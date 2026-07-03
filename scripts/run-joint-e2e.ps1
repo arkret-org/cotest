@@ -21,6 +21,16 @@
 [CmdletBinding()]
 param(
     [string]$OutputRoot,
+    # Exact directory that receives this run's joint outputs (junit.xml,
+    # summary.json, playwright-report/, services/, ...). When set, the script
+    # writes there directly and skips both the `runs/<timestamp>/joint-e2e`
+    # layout and the `latest/joint-e2e` mirror — used by run-cotest.ps1 to
+    # embed joint results inside its own run directory without nesting a
+    # second runs/latest tree.
+    [string]$JointDir,
+    # How many timestamped run directories to keep under <OutputRoot>/runs
+    # (standalone runs only). 0 disables pruning.
+    [int]$KeepRuns = 20,
     [string]$SutManifest,
     [string]$YougenRoot,
     [string]$SolandBaseUrl,
@@ -1034,13 +1044,32 @@ if (-not $YougenRoot) {
 }
 $YougenRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($YougenRoot)
 
+# Canonical artifacts layout (see cotest/README.md "Artifacts layout"):
+#   <OutputRoot>/runs/<timestamp>/joint-e2e/  — authoritative per-run outputs
+#   <OutputRoot>/latest/joint-e2e/            — mirror of the most recent run
+# With -JointDir the caller owns the run directory and both are skipped.
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$runDir = Join-Path $OutputRoot "runs\$timestamp"
-$jointDir = Join-Path $runDir "joint-e2e"
+if ($JointDir) {
+    $jointDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($JointDir)
+    $latestJointDir = $null
+} else {
+    $runDir = Join-Path $OutputRoot "runs\$timestamp"
+    $jointDir = Join-Path $runDir "joint-e2e"
+    $latestJointDir = Join-Path $OutputRoot "latest\joint-e2e"
+    if ($KeepRuns -gt 0) {
+        $runsRoot = Join-Path $OutputRoot "runs"
+        $stale = @(Get-ChildItem -Path $runsRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d{8}-\d{6}(-adhoc)?$' } |
+            Sort-Object Name -Descending |
+            Select-Object -Skip ($KeepRuns - 1))
+        foreach ($dir in $stale) {
+            Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
 $serviceLogDir = Join-Path $jointDir "services"
 $screenshotDir = Join-Path $jointDir "screenshots"
 $visualBaselineDir = Join-Path $jointDir "visual-baselines"
-$latestJointDir = Join-Path $OutputRoot "latest\joint-e2e"
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 $null = New-Item -ItemType Directory -Force -Path $screenshotDir
 $null = New-Item -ItemType Directory -Force -Path $visualBaselineDir
@@ -2574,7 +2603,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - services: $($summary.services)
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
-Copy-ToLatest -RunJointDir $jointDir -LatestJointDir $latestJointDir
+if ($latestJointDir) {
+    Copy-ToLatest -RunJointDir $jointDir -LatestJointDir $latestJointDir
+}
 
 Write-Host ""
 Write-Host "Joint E2E Summary"
@@ -2626,6 +2657,8 @@ if ($TeabayBaseUrl) {
 Write-Host "  screenshots : $screenshotDir"
 Write-Host "  visual base : $visualBaselineDir"
 Write-Host "  report      : $summaryMd"
-Write-Host "  latest      : $latestJointDir"
+if ($latestJointDir) {
+    Write-Host "  latest      : $latestJointDir"
+}
 
 exit $exitCode

@@ -19,7 +19,10 @@ param(
     [string]$DockerCacheTo,
     [switch]$DockerPull,
     [switch]$DockerNoCache,
-    [switch]$SkipJointSmokeGate
+    [switch]$SkipJointSmokeGate,
+    # How many timestamped run directories to keep under <OutputRoot>/runs.
+    # 0 disables pruning.
+    [int]$KeepRuns = 20
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,12 +96,15 @@ function Invoke-JointSmokeGate {
     )
 
     $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
+    # Joint outputs land directly inside this run's directory
+    # (runs/<ts>/<OutputName>/); -JointDir keeps the child from nesting its
+    # own runs/<ts>/latest tree in there.
     $jointOutputRoot = Join-Path $RunDir $OutputName
     $psExe = (Get-Process -Id $PID).Path
     $args = @(
         "-NoProfile",
         "-File", $jointScript,
-        "-OutputRoot", $jointOutputRoot
+        "-JointDir", $jointOutputRoot
     )
     if ($StartCoauth) {
         $args += "-StartCoauth"
@@ -168,12 +174,10 @@ function Invoke-JointSmokeGate {
 
     $summaryJson = $null
     $summaryMd = $null
-    $summaryCandidates = @(Get-ChildItem -Path (Join-Path $jointOutputRoot "runs") -Recurse -Filter "summary.json" -ErrorAction SilentlyContinue |
-        Where-Object { (Split-Path -Leaf (Split-Path -Parent $_.FullName)) -eq "joint-e2e" } |
-        Sort-Object LastWriteTime)
-    if ($summaryCandidates.Count -gt 0) {
-        $summaryJson = $summaryCandidates[-1].FullName
-        $summaryMd = Join-Path (Split-Path -Parent $summaryJson) "summary.md"
+    $summaryCandidate = Join-Path $jointOutputRoot "summary.json"
+    if (Test-Path $summaryCandidate) {
+        $summaryJson = $summaryCandidate
+        $summaryMd = Join-Path $jointOutputRoot "summary.md"
     }
 
     [pscustomobject]@{
@@ -1652,6 +1656,16 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runDir = Join-Path $OutputRoot "runs\$timestamp"
 $latestDir = Join-Path $OutputRoot "latest"
 $serviceLogDir = Join-Path $runDir "services"
+if ($KeepRuns -gt 0) {
+    $runsRoot = Join-Path $OutputRoot "runs"
+    $staleRuns = @(Get-ChildItem -Path $runsRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^\d{8}-\d{6}(-adhoc)?$' } |
+        Sort-Object Name -Descending |
+        Select-Object -Skip ($KeepRuns - 1))
+    foreach ($dir in $staleRuns) {
+        Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 $null = New-Item -ItemType Directory -Force -Path $runDir
 $null = New-Item -ItemType Directory -Force -Path $latestDir
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir

@@ -99,7 +99,7 @@ jobs:
         working-directory: cotest/e2e
         env:
           COTEST_SOLAND_BASE_URL: http://127.0.0.1:8008
-          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/integration-playwright
+          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/integration-playwright/joint-e2e
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/soland-objects"
@@ -134,7 +134,7 @@ jobs:
           COTEST_SOLAND_BETA_SERVICE_DID: did:web:soland-beta.security-ci.local
           COTEST_EXPECT_FEDERATION_DENYLIST: "1"
           COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED: "1"
-          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/federation-security-hardening
+          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e
         run: |
           set -euo pipefail
 
@@ -219,4 +219,5 @@ jobs:
         with:
           name: live-harness-artifacts
           path: |
-            cotest/artifacts/integration-playwright
+            cotest/artifacts/runs/integration-playwright
+            cotest/artifacts/runs/federation-security-hardening

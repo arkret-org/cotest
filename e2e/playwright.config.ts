@@ -1,9 +1,23 @@
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-const runDir =
-  process.env.COTEST_JOINT_RUN_DIR ??
-  path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local");
+// Canonical artifacts layout: every run writes under
+// `cotest/artifacts/runs/<timestamp>/`. Orchestrated runs (run-joint-e2e.ps1 /
+// run-cotest.ps1 / CI) pass COTEST_JOINT_RUN_DIR; ad-hoc `npx playwright test`
+// invocations get a fresh `runs/<timestamp>-adhoc/joint-e2e` directory. The
+// resolved dir is written back into the env so worker processes and the
+// helpers in helpers/env.ts (screenshots, diagnostics, visual baselines) all
+// agree on one directory.
+function adhocRunDir(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return path.resolve(process.cwd(), "..", "artifacts", "runs", `${stamp}-adhoc`, "joint-e2e");
+}
+const runDir = process.env.COTEST_JOINT_RUN_DIR ?? adhocRunDir();
+process.env.COTEST_JOINT_RUN_DIR = runDir;
 const baseURL =
   process.env.YOUGEN_BASE_URL ??
   process.env.COTEST_YOUGEN_BASE_URL ??

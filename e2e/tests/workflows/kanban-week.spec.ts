@@ -173,9 +173,11 @@ test.describe("workflow: kanban week-in-review", () => {
         .toBe("active");
 
       // list-archive-button is hover-revealed on the column header — hover
-      // the column itself first so the button becomes actionable.
+      // the column itself first so the button becomes actionable. Clicking
+      // it opens a confirmation dialog; the archive submits from confirm.
       await today.hover();
       await today.getByTestId("list-archive-button").click();
+      await patPage.page.getByTestId("list-archive-confirm-button").click();
       const archivedLists = patPage.page.getByTestId("kanban-archived-lists");
       await archivedLists.locator("summary").click();
       await expect(

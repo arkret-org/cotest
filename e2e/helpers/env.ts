@@ -209,23 +209,25 @@ export function mockMimiFacadeDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_MIMI_FACADE_DID");
 }
 
-export function diagnosticsRoot(): string {
-  return path.join(
-    optionalEnv("COTEST_JOINT_RUN_DIR") ?? path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local"),
-    "diagnostics",
+// The joint run directory for this process. playwright.config.ts always sets
+// COTEST_JOINT_RUN_DIR (orchestrator value or a fresh runs/<ts>-adhoc dir)
+// before workers spawn, so the fallback here only covers non-Playwright
+// callers of these helpers.
+export function jointRunDir(): string {
+  return (
+    optionalEnv("COTEST_JOINT_RUN_DIR") ??
+    path.resolve(process.cwd(), "..", "artifacts", "runs", "adhoc", "joint-e2e")
   );
+}
+
+export function diagnosticsRoot(): string {
+  return path.join(jointRunDir(), "diagnostics");
 }
 
 export function screenshotRoot(): string {
-  return (
-    optionalEnv("COTEST_UI_SCREENSHOT_DIR") ??
-    path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local", "screenshots")
-  );
+  return optionalEnv("COTEST_UI_SCREENSHOT_DIR") ?? path.join(jointRunDir(), "screenshots");
 }
 
 export function visualBaselineRoot(): string {
-  return (
-    optionalEnv("COTEST_UI_VISUAL_BASELINE_DIR") ??
-    path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local", "visual-baselines")
-  );
+  return optionalEnv("COTEST_UI_VISUAL_BASELINE_DIR") ?? path.join(jointRunDir(), "visual-baselines");
 }

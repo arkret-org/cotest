@@ -585,8 +585,10 @@ test.describe("workflow: sprint planning", () => {
       await stepShot(meiPage.page, testInfo, "archiveboard-A-ready");
 
       // Bulk archive the whole board: cascade-archive every active card +
-      // list, then the board Space itself.
+      // list, then the board Space itself. The button opens a confirmation
+      // dialog first; the cascade only fires from the confirm button.
       await meiPage.page.getByTestId("archive-board-button").click();
+      await meiPage.page.getByTestId("archive-board-confirm-button").click();
 
       // Cascade: cards and the column drop out of the active board view.
       for (const card of cards) {

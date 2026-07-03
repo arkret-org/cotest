@@ -1217,9 +1217,11 @@ fn normalize_string(value: &str) -> String {
 }
 
 fn write_report(root: &Path, results: &[CaseResult]) -> Result<()> {
+    // Bare `cargo test` (no COTEST_ARTIFACT_DIR from run-cotest.ps1) lands in
+    // the canonical runs/ tree instead of scattering files at artifacts/ root.
     let artifact_dir = std::env::var_os("COTEST_ARTIFACT_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("artifacts"));
+        .unwrap_or_else(|| root.join("artifacts").join("runs").join("cargo-adhoc"));
     fs::create_dir_all(&artifact_dir)?;
     let path = artifact_dir.join("mock-parity.md");
     let mut out = String::new();
