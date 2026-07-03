@@ -28,7 +28,7 @@
 
 | 名字 | DID | 在 extensions/mimi-federation 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:webvh:alice-s1-<uuid>.example` | Cokret principal,Realm owner;声明支持 MIMI | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-s1-<uuid>.example` | Cokret principal,Realm owner;声明支持 MIMI | 测试开始前 |
 | bob_mimi | `did:pairwise:<realm-scope>/<facade-mapped-id>` | 外部 MIMI 网络用户,通过 facade 映射为 pairwise DID | facade 在 Phase C 中按需 mint |
 | mimi_facade | (no DID — 是 server-side 适配器,不是 principal) | mock / stub,模拟 MIMI Provider Facade | 测试 setup 阶段启动 (可选) |
 
@@ -52,8 +52,10 @@
    - `ck.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
 2. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
-4. alice 调 `GET /_cokret/self/realm/${realmId}/federation/mimi/endpoint`
-   - 断言:返回 200,body 含 `mimi_endpoint_url`(facade 已在 soland 中绑定该 Realm)、`room_binding_id`
+4. MIMI 互通暴露面走 spec 注册的协议面(SPEC-CR-020:零新增 operation,不存在 `/_cokret/self/realm/:id/federation/mimi/*` 端点):
+   - 断言:`GET /_cokret/describe` 宣告 `mimi_interop` extension 支持
+   - 断言:`GET /_cokret/open/mimi/provider-directory`(`ck.open.mimi.query.provider_directory`)返回 200 的 MIMI provider feature profile
+   - room binding 通过 `POST /_cokret/open/mimi/strands/{strand_id}/update`(`ck.open.mimi.command.update_room`)以 `ck.mimi.room_binding` 建立,记录 `room_binding` 的 `mimi_room_uri`
 
 ### Phase B — bob_mimi 经 MIMI federation 申请加入
 
@@ -70,8 +72,8 @@
 10. soland 验证 facade 返回的 identity 证明,通过 `extensions/mimi-interop` §6 的规则生成 pairwise DID:
     - DID = `did:pairwise:${realmId}/${hash(bob_mimi.mimi_handle, realmId.salt)}`
     - 同一个 bob_mimi 在不同 Realm 中得到不同的 pairwise DID(不可关联)
-11. 断言:`POST /_cokret/self/realm/${realmId}/federation/mimi/approve` 返回 200,body 含 `pairwise_did`,符合 `did:pairwise:...` 形态
-12. 断言:bob_mimi 现在是 Realm `R` 的成员(`GET /_cokret/self/realm/${realmId}/members` 包含该 pairwise DID,标记 `source = mimi`)
+11. 断言:approve 是事件面动作(不存在 `/_cokret/self/realm/:id/federation/mimi/approve` 端点)——alice 在 admin panel(yougen UI 或 `/_soland/` 产品面)执行 approve 后,事件面出现针对 pairwise DID 的 `ck.member.state{membership=join}` 事件,pairwise DID 符合 `did:pairwise:...` 形态
+12. 断言:bob_mimi 现在是 Realm `R` 的成员——通过 `/_cokret/self/events` 查询(`queryRealmEventsApi`)读取 `ck.member.state` 事件流,包含该 pairwise DID 且带 `mimi` 来源标记(不存在 `GET /_cokret/self/realm/:id/members` 端点)
 
 ### Phase D — 双向消息 + content/policy mapping
 
@@ -96,9 +98,9 @@
 ## Observable assertions (合并清单)
 
 - 步骤 2 之后:`realmId` 形如 `ck:realm:...`,`federation_profile` 字段 = `mimi_interop`
-- 步骤 4:`mimi_endpoint_url` 存在且可达,Realm 与 MIMI room_binding 绑定
+- 步骤 4:`/_cokret/describe` 宣告 mimi_interop;`/_cokret/open/mimi/provider-directory` 可达;Realm 与 MIMI room_binding 经 `/_cokret/open/mimi/strands/{strand_id}/update` 绑定
 - 步骤 6-7:facade 投递的 inbound request 在 alice 的 admin panel 中可见,标记 `mimi` 来源
-- 步骤 11-12:approve 之后生成 pairwise DID,bob_mimi 成为 Realm 成员
+- 步骤 11-12:approve 之后生成 pairwise DID,事件面出现该 pairwise DID 的 `ck.member.state{membership=join}`,bob_mimi 成为 Realm 成员
 - 步骤 14:alice 发的 `M1` 被 facade 翻译为 outbound MIMI event
 - 步骤 16-17:bob_mimi 在 MIMI 网络发的消息经 facade 翻译为 Cokret Message,显示在 alice timeline
 - 步骤 18:reply 关系在 MIMI ↔ Cokret 双向保留

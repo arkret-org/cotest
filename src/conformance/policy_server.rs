@@ -149,7 +149,8 @@ fn evaluate_decision_replay_rejected(case: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `expires_at > now` with no TTL grace (§5: "节点 MUST 拒绝过期 decision").
+/// `expires_at > now` with no TTL grace (§5: nodes MUST reject expired
+/// decisions).
 /// ISO-8601 UTC timestamps ending in `Z` compare correctly as strings.
 fn decision_unexpired(window: &Value) -> Result<bool> {
     let expires_at = window

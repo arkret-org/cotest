@@ -25,37 +25,77 @@ export function sendJson(res, status, body) {
 }
 
 /// Deterministic canonical JSON (RFC 8785 / JCS-style: keys sorted by UTF-16
-/// code unit, no whitespace, `undefined` members dropped). This is the single
-/// canonical-JSON implementation for the `.mjs` runtime (mocks + scripts), kept
-/// in lock-step with the TypeScript helper `canonicalJson` in
-/// `e2e/helpers/soland-api.ts` so mock/script-computed digests cannot drift
-/// from the harness. Numbers are validated to be finite integers (the only
-/// number form the conformance encoding profile permits) so a boundary value
-/// fails loudly here instead of silently diverging from the TS authority.
+/// code unit, no whitespace). This is the single canonical-JSON implementation
+/// for the `.mjs` runtime (mocks + scripts), kept in lock-step with the
+/// TypeScript authority `canonicalJson` in `e2e/helpers/soland-api.ts` (itself
+/// a port of cokret-rust-sdk/crates/core/src/canonical.rs) so mock/script
+/// computed digests cannot drift from the harness. The full canonical-profile
+/// validation matches the TS port: safe-integer-only numbers, `-0` rejected,
+/// BOM / non-NFC strings rejected, `undefined` object members rejected, and
+/// non-plain object prototypes rejected. Drift is guarded by the third lane of
+/// e2e/tests/conformance/canonical-cross-lang.spec.ts over the shared
+/// e2e/fixtures/canonical-cross-check.json golden.
 export function canonicalJson(value) {
+  return canonicalJsonValue(value, "$");
+}
+
+function canonicalJsonValue(value, path) {
   if (value === null) {
     return "null";
   }
   switch (typeof value) {
     case "string":
-    case "boolean":
+      assertCanonicalString(value, path);
       return JSON.stringify(value);
     case "number":
-      if (!Number.isFinite(value) || !Number.isInteger(value)) {
-        throw new TypeError(`non-canonical JSON number: ${value}`);
-      }
+      assertCanonicalNumber(value, path);
       return JSON.stringify(value);
+    case "boolean":
+      return value ? "true" : "false";
     case "object":
       break;
     default:
-      throw new TypeError(`non-canonical JSON value: ${typeof value}`);
+      throw new TypeError(`non-canonical JSON value at ${path}: ${typeof value}`);
   }
+
   if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
+    return `[${value
+      .map((item, index) => canonicalJsonValue(item, `${path}[${index}]`))
+      .join(",")}]`;
   }
+
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    throw new TypeError(`non-canonical JSON object at ${path}`);
+  }
+
   return `{${Object.keys(value)
-    .filter((key) => value[key] !== undefined)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+    .sort(compareJsonKeys)
+    .map((key) => {
+      assertCanonicalString(key, `${path}.${key}`);
+      if (value[key] === undefined) {
+        throw new TypeError(`non-canonical undefined member at ${path}.${key}`);
+      }
+      return `${JSON.stringify(key)}:${canonicalJsonValue(value[key], `${path}.${key}`)}`;
+    })
     .join(",")}}`;
+}
+
+function compareJsonKeys(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function assertCanonicalString(value, path) {
+  if (value.includes("\uFEFF")) {
+    throw new TypeError(`non-canonical BOM in string at ${path}`);
+  }
+  if (value.normalize("NFC") !== value) {
+    throw new TypeError(`non-canonical non-NFC string at ${path}`);
+  }
+}
+
+function assertCanonicalNumber(value, path) {
+  if (!Number.isSafeInteger(value) || Object.is(value, -0)) {
+    throw new TypeError(`non-canonical number at ${path}: ${value}`);
+  }
 }

@@ -11,7 +11,7 @@
 // kick/ban provenance lives in the durable `ck.call.state.removed_participants[]`
 // cell. The relay is content-agnostic and gates on `ck.call.signal.send` (§162);
 // the `ck.call.moderate` authorization for a moderation frame is a RECEIVER /
-// reducer check (§3a — "接收方与 reducer MUST 拒绝"), pinned as a real
+// reducer check (§3a: receiver and reducer MUST reject), pinned as a real
 // conformance vector (`run_moderator_kick_ban_vector`, step 1 →
 // call_moderation_unauthorised). The HTTP-observable moderation consequence is
 // the durable ban gate: a banned actor's media-token re-exchange is refused

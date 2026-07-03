@@ -1,7 +1,7 @@
 //! CT-11 — Key backup restore + MLS history replay.
 //!
 //! Spec references:
-//!   - `cokret-spec/spec/v1/zh/identity/key-management.md` §7.1 "备份内容" — three backup domains
+//!   - `cokret-spec/spec/v1/zh/identity/key-management.md` §7.1 (backup contents) — three backup domains
 //!     MUST be isolated:
 //!       * `did_recovery` — DID control / recovery key shares.
 //!       * `secret_storage` — `self_signing_key`, `user_signing_key`, recovery secret, MLS group
@@ -17,7 +17,7 @@
 //!         Recovery Key; legacy vault passphrase only for §7.5.1 compat) locally before downloading
 //!         ciphertext.
 //!       * Service-side MUST NOT store passphrase / derived key / KDF output.
-//!   - §7.3 "恢复流程" — restore steps:
+//!   - §7.3 (restore flow) — restore steps:
 //!       1. new device generates fresh device key.
 //!       2. user enters the 24-word Recovery Key (§3.3, the sole user-facing content-recovery
 //!          credential) / collects recovery shares per the recovery policy; a legacy vault
@@ -28,7 +28,7 @@
 //!       5. client publishes `recover` or `ck.device.authorize`.
 //!       6. for E2EE Realms: pull MLS state, replay historical `ck.mls.commit` events with the
 //!          recovered `mls_history_backup_key` to decrypt pre-loss epoch content.
-//!   - §7.4 "所有权证明与解密证明" — SSK proof binding fields: `challenge / audience / origin /
+//!   - §7.4 (ownership and decryption proofs) — SSK proof binding fields: `challenge / audience / origin /
 //!     service_did / principal_id / key_id / expires_at / nonce`.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let (nonce_ss, ct_ss) = xchacha20_seal_with_aad(
     //       &secret_storage_key, &ssk_plaintext, aad.as_bytes());
     //   // (and the same for mls_history domain; split into two backup
-    //   //  envelopes per the §7.1 default `MUST 分离`.)
+    //   //  envelopes per the §7.1 default: domains MUST stay separated.)
     //
     //   expect_json(
     //       alice.put(&format!("/_cokret/self/keys/backups/{backup_id}"))

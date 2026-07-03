@@ -26,8 +26,8 @@
 
 | 名字 | DID | 在 models/realm-links 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-s1-<uuid>.example` | org admin；创建 governance Realm G 与 team Realm T，签 `ck.realm.link` Move | 测试开始前 |
-| bob | `did:web:bob-s1-<uuid>.example` | team member；在 T 中发违规消息，被 G 的 inherited policy 处理 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-s1-<uuid>.example` | org admin；创建 governance Realm G 与 team Realm T，签 `ck.realm.link` Move | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-s1-<uuid>.example` | team member；在 T 中发违规消息，被 G 的 inherited policy 处理 | 测试开始前 |
 
 ## Pre-conditions
 

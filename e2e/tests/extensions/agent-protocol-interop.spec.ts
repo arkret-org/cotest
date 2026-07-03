@@ -356,7 +356,7 @@ test.describe("agent protocol interop", () => {
   }) => {
     // spec: §4 (explicit + authorizable upgrade), §7 (capability actions +
     // constraint: allowed_endpoints / requires_human_approval), §8
-    // (启动前 capability 检查). Drives the yougen /agents interop approval
+    // (pre-start capability check). Drives the yougen /agents interop approval
     // modal: the human-approval gate MUST be acknowledged before the
     // controller can confirm, and the resulting `ck.capability.grant`
     // carries `actions=[ck.agent.interop_session.start]` with a single-valued

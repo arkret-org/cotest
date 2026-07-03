@@ -1,8 +1,10 @@
 //! Round 4 / A2 — schema-validation-fixture runner.
 //!
-//! Loads
-//! `cokret-spec/spec/v1/artifacts/fixtures/schema-validation-fixture.json`
-//! and runs each positive/negative case against the schema referenced by
+//! Loads every fixture listed in [`SCHEMA_VALIDATION_FIXTURE_FILES`]
+//! (`schema-validation-fixture.json`, `key-backup-fixture.json`,
+//! `realm-organization-fixture.json` under
+//! `cokret-spec/spec/v1/artifacts/fixtures/`) and runs each
+//! positive/negative case against the schema referenced by
 //! `schema_ref`. `schema_ref` syntax (mirrors the Python lint
 //! `check_fixture_schema_validation_cases`):
 //!
@@ -34,6 +36,36 @@ pub const SCHEMA_VALIDATION_FIXTURE: &str = "schema-validation-fixture.json";
 /// Canonical conformance profile pin.
 pub const SCHEMA_VALIDATION_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 
+/// Key-backup schema-validation fixture (25 cases against the key-backup /
+/// recovery schema family).
+pub const KEY_BACKUP_FIXTURE: &str = "key-backup-fixture.json";
+
+/// Realm-organization schema-validation fixture (14 cases against
+/// `event-payload.schema.json#/$defs/realm_organization_payload`).
+pub const REALM_ORGANIZATION_FIXTURE: &str = "realm-organization-fixture.json";
+
+/// Every spec fixture whose `schema_validation_cases` this runner executes:
+/// `(file_name, expected_profile, expected_suite)`. Extend this manifest when
+/// the spec ships a new schema-validation-shaped fixture instead of adding a
+/// parallel runner.
+pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
+    (
+        SCHEMA_VALIDATION_FIXTURE,
+        SCHEMA_VALIDATION_PROFILE,
+        "schema_validation",
+    ),
+    (
+        KEY_BACKUP_FIXTURE,
+        "ck.profile.key_backup.memory_hard.v1",
+        "key_backup_schema_validation",
+    ),
+    (
+        REALM_ORGANIZATION_FIXTURE,
+        "ck.profile.privacy_security_vectors.v1",
+        "realm_organization_conformance",
+    ),
+];
+
 const SCHEMA_DIR: &str = "schemas";
 const SCHEMA_ID_PREFIX: &str = "https://cokret.org/v1/";
 const OPENAPI_FILE: &str = "openapi/cokret-service-api.openapi.yaml";
@@ -61,19 +93,34 @@ fn default_true() -> bool {
     true
 }
 
-/// Public entry point: load the canonical fixture and run every case.
+/// Public entry point: load every fixture in
+/// [`SCHEMA_VALIDATION_FIXTURE_FILES`] and run all of their cases.
 pub fn run_schema_validation_fixture_suite() -> Result<()> {
-    let path = fixture_path(SCHEMA_VALIDATION_FIXTURE);
+    for (file_name, expected_profile, expected_suite) in SCHEMA_VALIDATION_FIXTURE_FILES {
+        run_schema_validation_fixture_file(file_name, expected_profile, expected_suite)
+            .with_context(|| format!("schema-validation fixture {file_name}"))?;
+    }
+    Ok(())
+}
+
+/// Load one schema-validation-shaped fixture, pin its profile/suite, and run
+/// every `schema_validation_cases` entry.
+pub fn run_schema_validation_fixture_file(
+    file_name: &str,
+    expected_profile: &str,
+    expected_suite: &str,
+) -> Result<()> {
+    let path = fixture_path(file_name);
     let raw = fs::read_to_string(&path)
-        .with_context(|| format!("read schema-validation-fixture {}", path.display()))?;
+        .with_context(|| format!("read schema-validation fixture {}", path.display()))?;
     let value: Value = serde_json::from_str(&raw)
-        .with_context(|| format!("parse schema-validation-fixture {}", path.display()))?;
-    validate_profile(&value, SCHEMA_VALIDATION_PROFILE)?;
+        .with_context(|| format!("parse schema-validation fixture {}", path.display()))?;
+    validate_profile(&value, expected_profile)?;
     let fixture: SchemaValidationFixture = serde_json::from_value(value)
-        .with_context(|| format!("decode schema-validation-fixture {}", path.display()))?;
-    if fixture.suite != "schema_validation" {
+        .with_context(|| format!("decode schema-validation fixture {}", path.display()))?;
+    if fixture.suite != expected_suite {
         bail!(
-            "schema-validation-fixture suite drifted: expected `schema_validation`, got `{}`",
+            "fixture {file_name} suite drifted: expected `{expected_suite}`, got `{}`",
             fixture.suite
         );
     }

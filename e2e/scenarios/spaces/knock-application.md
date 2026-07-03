@@ -33,10 +33,10 @@
 
 | 名字 | DID | 角色 | capability |
 |---|---|---|---|
-| alice | `did:web:alice-s6-<uuid>.example` | Realm owner + reviewer | owner 默认 + `ck.realm.join.review` |
-| bob | `did:web:bob-s6-<uuid>.example` | applicant (会被 accept) | (无) |
-| mallory | `did:web:mallory-s6-<uuid>.example` | applicant (会被 reject,进入 cooldown) | (无) |
-| eve | `did:web:eve-s6-<uuid>.example` | 旁观成员;验证 application 正文不可见 | 成员默认 capability |
+| alice | `did:webvh:z6mkfixture:alice-s6-<uuid>.example` | Realm owner + reviewer | owner 默认 + `ck.realm.join.review` |
+| bob | `did:webvh:z6mkfixture:bob-s6-<uuid>.example` | applicant (会被 accept) | (无) |
+| mallory | `did:webvh:z6mkfixture:mallory-s6-<uuid>.example` | applicant (会被 reject,进入 cooldown) | (无) |
+| eve | `did:webvh:z6mkfixture:eve-s6-<uuid>.example` | 旁观成员;验证 application 正文不可见 | 成员默认 capability |
 
 ## Pre-conditions
 

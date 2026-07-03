@@ -221,7 +221,7 @@ async function setupMediaCall(
   );
 
   // Token exchange is decoupled from any prior signaling session
-  // (media-service-binding.md 落账时序): a brand-new call has no ck.call.state
+  // (media-service-binding.md settlement ordering): a brand-new call has no ck.call.state
   // cell yet, and authorization is realm membership + ck.call.join. alice owns
   // the realm (holds all caps), so no explicit grant is needed for her.
   const callId = newCallId();

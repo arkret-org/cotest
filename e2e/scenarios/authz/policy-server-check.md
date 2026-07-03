@@ -28,8 +28,8 @@
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-s30-<uuid>.example` | realm admin,创建并配置 policy server endpoint | 测试开始前 |
-| bob | `did:web:bob-s30-<uuid>.example` | target user,被 policy check 限制的对象 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-s30-<uuid>.example` | realm admin,创建并配置 policy server endpoint | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-s30-<uuid>.example` | target user,被 policy check 限制的对象 | 测试开始前 |
 | policy_server | — | mock,通过 `MOCK_POLICY_SERVER_PORT` 访问;不是 DID actor,但作为外部依赖在 trace 中出现 | 测试启动前已运行 |
 
 ## Pre-conditions

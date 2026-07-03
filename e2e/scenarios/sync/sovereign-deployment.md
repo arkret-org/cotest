@@ -27,8 +27,8 @@
 
 | 名字 | DID | 角色 | 落地节点 |
 |---|---|---|---|
-| alice_internal | `did:web:alice-int-<uuid>.example` (内部 DID method) | 内部组织成员;主域 owner;创建 enclave Realm | `soland_main` |
-| bob_external | `did:web:bob-ext-<uuid>.example.org` (外部 org DID method) | 外部协作者;只能通过 enclave 接入 | `soland_enclave` |
+| alice_internal | `did:webvh:z6mkfixture:alice-int-<uuid>.example` (内部 DID method) | 内部组织成员;主域 owner;创建 enclave Realm | `soland_main` |
+| bob_external | `did:webvh:z6mkfixture:bob-ext-<uuid>.example.org` (外部 org DID method) | 外部协作者;只能通过 enclave 接入 | `soland_enclave` |
 
 ## Pre-conditions
 
@@ -57,7 +57,7 @@
    - `ck.realm.deployment_profile = "enclave"`
    - `ck.realm.hosted_on = "<soland_enclave server_id>"`
    - `ck.realm.external_invite_policy = "allowed"`
-8. 断言:`soland_main` 返回 enclave Realm 的 `realm_id`;`soland_enclave` 上 `GET /_cokret/self/realm/E` 200,profile=enclave
+8. 断言:`soland_main` 返回 enclave Realm 的 `realm_id`;`soland_enclave` 上 `GET /_soland/self/realm/E` 200,profile=enclave
 9. **alice_internal** 在 enclave Realm `E` 中通过 yougen 建 space `S_enclave`(session 切到 enclave 节点上下文),记录 `enclaveSpaceId`
 
 ### Phase C — 外部用户加入 enclave
@@ -66,7 +66,7 @@
     - 返回 `invite_token`,带 `target_realm = "E"`、`target_host = <soland_enclave>`
 11. **bob_external** 用 `invite_token` 调 `POST <soland_enclave>/_soland/self/account/accept-external-invite` → enclave 节点验证 bob 的 DID 通过 enclave 的 trust chain(不走 main 的 resolver),创建 enclave 内 session
 12. **bob_external** yougen browser context 配置 `server_url = <soland_enclave>`,加载后进入 `S_enclave`
-13. 断言:`bob_external` 的 session metadata 显式标 `realm = "E"`、`bound_node = soland_enclave`;在 `GET <soland_main>/_cokret/self/account/<bob.did>` 返回 404 或 `external_via_enclave` 标志(bob 不是 main 的 first-class 账户)
+13. 断言:`bob_external` 的 session metadata 显式标 `realm = "E"`、`bound_node = soland_enclave`;在 `GET <soland_main>/_soland/self/account/<bob.did>` 返回 404 或 `external_via_enclave` 标志(bob 不是 main 的 first-class 账户)
 
 ### Phase D — Enclave 内协作
 
@@ -87,7 +87,7 @@
 
 ### Phase F — Exit + audit
 
-22. **bob_external** 主动离开 enclave Realm `E`(`POST <soland_enclave>/_cokret/self/realm/E/leave`)或被 alice 移除
+22. **bob_external** 主动离开 enclave Realm `E`(`POST <soland_enclave>/_soland/self/realm/E/leave`)或被 alice 移除
 23. 断言:bob 的 enclave session 失效,后续任何 enclave API 调用 401
 24. **alice_internal** 调 `GET <soland_main>/_soland/admin/deployment/audit?subject=<bob.did>` 获取审计日志
 25. 断言:审计日志至少包含:
@@ -124,7 +124,7 @@
   - 链路恢复后,main 拉 federation pull,enclave 的 store-and-forward 队列推送过去,alice 看到 bob 离线期间的所有消息
   - 关键区别(对比 offline-conflict.md 的 E26.*):store-and-forward 是**节点间**而非客户端 outbox;bob 这边**不**看到 "pending sync" UI
 - **E7.3 enclave DID resolver policy**:bob 的 DID 必须通过 **enclave** 的 trust chain 验证:
-  - 一个属于 enclave trust roots 但**不**属于 main trust roots 的 DID(`did:web:bob-ext-<uuid>.example.org`)应能加入 enclave,被 main 上拒绝直接 register
+  - 一个属于 enclave trust roots 但**不**属于 main trust roots 的 DID(`did:webvh:z6mkfixture:bob-ext-<uuid>.example.org`)应能加入 enclave,被 main 上拒绝直接 register
   - 反过来一个 main trust roots 但不在 enclave trust roots 的 DID(假设有这种配置)应在 enclave 加入时被拒,reason `enclave_did_method_not_trusted`
   - bob 试图在 enclave session 内更换 DID document(替换为 `did:web:rogue.evil`)→ enclave 验证失败,session 失效
 
@@ -132,7 +132,7 @@
 
 - **soland 已落地**:
   - `/_soland/admin/deployment/configure`、`/_soland/admin/deployment/info`、`/_soland/admin/deployment/register-enclave` 提供本地 sovereign main / enclave profile 与 trust chain handshake。
-  - `/_soland/admin/deployment/realm.create`、`/_cokret/self/realm/:id` 记录 enclave Realm 的 `deployment_profile`、`hosted_on`、`external_invite_policy`。
+  - `/_soland/admin/deployment/realm.create`、`/_soland/self/realm/:id` 记录 enclave Realm 的 `deployment_profile`、`hosted_on`、`external_invite_policy`。
   - `/_soland/admin/deployment/external-invite` + `/_soland/self/account/accept-external-invite` 验证 enclave trust roots;main 侧直接注册外部 DID 返回 `did_method_not_trusted`;enclave 侧 rogue DID 返回 `enclave_did_method_not_trusted`。
   - `/_cokret/self/realms/:id`、`/_cokret/find/directory/search-realms`、`/_soland/self/deployment/enclave-proxy` 覆盖 external user 的 main-domain escape rejection 与边界审计。
   - `/_soland/admin/deployment/store-and-forward/*` 覆盖 enclave upstream outage 下本地 accepted、非客户端 pending、恢复后 drain/ingest 收敛。

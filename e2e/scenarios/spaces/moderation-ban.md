@@ -32,10 +32,10 @@
 
 | 名字 | DID | 角色 | 持有的 capability |
 |---|---|---|---|
-| alice | `did:web:alice-s5-<uuid>.example` | Realm owner + moderator | `ck.moderation.decision` / `ck.message.redact` |
-| bob | `did:web:bob-s5-<uuid>.example` | 普通成员;举报人 | (默认成员 capability,无 moderate) |
-| mallory | `did:web:mallory-s5-<uuid>.example` | 普通成员;违规者 (被封禁目标) | (默认成员 capability) |
-| carol | `did:web:carol-s5-<uuid>.example` | 普通成员;旁观者,用于验证 personal blocklist 不广播 | (默认成员 capability) |
+| alice | `did:webvh:z6mkfixture:alice-s5-<uuid>.example` | Realm owner + moderator | `ck.moderation.decision` / `ck.message.redact` |
+| bob | `did:webvh:z6mkfixture:bob-s5-<uuid>.example` | 普通成员;举报人 | (默认成员 capability,无 moderate) |
+| mallory | `did:webvh:z6mkfixture:mallory-s5-<uuid>.example` | 普通成员;违规者 (被封禁目标) | (默认成员 capability) |
+| carol | `did:webvh:z6mkfixture:carol-s5-<uuid>.example` | 普通成员;旁观者,用于验证 personal blocklist 不广播 | (默认成员 capability) |
 
 ## Pre-conditions
 

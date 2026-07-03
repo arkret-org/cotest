@@ -46,7 +46,7 @@
 
 | 名字 | DID | 在 conformance/snapshot-query-scalability 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-sqs-<uuid>.example` | 单 actor;Phase B 用她的 dev key 验证 snapshot signature 验证流的 actor 上下文(实际签名者 DID 由 vector 提供);Phase C 用她的 session 调 query 端点确保 authz filter 走 actor 路径 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-sqs-<uuid>.example` | 单 actor;Phase B 用她的 dev key 验证 snapshot signature 验证流的 actor 上下文(实际签名者 DID 由 vector 提供);Phase C 用她的 session 调 query 端点确保 authz filter 走 actor 路径 | 测试开始前 |
 | harness | n/a (Playwright `request` + node `fs`) | Vector loader / assertion driver;glob fixture 目录 → 调端点 → diff actual vs expected | n/a |
 
 ## Pre-conditions

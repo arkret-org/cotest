@@ -27,9 +27,9 @@
 
 | 名字 | DID | 在 messaging/triad-collaboration 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-s1-<uuid>.example` | Realm 创建者 / owner | 测试开始前 |
-| bob | `did:web:bob-s1-<uuid>.example` | 早期成员;邀请阶段加入 | 测试开始前 |
-| carol | `did:web:carol-s1-<uuid>.example` | 晚到成员;在前 N 条消息之后才加入 | 测试开始前注册,但延后加入 Realm |
+| alice | `did:webvh:z6mkfixture:alice-s1-<uuid>.example` | Realm 创建者 / owner | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-s1-<uuid>.example` | 早期成员;邀请阶段加入 | 测试开始前 |
+| carol | `did:webvh:z6mkfixture:carol-s1-<uuid>.example` | 晚到成员;在前 N 条消息之后才加入 | 测试开始前注册,但延后加入 Realm |
 
 ## Pre-conditions
 

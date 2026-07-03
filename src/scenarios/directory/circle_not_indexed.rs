@@ -35,6 +35,9 @@ pub fn ingest_filter(scope: &EffectiveScope) -> DirectoryFilterDecision {
     match scope {
         EffectiveScope::Realm { .. } => DirectoryFilterDecision::Project,
         EffectiveScope::Circle { .. } => DirectoryFilterDecision::DropCircleScoped,
+        // `EffectiveScope` is `#[non_exhaustive]`: an unrecognised scope
+        // variant MUST fail closed and stay out of the directory index.
+        _ => DirectoryFilterDecision::DropCircleScoped,
     }
 }
 

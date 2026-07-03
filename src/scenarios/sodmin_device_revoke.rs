@@ -2,8 +2,9 @@
 //!
 //! Spec:
 //!   - `cokret-spec/spec/v1/zh/identity/account-lifecycle.md` §3 (device lifecycle), §9 (session
-//!     revocation): "撤销 device MUST 产生 device list update. E2EE 客户端 MUST 停止向 revoked
-//!     device 分享新密钥." Revocation MUST also invalidate any soland session bound to that device.
+//!     revocation, paraphrased): revoking a device MUST produce a device list update, and E2EE
+//!     clients MUST stop sharing new keys with the revoked device. Revocation MUST also
+//!     invalidate any soland session bound to that device.
 //!
 //! Scenario walk-through (when fully wired):
 //!   1. Boot soland + coauth + sodmin (admin UI) in the same docker network. Register alice on

@@ -62,14 +62,14 @@ param(
     [switch]$StartStarid,
     [string]$StaridBin,
     [string]$StaridBaseUrl,
-    [string]$StaridServiceDid = "did:web:starid.joint-e2e.local",
+    [string]$StaridServiceDid = "did:webvh:z6mkfixture:starid.joint-e2e.local",
     [switch]$StartTeabay,
     [string]$TeabayBin,
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
-    [string]$TeabayServiceDid = "did:web:teabay.joint-e2e.local",
-    [string]$SolandServiceDid = "did:web:soland.joint-e2e.local",
-    [string]$CoauthServiceDid = "did:web:coauth.joint-e2e.local",
+    [string]$TeabayServiceDid = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
+    [string]$SolandServiceDid = "did:webvh:z6mkfixture:soland.joint-e2e.local",
+    [string]$CoauthServiceDid = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
@@ -90,7 +90,7 @@ param(
     [switch]$KeepServices,
     [switch]$SkipPreflight,
     [switch]$DualSoland,
-    [string]$SolandBetaServiceDid = "did:web:soland-beta.joint-e2e.local",
+    [string]$SolandBetaServiceDid = "did:webvh:z6mkfixture:soland-beta.joint-e2e.local",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -106,13 +106,13 @@ param(
     [switch]$StartMockTspEndpoint,
     [string]$MockTspEndpointVid,
     [switch]$StartMockMimiFacade,
-    [string]$MockMimiFacadeDid = "did:web:mimi-facade.joint-e2e.local",
+    [string]$MockMimiFacadeDid = "did:webvh:z6mkfixture:mimi-facade.joint-e2e.local",
     [switch]$StartMockClaimIssuer,
-    [string]$MockClaimIssuerDid = "did:web:vc-issuer.joint-e2e.local",
+    [string]$MockClaimIssuerDid = "did:webvh:z6mkfixture:vc-issuer.joint-e2e.local",
     [switch]$StartMockChallengeProvider,
-    [string]$MockChallengeProviderDid = "did:web:captcha.joint-e2e.local",
+    [string]$MockChallengeProviderDid = "did:webvh:z6mkfixture:captcha.joint-e2e.local",
     [switch]$StartMocks,
-    [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
+    [string]$MockWitnessDid = "did:webvh:z6mkfixture:witness.joint-e2e.local",
     [string[]]$MockWitnessExtraDids = @(),
     [string]$MockAuditAgentDid,
     [ValidateSet("joint-smoke", "joint-full")]
@@ -1564,7 +1564,7 @@ try {
     $solandStaridEnv = ""
     if ($StaridBaseUrl) {
         $solandStaridEnv = (
-            "`$env:SOLAND_DID_RESOLVER_ALLOW_METHODS='did:web,did:key,did:webvh'; " +
+            "`$env:SOLAND_DID_RESOLVER_ALLOW_METHODS='did:webvh,did:key'; " +
             "`$env:SOLAND_STARID_WEBVH_RESOLVER_URL={0}; "
         ) -f (Quote-PsLiteral $StaridBaseUrl)
     }
@@ -1617,7 +1617,7 @@ try {
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($StaridBaseUrl) {
-            $map.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:web,did:key,did:webvh"
+            $map.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:webvh,did:key"
             $map.SOLAND_STARID_WEBVH_RESOLVER_URL = Convert-ToContainerReachableUrl $StaridBaseUrl
         }
         if ($TeabayBaseUrl) {

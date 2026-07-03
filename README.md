@@ -285,6 +285,21 @@ The teabay Directory Service bridge is optional in normal runs. Set
 or build `../teabay` and provide `DATABASE_URL` so cotest can spawn it through
 the `TEABAY_BIN`/sibling-binary convention.
 
+## Event proof mode (Playwright harness)
+
+The e2e helpers sign every submitted event envelope
+(`e2e/helpers/soland-api.ts` `eventProof`). Two environment variables control
+the proof shape:
+
+- `COTEST_EVENT_PROOF_MODE` — `detached-jws` (default) emits the
+  `cotest.detached_jws.fixture.v1` detached-JWS proof that soland verifies
+  cryptographically; `dev-proof` emits the legacy development placeholder
+  proof, accepted only by soland development builds. Any other value throws.
+- `COTEST_FORBID_DEV_PROOF=1` — hard-fails the run if anything selects
+  `dev-proof`, so production-shaped runs cannot silently fall back to the
+  placeholder (see `.github/workflows/integration.yml`
+  `production_rejects_placeholder_proof_e2e`).
+
 ## Runtime Modes
 
 - `process`: spawn the SUT with local `cargo run` against a checkout manifest.
@@ -359,7 +374,7 @@ and alpha/beta yougen locally, then runs the federation Playwright matrix;
 `scripts/run-hygiene.ps1` is run separately from scenario profiles so
 dependency policy, typo checks, and advisory scans can fail fast without
 starting services.
-`scripts/run-joint-e2e.ps1 -StartMockWitness -MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`
+`scripts/run-joint-e2e.ps1 -StartMockWitness -MockWitnessExtraDids "did:webvh:z6mkfixture:witness-b.local,did:webvh:z6mkfixture:witness-c.local"`
 starts a mock witness quorum and exports the list helpers consumed by E2E
 specs.
 `scripts/run-joint-e2e.ps1 -StartMockMimiFacade` starts the local MIMI facade

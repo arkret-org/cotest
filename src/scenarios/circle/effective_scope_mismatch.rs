@@ -91,6 +91,13 @@ fn assert_envelope_payload_scope_agrees(
                 Some(_) => { /* agree */ }
             }
         }
+        // `EffectiveScope` is `#[non_exhaustive]`: an unrecognised scope
+        // variant MUST fail closed, never fall through as in-scope.
+        other => {
+            return Err(anyhow!(
+                "reason=scope_rebind_forbidden: unrecognised effective scope {other:?}"
+            ));
+        }
     }
     Ok(())
 }

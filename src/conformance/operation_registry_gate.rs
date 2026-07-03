@@ -881,6 +881,14 @@ fn source_context_allows_literal(
         || context.contains("get_json")
         || context.contains("put_json")
         || context.contains("delete_json")
+        // Local TS wrapper helpers (`getJson(...)`, `postJson(...)`, ...) that
+        // suites define around request.get/post. Without these the wrapper
+        // context hides template-string paths from the scan entirely (the
+        // CTS-CORR-01 false-negative channel).
+        || context.contains("getjson(")
+        || context.contains("postjson(")
+        || context.contains("putjson(")
+        || context.contains("deletejson(")
         || context.contains("path ===")
         || context.contains("pathname ===")
         || context.contains("pathname.match")
@@ -978,6 +986,7 @@ fn infer_method_from_line(line: &str) -> Option<String> {
 }
 
 fn infer_method_from_context(context: &str) -> Option<String> {
+    let context_lower = context.to_ascii_lowercase();
     for method in HTTP_METHODS {
         let lower = method.to_ascii_lowercase();
         if context.contains(&format!("Method::{method}"))
@@ -987,6 +996,10 @@ fn infer_method_from_context(context: &str) -> Option<String> {
             ))
             || context.contains(&format!(".{lower}("))
             || context.contains(&format!("{lower}_json"))
+            // camelCase TS wrappers: getJson(/postJson(/... — matched
+            // case-insensitively with the call paren so unrelated identifiers
+            // do not bind a verb.
+            || context_lower.contains(&format!("{lower}json("))
             || context.contains(&format!("method() === \"{method}\""))
             || context.contains(&format!("method === \"{method}\""))
             || context.contains(&format!("request.method() === \"{method}\""))

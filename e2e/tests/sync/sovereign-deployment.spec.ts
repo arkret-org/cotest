@@ -39,10 +39,12 @@ test.describe("sovereign deployment", () => {
     expect(rogue.status()).toBe(403);
     await expectErrorCode(rogue, "did_method_not_trusted");
 
+    // Deployment/enclave introspection is a soland product-private surface
+    // (`/_soland/self/...`), not part of the `/_cokret/` protocol catalog.
     const betaRealm = await getJson(
       request,
       "beta",
-      `/_cokret/self/realm/${encodeURIComponent(fixture.enclaveRealmId)}`,
+      `/_soland/self/realm/${encodeURIComponent(fixture.enclaveRealmId)}`,
     );
     expect(betaRealm.profile).toBe("enclave");
     expect(betaRealm.hosted_on).toBe(solandServiceDid("beta"));
@@ -50,7 +52,7 @@ test.describe("sovereign deployment", () => {
     const bobStatus = await getJson(
       request,
       "alpha",
-      `/_cokret/self/account/${encodeURIComponent(fixture.bobDid)}`,
+      `/_soland/self/account/${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(bobStatus.external_via_enclave).toBe(true);
     expect(bobStatus.realm).toBe(fixture.enclaveRealmId);
@@ -111,7 +113,7 @@ test.describe("sovereign deployment", () => {
     expect(audit.entries.map((entry: any) => entry.action)).toContain("boundary.enclave_proxy");
   });
 
-  test("E7.2 network outage: soland_main <-> soland_enclave 失联时 enclave 走 store-and-forward,而非客户端 offline outbox", async ({
+  test("E7.2 network outage: when soland_main <-> soland_enclave loses connectivity the enclave uses store-and-forward, not a client-side offline outbox", async ({
     request,
   }) => {
     const fixture = await setupSovereignFixture(request, "outage");
@@ -156,7 +158,7 @@ test.describe("sovereign deployment", () => {
     expect(converged.main_frontier).toBeGreaterThanOrEqual(1);
   });
 
-  test("E7.3 enclave DID resolver policy: bob 的 DID 必须通过 enclave 的 trust chain 验证(不是 main 的)", async ({
+  test("E7.3 enclave DID resolver policy: bob's DID must be validated through the enclave trust chain (not the main one)", async ({
     request,
   }) => {
     const fixture = await setupSovereignFixture(request, "trust");

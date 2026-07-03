@@ -38,8 +38,8 @@
 
 | 名字 | DID | 在 models/core-object-invariants 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-coinv-<uuid>.example` | Space 创建者；patch / archive / tombstone 的发起者；Relation 与 View 的写入端 | 测试开始前 |
-| bob | `did:web:bob-coinv-<uuid>.example` | 第二个 actor；用于 Phase D 中验证 `assigned_to` / `has_default_view` 等需要第二主体的基数边 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-coinv-<uuid>.example` | Space 创建者；patch / archive / tombstone 的发起者；Relation 与 View 的写入端 | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-coinv-<uuid>.example` | 第二个 actor；用于 Phase D 中验证 `assigned_to` / `has_default_view` 等需要第二主体的基数边 | 测试开始前 |
 
 ## Pre-conditions
 

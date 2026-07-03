@@ -46,9 +46,9 @@
 
 | 名字 | DID | 注册服务器 | 角色 |
 |---|---|---|---|
-| alice | `did:web:alice-s2-<uuid>.example` | α (soland-alpha) | Realm 创建者 + 跨域 inviter |
-| bob | `did:web:bob-s2-<uuid>.example` | β (soland-beta) | 跨域 invitee |
-| mallory (sub-test) | `did:web:mallory-s2-<uuid>.example` | β | 服务委托被撤销后的旁观者 |
+| alice | `did:webvh:z6mkfixture:alice-s2-<uuid>.example` | α (soland-alpha) | Realm 创建者 + 跨域 inviter |
+| bob | `did:webvh:z6mkfixture:bob-s2-<uuid>.example` | β (soland-beta) | 跨域 invitee |
+| mallory (sub-test) | `did:webvh:z6mkfixture:mallory-s2-<uuid>.example` | β | 服务委托被撤销后的旁观者 |
 
 ## Pre-conditions
 

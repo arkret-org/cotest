@@ -37,7 +37,7 @@ test.describe("key backup restore live path", () => {
     const put = await putBackup(request, aliceToken, backupId, backup);
     expect(put.status()).toBe(200);
     // spec `keys-operations.schema.json#/$defs/keys_backups_put_outcome`:
-    // { status, backup_id, ciphertext_digest }(SDK KeysBackupsPutOutcome 形)。
+    // { status, backup_id, ciphertext_digest } (the SDK KeysBackupsPutOutcome shape).
     expect(await put.json()).toMatchObject({
       status: "accepted",
       backup_id: backupId,
@@ -168,7 +168,8 @@ test.describe("key backup restore live path", () => {
       },
     );
     expect(proofDelete.status()).toBe(200);
-    // spec `keys_backups_delete_outcome` 仅含 { deleted }(SDK KeysBackupsDeleteOutcome 形)。
+    // spec `keys_backups_delete_outcome` carries only { deleted } (the SDK
+    // KeysBackupsDeleteOutcome shape).
     expect(await proofDelete.json()).toMatchObject({ deleted: true });
     const list = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
       headers: authHeaders(aliceToken),

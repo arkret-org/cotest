@@ -35,14 +35,25 @@ export function conformanceBaseUrl(key: SolandKey = "default"): string {
   return `${solandBaseUrl(key)}/_cokret/_conformance`;
 }
 
+// Service DIDs default to did:webvh (v1 core default service method,
+// identity-did.md); the fixture SCID form matches the spec conformance
+// vectors. did:web is reserved for explicit no-history / negative fixtures.
 export function solandServiceDid(key: SolandKey = "default"): string {
   if (key === "alpha") {
-    return optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ?? "did:web:soland-alpha.joint-e2e.local";
+    return (
+      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ??
+      "did:webvh:z6mkfixture:soland-alpha.joint-e2e.local"
+    );
   }
   if (key === "beta") {
-    return optionalEnv("COTEST_SOLAND_BETA_SERVICE_DID") ?? "did:web:soland-beta.joint-e2e.local";
+    return (
+      optionalEnv("COTEST_SOLAND_BETA_SERVICE_DID") ??
+      "did:webvh:z6mkfixture:soland-beta.joint-e2e.local"
+    );
   }
-  return optionalEnv("COTEST_SOLAND_SERVICE_DID") ?? "did:web:soland.joint-e2e.local";
+  return (
+    optionalEnv("COTEST_SOLAND_SERVICE_DID") ?? "did:webvh:z6mkfixture:soland.joint-e2e.local"
+  );
 }
 
 // True when the dual-soland topology (used by S2 cross-server federation)
@@ -69,7 +80,7 @@ export function coauthBaseUrl(): string | undefined {
 }
 
 export function coauthServiceDid(): string {
-  return optionalEnv("COTEST_COAUTH_SERVICE_DID") ?? "did:web:coauth.joint-e2e.local";
+  return optionalEnv("COTEST_COAUTH_SERVICE_DID") ?? "did:webvh:z6mkfixture:coauth.joint-e2e.local";
 }
 
 // The OAuth `client_id` soland is configured to advertise in
@@ -107,7 +118,7 @@ export function mockClaimIssuerBaseUrl(): string | undefined {
 export function mockClaimIssuerDid(): string {
   return (
     optionalEnv("COTEST_MOCK_CLAIM_ISSUER_DID") ??
-    "did:web:vc-issuer.joint-e2e.local"
+    "did:webvh:z6mkfixture:vc-issuer.joint-e2e.local"
   );
 }
 
@@ -121,7 +132,7 @@ export function mockChallengeProviderBaseUrl(): string | undefined {
 export function mockChallengeProviderDid(): string {
   return (
     optionalEnv("COTEST_MOCK_CHALLENGE_PROVIDER_DID") ??
-    "did:web:captcha.joint-e2e.local"
+    "did:webvh:z6mkfixture:captcha.joint-e2e.local"
   );
 }
 

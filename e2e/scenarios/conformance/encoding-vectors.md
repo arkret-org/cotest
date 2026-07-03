@@ -40,8 +40,8 @@
 
 | 名字 | DID | 在 conformance/encoding-vectors 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-conf-<uuid>.example` | 单 actor;在 §1.8 signature binding 阶段用她的 dev key 签 event,在 §3 redaction 阶段做 redaction 发起者 | 测试开始前 |
-| guest | `did:web:guest-conf-<uuid>.example` | 仅用于 §3 redaction visibility matrix 中的 "未授权读者" 投影 (不实际加入任何 space,只是它的 DID 作为 visibility filter 的输入) | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-conf-<uuid>.example` | 单 actor;在 §1.8 signature binding 阶段用她的 dev key 签 event,在 §3 redaction 阶段做 redaction 发起者 | 测试开始前 |
+| guest | `did:webvh:z6mkfixture:guest-conf-<uuid>.example` | 仅用于 §3 redaction visibility matrix 中的 "未授权读者" 投影 (不实际加入任何 space,只是它的 DID 作为 visibility filter 的输入) | 测试开始前 |
 | conformance harness | n/a (Playwright `request`) | Vector loader / assertion driver;加载 fixture → 调端点 → diff actual vs expected | n/a |
 
 ## Pre-conditions

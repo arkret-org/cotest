@@ -321,7 +321,7 @@ export async function seedCallState(
 }
 
 /** Mint a fresh `ck:call:<uuidv7>` id. The media token issuer + signaling are
- *  decoupled from any prior session (media-service-binding.md 落账时序).
+ *  decoupled from any prior session (media-service-binding.md settlement ordering).
  *  `ck:call:` is its own id-kind (id-kind-registry.json), independent of the
  *  generic `OperationKind` set, so we mint a uuidv7 directly. */
 export function newCallId(): string {

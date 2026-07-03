@@ -213,9 +213,12 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         ));
     }
     if let Some(starid) = &starid {
+        // did:webvh is the v1 core default method; did:web is intentionally
+        // absent (no-history method, negative-fixture only — soland's default
+        // allow-methods no longer includes it either).
         soland_env.push((
             "SOLAND_DID_RESOLVER_ALLOW_METHODS".to_owned(),
-            "did:web,did:key,did:webvh".to_owned(),
+            "did:webvh,did:key".to_owned(),
         ));
         soland_env.push((
             "SOLAND_STARID_WEBVH_RESOLVER_URL".to_owned(),

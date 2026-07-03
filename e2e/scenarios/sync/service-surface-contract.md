@@ -39,7 +39,7 @@
 
 | 名字 | DID | 在 service-surface-contract 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-ssc-<uuid>.example` | 写操作发起者;Phase D 用她的 dev token 重复提交带 `Idempotency-Key` 的写请求;Phase C 用她的可见性范围列分页 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-ssc-<uuid>.example` | 写操作发起者;Phase D 用她的 dev token 重复提交带 `Idempotency-Key` 的写请求;Phase C 用她的可见性范围列分页 | 测试开始前 |
 | harness | n/a (Playwright `request`) | 直接拼 HTTP request、断言响应 envelope、解码 cursor base64url | n/a |
 
 不需要第二个 actor:本 scenario 不涉及跨用户授权;`unsupported_feature` 路径只需要 alice 的 token + 一个声明不支持的 feature。

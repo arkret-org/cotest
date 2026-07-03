@@ -35,9 +35,9 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 | 名字 | 设备 | DID / device_id | 角色 |
 |---|---|---|---|
-| alice | alice-device-1 (laptop) | `did:web:alice-s11-<uuid>.example` / `ck:device:...-d1` | reader,首次记录 read marker |
+| alice | alice-device-1 (laptop) | `did:webvh:z6mkfixture:alice-s11-<uuid>.example` / `ck:device:...-d1` | reader,首次记录 read marker |
 | alice | alice-device-2 (phone)  | 同上 actor,不同 device_id `ck:device:...-d2` | 第二台 device,接收 to-device 同步;最后触发 mark-all-read |
-| bob   | bob 默认设备            | `did:web:bob-s11-<uuid>.example`              | sender,在共享 Realm 里发 M1/M2/M3/M4 |
+| bob   | bob 默认设备            | `did:webvh:z6mkfixture:bob-s11-<uuid>.example`              | sender,在共享 Realm 里发 M1/M2/M3/M4 |
 
 ## Pre-conditions
 

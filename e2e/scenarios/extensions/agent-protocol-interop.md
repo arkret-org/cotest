@@ -35,9 +35,9 @@
 
 | 名字 | DID | 在 agent-protocol-interop 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-agent-handoff-<uuid>.example` | 人类 delegator;在 yougen 上选定 endpoint、批准 capability grant、签 `ck.agent.protocol_session.start`、最终接收 result 并 publish | 测试开始前 |
-| local_agent | `did:web:local-agent-handoff-<uuid>.example` | alice 名下的 local agent actor;持 `ck.agent.protocol.discover` + `ck.agent.protocol_session.start` 两条 capability;实际 session.start 的 `actor_id` | 测试开始前 (`ck.agent.endpoint` 注册时由 alice 颁发 capability) |
-| remote_agent | `did:web:agent-handoff-<uuid>.example` | 远端 agent,在 DID Document 的 `service` 数组里声明 a2a + acp 双 endpoint;由 mock-agent-runtime 代表;target of `counterparty_agent` 字段 | 测试开始前由 mock-agent-runtime 注入 (生成 DID Document 并 expose `agent-card.json`) |
+| alice | `did:webvh:z6mkfixture:alice-agent-handoff-<uuid>.example` | 人类 delegator;在 yougen 上选定 endpoint、批准 capability grant、签 `ck.agent.protocol_session.start`、最终接收 result 并 publish | 测试开始前 |
+| local_agent | `did:webvh:z6mkfixture:local-agent-handoff-<uuid>.example` | alice 名下的 local agent actor;持 `ck.agent.protocol.discover` + `ck.agent.protocol_session.start` 两条 capability;实际 session.start 的 `actor_id` | 测试开始前 (`ck.agent.endpoint` 注册时由 alice 颁发 capability) |
+| remote_agent | `did:webvh:z6mkfixture:agent-handoff-<uuid>.example` | 远端 agent,在 DID Document 的 `service` 数组里声明 a2a + acp 双 endpoint;由 mock-agent-runtime 代表;target of `counterparty_agent` 字段 | 测试开始前由 mock-agent-runtime 注入 (生成 DID Document 并 expose `agent-card.json`) |
 
 > 命名约定:`local_agent` 与 `remote_agent` 都是 agent-class actor;alice 是 human delegator,签发 capability 但不直接执行 handoff。Spec §4 要求 upgrade MUST 是显式、可授权、可审计的行为,因此每条 capability grant 的 `actor` 都必须能被 audit chain 反查到 alice。
 

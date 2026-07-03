@@ -29,7 +29,7 @@
 | 名字 | VID | 在 identity/tsp-bootstrap 中的角色 | 注册时机 |
 |---|---|---|---|
 | alice | `did:webvh:<scid>:alice-tsp-<uuid>.example` | 内部 Cokret 用户;TSP relationship 发起方;发送 `ck.invite.create` | 测试开始前 |
-| bob_extern | `did:web:bob-extern-tsp-<uuid>.example` | 外部组织;通过 TSP 接入;接收 invite 并回 `ck.member.state{join}` | 测试开始前(只在 DID:web host 注册 DID Document,不在 soland 注册账户) |
+| bob_extern | `did:webvh:z6mkfixture:bob-extern-tsp-<uuid>.example` | 外部组织;通过 TSP 接入;接收 invite 并回 `ck.member.state{join}` | 测试开始前(只在 DID:web host 注册 DID Document,不在 soland 注册账户) |
 | tsp_endpoint | mock | 双向 TSP 通道的承载者;`MOCK_TSP_ENDPOINT_PORT` 指定端口、`MOCK_TSP_ENDPOINT_VID` 指定其代为宣告的 VID | 由 harness 在测试启动前拉起 |
 
 ## Pre-conditions

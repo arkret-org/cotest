@@ -54,20 +54,6 @@
     {
       "source": "cotest",
       "method": "*",
-      "path": "/_cokret/self/authz/grants",
-      "classification": "product-private",
-      "reason": "Frozen test.describe.fixme in capability-chain.spec.ts referencing a spec-removed synchronous grant-create surface (replaced by event-minted ck.capability.grant -> /_cokret/self/events + reducer). Allowlisted only so the path-scan gate stays green until the suite is rebuilt on the event wire; not a protocol operation. See fixme-debt.md (capability-chain rewrite)."
-    },
-    {
-      "source": "cotest",
-      "method": "*",
-      "path": "/_cokret/self/authz/grants/{wildcard}",
-      "classification": "product-private",
-      "reason": "Frozen test.describe.fixme in capability-chain.spec.ts referencing a spec-removed cascade-revoke surface (DELETE /authz/grants/{grant_id}, replaced by event-minted ck.capability.revoke -> /_cokret/self/events + reducer). Allowlisted only so the path-scan gate stays green until the suite is rebuilt on the event wire; not a protocol operation. See fixme-debt.md (capability-chain rewrite)."
-    },
-    {
-      "source": "cotest",
-      "method": "*",
       "path": "/_cokret/self/schemas",
       "classification": "product-private",
       "reason": "Negative-surface probe: schema_policy_realtime/schema.rs asserts these schema-registry endpoints respond 404 unrecognized_endpoint, i.e. it confirms the absence of a schema-registry operation rather than calling one."

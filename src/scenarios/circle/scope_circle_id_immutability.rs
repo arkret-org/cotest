@@ -1,11 +1,11 @@
 //! P2F.3 — `scope_circle_id` is reducer-immutable (`scope_rebind_forbidden`).
 //!
-//! CKP-0007 §3.4 normative spec:
-//!
-//! > 改绑 `scope_circle_id` 默认 reducer 拒绝
-//! > (`failed_precondition` `reason="scope_rebind_forbidden"`); profile MAY
-//! > 允许,但 MUST audit-paired high-risk update. 所有已存在 Message / 子
-//! > 内容保留其写入时的 `effective_scope` 与旧 scope MLS;新内容才进新 scope.
+//! Normative rule (CKP-0007 §3.4, paraphrased): rebinding `scope_circle_id`
+//! is rejected by the reducer by default (`failed_precondition`
+//! `reason="scope_rebind_forbidden"`); a profile MAY allow it, but the update
+//! MUST then be an audit-paired high-risk update. All pre-existing Messages
+//! and child content keep the `effective_scope` (and old-scope MLS) they were
+//! written under; only new content enters the new scope.
 //!
 //! The companion scenario [`effective_scope_mismatch`] pins the
 //! *envelope-vs-payload* consistency check (same event, two declared

@@ -1,506 +1,335 @@
-// Capability grant / revoke / delegate / constraints / audit
+// Capability chain on the event wire: grant / delegate (narrowing) / revoke cascade
 // Contract: e2e/scenarios/authz/capability-chain.md
-// Spec: authz/capabilities.md §3 (Grant), §10 (Delegation), §12 (Revocation),
-//        events/audit shape from admin/audit.rs
-// E2E-CAP-1 — soland/_todos.md "E2E gap backlog".
+// Spec: authz/capabilities.md §3 (grant + §3.1a issuer upper bound),
+//       §10 (delegation narrowing + §10.3 revoke propagation), §12 (revocation)
+//
+// Capabilities are event-minted: grants are `ck.capability.grant` events and
+// revocations `ck.capability.revoke` events submitted to /_cokret/self/events
+// and projected by the reducer. The only synchronous read surfaces are the
+// registered diagnostics endpoints POST /_cokret/self/authz/check
+// (ck.self.authz.query.check) and GET /_cokret/self/authz/effective-grants
+// (ck.self.authz.grants.query.effective). The former synchronous REST
+// grant/revoke/audit surface (POST/DELETE /_cokret/self/authz/grants*,
+// GET /_soland/self/audit/events) was removed from the spec and MUST NOT be
+// reintroduced (SPEC-CR-020: zero new operations).
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { wireErrCode } from "../../helpers/soland-api";
 import {
-  ensureRegistered,
-  issueDevSession,
-  openUserPage,
-  uniqueUser,
-} from "../../helpers/users";
-
-test.describe.configure({ mode: "serial" });
-
-type GrantBody = {
-  realm_id: string;
-  subject: string;
-  resource?: string;
-  actions: string[];
-  constraints?: unknown[];
-  expires_at?: string;
-  delegated_from?: string;
-};
-
-async function createGrant(
-  request: ReturnType<typeof Object>,
-  token: string,
-  body: GrantBody,
-) {
-  return await (request as import("@playwright/test").APIRequestContext).post(
-    `${solandBaseUrl()}/_cokret/self/authz/grants`,
-    {
-      headers: { authorization: `Bearer ${token}` },
-      data: body,
-    },
-  );
-}
-
-async function authzCheck(
-  request: import("@playwright/test").APIRequestContext,
-  token: string,
-  body: { actor_id: string; action: string; resource: unknown },
-) {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
-    headers: { authorization: `Bearer ${token}` },
-    data: body,
-  });
-}
+  authHeaders,
+  buildCapabilityGrantEnvelope,
+  createRealmApi,
+  grantCapabilityEventApi,
+  revokeCapabilityApi,
+  wireErrCode,
+  type CapabilityGrantEventArgs,
+} from "../../helpers/soland-api";
+import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
 function plusSeconds(deltaSec: number): string {
-  return new Date(Date.now() + deltaSec * 1000).toISOString();
+  return new Date(Date.now() + deltaSec * 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
 }
 
-// GAP-authz-capability-rest-removed — demoted from @fully-implemented.
-// This suite drives a synchronous REST grant/revoke/audit API that has been
-// removed from soland:
-//   - POST   /_cokret/self/authz/grants            (grant create — removed)
-//   - DELETE /_cokret/self/authz/grants/{id}        (revoke + cascade — removed)
-//   - GET    /_soland/self/audit/events             (audit log — removed)
-// The spec replacement is event-minted capabilities: grants are a
-// `ck.capability.grant` event and revocations a `ck.capability.revoke` event
-// submitted to /_cokret/self/events, projected by the reducer
-// (soland reducer/apply_capability.rs); only authz/check + authz/effective-grants
-// remain as read endpoints. The event model has fundamentally different
-// semantics from this suite's assertions: no synchronous 412
-// capability_not_held / capability_over_expire at submit time, no
-// cascade_revoked response body, and no audit-events endpoint. Re-implementing
-// these against the event model + reducer-side validation is a rewrite, not an
-// endpoint swap. Restore to @fully-implemented once rebuilt on the event wire.
-test.describe.fixme("capability chain", () => {
-  test("non-member writing to a space is rejected (missing_capability baseline)", async ({
-    browser,
+// POST /_cokret/self/authz/check — spec AuthzCheckOutcome: five-valued
+// `decision` enum; `allow` / `hard_deny` are the terminal values the local
+// projection yields.
+async function authzCheck(
+  request: APIRequestContext,
+  token: string,
+  args: { actorDid: string; action: string; realmId: string },
+): Promise<{ decision: string; reasonCode?: string }> {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
+    headers: authHeaders(token),
+    data: {
+      actor_id: args.actorDid,
+      action: args.action,
+      resource: { kind: "realm", realm_id: args.realmId },
+    },
+  });
+  const text = await response.text();
+  expect(response.status(), `authz/check: ${text}`).toBe(200);
+  const body = JSON.parse(text) as { decision: string; reason_code?: string };
+  return { decision: body.decision, reasonCode: body.reason_code };
+}
+
+// Submit a `ck.capability.grant` envelope raw (no 200 assertion) so negative
+// cases can pin the reducer's fail-closed rejection.
+async function submitGrantRaw(
+  request: APIRequestContext,
+  token: string,
+  args: CapabilityGrantEventArgs,
+): Promise<{ status: number; text: string; body: unknown; grantId: string }> {
+  const { envelope, grantId } = buildCapabilityGrantEnvelope(args);
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    headers: authHeaders(token),
+    data: envelope,
+  });
+  const text = await response.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = undefined;
+  }
+  return { status: response.status(), text, body, grantId };
+}
+
+// Reducer fail-closed rejections surface as a 4xx wire error. The top-level
+// code is the coarse spec class (`failed_precondition` / `schema_violation`);
+// implementations may surface the fine-grained registry reason directly.
+function expectGrantRejected(
+  result: { status: number; text: string; body: unknown },
+  acceptableReasons: string[],
+) {
+  expect(
+    result.status,
+    `expected fail-closed rejection, got ${result.status}: ${result.text}`,
+  ).toBeGreaterThanOrEqual(400);
+  expect(result.status).toBeLessThan(500);
+  expect(
+    ["failed_precondition", "schema_violation", ...acceptableReasons],
+    `unexpected error code in ${result.text}`,
+  ).toContain(wireErrCode(result.body));
+}
+
+async function setupOwnerRealm(request: APIRequestContext, label: string) {
+  const alice = uniqueUser(`cap-${label}-alice`);
+  const bob = uniqueUser(`cap-${label}-bob`);
+  const carol = uniqueUser(`cap-${label}-carol`);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+    ensureRegistered(request, carol),
+  ]);
+  const aliceToken = await issueDevSession(request, alice);
+  const bobToken = await issueDevSession(request, bob);
+  const realmId = await createRealmApi(request, aliceToken, {
+    title: `cap ${label} ${Date.now()}`,
+    discoverability: "listed",
+  });
+  return { alice, bob, carol, aliceToken, bobToken, realmId };
+}
+
+test.describe("capability chain (event wire)", () => {
+  test("§3 grant lifecycle: bob is denied before the grant and allowed after alice mints ck.capability.grant; effective-grants surfaces it", async ({
     request,
   }) => {
-    const stamp = Date.now();
-    const alice = uniqueUser("s20-alice");
-    const mallory = uniqueUser("s20-mallory");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, mallory),
-    ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const malloryToken = await issueDevSession(request, mallory);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const { alice, bob, aliceToken, realmId } = await setupOwnerRealm(request, "grant");
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `S20 baseline ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
+    const before = await authzCheck(request, aliceToken, {
+      actorDid: bob.did,
+      action: "ck.message.create",
+      realmId,
+    });
+    expect(before.decision).toBe("hard_deny");
 
-      // mallory (non-member, no capability) attempts to send a message via API.
-      const send = await request.post(`${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/messages`, {
-        headers: { authorization: `Bearer ${malloryToken}` },
-        data: { content: { text: "mallory attempt" } },
-      });
-      expect([401, 403, 404, 405]).toContain(send.status());
-    } finally {
-      await alicePage.close();
-    }
+    const { grantId } = await grantCapabilityEventApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: bob.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(3600),
+    });
+
+    const after = await authzCheck(request, aliceToken, {
+      actorDid: bob.did,
+      action: "ck.message.create",
+      realmId,
+    });
+    expect(after.decision).toBe("allow");
+
+    // GET /_cokret/self/authz/effective-grants — realm owner may query a
+    // subject's direct grants (GrantList).
+    const grantsResp = await request.get(
+      `${solandBaseUrl()}/_cokret/self/authz/effective-grants?subject=${encodeURIComponent(bob.did)}&realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const grantsText = await grantsResp.text();
+    expect(grantsResp.status(), grantsText).toBe(200);
+    const grants = (JSON.parse(grantsText) as { grants?: Array<{ id?: string }> }).grants ?? [];
+    expect(grants.map((grant) => grant.id)).toContain(grantId);
   });
 
-  test("alice grants bob ck.message.create with expires_at=+1h; the grant is effective via /authz/check", async ({
-    browser,
+  test("§10 narrowing delegation: bob re-grants to carol with a subset window via parent_grant_id; carol's check passes through the chain", async ({
     request,
   }) => {
-    // spec: capabilities.md §3 (Grant object) — temporal constraint accepted,
-    // and /authz/check returns allowed=true with reason=explicit_grant.
-    const stamp = Date.now();
-    const alice = uniqueUser("cap-grant-alice");
-    const bob = uniqueUser("cap-grant-bob");
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
+      request,
+      "delegate",
+    );
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `cap grant ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
+    const parent = await grantCapabilityEventApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: bob.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(3600),
+    });
 
-      const expiresAt = plusSeconds(3600);
-      const grantResp = await createGrant(request, aliceToken, {
-        realm_id: realmId,
-        subject: bob.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: expiresAt,
-      });
-      expect(grantResp.status()).toBe(200);
-      const grant = await grantResp.json();
-      expect(grant.grant_id).toBeTruthy();
-      expect(grant.subject).toBe(bob.did);
-      expect(grant.actions).toContain("ck.message.create");
-      expect(grant.expires_at).toBeTruthy();
-      expect(grant.delegated_from).toBeUndefined();
+    // Child grant narrows: same action set, strictly earlier expiry (§10.1).
+    await grantCapabilityEventApi(request, bobToken, {
+      ownerDid: bob.did,
+      realmId,
+      subjectDid: carol.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(1800),
+      parentGrantId: parent.grantId,
+    });
 
-      const check = await authzCheck(request, aliceToken, {
-        actor_id: bob.did,
-        action: "ck.message.create",
-        resource: { kind: "realm", realm_id: realmId },
-      });
-      expect(check.status()).toBe(200);
-      const decision = await check.json();
-      expect(decision.allowed).toBe(true);
-      expect(decision.reason_code).toBeFalsy();
-    } finally {
-      await alicePage.close();
-    }
+    const carolCheck = await authzCheck(request, aliceToken, {
+      actorDid: carol.did,
+      action: "ck.message.create",
+      realmId,
+    });
+    expect(carolCheck.decision).toBe("allow");
   });
 
-  test("bob delegates the capability to carol with stricter expires_at; carol's check passes through the delegation chain", async ({
-    browser,
+  test("§10.1/§3.1a over-action delegation fails closed: bob cannot re-grant an action bob does not hold", async ({
     request,
   }) => {
-    // spec: capabilities.md §10 — delegation MUST NOT widen actions or expiry.
-    const stamp = Date.now();
-    const alice = uniqueUser("cap-delegate-alice");
-    const bob = uniqueUser("cap-delegate-bob");
-    const carol = uniqueUser("cap-delegate-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
-    ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
+      request,
+      "overaction",
+    );
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `cap delegate ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
+    const parent = await grantCapabilityEventApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: bob.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(3600),
+    });
 
-      const parentGrant = await createGrant(request, aliceToken, {
-        realm_id: realmId,
-        subject: bob.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(3600),
-      });
-      expect(parentGrant.status()).toBe(200);
-      const parent = await parentGrant.json();
+    // bob only holds ck.message.create; delegating moderation authority
+    // violates child.actions ⊆ parent.actions (§10.1) / the issuer upper
+    // bound (§3.1a, reason grant_exceeds_issuer_authority).
+    const overAction = await submitGrantRaw(request, bobToken, {
+      ownerDid: bob.did,
+      realmId,
+      subjectDid: carol.did,
+      actions: ["ck.moderation.decision"],
+      expiresAt: plusSeconds(1800),
+      parentGrantId: parent.grantId,
+    });
+    expectGrantRejected(overAction, ["grant_exceeds_issuer_authority"]);
 
-      // bob delegates to carol with a STRICTER (earlier) expires_at.
-      const childGrant = await createGrant(request, bobToken, {
-        realm_id: realmId,
-        subject: carol.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(1800),
-        delegated_from: parent.grant_id,
-      });
-      expect(childGrant.status()).toBe(200);
-      const child = await childGrant.json();
-      expect(child.delegated_from).toBe(parent.grant_id);
-
-      const check = await authzCheck(request, aliceToken, {
-        actor_id: carol.did,
-        action: "ck.message.create",
-        resource: { kind: "realm", realm_id: realmId },
-      });
-      expect(check.status()).toBe(200);
-      const decision = await check.json();
-      expect(decision.allowed).toBe(true);
-    } finally {
-      await alicePage.close();
-    }
+    const carolCheck = await authzCheck(request, aliceToken, {
+      actorDid: carol.did,
+      action: "ck.moderation.decision",
+      realmId,
+    });
+    expect(carolCheck.decision).toBe("hard_deny");
   });
 
-  test("alice revokes bob's grant; cascade revokes carol's delegated capability; both subsequent checks rejected", async ({
-    browser,
+  test("§10.1 expiry widening fails closed: the child grant cannot outlive the parent grant", async ({
     request,
   }) => {
-    // spec: capabilities.md §3.3 / §12 — revoke cascades through delegation chain.
-    const stamp = Date.now();
-    const alice = uniqueUser("cap-revoke-alice");
-    const bob = uniqueUser("cap-revoke-bob");
-    const carol = uniqueUser("cap-revoke-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
+    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
+      request,
+      "overexpire",
+    );
+
+    const parent = await grantCapabilityEventApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: bob.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(1800),
+    });
+
+    // child effective_expires_at MUST be <= parent.effective_expires_at
+    // (§10.1, reason delegation_expiry_widening).
+    const overExpire = await submitGrantRaw(request, bobToken, {
+      ownerDid: bob.did,
+      realmId,
+      subjectDid: carol.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(7200),
+      parentGrantId: parent.grantId,
+    });
+    expectGrantRejected(overExpire, [
+      "delegation_expiry_widening",
+      "grant_exceeds_issuer_authority",
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `cap revoke ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
-
-      const parentResp = await createGrant(request, aliceToken, {
-        realm_id: realmId,
-        subject: bob.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(3600),
-      });
-      expect(parentResp.status()).toBe(200);
-      const parent = await parentResp.json();
-
-      const childResp = await createGrant(request, bobToken, {
-        realm_id: realmId,
-        subject: carol.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(1800),
-        delegated_from: parent.grant_id,
-      });
-      expect(childResp.status()).toBe(200);
-      const child = await childResp.json();
-
-      // Sanity: both currently allowed.
-      const bobBefore = await authzCheck(request, aliceToken, {
-        actor_id: bob.did,
-        action: "ck.message.create",
-        resource: { kind: "realm", realm_id: realmId },
-      });
-      expect((await bobBefore.json()).allowed).toBe(true);
-
-      // alice (space owner) revokes the parent grant — cascade revokes carol's.
-      const revokeResp = await request.delete(
-        `${solandBaseUrl()}/_cokret/self/authz/grants/${encodeURIComponent(parent.grant_id)}`,
-        { headers: { authorization: `Bearer ${aliceToken}` } },
-      );
-      expect(revokeResp.status()).toBe(200);
-      const revoke = await revokeResp.json();
-      expect(revoke.revoked).toBe(true);
-      expect(revoke.cascade_revoked).toContain(child.grant_id);
-
-      // Both must now be rejected.
-      const bobAfter = await authzCheck(request, aliceToken, {
-        actor_id: bob.did,
-        action: "ck.message.create",
-        resource: { kind: "realm", realm_id: realmId },
-      });
-      const carolAfter = await authzCheck(request, aliceToken, {
-        actor_id: carol.did,
-        action: "ck.message.create",
-        resource: { kind: "realm", realm_id: realmId },
-      });
-      expect((await bobAfter.json()).allowed).toBe(false);
-      expect((await carolAfter.json()).allowed).toBe(false);
-    } finally {
-      await alicePage.close();
-    }
+    const carolCheck = await authzCheck(request, aliceToken, {
+      actorDid: carol.did,
+      action: "ck.message.create",
+      realmId,
+    });
+    expect(carolCheck.decision).toBe("hard_deny");
   });
 
-  test("E20.1 over-grant: bob cannot delegate an action bob does not hold (capability_not_held)", async ({
-    browser,
+  test("§12/§10.3 revoke cascade: revoking the parent grant invalidates the delegated child and blocks re-delegation from the revoked parent", async ({
     request,
   }) => {
-    // spec: capabilities.md §10 — 再授权不得扩大动作范围.
-    const stamp = Date.now();
-    const alice = uniqueUser("cap-overgrant-alice");
-    const bob = uniqueUser("cap-overgrant-bob");
-    const carol = uniqueUser("cap-overgrant-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
-    ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
+      request,
+      "revoke",
+    );
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `cap overgrant ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
+    const parent = await grantCapabilityEventApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: bob.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(3600),
+    });
+    await grantCapabilityEventApi(request, bobToken, {
+      ownerDid: bob.did,
+      realmId,
+      subjectDid: carol.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(1800),
+      parentGrantId: parent.grantId,
+    });
 
-      // alice only gives bob `ck.message.create`.
-      const parentResp = await createGrant(request, aliceToken, {
-        realm_id: realmId,
-        subject: bob.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(3600),
-      });
-      expect(parentResp.status()).toBe(200);
-      const parent = await parentResp.json();
+    // Sanity: both allowed before the revoke.
+    expect(
+      (
+        await authzCheck(request, aliceToken, {
+          actorDid: bob.did,
+          action: "ck.message.create",
+          realmId,
+        })
+      ).decision,
+    ).toBe("allow");
 
-      // bob tries to delegate moderation authority to carol, but bob doesn't hold it.
-      const childResp = await createGrant(request, bobToken, {
-        realm_id: realmId,
-        subject: carol.did,
-        resource: "*",
-        actions: ["ck.moderation.decision"],
-        expires_at: plusSeconds(1800),
-        delegated_from: parent.grant_id,
-      });
-      expect(childResp.status()).toBe(412);
-      const body = await childResp.json();
-      expect(wireErrCode(body)).toBe("capability_not_held");
-    } finally {
-      await alicePage.close();
-    }
-  });
+    // Revocation is an explicit ck.capability.revoke event (§12), never a
+    // record deletion.
+    await revokeCapabilityApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      grantId: parent.grantId,
+    });
 
-  test("E20.2 over-expire: bob's delegation cannot exceed bob's own expiry (capability_over_expire)", async ({
-    browser,
-    request,
-  }) => {
-    // spec: capabilities.md §10 — 再授权不得扩大资源范围 / temporal constraint.
-    const stamp = Date.now();
-    const alice = uniqueUser("cap-overexpire-alice");
-    const bob = uniqueUser("cap-overexpire-bob");
-    const carol = uniqueUser("cap-overexpire-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
-    ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    // §10.3: every derived child grant MUST be invalid in the revoke's causal
+    // future — both checks fail closed.
+    const bobAfter = await authzCheck(request, aliceToken, {
+      actorDid: bob.did,
+      action: "ck.message.create",
+      realmId,
+    });
+    expect(bobAfter.decision).toBe("hard_deny");
+    const carolAfter = await authzCheck(request, aliceToken, {
+      actorDid: carol.did,
+      action: "ck.message.create",
+      realmId,
+    });
+    expect(carolAfter.decision).toBe("hard_deny");
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `cap overexpire ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
-
-      // alice gives bob a grant expiring in 30 minutes.
-      const parentResp = await createGrant(request, aliceToken, {
-        realm_id: realmId,
-        subject: bob.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(1800),
-      });
-      expect(parentResp.status()).toBe(200);
-      const parent = await parentResp.json();
-
-      // bob tries to delegate to carol expiring in 2 hours.
-      const childResp = await createGrant(request, bobToken, {
-        realm_id: realmId,
-        subject: carol.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(7200),
-        delegated_from: parent.grant_id,
-      });
-      expect(childResp.status()).toBe(412);
-      const body = await childResp.json();
-      expect(wireErrCode(body)).toBe("capability_over_expire");
-    } finally {
-      await alicePage.close();
-    }
-  });
-
-  test("audit log contains grant, delegate, revoke entries with grantor/grantee/timestamp/actions", async ({
-    browser,
-    request,
-  }) => {
-    // spec: capabilities.md §3.4 — each grant lifecycle event MUST be auditable.
-    const stamp = Date.now();
-    const alice = uniqueUser("cap-audit-alice");
-    const bob = uniqueUser("cap-audit-bob");
-    const carol = uniqueUser("cap-audit-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
-    ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `cap audit ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-      });
-
-      const parentResp = await createGrant(request, aliceToken, {
-        realm_id: realmId,
-        subject: bob.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(3600),
-      });
-      const parent = await parentResp.json();
-
-      const childResp = await createGrant(request, bobToken, {
-        realm_id: realmId,
-        subject: carol.did,
-        resource: "*",
-        actions: ["ck.message.create"],
-        expires_at: plusSeconds(1800),
-        delegated_from: parent.grant_id,
-      });
-      const child = await childResp.json();
-
-      await request.delete(
-        `${solandBaseUrl()}/_cokret/self/authz/grants/${encodeURIComponent(parent.grant_id)}`,
-        { headers: { authorization: `Bearer ${aliceToken}` } },
-      );
-
-      // alice queries her own audit log — must contain authz.grant.create + authz.grant.revoke.
-      const aliceAudit = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(alice.did)}`,
-        { headers: { authorization: `Bearer ${aliceToken}` } },
-      );
-      expect(aliceAudit.status()).toBe(200);
-      const aliceBody = await aliceAudit.json();
-      const aliceEvents = aliceBody.events as Array<{
-        action: string;
-        actor?: string;
-        target?: { grant_id?: string; subject?: string; actions?: string[] };
-        created_at?: string;
-      }>;
-      const aliceCreate = aliceEvents.find(
-        (e) => e.action === "authz.grant.create" && e.target?.grant_id === parent.grant_id,
-      );
-      expect(aliceCreate, "alice must have an authz.grant.create entry for the parent grant").toBeTruthy();
-      expect(aliceCreate?.actor).toBe(alice.did);
-      expect(aliceCreate?.target?.subject).toBe(bob.did);
-      expect(aliceCreate?.target?.actions).toContain("ck.message.create");
-      expect(aliceCreate?.created_at).toBeTruthy();
-
-      const aliceRevoke = aliceEvents.find(
-        (e) => e.action === "authz.grant.revoke" && e.target?.grant_id === parent.grant_id,
-      );
-      expect(aliceRevoke, "alice must have an authz.grant.revoke entry").toBeTruthy();
-      expect(aliceRevoke?.actor).toBe(alice.did);
-
-      // bob queries his own audit log — must contain authz.grant.delegate.
-      const bobAudit = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(bob.did)}`,
-        { headers: { authorization: `Bearer ${bobToken}` } },
-      );
-      expect(bobAudit.status()).toBe(200);
-      const bobBody = await bobAudit.json();
-      const bobEvents = bobBody.events as Array<{
-        action: string;
-        actor?: string;
-        target?: { grant_id?: string; subject?: string };
-      }>;
-      const bobDelegate = bobEvents.find(
-        (e) => e.action === "authz.grant.delegate" && e.target?.grant_id === child.grant_id,
-      );
-      expect(bobDelegate, "bob must have an authz.grant.delegate entry for the child grant").toBeTruthy();
-      expect(bobDelegate?.actor).toBe(bob.did);
-      expect(bobDelegate?.target?.subject).toBe(carol.did);
-    } finally {
-      await alicePage.close();
-    }
+    // Re-delegating from the revoked parent MUST fail closed with
+    // grant_revoked_upstream (§10.3).
+    const fromRevoked = await submitGrantRaw(request, bobToken, {
+      ownerDid: bob.did,
+      realmId,
+      subjectDid: carol.did,
+      actions: ["ck.message.create"],
+      expiresAt: plusSeconds(600),
+      parentGrantId: parent.grantId,
+    });
+    expectGrantRejected(fromRevoked, ["grant_revoked_upstream"]);
   });
 });

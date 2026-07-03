@@ -28,10 +28,18 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("mimi federation", () => {
-  // soland/yougen gap: MIMI Provider Facade binding + room binding +
-  // identity bridging 未实现(MIMI interop 是 extension profile,v1 core 不必需)。
-  // cotest 已提供 helpers/mimi-facade.ts 与 mock facade;业务 case 仍以 fixme
-  // 锚定服务端/客户端待实现链路。
+  // soland/yougen gap: the MIMI Provider Facade binding + identity-bridging
+  // business chain is not implemented yet (MIMI interop is an extension
+  // profile, not required for v1 core). cotest already ships
+  // helpers/mimi-facade.ts plus the mock facade; the business cases below stay
+  // fixme-anchored until the server/client chain lands. All acceptance
+  // surfaces are spec-registered: the MIMI protocol face is exactly
+  // `/_cokret/open/mimi/*` (openapi catalog); realm/member introspection goes
+  // through the event plane (`ck.member.state` via `/_cokret/self/events`) or
+  // the `/_soland/` product face — there is NO
+  // `/_cokret/self/realm/:id/federation/mimi/*` and NO
+  // `/_cokret/self/realm/:id/members` endpoint, and none may be invented
+  // (SPEC-CR-020: zero new operations).
 
   test.fixme(
     // @blocking-on: soland#extensions-mimi-federation-gap
@@ -39,31 +47,45 @@ test.describe("mimi federation", () => {
     // @expected-live-by: 2026Q3
     "alice opens MIMI-enabled Realm; bob_mimi joins via facade; bidirectional messaging with identity bridging",
     async () => {
-      // Phase A — alice 通过 /setup 创建 Realm,设
-      //   ck.realm.federation_profile = "mimi_interop"
-      // 断言 GET /_cokret/self/realm/:id/federation/mimi/endpoint 返回 mimi_endpoint_url + room_binding_id。
+      // Phase A — alice creates a Realm via /setup with
+      //   ck.realm.federation_profile = "mimi_interop".
+      // Assert MIMI interop exposure via the registered protocol face:
+      //   GET /_cokret/describe advertises the mimi_interop extension, and
+      //   GET /_cokret/open/mimi/provider-directory
+      //   (ck.open.mimi.query.provider_directory) returns the provider
+      //   feature profile. The room binding is established through
+      //   POST /_cokret/open/mimi/strands/:id/update (see createBoundMimiRoom
+      //   below for the already-live pattern).
       //
-      // Phase B — mimi_facade (mock) 模拟外部 MIMI 网络的 join request,
-      //   翻译为 Cokret 的 ck.invite.request / knock,投递到 soland;
-      //   alice 的 /realm/:id/admin 看到 federation-inbound-panel 含 mimi 来源标记。
+      // Phase B — mimi_facade (mock) simulates a join request from the
+      //   external MIMI network, translated into a Cokret ck.invite.request /
+      //   knock event submitted to soland; alice's /realm/:id/admin shows the
+      //   federation-inbound-panel with a mimi origin marker.
       //
-      // Phase C — alice approve;soland 通过 facade 验证 bob_mimi 的 MIMI identity,
-      //   按 spec §6 生成 pairwise DID = did:pairwise:${realmId}/${hash(handle, realmId.salt)};
-      //   POST /_cokret/self/realm/:id/federation/mimi/approve 返回 pairwise_did;
-      //   GET /_cokret/self/realm/:id/members 含 source = mimi 的成员。
+      // Phase C — alice approves; soland verifies bob_mimi's MIMI identity
+      //   through the facade and mints the pairwise DID per spec §6
+      //   (did:pairwise:${realmId}/${hash(handle, realmId.salt)}).
+      //   Approval is an event-plane action: the admin approval (product
+      //   face /_soland/, or yougen admin panel) results in a
+      //   ck.member.state{membership=join} event for the pairwise DID.
+      //   Assert membership via the event plane: query /_cokret/self/events
+      //   (queryRealmEventsApi) for the ck.member.state event carrying the
+      //   pairwise DID with a mimi source annotation.
       //
-      // Phase D — alice 在 /timeline/:realmId 发 M1;
-      //   facade mock 记录到 outbound MIMI event;soland message 挂
-      //   ck.morph.federation_outbound = "mimi" + mimi_event_id。
-      //   facade 把 bob_mimi 在 MIMI 网络的 MM2 翻译为 Cokret Message;
-      //   alice timeline 在 30s 内出现 MM2,sender 显示为 pairwise DID;
-      //   消息挂 ck.morph.federation_inbound = "mimi" + mimi_origin_event_id。
-      //   alice reply MM2 → M3;reply 关系在 MIMI ↔ Cokret 双向保留。
+      // Phase D — alice posts M1 on /timeline/:realmId;
+      //   the facade mock records an outbound MIMI event; the soland message
+      //   carries ck.morph.federation_outbound = "mimi" + mimi_event_id.
+      //   The facade translates bob_mimi's MM2 from the MIMI network into a
+      //   Cokret Message; alice's timeline shows MM2 within 30s with the
+      //   pairwise DID as sender; the message carries
+      //   ck.morph.federation_inbound = "mimi" + mimi_origin_event_id.
+      //   alice replies to MM2 with M3; the reply relation is preserved in
+      //   both directions across MIMI <-> Cokret.
       //
-      // Phase E — Phase B 的 approve 隐含 per-Realm consent;
-      //   bob_mimi 的 pairwise DID 只对当前 Realm 有效,
-      //   尝试在另一 Realm R2 中以同一 pairwise DID 投递应被拒。
-      //   (cross-link 到 identity/consent-grant scenario)
+      // Phase E — the Phase B approval implies per-Realm consent only;
+      //   bob_mimi's pairwise DID is valid for the current Realm alone, and a
+      //   delivery attempt in another Realm R2 with the same pairwise DID
+      //   must be rejected. (Cross-link: identity/consent-grant scenario.)
     },
   );
 
@@ -71,16 +93,18 @@ test.describe("mimi federation", () => {
     // @blocking-on: soland#extensions-mimi-federation-gap
     // @user-promise: e2e/scenarios/extensions/mimi-federation.md
     // @expected-live-by: 2026Q3
-    "E5.1 MIMI endpoint 不可达 → federation fallback: 消息本地保留 + outbound 状态标记 deferred,facade 恢复后重试",
+    "E5.1 MIMI endpoint unreachable -> federation fallback: message kept locally, outbound status marked deferred, retried once the facade recovers",
     async () => {
-      // facade mock 主动返回 5xx / timeout;
-      // alice 发 M1 应仍然 persist 到 soland 本地、对 Cokret 成员可见;
-      // message 挂 ck.morph.federation_outbound_status = "deferred";
-      // facade 恢复后,soland 自动重试投递,状态转为 "delivered"。
+      // The facade mock deliberately returns 5xx / times out;
+      // alice's M1 must still persist locally on soland and stay visible to
+      // Cokret members; the message carries
+      // ck.morph.federation_outbound_status = "deferred";
+      // once the facade recovers, soland retries delivery and the status
+      // transitions to "delivered".
     },
   );
 
-  test("E5.2 E2EE 在 MIMI 中的转换:transcript binding 或 explicit downgrade 标记,绝不静默泄露明文", async ({
+  test("E5.2 E2EE translation into MIMI: transcript binding or explicit downgrade marker, never a silent plaintext leak", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -170,7 +194,7 @@ test.describe("mimi federation", () => {
     );
   });
 
-  test("E5.3 content type 差异:MIMI 特有 content kind → quarantine + ck.morph.unknown_content_kind", async ({
+  test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + ck.morph.unknown_content_kind", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -425,6 +449,12 @@ function localMimiProviderId(): string {
   const serviceDid = solandServiceDid();
   if (serviceDid.startsWith("did:web:")) {
     return `mimi://${serviceDid.slice("did:web:".length).replaceAll(":", "/")}`;
+  }
+  // did:webvh:<scid>:<host>[:<path>...] — the HTTP authority starts after
+  // the SCID segment.
+  const webvh = serviceDid.match(/^did:webvh:[^:]+:(.+)$/);
+  if (webvh) {
+    return `mimi://${webvh[1].replaceAll(":", "/")}`;
   }
   return `mimi://${serviceDid.replaceAll(":", ".")}`;
 }

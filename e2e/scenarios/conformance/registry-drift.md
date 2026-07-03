@@ -29,7 +29,7 @@
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-drift-<uuid>.example` | 尝试写入 removed event kind 的发起者 (用 dev session token) | 测试开始前;仅 Phase A/F 需要 |
+| alice | `did:webvh:z6mkfixture:alice-drift-<uuid>.example` | 尝试写入 removed event kind 的发起者 (用 dev session token) | 测试开始前;仅 Phase A/F 需要 |
 | 无 (live phases) | n/a | Phase C/E 是纯 describe + artifact diff,不需要 actor | n/a |
 
 ## Pre-conditions

@@ -1,18 +1,16 @@
-# Capability 授权链(grant / revoke / delegate / constraints / audit)
+# Capability 授权链(事件面:grant / delegate 收窄 / revoke 级联)
 
 ## 目标
 
-验证 capability 完整生命周期:alice 给 bob grant 写消息 capability,带 expiry 约束;bob 用该 capability 写消息;bob delegate 给 carol(sub-constraint);alice revoke bob 后,bob/carol 双双失效;所有变更进 audit log。
+验证 capability 在事件面上的完整生命周期:grant 与 revoke 都是提交到 `/_cokret/self/events` 的事件(`ck.capability.grant` / `ck.capability.revoke`),由 reducer 投影;委托(delegated grant,`parent_grant_id` 链)必须收窄、不得扩权/扩时;revoke 必须显式且沿委托链级联。同步 REST 授权面(`POST/DELETE /_cokret/self/authz/grants*`、`GET /_soland/self/audit/events`)已从 spec 移除,本 scenario 不得复活它(SPEC-CR-020:零新增 operation);仅存的同步读面是注册端点 `POST /_cokret/self/authz/check`(`ck.self.authz.query.check`,诊断/预检,非签名决定)与 `GET /_cokret/self/authz/effective-grants`(`ck.self.authz.grants.query.effective`)。
 
 ## Spec 锚点
 
-- `authz/capabilities.md` §3 — Capability schema(grantor、grantee、actions、constraints)
-- `authz/capabilities.md` §3.2 — Delegation
-- `authz/capabilities.md` §3.3 — Revoke
-- `authz/capabilities.md` §3.4 — Audit trail
-- `authz/constraint-schema.md` — 约束 grammar(temporal、resource-selector)
-- `authz/resource-selector-grammar.md` — 资源选择器(realm-scoped、message-scoped)
-- `authz/event-auth-state-resolution.md` §3 — Capability 是 allow 的唯一来源
+- `authz/capabilities.md` §3 — Grant 对象与事件铸造;§3.1a 首发 grant 的 issuer 自身权限上界(`grant_exceeds_issuer_authority`)
+- `authz/capabilities.md` §10 — Delegation;§10.1 收窄不变量(actions ⊆ parent、resources 收窄、`effective_expires_at` ≤ parent,违反 → `failed_precondition` reason=`delegation_expiry_widening`(窗口)或 `schema_violation`(actions/resources 越界));§10.3 revoke 因果传播(`grant_revoked_upstream`)
+- `authz/capabilities.md` §12 — Revocation 必须显式事件,不是删除记录
+- `authz/event-auth-state-resolution.md` §6 — 委托链 revocation 传播
+- openapi:`ck.self.authz.query.check`(AuthzCheckOutcome 五值 `decision`)、`ck.self.authz.grants.query.effective`(GrantList)
 
 ## 拓扑
 
@@ -22,67 +20,58 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | Realm owner,初始 capability 持有者 |
+| alice | Realm owner,grant issuer |
 | bob | grantee → delegator |
 | carol | sub-delegatee |
-| mallory | 第三方,不应有任何 capability |
 
 ## Steps
 
-### Phase A — alice grant capability 给 bob
+### Phase A — §3 grant 生命周期
 
-1. alice createRealm,seedMembers=[bob, carol, mallory]
-2. alice 进 `/realms/${realmId}/admin` → "Capabilities" 区
-3. 点 "Grant" → 选 grantee = bob.did,actions = `[ck.message.create]`,constraints = `{ expires_at: +1h }`
-4. yougen 提交 `ck.capability.grant`,event 落到 `ck.cell:ck.component.capability.<grant_id>.v1`
-5. 断言:`/realms/${realmId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
+1. alice 建 Realm(API 面 `ck.realm.create`)
+2. 断言:`POST /_cokret/self/authz/check {actor_id: bob, action: ck.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
+3. alice 提交 `ck.capability.grant` 事件(issuer=alice、subject=bob、actions=[`ck.message.create`]、`expires_at=+1h`,grant 对象带 detached-JWS proof)
+4. 断言:同一 authz/check → `decision = "allow"`
+5. 断言:`GET /_cokret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 GrantList 含该 grant id
 
-### Phase B — bob 用 capability 写消息
+### Phase B — §10 合法收窄委托
 
-6. bob 在 timeline 发消息 `M_b`
-7. reducer 校验 bob 持有 `ck.message.create` capability + constraint(未过期)→ 接受
-8. 断言:`M_b` 渲染
+6. alice → bob parent grant(`expires_at=+1h`)
+7. bob 提交子 grant:`ck.capability.grant` 且 grant 对象带 `parent_grant_id=<parent>`、同 action 集、`expires_at=+30min`(严格早于 parent)
+8. 断言:carol 的 authz/check → `allow`(沿 delegation chain 生效)
 
-### Phase C — bob delegate 给 carol(sub-constraint)
+### Phase C — 委托不得扩权(§10.1 / §3.1a)
 
-9. bob 进 `/settings/capabilities` 或 space admin → "Delegate"
-10. 输入 grantee = carol.did,actions = `[ck.message.create]`,sub-constraints = `{ expires_at: +30min }`(在 bob 自己 expiry 之前)
-11. yougen 提交 `ck.capability.delegate`
-12. 断言:capability tree 显示 alice → bob → carol 三层
+9. bob 只持有 `ck.message.create`;bob 试图以 parent 链委托 `ck.moderation.decision` 给 carol
+10. 断言:事件提交被 reducer fail-closed 拒绝(4xx;code ∈ {`failed_precondition`,`schema_violation`,`grant_exceeds_issuer_authority`})
+11. 断言:carol 对 `ck.moderation.decision` 的 authz/check 仍 `hard_deny`
 
-### Phase D — carol 用 delegated capability
+### Phase D — 委托不得扩时(§10.1)
 
-13. carol 发消息 `M_c`
-14. reducer 沿 delegation chain 上溯:bob → alice → Realm owner;全 OK,carol 写入成功
-15. 断言:`M_c` 渲染
+12. parent grant `expires_at=+30min`;bob 试图给 carol 子 grant `expires_at=+2h`
+13. 断言:拒绝(code ∈ {`failed_precondition`,`delegation_expiry_widening`,`grant_exceeds_issuer_authority`})
+14. 断言:carol authz/check 仍 `hard_deny`
 
-### Phase E — alice revoke bob
+### Phase E — §12 显式 revoke + §10.3 级联
 
-16. alice 进 capabilities 列表,点 bob 旁的 "Revoke"
-17. 提交 `ck.capability.revoke { grant_id: bob_grant_id }`
-18. reducer cascade:revoke bob → carol 的 delegated capability 也自动失效(spec §3.3 cascade rule)
-19. 断言:capability tree 中 bob/carol 都标 `revoked`
-20. bob 再发消息 → reducer 拒,reason `capability_revoked`
-21. carol 再发消息 → 同样拒(级联)
+15. alice 提交 `ck.capability.revoke { grant_id: <parent> }`
+16. 断言:bob 与 carol 的 authz/check 双双 `hard_deny`(child grant 在 revoke 的因果后继中失效)
+17. bob 再以已 revoke 的 parent 链发起新委托
+18. 断言:拒绝(code ∈ {`failed_precondition`,`grant_revoked_upstream`})——上游 revoke 的本地可见性优先于 child 的 causal 视图
 
-### Phase F — Audit trail
+## Edge cases(后续扩展,当前未覆盖)
 
-22. alice 查 `/realms/${realmId}/audit` 或调 `GET /_soland/self/audit/events?realm_id=<R>&kind=ck.capability.*`
-23. 断言:看到一行 grant、一行 delegate、一行 revoke;每行含 grantor / grantee / timestamp / actions / constraints
-
-## Edge cases
-
-- **E20.1 over-grant**:bob 试 delegate carol 一个 bob 自己没有的 action(`ck.moderation.decision`)→ reducer 拒,reason `capability_not_held`
-- **E20.2 over-expire**:bob 试 delegate 给 carol 一个 expiry 比 bob 自己晚的 → 拒,reason `delegation_exceeds_grantor_expiry`
-- **E20.3 mallory 无 capability 写消息**:reducer 拒,reason `missing_capability`
-- **E20.4 expiry 自动失效**:bob 的 grant 到期后,无需 explicit revoke,后续消息自动被拒
-- **E20.5 resource selector**:capability 限定到具体 strand_id;bob 给 strand A 写消息 OK,给 strand B 写拒(spec resource-selector-grammar)
+- **expiry 自动失效**:grant 到期后无需显式 revoke 自动失效(需要时间推进 hook)
+- **resource selector 收窄**:委托 resources 必须是 parent 的 selector-narrowing 子集(`resource-selector-grammar.md`)
+- **delegation cycle / depth**:§10.2 cycle detection(`delegation_cycle`)与 `max_delegation_depth`(`delegation_depth_exceeded`)
+- **audit 事实面**:grant/revoke 作为事件本身即审计事实,经事件查询面(`/_cokret/self/events` query)或 `/_soland/` 产品审计面读取;旧 `GET /_soland/self/audit/events` 端点已移除
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.capability.{grant,revoke,delegate}` event kinds;capability tree projection;cascade revoke;constraint evaluator(temporal + resource selector)
-- **yougen 缺口**:`/settings/capabilities` 或 space admin 的 capability UI,delegation tree viewer
+- 事件面 helper:`grantCapabilityEventApi` / `buildCapabilityGrantEnvelope`(负例 raw 提交)/ `revokeCapabilityApi`(`e2e/helpers/soland-api.ts`)
+- soland 的 delegated grant 校验在 reducer(`apply_capability.rs`):issuer 必须是 parent.subject、realm 一致、actions/resources ⊆ parent、expiry 不得晚于 parent、parent 被 revoke → `grant_revoked_upstream`
+- 高层写事件引用授权走信封 `refs[role="authorized_by"]` 指向 grant 的承载事件(`ck:event:` id),既有用法见 `models/morph-schema-migration.spec.ts`
 
 ## 总耗时预估
 
-约 60-90s。
+约 30-45s(纯 API 面,无浏览器)。

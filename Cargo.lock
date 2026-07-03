@@ -657,6 +657,7 @@ dependencies = [
  "cokret-identifiers",
  "getrandom 0.4.2",
  "hex",
+ "hmac 0.13.0",
  "regex",
  "serde",
  "serde_json",
@@ -707,6 +708,7 @@ dependencies = [
  "cokret-core",
  "cokret-signatures",
  "futures-util",
+ "getrandom 0.4.2",
  "reqwest",
  "serde",
  "serde_json",
@@ -751,6 +753,7 @@ dependencies = [
  "subtle",
  "thiserror",
  "url",
+ "zeroize",
 ]
 
 [[package]]

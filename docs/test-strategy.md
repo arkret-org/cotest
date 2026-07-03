@@ -213,14 +213,20 @@ Space Admin. The runner writes these files under
 
 The coauth/soland test mapping is fixed by the runner:
 
-- soland audience/service DID: `did:web:soland.joint-e2e.local`
-- coauth service/issuer DID: `did:web:coauth.joint-e2e.local`
+- soland audience/service DID: `did:webvh:z6mkfixture:soland.joint-e2e.local`
+- coauth service/issuer DID: `did:webvh:z6mkfixture:coauth.joint-e2e.local`
 - coauth publishes soland under `cokret.principal_servers`
 - soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
 - soland introspects session grants at
   `<coauth>/_cokret/gate/account/session-grants/introspect`
 - the static bearer values are local E2E-only defaults and never exposed to the
   browser
+- event proof mode: `COTEST_EVENT_PROOF_MODE` selects the envelope proof the
+  helpers sign with (`detached-jws` default = real detached-JWS fixture;
+  `dev-proof` = legacy development placeholder, dev builds only), and
+  `COTEST_FORBID_DEV_PROOF=1` hard-fails any dev-proof selection so
+  production-shaped runs cannot regress onto the placeholder (implementation:
+  `e2e/helpers/soland-api.ts` `eventProofMode()`)
 
 Recommended local run:
 
@@ -287,7 +293,7 @@ paths. The mock endpoint accepts both its native token payload and Coauth's
 generic outbound email webhook payload.
 
 Witness quorum specs can pass extra witness DIDs with
-`-MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`.
+`-MockWitnessExtraDids "did:webvh:z6mkfixture:witness-b.local,did:webvh:z6mkfixture:witness-c.local"`.
 The runner starts one mock witness process per DID and exports both the primary
 single-witness env vars and the quorum lists
 `COTEST_MOCK_WITNESS_QUORUM_BASE_URLS` /

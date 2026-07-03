@@ -25,8 +25,8 @@
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-s31-<uuid>.example` | 执行 block 的 user | 测试开始前 |
-| bob | `did:web:bob-s31-<uuid>.example` | 被 block 的 user;同 Realm 成员 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-s31-<uuid>.example` | 执行 block 的 user | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-s31-<uuid>.example` | 被 block 的 user;同 Realm 成员 | 测试开始前 |
 
 ## Pre-conditions
 

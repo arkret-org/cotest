@@ -1,7 +1,7 @@
 //! CT-9 — Multi-device QR pairing + cross-signing + MLS Remove on revoke.
 //!
 //! Spec references:
-//!   - `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 "配对流程 (无密码登录)" — QR
+//!   - `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 (pairing flow, passwordless login) — QR
 //!     pairing handshake:
 //!       * new device generates local Ed25519 device key + displays QR containing public key +
 //!         challenge nonce.
@@ -15,7 +15,7 @@
 //!   - §6 "Device List Sync" — any device add / revoke / signature update MUST produce a
 //!     `ck.device.list_update` event in the principal control stream. Clients MUST expose the
 //!     device list delta via sync.
-//!   - §9 / `key-management.md` §5.2 "设备吊销" — revocation:
+//!   - §9 / `key-management.md` §5.2 (device revocation) — revocation:
 //!       * publish `ck.device.revoke` on the principal control stream.
 //!       * for every MLS group the revoked device participated in, issue an MLS `Remove` proposal +
 //!         commit so the device's epoch keys no longer decrypt new content.

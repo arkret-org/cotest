@@ -765,7 +765,11 @@ export function uniqueUser(prefix: string): JointUser {
   const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
   return {
     name: slug,
-    did: `did:web:${slug}.example`,
+    // did:webvh is the v1 core default principal method (identity-did.md).
+    // Dev-login principals use the fixture SCID form from the spec
+    // conformance vectors (`did:webvh:z6mkfixture:<host>`); did:web is
+    // reserved for explicit no-history / negative fixtures only.
+    did: `did:webvh:z6mkfixture:${slug}.example`,
     deviceId: `ck:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
@@ -1187,6 +1191,13 @@ function displayLabelForDid(did: string): string {
   const simpleExample = did.match(/^did:web:([a-z0-9._-]+)\.example$/i);
   if (simpleExample) {
     return `${simpleExample[1].toLowerCase()}:example.com`;
+  }
+  // did:webvh fixture principals minted by uniqueUser():
+  // `did:webvh:<scid>:<slug>.example` — same label derivation as the
+  // did:web simple-example form above.
+  const webvhExample = did.match(/^did:webvh:[a-z0-9]+:([a-z0-9._-]+)\.example$/i);
+  if (webvhExample) {
+    return `${webvhExample[1].toLowerCase()}:example.com`;
   }
   return did;
 }

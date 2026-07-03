@@ -1,20 +1,25 @@
 import { expect, type Locator } from "@playwright/test";
 
 /**
- * 选择一个 dioxus-components(dxc)Select 的选项。
+ * Pick an option from a dioxus-components (dxc) Select.
  *
- * 背景:yougen 前端从原生 `<select>` 迁移到 dxc `Select`(dioxus-primitives)后,
- * 下拉渲染为自定义弹层 —— `button[aria-haspopup="listbox"]` 触发 +
- * `div[role="listbox"]` 容器 + 一组 `div[role="option"]`,不再是原生
- * `<select>`/`<option>`。因此 Playwright 的 `locator.selectOption()` 会抛
- * `Element is not a <select> element`,所有沿用它的 e2e 都会崩。
+ * Background: after the yougen frontend migrated from a native `<select>` to
+ * the dxc `Select` (dioxus-primitives), the dropdown renders as a custom
+ * popover — a `button[aria-haspopup="listbox"]` trigger plus a
+ * `div[role="listbox"]` container with `div[role="option"]` entries — no
+ * longer a native `<select>`/`<option>`. Playwright's
+ * `locator.selectOption()` therefore throws
+ * `Element is not a <select> element` and every e2e still using it breaks.
  *
- * yougen 的 `SelectOption` 把底层 value 暴露为 `data-value`(见
- * `yougen/src/ui/select/component.rs`),本 helper 据此按 value 定位并点击,
- * 调用语义与原 `selectOption(value)` 等价(传入的字符串不变)。
+ * yougen's `SelectOption` exposes the underlying value as `data-value` (see
+ * `yougen/src/ui/select/component.rs`); this helper locates and clicks the
+ * option by that value, keeping call semantics equivalent to the original
+ * `selectOption(value)` (the string passed in is unchanged).
  *
- * @param scope 指向 Select 外层容器的 Locator(通常 `page.getByTestId("xxx-select")`)
- * @param value 选项的底层 value(与原 `selectOption` 的第一个参数完全一致)
+ * @param scope Locator pointing at the Select's outer container (usually
+ *   `page.getByTestId("xxx-select")`)
+ * @param value the option's underlying value (identical to the first
+ *   argument of the original `selectOption`)
  */
 export async function selectDxcOption(scope: Locator, value: string): Promise<void> {
   const trigger = scope.locator('button[aria-haspopup="listbox"]').first();

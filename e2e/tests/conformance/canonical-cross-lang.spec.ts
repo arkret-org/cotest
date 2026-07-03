@@ -14,6 +14,12 @@
 // reproduces it byte-for-byte, while the Rust gate asserts the SDK does. If the
 // TS port drifts, only this side fails — localising the regression.
 //
+// Third lane: the `.mjs` runtime (mocks + scripts) carries its own
+// canonicalJson in e2e/mocks/_shared/http.mjs whose digests must equally match
+// what soland/the SDK verify. It is asserted here against the same golden so
+// its "lock-step with the TS helper" contract is machine-checked, not a
+// comment promise.
+//
 // Pure logic test: no live server, no network. It exercises the canonicaliser
 // in isolation.
 
@@ -22,6 +28,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { canonicalJson } from "../../helpers/soland-api";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — plain-ESM mock helper module without type declarations.
+import { canonicalJson as canonicalJsonMjs } from "../../mocks/_shared/http.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -51,6 +60,11 @@ test.describe("canonical JSON cross-language parity (TS port vs SDK golden)", ()
   for (const [index, vector] of doc.vectors.entries()) {
     test(`vector[${index}] TS canonicalJson matches SDK golden byte-for-byte`, () => {
       const produced = canonicalJson(vector.value);
+      expect(produced).toBe(vector.canonical);
+    });
+
+    test(`vector[${index}] mjs canonicalJson (mocks/_shared/http.mjs) matches SDK golden byte-for-byte`, () => {
+      const produced = (canonicalJsonMjs as (value: unknown) => string)(vector.value);
       expect(produced).toBe(vector.canonical);
     });
   }

@@ -36,7 +36,7 @@
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-morph-<uuid>.example` | Realm owner;发 `ck.morph.create` / `ck.morph.update` / `ck.morph.schema_migrate` event;Phase A/B/C/D 用她的 dev session | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-morph-<uuid>.example` | Realm owner;发 `ck.morph.create` / `ck.morph.update` / `ck.morph.schema_migrate` event;Phase A/B/C/D 用她的 dev session | 测试开始前 |
 | 无 (Phase E) | n/a | Phase E 是纯 artifact 解析 + describe 自检,不需要 actor | n/a |
 
 ## Pre-conditions

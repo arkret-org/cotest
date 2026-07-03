@@ -22,6 +22,10 @@
 #   * src/scenarios/*.rs — files containing `unimplemented!(` call sites are
 #     reported as one `rust-unimplemented-scaffold` entry per file, keyed off the
 #     first `pub (async) fn *_run` and the first `unimplemented!(` line.
+#   * tests/**/*.rs + src/**/*.rs — every `#[ignore]` attribute is reported as
+#     one `rust-ignored-test` entry. The tracking doc comment enforced by
+#     scripts/check_ignore_comments.sh (`/// Issue:` / `/// Gating:`) is carried
+#     into the title so the debt dashboard shows why the test is skipped.
 #
 # Output format mirrors the existing fixme-debt.md exactly: a metrics table,
 # then one `## <feature-id>` section per group (groups sorted lexicographically,
@@ -248,12 +252,86 @@ function Get-RustScaffoldEntry {
 }
 
 # ---------------------------------------------------------------------------
+# Rust #[ignore] scan
+# ---------------------------------------------------------------------------
+
+# Every `#[ignore]` attribute in tests/ or src/ becomes one debt entry. The
+# `/// Issue:` / `/// Gating:` tracking comment (mandatory per
+# scripts/check_ignore_comments.sh) within a small lookback window is surfaced
+# as the reason; the following `fn <name>` is the test identity.
+function Get-RustIgnoreEntries {
+    param([Parameter(Mandatory = $true)][string]$RustPath)
+
+    $entries = New-Object System.Collections.Generic.List[hashtable]
+    $lines = @(Get-Content -LiteralPath $RustPath -Encoding UTF8)
+    if ($lines.Count -eq 0) { return $entries }
+    $relPath = Get-RelativePath -Path $RustPath
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^\s*#\[ignore') { continue }
+        $lineNumber = $i + 1
+
+        # Inline reason form first: #[ignore = "reason"]. Rust string literals
+        # may continue across lines with a trailing `\`, so join a small window
+        # before matching.
+        $reason = $null
+        $joinEnd = [Math]::Min($i + 3, $lines.Count - 1)
+        $joined = ($lines[$i..$joinEnd] -join "`n") -replace '\\\r?\n\s*', ' '
+        $inline = [regex]::Match($joined, '#\[ignore\s*=\s*"(?<v>(?:\\.|[^"\\])*)"')
+        if ($inline.Success) {
+            $reason = $inline.Groups['v'].Value.Trim()
+        }
+
+        # Otherwise the doc-comment form enforced by check_ignore_comments.sh
+        # (lookback window mirrors its WINDOW=12).
+        if (-not $reason) {
+            $start = [Math]::Max(0, $i - 12)
+            for ($j = $i - 1; $j -ge $start; $j--) {
+                $m = [regex]::Match($lines[$j], '^\s*///\s*(?<k>Issue|Gating):\s*(?<v>.+)$')
+                if ($m.Success) {
+                    $reason = "$($m.Groups['k'].Value): $($m.Groups['v'].Value.Trim())"
+                    break
+                }
+            }
+        }
+
+        # Test identity: the first fn declaration after the attribute.
+        $fnName = $null
+        $maxScan = [Math]::Min($i + 12, $lines.Count - 1)
+        for ($j = $i + 1; $j -le $maxScan; $j++) {
+            $m = [regex]::Match($lines[$j], '\bfn\s+(?<n>[A-Za-z0-9_]+)\s*\(')
+            if ($m.Success) { $fnName = $m.Groups['n'].Value; break }
+        }
+
+        $titleFn = if ($fnName) { $fnName } else { "(unresolved fn)" }
+        $titleReason = if ($reason) { $reason } else { "(missing tracking comment)" }
+        $entries.Add(@{
+                kind            = "rust-ignored-test"
+                feature_id      = "cotest#rust-ignored-test"
+                expected_live_by = $DefaultExpectedLiveBy
+                status          = "tracked"
+                file            = $relPath
+                line            = $lineNumber
+                title           = "Rust #[ignore] test: $titleFn - $titleReason"
+                user_promise    = $relPath
+                missing         = if ($reason) { "-" } else { "tracking-comment" }
+                invalid         = "-"
+                call_sites      = 1
+                expired         = (Test-ExpiredQuarter -Quarter $DefaultExpectedLiveBy)
+            })
+    }
+
+    return $entries
+}
+
+# ---------------------------------------------------------------------------
 # Collect
 # ---------------------------------------------------------------------------
 
 $allEntries = New-Object System.Collections.Generic.List[hashtable]
 $rustFileCount = 0
 $rustCallSiteCount = 0
+$rustIgnoreCount = 0
 
 if (Test-Path -LiteralPath $e2eTestsDir) {
     $specFiles = @(Get-ChildItem -LiteralPath $e2eTestsDir -Recurse -Filter "*.spec.ts" -File | Sort-Object FullName)
@@ -272,6 +350,17 @@ if (Test-Path -LiteralPath $rustScenarioDir) {
             $allEntries.Add($entry)
             $rustFileCount++
             $rustCallSiteCount += [int]$entry.call_sites
+        }
+    }
+}
+
+foreach ($ignoreRoot in @((Join-Path $repoRoot "tests"), (Join-Path $repoRoot "src"))) {
+    if (-not (Test-Path -LiteralPath $ignoreRoot)) { continue }
+    $rustFiles = @(Get-ChildItem -LiteralPath $ignoreRoot -Recurse -Filter "*.rs" -File | Sort-Object FullName)
+    foreach ($rf in $rustFiles) {
+        foreach ($entry in (Get-RustIgnoreEntries -RustPath $rf.FullName)) {
+            $allEntries.Add($entry)
+            $rustIgnoreCount++
         }
     }
 }
@@ -300,6 +389,7 @@ $out.Add("| total debt entries | $($allEntries.Count) |")
 $out.Add("| playwright fixme | $($playwrightEntries.Count) |")
 $out.Add("| rust unimplemented scaffold files | $rustFileCount |")
 $out.Add("| rust unimplemented call sites | $rustCallSiteCount |")
+$out.Add("| rust ignored tests | $rustIgnoreCount |")
 $out.Add("| missing metadata | $missingMeta |")
 $out.Add("| invalid metadata/body | $invalidMeta |")
 $out.Add("| expired expected_live_by | $expiredCount |")
@@ -337,6 +427,7 @@ if ($StdOut) {
     Write-Host "Wrote $($allEntries.Count) debt entries to $OutputPath"
     Write-Host "  playwright fixme : $($playwrightEntries.Count)"
     Write-Host "  rust scaffolds   : $rustFileCount files / $rustCallSiteCount call sites"
+    Write-Host "  rust ignored     : $rustIgnoreCount tests"
     Write-Host "  groups           : $((($allEntries | Group-Object { $_.feature_id }) | Measure-Object).Count)"
     if ($missingMeta -gt 0) { Write-Host "  WARNING: $missingMeta entries missing metadata" }
     if ($expiredCount -gt 0) { Write-Host "  WARNING: $expiredCount entries past expected_live_by" }

@@ -132,8 +132,9 @@ test.describe("transport negotiation", () => {
 
   test.fixme(
     // @blocking-on: spec — WebSocket/TSP are binding *extension profiles*, not
-    //   v1 core. transport-bindings.md §6 states non-HTTP bindings ("不是 v1 core
-    //   互通 surface"; "core 实现不要求提供") and §1/§2 lock v1 core interop to
+    //   v1 core. transport-bindings.md §6 classifies non-HTTP bindings as outside the
+    //   v1 core interop surface (core implementations are not required to
+    //   provide them) and §1/§2 lock v1 core interop to
     //   HTTP/JSON. There is no registered `websocket_frame` binding kind,
     //   `ck.profile.binding.websocket.v1` profile, or `ck.transport.negotiate`
     //   operation in artifacts/registry — they are reserved extension slots only.
@@ -151,8 +152,9 @@ test.describe("transport negotiation", () => {
     //   profile + outbound envelope-batch fanout; neither is on the v1 core path)
     "soland_a and soland_b negotiate HTTP → WebSocket → TSP with proper RFC 9421 signing throughout; fallback to HTTP on WebSocket failure",
     async ({ browser, request }, testInfo) => {
-      // soland gap: WebSocket transport + TSP binding negotiation 未实现;
-      // HTTP RFC 9421 入站 OK 但出站签名生成不完整。
+      // soland gap: WebSocket transport + TSP binding negotiation are not
+      // implemented; inbound HTTP RFC 9421 verification works but outbound
+      // signature generation is incomplete.
       //
       // Acceptance criteria once soland ships the full binding stack:
       //
@@ -384,7 +386,8 @@ test.describe("transport negotiation", () => {
     //   `websocket_frame` binding, neither of which exists in v1. There is no
     //   `ck.transport.negotiate` operation in artifacts/registry and no
     //   registered WebSocket binding kind (transport-bindings.md §6: non-HTTP
-    //   bindings are extension profiles, "core 实现不要求提供"). The whole
+    //   bindings are extension profiles that core implementations are not
+    //   required to provide). The whole
     //   negotiation → timeout → fallback state machine is client-side logic
     //   over a binding stack soland does not (and per v1 core need not) ship.
     //   The HTTP/JSON baseline this would "fall back to" is the same

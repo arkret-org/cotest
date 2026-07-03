@@ -354,7 +354,7 @@ test.describe("account recovery", () => {
     "after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline",
     async () => {
       // spec: key-management.md §7.3 step 6, encryption-and-audit.md §2.4
-      // BLOCKED: depends on the device-2 ck.device.authorize restore段 above
+      // BLOCKED: depends on the device-2 ck.device.authorize restore stage above
       // being end-to-end wired. The MLS-history decrypt-on-fresh-device path
       // itself is already live-covered by tests/encryption/key-backup.spec.ts
       // A1 (historical encrypted cards visible after unlock) and A2 (kanban

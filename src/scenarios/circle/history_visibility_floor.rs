@@ -1,11 +1,10 @@
 //! P2F.3 — Circle effective history visibility takes the stricter of
 //! `(realm_floor, circle_setting)` (CKP-0007 §3.4).
 //!
-//! Spec text:
-//!
-//! > Effective history visibility = 父 Realm policy floor 与 Circle
-//! > `history_visibility` 的更严格者. Circle MAY 收紧父 Realm,不得放宽
-//! > 父 Realm 的隐私/合规下限.
+//! Normative rule (CKP-0007 §3.4, paraphrased): effective history
+//! visibility is the stricter of the parent Realm policy floor and the
+//! Circle's `history_visibility`. A Circle MAY tighten the parent Realm's
+//! floor but MUST NOT loosen the parent Realm's privacy/compliance floor.
 //!
 //! Strictness order over [`HistoryVisibility`] (least strict → most strict):
 //!

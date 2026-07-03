@@ -2,7 +2,8 @@
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED, REASON_RECOVERY_EVIDENCE_UNBOUND,
+    ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED,
+    REASON_RECOVERY_EVIDENCE_UNBOUND,
 };
 use cokret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;
@@ -24,7 +25,6 @@ const KEY_BACKUP_ENCRYPTION_SCHEMA: &str = "schemas/key-backup.schema.json#/prop
 const KEY_BACKUP_UNLOCK_REQUEST_SCHEMA: &str =
     "schemas/keys-operations.schema.json#/$defs/keys_backups_unlock_request_body";
 const KEY_BACKUP_PLAINTEXT_SCHEMA: &str = "schemas/key-backup-plaintext.schema.json";
-const ERROR_CODE_FORBIDDEN: &str = "forbidden";
 
 fn key_backup_hardening_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(KEY_BACKUP_HARDENING_FIXTURE_FILE)?;
@@ -201,7 +201,7 @@ fn authorize_unlock(
         return Err(ERROR_CODE_UNAUTHENTICATED);
     }
     if caller != envelope.actor_id {
-        return Err(ERROR_CODE_FORBIDDEN);
+        return Err(ERROR_CODE_CAPABILITY_DENIED);
     }
     let Some(proof) = proof else {
         return Err(ERROR_CODE_UNAUTHENTICATED);

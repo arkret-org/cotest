@@ -1,7 +1,8 @@
 // Conformance — Registry Drift / Removed IDs
 // Contract: e2e/scenarios/conformance/registry-drift.md
-// Spec: conformance/schema-registry.md §1 (真源声明) / §3 (event type 约束) /
-//       §6 (演进约束 + critical extension fail-closed)
+// Spec: conformance/schema-registry.md §1 (source-of-truth declaration) /
+//       §3 (event type constraints) / §6 (evolution constraints + critical
+//       extension fail-closed)
 // Artifacts (machine-readable source-of-truth):
 //   - cokret-spec/spec/v1/artifacts/migration/removed-event-kinds.json
 //   - cokret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json

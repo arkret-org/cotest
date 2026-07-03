@@ -55,7 +55,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-pg-<uuid>.example` | Phase B event submitter | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-pg-<uuid>.example` | Phase B event submitter | 测试开始前 |
 | profile harness | n/a | describe 调用 + catalog loader + 集合差比对 | n/a |
 
 ## Pre-conditions

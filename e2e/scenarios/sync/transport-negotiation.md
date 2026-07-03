@@ -29,8 +29,8 @@
 
 | 名字 | DID | 在 transport-negotiation 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-s8-<uuid>.example` (注册在 soland_a) | server A 上的 originating actor;触发跨域操作以产生 federation traffic | 测试开始前 |
-| bob | `did:web:bob-s8-<uuid>.example` (注册在 soland_b) | server B 上的 destination actor;接收 federation push | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-s8-<uuid>.example` (注册在 soland_a) | server A 上的 originating actor;触发跨域操作以产生 federation traffic | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-s8-<uuid>.example` (注册在 soland_b) | server B 上的 destination actor;接收 federation push | 测试开始前 |
 
 服务 actor:
 - soland_a 自身 service DID = `did:web:soland-alpha.joint-e2e.local`,所有 outbound 请求 MUST 以该 service DID 作为 RFC 9421 keyid 签名

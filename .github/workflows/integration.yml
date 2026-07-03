@@ -105,7 +105,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/soland-objects"
           SOLAND_DEVELOPMENT_MODE=1 \
           SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
-          SOLAND_SERVICE_DID="did:web:soland.integration-ci.local" \
+          SOLAND_SERVICE_DID="did:webvh:z6mkfixture:soland.integration-ci.local" \
           SOLAND_METRICS_BIND="127.0.0.1:9008" \
           SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
           SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
@@ -129,9 +129,9 @@ jobs:
         working-directory: cotest/e2e
         env:
           COTEST_SOLAND_ALPHA_BASE_URL: http://127.0.0.1:8011
-          COTEST_SOLAND_ALPHA_SERVICE_DID: did:web:soland-alpha.security-ci.local
+          COTEST_SOLAND_ALPHA_SERVICE_DID: did:webvh:z6mkfixture:soland-alpha.security-ci.local
           COTEST_SOLAND_BETA_BASE_URL: http://127.0.0.1:8012
-          COTEST_SOLAND_BETA_SERVICE_DID: did:web:soland-beta.security-ci.local
+          COTEST_SOLAND_BETA_SERVICE_DID: did:webvh:z6mkfixture:soland-beta.security-ci.local
           COTEST_EXPECT_FEDERATION_DENYLIST: "1"
           COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED: "1"
           COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e

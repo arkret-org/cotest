@@ -464,17 +464,30 @@ export async function grantServiceDelegationApi(
 // authorized_by ref resolver requires the `ck:event:` typed id (not the
 // `ck:grant:` form). Callers that need the authorized_by ref use the returned
 // `eventId`.
-export async function grantCapabilityEventApi(
-  request: APIRequestContext,
-  ownerToken: string,
-  args: {
-    ownerDid: string;
-    realmId: string;
-    subjectDid: string;
-    actions: string[];
-    server?: SolandKey;
-  },
-): Promise<{ grantId: string; eventId: string }> {
+export type CapabilityGrantEventArgs = {
+  ownerDid: string;
+  realmId: string;
+  subjectDid: string;
+  actions: string[];
+  // capabilities.md §8: optional finite validity upper bound. Delegated
+  // grants (parentGrantId set) MUST narrow — child effective_expires_at MUST
+  // be <= the parent's (§10.1).
+  expiresAt?: string;
+  // capabilities.md §10: delegation chain anchor. When set the grant is a
+  // delegated (child) grant and the reducer enforces the §10.1 narrowing
+  // invariants against the referenced parent grant.
+  parentGrantId?: string;
+  server?: SolandKey;
+};
+
+// Build (but do not submit) a signed `ck.capability.grant` envelope. Exposed
+// separately from grantCapabilityEventApi so negative suites (delegation
+// widening, revoked-parent re-delegation, ...) can submit the same canonical
+// envelope shape raw and assert the reducer rejection instead of the 200 the
+// happy-path helper pins.
+export function buildCapabilityGrantEnvelope(
+  args: CapabilityGrantEventArgs,
+): { envelope: Record<string, unknown>; grantId: string; eventId: string } {
   const grantId = typedId("grant");
   const eventId = typedId("event");
   const issuedAt = canonicalTimestamp();
@@ -488,35 +501,44 @@ export async function grantCapabilityEventApi(
     actions: args.actions,
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
+    ...(args.expiresAt ? { expires_at: args.expiresAt } : {}),
+    ...(args.parentGrantId ? { parent_grant_id: args.parentGrantId } : {}),
   };
-  await submitSignedEventApi(
-    request,
-    ownerToken,
-    signedEventEnvelope({
-      actorDid: args.ownerDid,
-      realmId: args.realmId,
-      kind: "ck.capability.grant",
-      eventId,
-      createdAt: issuedAt,
-      payload: {
-        grant_id: grantId,
-        grant: {
-          ...unsignedGrant,
-          proofs: [
-            buildDetachedJwsProof({
-              issuerDid: args.ownerDid,
-              payload: unsignedGrant,
-              createdAt: issuedAt,
-            }),
-          ],
-        },
+  const envelope = signedEventEnvelope({
+    actorDid: args.ownerDid,
+    realmId: args.realmId,
+    kind: "ck.capability.grant",
+    eventId,
+    createdAt: issuedAt,
+    // capability_grant_payload (event-payload.schema.json) is closed —
+    // parent_grant_id travels inside the grant object, not the payload.
+    payload: {
+      grant_id: grantId,
+      grant: {
+        ...unsignedGrant,
+        proofs: [
+          buildDetachedJwsProof({
+            issuerDid: args.ownerDid,
+            payload: unsignedGrant,
+            createdAt: issuedAt,
+          }),
+        ],
       },
-    }),
-    {
-      server: args.server,
-      context: `grant [${args.actions.join(", ")}] to ${args.subjectDid}`,
     },
-  );
+  });
+  return { envelope, grantId, eventId };
+}
+
+export async function grantCapabilityEventApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: CapabilityGrantEventArgs,
+): Promise<{ grantId: string; eventId: string }> {
+  const { envelope, grantId, eventId } = buildCapabilityGrantEnvelope(args);
+  await submitSignedEventApi(request, ownerToken, envelope, {
+    server: args.server,
+    context: `grant [${args.actions.join(", ")}] to ${args.subjectDid}`,
+  });
   return { grantId, eventId };
 }
 

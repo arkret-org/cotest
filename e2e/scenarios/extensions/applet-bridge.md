@@ -23,8 +23,8 @@
 
 | 名字 | DID | 在 applet-bridge 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-s-applet-<uuid>.example` | principal user / Realm 创建者 / 可对 applet 行使 revoke 的 admin | 测试开始前 |
-| applet_service | `did:web:applet-registry-<uuid>.example` | mock-applet-registry 暴露的开发者身份;签 manifest、为外部用户生成 ghost actor | 测试开始前(由 mock 启动注入) |
+| alice | `did:webvh:z6mkfixture:alice-s-applet-<uuid>.example` | principal user / Realm 创建者 / 可对 applet 行使 revoke 的 admin | 测试开始前 |
+| applet_service | `did:webvh:z6mkfixture:applet-registry-<uuid>.example` | mock-applet-registry 暴露的开发者身份;签 manifest、为外部用户生成 ghost actor | 测试开始前(由 mock 启动注入) |
 | bot_actor | `did:web:bot-<applet_namespace>-<uuid>.example` | applet 注册成功后 soland 颁发的 bot DID;以 member 身份加入 Realm | Phase A 末由 soland 颁发 |
 | ghost_actor | `did:web:ghost-<external_user_x>-<uuid>.example` | 外部用户 X 在 portal realm 内的代理身份;由 applet_service 在 Phase C 现场生成 | Phase C 现场颁发(每次外部事件可能复用同一 ghost) |
 

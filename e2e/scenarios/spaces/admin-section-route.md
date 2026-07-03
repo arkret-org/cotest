@@ -30,7 +30,7 @@
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-admin-probe-<uuid>.example` | 单 actor;建一个空间然后直接 hard nav 到 `/admin/members` | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-admin-probe-<uuid>.example` | 单 actor;建一个空间然后直接 hard nav 到 `/admin/members` | 测试开始前 |
 
 ## Pre-conditions
 

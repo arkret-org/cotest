@@ -24,8 +24,8 @@
 
 | 名字 | DID | 在 identity/consent-grant 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-consent-<uuid>.example` | holder,consent 决策者;持有 consent cell | 测试开始前 |
-| bob | `did:web:bob-consent-<uuid>.example` | peer,发起 contact 请求;被 alice 的 consent gate 评估 | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-consent-<uuid>.example` | holder,consent 决策者;持有 consent cell | 测试开始前 |
+| bob | `did:webvh:z6mkfixture:bob-consent-<uuid>.example` | peer,发起 contact 请求;被 alice 的 consent gate 评估 | 测试开始前 |
 
 ## Pre-conditions
 

@@ -1,15 +1,14 @@
 //! P2F.3 — Circle `metadata_encryption_floor` may only tighten the
 //! parent Realm's floor (CKP-0007 §3.4.1).
 //!
-//! Spec text:
-//!
-//! > Effective metadata floor = max(parent Realm
-//! > `metadata_encryption_floor`, Circle `metadata_encryption_floor` if
-//! > present, Space `child_scope_policy.metadata_encryption_floor` if in
-//! > placement context, object profile requirement). 比较顺序为
-//! > `allow_plaintext < e2ee_required`; 任何写入若低于
-//! > effective floor MUST `failed_precondition`
-//! > (`reason="metadata_encryption_floor_violation"`).
+//! Normative rule (CKP-0007 §3.4.1, paraphrased): effective metadata floor
+//! = max(parent Realm `metadata_encryption_floor`, Circle
+//! `metadata_encryption_floor` if present, Space
+//! `child_scope_policy.metadata_encryption_floor` if in placement context,
+//! object profile requirement). Comparison order is
+//! `allow_plaintext < e2ee_required`; any write below the effective floor
+//! MUST `failed_precondition`
+//! (`reason="metadata_encryption_floor_violation"`).
 //!
 //! In other words, a Circle MAY raise the floor (e.g. Realm=`allow_plaintext`
 //! → Circle=`e2ee_required` is fine), but never lower it (Realm=
