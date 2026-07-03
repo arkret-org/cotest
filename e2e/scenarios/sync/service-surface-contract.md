@@ -158,22 +158,22 @@
 
 ## Edge cases / sub-tests
 
-- **E1 profile partition leak**:claim_kind 不混淆 — `claimed_profiles[*].claim_kind` MUST 全部是 `"self_claimed"`;任何 `cotest_verified` 条目 MUST 只出现在 `verified_profiles` 数组中(spec §3.0 第 2 + 4 条);本测试用 fixme 钉住,等 G4.T3 verified profile 写入链路落地后 live 化
+- **E1 profile partition leak**:claim_kind 不混淆 — `claimed_profiles[*].claim_kind` MUST 全部是 `"self_claimed"`;任何 `cotest_verified` 条目 MUST 只出现在 `verified_profiles` 数组中(spec §3.0 第 2 + 4 条);当前已 live,并在 `verified_profiles` 非空时校验 cotest artifact 元数据与 profile_id 分区
 - **E2 dev_mode invariant**:`development_mode === true` + 非空 `verified_profiles` 是 invalid describe(SDK / conformance tooling 必须 fail);harness 不能模拟服务端违规,所以以 fixme 钉住 spec 合约,等 production-mode CI 落地后做 live 反例测试
 - **E3 cursor TTL 上限**:stream cursor TTL MUST ≤ 7 天(api-conventions §7 TTL 硬上限);本测试无法在 e2e 内等 7 天,但可以 fixme 钉住 spec,后续在 cotest fixture 里塞一个 8 天前签发的 cursor 验证 `cursor_expired`
 - **E4 idempotency cross-actor 隔离**:同一 `Idempotency-Key` 由 bob 重复提交 MUST NOT 命中 alice 的缓存项(否则可被用作 oracle);fixme 钉住,等 G3.S0 / multi-user soland scaffold 稳定后 live
-- **E5 unsupported critical extension**:与 `unsupported_feature` 平行,`requirements.critical_extensions[]` 引用未实现 extension MUST 也用 `unsupported_feature` code(spec §5.1 同一条);fixme 钉住直到 soland critical_extensions 反射出现
+- **E5 unsupported critical extension**:与 `unsupported_feature` 平行,`requirements.critical_extensions[]` 引用未实现且 `fail_closed=true` 的 extension MUST 也用 `unsupported_feature` code(spec §5.1 同一条);当前已由 Phase E2 live 覆盖
 
 ## Implementation notes
 
 - **soland describe 已实现**:`soland/src/routing/system/describe.rs` + `soland/src/wire.rs` 已经写入 `claimed_profiles` / `verified_profiles` / `implemented_features` 等字段;Phase A 在 soland 侧可以**直接 live**
 - **coauth describe 已实现**:`coauth/crates/backend/src/handlers/cokret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
-- **`/sync/operations` 不存在**:Phase C 的实际 list endpoint 取决于哪些 list-style endpoint 在当前 soland 已落地。当前已知的 list endpoint 例如 `/_cokret/self/authz/invites`、`/_cokret/self/events?after=...` 可作为 fallback;但 spec §7.1 的 `items` / `next_cursor` / `has_more` 形状未必所有现有 list endpoint 都满足。Phase C 整体保持 fixme 直到至少一个 list endpoint 符合 §7.1 wire shape
+- **Phase C list endpoint 已 live**:当前用 `/_cokret/self/events?after=...` 覆盖 §7.1 pagination shape、opaque cursor、tamper reject、gap-free / non-overlap 分页;`/sync/operations` 不存在不再阻塞本场景
 - **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
-- **Idempotency-Key header 仍为 fixme**:独立的 `Idempotency-Key` header 路径未必所有 write endpoint 都已实现 — Phase D 整体 fixme,直到 `Idempotency-Key` header 被 events / authz write 路径接受
-- **`unsupported_feature` 触发条件**:spec §5.1 要求该 code 用于 `Event.requirements.features[]`;具体是否在当前 reducer 路径上被严格执行需要 probe — Phase E 整体 fixme,等 soland 在 envelope validation 阶段返回该 code
+- **Idempotency-Key header 已在 events write live**:Phase D 覆盖 `POST /_cokret/self/events` 的同键同 body replay 与同键不同 body `duplicate_conflict`;其它 write endpoint 的一致性可另开场景
+- **`unsupported_feature` 触发条件已 live**:Phase E 通过 `Event.requirements.features[]` 注入未声明 feature,Phase E2 通过 `requirements.critical_extensions[]` 注入 fail-closed extension,断言 soland 在 envelope validation 阶段返回 `unsupported_feature`
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession` + `solandBaseUrl()` / `coauthBaseUrl()`;不要新增 helper
 
 ## 总耗时预估
 
-单次跑约 5–15s(Phase A 两个 HTTP GET;其余 phase 全部 fixme,实际不触发网络)。Phase A live 之后,加入 Phase B 也只增 ~2s。完整 live 化(所有 phase)预计 30–60s。
+单次跑约 30–60s:当前 Phase A/B/C/D/E/E2 均已 live,会启动 soland 并执行 describe、error envelope、pagination、idempotency 与 fail-closed 写入验证。E2 dev-mode 反例、E3 cursor TTL 过期、E4 cross-actor Idempotency-Key 隔离仍是后续边界。

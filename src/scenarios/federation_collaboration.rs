@@ -928,7 +928,9 @@ pub(crate) fn bootstrap_device_authorize_payload(
                 .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
         ),
         scopes: None,
-        not_before: "2026-05-02T00:00:00Z".parse().expect("static timestamp parses"),
+        not_before: "2026-05-02T00:00:00Z"
+            .parse()
+            .expect("static timestamp parses"),
         expires_at: None,
         device_signature: Some(cokret_core::SignatureMaterial::NonEmptyString(
             "bootstrap-device-signature-placeholder".to_owned(),

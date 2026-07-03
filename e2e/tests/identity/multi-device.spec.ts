@@ -5,6 +5,7 @@
 //   - §6 (device list sync), §7 (to-device queue), §9 (MLS KeyPackage / Remove)
 //   - identity/key-management.md §5.0-§5.2
 
+import { createHash, sign as nodeSign } from "node:crypto";
 import { type APIRequestContext, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -17,14 +18,18 @@ import {
 import {
   authHeaders,
   b64url,
+  canonicalBytes,
+  canonicalTimestamp,
   createRealmApi,
   currentActorDidApi,
   principalControlRealmForDid,
   queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
+  submitSignedEventApi,
   typedId,
   wireErrCode,
+  wireErrReason,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -35,6 +40,10 @@ import {
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
+
+const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
+  "ck.profile.mls_governance_binding.full.v1";
+const MLS_REDUCER_PROFILE_V1 = "ck.reducer.v1";
 
 test.describe("multi-device pairing + revocation", () => {
   test("dev-login twice for the same actor returns two distinct sessions (proxy for two-device state until real pairing lands)", async ({
@@ -175,6 +184,7 @@ test.describe("multi-device pairing + revocation", () => {
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
+            device_signature: deviceAuthorizeSignature(alice.did, device2Id),
             authorized_by: alice.deviceId,
             not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
             cross_signing_binding: goodBinding,
@@ -243,6 +253,7 @@ test.describe("multi-device pairing + revocation", () => {
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
+            device_signature: deviceAuthorizeSignature(alice.did, staleDeviceId),
             authorized_by: alice.deviceId,
             not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
             cross_signing_binding: staleBinding,
@@ -285,6 +296,7 @@ test.describe("multi-device pairing + revocation", () => {
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
+            device_signature: deviceAuthorizeSignature(alice.did, forgedDeviceId),
             authorized_by: alice.deviceId,
             not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
             cross_signing_binding: forgedBinding,
@@ -457,22 +469,466 @@ test.describe("multi-device pairing + revocation", () => {
     expect(device2Row!.status).toBe("revoked");
   });
 
-  test.fixme(
-    // @blocking-on: full MLS group orchestration (KeyPackage claim → Welcome →
-    //   Commit Remove → epoch advance) across two device leaves; out of scope
-    //   here because it requires driving the mls-group encryption stack, not
-    //   just the device lifecycle surface this suite owns.
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
+  test("revoking Device 2 removes its device_signing_key from /_cokret/self/keys/query and reports device_status=revoked", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §8.2. A revoked or unverified device MUST NOT
+    // expose a device_signing_key through keys/query; receivers treat
+    // device_status != active as fail-closed for event/signal proof checks.
+    const alice = uniqueUser(`s10-revoke-key-query-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const device2Id = typedId("device");
+    await issueDevSession(request, alice, { deviceId: device2Id });
+
+    const identity = await publishCrossSigningForUser(request, alice, device1Token);
+    await authorizeDeviceWithCrossSigning(
+      request,
+      alice,
+      device1Token,
+      identity,
+      device2Id,
+    );
+    await expect
+      .poll(() => pollDeviceStatus(request, device1Token, device2Id), {
+        timeout: 30_000,
+        intervals: [500, 1_000, 2_000],
+      })
+      .toBe("active");
+
+    const activeRecord = await queryDeviceKeyRecord(
+      request,
+      device1Token,
+      alice.did,
+      device2Id,
+    );
+    expect(activeRecord.device_status).toBe("active");
+    expect(typeof activeRecord.device_signing_key).toBe("string");
+
+    await revokeDeviceApi(request, alice, device1Token, device2Id);
+
+    const revokedRecord = await queryDeviceKeyRecord(
+      request,
+      device1Token,
+      alice.did,
+      device2Id,
+    );
+    expect(revokedRecord.device_status).toBe("revoked");
+    expect(revokedRecord.device_signing_key).toBeUndefined();
+    expect(revokedRecord.hpke_key).toBeUndefined();
+    expect(Object.keys((revokedRecord.algorithms as object) ?? {})).toHaveLength(0);
+  });
+
+  test("revoking Device 2 retires its unconsumed one-time and last-resort KeyPackages so later claims fail closed", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §9 / identity/key-management.md §5.2. Device
+    // revoke must stop new MLS bootstrapping to the revoked device: even
+    // KeyPackages uploaded before the revoke are retired and no longer
+    // claimable for Welcome generation.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s10-revoke-kp-${stamp}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const device2Id = typedId("device");
+    const device2Token = await issueDevSession(request, alice, {
+      deviceId: device2Id,
+    });
+
+    const identity = await publishCrossSigningForUser(request, alice, device1Token);
+    await authorizeDeviceWithCrossSigning(
+      request,
+      alice,
+      device1Token,
+      identity,
+      device2Id,
+    );
+
+    const expiresAt = canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000));
+    const keypackageCapabilities = ["ck.mls.profile.full"];
+    const keyPackages = [
+      buildKeyPackageUploadEntry({
+        label: `ordinary-${stamp}`,
+        capabilities: keypackageCapabilities,
+        expiresAt,
+        lastResort: false,
+      }),
+      buildKeyPackageUploadEntry({
+        label: `last-resort-${stamp}`,
+        capabilities: keypackageCapabilities,
+        expiresAt,
+        lastResort: true,
+      }),
+    ];
+    await uploadDeviceKeyPackages(request, alice, device2Token, device2Id, keyPackages);
+
+    await revokeDeviceApi(request, alice, device1Token, device2Id);
+
+    const claim = await request.post(
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
+      {
+        headers: authHeaders(device1Token),
+        data: {
+          target_principal_id: alice.did,
+          target_device_ids: [device2Id],
+          intended_realm_id: typedId("realm"),
+          requester: alice.did,
+          required_capabilities: keypackageCapabilities,
+          claim_nonce: `claim-after-revoke-${stamp}`,
+          expires_at: expiresAt,
+          mls_group_id: typedId("mls_group"),
+          proofs: [],
+        },
+      },
+    );
+    const claimBody = await claim
+      .json()
+      .catch(async () => ({ raw: await claim.text() }));
+    expect(
+      claim.ok(),
+      `KeyPackage claim after device revoke returned ${claim.status()}: ${JSON.stringify(claimBody)}`,
+    ).toBeTruthy();
+    expect(claimBody.claims ?? []).toEqual([]);
+    expect(claimBody.failures?.[0]?.reason_code).toBe("mls_keypackage_not_found");
+    expect(claimBody.available_count).toBe(0);
+  });
+
+  test(
     "after revoke in an E2EE Realm, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages",
-    async () => {
-      // spec: device-lifecycle.md §9 + encryption-and-audit.md §2.2
-      // The device-revoke half (peer revoke → device_status=revoked, queued
-      // to-device drop) is covered by the promoted tests above. The remaining
-      // MLS half — claiming Device 2 a KeyPackage, joining it to an E2EE Realm
-      // group via Welcome, then driving a Commit{Remove} that advances the
-      // epoch and re-keys so Device 2 can no longer decrypt — needs the full
-      // MLS group stack and is tracked separately.
+    async ({ request }) => {
+      const stamp = Date.now();
+      const alice = uniqueUser(`s10-revoke-mls-remove-${stamp}`);
+      await ensureRegistered(request, alice);
+      const device1Token = await issueDevSession(request, alice);
+      const device2Id = typedId("device");
+      const device2Token = await issueDevSession(request, alice, {
+        deviceId: device2Id,
+      });
+
+      const identity = await publishCrossSigningForUser(
+        request,
+        alice,
+        device1Token,
+      );
+      await authorizeDeviceWithCrossSigning(
+        request,
+        alice,
+        device1Token,
+        identity,
+        device2Id,
+      );
+      await expect
+        .poll(() => pollDeviceStatus(request, device1Token, device2Id), {
+          timeout: 30_000,
+          intervals: [500, 1_000, 2_000],
+        })
+        .toBe("active");
+
+      const realmId = await createRealmApi(request, device1Token, {
+        title: `MLS revoke remove ${stamp}`,
+        ownerDid: alice.did,
+        history_visibility: "joined",
+        encryption_profile: "mls_rfc9420",
+      });
+      const groupId = typedId("mls_group");
+      const policyRoot = sha256Digest(
+        Buffer.from(`policy-root:${stamp}`, "utf8"),
+      );
+      const effectiveScope = { kind: "realm", realm_id: realmId };
+      const genesisEventId = typedId("event");
+      const group = {
+        groupId,
+        realmId,
+        effectiveScope,
+        policyRoot,
+        genesisEventId,
+      };
+
+      const genesisBody = await submitSignedEventApi(
+        request,
+        device1Token,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.mls.genesis",
+          eventId: genesisEventId,
+          payload: {
+            mls_group_id: groupId,
+            effective_scope: effectiveScope,
+            epoch: 0,
+            creator_principal_id: alice.did,
+            creator_device_id: alice.deviceId,
+            cipher_suite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            group_info_digest: sha256Digest(
+              Buffer.from(`group-info:${stamp}`, "utf8"),
+            ),
+            ratchet_tree_digest: sha256Digest(
+              Buffer.from(`ratchet-tree:${stamp}`, "utf8"),
+            ),
+            governance_binding: mlsGovernanceBinding(group, 0, 0, [
+              genesisEventId,
+            ]),
+            created_at: canonicalTimestamp(),
+          },
+        }),
+        { context: "submit MLS genesis for revoke/remove test" },
+      );
+      expect(genesisBody.accepted ?? []).toContain(genesisEventId);
+
+      const expiresAt = canonicalTimestamp(
+        new Date(Date.now() + 60 * 60 * 1000),
+      );
+      const keypackageCapabilities = ["ck.mls.profile.full"];
+      const device2KeyPackage = buildKeyPackageUploadEntry({
+        label: `join-device2-${stamp}`,
+        capabilities: keypackageCapabilities,
+        expiresAt,
+        lastResort: false,
+      });
+      await uploadDeviceKeyPackages(request, alice, device2Token, device2Id, [
+        device2KeyPackage,
+      ]);
+
+      const claim = await request.post(
+        `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
+        {
+          headers: authHeaders(device1Token),
+          data: {
+            target_principal_id: alice.did,
+            target_device_ids: [device2Id],
+            intended_realm_id: realmId,
+            requester: alice.did,
+            required_capabilities: keypackageCapabilities,
+            claim_nonce: `claim-before-revoke-${stamp}`,
+            expires_at: expiresAt,
+            mls_group_id: groupId,
+            proofs: [],
+          },
+        },
+      );
+      const claimBody = await claim
+        .json()
+        .catch(async () => ({ raw: await claim.text() }));
+      expect(
+        claim.ok(),
+        `KeyPackage claim before revoke returned ${claim.status()}: ${JSON.stringify(claimBody)}`,
+      ).toBeTruthy();
+      expect(claimBody.claims ?? []).toHaveLength(1);
+      const keypackageClaim = claimBody.claims[0] as Record<string, unknown>;
+
+      const addCommitEventId = typedId("event");
+      const beforeRevokeWelcome = buildMlsWelcomeEnvelope({
+        actorDid: alice.did,
+        realmId,
+        group,
+        identity,
+        keypackageClaim,
+        recipientDid: alice.did,
+        recipientDeviceId: device2Id,
+        epoch: 1,
+        commitRef: addCommitEventId,
+        label: `before-revoke-${stamp}`,
+        governanceBinding: mlsGovernanceBinding(group, 0, 0, [genesisEventId]),
+      });
+      const welcomeBody = await submitSignedEventApi(
+        request,
+        device1Token,
+        beforeRevokeWelcome.envelope,
+        { context: "submit pre-revoke MLS Welcome" },
+      );
+      expect(welcomeBody.accepted ?? []).toContain(beforeRevokeWelcome.eventId);
+
+      const addCommitBody = await submitSignedEventApi(
+        request,
+        device1Token,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.mls.commit",
+          eventId: addCommitEventId,
+          payload: {
+            mls_group_id: groupId,
+            base_epoch: 0,
+            base_epoch_ref: genesisEventId,
+            proposal_refs: [],
+            next_epoch: 1,
+            commit_digest: sha256Digest(
+              Buffer.from(`add-device2:${stamp}`, "utf8"),
+            ),
+            governance_binding: mlsGovernanceBinding(group, 0, 1, [
+              genesisEventId,
+            ]),
+          },
+        }),
+        { context: "submit MLS add commit" },
+      );
+      expect(addCommitBody.accepted ?? []).toContain(addCommitEventId);
+
+      const pendingBeforeRevoke = await request.get(
+        `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
+        { headers: authHeaders(device2Token) },
+      );
+      const pendingBeforeBody = await pendingBeforeRevoke
+        .json()
+        .catch(async () => ({ raw: await pendingBeforeRevoke.text() }));
+      expect(
+        pendingBeforeRevoke.ok(),
+        `Device 2 pre-revoke pending welcomes returned ${pendingBeforeRevoke.status()}: ${JSON.stringify(pendingBeforeBody)}`,
+      ).toBeTruthy();
+      expect(pendingBeforeBody.welcomes).toHaveLength(1);
+      expect(pendingBeforeBody.welcomes[0]).toMatchObject({
+        welcome_id: beforeRevokeWelcome.welcomeId,
+        mls_group_ref: groupId,
+        recipient_device_id: device2Id,
+      });
+
+      const revokeEventId = await revokeDeviceApi(
+        request,
+        alice,
+        device1Token,
+        device2Id,
+      );
+
+      const removeProposalEventId = typedId("event");
+      const proposalBody = await submitSignedEventApi(
+        request,
+        device1Token,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.mls.proposal",
+          eventId: removeProposalEventId,
+          payload: {
+            mls_group_id: groupId,
+            base_epoch: 1,
+            proposal_type: "remove",
+            proposal_digest: sha256Digest(
+              Buffer.from(`remove-device2:${stamp}`, "utf8"),
+            ),
+            target_principal_id: alice.did,
+            target_device_id: device2Id,
+          },
+        }),
+        { context: "submit MLS Remove proposal for revoked Device 2" },
+      );
+      expect(proposalBody.accepted ?? []).toContain(removeProposalEventId);
+
+      const staleRemoveCommit = await request.post(
+        `${solandBaseUrl()}/_cokret/self/events`,
+        {
+          headers: authHeaders(device1Token),
+          data: signedEventEnvelope({
+            actorDid: alice.did,
+            realmId,
+            kind: "ck.mls.commit",
+            payload: {
+              mls_group_id: groupId,
+              base_epoch: 1,
+              base_epoch_ref: addCommitEventId,
+              proposal_refs: [removeProposalEventId],
+              next_epoch: 2,
+              commit_digest: sha256Digest(
+                Buffer.from(`stale-remove-device2:${stamp}`, "utf8"),
+              ),
+              governance_binding: mlsGovernanceBinding(group, 1, 2, [
+                addCommitEventId,
+              ]),
+            },
+          }),
+        },
+      );
+      const staleRemoveBody = await staleRemoveCommit
+        .json()
+        .catch(async () => ({ raw: await staleRemoveCommit.text() }));
+      expect([409, 412, 422]).toContain(staleRemoveCommit.status());
+      expect(wireErrCode(staleRemoveBody) ?? wireErrReason(staleRemoveBody)).toBe(
+        "mls_remove_missing_governance_frontier",
+      );
+
+      const removeCommitEventId = typedId("event");
+      const removeCommitBody = await submitSignedEventApi(
+        request,
+        device1Token,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.mls.commit",
+          eventId: removeCommitEventId,
+          payload: {
+            mls_group_id: groupId,
+            base_epoch: 1,
+            base_epoch_ref: addCommitEventId,
+            proposal_refs: [removeProposalEventId],
+            next_epoch: 2,
+            commit_digest: sha256Digest(
+              Buffer.from(`remove-device2-ok:${stamp}`, "utf8"),
+            ),
+            governance_binding: mlsGovernanceBinding(group, 1, 2, [
+              revokeEventId,
+            ]),
+          },
+        }),
+        { context: "submit MLS Remove commit covering revoke frontier" },
+      );
+      expect(removeCommitBody.accepted ?? []).toContain(removeCommitEventId);
+
+      const eventsBody = await queryRealmEventsApi(request, device1Token, realmId, {
+        limit: 100,
+      });
+      const removeCommitPayload = findEventPayload(
+        eventsBody,
+        removeCommitEventId,
+      );
+      expect(
+        removeCommitPayload,
+        `accepted Remove commit not found in realm events: ${JSON.stringify(eventsBody)}`,
+      ).toBeTruthy();
+      expect(removeCommitPayload?.next_epoch).toBe(2);
+      expect(removeCommitPayload?.proposal_refs).toContain(removeProposalEventId);
+      expect(
+        (removeCommitPayload?.governance_binding as Record<string, unknown>)
+          ?.membership_frontier,
+      ).toContain(revokeEventId);
+
+      const postRemoveWelcome = buildMlsWelcomeEnvelope({
+        actorDid: alice.did,
+        realmId,
+        group,
+        identity,
+        keypackageClaim,
+        recipientDid: alice.did,
+        recipientDeviceId: device2Id,
+        epoch: 3,
+        commitRef: removeCommitEventId,
+        label: `post-remove-${stamp}`,
+        governanceBinding: mlsGovernanceBinding(group, 2, 2, [revokeEventId]),
+      });
+      const postRemoveWelcomeResp = await request.post(
+        `${solandBaseUrl()}/_cokret/self/events`,
+        {
+          headers: authHeaders(device1Token),
+          data: postRemoveWelcome.envelope,
+        },
+      );
+      const postRemoveWelcomeBody = await postRemoveWelcomeResp
+        .json()
+        .catch(async () => ({ raw: await postRemoveWelcomeResp.text() }));
+      expect([400, 401, 403, 409, 412, 422]).toContain(
+        postRemoveWelcomeResp.status(),
+      );
+      expect(
+        wireErrCode(postRemoveWelcomeBody) ?? wireErrReason(postRemoveWelcomeBody),
+      ).toBe("device_revoked");
+
+      const eventsAfterRejectedWelcome = await queryRealmEventsApi(
+        request,
+        device1Token,
+        realmId,
+        { limit: 100 },
+      );
+      expect(JSON.stringify(eventsAfterRejectedWelcome)).not.toContain(
+        postRemoveWelcome.eventId,
+      );
     },
   );
 
@@ -898,6 +1354,7 @@ async function promoteDeviceToVerified(
           hpke_key: "z6LSCotestE2eDeviceHpkeKey",
           algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
+          device_signature: deviceAuthorizeSignature(user.did, deviceId),
           authorized_by: deviceId,
           not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
           cross_signing_binding: binding,
@@ -1004,4 +1461,351 @@ async function pollDeviceStatus(
   };
   return (body.devices ?? []).find((device) => device.device_id === deviceId)
     ?.status;
+}
+
+type CrossSigningIdentity = ReturnType<typeof generateCrossSigningIdentity>;
+
+async function publishCrossSigningForUser(
+  request: APIRequestContext,
+  user: JointUser,
+  token: string,
+): Promise<CrossSigningIdentity> {
+  const realmId = principalControlRealmForDid(user.did);
+  const identity = generateCrossSigningIdentity({ principalId: user.did });
+  const publish = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    headers: authHeaders(token),
+    data: signedEventEnvelope({
+      actorDid: user.did,
+      realmId,
+      kind: "ck.cross_signing.publish",
+      payload: buildCrossSigningPublishPayload(identity),
+    }),
+  });
+  expect(
+    [200, 201],
+    `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+  ).toContain(publish.status());
+  return identity;
+}
+
+async function authorizeDeviceWithCrossSigning(
+  request: APIRequestContext,
+  user: JointUser,
+  token: string,
+  identity: CrossSigningIdentity,
+  deviceId: string,
+) {
+  const realmId = principalControlRealmForDid(user.did);
+  const deviceKey = deviceVerifyKeyMultibase();
+  const binding = buildDeviceCrossSigningBinding({
+    identity,
+    deviceId,
+    devicePublicKeyMultibase: deviceKey.multibase,
+    hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+    algorithms: TEST_DEVICE_ALGORITHMS,
+  });
+  const authorize = await request.post(
+    `${solandBaseUrl()}/_cokret/self/events`,
+    {
+      headers: authHeaders(token),
+      data: signedEventEnvelope({
+        actorDid: user.did,
+        realmId,
+        kind: "ck.device.authorize",
+        payload: {
+          principal_id: user.did,
+          device_id: deviceId,
+          device_public_key: deviceKey.multibase,
+          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+          algorithms: TEST_DEVICE_ALGORITHMS,
+          device_key_algorithm: "EdDSA",
+          device_signature: deviceAuthorizeSignature(user.did, deviceId),
+          authorized_by: user.deviceId,
+          not_before: canonicalTimestamp(),
+          cross_signing_binding: binding,
+        },
+      }),
+    },
+  );
+  expect(
+    [200, 201],
+    `ck.device.authorize returned ${authorize.status()}: ${await authorize.text()}`,
+  ).toContain(authorize.status());
+}
+
+async function revokeDeviceApi(
+  request: APIRequestContext,
+  user: JointUser,
+  token: string,
+  deviceId: string,
+): Promise<string> {
+  const eventId = typedId("event");
+  const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    headers: authHeaders(token),
+    data: signedEventEnvelope({
+      actorDid: user.did,
+      realmId: principalControlRealmForDid(user.did),
+      kind: "ck.device.revoke",
+      eventId,
+      payload: {
+        principal_id: user.did,
+        device_id: deviceId,
+        revoked_by: user.deviceId,
+        revoked_at: canonicalTimestamp(),
+        reason: "lost_device",
+      },
+    }),
+  });
+  expect(
+    [200, 201],
+    `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+  ).toContain(revoke.status());
+  return eventId;
+}
+
+async function queryDeviceKeyRecord(
+  request: APIRequestContext,
+  token: string,
+  principalId: string,
+  deviceId: string,
+): Promise<Record<string, unknown>> {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/keys/query`, {
+    headers: authHeaders(token),
+    data: {
+      device_keys: {
+        [principalId]: [deviceId],
+      },
+    },
+  });
+  const body = (await response.json().catch(async () => ({
+    raw: await response.text(),
+  }))) as {
+    device_keys?: Record<string, Record<string, Record<string, unknown>>>;
+  };
+  expect(
+    response.ok(),
+    `keys/query returned ${response.status()}: ${JSON.stringify(body)}`,
+  ).toBeTruthy();
+  const record = body.device_keys?.[principalId]?.[deviceId];
+  expect(
+    record,
+    `keys/query missing ${principalId}/${deviceId}: ${JSON.stringify(body)}`,
+  ).toBeTruthy();
+  return record!;
+}
+
+type KeyPackageUploadEntry = {
+  keypackage_id: string;
+  keypackage_ref: string;
+  key_package: string;
+  keypackage_digest: string;
+  cipher_suites: string[];
+  capabilities: string[];
+  created_at: string;
+  expires_at: string;
+  last_resort: boolean;
+};
+
+type MlsRealmGroupFixture = {
+  groupId: string;
+  realmId: string;
+  effectiveScope: Record<string, unknown>;
+  policyRoot: string;
+  genesisEventId: string;
+};
+
+function mlsGovernanceBinding(
+  group: MlsRealmGroupFixture,
+  previousEpoch: number,
+  nextEpoch: number,
+  membershipFrontier: string[],
+): Record<string, unknown> {
+  return {
+    binding_version: 1,
+    encoding_profile: "cbor-deterministic-rfc8949-v1",
+    realm_id: group.realmId,
+    effective_scope: group.effectiveScope,
+    mls_group_id: group.groupId,
+    previous_epoch: previousEpoch,
+    next_epoch: nextEpoch,
+    membership_frontier: membershipFrontier,
+    policy_root: group.policyRoot,
+    binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+    reducer_profile: MLS_REDUCER_PROFILE_V1,
+  };
+}
+
+function buildMlsWelcomeEnvelope(args: {
+  actorDid: string;
+  realmId: string;
+  group: MlsRealmGroupFixture;
+  identity: CrossSigningIdentity;
+  keypackageClaim: Record<string, unknown>;
+  recipientDid: string;
+  recipientDeviceId: string;
+  epoch: number;
+  commitRef: string;
+  label: string;
+  governanceBinding: Record<string, unknown>;
+}): { eventId: string; welcomeId: string; envelope: Record<string, unknown> } {
+  const eventId = typedId("event");
+  const welcomeId = typedId("mls_welcome");
+  const claimId = String(args.keypackageClaim.claim_id);
+  const keypackageRef = String(args.keypackageClaim.keypackage_ref);
+  const keypackageDigest = String(args.keypackageClaim.keypackage_digest);
+  const capabilitiesDigest = String(args.keypackageClaim.capabilities_digest);
+  const sskGeneration = Number(args.keypackageClaim.ssk_generation);
+  expect(Number.isFinite(sskGeneration)).toBeTruthy();
+  const ciphertext = b64url(`opaque-mls-welcome-${args.label}`);
+  const welcomeDigest = sha256Digest(Buffer.from(ciphertext, "base64url"));
+  const claimEnvelopeUnsigned = {
+    keypackage_ref: keypackageRef,
+    keypackage_digest: keypackageDigest,
+    intended_realm_id: args.realmId,
+    claim_id: claimId,
+    requester_did: args.actorDid,
+    ssk_generation: sskGeneration,
+    nonce: `welcome-claim-${args.label}`,
+    welcome_digest: welcomeDigest,
+    created_at: canonicalTimestamp(),
+  };
+
+  return {
+    eventId,
+    welcomeId,
+    envelope: signedEventEnvelope({
+      actorDid: args.actorDid,
+      realmId: args.realmId,
+      kind: "ck.mls.welcome",
+      eventId,
+      payload: {
+        welcome_id: welcomeId,
+        mls_group_id: args.group.groupId,
+        epoch: args.epoch,
+        recipient_principal_id: args.recipientDid,
+        recipient_device_id: args.recipientDeviceId,
+        keypackage_ref: keypackageRef,
+        keypackage_digest: keypackageDigest,
+        claim_id: claimId,
+        claim_ref: {
+          claim_id: claimId,
+          keypackage_ref: keypackageRef,
+          keypackage_digest: keypackageDigest,
+          capabilities_digest: capabilitiesDigest,
+          ssk_generation: sskGeneration,
+        },
+        claim_envelope: {
+          ...claimEnvelopeUnsigned,
+          signature: {
+            kid: args.identity.ssk.verificationMethod,
+            alg: "EdDSA",
+            sig: nodeSign(
+              null,
+              canonicalBytes(claimEnvelopeUnsigned),
+              args.identity.ssk.privateKey,
+            ).toString("base64url"),
+          },
+        },
+        ciphertext,
+        expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
+        commit_ref: args.commitRef,
+        governance_binding: args.governanceBinding,
+      },
+    }),
+  };
+}
+
+function findEventPayload(
+  body: Record<string, unknown>,
+  eventId: string,
+): Record<string, unknown> | undefined {
+  const events = Array.isArray(body.events) ? body.events : [];
+  for (const event of events) {
+    if (!event || typeof event !== "object" || Array.isArray(event)) {
+      continue;
+    }
+    const record = event as Record<string, unknown>;
+    if (record.event_id !== eventId && record.id !== eventId) {
+      continue;
+    }
+    const payload = record.payload;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      return payload as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+function buildKeyPackageUploadEntry(args: {
+  label: string;
+  capabilities: string[];
+  expiresAt: string;
+  lastResort: boolean;
+}): KeyPackageUploadEntry {
+  const keyPackage = b64url(`opaque-keypackage-${args.label}`);
+  const keypackageDigest = sha256Digest(Buffer.from(keyPackage, "base64url"));
+  return {
+    keypackage_id: typedId("mls_keypackage"),
+    keypackage_ref: keypackageDigest,
+    key_package: keyPackage,
+    keypackage_digest: keypackageDigest,
+    cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
+    capabilities: args.capabilities,
+    created_at: canonicalTimestamp(),
+    expires_at: args.expiresAt,
+    last_resort: args.lastResort,
+  };
+}
+
+async function uploadDeviceKeyPackages(
+  request: APIRequestContext,
+  user: JointUser,
+  token: string,
+  deviceId: string,
+  keyPackages: KeyPackageUploadEntry[],
+) {
+  const deviceSignature = {
+    kid: `${user.did}#${deviceId}`,
+    alg: "EdDSA",
+    sig: b64url(`device-signature-${deviceId}-${Date.now()}`),
+  };
+  const publish = await request.post(
+    `${solandBaseUrl()}/_cokret/self/keys/keypackages/upload`,
+    {
+      headers: authHeaders(token),
+      data: {
+        principal_id: user.did,
+        device_id: deviceId,
+        device_signature: deviceSignature,
+        key_packages: keyPackages.map((entry) => ({
+          ...entry,
+          device_signature: deviceSignature,
+        })),
+      },
+    },
+  );
+  const body = await publish
+    .json()
+    .catch(async () => ({ raw: await publish.text() }));
+  expect(
+    publish.ok(),
+    `KeyPackage upload returned ${publish.status()}: ${JSON.stringify(body)}`,
+  ).toBeTruthy();
+  expect(body.accepted).toBe(keyPackages.length);
+  expect(body.rejected ?? []).toEqual([]);
+}
+
+function sha256Digest(value: Buffer): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function deviceAuthorizeSignature(
+  principalId: string,
+  deviceId: string,
+): Record<string, string> {
+  return {
+    kid: `${principalId}#${deviceId}`,
+    alg: "EdDSA",
+    sig: b64url(`device-authorize:${principalId}:${deviceId}`),
+  };
 }

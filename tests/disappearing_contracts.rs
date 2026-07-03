@@ -114,6 +114,7 @@ fn disappearing_message_payloads_keep_expiry_for_all_triggers() {
         assert_eq!(payload["expiry"]["grace_ms"], 5_000);
         assert!(payload.get("expiry").is_some());
         cokret_core::schema::event_payload_validator_catalog()
+            .unwrap()
             .validate_payload("ck.message.create", &payload)
             .unwrap();
 

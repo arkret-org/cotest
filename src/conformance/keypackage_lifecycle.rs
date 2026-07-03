@@ -50,8 +50,7 @@ const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ck.feature.mls_last_resort_keypackage.v1";
 const REASON_LAST_RESORT_NOT_SUPPORTED: &str = "last_resort_not_supported";
-const REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION: &str =
-    "last_resort_realm_affinity_violation";
+const REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION: &str = "last_resort_realm_affinity_violation";
 const REASON_LAST_RESORT_ROTATION_REQUIRED: &str = "last_resort_rotation_required";
 
 fn keypackage_fixture() -> Result<Value> {

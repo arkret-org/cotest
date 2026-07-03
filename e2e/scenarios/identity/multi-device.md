@@ -59,6 +59,8 @@
 18. soland reducer:
     - 接受 `ck.device.revoke`
     - 把 device-2 从 alice 的 active device set 移除
+    - `keys/query` 对 device-2 返回 `device_status=revoked`,并省略 `device_signing_key` / `hpke_key`
+    - retire device-2 已发布但未消费的 ordinary 与 last-resort MLS KeyPackage,后续 claim 返回 `mls_keypackage_not_found`
     - 若在 E2EE Realm:触发 MLS Remove(剔除 device-2 的 leaf node)+ 新 commit + 新 epoch
 19. 断言:device-1 的 `/settings/devices` 看不到 device-2 了
 
@@ -88,6 +90,8 @@
 - Phase B 步骤 11/13:双向消息可见
 - Phase B 步骤 14:消息携带 device_id 信息
 - Phase C 步骤 19:device-2 从 device-1 视图中消失
+- Phase C:撤销后 `/_cokret/self/keys/query` 不再暴露 device-2 的 `device_signing_key`,并标记 `device_status=revoked`
+- Phase C:撤销后 device-2 的未消费 ordinary / last-resort KeyPackage 不再可 claim
 - Phase D 步骤 22:device-2 提交被拒,错误码 device_revoked
 - Phase E 步骤 26:to-device 队列 drop
 - Phase F 步骤 30:MLS Remove 生效,device-2 失去新 epoch 访问
@@ -102,7 +106,8 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.device.authorize` 含 `cross_signing_binding`、`ck.device.revoke`、`ck.device.list_update` 投影、to-device 队列、MLS Remove 与 revoke 联动 — partial(`ck.member.state` 有,但 device-specific 链不完整)。多数 phase fixme-able。
+- **soland 已覆盖**:`ck.device.authorize` + `cross_signing_binding` 验签、`ck.device.revoke` auth gate、device-set projection、to-device grace drop、`keys/query` revoked 目录面、撤销时未消费 ordinary / last-resort MLS KeyPackage retire。
+- **soland 剩余缺口**:完整 E2EE Realm MLS Remove fan-out:KeyPackage claim → Welcome → Commit Remove → epoch advance → revoked device 无法解密后续消息。该缺口保留为 `multi-device.spec.ts` 的 MLS fixme,不能用单纯 auth 拒绝替代。
 - **yougen 缺口**:`/settings/devices` 的 device 列表 + revoke 按钮;QR scan UI(本测试用 evaluate 注入,UI 缺口对测试不致命)
 - **harness**:模拟相机扫码用 `page.evaluate` 注入 QR payload 到 device-1 的 add-device input
 

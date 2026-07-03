@@ -333,7 +333,9 @@ fn service_attested_device_authorize_event(
         device_key_algorithm: None,
         authorized_by: cokret_core::DeviceOrPrincipalRef::Did(authority.clone()),
         scopes: None,
-        not_before: "2026-06-17T00:00:00Z".parse().expect("static timestamp parses"),
+        not_before: "2026-06-17T00:00:00Z"
+            .parse()
+            .expect("static timestamp parses"),
         expires_at: None,
         device_signature: None,
         proof: None,

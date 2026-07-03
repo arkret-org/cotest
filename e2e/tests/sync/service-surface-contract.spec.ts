@@ -10,19 +10,16 @@
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/cokret.rs::server_describe`) already serve
 // `GET /_cokret/describe` with the claim-level partition layer in place, so the two
-// describe probes are LIVE today. Phase B (error envelope), Phase E
-// (unsupported_feature fail-closed), Phase C (opaque list-pagination cursor on
-// `ck.self.events.query.scan`) and Phase D (generic `Idempotency-Key` header path on
-// POST /_cokret/self/events) are all live on soland. Only Phase A.E1
-// (claim_kind partition between claimed vs verified profiles) stays pinned via
-// test.fixme: the verified-profile side carries no data until the G4.T3 cotest
-// verified-profile write path produces real artifacts, so the no-leak invariant
-// cannot be exercised end-to-end yet.
+// describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
+// (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
+// list-pagination cursor on `ck.self.events.query.scan`) and Phase D (generic
+// `Idempotency-Key` header path on POST /_cokret/self/events) are all live on
+// soland.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
-// run under joint-smoke. The untagged service-surface block carries Phases B/C/D/E plus the
-// remaining Phase A.E1 fixme placeholder, so the extra live probes do not broaden
-// PR-level gating.
+// run under joint-smoke. The untagged service-surface block carries the broader
+// Phases A.E1/B/C/D/E probes, so the extra live probes do not broaden PR-level
+// gating.
 
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
@@ -245,29 +242,76 @@ test.describe("describes coauth surface @fully-implemented", () => {
   });
 });
 
-// ---------- Mixed: live error-envelope probe plus remaining fixme phases ----------
+// ---------- Mixed: broader live service-surface probes ----------
 
 test.describe("service surface contract — error envelope, pagination, idempotency, fail-closed", () => {
-  test.fixme(
-    // @blocking-on: soland#sync-service-surface-contract-gap
-    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
-    // @expected-live-by: 2026Q3
+  test(
     "Phase A.E1: claim_kind partition does not leak between claimed_profiles and verified_profiles",
-    async () => {
-      // spec: service-surface.md §3.0 (claim levels), §17 (line-level interop required).
-      //
-      // For each entry in verified_profiles: claim_kind === "cotest_verified" AND
-      //   entry has non-empty cotest_run_id + artifact_digest + artifact_ref +
-      //   cotest_issuer_did + signature + timestamp.
-      // For each entry in claimed_profiles: claim_kind === "self_claimed" AND
-      //   the same profile_id MUST NOT also appear in verified_profiles unless
-      //   the verified entry was produced by an out-of-band cotest run (then
-      //   verified copy wins; self-claim copy MUST be dropped).
-      //
-      // Blocked on: G4.T3 verified-profile write path. Until cotest produces real
-      // verified-profile artifacts, both arrays are observable but only the
-      // self_claimed side carries data — partition correctness can't be exercised
-      // end-to-end yet.
+    async ({ request }, testInfo) => {
+      type ProfileClaim = {
+        profile_id?: unknown;
+        claim_kind?: unknown;
+        cotest_run_id?: unknown;
+        artifact_digest?: unknown;
+        artifact_ref?: unknown;
+        cotest_issuer_did?: unknown;
+        signature?: unknown;
+        timestamp?: unknown;
+      };
+      const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+      expect(resp.status()).toBe(200);
+      const body = await resp.json();
+      const claimed = (body.claimed_profiles ?? []) as ProfileClaim[];
+      const verified = (body.verified_profiles ?? []) as ProfileClaim[];
+
+      expect(Array.isArray(claimed), "claimed_profiles is array").toBe(true);
+      expect(Array.isArray(verified), "verified_profiles is array").toBe(true);
+
+      const claimedIds = new Set<string>();
+      for (const entry of claimed) {
+        expect(typeof entry.profile_id, "claimed profile_id").toBe("string");
+        const profileId = entry.profile_id as string;
+        expect(profileId, "claimed profile_id is non-empty").not.toBe("");
+        expect(entry.claim_kind, `claimed ${profileId} claim_kind`).toBe("self_claimed");
+        expect(entry.claim_kind, `claimed ${profileId} must not be cotest_verified`).not.toBe(
+          "cotest_verified",
+        );
+        expect(claimedIds.has(profileId), `claimed ${profileId} appears once`).toBe(false);
+        claimedIds.add(profileId);
+      }
+
+      const verifiedIds = new Set<string>();
+      for (const entry of verified) {
+        expect(typeof entry.profile_id, "verified profile_id").toBe("string");
+        const profileId = entry.profile_id as string;
+        expect(profileId, "verified profile_id is non-empty").not.toBe("");
+        expect(entry.claim_kind, `verified ${profileId} claim_kind`).toBe("cotest_verified");
+        for (const field of [
+          "cotest_run_id",
+          "artifact_digest",
+          "artifact_ref",
+          "cotest_issuer_did",
+          "signature",
+          "timestamp",
+        ] as const) {
+          expect(entry[field], `verified ${profileId} ${field}`).toBeTruthy();
+        }
+        expect(verifiedIds.has(profileId), `verified ${profileId} appears once`).toBe(false);
+        verifiedIds.add(profileId);
+        expect(
+          claimedIds.has(profileId),
+          `${profileId} must not appear in both claimed_profiles and verified_profiles`,
+        ).toBe(false);
+      }
+
+      if (body.development_mode === true) {
+        expect(verified, "dev-mode verified_profiles is empty").toEqual([]);
+      }
+
+      await testInfo.attach("phase-a-e1-describe", {
+        body: JSON.stringify(body, null, 2),
+        contentType: "application/json",
+      });
     },
   );
 
@@ -635,6 +679,53 @@ test.describe("service surface contract — error envelope, pagination, idempote
         data: envelope,
       });
       expect(resp.status()).toBeGreaterThanOrEqual(400);
+      const body = await resp.json();
+      expect(wireErrCode(body)).toBe("unsupported_feature");
+      expect(JSON.stringify(body)).not.toContain('"accepted"');
+      expect(JSON.stringify(body)).not.toContain(eventId);
+    },
+  );
+
+  test(
+    "Phase E2: unknown fail-closed critical extension is rejected with unsupported_feature",
+    async ({ request }) => {
+      // spec: api-conventions.md section 5.1 uses unsupported_feature for
+      // unknown Event.requirements.critical_extensions[] entries that are
+      // declared fail_closed.
+      const criticalExtension = "ck.extension.cotest.unknown_fail_closed.v1";
+      const alice = uniqueUser("ssc-phase-e2");
+      await ensureRegistered(request, alice);
+      const token = await issueDevSession(request, alice);
+      const eventId = `ck:event:01904100-0000-7000-8000-${Date.now()
+        .toString()
+        .slice(-12)
+        .padStart(12, "0")}`;
+      const envelope = signedEventEnvelope({
+        actorDid: alice.did,
+        eventId,
+        realmId: "ck:realm:01904100-0000-7000-8000-000000001102",
+        kind: "ck.message.create",
+        payload: {
+          strand_id: "ck:strand:01904100-0000-7000-8000-000000001102",
+          track_name: "discussion",
+          content: {
+            kind: "ck.content.text",
+            body: "must not accept unknown fail-closed critical extension",
+          },
+        },
+      });
+      (
+        envelope.requirements as {
+          critical_extensions: Array<{ id: string; fail_closed: boolean }>;
+        }
+      ).critical_extensions = [{ id: criticalExtension, fail_closed: true }];
+
+      const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: { authorization: `Bearer ${token}` },
+        data: envelope,
+      });
+      expect(resp.status()).toBeGreaterThanOrEqual(400);
+      expect(resp.status()).toBeLessThan(600);
       const body = await resp.json();
       expect(wireErrCode(body)).toBe("unsupported_feature");
       expect(JSON.stringify(body)).not.toContain('"accepted"');

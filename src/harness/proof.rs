@@ -74,10 +74,7 @@ pub fn attach_ephemeral_proof(
 /// value is round-tripped through the typed [`cokret_core::EphemeralEnvelope`]
 /// (so a malformed envelope fails loudly here, not at the server) and
 /// re-serialized with the attached proof.
-pub fn attach_ephemeral_proof_value(
-    envelope: &mut Value,
-    signing_key: &ed25519_dalek::SigningKey,
-) {
+pub fn attach_ephemeral_proof_value(envelope: &mut Value, signing_key: &ed25519_dalek::SigningKey) {
     let mut typed: cokret_core::EphemeralEnvelope = serde_json::from_value(envelope.clone())
         .expect("value is a well-formed ephemeral envelope");
     attach_ephemeral_proof(&mut typed, signing_key);

@@ -16,10 +16,10 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED, REASON_APPROVAL_ALREADY_CONSUMED,
-    REASON_PAIRING_REQUEST_EXPIRED, REASON_PROOF_INVALID, REASON_SIDECAR_CREATE_DENIED,
-    REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH, REASON_ACCOUNTABILITY_GRANT_MISSING,
-    REASON_APPROVAL_NONCE_REUSED,
+    REASON_ACCOUNTABILITY_GRANT_MISSING, REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED,
+    REASON_APPROVAL_ALREADY_CONSUMED, REASON_APPROVAL_NONCE_REUSED, REASON_PAIRING_REQUEST_EXPIRED,
+    REASON_PROOF_INVALID, REASON_SIDECAR_CREATE_DENIED,
+    REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
 };
 use cokret_core::{
     CAP_ACTION_AGENT_PROVISION, OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT,
@@ -132,9 +132,7 @@ pub fn run_agent_provision_vector() -> Result<()> {
 
 pub fn run_agent_pairing_expiry_vector() -> Result<()> {
     if REASON_PAIRING_REQUEST_EXPIRED != "pairing_request_expired" {
-        bail!(
-            "REASON_PAIRING_REQUEST_EXPIRED spelling drifted: {REASON_PAIRING_REQUEST_EXPIRED}"
-        );
+        bail!("REASON_PAIRING_REQUEST_EXPIRED spelling drifted: {REASON_PAIRING_REQUEST_EXPIRED}");
     }
     if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.command.pair_agent_key" {
         bail!("OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}");
@@ -324,9 +322,7 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
     // (controller's grant has not authorised the agent to write to
     // the sidecar circle).
     if REASON_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
-        bail!(
-            "REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}"
-        );
+        bail!("REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}");
     }
     if REASON_APPROVAL_NONCE_REUSED != "approval_nonce_reused" {
         bail!("REASON_APPROVAL_NONCE_REUSED spelling drifted: {REASON_APPROVAL_NONCE_REUSED}");

@@ -3,7 +3,7 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, Duration, Utc};
 use cokret_core::error::{
-    ERROR_CODE_DID_PROOF_REQUIRED, REASON_PROOF_INVALID, ERROR_CODE_UNAUTHENTICATED,
+    ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_UNAUTHENTICATED, REASON_PROOF_INVALID,
 };
 use cokret_core::{
     DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
@@ -876,7 +876,10 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
         false,
     )
     .err()
-        != Some(expected_str(vector, "default_protected_bare_bearer_reason")?)
+        != Some(expected_str(
+            vector,
+            "default_protected_bare_bearer_reason",
+        )?)
     {
         bail!("default profile accepted bare bearer on a protected endpoint");
     }

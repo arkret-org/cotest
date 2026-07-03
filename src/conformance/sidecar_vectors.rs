@@ -119,9 +119,7 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
     if REASON_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
-        bail!(
-            "REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}"
-        );
+        bail!("REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}");
     }
     Ok(())
 }

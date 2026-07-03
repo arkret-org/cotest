@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    REASON_RECOVERY_EVIDENCE_UNBOUND, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED,
+    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED, REASON_RECOVERY_EVIDENCE_UNBOUND,
 };
 use cokret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;

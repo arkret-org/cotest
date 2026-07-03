@@ -1,0 +1,1054 @@
+{
+  "schema": "cotest.spec_business_flow_coverage.v1",
+  "operation_registry_ref": "registry/operation-registry.json",
+  "flows": [
+    {
+      "id": "service_identity_recovery",
+      "title": "Service discovery, identity resolution, and recovery",
+      "status": "implemented",
+      "surfaces": [
+        "service_discovery",
+        "identity_registry"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.server.query.describe",
+          "surfaces": [
+            "service_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.root.identity.query.resolve",
+          "surfaces": [
+            "identity_registry"
+          ]
+        },
+        {
+          "operation_id": "ck.root.identity.document.resource.get",
+          "surfaces": [
+            "identity_registry"
+          ]
+        },
+        {
+          "operation_id": "ck.root.identity.recovery_policy.command.publish",
+          "surfaces": [
+            "identity_registry"
+          ]
+        },
+        {
+          "operation_id": "ck.root.identity.recovery_session.command.create",
+          "surfaces": [
+            "identity_registry"
+          ]
+        },
+        {
+          "operation_id": "ck.root.identity.recovery_session.command.submit_proof",
+          "surfaces": [
+            "identity_registry"
+          ]
+        },
+        {
+          "operation_id": "ck.root.identity.recovery_session.command.complete",
+          "surfaces": [
+            "identity_registry"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/identity.rs",
+          "markers": [
+            "/_cokret/root/identity/resolve",
+            "/_cokret/root/identity/document"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/recovery/policy.rs",
+          "markers": [
+            "/_cokret/root/identity/recovery-policy"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/recovery/session.rs",
+          "markers": [
+            "/_cokret/root/identity/recovery-sessions",
+            "ck.root.identity.recovery_session.command.submit_proof"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/key_backup_recovery_account_state.rs",
+          "markers": [
+            "/_cokret/root/identity/recovery-policy"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "account_session_profile_preferences",
+      "title": "Account registration, session lifecycle, profile, preferences, and logout",
+      "status": "implemented",
+      "surfaces": [
+        "account_auth",
+        "events_sync",
+        "account_data",
+        "read_cursor"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.gate.account.command.register",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.issue_session_grant",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.refresh_session_grant",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.introspect_session_grant",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.self.account.query.viewer",
+          "surfaces": [
+            "events_sync"
+          ]
+        },
+        {
+          "operation_id": "ck.self.account.command.update_profile",
+          "surfaces": [
+            "events_sync"
+          ]
+        },
+        {
+          "operation_id": "ck.self.account.stream.subscribe",
+          "surfaces": [
+            "events_sync"
+          ]
+        },
+        {
+          "operation_id": "ck.self.account_data.resource.replace",
+          "surfaces": [
+            "account_data"
+          ]
+        },
+        {
+          "operation_id": "ck.self.read_cursor.command.advance",
+          "surfaces": [
+            "read_cursor"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.revoke_session",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.logout_auth_session",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.logout",
+          "surfaces": [
+            "account_auth"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/auth.rs",
+          "markers": [
+            "/_cokret/gate/account/register",
+            "/_cokret/gate/account/logout"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../coauth/crates/backend/src/handlers/cokret/tests.rs",
+          "markers": [
+            "ck.gate.account.command.logout_auth_session",
+            "/_cokret/gate/account/session-grants/introspect"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/account_data_sync.rs",
+          "markers": [
+            "account_data",
+            "ck.read_cursor.advance"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/api_contracts_auth.rs",
+          "markers": [
+            "/_cokret/gate/account/register",
+            "/_cokret/gate/account/session-grants/revoke"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/account_subscribe_long_poll.rs",
+          "markers": [
+            "ck.self.account.stream.subscribe"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contact_realm_collaboration",
+      "title": "Contacts, circles, realms, consent, authorization, and moderation",
+      "status": "implemented",
+      "surfaces": [
+        "contact_lifecycle",
+        "circle_management",
+        "realm_governance_links",
+        "realm_read",
+        "realm_object_read",
+        "view_projection",
+        "authz_policy",
+        "consent_management",
+        "moderation_reports"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.self.contact.command.request",
+          "surfaces": [
+            "contact_lifecycle"
+          ]
+        },
+        {
+          "operation_id": "ck.self.contact.command.respond",
+          "surfaces": [
+            "contact_lifecycle"
+          ]
+        },
+        {
+          "operation_id": "ck.self.contact.query.list",
+          "surfaces": [
+            "contact_lifecycle"
+          ]
+        },
+        {
+          "operation_id": "ck.self.contact.command.tombstone",
+          "surfaces": [
+            "contact_lifecycle"
+          ]
+        },
+        {
+          "operation_id": "ck.self.circle.command.create",
+          "surfaces": [
+            "circle_management"
+          ]
+        },
+        {
+          "operation_id": "ck.self.circle.member.command.add",
+          "surfaces": [
+            "circle_management"
+          ]
+        },
+        {
+          "operation_id": "ck.self.circle.member.resource.delete",
+          "surfaces": [
+            "circle_management"
+          ]
+        },
+        {
+          "operation_id": "ck.self.realm.resource.get",
+          "surfaces": [
+            "realm_read"
+          ]
+        },
+        {
+          "operation_id": "ck.self.realm.command.archive",
+          "surfaces": [
+            "realm_read"
+          ]
+        },
+        {
+          "operation_id": "ck.self.realm.query.export",
+          "surfaces": [
+            "realm_read"
+          ]
+        },
+        {
+          "operation_id": "ck.self.realm_link.query.list",
+          "surfaces": [
+            "realm_governance_links"
+          ]
+        },
+        {
+          "operation_id": "ck.self.space.query.list",
+          "surfaces": [
+            "realm_object_read"
+          ]
+        },
+        {
+          "operation_id": "ck.self.views.collection_projection.command.materialize",
+          "surfaces": [
+            "view_projection"
+          ]
+        },
+        {
+          "operation_id": "ck.self.authz.query.check",
+          "surfaces": [
+            "authz_policy"
+          ]
+        },
+        {
+          "operation_id": "ck.self.consent.command.grant",
+          "surfaces": [
+            "consent_management"
+          ]
+        },
+        {
+          "operation_id": "ck.self.consent.command.revoke",
+          "surfaces": [
+            "consent_management"
+          ]
+        },
+        {
+          "operation_id": "ck.self.moderation.command.report",
+          "surfaces": [
+            "moderation_reports"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/identity/account/social.rs",
+          "markers": [
+            "ck.self.contact.command.request",
+            "ck.self.contact.command.respond"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/circles.rs",
+          "markers": [
+            "ck.self.circle.command.create",
+            "ck.self.circle.member.command.add"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/events/projection_query.rs",
+          "markers": [
+            "ck.self.space.query.list"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/spaces/space.rs",
+          "markers": [
+            "ck.self.realm.resource.get"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/realms.rs",
+          "markers": [
+            "ck.self.realm_link.query.list"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/identity/consent.rs",
+          "markers": [
+            "ck.self.consent.command.grant",
+            "ck.self.consent.command.revoke"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/interop/moderation.rs",
+          "markers": [
+            "ck.self.moderation.command.report"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/collaboration_workflow.rs",
+          "markers": [
+            "/_cokret/find/directory/resolve-realm",
+            "/_cokret/self/realms/{realm_id}"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/authz_policy_presence.rs",
+          "markers": [
+            "/_cokret/self/authz/check",
+            "/_cokret/self/authz/effective-grants"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "device_key_blob_recovery",
+      "title": "Device pairing, device messages, cryptographic keys, key backup, and blob storage",
+      "status": "implemented",
+      "surfaces": [
+        "account_auth",
+        "device_and_keys",
+        "blob_storage"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.gate.account.command.pair_device",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.enroll_device",
+          "surfaces": [
+            "account_auth"
+          ]
+        },
+        {
+          "operation_id": "ck.self.device_messages.command.send",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.device_messages.query.list",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.device_messages.command.ack",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.upload.create",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.query.lookup",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.command.claim",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.keypackages.upload.create",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.keypackages.command.claim",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.keypackages.command.consume",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.keypackages.command.revoke",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.backups.resource.replace",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.backups.query.list",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.backups.command.unlock",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.keys.backups.resource.delete",
+          "surfaces": [
+            "device_and_keys"
+          ]
+        },
+        {
+          "operation_id": "ck.self.blob.upload.create",
+          "surfaces": [
+            "blob_storage"
+          ]
+        },
+        {
+          "operation_id": "ck.self.blob.resource.get",
+          "surfaces": [
+            "blob_storage"
+          ]
+        },
+        {
+          "operation_id": "ck.self.blob.command.presign",
+          "surfaces": [
+            "blob_storage"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/push_keys/keys_devices.rs",
+          "markers": [
+            "/_cokret/self/keys/upload",
+            "/_cokret/self/blob/upload"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/push_keys/device_messages.rs",
+          "markers": [
+            "/_cokret/self/device_messages",
+            "/_cokret/self/device_messages/ack"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/protocol_payloads/key_backups.rs",
+          "markers": [
+            "/_cokret/self/keys/backups",
+            "ck.self.keys.backups.command.unlock"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/protocol_payloads/blob.rs",
+          "markers": [
+            "/_cokret/self/blob/upload",
+            "/_cokret/self/blob/get"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "tests/device_enroll_rollout_e2e.rs",
+          "markers": [
+            "device-enroll-rollout",
+            "/_cokret/self/keys/query"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "directory_discovery_takedown",
+      "title": "Directory search, handle resolution, private discovery, announce, withdraw, and takedown",
+      "status": "implemented",
+      "surfaces": [
+        "directory_discovery"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.find.directory.query.describe",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.query.search_realms",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.query.resolve_realm",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.query.resolve_target",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.query.resolve_handle",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.query.private_contact_discovery",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.query.list_handles_for_subject",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.command.announce",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.command.withdraw",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.command.takedown_appeal",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        },
+        {
+          "operation_id": "ck.find.directory.push.command.register",
+          "surfaces": [
+            "directory_discovery"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/directory_index.rs",
+          "markers": [
+            "/_cokret/find/directory/search-realms",
+            "ck.find.directory.query.private_contact_discovery"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../teabay/crates/server/tests/it/conformance.rs",
+          "markers": [
+            "/_cokret/find/directory/announce",
+            "/_cokret/find/directory/withdraw"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/handle_to_join_e2e.rs",
+          "markers": [
+            "ck.find.directory.query.resolve_handle"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/teabay_unsigned_ingest.rs",
+          "markers": [
+            "/_cokret/find/directory/announce"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/privacy.rs",
+          "markers": [
+            "ck.find.directory.query.private_contact_discovery",
+            "withdraw_and_takedown_have_blinded_external_responses"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../teabay/crates/server/src/routing.rs",
+          "markers": [
+            "ck.find.directory.command.takedown_appeal"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/list_handles_for_subject_vectors.rs",
+          "markers": [
+            "ck.find.directory.query.list_handles_for_subject"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/object_addressing_vectors.rs",
+          "markers": [
+            "ck.find.directory.query.resolve_target"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "push_realtime_media",
+      "title": "Presence, push registration and notification, ICE configuration, and media token exchange",
+      "status": "partially_implemented",
+      "surfaces": [
+        "events_sync",
+        "push",
+        "realtime_media"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.self.ephemeral.command.send",
+          "surfaces": [
+            "events_sync"
+          ]
+        },
+        {
+          "operation_id": "ck.edge.push.command.register_device",
+          "surfaces": [
+            "push"
+          ]
+        },
+        {
+          "operation_id": "ck.edge.push.command.unregister_device",
+          "surfaces": [
+            "push"
+          ]
+        },
+        {
+          "operation_id": "ck.edge.push.command.notify",
+          "surfaces": [
+            "push"
+          ]
+        },
+        {
+          "operation_id": "ck.self.media.query.ice_config",
+          "surfaces": [
+            "realtime_media"
+          ]
+        },
+        {
+          "operation_id": "ck.self.call.media.exchange.issue_token",
+          "surfaces": [
+            "events_sync"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/devices_webrtc.rs",
+          "markers": [
+            "/_cokret/self/ephemeral",
+            "rtc_media_token"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/account_data_sync.rs",
+          "markers": [
+            "/_cokret/edge/push/register-device",
+            "/_cokret/edge/push/notify"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../floria/tests/provider_payload_strictness.rs",
+          "markers": [
+            "notify_blind_profile_accepts_pure_blind_payload",
+            "/_cokret/edge/push/notify"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/authz_policy_presence.rs",
+          "markers": [
+            "/_cokret/edge/push/register-device",
+            "/_cokret/self/rtc/ice-config"
+          ]
+        },
+        {
+          "kind": "gap_guard",
+          "path": "src/scenarios/soland_floria_push_e2e.rs",
+          "markers": [
+            "ck.edge.push.command.register_device",
+            "/_cokret/edge/push/notify"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "agent_runtime_lifecycle",
+      "title": "Agent provisioning, key pairing, grant lifecycle, sidecar threads, participation, and deactivation",
+      "status": "implemented",
+      "surfaces": [
+        "agent_runtime"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.self.agent.command.provision",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.gate.account.command.pair_agent_key",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.query.list",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.resource.get",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.command.pause",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.command.resume",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.command.deactivate",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.command.rotate_key",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.grant.command.attach",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.grant.resource.delete",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.sidecar_thread.command.ensure",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.participation.resource.replace",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        },
+        {
+          "operation_id": "ck.self.agent.participation.resource.get",
+          "surfaces": [
+            "agent_runtime"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/identity/agents.rs",
+          "markers": [
+            "ck.self.agent.command.provision",
+            "ck.gate.account.command.pair_agent_key"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "tests/agent_provision_e2e.rs",
+          "markers": [
+            "ck.self.agent.command.provision",
+            "/_cokret/gate/account/agent-key-pair"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/scenarios/spec_section_11/mod.rs",
+          "markers": [
+            "ck.self.agent.sidecar_thread.command.ensure",
+            "ck.self.agent.deactivate"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "federation_interop_and_external_apps",
+      "title": "Peer federation, MIMI interop, invite locator handoff, and applet install/runtime",
+      "status": "implemented",
+      "surfaces": [
+        "peer_federation",
+        "mimi_interop",
+        "invite_locator_handoff",
+        "applet",
+        "applet_install",
+        "applet_ghost"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ck.peer.events.command.submit",
+          "surfaces": [
+            "peer_federation"
+          ]
+        },
+        {
+          "operation_id": "ck.peer.events.query.frontier",
+          "surfaces": [
+            "peer_federation"
+          ]
+        },
+        {
+          "operation_id": "ck.open.mimi.query.provider_directory",
+          "surfaces": [
+            "mimi_interop"
+          ]
+        },
+        {
+          "operation_id": "ck.open.mimi.command.submit_message",
+          "surfaces": [
+            "mimi_interop"
+          ]
+        },
+        {
+          "operation_id": "ck.open.invite_locator.query.resolve",
+          "surfaces": [
+            "invite_locator_handoff"
+          ]
+        },
+        {
+          "operation_id": "ck.edge.applet.query.describe",
+          "surfaces": [
+            "applet"
+          ]
+        },
+        {
+          "operation_id": "ck.self.applet.install.command.preview",
+          "surfaces": [
+            "applet_install"
+          ]
+        },
+        {
+          "operation_id": "ck.self.applet.command.install",
+          "surfaces": [
+            "applet_install"
+          ]
+        },
+        {
+          "operation_id": "ck.self.applet.ghost.command.provision",
+          "surfaces": [
+            "applet_ghost"
+          ]
+        },
+        {
+          "operation_id": "ck.edge.applet.command.transaction",
+          "surfaces": [
+            "applet"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/federation.rs",
+          "markers": [
+            "ck.peer.events.command.submit",
+            "/_cokret/peer/events/frontier"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/federation_two_node_e1.rs",
+          "markers": [
+            "/_cokret/peer/events",
+            "/_cokret/peer/events/frontier"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/http_api/mimi.rs",
+          "markers": [
+            "/_cokret/open/mimi/provider-directory",
+            "/_cokret/open/mimi/strands/{room_id}/messages"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/invites.rs",
+          "markers": [
+            "ck.open.invite_locator.query.resolve"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/src/routing/extensions/applet_bridge/endpoints.rs",
+          "markers": [
+            "ck.edge.applet.query.describe",
+            "ck.edge.applet.command.transaction"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/server/tests/extensions_smoke.rs",
+          "markers": [
+            "applet_install_package_registers_bot_projection_smoke",
+            "applet_ghost_actor_provision_writes_durable_profile_and_grant_events"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/wire/mimi.rs",
+          "markers": [
+            "ck.open.mimi.exchange.request_key_material"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/final_conformance_closure.rs",
+          "markers": [
+            "ck.edge.applet.command.transaction"
+          ]
+        }
+      ]
+    }
+  ]
+}

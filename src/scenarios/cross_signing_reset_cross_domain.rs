@@ -24,7 +24,7 @@
 use anyhow::{Result, anyhow};
 use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
-    REASON_CROSS_DOMAIN_REPLAY_REJECTED, REASON_RESET_EVENT_ID_MISMATCH, EventId,
+    EventId, REASON_CROSS_DOMAIN_REPLAY_REJECTED, REASON_RESET_EVENT_ID_MISMATCH,
     TypedTrustDomainId,
 };
 

@@ -5,11 +5,11 @@
 //! It drives the *shared* cokret-rust-sdk surfaces end to end so cotest never
 //! re-implements the organization-side crypto:
 //!
-//!   * `cokret_signatures::realm_organization_statement_sign` signs the canonical
-//!     transcript with the organization's control key (the same key a verifier
-//!     resolves from the organization's own DID document).
-//!   * the verification mirrors soland's `verify_realm_organization_proof_signature`
-//!     exactly: base64url-decode `authorization.proof`, re-derive
+//!   * `cokret_signatures::realm_organization_statement_sign` signs the canonical transcript with
+//!     the organization's control key (the same key a verifier resolves from the organization's own
+//!     DID document).
+//!   * the verification mirrors soland's `verify_realm_organization_proof_signature` exactly:
+//!     base64url-decode `authorization.proof`, re-derive
 //!     `realm_organization_statement_signing_bytes`, and `verify_strict`.
 //!
 //! Security anchor (model B/C): the signature MUST verify against the key named
@@ -130,8 +130,8 @@ fn statement_signed_by_a_foreign_key_is_rejected() {
     let org_key = org_control_key();
     let foreign_key = SigningKey::from_bytes(&[0x99u8; 32]);
 
-    let signed = realm_organization_statement_sign(&active_statement(), &foreign_key)
-        .expect("sign ok");
+    let signed =
+        realm_organization_statement_sign(&active_statement(), &foreign_key).expect("sign ok");
     // The verifier resolves the organization's own key, which did NOT sign this.
     let result = verify_like_soland(&signed, &org_key.verifying_key());
     assert!(

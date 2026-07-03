@@ -46,6 +46,7 @@ mod security_closure;
 mod security_negative;
 mod service_closure_hardening;
 mod sidecar_vectors;
+mod spec_business_flow;
 mod state_reducer_hardening;
 mod state_resolution;
 mod sync;
@@ -83,8 +84,8 @@ pub use agent_vectors::{
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
     run_auth_session_proof_fixture_suite, run_auth_soft_logout_did_proof_vector,
-    run_identity_did_proof_replay_window_vector,
-    run_session_bare_bearer_rejected_protected_vector, run_session_pop_presentation_vector,
+    run_identity_did_proof_replay_window_vector, run_session_bare_bearer_rejected_protected_vector,
+    run_session_pop_presentation_vector,
 };
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
@@ -274,6 +275,7 @@ pub use sidecar_vectors::{
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
     run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
 };
+pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{
     ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, run_state_reducer_hardening_fixture_suite,
     run_state_root_incremental_vector, run_strand_tracks_update_atomic_vector,

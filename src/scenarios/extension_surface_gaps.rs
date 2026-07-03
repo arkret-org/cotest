@@ -104,7 +104,8 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         .as_str()
         .unwrap_or_default();
     assert!(
-        agent_principal_id.starts_with("did:webvh:") && agent_principal_id.contains(":webvh:agent:"),
+        agent_principal_id.starts_with("did:webvh:")
+            && agent_principal_id.contains(":webvh:agent:"),
         "agent_principal_id must be a did:webvh agent DID, got: {agent_principal_id}"
     );
 

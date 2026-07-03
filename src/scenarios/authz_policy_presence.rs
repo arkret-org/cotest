@@ -593,7 +593,9 @@ fn presence_envelope(
     realm_id: &str,
     payload_fields: Value,
 ) -> cokret_core::EphemeralEnvelope {
-    let sent_at = Utc::now().with_nanosecond(0).expect("zeroing nanos is valid");
+    let sent_at = Utc::now()
+        .with_nanosecond(0)
+        .expect("zeroing nanos is valid");
     let expires_at = sent_at + ChronoDuration::seconds(30);
     let mut payload = json!({
         "realm_id": realm_id,
