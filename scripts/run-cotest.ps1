@@ -25,6 +25,26 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Repair-ProcessPathEnvironment {
+    $pathValue = [Environment]::GetEnvironmentVariable("Path", "Process")
+    if (-not $pathValue) {
+        $pathValue = [Environment]::GetEnvironmentVariable("PATH", "Process")
+    }
+    if (-not $pathValue) {
+        return
+    }
+
+    # Some Windows sandbox launchers inject both PATH and Path. PowerShell's
+    # process environment is case-sensitive enough to preserve both, while
+    # Start-Process builds a case-insensitive dictionary and then fails with
+    # "Item has already been added". Collapse the process-local environment
+    # to the canonical Windows Path spelling before any child process starts.
+    [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+    [Environment]::SetEnvironmentVariable("Path", $pathValue, "Process")
+}
+
+Repair-ProcessPathEnvironment
+
 function Add-RawLogLine {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -553,11 +573,22 @@ function Get-RepoGitRevision {
         return $null
     }
 
-    $revision = (& git -C $RepoPath rev-parse HEAD 2>$null)
-    if ($LASTEXITCODE -ne 0) {
+    $resolvedRepoPath = (Resolve-Path $RepoPath).Path
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $revision = (& git -c "safe.directory=$resolvedRepoPath" -C $resolvedRepoPath rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+        return $revision.Trim()
+    }
+    catch {
         return $null
     }
-    return $revision.Trim()
+    finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
 }
 
 function Get-DirectoryFingerprint {
@@ -1395,10 +1426,47 @@ function New-RegistryGapMarkdown {
     return ($lines -join [Environment]::NewLine)
 }
 
+function Resolve-PythonExe {
+    foreach ($name in @("python", "python3", "py")) {
+        $command = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($command) {
+            return $command.Source
+        }
+    }
+
+    $roots = New-Object System.Collections.Generic.List[string]
+    foreach ($root in @($env:LOCALAPPDATA, [Environment]::GetFolderPath("LocalApplicationData"), $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if ($root -and -not $roots.Contains($root)) {
+            $roots.Add($root)
+        }
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[object]
+    foreach ($root in $roots) {
+        foreach ($pythonRoot in @(
+                (Join-Path $root "Programs\Python"),
+                (Join-Path $root "Python")
+            )) {
+            if (-not (Test-Path $pythonRoot)) {
+                continue
+            }
+            foreach ($exe in @(Get-ChildItem -Path $pythonRoot -Recurse -Filter "python.exe" -ErrorAction SilentlyContinue)) {
+                $candidates.Add($exe)
+            }
+        }
+    }
+
+    if ($candidates.Count -eq 0) {
+        return $null
+    }
+
+    return ($candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+}
+
 function Test-SpecArtifactSync {
     param(
         [Parameter(Mandatory = $true)][string]$SpecRoot,
-        [string]$PythonExe = "python"
+        [AllowNull()][string]$PythonExe
     )
 
     $pipelineScript = Join-Path (Join-Path $SpecRoot "tools") "artifact_pipeline.py"
@@ -1407,6 +1475,21 @@ function Test-SpecArtifactSync {
             status = "skipped"
             reason = "artifact_pipeline.py not found"
             errors = @()
+        }
+    }
+
+    if (-not $PythonExe -and $env:COTEST_PYTHON_EXE) {
+        $PythonExe = $env:COTEST_PYTHON_EXE
+    }
+    if (-not $PythonExe) {
+        $PythonExe = Resolve-PythonExe
+    }
+    if (-not $PythonExe) {
+        return [pscustomobject]@{
+            status = "skipped"
+            reason = "python executable not found"
+            errors = @()
+            output = @()
         }
     }
 

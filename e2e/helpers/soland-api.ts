@@ -94,11 +94,42 @@ export function wireErrCode(body: unknown): string | undefined {
     stringValue(record.errcode) ??
     stringValue(record.code) ??
     stringValue(record.error_code) ??
-    stringValue(record.reason) ??
     stringValue(nested?.errcode) ??
     stringValue(nested?.code) ??
     stringValue(nested?.error_code) ??
+    stringValue(record.reason) ??
     stringValue(nested?.reason)
+  );
+}
+
+export function wireErrReason(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") {
+    return undefined;
+  }
+  const record = body as Record<string, unknown>;
+  const nested =
+    record.error && typeof record.error === "object"
+      ? (record.error as Record<string, unknown>)
+      : undefined;
+  const details =
+    record.details && typeof record.details === "object"
+      ? (record.details as Record<string, unknown>)
+      : undefined;
+  const nestedDetails =
+    nested?.details && typeof nested.details === "object"
+      ? (nested.details as Record<string, unknown>)
+      : undefined;
+  return (
+    stringValue(record.reason) ??
+    stringValue(record.reason_code) ??
+    stringValue(record.error_reason) ??
+    stringValue(details?.reason) ??
+    stringValue(details?.reason_code) ??
+    stringValue(nested?.reason) ??
+    stringValue(nested?.reason_code) ??
+    stringValue(nested?.error_reason) ??
+    stringValue(nestedDetails?.reason) ??
+    stringValue(nestedDetails?.reason_code)
   );
 }
 

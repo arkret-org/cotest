@@ -4,12 +4,11 @@
 import { randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "../../helpers/joint-fixture";
-import { eventProof, listInvitesApi } from "../../helpers/soland-api";
+import { eventProof } from "../../helpers/soland-api";
 import {
-  ensureRegistered,
-  issueDevSession,
-  openUserPage,
-  uniqueUser,
+  type DpopUserSession,
+  openDpopUserPage,
+  selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -31,7 +30,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
 
     await submitMessageEvent(
       request,
-      jointRealm.aliceToken,
+      jointRealm.aliceSession,
       jointRealm.alice.did,
       jointRealm.alicePage.serverUrl,
       jointRealm.realmId,
@@ -54,16 +53,23 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
-    const alice = uniqueUser("joint-invite-alice");
-    const bob = uniqueUser("joint-invite-bob");
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "joint-invite-alice"),
+      openDpopUserPage(browser, request, "joint-invite-bob"),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    test.skip(
+      !aliceFlow || !bobFlow,
+      "coauth DPoP session-grant login is required for joint UI",
+    );
+    if (!aliceFlow || !bobFlow) {
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
     const subscribeFailures: string[] = [];
     // Count every account-subscribe response (success or failure) so the
     // assertion below can wait for at least one FRESH re-poll after the join
@@ -98,7 +104,12 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
 
       await expect
         .poll(async () => {
-          const invites = await listInvitesApi(request, bobToken);
+          const invites = await listInvitesForDpop(
+            request,
+            bobFlow.session,
+            bobPage.serverUrl,
+            bob.did,
+          );
           return invites.some(
             (invite) => invite.realm_id === realmId && invite.invitee === bob.did,
           );
@@ -148,7 +159,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
 
 async function submitMessageEvent(
   request: APIRequestContext,
-  token: string,
+  session: DpopUserSession,
   actorDid: string,
   serverUrl: string,
   realmId: string,
@@ -156,7 +167,7 @@ async function submitMessageEvent(
 ) {
   const eventId = `ck:event:${uuidV7()}`;
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  const strandId = await resolveDefaultStrandId(request, token, serverUrl, realmId);
+  const strandId = await resolveDefaultStrandId(request, session, serverUrl, realmId);
   const payload = {
     strand_id: strandId,
     track_name: "discussion",
@@ -186,12 +197,33 @@ async function submitMessageEvent(
     proofs: [eventProof({ actorDid, event: envelopeWithoutProofs })],
   };
 
-  const response = await request.post(`${serverUrl}/_cokret/self/events`, {
-    headers: { authorization: `Bearer ${token}` },
+  const url = `${serverUrl}/_cokret/self/events`;
+  const response = await request.post(url, {
+    headers: selfPathHeadersForDpopSession(session, "POST", url),
     data: envelope,
   });
   const text = await response.text();
   expect([200, 201], `submit ck.message.create: ${text}`).toContain(response.status());
+}
+
+async function listInvitesForDpop(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  serverUrl: string,
+  subjectDid: string,
+): Promise<Array<{ id: string; realm_id: string; invitee?: string }>> {
+  const url = new URL("/_cokret/self/authz/invites", serverUrl);
+  url.searchParams.set("subject", subjectDid);
+  const href = url.toString();
+  const response = await request.get(href, {
+    headers: selfPathHeadersForDpopSession(session, "GET", href),
+  });
+  const text = await response.text();
+  expect(response.ok(), `list invites returned ${response.status()}: ${text}`).toBeTruthy();
+  const body = JSON.parse(text) as {
+    invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
+  };
+  return body.invites ?? [];
 }
 
 // COT-06-004: discover the default Strand via projection rather than deriving it
@@ -201,24 +233,24 @@ async function submitMessageEvent(
 // first, Strand projection `is_default` marker as fallback.
 async function resolveDefaultStrandId(
   request: APIRequestContext,
-  token: string,
+  session: DpopUserSession,
   serverUrl: string,
   realmId: string,
 ): Promise<string> {
-  const realmResp = await request.get(
-    `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
-    { headers: { authorization: `Bearer ${token}` } },
-  );
+  const realmUrl = `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}`;
+  const realmResp = await request.get(realmUrl, {
+    headers: selfPathHeadersForDpopSession(session, "GET", realmUrl),
+  });
   if (realmResp.ok()) {
     const realm = (await realmResp.json()) as { default_strand_id?: unknown };
     if (typeof realm.default_strand_id === "string" && realm.default_strand_id) {
       return realm.default_strand_id;
     }
   }
-  const flowsResp = await request.get(
-    `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`,
-    { headers: { authorization: `Bearer ${token}` } },
-  );
+  const flowsUrl = `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const flowsResp = await request.get(flowsUrl, {
+    headers: selfPathHeadersForDpopSession(session, "GET", flowsUrl),
+  });
   expect(
     flowsResp.ok(),
     `resolveDefaultStrandId: strand projection for ${realmId} returned ${flowsResp.status()}`,

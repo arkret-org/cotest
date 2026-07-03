@@ -3,11 +3,8 @@
 
 import { expect, test } from "@playwright/test";
 import {
-  ensureRegistered,
-  issueDevSession,
   type JointUserPage,
-  openUserPage,
-  uniqueUser,
+  openDpopUserPage,
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -17,18 +14,23 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
-    const alice = uniqueUser("same-profile-alice");
-    const bob = uniqueUser("same-profile-bob");
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "same-profile-alice"),
+      openDpopUserPage(browser, request, "same-profile-bob"),
     ]);
-    const [alicePage, bobPage] = await Promise.all([
-      openUserPage(browser, alice, { sessionCredential: aliceToken }),
-      openUserPage(browser, bob, { sessionCredential: bobToken }),
-    ]);
+    test.skip(
+      !aliceFlow || !bobFlow,
+      "coauth DPoP session-grant login is required for joint UI",
+    );
+    if (!aliceFlow || !bobFlow) {
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     const realmTitle = `Same server profiles ${stamp}`;
     const aliceMessage = `alice profile message ${stamp}`;

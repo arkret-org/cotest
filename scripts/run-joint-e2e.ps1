@@ -827,7 +827,7 @@ function Wait-HttpReady {
 function Wait-LogContains {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string[]]$Pattern,
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds
     )
 
@@ -835,13 +835,17 @@ function Wait-LogContains {
     while ((Get-Date) -lt $deadline) {
         if (Test-Path $Path) {
             $content = Get-Content -Path $Path -Raw -ErrorAction SilentlyContinue
-            if ($content -and $content.Contains($Pattern)) {
-                return
+            if ($content) {
+                foreach ($candidate in $Pattern) {
+                    if ($content.Contains($candidate)) {
+                        return
+                    }
+                }
             }
         }
         Start-Sleep -Milliseconds 500
     }
-    throw "Timed out waiting for log pattern '$Pattern' in $Path"
+    throw "Timed out waiting for any log pattern '$($Pattern -join "', '")' in $Path"
 }
 
 function Start-ManagedCommand {
@@ -873,6 +877,46 @@ function Start-ManagedCommand {
         Stderr = $stderr
         CommandLog = $commandLog
     }
+}
+
+function Get-DioxusNoDownloadsPathPrefix {
+    $dxHome = if ($env:DX_HOME) { $env:DX_HOME } else { Join-Path $HOME ".dx" }
+    $toolsRoot = Join-Path $dxHome "tools"
+    $segments = @()
+
+    if (Test-Path $toolsRoot) {
+        $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "wasm-bindgen-*" -ErrorAction SilentlyContinue |
+            Sort-Object -Property Name -Descending |
+            ForEach-Object { $_.FullName }
+        $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "esbuild-*" -ErrorAction SilentlyContinue |
+            Sort-Object -Property Name -Descending |
+            ForEach-Object { $_.FullName }
+        $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "binaryen-*" -ErrorAction SilentlyContinue |
+            Sort-Object -Property Name -Descending |
+            ForEach-Object { Join-Path $_.FullName "bin" }
+    }
+
+    $cargoBin = Join-Path $HOME ".cargo\bin"
+    if (Test-Path $cargoBin) {
+        $segments += $cargoBin
+    }
+
+    $existing = @($segments | Where-Object { $_ -and (Test-Path $_) })
+    return ($existing -join [System.IO.Path]::PathSeparator)
+}
+
+function Add-DioxusNoDownloadsEnvironment {
+    param(
+        [Parameter(Mandatory = $true)][string]$Command
+    )
+
+    $pathPrefix = Get-DioxusNoDownloadsPathPrefix
+    $prefix = "`$env:NO_DOWNLOADS='1'; "
+    if ($pathPrefix) {
+        $escapedPathPrefix = $pathPrefix.Replace("'", "''")
+        $prefix += "`$env:PATH='$escapedPathPrefix' + [System.IO.Path]::PathSeparator + `$env:PATH; "
+    }
+    return "$prefix$Command"
 }
 
 function Start-ManagedDockerSoland {
@@ -1719,7 +1763,7 @@ try {
     $yougenBetaService = $null
     $generatedYougenBetaCommand = $false
     if (-not $SkipYougen -and -not $YougenCommand -and $yougenPort) {
-        $YougenCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents"
+        $YougenCommand = Add-DioxusNoDownloadsEnvironment "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents"
         $generatedYougenCommand = $true
     }
     if ($YougenCommand) {
@@ -1730,12 +1774,12 @@ try {
     if (-not $SkipYougen) {
         Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedYougenCommand -and $yougenService) {
-            Wait-LogContains -Path $yougenService.Stdout -Pattern "Build completed successfully" -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-LogContains -Path $yougenService.Stdout -Pattern @("Build completed successfully", "Serving your app") -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
     if (-not $SkipYougen -and $DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
         if (-not $YougenBetaCommand -and $yougenBetaPort) {
-            $YougenBetaCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents"
+            $YougenBetaCommand = Add-DioxusNoDownloadsEnvironment "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents"
             $generatedYougenBetaCommand = $true
         }
         if ($YougenBetaCommand) {
@@ -1744,7 +1788,7 @@ try {
         }
         Wait-HttpReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedYougenBetaCommand -and $yougenBetaService) {
-            Wait-LogContains -Path $yougenBetaService.Stdout -Pattern "Build completed successfully" -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-LogContains -Path $yougenBetaService.Stdout -Pattern @("Build completed successfully", "Serving your app") -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
 

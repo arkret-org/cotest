@@ -334,7 +334,7 @@ fn evaluate_disappearing_on_last_read(case: &Value) -> Result<Value> {
     let mut bob_contribution_count = 0_u64;
     for contribution in required_array(case, "contributions")? {
         let principal = required_str(contribution, "principal_id")?;
-        if principal == "did:web:bob.example" && contributed.insert(principal) {
+        if principal == "did:webvh:z6mkfixture:bob.example" && contributed.insert(principal) {
             bob_contribution_count += 1;
         } else {
             contributed.insert(principal);

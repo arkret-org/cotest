@@ -13,6 +13,7 @@ import {
   eventProof,
   singleDidNotary,
   wireErrCode,
+  wireErrReason,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -121,11 +122,11 @@ test.describe("world_readable history @fully-implemented", () => {
     expect([401, 403, 404, 405]).toContain(write.status());
   });
 
-  test("E1.3.1 trying to set encryption_profile=mls_rfc9420 AND history_visibility=world_readable is rejected with incompatible_history_with_encryption", async ({
+  test("E1.3.1 trying to set encryption_profile=mls_rfc9420 AND history_visibility=world_readable requires a history-capable scheme", async ({
     request,
   }) => {
-    // spec: realm-and-space.md §2.3 — encrypted Realms cannot be
-    // world_readable (non-members lack the group key).
+    // Spec: mls_rfc9420 plus pre-join-visible history requires the
+    // history-capable content_scheme.
     const alice = uniqueUser("incompat-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
@@ -135,9 +136,12 @@ test.describe("world_readable history @fully-implemented", () => {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: event,
     });
-    expect([400, 422]).toContain(create.status());
     const body = await create.json();
-    expect(wireErrCode(body)).toBe("incompatible_history_with_encryption");
+    expect(create.status()).toBe(412);
+    expect(wireErrCode(body)).toBe("failed_precondition");
+    expect(wireErrReason(body)).toBe(
+      "history_visibility_requires_history_capable_scheme",
+    );
   });
 });
 

@@ -552,7 +552,7 @@ fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
     }
     let without_middle: Vec<Delegation> = delegations
         .into_iter()
-        .filter(|delegation| delegation.subject != "did:web:ops.example.com")
+        .filter(|delegation| delegation.subject != "did:webvh:z6mkfixture:ops.example.com")
         .collect();
     if evaluate_chain(base, &without_middle, &query).authorized {
         bail!("delegate_chain: skipping the middle delegate still authorized");

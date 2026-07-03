@@ -27,7 +27,7 @@ import {
   dpopDeviceSeedB64url,
   dpopDeviceKeyFromSeedB64url,
   generateDpopDeviceKey,
-  kickoffDpopHeaders,
+  mintDpopBoundGrant,
   selfPathGrantHeaders,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
@@ -867,56 +867,33 @@ export async function createDpopUserSessionForAccount(
   const seed = uniqueUser(prefix);
   const deviceKey = generateDpopDeviceKey();
   const audience = solandServiceDid(opts.server);
-  const loginUrl = `${coauth}/_coauth/account/auth/login`;
-  const login = await request.post(loginUrl, {
-    headers: kickoffDpopHeaders({
-      deviceKey,
-      method: "POST",
-      url: loginUrl,
-    }),
-    data: {
-      handle: account.handle,
-      password: account.password,
-      audience,
-      device_id: seed.deviceId,
-    },
-  });
-  const raw = await login.text();
-  let body: any = null;
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch {
-    body = null;
-  }
-  if (login.status() === 404) {
+  const grant = await mintDpopBoundGrant(
+    request,
+    coauth,
+    account.did,
+    seed.deviceId,
+    deviceKey,
+    { audience },
+  );
+  if (!grant) {
     return undefined;
   }
-  if (!login.ok() || body?.status !== "success") {
-    throw new Error(
-      `coauth DPoP password login returned ${login.status()}: ${raw}`,
-    );
-  }
-  const grant = body?.session_grant;
-  const principalDid = body?.viewer?.did;
-  if (!principalDid || !grant?.grant_jwt || !grant?.id || !grant?.audience) {
-    throw new Error(
-      `coauth DPoP password login omitted principal grant: ${raw}`,
-    );
-  }
   expect(grant.audience).toBe(audience);
+  expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
   expect(grant.scopes).toContain(`urn:cokret:client:device:${seed.deviceId}`);
   const user = {
     ...seed,
     name: account.handle,
-    did: principalDid,
+    did: account.did,
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
+  await ensureRegistered(request, user, { server: opts.server });
   return {
     user,
-    grantJwt: grant.grant_jwt,
-    grantId: grant.id,
+    grantJwt: grant.grantJwt,
+    grantId: grant.grantId,
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     deviceKey,

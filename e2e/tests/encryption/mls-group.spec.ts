@@ -28,6 +28,7 @@ import {
   submitSignedEventApi,
   typedId,
   wireErrCode,
+  wireErrReason,
 } from "../../helpers/soland-api";
 import {
   createDpopUserSession,
@@ -827,9 +828,11 @@ test.describe("MLS group encryption", () => {
         }),
       },
     );
-    expect([400, 422]).toContain(incompatible.status());
-    expect(wireErrCode(await incompatible.json())).toBe(
-      "incompatible_history_with_encryption",
+    const incompatibleBody = await incompatible.json();
+    expect(incompatible.status()).toBe(412);
+    expect(wireErrCode(incompatibleBody)).toBe("failed_precondition");
+    expect(wireErrReason(incompatibleBody)).toBe(
+      "history_visibility_requires_history_capable_scheme",
     );
   });
 
