@@ -31,6 +31,7 @@ import {
   wireErrReason,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   createDpopUserSession,
   ensureRegistered,
   issueDevSession,
@@ -1189,10 +1190,18 @@ test.describe("MLS group encryption", () => {
       createDpopUserSession(request, "s11-decrypt-alice"),
       createDpopUserSession(request, "s11-decrypt-bob"),
     ]);
-    test.skip(
-      !aliceSession || !bobSession,
-      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
-    );
+    if (!aliceSession || !bobSession) {
+      // Fail loud on the joint harness (coauth up) instead of green-skipping the
+      // single most important cross-member decrypt test in the suite.
+      assertJointStackNotRequired(
+        "MLS joined-member decrypt requires coauth DPoP session-grant login",
+      );
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+      );
+      return;
+    }
     const alice = aliceSession!.user;
     const bob = bobSession!.user;
     const [alicePage, bobPage] = await Promise.all([

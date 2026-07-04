@@ -3,6 +3,7 @@
 
 import { expect, test } from "@playwright/test";
 import {
+  assertJointStackNotRequired,
   type JointUserPage,
   openDpopUserPage,
 } from "../../helpers/users";
@@ -20,11 +21,11 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
       openDpopUserPage(browser, request, "same-profile-alice"),
       openDpopUserPage(browser, request, "same-profile-bob"),
     ]);
-    test.skip(
-      !aliceFlow || !bobFlow,
-      "coauth DPoP session-grant login is required for joint UI",
-    );
     if (!aliceFlow || !bobFlow) {
+      assertJointStackNotRequired(
+        "same-server multi-profile UI requires coauth DPoP session-grant login",
+      );
+      test.skip(true, "coauth DPoP session-grant login is required for joint UI");
       return;
     }
     const alice = aliceFlow.user;

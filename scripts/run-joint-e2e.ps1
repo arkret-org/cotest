@@ -1891,10 +1891,18 @@ try {
         # $solandCoauthEnv / SOLAND_OAUTH_CLIENT_ID). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_cokret/describe advertises it.
         $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
+        # Anti-false-green: coauth is up, so the crown-jewel cross-member paths
+        # (MLS decrypt, cross-member kanban, multi-profile) MUST run. This flag
+        # turns their "coauth session unavailable" branch from a silent
+        # test.skip() into a hard failure (helpers/users.ts
+        # assertJointStackNotRequired), so a green joint run genuinely means those
+        # flows executed rather than self-disabled.
+        $env:COTEST_REQUIRE_JOINT_STACK = "1"
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_DID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
     }
     if ($StaridBaseUrl) {
         $env:COTEST_STARID_BASE_URL = $StaridBaseUrl.TrimEnd("/")

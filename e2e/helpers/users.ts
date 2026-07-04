@@ -759,6 +759,32 @@ export class JointUserPage {
   }
 }
 
+// Anti-false-green guard for the crown-jewel cross-member paths.
+//
+// The heavy two-browser flows (MLS decrypt, cross-member kanban, multi-profile)
+// need a live coauth to mint device-authorized DPoP session grants. Historically
+// they self-disabled with `test.skip(!aliceSession || !bobSession, ...)` — so a
+// run without coauth reported GREEN while never exercising the code that most
+// often breaks in real usage. That is the exact "tests are green but manual
+// testing finds everything" failure mode.
+//
+// This guard makes the skip OPT-IN to fail-loud: when the joint harness declares
+// the stack present (COTEST_REQUIRE_JOINT_STACK=1, set by run-joint-e2e.ps1
+// whenever it starts coauth), a missing session becomes a hard error instead of a
+// silent skip. Ad-hoc local runs without the flag keep the old skip behavior, so
+// this does not break anyone's existing CI — it only closes the false-green hole
+// on the harness that is supposed to have the full stack up.
+export function assertJointStackNotRequired(context: string): void {
+  if (process.env.COTEST_REQUIRE_JOINT_STACK === "1") {
+    throw new Error(
+      `${context}: COTEST_REQUIRE_JOINT_STACK=1 (joint stack declared present) but the ` +
+        `coauth DPoP session-grant login is unavailable — refusing to silently skip a ` +
+        `critical cross-member path and report a false green. Start coauth ` +
+        `(run-joint-e2e.ps1 -StartCoauth) or unset COTEST_REQUIRE_JOINT_STACK.`,
+    );
+  }
+}
+
 export function uniqueUser(prefix: string): JointUser {
   const stamp = randomUUID();
   const slug = `${prefix}-${stamp}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
@@ -1031,8 +1057,14 @@ export async function openUser(
         style.textContent =
           "#__dx-toast,#__dx-toast-container{display:none!important;visibility:hidden!important;pointer-events:none!important}";
         if (init.hideDeviceAuthorizationPrompt) {
+          // The device-authorization MODAL and the in-shell BANNER both overlay
+          // the app and intercept pointer events even when the app underneath is
+          // interactive. Tests that navigate with raw page.goto (bypassing the
+          // JointUserPage.goto* helpers that click device-authorization-dismiss)
+          // otherwise get their clicks swallowed by the banner. No test asserts
+          // this prompt is visible, so kill both permanently on every navigation.
           style.textContent +=
-            "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-reopen'],[class*='dx-dialog-backdrop']:has([data-testid='device-authorization-modal']){display:none!important;visibility:hidden!important;pointer-events:none!important}";
+            "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-banner'],[data-testid='device-authorization-reopen'],[class*='dx-dialog-backdrop']:has([data-testid='device-authorization-modal']){display:none!important;visibility:hidden!important;pointer-events:none!important}";
         }
         document.head.appendChild(style);
       };
