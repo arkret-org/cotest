@@ -37,7 +37,7 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
 ];
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
-const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
+const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ck.vector_group.privacy_security.v1";
 const APPLET_TRANSACTION_OPERATION_ID: &str = "ck.edge.applet.command.transaction";
 const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_cokret_inbound";
 

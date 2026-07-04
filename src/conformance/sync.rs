@@ -11,7 +11,7 @@ use crate::transcripts::record_vector_event;
 
 pub fn run_sync_fixture_suite() -> Result<()> {
     let value = load_fixture_value("sync-fixture.json")?;
-    validate_profile(&value, "ck.profile.sync_vectors.v1")?;
+    validate_profile(&value, "ck.vector_group.sync.v1")?;
     validate_collection_projection(&value)?;
     validate_strand_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;

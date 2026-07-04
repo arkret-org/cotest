@@ -19,7 +19,7 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
     if required_str(&fixture, "suite")? != SUITE {
         bail!("{FIXTURE} suite must be {SUITE}");
     }
-    validate_profile(&fixture, "ck.profile.privacy_security_vectors.v1")?;
+    validate_profile(&fixture, "ck.vector_group.privacy_security.v1")?;
 
     let cases = fixture
         .get("cases")

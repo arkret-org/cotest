@@ -32,7 +32,7 @@ pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const SERVICE_CLOSURE_HARDENING_FIXTURE_FILE: &str = "service-closure-hardening-fixture.json";
-const SERVICE_CLOSURE_HARDENING_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
+const SERVICE_CLOSURE_HARDENING_PROFILE: &str = "ck.vector_group.privacy_security.v1";
 
 pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;

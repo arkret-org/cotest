@@ -21,7 +21,7 @@ pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
-const STATE_REDUCER_HARDENING_PROFILE: &str = "ck.profile.cba_lattice_vectors.v1";
+const STATE_REDUCER_HARDENING_PROFILE: &str = "ck.vector_group.cba_lattice.v1";
 const EVENT_KIND_STRAND_TRACKS_UPDATE: &str = "ck.strand.tracks.update";
 const STRAND_TRACKS_CELL_FAMILY: &str = "ck.component.strand.tracks.v1";
 

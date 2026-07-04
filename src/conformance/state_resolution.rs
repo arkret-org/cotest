@@ -23,7 +23,7 @@ pub fn run_state_resolution_fixture_suite() -> Result<()> {
 
 pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let value = load_fixture_value("cba-lattice-fixture.json")?;
-    validate_profile(&value, "ck.profile.cba_lattice_vectors.v1")?;
+    validate_profile(&value, "ck.vector_group.cba_lattice.v1")?;
 
     let vectors = value
         .get("vectors")

@@ -34,7 +34,7 @@ use super::{fixture_path, spec_artifacts_root, validate_profile};
 pub const SCHEMA_VALIDATION_FIXTURE: &str = "schema-validation-fixture.json";
 
 /// Canonical conformance profile pin.
-pub const SCHEMA_VALIDATION_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
+pub const SCHEMA_VALIDATION_PROFILE: &str = "ck.vector_group.privacy_security.v1";
 
 /// Key-backup schema-validation fixture (25 cases against the key-backup /
 /// recovery schema family).
@@ -61,7 +61,7 @@ pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
     ),
     (
         REALM_ORGANIZATION_FIXTURE,
-        "ck.profile.privacy_security_vectors.v1",
+        "ck.vector_group.privacy_security.v1",
         "realm_organization_conformance",
     ),
 ];

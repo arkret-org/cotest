@@ -41,7 +41,7 @@ const MIXED_PROFILE_FIELDS: &[&str] = &[
 ];
 
 const LOCAL_PROFILE_SUITES: &[(&str, &str)] = &[(
-    "ck.profile.privacy_security_vectors.v1",
+    "ck.vector_group.privacy_security.v1",
     "security_negative_profile",
 )];
 

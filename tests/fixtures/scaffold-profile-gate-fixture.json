@@ -1,6 +1,6 @@
 {
   "suite": "scaffold_profile_gate",
-  "profile": "ck.profile.privacy_security_vectors.v1",
+  "profile": "ck.vector_group.privacy_security.v1",
   "cases": [
     {
       "name": "coauth_admin_full_claim_with_501_is_rejected",

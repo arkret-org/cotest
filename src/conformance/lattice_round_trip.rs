@@ -75,7 +75,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
 
 fn validate_lattice_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value("cba-lattice-fixture.json")?;
-    super::validate_profile(&fixture, "ck.profile.cba_lattice_vectors.v1")?;
+    super::validate_profile(&fixture, "ck.vector_group.cba_lattice.v1")?;
     let metadata = fixture
         .get("lattice_round_trip")
         .ok_or_else(|| anyhow!("cba-lattice fixture missing lattice_round_trip metadata"))?;

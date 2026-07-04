@@ -194,7 +194,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 }
 
 fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
-    validate_profile(value, "ck.profile.encoding_vectors.v1")?;
+    validate_profile(value, "ck.vector_group.encoding.v1")?;
     let rank_order = value
         .get("rank_order")
         .and_then(Value::as_array)

@@ -116,7 +116,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     expect_profile_rejected(&missing_required_cells, "missing required cells")?;
 
     let missing_required_fixture = serde_json::json!({
-        "supported_profiles": ["ck.profile.capability_vectors.v1"],
+        "supported_profiles": ["ck.vector_group.capability.v1"],
         "supported_operations": ["ck.self.authz.query.check"],
         "verified_fixtures": [],
     });

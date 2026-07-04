@@ -8,7 +8,7 @@ use crate::transcripts::record_vector_event;
 
 pub fn run_capability_fixture_suite() -> Result<()> {
     let value = load_fixture_value("capability-fixture.json")?;
-    validate_profile(&value, "ck.profile.capability_vectors.v1")?;
+    validate_profile(&value, "ck.vector_group.capability.v1")?;
     let fixtures = value
         .get("fixtures")
         .and_then(Value::as_array)

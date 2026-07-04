@@ -38,7 +38,7 @@ use super::{fixture_path, validate_profile};
 pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-vectors.json";
 
 /// Canonical conformance profile for the security closure fixture suite.
-pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
+pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ck.vector_group.privacy_security.v1";
 
 /// The 13 vector ids the round-4 spec promotes from prose to fixture. The
 /// list is pinned here so any drift on either side is loud.
@@ -221,7 +221,7 @@ impl SecurityClosureStep {
 /// Top-level sanity suite — wire shape closure over the fixture itself.
 ///
 /// Pins:
-/// * profile equals `ck.profile.privacy_security_vectors.v1`
+/// * profile equals `ck.vector_group.privacy_security.v1`
 /// * every required vector_id is present
 /// * every step exposes the full 6-field `runner{}` contract
 /// * `expected_state_transition.outcome` (when set) matches `expected.outcome` (mirrors the

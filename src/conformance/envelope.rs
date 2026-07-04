@@ -15,7 +15,7 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
     let event_kinds = event_kind_metadata(&event_kind_registry)?;
 
     let crypto_fixture = load_fixture_value("crypto-signature-fixture.json")?;
-    validate_profile(&crypto_fixture, "ck.profile.crypto_signature_vectors.v1")?;
+    validate_profile(&crypto_fixture, "ck.vector_group.crypto_signature.v1")?;
     for vector in crypto_fixture
         .get("vectors")
         .and_then(Value::as_array)
