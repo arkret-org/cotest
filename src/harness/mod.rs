@@ -38,6 +38,27 @@ pub(crate) use server::{ReservedPort, reserve_port};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 
+/// The placeholder SCID used by fixture `did:webvh` identifiers.
+///
+/// `did:webvh` is the v1 core default method for both service and principal
+/// DIDs (identity-did.md); the fixture SCID form matches the spec conformance
+/// vectors and the e2e side's `uniqueUser()` / `env.ts` migration
+/// (`did:webvh:z6mkfixture:<host>`). Live scenarios rely on soland's dev mode
+/// not performing online SCID resolution — these fixture DIDs have no real
+/// `did.jsonl`. `did:web` is reserved for explicit no-history / negative
+/// fixtures only.
+pub(crate) const FIXTURE_WEBVH_SCID: &str = "z6mkfixture";
+
+/// Build a fixture `did:webvh:<scid>:<host>` DID for `host`.
+///
+/// `host` is the DID's HTTP authority (e.g. `soland.cotest.local`,
+/// `alice.example`). soland derives the federation trust domain from the host
+/// segment that follows the SCID, so callers pass the bare host and the SCID is
+/// supplied here.
+pub(crate) fn fixture_webvh_did(host: &str) -> String {
+    format!("did:webvh:{FIXTURE_WEBVH_SCID}:{host}")
+}
+
 pub(crate) fn canonical_device_id(input: &str) -> String {
     if input.starts_with("ck:device:") {
         return input.to_owned();
@@ -206,10 +227,10 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
         "notary": {
             "type": "single_did",
             "did": actor,
-            "recovery_members": ["did:web:recovery.soland.local"],
-            "controller_organization": "did:web:organization.primary.soland.local",
+            "recovery_members": ["did:webvh:z6mkfixture:recovery.soland.local"],
+            "controller_organization": "did:webvh:z6mkfixture:organization.primary.soland.local",
             "recovery_controller_organizations": [
-                "did:web:organization.recovery.soland.local"
+                "did:webvh:z6mkfixture:organization.recovery.soland.local"
             ],
         },
         "created_at": "2026-05-02T00:00:00Z",

@@ -4,7 +4,7 @@
 //!
 //! ```ignore
 //! let server = CokretServer::spawn("my-scenario").await?;
-//! let alice = server.register_client("did:web:alice.example", "@alice", "ck:device:01904100-0000-7000-8000-0000000000a1").await?;
+//! let alice = server.register_client("did:webvh:z6mkfixture:alice.example", "@alice", "ck:device:01904100-0000-7000-8000-0000000000a1").await?;
 //! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
 //!
@@ -12,7 +12,7 @@
 //!
 //! ```ignore
 //! let alice = TestActorBuilder::new(&server, "@alice")
-//!     .with_did("did:web:alice.example")
+//!     .with_did("did:webvh:z6mkfixture:alice.example")
 //!     .with_device("ck:device:01904100-0000-7000-8000-0000000000a1")
 //!     .with_realm("Some Realm")
 //!     .create()
@@ -36,7 +36,7 @@ use std::fmt;
 
 use anyhow::{Context, Result};
 
-use crate::harness::{CokretServer, TestActorClient};
+use crate::harness::{CokretServer, TestActorClient, fixture_webvh_did};
 
 /// Tracks the realms a scenario asked the builder to create as part of the
 /// fixture preamble. Each entry stores the original requested name and the
@@ -122,8 +122,8 @@ impl<'a> TestActorBuilder<'a> {
     ///
     /// `handle` accepts either the bare nickname (`alice`) or the leading-`@`
     /// form (`@alice`) — both shapes appear in existing scenarios. The default
-    /// DID is derived as `did:web:<bare-handle>.example` and the default
-    /// primary device id as `dev_<bare-handle>`, both overridable.
+    /// DID is derived as `did:webvh:z6mkfixture:<bare-handle>.example` and the
+    /// default primary device id as `dev_<bare-handle>`, both overridable.
     pub fn new(server: &'a CokretServer, handle: &str) -> Self {
         let handle = handle.to_owned();
         Self {
@@ -136,7 +136,7 @@ impl<'a> TestActorBuilder<'a> {
     }
 
     /// Override the DID. By default the builder derives
-    /// `did:web:<bare-handle>.example` from the handle.
+    /// `did:webvh:z6mkfixture:<bare-handle>.example` from the handle.
     pub fn with_did(mut self, did: &str) -> Self {
         self.did = Some(did.to_owned());
         self
@@ -174,7 +174,7 @@ impl<'a> TestActorBuilder<'a> {
         let did = self
             .did
             .clone()
-            .unwrap_or_else(|| format!("did:web:{bare_handle}.example"));
+            .unwrap_or_else(|| fixture_webvh_did(&format!("{bare_handle}.example")));
         let primary_device = self
             .primary_device
             .clone()
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn defaults_derive_did_and_device_from_handle() {
-        use crate::harness::canonical_device_id;
+        use crate::harness::{canonical_device_id, fixture_webvh_did};
 
         // Build the spec without driving create() so we can assert the
         // derivations the builder applies. We use a dummy server reference
@@ -242,7 +242,10 @@ mod tests {
         let raw = "@alice";
         let bare = raw.strip_prefix('@').unwrap_or(raw);
         assert_eq!(bare, "alice");
-        assert_eq!(format!("did:web:{bare}.example"), "did:web:alice.example");
+        assert_eq!(
+            fixture_webvh_did(&format!("{bare}.example")),
+            "did:webvh:z6mkfixture:alice.example"
+        );
         assert_eq!(
             canonical_device_id(&format!("dev_{bare}")),
             "ck:device:01904100-0000-7000-8000-0000000000a1"

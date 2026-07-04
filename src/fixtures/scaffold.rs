@@ -6,7 +6,7 @@
 //! - a brand-new SUT process (or docker container) on a freshly-reserved port,
 //! - a unique blob root at `temp_dir().join("cotest-{name}-{port}-blobs")` (the port is
 //!   system-unique while the listener is held, so two parallel spawns cannot collide on the path),
-//! - a unique `did:web:{name}.cotest.local` service DID,
+//! - a unique `did:webvh:z6mkfixture:{name}.cotest.local` service DID,
 //! - in-memory persistence inside `soland` so all `AccountRecord` / `SpaceMetaRecord` /
 //!   `ProjectionState` lives inside the spawned process and is destroyed by `Drop for
 //!   CokretServer`.

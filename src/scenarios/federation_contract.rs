@@ -154,10 +154,29 @@ fn with_signed_federation_request_digests(
 }
 
 fn trust_domain_from_service_did(service_did: &str) -> String {
+    // Mirror soland's `trust_domain_from_service_did`: for
+    // `did:webvh:<scid>:<host>[:...]` the trust domain is scoped to the host
+    // segment *after* the SCID, so the SCID must not leak in (soland test
+    // `trust_domain_derives_webvh_host_not_scid`). `did:web:` and `did:key:`
+    // are kept for negative/no-history fixtures that still mint those forms.
+    if let Some(rest) = service_did.strip_prefix("did:webvh:") {
+        let mut parts = rest.split(':');
+        let scid = parts.next().unwrap_or_default();
+        if let Some(host) = parts.next() {
+            if !scid.is_empty() && !host.is_empty() {
+                return format!("ck:trust_domain:{}", host.to_ascii_lowercase());
+            }
+        }
+    }
+    if let Some(rest) = service_did.strip_prefix("did:web:") {
+        if let Some(host) = rest.split(':').next() {
+            if !host.is_empty() {
+                return format!("ck:trust_domain:{}", host.to_ascii_lowercase());
+            }
+        }
+    }
     let scope = service_did
-        .strip_prefix("did:web:")
-        .or_else(|| service_did.strip_prefix("did:key:"))
-        .or_else(|| service_did.strip_prefix("did:webvh:"))
+        .strip_prefix("did:key:")
         .unwrap_or(service_did)
         .to_ascii_lowercase()
         .replace(':', ".");

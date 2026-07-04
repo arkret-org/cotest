@@ -16,7 +16,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::assertions::expect_json;
-use super::canonical_device_id;
+use super::{canonical_device_id, fixture_webvh_did};
 use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_handle};
 
@@ -107,7 +107,7 @@ impl CokretServer {
 
     /// Spawn a pre-built soland binary on already-reserved ports. Splitting the
     /// port reservation out of [`spawn_external_binary_with_env`] lets the
-    /// multi-node federation path compute every node's `did:web` + base URL up
+    /// multi-node federation path compute every node's `did:webvh` + base URL up
     /// front so each node can be started with the others wired in via
     /// `SOLAND_FEDERATION_PEERS`.
     async fn spawn_external_binary_with_ports_and_env(
@@ -120,7 +120,7 @@ impl CokretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let service_did = format!("did:web:{name}.cotest.local");
+        let service_did = fixture_webvh_did(&format!("{name}.cotest.local"));
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -192,7 +192,7 @@ impl CokretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let service_did = format!("did:web:{name}.cotest.local");
+        let service_did = fixture_webvh_did(&format!("{name}.cotest.local"));
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -254,7 +254,7 @@ impl CokretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let service_did = format!("did:web:{name}.cotest.local");
+        let service_did = fixture_webvh_did(&format!("{name}.cotest.local"));
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -501,8 +501,8 @@ impl TestServerGroup {
     }
 
     /// Spawn `count` pre-built soland binaries with each node wired to every
-    /// other as a `SOLAND_FEDERATION_PEERS` entry (`did:web|base_url`). Ports
-    /// are reserved for all nodes up front so each node's `did:web` + base URL
+    /// other as a `SOLAND_FEDERATION_PEERS` entry (`did:webvh|base_url`). Ports
+    /// are reserved for all nodes up front so each node's `did:webvh` + base URL
     /// is known before any node starts, which is the only way to inject a
     /// mutual peer mesh through start-time env. Without this, an inbound
     /// `/_cokret/peer/events` submission can never resolve the source peer's
@@ -531,7 +531,7 @@ impl TestServerGroup {
             let node_name = format!("{name}-{index}");
             let port = reserve_port()?;
             let metrics = reserve_port()?;
-            let did = format!("did:web:{node_name}.cotest.local");
+            let did = fixture_webvh_did(&format!("{node_name}.cotest.local"));
             let url = format!("http://127.0.0.1:{}", port.port());
             pending.push(Pending {
                 name: node_name,

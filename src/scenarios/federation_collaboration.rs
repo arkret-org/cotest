@@ -1196,10 +1196,39 @@ fn with_federation_trust_headers_for_digest(
 }
 
 fn trust_domain_for(service_did: &str) -> String {
-    format!(
-        "ck:trust_domain:{}",
-        service_did.trim_start_matches("did:web:").replace(':', ".")
-    )
+    format!("ck:trust_domain:{}", did_host_from_service_did(service_did))
+}
+
+/// Extract the HTTP authority (host) a service DID's trust domain is scoped to,
+/// mirroring soland's `trust_domain_from_service_did`.
+///
+/// For `did:webvh:<scid>:<host>[:...]` the host is the segment *after* the SCID,
+/// so the SCID must not leak into the trust domain (soland test
+/// `trust_domain_derives_webvh_host_not_scid`). `did:web:<host>[:...]` and the
+/// `did:key:` fallback are kept for the negative/no-history fixtures that still
+/// mint those forms.
+fn did_host_from_service_did(service_did: &str) -> String {
+    if let Some(rest) = service_did.strip_prefix("did:webvh:") {
+        let mut parts = rest.split(':');
+        let scid = parts.next().unwrap_or_default();
+        if let Some(host) = parts.next() {
+            if !scid.is_empty() && !host.is_empty() {
+                return host.to_ascii_lowercase();
+            }
+        }
+    }
+    if let Some(rest) = service_did.strip_prefix("did:web:") {
+        if let Some(host) = rest.split(':').next() {
+            if !host.is_empty() {
+                return host.to_ascii_lowercase();
+            }
+        }
+    }
+    service_did
+        .strip_prefix("did:key:")
+        .unwrap_or(service_did)
+        .to_ascii_lowercase()
+        .replace(':', ".")
 }
 
 fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {

@@ -331,7 +331,7 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
         "ciphertext": ciphertext,
         "authentication_tag": "opaque-tag",
         "aad": {"suite": "test"},
-        "key_ref": {"kid": "did:web:alice.example#device"},
+        "key_ref": {"kid": "did:webvh:z6mkfixture:alice.example#device"},
         "digests": {
             "ciphertext": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         }

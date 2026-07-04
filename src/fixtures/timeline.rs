@@ -250,7 +250,7 @@ pub fn install_failure_dump_hook() {
 mod tests {
     use super::*;
 
-    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_cokret/self/events","headers":{},"body":{"event_id":"ck:event:01999999-0000-7000-8000-000000000001","kind":"ck.message.create","actor_id":"did:web:alice.example","realm_id":"ck:realm:abc","prev_refs":["ck:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ck:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
+    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_cokret/self/events","headers":{},"body":{"event_id":"ck:event:01999999-0000-7000-8000-000000000001","kind":"ck.message.create","actor_id":"did:webvh:z6mkfixture:alice.example","realm_id":"ck:realm:abc","prev_refs":["ck:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ck:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
     const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/_cokret/self/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
 
     #[test]
@@ -260,7 +260,7 @@ mod tests {
         assert_eq!(timeline.events.len(), 2);
 
         let first = &timeline.events[0];
-        assert_eq!(first.sender, "did:web:alice.example");
+        assert_eq!(first.sender, "did:webvh:z6mkfixture:alice.example");
         assert_eq!(first.op_id, "ck:event:01999999-0000-7000-8000-000000000001");
         assert_eq!(first.kind, "ck.message.create");
         assert_eq!(first.event_digest, "sha256:deadbeef");
@@ -283,7 +283,9 @@ mod tests {
         let ndjson = format!("{SAMPLE_EVENT_LINE}\n{SAMPLE_GET_LINE}\n");
         let rendered = EventTimeline::from_ndjson(&ndjson).to_string();
         assert!(rendered.contains("cotest event timeline"));
-        assert!(rendered.contains("did:web:alice.example"));
+        // The sender column is truncated to 28 chars, so the full 35-char
+        // `did:webvh:z6mkfixture:alice.example` renders as its visible prefix.
+        assert!(rendered.contains("did:webvh:z6mkfixture:alice"));
         assert!(rendered.contains("ck.message.create"));
         assert!(rendered.contains("sha256:deadbeef"));
         assert!(rendered.contains("ck:event:prev-1"));
@@ -336,7 +338,8 @@ mod tests {
         // Verify load_from_env picks up the transcript.
         let loaded = EventTimeline::load_from_env().expect("env-driven load");
         let rendered = loaded.to_string();
-        assert!(rendered.contains("did:web:alice.example"));
+        // Sender column truncates at 28 chars; assert the visible prefix.
+        assert!(rendered.contains("did:webvh:z6mkfixture:alice"));
         assert!(rendered.contains("ck.message.create"));
 
         // Install the hook and run a panic in a child thread; the join handle
