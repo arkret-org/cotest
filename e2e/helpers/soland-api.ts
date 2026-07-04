@@ -1946,13 +1946,16 @@ function detachedJwsFixture(args: {
   eventDigest: string;
   createdAt: string;
 }): string {
+  // encoding.md §2: the detached-JWS protected header is fixed to
+  // {"alg":"EdDSA"} (no kid/typ), and the signed binding object carries the
+  // fixed context tag "ck-event-proof-v1" so an Event proof cannot be confused
+  // with another proof family's binding.
   const protectedHeader = base64urlJsonCanonical({
     alg: "EdDSA",
-    kid: args.verificationMethod,
-    typ: "ck-event-proof+jws",
   });
   const payload = base64urlJsonCanonical({
     actor_id: args.actorDid,
+    context: "ck-event-proof-v1",
     created_at: args.createdAt,
     event_digest: args.eventDigest,
     verification_method: args.verificationMethod,

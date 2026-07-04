@@ -187,7 +187,11 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         &cokret_core::canonical::canonical_json_bytes(&header)
             .map_err(|err| anyhow!("header JCS failed: {err}"))?,
     );
+    // encoding.md §2: the Event proof binding carries the fixed context tag
+    // "ck-event-proof-v1" (domain separation); the SDK verifier reconstructs it
+    // and the signature must cover it.
     let binding = json!({
+        "context": "ck-event-proof-v1",
         "event_digest": event_digest,
         "actor_id": actor_id,
         "verification_method": verification_method,
