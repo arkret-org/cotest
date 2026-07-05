@@ -436,4 +436,139 @@ test.describe("cross-member encrypted kanban", () => {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
   });
+
+  test("bob joins a shared-history MLS realm after alice's encrypted card and decrypts the pre-join card content", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(360_000);
+
+    const stamp = Date.now();
+    const [aliceSession, bobSession] = await Promise.all([
+      createDpopUserSession(request, "xmhist-alice", { skipDeviceEnrollment: true }),
+      createDpopUserSession(request, "xmhist-bob", { skipDeviceEnrollment: true }),
+    ]);
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired(
+        "shared-history encrypted kanban requires coauth DPoP session-grant login",
+      );
+      test.skip(true, "coauth DPoP session-grant login is required for MLS history sharing");
+      return;
+    }
+
+    const alice = aliceSession.user;
+    const bob = bobSession.user;
+    const [alicePage, bobPage] = await Promise.all([
+      openUserPage(browser, alice, {
+        grantJwt: aliceSession.grantJwt,
+        dpopSeedB64url: aliceSession.dpopSeedB64url,
+        grantId: aliceSession.grantId,
+        grantAudience: aliceSession.grantAudience,
+      }),
+      openUserPage(browser, bob, {
+        grantJwt: bobSession.grantJwt,
+        dpopSeedB64url: bobSession.dpopSeedB64url,
+        grantId: bobSession.grantId,
+        grantAudience: bobSession.grantAudience,
+      }),
+    ]);
+
+    const boardTitle = `Shared History Board ${stamp}`;
+    const listTitle = `Before-join-${stamp}`;
+    const aliceCard = `Pre-join encrypted card ${stamp}`;
+    const aliceDescription = `Pre-join private detail ${stamp}`;
+
+    try {
+      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
+      await Promise.all([
+        alicePage.completeRecoveryKeySetupIfPrompted(),
+        bobPage.completeRecoveryKeySetupIfPrompted(),
+      ]);
+      await Promise.all([
+        alicePage.acknowledgeRecommendedEncryptionPromptIfVisible(),
+        bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
+      ]);
+
+      // 1) Alice creates a shared-history MLS realm. For this visibility the
+      // card events are visible to a later joined member, but the private body
+      // still requires the explicit ck.realm_key.request -> ck.realm_key.share
+      // path before Bob may render plaintext.
+      const realmId = await alicePage.createRealm({
+        title: `Shared-history MLS Kanban ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "shared",
+        encryptionProfile: "mls_rfc9420",
+      });
+
+      // 2) Alice writes the board/list/card and encrypted private description
+      // BEFORE Bob joins. This is the regression path: Bob's projection can see
+      // activity/history, but the description used to stay locked without the
+      // shared-history key exchange.
+      const boardId = await buildEncryptedBoardListCard(
+        alicePage.page,
+        realmId,
+        boardTitle,
+        listTitle,
+        aliceCard,
+      );
+      await addEncryptedDescription(alicePage.page, aliceCard, aliceDescription);
+      await stepShot(alicePage.page, testInfo, "A-alice-prejoin-encrypted-card");
+
+      // 3) Alice invites Bob only after the encrypted content already exists.
+      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
+      expect(inviteStatus).toContain("MLS Welcome queued");
+      await bobPage.acceptInvite(realmId);
+
+      // Server-side visibility gate: Bob's event feed must include the pre-join
+      // board Space. If this fails, the bug is not the MLS key-share path.
+      await expect
+        .poll(
+          async () => {
+            const url = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
+            const resp = await request.get(url, {
+              headers: selfPathGrantHeaders({
+                deviceKey: bobSession.deviceKey,
+                grantJwt: bobSession.grantJwt,
+                method: "GET",
+                url,
+              }),
+            });
+            if (resp.status() !== 200) return `status ${resp.status()}`;
+            return JSON.stringify(await resp.json());
+          },
+          {
+            timeout: 60_000,
+            intervals: [1_000, 2_000, 5_000],
+            message: `shared-history realm did not expose alice's pre-join board Space (${boardId}) to Bob`,
+          },
+        )
+        .toContain(boardId);
+
+      // End-to-end history sharing proof: Bob must request/install the missing
+      // epoch history_secret and decrypt Alice's private card description.
+      await openReaderBoard(bobPage, realmId, boardId);
+      await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+      await stepShot(bobPage.page, testInfo, "B-bob-decrypted-prejoin-card");
+
+      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+      await readyReaderBoard(bobPage, boardId);
+      await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+      await stepShot(bobPage.page, testInfo, "C-bob-prejoin-card-survives-reload");
+
+      const rawEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
+      const rawEvents = await request.get(rawEventsUrl, {
+        headers: selfPathGrantHeaders({
+          deviceKey: aliceSession.deviceKey,
+          grantJwt: aliceSession.grantJwt,
+          method: "GET",
+          url: rawEventsUrl,
+        }),
+      });
+      expect(rawEvents.status()).toBe(200);
+      expect(JSON.stringify(await rawEvents.json())).not.toContain(aliceDescription);
+    } finally {
+      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+    }
+  });
 });
