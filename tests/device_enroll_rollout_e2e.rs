@@ -327,7 +327,7 @@ fn service_attested_device_authorize_event(
         device_public_key: device_public_key.to_owned(),
         hpke_key: "z6LSCotestEnrollHpkeKey".to_owned(),
         algorithms: vec![
-            "ck.hpke_x25519_aead_xchacha20poly1305.v1".to_owned(),
+            "ck.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
             "ck.mls.v1".to_owned(),
         ],
         device_key_algorithm: None,

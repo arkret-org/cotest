@@ -182,12 +182,12 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             recipient_key_ref: Some("did:key:z6MkrecoveryKey#z6MkrecoveryKey".to_owned()),
             kdf: None,
             // hpke-suite-registry.json: absent `hpke_suite` denotes the
-            // default-MUST row ck.hpke_x25519_aead_xchacha20poly1305.v1, and
-            // aead.name MUST equal that suite's AEAD (`xchacha20_poly1305`) —
+            // default-MUST row ck.hpke_x25519_aead_chacha20poly1305.v1, and
+            // aead.name MUST equal that suite's AEAD (`chacha20_poly1305`) —
             // the SDK rejects a mismatch at parse time (schema_violation).
             aead: KeyBackupAead {
-                name: "xchacha20_poly1305".to_owned(),
-                aead_profile: Some("ck.aead.xchacha20_poly1305.v1".to_owned()),
+                name: "chacha20_poly1305".to_owned(),
+                aead_profile: Some("ck.aead.chacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
                 nonce: None,
                 enc: Some("Y290ZXN0LWVuYw".to_owned()),

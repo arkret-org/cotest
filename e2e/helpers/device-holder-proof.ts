@@ -89,7 +89,7 @@ export async function enrollOnboardedDeviceSigningKey(
       // §5.4: the enrollment authority also attests the device HPKE sealing
       // key and the canonical algorithm set.
       hpke_key: "z6LSCotestE2eDeviceHpkeKey",
-      algorithms: ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
+      algorithms: ["ck.hpke_x25519_aead_chacha20poly1305.v1", "ck.mls.v1"],
       actor_seq: 1,
     },
   });

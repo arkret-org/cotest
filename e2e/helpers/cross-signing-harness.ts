@@ -222,7 +222,7 @@ export function buildCrossSigningPublishPayload(
 /// Canonical default algorithm set for test device records; matches the
 /// hpke-suite-registry default-MUST row plus the MLS group algorithm.
 export const TEST_DEVICE_ALGORITHMS = [
-  "ck.hpke_x25519_aead_xchacha20poly1305.v1",
+  "ck.hpke_x25519_aead_chacha20poly1305.v1",
   "ck.mls.v1",
 ];
 export function buildDeviceCrossSigningBinding(args: {
