@@ -114,6 +114,12 @@ fn validate_crypto_signature_event_vector(
             "crypto vector {name} payload hash drifted: expected {expected_payload_digest}, got {payload_digest}"
         );
     }
+    let expected_event_digest = required_str(vector, "event_digest")?;
+    if payload_digest != expected_event_digest {
+        bail!(
+            "crypto vector {name} event hash drifted: expected {expected_event_digest}, got {payload_digest}"
+        );
+    }
 
     let binding = required_field(vector, "binding_object")?;
     let canonical_binding = canonical_json(binding)?;
@@ -124,16 +130,30 @@ fn validate_crypto_signature_event_vector(
         bail!("crypto vector {name} binding digest drifted");
     }
 
-    let event_with_proof = required_field(vector, "event_with_proof")?;
-    let mut context = EventEnvelopeContext::default_for_durable_history();
-    context
-        .supported_features
-        .extend(event_feature_ids(event_with_proof)?);
-    let decision = validate_event_envelope(event_with_proof, event_kinds, &context)?;
-    assert_event_decision(&decision, "accept", None, name)?;
-    let digest = canonical_event_digest(event_with_proof)?;
-    if !looks_like_sha256_digest(&digest) {
-        bail!("crypto vector {name} canonical event digest was invalid");
+    if let Some(event_with_proof) = vector.get("event_with_proof") {
+        let mut context = EventEnvelopeContext::default_for_durable_history();
+        context
+            .supported_features
+            .extend(event_feature_ids(event_with_proof)?);
+        let decision = validate_event_envelope(event_with_proof, event_kinds, &context)?;
+        assert_event_decision(&decision, "accept", None, name)?;
+        let digest = canonical_event_digest(event_with_proof)?;
+        if !looks_like_sha256_digest(&digest) {
+            bail!("crypto vector {name} canonical event digest was invalid");
+        }
+    } else {
+        let proof_kind = required_str(vector, "proof_kind")?;
+        if proof_kind != "raw_detached_signature" {
+            bail!("crypto vector {name} missing event_with_proof for proof_kind {proof_kind}");
+        }
+        let signature_algorithm = required_str(vector, "signature_algorithm")?;
+        if signature_algorithm.is_empty() {
+            bail!("crypto vector {name} missing signature algorithm");
+        }
+        let signature = required_str(vector, "signature_b64u")?;
+        if signature.is_empty() {
+            bail!("crypto vector {name} missing raw detached signature");
+        }
     }
 
     Ok(())
@@ -187,7 +207,13 @@ fn validate_event_envelope_negative_case(
         );
     }
 
-    let event = required_field(input, "event")?;
+    let generated_event;
+    let event = if let Some(generator) = input.get("generator") {
+        generated_event = generate_negative_envelope_event(generator)?;
+        &generated_event
+    } else {
+        required_field(input, "event")?
+    };
     let mut context = EventEnvelopeContext::default_for_durable_history();
     if let Some(scope) = input.get("wire_scope").and_then(Value::as_str) {
         context.durable_history = matches!(scope, "durable_event" | "durable_history");
@@ -213,6 +239,76 @@ fn validate_event_envelope_negative_case(
         expected.get("error_code").and_then(Value::as_str),
         name,
     )
+}
+
+fn generate_negative_envelope_event(generator: &Value) -> Result<Value> {
+    let kind = required_str(generator, "kind")?;
+    let target_canonical_bytes = value_field_u64(generator, "target_canonical_bytes")? as usize;
+    let filler_json_pointer = required_str(generator, "filler_json_pointer")?;
+    let filler_char = required_str(generator, "filler_char")?;
+    if filler_char.len() != 1 || !filler_char.is_ascii() {
+        bail!("generator filler_char must be one ASCII byte");
+    }
+    let base_event = required_field(generator, "base_event")?;
+
+    let mut low = 0usize;
+    let mut high = target_canonical_bytes + 1024;
+    while low < high {
+        let mid = low + (high - low) / 2;
+        let candidate = apply_negative_envelope_filler(
+            base_event,
+            kind,
+            filler_json_pointer,
+            filler_char,
+            mid,
+        )?;
+        if canonical_json(&candidate)?.len() >= target_canonical_bytes {
+            high = mid;
+        } else {
+            low = mid + 1;
+        }
+    }
+
+    let event =
+        apply_negative_envelope_filler(base_event, kind, filler_json_pointer, filler_char, low)?;
+    let canonical_len = canonical_json(&event)?.len();
+    if canonical_len < target_canonical_bytes {
+        bail!(
+            "generator {kind} produced {canonical_len} canonical bytes, below target {target_canonical_bytes}"
+        );
+    }
+    Ok(event)
+}
+
+fn apply_negative_envelope_filler(
+    base_event: &Value,
+    kind: &str,
+    pointer: &str,
+    filler_char: &str,
+    repeat: usize,
+) -> Result<Value> {
+    let mut event = base_event.clone();
+    let filler = filler_char.repeat(repeat);
+    match kind {
+        "oversize_envelope" | "long_string_value" => {
+            let target = event
+                .pointer_mut(pointer)
+                .ok_or_else(|| anyhow!("generator pointer {pointer} did not resolve"))?;
+            if !target.is_string() {
+                bail!("generator pointer {pointer} must target a string");
+            }
+            *target = Value::String(filler);
+        }
+        "long_object_key" => {
+            let target = event
+                .pointer_mut(pointer)
+                .and_then(Value::as_object_mut)
+                .ok_or_else(|| anyhow!("generator pointer {pointer} must target an object"))?;
+            target.insert(filler, json!(1));
+        }
+        _ => bail!("unknown event envelope negative generator kind {kind}"),
+    }
+    Ok(event)
 }
 
 fn validate_synthetic_event_envelope_negatives(
@@ -367,6 +463,13 @@ fn validate_event_envelope(
             "event envelope must be an object",
         ));
     };
+    let canonical_len = canonical_json(event)?.len();
+    if canonical_len > context.max_canonical_bytes {
+        return Ok(EventEnvelopeDecision::reject(
+            "payload_too_large",
+            "canonical Event envelope exceeds byte cap",
+        ));
+    }
 
     // event-envelope.schema.json roots `additionalProperties:false`: any
     // top-level field outside this set MUST be rejected. This is the hard
@@ -825,6 +928,7 @@ struct EventEnvelopeContext {
     supported_features: BTreeSet<String>,
     actor_frontier: Option<ActorFrontier>,
     revoked_at_by_actor: BTreeMap<String, String>,
+    max_canonical_bytes: usize,
     max_prev_refs: usize,
     now_hlc_ms: Option<u64>,
     max_future_drift_ms: u64,
@@ -837,6 +941,7 @@ impl EventEnvelopeContext {
             supported_features: BTreeSet::new(),
             actor_frontier: None,
             revoked_at_by_actor: BTreeMap::new(),
+            max_canonical_bytes: 1_048_576,
             max_prev_refs: 128,
             now_hlc_ms: None,
             max_future_drift_ms: 5 * 60 * 1000,

@@ -104,7 +104,7 @@ test.describe("call moderation (spec wire)", () => {
     // moderator).
     const proof = frame!.proof as Record<string, unknown>;
     expect(proof.kind).toBe("detached_jws");
-    expect(proof.verification_method).toBe(`${alice.did}#device`);
+    expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
   });
 
   test("moderator ban: ck.call.signal{moderation=ban} omits target_device_id (actor-wide scope)", async ({

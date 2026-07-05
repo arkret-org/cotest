@@ -60,7 +60,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token).await?;
-    unlock_backup_reaches_trust_anchor(server, token).await?;
+    principal_signing_unlock_reaches_trust_anchor(server, token).await?;
     Ok(())
 }
 
@@ -232,7 +232,10 @@ async fn unlock_backup_requires_body_proof(server: &CokretServer, token: &str) -
     Ok(())
 }
 
-async fn unlock_backup_reaches_trust_anchor(server: &CokretServer, token: &str) -> Result<()> {
+async fn principal_signing_unlock_reaches_trust_anchor(
+    server: &CokretServer,
+    token: &str,
+) -> Result<()> {
     let unlock = expect_json(
         server
             .http()
@@ -252,9 +255,9 @@ async fn unlock_backup_reaches_trust_anchor(server: &CokretServer, token: &str) 
 /// JSON transcript bound to the stored envelope, signed by an Ed25519 device
 /// key whose `verification_method` resolves via `did:key`.
 ///
-/// No durable recovery-session record exists for this synthetic session id,
-/// so soland's session-binding check is skipped (device-signed decrypt proof
-/// path); the shape, envelope binding, and signature are still verified.
+/// No durable recovery-session record exists for this synthetic session id.
+/// `principal_signing` is the compatibility proof kind that may still reach
+/// the trust-anchor check without a bound recovery ceremony.
 fn unlock_proof() -> Result<KeyBackupUnlockProof> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
@@ -270,7 +273,7 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
         backup_class: BackupClass::MlsHistory,
         series_id: backup_series_id(SERIES_ID)?,
         ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
-        proof_kind: "recovery_unlock".to_owned(),
+        proof_kind: "principal_signing".to_owned(),
         proof_digest: Value::String(
             "sha256:84a51084210842108421084210842108421084210842108421084210842108aa".to_owned(),
         ),

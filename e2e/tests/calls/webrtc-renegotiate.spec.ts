@@ -129,7 +129,7 @@ test.describe("ck.call.signal renegotiation + ICE restart", () => {
     // Proof intact on the relayed renegotiate frame.
     const proof = received[1].proof as Record<string, unknown>;
     expect(proof.kind).toBe("detached_jws");
-    expect(proof.verification_method).toBe(`${alice.did}#device`);
+    expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
   });
 });
 

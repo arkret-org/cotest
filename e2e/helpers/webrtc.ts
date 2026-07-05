@@ -80,7 +80,7 @@ const deviceSignerCache = new Map<string, DeviceSigner>();
 /**
  * Mint (or reuse) a real ed25519 signer for an `(actor, device)`. The keypair
  * is generated in-process; it is a genuine ed25519 key, never a hard-coded
- * string. The `verification_method` follows the spec `{actor_id}#device` form.
+ * string. The `verification_method` follows the spec `{actor_id}#{device_id}` form.
  */
 function deviceSigner(actorDid: string, deviceId: string): DeviceSigner {
   const key = `${actorDid}\0${deviceId}`;
@@ -95,7 +95,7 @@ function deviceSigner(actorDid: string, deviceId: string): DeviceSigner {
   const signer: DeviceSigner = {
     actorDid,
     deviceId,
-    verificationMethod: `${actorDid}#device`,
+    verificationMethod: `${actorDid}#${deviceId}`,
     privateKey,
     publicKeyHex,
   };

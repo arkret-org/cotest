@@ -185,7 +185,7 @@ export function buildHolderProofRefreshBody(args: {
     principal_id: args.principalDid,
     device_id: args.deviceId,
     audience: args.audience,
-    holder_key_id: holderKeyId,
+    grant_binding_key_id: holderKeyId,
   });
 
   // The signed claims — recomputed identically by coauth from the proof fields.

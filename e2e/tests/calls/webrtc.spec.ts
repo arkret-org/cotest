@@ -153,7 +153,7 @@ test.describe("calls — canonical wire", () => {
       const proof = env.proof as Record<string, unknown>;
       expect(proof.kind).toBe("detached_jws");
       expect(proof.alg).toBe("EdDSA");
-      expect(proof.verification_method).toBe(`${env.actor_id}#device`);
+      expect(proof.verification_method).toBe(`${env.actor_id}#${env.device_id}`);
     }
     // Alice's lane is seq-monotonic (invite=1, hangup=2).
     const aliceSeqs = bobView

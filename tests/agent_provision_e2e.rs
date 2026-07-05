@@ -189,10 +189,9 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let service_name = "agent-live-e2e";
-    let service_did = format!("did:web:{service_name}.cotest.local");
     let holder = AgentSessionHolder::new();
     let mock = MockIntrospection::spawn(
-        service_did.clone(),
+        format!("did:web:{service_name}.cotest.local"),
         holder.cnf_jkt.clone(),
         holder.public_jwk.to_string(),
     )?;
@@ -211,6 +210,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         ],
     )
     .await?;
+    mock.set_service_did(server.service_did().to_owned());
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
 
     let realm_id = create_realm(&server, &token, ALICE_DID, "Agent reply live e2e").await?;
@@ -609,6 +609,7 @@ struct MockIntrospection {
     running: Arc<AtomicBool>,
     active: Arc<AtomicBool>,
     request_count: Arc<AtomicUsize>,
+    service_did: Arc<Mutex<String>>,
     subject: Arc<Mutex<Option<String>>>,
     handle: Option<JoinHandle<()>>,
 }
@@ -622,10 +623,12 @@ impl MockIntrospection {
         let running = Arc::new(AtomicBool::new(true));
         let active = Arc::new(AtomicBool::new(true));
         let request_count = Arc::new(AtomicUsize::new(0));
+        let service_did = Arc::new(Mutex::new(service_did));
         let subject = Arc::new(Mutex::new(None));
         let thread_running = Arc::clone(&running);
         let thread_active = Arc::clone(&active);
         let thread_count = Arc::clone(&request_count);
+        let thread_service_did = Arc::clone(&service_did);
         let thread_subject = Arc::clone(&subject);
         let handle = thread::spawn(move || {
             while thread_running.load(Ordering::SeqCst) {
@@ -635,7 +638,7 @@ impl MockIntrospection {
                         handle_introspection_connection(
                             stream,
                             thread_active.load(Ordering::SeqCst),
-                            &service_did,
+                            &thread_service_did,
                             &cnf_jkt,
                             &session_public_key,
                             &thread_subject,
@@ -654,6 +657,7 @@ impl MockIntrospection {
             running,
             active,
             request_count,
+            service_did,
             subject,
             handle: Some(handle),
         })
@@ -665,6 +669,12 @@ impl MockIntrospection {
 
     fn requests(&self) -> usize {
         self.request_count.load(Ordering::SeqCst)
+    }
+
+    fn set_service_did(&self, service_did: String) {
+        if let Ok(mut guard) = self.service_did.lock() {
+            *guard = service_did;
+        }
     }
 
     fn set_subject(&self, subject: String) {
@@ -691,15 +701,13 @@ impl Drop for MockIntrospection {
 fn handle_introspection_connection(
     mut stream: TcpStream,
     active: bool,
-    service_did: &str,
+    service_did: &Arc<Mutex<String>>,
     cnf_jkt: &str,
     session_public_key: &str,
     subject: &Arc<Mutex<Option<String>>>,
 ) {
-    let mut buffer = [0_u8; 4096];
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let bytes_read = stream.read(&mut buffer).unwrap_or(0);
-    let request = String::from_utf8_lossy(&buffer[..bytes_read]).to_ascii_lowercase();
+    let request = read_http_request(&mut stream);
     if !request.contains(&format!(
         "authorization: bearer {}",
         INTROSPECTION_BEARER.to_ascii_lowercase()
@@ -712,6 +720,10 @@ fn handle_introspection_connection(
         return;
     }
 
+    let service_did = service_did
+        .lock()
+        .map(|guard| guard.clone())
+        .unwrap_or_else(|_| "did:web:agent-live-e2e.cotest.local".to_owned());
     let subject = subject
         .lock()
         .ok()
@@ -755,6 +767,52 @@ fn handle_introspection_connection(
         })
     };
     write_json_response(stream, "200 OK", body);
+}
+
+fn read_http_request(stream: &mut TcpStream) -> String {
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    let mut header_end = None;
+    let mut content_length = None;
+
+    loop {
+        let bytes_read = match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(bytes_read) => bytes_read,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break;
+            }
+            Err(_) => break,
+        };
+        bytes.extend_from_slice(&buffer[..bytes_read]);
+
+        if header_end.is_none()
+            && let Some(position) = bytes.windows(4).position(|window| window == b"\r\n\r\n")
+        {
+            header_end = Some(position + 4);
+            let headers = String::from_utf8_lossy(&bytes[..position]);
+            content_length = headers.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            });
+        }
+
+        if let Some(header_end) = header_end {
+            let expected = header_end + content_length.unwrap_or(0);
+            if bytes.len() >= expected {
+                break;
+            }
+        }
+    }
+
+    String::from_utf8_lossy(&bytes).to_ascii_lowercase()
 }
 
 fn write_json_response(mut stream: TcpStream, status: &str, body: Value) {

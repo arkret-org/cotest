@@ -95,7 +95,7 @@ test.describe("ck.call.signal canonical signal catalog", () => {
       expect(proof, "relayed envelope carries proof verbatim").toBeTruthy();
       expect(proof.kind).toBe("detached_jws");
       expect(proof.alg).toBe("EdDSA");
-      expect(proof.verification_method).toBe(`${alice.did}#device`);
+      expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
       expect(typeof proof.event_digest).toBe("string");
       expect(proof.event_digest as string).toMatch(/^sha256:[0-9a-f]{64}$/);
       // Detached JWS = `<protected>..<signature>` (empty payload segment).
