@@ -42,8 +42,8 @@ async function createJointTwoUserRealm(
 ): Promise<JointRealmFixture> {
   const stamp = Date.now();
   const [aliceSession, bobSession] = await Promise.all([
-    createDpopUserSession(request, "joint-alice"),
-    createDpopUserSession(request, "joint-bob"),
+    createDpopUserSession(request, "joint-alice", { skipDeviceEnrollment: true }),
+    createDpopUserSession(request, "joint-bob", { skipDeviceEnrollment: true }),
   ]);
   if (!aliceSession || !bobSession) {
     throw new Error("joint fixture requires coauth DPoP session-grant login");

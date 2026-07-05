@@ -1009,9 +1009,13 @@ export async function openDpopUserPage(
     server?: SolandKey;
     coauthBase?: string;
     prepareMlsDevice?: boolean;
+    skipDeviceEnrollment?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
-  const session = await createDpopUserSession(request, prefix, opts);
+  const session = await createDpopUserSession(request, prefix, {
+    ...opts,
+    skipDeviceEnrollment: opts.skipDeviceEnrollment ?? true,
+  });
   if (!session) {
     return undefined;
   }

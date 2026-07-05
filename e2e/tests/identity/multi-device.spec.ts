@@ -11,7 +11,9 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   buildCrossSigningPublishPayload,
   buildDeviceCrossSigningBinding,
+  buildDevicePossessionSignature,
   TEST_DEVICE_ALGORITHMS,
+  type CrossSigningIdentity,
   deviceVerifyKeyMultibase,
   generateCrossSigningIdentity,
 } from "../../helpers/cross-signing-harness";
@@ -169,6 +171,7 @@ test.describe("multi-device pairing + revocation", () => {
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
     });
+    const authorizeNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const authorize = await request.post(
       `${solandBaseUrl()}/_cokret/self/events`,
       {
@@ -184,9 +187,17 @@ test.describe("multi-device pairing + revocation", () => {
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
-            device_signature: deviceAuthorizeSignature(alice.did, device2Id),
+            device_signature: deviceAuthorizeSignature({
+              identity,
+              principalId: alice.did,
+              deviceId: device2Id,
+              devicePublicKeyMultibase: device2Key.multibase,
+              authorizedBy: alice.deviceId,
+              notBefore: authorizeNotBefore,
+              privateKey: device2Key.privateKey,
+            }),
             authorized_by: alice.deviceId,
-            not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            not_before: authorizeNotBefore,
             cross_signing_binding: goodBinding,
           },
         }),
@@ -238,6 +249,7 @@ test.describe("multi-device pairing + revocation", () => {
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
     });
+    const staleNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const staleAuthorize = await request.post(
       `${solandBaseUrl()}/_cokret/self/events`,
       {
@@ -253,9 +265,17 @@ test.describe("multi-device pairing + revocation", () => {
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
-            device_signature: deviceAuthorizeSignature(alice.did, staleDeviceId),
+            device_signature: deviceAuthorizeSignature({
+              identity: { ...identity, generation: identity.generation + 1 },
+              principalId: alice.did,
+              deviceId: staleDeviceId,
+              devicePublicKeyMultibase: staleDeviceKey.multibase,
+              authorizedBy: alice.deviceId,
+              notBefore: staleNotBefore,
+              privateKey: staleDeviceKey.privateKey,
+            }),
             authorized_by: alice.deviceId,
-            not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            not_before: staleNotBefore,
             cross_signing_binding: staleBinding,
           },
         }),
@@ -281,6 +301,7 @@ test.describe("multi-device pairing + revocation", () => {
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
     });
+    const forgedNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const forgedAuthorize = await request.post(
       `${solandBaseUrl()}/_cokret/self/events`,
       {
@@ -296,9 +317,17 @@ test.describe("multi-device pairing + revocation", () => {
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
-            device_signature: deviceAuthorizeSignature(alice.did, forgedDeviceId),
+            device_signature: deviceAuthorizeSignature({
+              identity,
+              principalId: alice.did,
+              deviceId: forgedDeviceId,
+              devicePublicKeyMultibase: forgedDeviceKey.multibase,
+              authorizedBy: alice.deviceId,
+              notBefore: forgedNotBefore,
+              privateKey: forgedDeviceKey.privateKey,
+            }),
             authorized_by: alice.deviceId,
-            not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            not_before: forgedNotBefore,
             cross_signing_binding: forgedBinding,
           },
         }),
@@ -1357,6 +1386,7 @@ async function promoteDeviceToVerified(
     hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
+  const authorizeNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const authorize = await request.post(
     `${solandBaseUrl()}/_cokret/self/events`,
     {
@@ -1372,9 +1402,17 @@ async function promoteDeviceToVerified(
           hpke_key: "z6LSCotestE2eDeviceHpkeKey",
           algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
-          device_signature: deviceAuthorizeSignature(user.did, deviceId),
+          device_signature: deviceAuthorizeSignature({
+            identity,
+            principalId: user.did,
+            deviceId,
+            devicePublicKeyMultibase: deviceKey.multibase,
+            authorizedBy: deviceId,
+            notBefore: authorizeNotBefore,
+            privateKey: deviceKey.privateKey,
+          }),
           authorized_by: deviceId,
-          not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+          not_before: authorizeNotBefore,
           cross_signing_binding: binding,
         },
       }),
@@ -1523,6 +1561,7 @@ async function authorizeDeviceWithCrossSigning(
     hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
+  const authorizeNotBefore = canonicalTimestamp();
   const authorize = await request.post(
     `${solandBaseUrl()}/_cokret/self/events`,
     {
@@ -1538,9 +1577,17 @@ async function authorizeDeviceWithCrossSigning(
           hpke_key: "z6LSCotestE2eDeviceHpkeKey",
           algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
-          device_signature: deviceAuthorizeSignature(user.did, deviceId),
+          device_signature: deviceAuthorizeSignature({
+            identity,
+            principalId: user.did,
+            deviceId,
+            devicePublicKeyMultibase: deviceKey.multibase,
+            authorizedBy: user.deviceId,
+            notBefore: authorizeNotBefore,
+            privateKey: deviceKey.privateKey,
+          }),
           authorized_by: user.deviceId,
-          not_before: canonicalTimestamp(),
+          not_before: authorizeNotBefore,
           cross_signing_binding: binding,
         },
       }),
@@ -1818,13 +1865,30 @@ function sha256Digest(value: Buffer): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function deviceAuthorizeSignature(
-  principalId: string,
-  deviceId: string,
-): Record<string, string> {
+function deviceAuthorizeSignature(args: {
+  identity: CrossSigningIdentity;
+  principalId: string;
+  deviceId: string;
+  devicePublicKeyMultibase: string;
+  authorizedBy: string;
+  notBefore: string;
+  privateKey: ReturnType<typeof deviceVerifyKeyMultibase>["privateKey"];
+  recoverySessionId?: string | null;
+}): Record<string, string> {
   return {
-    kid: `${principalId}#${deviceId}`,
+    kid: `${args.principalId}#${args.deviceId}`,
     alg: "EdDSA",
-    sig: b64url(`device-authorize:${principalId}:${deviceId}`),
+    sig: buildDevicePossessionSignature({
+      identity: args.identity,
+      deviceId: args.deviceId,
+      devicePublicKeyMultibase: args.devicePublicKeyMultibase,
+      hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+      algorithms: TEST_DEVICE_ALGORITHMS,
+      deviceKeyAlgorithm: "EdDSA",
+      authorizedBy: args.authorizedBy,
+      notBefore: args.notBefore,
+      recoverySessionId: args.recoverySessionId,
+      privateKey: args.privateKey,
+    }),
   };
 }

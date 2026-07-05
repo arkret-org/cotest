@@ -692,6 +692,7 @@ async function openDpopDeviceForAccount(
 ): Promise<{ page: JointUserPage; session: DpopUserSession } | undefined> {
   const session = await createDpopUserSessionForAccount(request, prefix, account, {
     coauthBase: coauth,
+    skipDeviceEnrollment: true,
   });
   if (!session) {
     return undefined;

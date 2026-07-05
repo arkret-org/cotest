@@ -122,6 +122,46 @@ function deviceTrustBindingInput(args: {
   ]);
 }
 
+function deviceAuthorizePossessionInput(args: {
+  principalId: string;
+  deviceId: string;
+  devicePublicKey: string;
+  hpkeKey: string;
+  algorithms: string[];
+  deviceKeyAlgorithm: string;
+  authorizedBy: string;
+  notBefore: string;
+  expiresAt?: string | null;
+  scopes?: string[] | null;
+  recoverySessionId?: string | null;
+  authorizationBindingKind: "cross_signing" | "bootstrap" | "enrollment_authority";
+  crossSigningGeneration?: number | null;
+}): Buffer {
+  const canonicalAlgorithms = [...new Set(args.algorithms)].sort();
+  const canonicalScopes = args.scopes
+    ? [...new Set(args.scopes)].sort()
+    : null;
+  const body = canonicalJson({
+    principal_id: args.principalId,
+    device_id: args.deviceId,
+    device_public_key: args.devicePublicKey,
+    hpke_key: args.hpkeKey,
+    algorithms: canonicalAlgorithms,
+    device_key_algorithm: args.deviceKeyAlgorithm,
+    authorized_by: args.authorizedBy,
+    not_before: args.notBefore,
+    expires_at: args.expiresAt ?? null,
+    scopes: canonicalScopes,
+    recovery_session_id: args.recoverySessionId ?? null,
+    authorization_binding_kind: args.authorizationBindingKind,
+    cross_signing_generation: args.crossSigningGeneration ?? null,
+  });
+  return Buffer.concat([
+    Buffer.from("ck-device-authorize-possession-v1\n", "utf8"),
+    Buffer.from(body, "utf8"),
+  ]);
+}
+
 /// The accepted cross-signing identity for a principal: the PSK plus the SSK
 /// and USK it cross-signed, and the generation they were published at.
 export type CrossSigningIdentity = {
@@ -253,6 +293,42 @@ export function buildDeviceCrossSigningBinding(args: {
 
 /// Render a freshly-generated device verify key as the `z…` multibase form
 /// soland stores under `device_public_key` and re-exposes as a `did:key`.
+/// Build the ck-device-authorize-possession-v1 signature made by the device
+/// identity key, proving possession of `device_public_key`.
+export function buildDevicePossessionSignature(args: {
+  identity: CrossSigningIdentity;
+  deviceId: string;
+  devicePublicKeyMultibase: string;
+  hpkeKeyMultibase: string;
+  algorithms: string[];
+  deviceKeyAlgorithm: string;
+  authorizedBy: string;
+  notBefore: string;
+  expiresAt?: string | null;
+  scopes?: string[] | null;
+  recoverySessionId?: string | null;
+  privateKey: CrossSigningKey["privateKey"];
+}): string {
+  const input = deviceAuthorizePossessionInput({
+    principalId: args.identity.principalId,
+    deviceId: args.deviceId,
+    devicePublicKey: args.devicePublicKeyMultibase,
+    hpkeKey: args.hpkeKeyMultibase,
+    algorithms: args.algorithms,
+    deviceKeyAlgorithm: args.deviceKeyAlgorithm,
+    authorizedBy: args.authorizedBy,
+    notBefore: args.notBefore,
+    expiresAt: args.expiresAt,
+    scopes: args.scopes,
+    recoverySessionId: args.recoverySessionId,
+    authorizationBindingKind: "cross_signing",
+    crossSigningGeneration: args.identity.generation,
+  });
+  return sign(null, input, args.privateKey).toString("base64url");
+}
+
+/// Render a freshly-generated device verify key as the multibase form soland
+/// stores under `device_public_key` and re-exposes as a `did:key`.
 export function deviceVerifyKeyMultibase(): {
   multibase: string;
   didKey: string;

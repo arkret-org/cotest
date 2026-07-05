@@ -36,6 +36,7 @@ import { solandBaseUrl } from "./env";
 import {
   buildCrossSigningPublishPayload,
   buildDeviceCrossSigningBinding,
+  buildDevicePossessionSignature,
   TEST_DEVICE_ALGORITHMS,
   type CrossSigningIdentity,
   deviceVerifyKeyMultibase,
@@ -195,6 +196,18 @@ export async function prepareRecoveryPrincipal(
     hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
+  const sessionNotBefore = rfc3339Millis(new Date()).replace(/\.\d{3}Z$/, "Z");
+  const sessionDeviceSignature = buildDevicePossessionSignature({
+    identity,
+    deviceId: user.deviceId,
+    devicePublicKeyMultibase: sessionDeviceKey.multibase,
+    hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+    algorithms: TEST_DEVICE_ALGORITHMS,
+    deviceKeyAlgorithm: "EdDSA",
+    authorizedBy: user.deviceId,
+    notBefore: sessionNotBefore,
+    privateKey: sessionDeviceKey.privateKey,
+  });
   const selfAuthorize = await request.post(
     `${solandBaseUrl()}/_cokret/self/events`,
     {
@@ -211,7 +224,8 @@ export async function prepareRecoveryPrincipal(
           algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
           authorized_by: user.deviceId,
-          not_before: rfc3339Millis(new Date()).replace(/\.\d{3}Z$/, "Z"),
+          not_before: sessionNotBefore,
+          device_signature: sessionDeviceSignature,
           cross_signing_binding: sessionBinding,
         },
       }),
@@ -458,6 +472,19 @@ export async function restoreViaRecoveryUnlock(
     hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
+  const device2NotBefore = rfc3339Millis(new Date()).replace(/\.\d{3}Z$/, "Z");
+  const device2Signature = buildDevicePossessionSignature({
+    identity: principal.identity,
+    deviceId: newDeviceId,
+    devicePublicKeyMultibase: device2Key.multibase,
+    hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+    algorithms: TEST_DEVICE_ALGORITHMS,
+    deviceKeyAlgorithm: "EdDSA",
+    authorizedBy: principal.user.deviceId,
+    notBefore: device2NotBefore,
+    recoverySessionId: session.recovery_session_id,
+    privateKey: device2Key.privateKey,
+  });
   const authorizeEventId = typedId("event");
   const authorize = await request.post(
     `${solandBaseUrl()}/_cokret/self/events`,
@@ -476,7 +503,8 @@ export async function restoreViaRecoveryUnlock(
           algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
           authorized_by: principal.user.deviceId,
-          not_before: rfc3339Millis(new Date()).replace(/\.\d{3}Z$/, "Z"),
+          not_before: device2NotBefore,
+          device_signature: device2Signature,
           recovery_session_id: session.recovery_session_id,
           cross_signing_binding: binding,
         },
