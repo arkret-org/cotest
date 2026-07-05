@@ -37,7 +37,7 @@
 // Optional: set COTEST_OIDC_LOGIN_HANDLE + COTEST_OIDC_LOGIN_PASSWORD to drive
 // an existing account instead of self-registering.
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   coauthBaseUrl,
   optionalEnv,
@@ -45,65 +45,16 @@ import {
   realOidcLoginPassword,
   solandBaseUrl,
 } from "../../helpers/env";
-import { openUserPage, uniqueUser, type JointUserPage } from "../../helpers/users";
+import { openUserPage, uniqueUser } from "../../helpers/users";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
+import {
+  hardLogoutViaAccountMenu,
+  serverLoginViaCoauth,
+  submitCoauthPasswordCredentials,
+  type RealOidcAccount,
+} from "../../helpers/real-oidc-login";
 
 test.describe.configure({ mode: "serial" });
-
-type Account = { handle: string; password: string };
-
-// Drive yougen's "start server login" through coauth and back to the signed-in
-// app. Robust to both paths: a fresh coauth session shows the login form +
-// consent; a returning coauth session may bounce straight back to the app.
-// coauth selectors:
-//   #login-handle / #login-password    — login.rs form inputs
-//   [data-testid=coauth-login-submit]   — login.rs "Sign in" button
-//   [data-testid=coauth-oauth-approve]  — oauth_approval.rs "Allow" button (skipped once approved)
-async function serverLoginViaCoauth(page: Page, account: Account): Promise<void> {
-  await page.getByTestId("login-server-url").fill(solandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
-
-  const loginHandle = page.locator("#login-handle");
-  const shell = page.getByTestId("client-shell");
-
-  // Wait until coauth either asks for credentials or (returning session) the
-  // app shell comes back.
-  await expect(loginHandle.or(shell)).toBeVisible({ timeout: 60_000 });
-  if (await loginHandle.isVisible()) {
-    await loginHandle.fill(account.handle);
-    await page.locator("#login-password").fill(account.password);
-    await page.getByTestId("coauth-login-submit").click();
-  }
-
-  // Consent is optional — coauth skips it when the client+scope were already
-  // approved for this account.
-  const approve = page.getByTestId("coauth-oauth-approve");
-  const consentShown = await approve
-    .waitFor({ state: "visible", timeout: 20_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (consentShown) {
-    await approve.click();
-  }
-
-  // Signed in: app shell renders, no login panel. (An "Authorize this device"
-  // MLS modal may overlay the shell — that's the legitimate next step, not a
-  // login failure — so we assert the shell, not the absence of any modal.)
-  await expect(shell).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("login-panel")).toHaveCount(0);
-  expect(new URL(page.url()).pathname).not.toBe("/login");
-}
-
-async function logout(jointPage: JointUserPage): Promise<void> {
-  const page = jointPage.page;
-  // The logout control lives in the topbar account menu (yougen app.rs:
-  // account-menu-button → account-menu-session-logout). It performs a hard
-  // logout (revokes the session grant) and redirects to /login.
-  await page.getByTestId("account-menu-button").click();
-  await page.getByTestId("account-menu-session-logout").click();
-  await expect(page.getByTestId("login-panel")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId("client-shell")).toHaveCount(0);
-}
 
 test.describe("real OIDC browser login lifecycle", () => {
   const coauth = coauthBaseUrl();
@@ -124,7 +75,7 @@ test.describe("real OIDC browser login lifecycle", () => {
     //    self-register a fresh new user over coauth's registration API.
     const envHandle = realOidcLoginHandle();
     const envPassword = realOidcLoginPassword();
-    const account: Account =
+    const account: RealOidcAccount =
       envHandle && envPassword
         ? { handle: envHandle, password: envPassword }
         : await registerCoauthPasswordAccount(request, coauth!);
@@ -153,7 +104,7 @@ test.describe("real OIDC browser login lifecycle", () => {
 
       // 4. Logout.
       await test.step("logout clears the session and returns to /login", async () => {
-        await logout(jointPage);
+        await hardLogoutViaAccountMenu(jointPage);
       });
 
       // 5. Returning-user login (same account, no re-registration).
@@ -181,15 +132,15 @@ test.describe("real OIDC browser login lifecycle", () => {
       await page.getByTestId("start-server-login-button").click();
 
       // Submit the real handle with a wrong password.
-      await expect(page.locator("#login-handle")).toBeVisible({ timeout: 60_000 });
-      await page.locator("#login-handle").fill(account.handle);
-      await page.locator("#login-password").fill(`${account.password}-WRONG`);
-      await page.getByTestId("coauth-login-submit").click();
+      await submitCoauthPasswordCredentials(page, {
+        handle: account.handle,
+        password: `${account.password}-WRONG`,
+      });
 
       // coauth surfaces the error and stays on its login page; yougen never
       // reaches the signed-in shell.
       await expect(page.locator("#login-error")).toBeVisible({ timeout: 30_000 });
-      await expect(page.locator("#login-handle")).toBeVisible();
+      await expect(page.locator("#login-password")).toBeVisible();
       await expect(page.getByTestId("client-shell")).toHaveCount(0);
     } finally {
       await jointPage.close();

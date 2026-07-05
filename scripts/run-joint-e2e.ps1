@@ -744,6 +744,8 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$PostgresUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBaseUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBind,
+        [Parameter(Mandatory = $true)][string]$YougenBaseUrl,
+        [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
         [Parameter(Mandatory = $true)][string]$SolandServiceDid,
         [Parameter(Mandatory = $true)][string]$CoauthServiceDid,
@@ -774,6 +776,8 @@ function New-CoauthJointConfig {
         "--postgres-url", $PostgresUrl,
         "--coauth-base-url", $CoauthBaseUrl,
         "--coauth-bind", $CoauthBind,
+        "--yougen-base-url", $YougenBaseUrl,
+        "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
         "--soland-service-did", $SolandServiceDid,
         "--coauth-service-did", $CoauthServiceDid,
@@ -808,6 +812,21 @@ function Invoke-CoauthMigrations {
     $migrateOutput | Set-Content -Path $migrateLog -Encoding UTF8
     if ($LASTEXITCODE -ne 0) {
         throw "coauth database migrate failed; see $migrateLog"
+    }
+}
+
+function Invoke-CoauthConfigSync {
+    param(
+        [Parameter(Mandatory = $true)][string]$CoauthBinary,
+        [Parameter(Mandatory = $true)][string]$ConfigPath,
+        [Parameter(Mandatory = $true)][string]$LogDirectory
+    )
+
+    $syncLog = Join-Path $LogDirectory "coauth-config-sync.log"
+    $syncOutput = & $CoauthBinary config sync -c $ConfigPath 2>&1
+    $syncOutput | Set-Content -Path $syncLog -Encoding UTF8
+    if ($LASTEXITCODE -ne 0) {
+        throw "coauth config sync failed; see $syncLog"
     }
 }
 
@@ -1456,6 +1475,8 @@ try {
             -PostgresUrl $coauthPostgresDsn `
             -CoauthBaseUrl $CoauthBaseUrl `
             -CoauthBind "127.0.0.1:$coauthPort" `
+            -YougenBaseUrl $YougenBaseUrl `
+            -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
             -SolandServiceDid $SolandServiceDid `
             -CoauthServiceDid $CoauthServiceDid `
@@ -1464,6 +1485,7 @@ try {
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
+        Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
         # so the joint harness can mint real DPoP-bound ck.session.grants instead
         # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).

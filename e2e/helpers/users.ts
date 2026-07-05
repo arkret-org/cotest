@@ -71,6 +71,10 @@ export type OpenUserOpts = {
   sessionCredential?: string;
   server?: SolandKey;
   keepDeviceAuthorizationModal?: boolean;
+  /// Start with server-only config for tests that must exercise real login.
+  /// This keeps diagnostics/page helpers but avoids seeding a fixture
+  /// account/device into yougen.config.v1 before the product login flow runs.
+  neutralLoginConfig?: boolean;
   /// Real `ck.session.grant` JWT to inject as yougen's session credential.
   /// When set together with `dpopSeedB64url`, yougen's dev-only boot injection
   /// rehydrates the grant + DPoP device key instead of relying on dev-login.
@@ -324,10 +328,18 @@ export class JointUserPage {
   }): Promise<boolean> {
     let handled = false;
     if (opts.completeRecoveryKeySetup) {
+      const openRecoverySetup = this.page
+        .getByTestId("recovery-setup-open-recovery")
+        .last();
+      if (await openRecoverySetup.isVisible({ timeout: 250 }).catch(() => false)) {
+        await openRecoverySetup.click();
+        handled = true;
+      }
       const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(250);
       handled ||= recoveryKey !== undefined;
     }
     for (const [testId, modalTestId] of [
+      ["mls-backup-dismiss", "mls-backup-modal"],
       ["mls-recovery-missing-dismiss", "mls-recovery-missing-modal"],
       ["mls-unlock-dismiss", "mls-unlock-modal"],
     ] as const) {
@@ -1064,10 +1076,19 @@ export async function openUser(
       : undefined;
   await context.addInitScript(
     (init) => {
-      window.localStorage.setItem(
-        "yougen.config.v1",
-        JSON.stringify(init.config),
-      );
+      if (init.neutralLoginConfig) {
+        if (!window.localStorage.getItem("yougen.config.v1")) {
+          window.localStorage.setItem(
+            "yougen.config.v1",
+            JSON.stringify(init.config),
+          );
+        }
+      } else {
+        window.localStorage.setItem(
+          "yougen.config.v1",
+          JSON.stringify(init.config),
+        );
+      }
       // The harness injects sessions into localStorage; yougen's wasm build is
       // IndexedDB-only for session credentials/secrets by default (SubtleCrypto, non-
       // extractable). Opt into the localStorage compatibility tier so the
@@ -1093,10 +1114,11 @@ export async function openUser(
     {
       config: {
         server_url: serverUrl,
-        account_did: user.did,
-        device_id: user.deviceId,
-        session_credential: sessionCredential,
+        account_did: opts.neutralLoginConfig ? "" : user.did,
+        device_id: opts.neutralLoginConfig ? "" : user.deviceId,
+        session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
       },
+      neutralLoginConfig: opts.neutralLoginConfig === true,
       sessionInjection,
     },
   );
