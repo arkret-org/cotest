@@ -1,5 +1,39 @@
 # 跨成员加密聊天消息被丢弃 —— 矛盾信号与开放问题
 
+> ## ✅ 已解决(2026-07-05)—— 真根因 = event proof binding 缺 `context` 域标记
+>
+> 逐层深钻(device_id 漂移 → key 不匹配 → reducer 字段 → server 改字段 → **binding
+> 构造**)全部 live/单测证伪到最底,真根因锁定:**yougen `event_signer` 手搓 detached-JWS
+> proof binding 时漏了 SDK `Proof::binding_object` 折入的固定域标记 `context =
+> "ck-event-proof-v1"`(encoding.md §2)。** 发送端签的是 `{event_digest, actor_id,
+> verification_method, created_at}`,验证端(SDK `verify_eddsa_detached_jws_proof`,
+> **soland `envelope.rs:2418` 亦然**)重建的是 `{context, …}` → binding 字节不同 →
+> **所有 kind 的 event proof JWS 验签系统性失败**。
+>
+> **为何一直没暴露**:harness 之前 enroll 的是 DPoP session key(非浏览器真 event-signer
+> key),proof 门永远卡在 key-mismatch 层,够不到 binding 层;且 2 个签验往返单测长期红但没人跑到。
+> 修好自入册(矛盾 C:`connect.rs` grant None 时用 connect 持有的 bearer 兜底)让 key 对齐后,
+> 才把 bug 顶到最底。
+>
+> **修复(已 commit + push)**:
+> - yougen `9c68fad`:`event_signer` 改走 SDK 权威 `Proof::canonical_binding_bytes`(signer/verifier
+>   同一 transcript,永不 drift);`connect.rs` 自入册 grant 兜底;3 处陈旧 chat 测试改走 SDK binding。
+> - cotest `6079aa9`:`createDpopUserSession` 加 `skipDeviceEnrollment`,浏览器 MLS 测试交给自入册
+>   授权正确的 event-signer key(已授权设备会跳过自入册,故必须 skip 而非覆盖)。
+> - **live 双绿**:mls-group "joined member decrypts" + cross-member-encrypted kanban(`2 passed`)。
+>
+> **矛盾 A/B/C 复盘**:A(哪把 key 签)与 B(device_id vs key)其实都不是丢消息的直接原因——
+> 它们是 harness 错 key 掩盖出的**表层现象**;C(自入册拿不到 grant)是必须先解的前置(否则 key 不对齐、
+> 够不到 binding 层)。真正的直接原因是 binding 缺 context,与 0004(holder/device key 生命周期)
+> **正交**:0004 仍是有效的生产正确性项目线(重登不丢身份),但**不是**本 gap 的解药。
+>
+> **姊妹 bug(待修)**:`yougen/src/views/call_signals.rs` 的 webrtc 调用信令 proof 也手搓
+> 无-context binding(测试 `valid_call_proof_verifies_and_routes_to_ring` 长期红),同源同类,应比照修。
+>
+> ---
+>
+> 以下为解决前的原始记录,保留作为诊断轨迹。
+
 > Follow-up 记录。`encryption/mls-group.spec.ts` 的 "joined member decrypts E2EE
 > timeline messages" 在真栈(`-StartCoauth`)下跑穿了整条 MLS 链,但最终 bob
 > reload 后看不到 alice 的加密聊天消息(讨论区 "No messages yet")。
