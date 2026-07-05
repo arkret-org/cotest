@@ -938,12 +938,17 @@ export async function createDpopUserSessionForAccount(
   await ensureRegistered(request, user, { server: opts.server });
   // Device authorization. soland requires an ACCEPTED ck.device.authorize before
   // this device may publish an MLS KeyPackage; without it every MLS browser flow
-  // dies at invite with `mls_keypackage_not_found` — the exact failure the
-  // silently-skipped cross-member MLS tests were hiding. Now that the account
-  // identity is the model-B principal DID (whose document designates coauth's
-  // enrollment authority), drive coauth device-enroll → soland event-submit so the
-  // device is verified-with-key BEFORE the browser publishes its KeyPackage on
-  // login. Returns undefined (no-op) when coauth lacks the device-enroll seam.
+  // dies at invite with `mls_keypackage_not_found`. yougen's own on-connect
+  // self-enrollment (app/connect.rs) is racy under the injected-grant path (the
+  // KeyPackage upload can beat the self-enrollment), so authorize the device here
+  // up front. NOTE: this authorizes the DPoP *session* key, which is a DIFFERENT
+  // key than the persisted signing seed yougen signs event/message proofs with.
+  // That mismatch is invisible to kanban strand content (no proof gate) but makes
+  // a receiver's CHAT proof gate (verify_chat_envelope_proof) resolve the wrong
+  // signing key and drop cross-member messages — the remaining
+  // mls-group joined-member gap. The real fix is to authorize yougen's actual
+  // signing-seed key (or make yougen's self-enrollment reliable + KeyPackage
+  // upload wait on it); tracked separately.
   await enrollOnboardedDeviceSigningKey(
     request,
     coauth,
