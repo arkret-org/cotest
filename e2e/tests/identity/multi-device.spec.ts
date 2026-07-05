@@ -1129,7 +1129,7 @@ test.describe("multi-device pairing + revocation", () => {
       // the to-device inbox; the home shell mounts the global prompt.
       await device1.gotoHome();
 
-      const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
+      const { pairingCode, requestingDeviceId, newDevicePublicKey } = await deliverPairingRequest(
         request,
         alice,
         device1Token,
@@ -1173,6 +1173,15 @@ test.describe("multi-device pairing + revocation", () => {
           { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
         )
         .toBe("active");
+
+      const pairedRecord = await queryDeviceKeyRecord(
+        request,
+        device1Token,
+        alice.did,
+        requestingDeviceId,
+      );
+      expect(pairedRecord.device_status).toBe("active");
+      expect(pairedRecord.device_signing_key).toBe(`did:key:${newDevicePublicKey}`);
     } finally {
       await device1.close();
     }
@@ -1247,7 +1256,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
     try {
       await device1.gotoHome();
-      const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
+      const { pairingCode, requestingDeviceId, newDevicePublicKey } = await deliverPairingRequest(
         request,
         alice,
         device1Token,
@@ -1294,6 +1303,15 @@ test.describe("multi-device pairing + revocation", () => {
           { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
         )
         .toBe("active");
+
+      const pairedRecord = await queryDeviceKeyRecord(
+        request,
+        device1Token,
+        alice.did,
+        requestingDeviceId,
+      );
+      expect(pairedRecord.device_status).toBe("active");
+      expect(pairedRecord.device_signing_key).toBe(`did:key:${newDevicePublicKey}`);
     } finally {
       await device1.close();
     }
@@ -1388,15 +1406,16 @@ async function deliverPairingRequest(
   user: JointUser,
   senderToken: string,
   opts: { displayName?: string } = {},
-): Promise<{ requestingDeviceId: string; pairingCode: string }> {
+): Promise<{ requestingDeviceId: string; pairingCode: string; newDevicePublicKey: string }> {
   const requestingDeviceId = typedId("device");
   const pairingCode = `${Date.now() % 1_000_000}`.padStart(6, "0");
   const transactionId = `ck.key.verification.request:${requestingDeviceId}`;
+  const newDeviceKey = deviceVerifyKeyMultibase();
   const newDevicePubkey = {
     kty: "OKP",
     kid: requestingDeviceId,
     alg: "EdDSA",
-    public_key: b64url(`pubkey:${requestingDeviceId}`),
+    public_key: newDeviceKey.multibase,
   };
   const expiresAt = new Date(Date.now() + 10 * 60_000)
     .toISOString()
@@ -1438,7 +1457,7 @@ async function deliverPairingRequest(
     sendResp.ok(),
     `pairing to-device send returned ${sendResp.status()}: ${await sendResp.text()}`,
   ).toBeTruthy();
-  return { requestingDeviceId, pairingCode };
+  return { requestingDeviceId, pairingCode, newDevicePublicKey: newDeviceKey.multibase };
 }
 
 /// Read a single device's `status` out of alice's device-set projection
