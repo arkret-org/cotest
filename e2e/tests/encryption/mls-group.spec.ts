@@ -1192,8 +1192,8 @@ test.describe("MLS group encryption", () => {
     test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
-      createDpopUserSession(request, "s11-decrypt-alice"),
-      createDpopUserSession(request, "s11-decrypt-bob"),
+      createDpopUserSession(request, "s11-decrypt-alice", { skipDeviceEnrollment: true }),
+      createDpopUserSession(request, "s11-decrypt-bob", { skipDeviceEnrollment: true }),
     ]);
     if (!aliceSession || !bobSession) {
       // Fail loud on the joint harness (coauth up) instead of green-skipping the

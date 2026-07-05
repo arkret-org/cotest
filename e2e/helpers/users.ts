@@ -882,7 +882,7 @@ export async function issueDevSession(
 export async function createDpopUserSession(
   request: APIRequestContext,
   prefix: string,
-  opts: { server?: SolandKey; coauthBase?: string } = {},
+  opts: { server?: SolandKey; coauthBase?: string; skipDeviceEnrollment?: boolean } = {},
 ): Promise<DpopUserSession | undefined> {
   const coauth = opts.coauthBase ?? coauthBaseUrl();
   if (!coauth) {
@@ -898,7 +898,19 @@ export async function createDpopUserSessionForAccount(
   request: APIRequestContext,
   prefix: string,
   account: CoauthPasswordAccount,
-  opts: { server?: SolandKey; coauthBase?: string } = {},
+  opts: {
+    server?: SolandKey;
+    coauthBase?: string;
+    // Skip the harness-side `ck.device.authorize`. Set this for browser MLS
+    // sessions so yougen's own on-connect self-enrollment
+    // (app/connect.rs enroll_current_session_device) becomes the sole device
+    // authority — it enrolls the browser's REAL event-signer key, which is what
+    // signs message proofs, so a receiver's chat proof gate resolves a matching
+    // key. Leaving the harness enroll on would pre-authorize the device with the
+    // DPoP *session* key and suppress self-enrollment (only unauthorized devices
+    // self-enroll), stranding cross-member chat proofs.
+    skipDeviceEnrollment?: boolean;
+  } = {},
 ): Promise<DpopUserSession | undefined> {
   const coauth = opts.coauthBase ?? coauthBaseUrl();
   if (!coauth) {
@@ -936,37 +948,37 @@ export async function createDpopUserSessionForAccount(
     displayName: account.displayName,
   };
   await ensureRegistered(request, user, { server: opts.server });
-  // Device authorization up front. yougen's own on-connect self-enrollment
-  // (app/connect.rs enroll_current_session_device) can't run under the
-  // injected-grant test seam — it reads the grant from
-  // `state_store.session_grant()`, which the async secure-store upgrade path
-  // clobbers before the device-authorization check runs ("device enrollment
-  // requires an active session grant") — so authorize the device here so the
-  // browser's KeyPackage upload is accepted and the MLS browser flows run.
+  // Device authorization up front, for API-only sessions that never open a
+  // browser (no in-browser self-enrollment runs, so authorize here to make the
+  // KeyPackage upload / MLS flows accepted).
   //
-  // KNOWN GAP (mls-group joined-member chat): this authorizes the DPoP session
-  // key, and a receiver's chat proof gate (verify_chat_envelope_proof) then
-  // resolves a device signing key that doesn't match the sender's message proof,
-  // dropping cross-member chat messages. Kanban strand content has no proof gate
-  // so it is unaffected. The clean fix is to make yougen's own self-enrollment
-  // work under the injected-grant seam (so its real event-signer key is
-  // authorized) — its KeyPackage publish already gates on that authorization now
-  // (app/mod.rs) — rather than authorizing the session key here.
-  await enrollOnboardedDeviceSigningKey(
-    request,
-    coauth,
-    {
-      account,
-      principalDid: user.did,
-      deviceId: seed.deviceId,
-      deviceKey,
-      grantJwt: grant.grantJwt,
-      grantId: grant.grantId,
-      grantAudience: grant.audience,
-      scopes: grant.scopes,
-    },
-    { server: opts.server },
-  );
+  // For BROWSER MLS sessions, pass `skipDeviceEnrollment: true`: this harness
+  // enroll authorizes the DPoP *session* key, but the browser's real event-signer
+  // key (what signs message proofs) is different — so a receiver's chat proof gate
+  // (verify_chat_envelope_proof) would resolve a non-matching key and drop
+  // cross-member chat messages. yougen's on-connect self-enrollment now works
+  // under the injected-grant seam (connect.rs falls back to the connect-held
+  // bearer when local_state has no reconstructed grant), so skipping this lets
+  // self-enrollment authorize the correct event-signer key. Because a pre-existing
+  // authorization suppresses self-enrollment (only unauthorized devices
+  // self-enroll), the harness enroll MUST be skipped, not merely overwritten.
+  if (!opts.skipDeviceEnrollment) {
+    await enrollOnboardedDeviceSigningKey(
+      request,
+      coauth,
+      {
+        account,
+        principalDid: user.did,
+        deviceId: seed.deviceId,
+        deviceKey,
+        grantJwt: grant.grantJwt,
+        grantId: grant.grantId,
+        grantAudience: grant.audience,
+        scopes: grant.scopes,
+      },
+      { server: opts.server },
+    );
+  }
   return {
     user,
     grantJwt: grant.grantJwt,

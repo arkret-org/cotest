@@ -273,8 +273,8 @@ test.describe("cross-member encrypted kanban", () => {
 
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
-      createDpopUserSession(request, "xmenc-alice"),
-      createDpopUserSession(request, "xmenc-bob"),
+      createDpopUserSession(request, "xmenc-alice", { skipDeviceEnrollment: true }),
+      createDpopUserSession(request, "xmenc-bob", { skipDeviceEnrollment: true }),
     ]);
     if (!aliceSession || !bobSession) {
       // Do not silently green-skip the crown-jewel cross-member decrypt path on
