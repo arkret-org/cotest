@@ -153,8 +153,25 @@ async function assertCardDecrypts(
     reader.page.getByTestId("kanban-card-redacted").filter({ hasText: cardTitle }),
   ).toHaveCount(0);
 
-  await card.click();
-  await expect(reader.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+  // The recovery/backup nag modal can re-pop and its backdrop intercepts the
+  // card click; dismiss it then open the card, retrying past a late modal.
+  const detailModal = reader.page.getByTestId("card-detail-modal");
+  await expect
+    .poll(
+      async () => {
+        if (await detailModal.isVisible().catch(() => false)) return true;
+        await dismissRecoveryNags(reader);
+        await card.click({ timeout: 3_000 }).catch(() => {});
+        return detailModal.isVisible().catch(() => false);
+      },
+      {
+        timeout: 60_000,
+        intervals: [1_000, 2_000],
+        message: `${reader.user.name} could not open the card detail (nag modal blocking?)`,
+      },
+    )
+    .toBe(true);
+  await dismissRecoveryNags(reader);
   await reader.page.getByTestId("card-detail-tab-description").click();
 
   // The decryption proof: the private body renders in plaintext...
@@ -165,6 +182,82 @@ async function assertCardDecrypts(
   // ...and the "locked / cannot decrypt" affordance is NOT shown.
   await expect(reader.page.getByTestId("card-detail-body-locked")).toHaveCount(0);
   await reader.page.getByTestId("card-detail-close-button").click();
+}
+
+// A member who has not set up encrypted-history recovery (every invitee, and
+// any creator until they save a Recovery Key) is nagged by modal prompts — the
+// "Protect your encrypted history" backup modal and the MLS recovery/unlock
+// modals — whose dialog backdrop blocks board interaction and which re-appear on
+// navigation. Dismiss whichever is currently up. Best-effort; never throws.
+async function dismissRecoveryNags(reader: JointUserPage): Promise<void> {
+  const page = reader.page;
+  // The "Set up your 24-word Recovery Key" modal (required before encryption) has
+  // NO dismiss affordance — it must be COMPLETED (save the generated key + confirm
+  // it back). An invitee hits it the moment they touch encrypted content.
+  await reader.completeRecoveryKeySetupIfPrompted(500).catch(() => undefined);
+  for (const testId of [
+    "mls-backup-dismiss",
+    "mls-recovery-missing-dismiss",
+    "mls-unlock-dismiss",
+  ]) {
+    const btn = page.getByTestId(testId).last();
+    if (await btn.isVisible({ timeout: 300 }).catch(() => false)) {
+      await btn.click({ timeout: 3_000 }).catch(() => {});
+    }
+  }
+}
+
+// Get a member's already-loaded kanban route into a readable board state:
+// dismiss the recovery nags, then EXPLICITLY select the board so its lists/cards
+// project into view — the deep-link `/board/<id>` route alone leaves the
+// board-space selector unset ("Select an option"), so no lists render. If the
+// member's projection never received the board space, the option never appears
+// and this throws — which is itself the cross-member-projection bug this test
+// hunts. Forces past the board-toolbar button overlap and retries the open with
+// nag-dismissal in case a late modal intercepts.
+async function readyReaderBoard(reader: JointUserPage, boardId: string): Promise<void> {
+  const page = reader.page;
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+  // Clear the recovery/backup nags whose modal backdrop blocks board interaction
+  // and which re-appear on navigation.
+  for (let i = 0; i < 5; i += 1) {
+    await dismissRecoveryNags(reader);
+    await page.waitForTimeout(400);
+  }
+  // Best-effort: explicitly select alice's board so the right board's lists
+  // render. The deep-link `/board/<id>` route + first-board auto-select usually
+  // already select it once the board Space projects into the switcher (that
+  // projection is the actual thing under test), so a hiccup opening the dxc
+  // Select here is NOT fatal — assertCardDecrypts (a 90s poll for the decrypted
+  // card) is the real gate.
+  const selectScope = page.getByTestId("board-space-select");
+  const trigger = selectScope.locator('button[aria-haspopup="listbox"]').first();
+  const quoted = boardId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const option = selectScope.locator(`[role="option"][data-value="${quoted}"]`);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await dismissRecoveryNags(reader);
+    if ((await trigger.getAttribute("aria-expanded").catch(() => null)) !== "true") {
+      await trigger.click({ force: true, timeout: 3_000 }).catch(() => {});
+    }
+    if (await option.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      await option.click({ force: true }).catch(() => {});
+      break;
+    }
+  }
+  if ((await trigger.getAttribute("aria-expanded").catch(() => null)) === "true") {
+    await trigger.press("Escape").catch(() => {});
+  }
+}
+
+async function openReaderBoard(
+  reader: JointUserPage,
+  realmId: string,
+  boardId: string,
+): Promise<void> {
+  await reader.page.goto(`/kanban/${realmId}/board/${boardId}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await readyReaderBoard(reader, boardId);
 }
 
 test.describe("cross-member encrypted kanban", () => {
@@ -227,7 +320,7 @@ test.describe("cross-member encrypted kanban", () => {
         bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
       ]);
 
-      // 1) Alice creates an MLS-encrypted realm with an encrypted card.
+      // 1) Alice creates an EMPTY MLS-encrypted realm.
       const realmId = await alicePage.createRealm({
         title: `Encrypted XM Kanban ${stamp}`,
         discoverability: "listed",
@@ -235,6 +328,25 @@ test.describe("cross-member encrypted kanban", () => {
         historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
       });
+
+      // 2) Alice invites bob → MLS Welcome must be queued (KeyPackage claimed).
+      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
+      expect(
+        inviteStatus,
+        "inviting a member of an MLS realm must queue a Welcome (KeyPackage claimed)",
+      ).toContain("MLS Welcome queued");
+
+      // 3) Bob JOINS before any board content exists. This matters twice over:
+      //    under history_visibility=joined, soland crops pre-join events from
+      //    bob's view; and under MLS forward secrecy, bob has no key for epochs
+      //    that predate his membership. So content alice creates AFTER this point
+      //    is the content bob can legitimately both see and decrypt. (Pre-join
+      //    history sharing is a separate, optional capability — not the core
+      //    cross-member collaboration path this test exercises.)
+      await bobPage.acceptInvite(realmId);
+
+      // 4) Alice builds the board + encrypted card AFTER bob is a member, so it is
+      //    post-join shared content for bob.
       const boardId = await buildEncryptedBoardListCard(
         alicePage.page,
         realmId,
@@ -245,29 +357,45 @@ test.describe("cross-member encrypted kanban", () => {
       await addEncryptedDescription(alicePage.page, aliceCard, aliceDescription);
       await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
 
-      // 2) Alice invites bob → MLS Welcome must be queued (KeyPackage claimed).
-      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
-      expect(
-        inviteStatus,
-        "inviting a member of an MLS realm must queue a Welcome (KeyPackage claimed)",
-      ).toContain("MLS Welcome queued");
+      // 4b) Cross-member DELIVERY gate (isolates soland delivery from yougen
+      //     projection): soland MUST surface alice's post-join board Space create
+      //     on bob's own realm events feed — the same feed the kanban backfill
+      //     ingests. If the board id is absent here, the bug is soland-side
+      //     Space delivery/visibility; if present but the board never appears in
+      //     bob's UI below, the bug is yougen's board projection.
+      await expect
+        .poll(
+          async () => {
+            const url = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
+            const resp = await request.get(url, {
+              headers: selfPathGrantHeaders({
+                deviceKey: bobSession.deviceKey,
+                grantJwt: bobSession.grantJwt,
+                method: "GET",
+                url,
+              }),
+            });
+            if (resp.status() !== 200) return `status ${resp.status()}`;
+            return JSON.stringify(await resp.json());
+          },
+          {
+            timeout: 60_000,
+            intervals: [1_000, 2_000, 5_000],
+            message: `soland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a yougen projection issue)`,
+          },
+        )
+        .toContain(boardId);
 
-      // 3) Bob accepts and opens the board. Route-context bootstrap is where his
-      //    client applies the pending MLS Welcome and hydrates realm state.
-      await bobPage.acceptInvite(realmId);
-      await bobPage.page.goto(`/kanban/${realmId}/board/${boardId}`, {
-        waitUntil: "domcontentloaded",
-      });
-      await expect(bobPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-
-      // 4) THE CORE ASSERTION: bob decrypts alice's private card content.
+      // 5) THE CORE ASSERTION: bob opens the board and decrypts alice's private
+      //    card content.
+      await openReaderBoard(bobPage, realmId, boardId);
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
       await stepShot(bobPage.page, testInfo, "B-bob-decrypted-card");
 
       // 5) Reload survival: the decrypted card must not flash-then-vanish when
       //    the live refresh clobbers the bootstrap backfill.
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(bobPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await readyReaderBoard(bobPage, boardId);
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
       await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
 
@@ -281,10 +409,7 @@ test.describe("cross-member encrypted kanban", () => {
         timeout: 45_000,
       });
 
-      await alicePage.page.goto(`/kanban/${realmId}/board/${boardId}`, {
-        waitUntil: "domcontentloaded",
-      });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await openReaderBoard(alicePage, realmId, boardId);
       await expect(
         alicePage.page.getByTestId("kanban-card").filter({ hasText: bobCard }),
         "bob's card must project back to alice (reverse cross-member sync)",

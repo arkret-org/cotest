@@ -31,6 +31,7 @@ import {
   selfPathGrantHeaders,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
+import { enrollOnboardedDeviceSigningKey } from "./device-holder-proof";
 
 export type JointUser = {
   name: string;
@@ -434,9 +435,18 @@ export class JointUserPage {
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
     await this.gotoSetup();
+    // Always complete the 24-word recovery-key setup modal when it appears — for
+    // BOTH plaintext and encrypted realms. Historically this was suppressed for
+    // `mls_rfc9420` (the encrypted path was assumed to use the post-create
+    // `encrypted-realm-recovery-gate-override` instead), but once a device
+    // genuinely participates in MLS (real authorized device, model-B principal
+    // DID) the encrypted-realm wizard pops the recovery-key setup modal DURING the
+    // basics/policy steps, whose dialog backdrop blocks every subsequent click. It
+    // never surfaced before because MLS never actually worked in the harness
+    // (silently-skipped/false-green). Completing recovery configures the account,
+    // so the post-create gate simply no-ops.
     const promptHandling = {
-      completeRecoveryKeySetup:
-        opts.completeRecoveryKeySetup ?? opts.encryptionProfile !== "mls_rfc9420",
+      completeRecoveryKeySetup: opts.completeRecoveryKeySetup ?? true,
     };
     await this.dismissCreateRealmBlockingPrompts(promptHandling);
     const strand = this.page.getByTestId("realm-lifecycle-strand").last();
@@ -912,14 +922,43 @@ export async function createDpopUserSessionForAccount(
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
   expect(grant.scopes).toContain(`urn:cokret:client:device:${seed.deviceId}`);
+  // Model-B identity: adopt the minted `did:webvh:…:webvh:<ulid>` principal DID
+  // the grant subject is bound to (coauth debug seam), NOT the coauth-local
+  // `user_did_for` fallback (`…:users:<ulid>`) that account.did carries. Only the
+  // minted DID's document designates coauth's CokretDeviceEnrollmentAuthority, so
+  // device enrollment + MLS KeyPackage publish resolve the right document.
+  expect(grant.principalDid, "debug seam must return the minted principal DID").toBeTruthy();
   const user = {
     ...seed,
     name: account.handle,
-    did: account.did,
+    did: grant.principalDid,
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
   await ensureRegistered(request, user, { server: opts.server });
+  // Device authorization. soland requires an ACCEPTED ck.device.authorize before
+  // this device may publish an MLS KeyPackage; without it every MLS browser flow
+  // dies at invite with `mls_keypackage_not_found` — the exact failure the
+  // silently-skipped cross-member MLS tests were hiding. Now that the account
+  // identity is the model-B principal DID (whose document designates coauth's
+  // enrollment authority), drive coauth device-enroll → soland event-submit so the
+  // device is verified-with-key BEFORE the browser publishes its KeyPackage on
+  // login. Returns undefined (no-op) when coauth lacks the device-enroll seam.
+  await enrollOnboardedDeviceSigningKey(
+    request,
+    coauth,
+    {
+      account,
+      principalDid: user.did,
+      deviceId: seed.deviceId,
+      deviceKey,
+      grantJwt: grant.grantJwt,
+      grantId: grant.grantId,
+      grantAudience: grant.audience,
+      scopes: grant.scopes,
+    },
+    { server: opts.server },
+  );
   return {
     user,
     grantJwt: grant.grantJwt,

@@ -608,7 +608,12 @@ async function sendEncryptedTimelineMessage(
   const response = await messageSubmit;
   const postData = response.request().postData() ?? "";
   expect(postData).toContain("encrypted_content");
-  expect(postData).toContain("mls-rfc9420");
+  // The per-message content scheme is the MLS-exporter-derived AEAD scheme
+  // (`mls-exporter-aead-v1`) — the shareable-history content scheme — NOT the
+  // realm-level `mls_rfc9420` encryption_profile. (This assertion previously read
+  // "mls-rfc9420" and only ever passed because the test silently skipped when
+  // coauth was absent; it now runs end-to-end.)
+  expect(postData).toContain("mls-exporter-aead");
   expect(postData).not.toContain(body);
   await expect(userPage.page.getByTestId("chat-status")).toContainText(
     /Encrypted message sent/i,
@@ -1252,6 +1257,12 @@ test.describe("MLS group encryption", () => {
 
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(bobPage.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
+      // An invitee viewing encrypted content is required to set up a Recovery Key
+      // first; its modal (no dismiss) otherwise blocks the encrypted timeline from
+      // rendering. Complete it before asserting the decrypted message. (soland DOES
+      // deliver the message to bob's feed — verified separately — so a missing
+      // message here is this client-side gate, not a delivery gap.)
+      await bobPage.completeRecoveryKeySetupIfPrompted();
       const bobMessage = bobPage.timelineEvent(plaintext);
       await expect(bobMessage).toBeVisible({ timeout: 60_000 });
       await expect(bobMessage.getByTestId("event-body")).toContainText(plaintext);
@@ -1284,7 +1295,7 @@ test.describe("MLS group encryption", () => {
       expect(rawEvents.status()).toBe(200);
       const rawWire = JSON.stringify(await rawEvents.json());
       expect(rawWire).toContain("encrypted_content");
-      expect(rawWire).toContain("mls-rfc9420");
+      expect(rawWire).toContain("mls-exporter-aead");
       expect(rawWire).not.toContain(plaintext);
 
       await stepShot(bobPage.page, testInfo, "joined-member-decrypted-e2ee-message");
