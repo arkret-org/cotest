@@ -936,19 +936,22 @@ export async function createDpopUserSessionForAccount(
     displayName: account.displayName,
   };
   await ensureRegistered(request, user, { server: opts.server });
-  // Device authorization. soland requires an ACCEPTED ck.device.authorize before
-  // this device may publish an MLS KeyPackage; without it every MLS browser flow
-  // dies at invite with `mls_keypackage_not_found`. yougen's own on-connect
-  // self-enrollment (app/connect.rs) is racy under the injected-grant path (the
-  // KeyPackage upload can beat the self-enrollment), so authorize the device here
-  // up front. NOTE: this authorizes the DPoP *session* key, which is a DIFFERENT
-  // key than the persisted signing seed yougen signs event/message proofs with.
-  // That mismatch is invisible to kanban strand content (no proof gate) but makes
-  // a receiver's CHAT proof gate (verify_chat_envelope_proof) resolve the wrong
-  // signing key and drop cross-member messages — the remaining
-  // mls-group joined-member gap. The real fix is to authorize yougen's actual
-  // signing-seed key (or make yougen's self-enrollment reliable + KeyPackage
-  // upload wait on it); tracked separately.
+  // Device authorization up front. yougen's own on-connect self-enrollment
+  // (app/connect.rs enroll_current_session_device) can't run under the
+  // injected-grant test seam — it reads the grant from
+  // `state_store.session_grant()`, which the async secure-store upgrade path
+  // clobbers before the device-authorization check runs ("device enrollment
+  // requires an active session grant") — so authorize the device here so the
+  // browser's KeyPackage upload is accepted and the MLS browser flows run.
+  //
+  // KNOWN GAP (mls-group joined-member chat): this authorizes the DPoP session
+  // key, and a receiver's chat proof gate (verify_chat_envelope_proof) then
+  // resolves a device signing key that doesn't match the sender's message proof,
+  // dropping cross-member chat messages. Kanban strand content has no proof gate
+  // so it is unaffected. The clean fix is to make yougen's own self-enrollment
+  // work under the injected-grant seam (so its real event-signer key is
+  // authorized) — its KeyPackage publish already gates on that authorization now
+  // (app/mod.rs) — rather than authorizing the session key here.
   await enrollOnboardedDeviceSigningKey(
     request,
     coauth,
