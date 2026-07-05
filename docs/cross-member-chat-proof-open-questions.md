@@ -8,6 +8,17 @@
 >
 > 本文只记录**已确认的事实**与**互相矛盾/尚未解释的信号**,给下一个接手的人。
 
+> **更新(2026-07-05)—— 结构性根因已落决策。** 本 gap 的公共病灶 = **holder/DPoP
+> key 与设备身份 key(§5.2 `device_public_key`)塌缩成同一 Ed25519 seed + device_id 漂移**,
+> 已抽象为 `cotask/decisions/0004-holder-key-vs-device-identity-key-lifecycle-separation.md`。
+> 关键订正:矛盾 B 把"signing seed == DPoP seed"当成**测试注入路径的 quirk**,但 0004 证明
+> 这是 **yougen 生产设计**——`auth_dpop.rs:341` `ensure_device_key` 从同一 `signing_seed`
+> **既建 DpopHandle 又 `activate_device_signer_from_seed`**。故生产里这两把 key 本就是**同一份
+> 字节**,"DPoP key 不该签 proof"(矛盾 A)的真正区分是**生命周期**而非 key 类型——这反而
+> 坐实了本文档"真凶是 device_id 漂移,不是 key 类型"的结论。0004 是结构框定与修复方向
+> (D2:停 `adopt_device_seed_scope_on_login` 覆盖、身份 key 生命周期独立于 holder 轮换),
+> **但不直接关闭本文档的矛盾 B/C**——聊天绿仍需按下文「方向② 落地路径」解矛盾 C + 对齐 device_id。
+
 ## 已确认的事实
 
 1. **soland 确实投递了消息。** 以 bob 身份查 `/_cokret/self/events?realms=` 含
