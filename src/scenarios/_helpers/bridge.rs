@@ -210,7 +210,7 @@ impl MockCoauthIntrospectionServer {
 async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let (subject, device_id, requests) = {
         let state = depot
-            .obtain::<CoauthIntrospectionState>()
+            .get_typed::<CoauthIntrospectionState>()
             .expect("coauth mock state injected");
         (
             state.subject.clone(),
