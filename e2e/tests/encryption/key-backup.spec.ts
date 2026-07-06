@@ -920,7 +920,7 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
     const errorText = request.failure()?.errorText ?? "";
     if (
       request.method() === "GET" &&
-      /\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|events\/describe|describe)(?:\?|$)/.test(
+      /\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|events\/subscribe|events\/describe|describe)(?:\?|$)/.test(
         url,
       ) &&
       /ERR_ABORTED|NS_BINDING_ABORTED|aborted|cancel/i.test(errorText)
@@ -970,38 +970,9 @@ async function createMlsRecoveryBackupFromPrompt(
   page: Page,
   keyBackupPuts: KeyBackupPut[],
 ): Promise<string> {
-  const setupPrompt = page.getByTestId("recovery-key-setup-modal").last();
-  const setupPromptVisible = await setupPrompt
-    .waitFor({ state: "visible", timeout: 30_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (setupPromptVisible) {
-    await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
-      "role",
-      "dialog",
-    );
-    await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
-      "aria-modal",
-      "true",
-    );
-
-    const generatedKeyField = page
-      .getByTestId("recovery-key-setup-generated-key")
-      .last();
-    await expect(generatedKeyField).toBeVisible({ timeout: 120_000 });
-    const recoveryKey = (await generatedKeyField.inputValue()).trim();
-    expect(recoveryKey.split(/\s+/)).toHaveLength(24);
-    await expect(
-      page.getByTestId("recovery-key-setup-generated-key-warning").last(),
-    ).toBeVisible();
-
-    await page
-      .getByTestId("recovery-key-setup-confirm-key")
-      .last()
-      .fill(recoveryKey);
-    await page.getByTestId("recovery-key-setup-saved").last().click();
-    await expect(setupPrompt).toBeHidden({ timeout: 30_000 });
-    return recoveryKey;
+  const setupRecoveryKey = await completeRecoveryKeySetupPrompt(page, 30_000);
+  if (setupRecoveryKey) {
+    return setupRecoveryKey;
   }
 
   const legacyPrompt = page.getByTestId("mls-backup-modal");
@@ -1052,6 +1023,10 @@ async function createMlsRecoveryBackupFromRecoverySettings(
   await expect(page.getByTestId("recovery-key-section")).toBeVisible({
     timeout: 120_000,
   });
+  const setupRecoveryKey = await completeRecoveryKeySetupPrompt(page, 1_000);
+  if (setupRecoveryKey) {
+    return setupRecoveryKey;
+  }
   await page.getByTestId("recovery-key-regenerate").click();
 
   const generatedKeyField = page.getByTestId("recovery-key-current");
@@ -1073,6 +1048,47 @@ async function createMlsRecoveryBackupFromRecoverySettings(
     /(?:DID recovery backup is on the server|encrypted history (?:is|are) backed up)/i,
     { timeout: 30_000 },
   );
+  return recoveryKey;
+}
+
+async function completeRecoveryKeySetupPrompt(
+  page: Page,
+  timeout: number,
+): Promise<string | undefined> {
+  const setupPrompt = page.getByTestId("recovery-key-setup-modal").last();
+  const setupPromptVisible = await setupPrompt
+    .waitFor({ state: "visible", timeout })
+    .then(() => true)
+    .catch(() => false);
+  if (!setupPromptVisible) {
+    return undefined;
+  }
+
+  await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
+    "role",
+    "dialog",
+  );
+  await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
+    "aria-modal",
+    "true",
+  );
+
+  const generatedKeyField = page
+    .getByTestId("recovery-key-setup-generated-key")
+    .last();
+  await expect(generatedKeyField).toBeVisible({ timeout: 120_000 });
+  const recoveryKey = (await generatedKeyField.inputValue()).trim();
+  expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+  await expect(
+    page.getByTestId("recovery-key-setup-generated-key-warning").last(),
+  ).toBeVisible();
+
+  await page
+    .getByTestId("recovery-key-setup-confirm-key")
+    .last()
+    .fill(recoveryKey);
+  await page.getByTestId("recovery-key-setup-saved").last().click();
+  await expect(setupPrompt).toBeHidden({ timeout: 30_000 });
   return recoveryKey;
 }
 
@@ -1115,22 +1131,20 @@ function normalizeRecoveryKeyText(value: string): string {
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
-  const unlockModal = page.getByTestId("mls-unlock-modal");
+  const unlockPrompt = page
+    .locator('[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]')
+    .last();
   const visibleUnlockStatus = page.locator(
     '[data-testid="mls-unlock-status"]:visible',
   );
 
-  await expect(unlockModal).toBeVisible({
+  await expect(unlockPrompt).toBeVisible({
     timeout: 90_000,
   });
-  await expect(page.getByTestId("mls-unlock-banner")).toHaveAttribute(
-    "role",
-    "dialog",
-  );
-  await expect(page.getByTestId("mls-unlock-banner")).toHaveAttribute(
-    "aria-modal",
-    "true",
-  );
+  await expect(unlockPrompt).toHaveAttribute("role", /^(?:dialog|region)$/);
+  if ((await unlockPrompt.getAttribute("role")) === "dialog") {
+    await expect(unlockPrompt).toHaveAttribute("aria-modal", "true");
+  }
   // `mls-unlock-passphrase` is the historical testid of the unlock input;
   // since the Recovery Key convergence it accepts only the 24-word key.
   const showRecoveryKey = page.getByTestId("mls-unlock-show-recovery-key");
@@ -1145,7 +1159,7 @@ async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   await expect
     .poll(
       async () => {
-        if (!(await unlockModal.isVisible().catch(() => false))) {
+        if (!(await unlockPrompt.isVisible().catch(() => false))) {
           return "closed";
         }
         const status = await visibleUnlockStatus.textContent().catch(() => "");
@@ -1157,7 +1171,7 @@ async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
       { timeout: 120_000 },
     )
     .toMatch(/^(?:restored|closed)$/);
-  await expect(unlockModal).not.toBeVisible({
+  await expect(unlockPrompt).not.toBeVisible({
     timeout: 30_000,
   });
 }

@@ -572,9 +572,10 @@ export async function revokeDevice(
   principal: RecoveryPrincipal,
   deviceId: string,
   revokedBy: string,
+  submitterToken: string,
 ): Promise<void> {
   const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-    headers: authHeaders(principal.token),
+    headers: authHeaders(submitterToken),
     data: signedEventEnvelope({
       actorDid: principal.user.did,
       realmId: principal.realmId,

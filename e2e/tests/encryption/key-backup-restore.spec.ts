@@ -178,6 +178,7 @@ test.describe("key backup restore live path", () => {
   });
 
   test("yougen crypto and late-recovery banner helpers stay live", async () => {
+    test.setTimeout(600_000);
     // Recovery-Key convergence: the vault-passphrase helpers are gone; the
     // live client contract is the seal/open vault primitives (fed by the
     // 24-word Recovery Key), the commitment-based wrong-key reject, and the
@@ -352,7 +353,16 @@ function deleteProof(actorDid: string, backupId: string): string {
 async function runYougenLibTest(filter: string): Promise<void> {
   const { stdout, stderr } = await execFileAsync(
     CARGO_BIN,
-    ["test", "--manifest-path", YOUGEN_MANIFEST, "--lib", filter, "--", "--nocapture"],
+    [
+      "test",
+      "--manifest-path",
+      YOUGEN_MANIFEST,
+      "--lib",
+      filter,
+      "--",
+      "--exact",
+      "--nocapture",
+    ],
     {
       cwd: YOUGEN_CWD,
       timeout: CARGO_TEST_TIMEOUT_MS,

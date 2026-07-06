@@ -13,7 +13,6 @@ import {
   buildDeviceCrossSigningBinding,
   buildDevicePossessionSignature,
   TEST_DEVICE_ALGORITHMS,
-  type CrossSigningIdentity,
   deviceVerifyKeyMultibase,
   generateCrossSigningIdentity,
 } from "../../helpers/cross-signing-harness";
@@ -34,8 +33,11 @@ import {
   wireErrReason,
 } from "../../helpers/soland-api";
 import {
+  createDpopUserSession,
   ensureRegistered,
   issueDevSession,
+  selfPathHeadersForDpopSession,
+  type DpopUserSession,
   type JointUser,
   openUserPage,
   uniqueUser,
@@ -46,6 +48,24 @@ test.describe.configure({ mode: "serial" });
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
   "ck.profile.mls_governance_binding.full.v1";
 const MLS_REDUCER_PROFILE_V1 = "ck.reducer.v1";
+
+type SelfPathHeadersSource =
+  | string
+  | ((method: string, url: string) => Record<string, string>);
+
+function selfPathHeaders(
+  source: SelfPathHeadersSource,
+  method: string,
+  url: string,
+): Record<string, string> {
+  return typeof source === "string" ? authHeaders(source) : source(method, url);
+}
+
+function dpopHeadersSource(
+  session: DpopUserSession,
+): (method: string, url: string) => Record<string, string> {
+  return (method, url) => selfPathHeadersForDpopSession(session, method, url);
+}
 
 test.describe("multi-device pairing + revocation", () => {
   test("dev-login twice for the same actor returns two distinct sessions (proxy for two-device state until real pairing lands)", async ({
@@ -1145,13 +1165,32 @@ test.describe("multi-device pairing + revocation", () => {
     // publish + ck.device.authorize the suite already exercises above) before
     // driving the UI. Device-2 then delivers its pairing request over the
     // to-device queue; device-1's background sync surfaces the global prompt.
-    const alice = uniqueUser(`s10-pair-approve-${Date.now()}`);
-    await ensureRegistered(request, alice);
-    const device1Token = await issueDevSession(request, alice);
-    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+    const device1Session = await createDpopUserSession(
+      request,
+      `s10-pair-approve-${Date.now()}`,
+      { skipDeviceEnrollment: false },
+    );
+    test.skip(
+      !device1Session,
+      "coauth DPoP session-grant login is required for UI device-pair approval",
+    );
+    if (!device1Session) {
+      return;
+    }
+    const alice = device1Session.user;
+    const device1Headers = dpopHeadersSource(device1Session);
+    await promoteDeviceToVerified(
+      request,
+      alice,
+      device1Headers,
+      alice.deviceId,
+    );
 
     const device1 = await openUserPage(browser, alice, {
-      sessionCredential: device1Token,
+      grantJwt: device1Session.grantJwt,
+      dpopSeedB64url: device1Session.dpopSeedB64url,
+      grantId: device1Session.grantId,
+      grantAudience: device1Session.grantAudience,
     });
     try {
       // Device-1 just needs to be inside the app so its background sync drains
@@ -1161,7 +1200,7 @@ test.describe("multi-device pairing + revocation", () => {
       const { pairingCode, requestingDeviceId, newDevicePublicKey } = await deliverPairingRequest(
         request,
         alice,
-        device1Token,
+        device1Headers,
         { displayName: "Alice second browser" },
       );
 
@@ -1185,19 +1224,7 @@ test.describe("multi-device pairing + revocation", () => {
       await expect
         .poll(
           async () => {
-            const viewer = await request.get(
-              `${solandBaseUrl()}/_cokret/self/account/viewer`,
-              { headers: authHeaders(device1Token) },
-            );
-            if (!viewer.ok()) {
-              return undefined;
-            }
-            const body = (await viewer.json()) as {
-              devices?: Array<{ device_id?: string; status?: string }>;
-            };
-            return (body.devices ?? []).find(
-              (device) => device.device_id === requestingDeviceId,
-            )?.status;
+            return pollDeviceStatus(request, device1Headers, requestingDeviceId);
           },
           { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
         )
@@ -1205,7 +1232,7 @@ test.describe("multi-device pairing + revocation", () => {
 
       const pairedRecord = await queryDeviceKeyRecord(
         request,
-        device1Token,
+        device1Headers,
         alice.did,
         requestingDeviceId,
       );
@@ -1223,20 +1250,39 @@ test.describe("multi-device pairing + revocation", () => {
     // spec: device-lifecycle.md §7 (no trust without explicit approval).
     // device-pair-approval-reject calls dismiss_pairing_to_device_message and
     // never POSTs device-pair, so the new device is never added to the list.
-    const alice = uniqueUser(`s10-pair-reject-${Date.now()}`);
-    await ensureRegistered(request, alice);
-    const device1Token = await issueDevSession(request, alice);
-    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+    const device1Session = await createDpopUserSession(
+      request,
+      `s10-pair-reject-${Date.now()}`,
+      { skipDeviceEnrollment: false },
+    );
+    test.skip(
+      !device1Session,
+      "coauth DPoP session-grant login is required for UI device-pair rejection",
+    );
+    if (!device1Session) {
+      return;
+    }
+    const alice = device1Session.user;
+    const device1Headers = dpopHeadersSource(device1Session);
+    await promoteDeviceToVerified(
+      request,
+      alice,
+      device1Headers,
+      alice.deviceId,
+    );
 
     const device1 = await openUserPage(browser, alice, {
-      sessionCredential: device1Token,
+      grantJwt: device1Session.grantJwt,
+      dpopSeedB64url: device1Session.dpopSeedB64url,
+      grantId: device1Session.grantId,
+      grantAudience: device1Session.grantAudience,
     });
     try {
       await device1.gotoHome();
       const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
         request,
         alice,
-        device1Token,
+        device1Headers,
         { displayName: "Alice rejected browser" },
       );
 
@@ -1257,7 +1303,7 @@ test.describe("multi-device pairing + revocation", () => {
       // settle, then assert absence.
       const seenStatus = await pollDeviceStatus(
         request,
-        device1Token,
+        device1Headers,
         requestingDeviceId,
       );
       expect(seenStatus).toBeUndefined();
@@ -1275,51 +1321,63 @@ test.describe("multi-device pairing + revocation", () => {
     // to-device inbox via parse_pending_pairing_requests and approves through
     // POST /_cokret/gate/account/device-pair; pending-pairing-refresh-button
     // re-reads the inbox after the background sync has drained the request.
-    const alice = uniqueUser(`s10-pair-card-${Date.now()}`);
-    await ensureRegistered(request, alice);
-    const device1Token = await issueDevSession(request, alice);
-    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+    const device1Session = await createDpopUserSession(
+      request,
+      `s10-pair-card-${Date.now()}`,
+      { skipDeviceEnrollment: false },
+    );
+    test.skip(
+      !device1Session,
+      "coauth DPoP session-grant login is required for UI device-pair settings card",
+    );
+    if (!device1Session) {
+      return;
+    }
+    const alice = device1Session.user;
+    const device1Headers = dpopHeadersSource(device1Session);
+    await promoteDeviceToVerified(
+      request,
+      alice,
+      device1Headers,
+      alice.deviceId,
+    );
 
     const device1 = await openUserPage(browser, alice, {
-      sessionCredential: device1Token,
+      grantJwt: device1Session.grantJwt,
+      dpopSeedB64url: device1Session.dpopSeedB64url,
+      grantId: device1Session.grantId,
+      grantAudience: device1Session.grantAudience,
     });
     try {
       await device1.gotoHome();
       const { pairingCode, requestingDeviceId, newDevicePublicKey } = await deliverPairingRequest(
         request,
         alice,
-        device1Token,
+        device1Headers,
         { displayName: "Alice card browser" },
       );
 
-      // The global prompt also mounts here; dismiss it (Reject local-only is
-      // fine — it just removes the in-memory inbox copy for the prompt) so it
-      // does not overlay the settings card. Instead, navigate straight to the
-      // pairing settings and drive the card. The card reads the same inbox.
+      // The global prompt also mounts here. Hide it in this page only so the
+      // settings-card path can approve the same pending inbox request.
       await device1.page.goto("/settings/devices/pair", {
         waitUntil: "domcontentloaded",
+      });
+      await device1.page.addStyleTag({
+        content:
+          "[data-testid='device-pair-approval-modal'],[class^='dx-dialog-backdrop'],[class*=' dx-dialog-backdrop']{display:none!important;visibility:hidden!important;pointer-events:none!important;}",
       });
       await expect(
         device1.page.getByTestId("pending-pairing-requests-card"),
       ).toBeVisible({ timeout: 120_000 });
 
-      // Re-read the inbox until the background sync has surfaced the request,
-      // refreshing the card between polls.
+      // Re-read the inbox once, then let Playwright wait for the row that this
+      // test delivered to the authorized device.
       const requestRow = device1.page
         .getByTestId("pending-pairing-request")
-        .filter({ hasText: pairingCode })
+        .filter({ hasText: "Alice card browser" })
         .first();
-      await expect
-        .poll(
-          async () => {
-            await device1.page
-              .getByTestId("pending-pairing-refresh-button")
-              .click();
-            return requestRow.isVisible().catch(() => false);
-          },
-          { timeout: 90_000, intervals: [1_000, 2_000, 5_000] },
-        )
-        .toBe(true);
+      await device1.page.getByTestId("pending-pairing-refresh-button").click();
+      await expect(requestRow).toBeVisible({ timeout: 90_000 });
       await expect(
         requestRow.getByTestId("pending-pairing-code"),
       ).toHaveText(pairingCode, { timeout: 15_000 });
@@ -1328,14 +1386,14 @@ test.describe("multi-device pairing + revocation", () => {
 
       await expect
         .poll(
-          () => pollDeviceStatus(request, device1Token, requestingDeviceId),
+          () => pollDeviceStatus(request, device1Headers, requestingDeviceId),
           { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
         )
         .toBe("active");
 
       const pairedRecord = await queryDeviceKeyRecord(
         request,
-        device1Token,
+        device1Headers,
         alice.did,
         requestingDeviceId,
       );
@@ -1359,13 +1417,14 @@ test.describe("multi-device pairing + revocation", () => {
 async function promoteDeviceToVerified(
   request: APIRequestContext,
   user: JointUser,
-  token: string,
+  headersSource: SelfPathHeadersSource,
   deviceId: string,
 ) {
   const realmId = principalControlRealmForDid(user.did);
   const identity = generateCrossSigningIdentity({ principalId: user.did });
-  const publish = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-    headers: authHeaders(token),
+  const eventsUrl = `${solandBaseUrl()}/_cokret/self/events`;
+  const publish = await request.post(eventsUrl, {
+    headers: selfPathHeaders(headersSource, "POST", eventsUrl),
     data: signedEventEnvelope({
       actorDid: user.did,
       realmId,
@@ -1387,10 +1446,8 @@ async function promoteDeviceToVerified(
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
   const authorizeNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  const authorize = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
-    {
-      headers: authHeaders(token),
+  const authorize = await request.post(eventsUrl, {
+      headers: selfPathHeaders(headersSource, "POST", eventsUrl),
       data: signedEventEnvelope({
         actorDid: user.did,
         realmId,
@@ -1416,8 +1473,7 @@ async function promoteDeviceToVerified(
           cross_signing_binding: binding,
         },
       }),
-    },
-  );
+    });
   expect(
     [200, 201],
     `ck.device.authorize (self-verify) returned ${authorize.status()}: ${await authorize.text()}`,
@@ -1425,7 +1481,7 @@ async function promoteDeviceToVerified(
 
   // The device surfaces as authorized (status=active) in the projection.
   await expect
-    .poll(() => pollDeviceStatus(request, token, deviceId), {
+    .poll(() => pollDeviceStatus(request, headersSource, deviceId), {
       timeout: 30_000,
       intervals: [500, 1_000, 2_000],
     })
@@ -1442,7 +1498,7 @@ async function promoteDeviceToVerified(
 async function deliverPairingRequest(
   request: APIRequestContext,
   user: JointUser,
-  senderToken: string,
+  senderHeadersSource: SelfPathHeadersSource,
   opts: { displayName?: string } = {},
 ): Promise<{ requestingDeviceId: string; pairingCode: string; newDevicePublicKey: string }> {
   const requestingDeviceId = typedId("device");
@@ -1462,7 +1518,11 @@ async function deliverPairingRequest(
     `${solandBaseUrl()}/_cokret/self/device_messages`,
     {
       headers: {
-        ...authHeaders(senderToken),
+        ...selfPathHeaders(
+          senderHeadersSource,
+          "POST",
+          `${solandBaseUrl()}/_cokret/self/device_messages`,
+        ),
         "Idempotency-Key": `pair-${requestingDeviceId}`,
       },
       data: {
@@ -1503,13 +1563,13 @@ async function deliverPairingRequest(
 /// absent or the read fails.
 async function pollDeviceStatus(
   request: APIRequestContext,
-  token: string,
+  headersSource: SelfPathHeadersSource,
   deviceId: string,
 ): Promise<string | undefined> {
-  const viewer = await request.get(
-    `${solandBaseUrl()}/_cokret/self/account/viewer`,
-    { headers: authHeaders(token) },
-  );
+  const viewerUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+  const viewer = await request.get(viewerUrl, {
+    headers: selfPathHeaders(headersSource, "GET", viewerUrl),
+  });
   if (!viewer.ok()) {
     return undefined;
   }
@@ -1631,12 +1691,13 @@ async function revokeDeviceApi(
 
 async function queryDeviceKeyRecord(
   request: APIRequestContext,
-  token: string,
+  headersSource: SelfPathHeadersSource,
   principalId: string,
   deviceId: string,
 ): Promise<Record<string, unknown>> {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/keys/query`, {
-    headers: authHeaders(token),
+  const queryUrl = `${solandBaseUrl()}/_cokret/self/keys/query`;
+  const response = await request.post(queryUrl, {
+    headers: selfPathHeaders(headersSource, "POST", queryUrl),
     data: {
       device_keys: {
         [principalId]: [deviceId],

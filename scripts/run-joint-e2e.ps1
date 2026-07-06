@@ -877,6 +877,53 @@ function Wait-LogContains {
     throw "Timed out waiting for any log pattern '$($Pattern -join "', '")' in $Path"
 }
 
+function Test-DioxusBuildPlaceholder {
+    param([AllowNull()][string]$Content)
+
+    if (-not $Content) {
+        return $true
+    }
+
+    $markers = @(
+        "We're building your app now",
+        "One sec!",
+        "qrcode compiling"
+    )
+    foreach ($marker in $markers) {
+        if ($Content.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Wait-DioxusAppReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastError = $null
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
+                if (-not (Test-DioxusBuildPlaceholder -Content $response.Content)) {
+                    return
+                }
+                $lastError = "Dioxus build placeholder still served"
+            } else {
+                $lastError = "HTTP $($response.StatusCode)"
+            }
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        Start-Sleep -Milliseconds 1000
+    }
+    throw "Timed out waiting for Dioxus app at $Url. Last error: $lastError"
+}
+
 function Start-ManagedCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -1826,6 +1873,7 @@ try {
         Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedYougenCommand -and $yougenService) {
             Wait-LogContains -Path $yougenService.Stdout -Pattern @("Build completed successfully", "Serving your app") -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-DioxusAppReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
     if (-not $SkipYougen -and $DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
@@ -1840,6 +1888,7 @@ try {
         Wait-HttpReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedYougenBetaCommand -and $yougenBetaService) {
             Wait-LogContains -Path $yougenBetaService.Stdout -Pattern @("Build completed successfully", "Serving your app") -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-DioxusAppReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
 

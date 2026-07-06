@@ -510,7 +510,13 @@ test.describe("account recovery", () => {
     expect(firstRestore.completeResponse.ok).toBe(true);
 
     // Revoke device-1 (the original dev-login signer) from device-2 (a peer).
-    await revokeDevice(request, principal, principal.user.deviceId, firstRestore.deviceId);
+    await revokeDevice(
+      request,
+      principal,
+      principal.user.deviceId,
+      firstRestore.deviceId,
+      firstRestore.deviceToken,
+    );
 
     // A subsequent recovery_unlock restore still succeeds post-revoke — the
     // recovery factor does not depend on the revoked device. The §15 step-3
