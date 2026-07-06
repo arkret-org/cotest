@@ -221,6 +221,37 @@ function Invoke-NativeCapture {
     }
 }
 
+function Resolve-PlaywrightCliInvocation {
+    param([Parameter(Mandatory = $true)][string]$E2eRoot)
+
+    $node = Find-CommandPath @("node.exe", "node")
+    if ($node) {
+        foreach ($cliPath in @(
+                (Join-Path $E2eRoot "node_modules\@playwright\test\cli.js"),
+                (Join-Path $E2eRoot "node_modules\playwright\cli.js")
+            )) {
+            if (Test-Path $cliPath) {
+                return [pscustomobject]@{
+                    FilePath  = $node
+                    Arguments = @($cliPath)
+                    Detail    = "$node $cliPath"
+                }
+            }
+        }
+    }
+
+    $npx = Find-CommandPath @("npx.cmd", "npx")
+    if ($npx) {
+        return [pscustomobject]@{
+            FilePath  = $npx
+            Arguments = @("playwright")
+            Detail    = $npx
+        }
+    }
+
+    return $null
+}
+
 function Test-DockerImagePresent {
     param([Parameter(Mandatory = $true)][string]$ImageTag)
 
@@ -340,10 +371,13 @@ function Invoke-JointE2ePreflight {
         Add-PreflightResult $results "e2e node_modules" "pass" "missing; runner will execute npm install"
     }
 
-    if ($npx) {
+    $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $E2eRoot
+    if ($playwrightCli) {
+        Add-PreflightResult $results "playwright cli" "pass" $playwrightCli.Detail
         Push-Location $E2eRoot
         try {
-            $playwrightVersionOutput = Invoke-NativeCapture -FilePath $npx -Arguments @("playwright", "--version")
+            $playwrightBaseArgs = @($playwrightCli.Arguments)
+            $playwrightVersionOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + @("--version"))
             $playwrightVersionExitCode = $LASTEXITCODE
             $playwrightVersion = $playwrightVersionOutput -join "`n"
             if ($playwrightVersionExitCode -eq 0) {
@@ -352,11 +386,11 @@ function Invoke-JointE2ePreflight {
                 Add-PreflightResult $results "playwright package" "fail" $playwrightVersion
             }
 
-            $listArgs = @("playwright", "test", "--config", "playwright.config.ts", "--list")
+            $listArgs = @("test", "--config", "playwright.config.ts", "--list")
             foreach ($project in $PlaywrightProjects) {
                 $listArgs += @("--project", $project)
             }
-            $listCommandOutput = Invoke-NativeCapture -FilePath $npx -Arguments $listArgs
+            $listCommandOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + $listArgs)
             $listExitCode = $LASTEXITCODE
             $listOutput = $listCommandOutput -join "`n"
             if ($listExitCode -eq 0) {
@@ -365,7 +399,7 @@ function Invoke-JointE2ePreflight {
                 Add-PreflightResult $results "playwright projects" "fail" $listOutput
             }
 
-            $browserListOutput = Invoke-NativeCapture -FilePath $npx -Arguments @("playwright", "install", "--list")
+            $browserListOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + @("install", "--list"))
             $browserListExitCode = $LASTEXITCODE
             $browserList = $browserListOutput -join "`n"
             if ($browserListExitCode -eq 0) {
@@ -377,6 +411,8 @@ function Invoke-JointE2ePreflight {
         finally {
             Pop-Location
         }
+    } else {
+        Add-PreflightResult $results "playwright cli" "fail" "Playwright CLI is required"
     }
 
     if ($WillStartDefaultSoland -or (-not $SolandBaseUrl -and -not $SolandCommand)) {
@@ -1915,11 +1951,12 @@ try {
     if (-not $SkipBrowserInstall -and $needsBundledChromium) {
         Push-Location $e2eRoot
         try {
-            $npxInstallCommandInfo = Get-Command npx.cmd -ErrorAction SilentlyContinue
-            if (-not $npxInstallCommandInfo) {
-                $npxInstallCommandInfo = Get-Command npx -ErrorAction Stop
+            $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $e2eRoot
+            if (-not $playwrightCli) {
+                throw "Playwright CLI is required"
             }
-            & $npxInstallCommandInfo.Source playwright install chromium
+            $browserInstallArgs = @($playwrightCli.Arguments) + @("install", "chromium")
+            & $playwrightCli.FilePath @browserInstallArgs
             if ($LASTEXITCODE -ne 0) {
                 throw "playwright browser install failed"
             }
@@ -2100,7 +2137,7 @@ try {
         Remove-Item Env:COTEST_MOCK_CHALLENGE_PROVIDER_DID -ErrorAction SilentlyContinue
     }
 
-    $playwrightArgs = @("playwright", "test", "--config", "playwright.config.ts")
+    $playwrightArgs = @("test", "--config", "playwright.config.ts")
     foreach ($project in $playwrightProjects) {
         $playwrightArgs += @("--project", $project)
     }
@@ -2127,16 +2164,17 @@ try {
     }
     $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
     $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"
-    $npxCommandInfo = Get-Command npx.cmd -ErrorAction SilentlyContinue
-    if (-not $npxCommandInfo) {
-        $npxCommandInfo = Get-Command npx -ErrorAction Stop
+    $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $e2eRoot
+    if (-not $playwrightCli) {
+        throw "Playwright CLI is required"
     }
-    $npxCommand = $npxCommandInfo.Source
+    $playwrightCommand = $playwrightCli.FilePath
+    $playwrightCommandArgs = @($playwrightCli.Arguments) + $playwrightArgs
     Push-Location $e2eRoot
     try {
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        $playwrightOutput = & $npxCommand @playwrightArgs 2>&1
+        $playwrightOutput = & $playwrightCommand @playwrightCommandArgs 2>&1
         $exitCode = $LASTEXITCODE
         $playwrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
         "" | Set-Content -Path $playwrightStderr -Encoding UTF8
