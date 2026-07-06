@@ -170,7 +170,7 @@ impl MockPushReceiver {
 #[handler]
 async fn push_sink(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let notifications = depot
-        .obtain::<PushReceiverState>()
+        .get_typed::<PushReceiverState>()
         .expect("push mock state injected")
         .notifications
         .clone();
