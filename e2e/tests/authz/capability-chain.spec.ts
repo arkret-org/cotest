@@ -17,6 +17,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
+  addRealmMemberApi,
   buildCapabilityGrantEnvelope,
   createRealmApi,
   grantCapabilityEventApi,
@@ -109,6 +110,8 @@ async function setupOwnerRealm(request: APIRequestContext, label: string) {
     title: `cap ${label} ${Date.now()}`,
     discoverability: "listed",
   });
+  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  await addRealmMemberApi(request, aliceToken, realmId, carol.did);
   return { alice, bob, carol, aliceToken, bobToken, realmId };
 }
 
