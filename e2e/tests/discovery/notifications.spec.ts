@@ -17,8 +17,10 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -32,20 +34,22 @@ test.describe("notifications", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s23-alice");
-    const bob = uniqueUser("s23-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      openDpopUserPage(browser, request, "s23-alice", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "s23-bob", {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired("notifications default browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceSession.page;
+    const bob = bobSession.user;
+    const bobPage = bobSession.page;
 
     try {
       const realmId = await alicePage.createRealm({

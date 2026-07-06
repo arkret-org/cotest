@@ -10,9 +10,10 @@ import {
 } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
-  openUserPage,
+  openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -24,20 +25,22 @@ test.describe("discovery", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s24-alice-${stamp}`);
-    const bob = uniqueUser(`s24-bob-${stamp}`);
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      openDpopUserPage(browser, request, `s24-alice-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, `s24-bob-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired("directory contact browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceSession.page;
+    const bob = bobSession.user;
+    const bobPage = bobSession.page;
 
     try {
       // Pre-contact: directory search for bob from alice returns empty.
@@ -372,9 +375,18 @@ test.describe("discovery", () => {
     expect(typeof demo!.policy_revision).toBe("string");
 
     // UI smoke — the Organizations tab renders the result row.
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    const aliceSession = await openDpopUserPage(
+      browser,
+      request,
+      `s24-org-ui-${stamp}`,
+      { prepareMlsDevice: false },
+    );
+    if (!aliceSession) {
+      assertJointStackNotRequired("directory organization browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceSession.page;
     try {
       await alicePage.gotoDirectory();
       await alicePage.page.getByTestId("tab-organizations").click();
