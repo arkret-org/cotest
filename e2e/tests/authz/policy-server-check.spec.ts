@@ -386,26 +386,97 @@ test.describe("policy server check", () => {
     await request.delete(`${baseUrl}/scenarios`);
   });
 
-  test.fixme(
-    // @blocking-on: soland multi-source (org-level) policy_server binding.
-    //   soland resolves at most ONE policy server per realm: the realm's own
-    //   ck.realm.policy_server, else an org-fallback walked via the realm's
-    //   governed_by link chain (reducer/realm_policy_server.rs +
-    //   reducer/apply_objects/queries.rs::realm_policy_server_config). It is a
-    //   fallback, not an override: if the realm declares its own server the org
-    //   one is never consulted, so "both sources called, org wins" is not a
-    //   shape soland produces. There is also no self-API to (a) declare an
-    //   org-level policy server (only PUT .../realms/{id}/policy-server exists)
-    //   or (b) establish a governed_by link between two realms, and
-    //   validate_policy_server_url forbids the ?source= query the original draft
-    //   used to disambiguate. Promote once an org-level policy-server binding +
-    //   a governed_by self-surface land and spec section 3.2 precedence is
-    //   expressed via that fallback chain.
-    // @user-promise: e2e/scenarios/authz/policy-server-check.md (E3.2)
+  test(
     "E3.2 multi-source priority: org policy_server applies via governed_by fallback when realm declares none",
-    async () => {
-      // Intentionally empty: blocked on the org-level binding + governed_by
-      // self-surface described in @blocking-on.
+    async ({ request }) => {
+      const stamp = Date.now();
+      const alice = uniqueUser(`s30-policy-fallback-alice-${stamp}`);
+      await ensureRegistered(request, alice);
+      const aliceToken = await issueDevSession(request, alice);
+      const orgRealmId = await createRealmApi(request, aliceToken, {
+        title: `S30 policy fallback org ${stamp}`,
+        discoverability: "listed",
+        history_visibility: "shared",
+        public: true,
+      });
+      const childRealmId = await createRealmApi(request, aliceToken, {
+        title: `S30 policy fallback child ${stamp}`,
+        discoverability: "listed",
+        history_visibility: "shared",
+        public: true,
+      });
+
+      const orgDid = "did:web:policy-org.example.com";
+      const orgBaseUrl = "http://127.0.0.1:9";
+      const orgUrl = `${orgBaseUrl}/_cokret/self/policy/check`;
+      await declarePolicyServer(request, aliceToken, orgRealmId, orgBaseUrl, orgDid, {
+        cacheTtlSeconds: 17,
+        timeoutMs: 1200,
+      });
+
+      const noFallbackYet = await request.get(
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(noFallbackYet.status()).toBe(404);
+
+      const link = await request.post(
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/links`,
+        {
+          headers: authHeaders(aliceToken),
+          data: {
+            target_realm_id: orgRealmId,
+            link_kind: "governed_by",
+            status: "active",
+          },
+        },
+      );
+      const linkBody = await expectJsonOk<Record<string, unknown>>(
+        link,
+        "create child governed_by policy fallback link",
+      );
+      expect(linkBody.realm_id).toBe(childRealmId);
+      expect(linkBody.target_realm_id).toBe(orgRealmId);
+      expect(linkBody.link_kind).toBe("governed_by");
+      expect(linkBody.status).toBe("active");
+
+      const fallback = await request.get(
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      const fallbackBody = await expectJsonOk<Record<string, unknown>>(
+        fallback,
+        "read child policy_server through governed_by fallback",
+      );
+      expect(fallbackBody.realm_id).toBe(orgRealmId);
+      expect(fallbackBody.policy_server_did).toBe(orgDid);
+      expect(fallbackBody.policy_server_url).toBe(orgUrl);
+      expect(fallbackBody.cache_ttl_seconds).toBe(17);
+      expect(fallbackBody.timeout_ms).toBe(1200);
+      expect(fallbackBody.from_org_fallback).toBe(true);
+
+      const childDid = "did:web:policy-child.example.com";
+      const childBaseUrl = "http://127.0.0.1:10";
+      const childUrl = `${childBaseUrl}/_cokret/self/policy/check`;
+      await declarePolicyServer(request, aliceToken, childRealmId, childBaseUrl, childDid, {
+        cacheTtlSeconds: 3,
+        timeoutMs: 900,
+      });
+
+      const direct = await request.get(
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      const directBody = await expectJsonOk<Record<string, unknown>>(
+        direct,
+        "read child direct policy_server overriding fallback",
+      );
+      expect(directBody.realm_id).toBe(childRealmId);
+      expect(directBody.policy_server_did).toBe(childDid);
+      expect(directBody.policy_server_url).toBe(childUrl);
+      expect(directBody.cache_ttl_seconds).toBe(3);
+      expect(directBody.timeout_ms).toBe(900);
+      expect(directBody.from_org_fallback).toBe(false);
     },
   );
 
