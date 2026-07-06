@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 
@@ -58,7 +58,7 @@ pub fn run_schema_validation_suite() -> Result<()> {
     let mut enum_negative_vectors = 0usize;
     let mut typed_id_negative_vectors = 0usize;
     let mut compiled_property_validators = 0usize;
-    let mut seen_ids = BTreeSet::new();
+    let mut seen_ids = BTreeMap::new();
 
     for entry in registry_entries {
         let schema_id = required_str(entry, "schema_id")?;
@@ -77,8 +77,10 @@ pub fn run_schema_validation_suite() -> Result<()> {
         if actual_id != expected_id {
             bail!("schema {schema_id} $id drift: expected {expected_id}, got {actual_id}");
         }
-        if !seen_ids.insert(actual_id.to_owned()) {
-            bail!("duplicate schema $id {actual_id}");
+        if let Some(previous_file) = seen_ids.insert(actual_id.to_owned(), file.to_owned())
+            && previous_file != file
+        {
+            bail!("duplicate schema $id {actual_id} appears in both {previous_file} and {file}");
         }
         id_consistency_checks += 1;
 

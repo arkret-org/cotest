@@ -27,7 +27,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::Utc;
+use chrono::{SecondsFormat, Utc};
 use cotest::harness::{
     CokretServer, add_member, create_realm, event_envelope, expect_api_error, expect_json,
     register_account, submit_event,
@@ -79,27 +79,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     );
 
     // 2. pair the runtime key -> durable ck.agent.key.authorize -> active.
-    let pair = server
-        .http()
-        .post(server.url("/_cokret/gate/account/agent-key-pair"))
-        .bearer_auth(&token)
-        .json(&json!({
-            "pairing_request_id": prov["pairing_request_id"],
-            "agent_principal_id": agent_did,
-            "verification_method": format!("{agent_did}#runtime-key-1"),
-            "public_key": {"key_type": "Ed25519", "public_key_multibase": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"},
-            "proof_of_possession": {
-                "challenge": "YWJj",
-                "audience": server.url("").trim_end_matches('/'),
-                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "expires_at": "2026-12-31T23:59:59Z",
-                "signature": "YQ"
-            }
-        }))
-        .send()
-        .await?;
-    assert_eq!(pair.status(), StatusCode::OK, "pairing must return 200");
-    let pair: Value = pair.json().await?;
+    let pair = pair_agent_runtime_key(&server, &token, &prov).await?;
     assert!(
         pair["authorized_event_ref"].as_str().is_some(),
         "authorized_event_ref present"
@@ -429,33 +409,126 @@ async fn provision_and_pair_agent(
         "pending_runtime_key"
     );
 
-    let pair = server
-        .http()
-        .post(server.url("/_cokret/gate/account/agent-key-pair"))
-        .bearer_auth(token)
-        .json(&json!({
-            "pairing_request_id": prov["pairing_request_id"],
-            "agent_principal_id": agent_did,
-            "verification_method": format!("{agent_did}#runtime-key-1"),
-            "public_key": {"key_type": "Ed25519", "public_key_multibase": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"},
-            "proof_of_possession": {
-                "challenge": "YWJj",
-                "audience": server.url("").trim_end_matches('/'),
-                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "expires_at": "2026-12-31T23:59:59Z",
-                "signature": "YQ"
-            }
-        }))
-        .send()
-        .await?;
-    assert_eq!(pair.status(), StatusCode::OK, "pairing must return 200");
-    let pair: Value = pair.json().await?;
+    let pair = pair_agent_runtime_key(server, token, &prov).await?;
     assert!(
         pair["authorized_event_ref"].as_str().is_some(),
         "authorized_event_ref present"
     );
     assert_eq!(agent_status(server, token, &agent_did).await?, "active");
     Ok(agent_did)
+}
+
+async fn pair_agent_runtime_key(
+    server: &CokretServer,
+    token: &str,
+    provisioned: &Value,
+) -> Result<Value> {
+    let agent_did = provisioned["agent_principal_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("agent_principal_id missing: {provisioned}"))?;
+    let pairing_request_id = provisioned["pairing_request_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("pairing_request_id missing: {provisioned}"))?;
+    let pairing_code = provisioned["pairing_code"]
+        .as_str()
+        .ok_or_else(|| anyhow!("pairing_code missing: {provisioned}"))?;
+    let pairing_expires_at = provisioned["expires_at"]
+        .as_str()
+        .ok_or_else(|| anyhow!("expires_at missing: {provisioned}"))?;
+    let agent_id = cokret::Did::new(agent_did.to_owned())
+        .map_err(|err| anyhow!("agent_principal_id invalid: {err}"))?;
+    let controller_id = cokret::Did::new(ALICE_DID.to_owned())
+        .map_err(|err| anyhow!("alice did invalid: {err}"))?;
+    let verification_method = format!("{agent_did}#runtime-key-1");
+    let signing_key = SigningKey::from_bytes(&[13_u8; 32]);
+    let public_key = json!({
+        "kty": "OKP",
+        "kid": verification_method,
+        "alg": "Ed25519",
+        "key": URL_SAFE_NO_PAD.encode(signing_key.verifying_key().to_bytes()),
+    });
+    let runtime_public_key_digest = cokret::agent::agent_runtime_public_key_digest(&public_key)?;
+    let request_digest = cokret::agent::agent_key_pair_proof_request_binding_digest(
+        pairing_request_id,
+        &agent_id,
+        &verification_method,
+        &public_key,
+        None,
+    )?;
+    let proof_expires_at =
+        chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
+    let signing_input = cokret::agent::agent_key_pair_proof_signing_input(
+        verification_method.clone(),
+        pairing_request_id.to_owned(),
+        server.service_did().to_owned(),
+        proof_expires_at,
+        request_digest.clone(),
+    );
+    let signature = signing_key.sign(&signing_input.canonical_bytes()?);
+    let pairing_binding_digest = cokret::agent::agent_key_pairing_request_binding_digest(
+        &controller_id,
+        &agent_id,
+        &verification_method,
+        &runtime_public_key_digest,
+        pairing_request_id,
+        pairing_code,
+        pairing_expires_at,
+        server.service_did(),
+    )?;
+    let body = cokret::models::AgentKeyPairRequestBody {
+        pairing_request_id: pairing_request_id.to_owned(),
+        agent_principal_id: agent_id,
+        verification_method: verification_method.clone(),
+        public_key,
+        proof_of_possession: json!({
+            "challenge": pairing_request_id,
+            "audience": server.service_did(),
+            "request_canonical_digest": request_digest.as_str(),
+            "expires_at": proof_expires_at.to_rfc3339_opts(SecondsFormat::Millis, true),
+            "signature": URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        }),
+        runtime_attestation: None,
+        authorize_event: json!({
+            "kind": "ck.agent.key.authorize",
+            "actor_id": ALICE_DID,
+            "payload": {
+                "agent_principal_id": agent_did,
+                "key_id": "ck:agent_key:01999999000070008000000000000001",
+                "verification_method": verification_method,
+                "public_key_digest": runtime_public_key_digest.as_str(),
+                "accountable_principal_id": ALICE_DID,
+                "agent_key_scope": {
+                    "actions": ["ck.self.events.command.submit"],
+                    "resources": [{"kind": "realm", "realm_id": "*"}],
+                    "constraints": []
+                },
+                "audience": [server.service_did()],
+                "issued_at": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                "expires_at": "2999-01-01T00:00:00Z",
+                "approval_evidence": {
+                    "kind": "approval_event",
+                    "ref": "ck:event:01999999-0000-7000-8000-000000000001",
+                    "request_canonical_digest": pairing_binding_digest.as_str(),
+                    "approved_by": ALICE_DID
+                }
+            }
+        }),
+    };
+    let response = server
+        .http()
+        .post(server.url("/_cokret/gate/account/agent-key-pair"))
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await?;
+    let status = response.status();
+    let body: Value = response.json().await.unwrap_or_else(|_| json!(null));
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "pairing must return 200, got {status}: {body}"
+    );
+    Ok(body)
 }
 
 async fn agent_status(server: &CokretServer, token: &str, agent_did: &str) -> Result<String> {

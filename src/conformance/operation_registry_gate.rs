@@ -1096,9 +1096,65 @@ fn extract_regex_path_candidates(line: &str) -> Vec<String> {
     }
     let normalized = raw
         .replace(r"\/", "/")
+        .replace("([^/]+)", "{wildcard}")
         .replace(r"[^/]+", "{wildcard}")
         .replace("\\", "");
-    extract_path_candidates(&normalized)
+    expand_regex_alternatives(&normalized)
+        .into_iter()
+        .flat_map(|candidate| extract_path_candidates(&candidate))
+        .collect()
+}
+
+fn expand_regex_alternatives(value: &str) -> Vec<String> {
+    let Some((start, end, alternatives)) = find_simple_regex_alternation(value) else {
+        return vec![value.to_owned()];
+    };
+
+    let mut out = Vec::new();
+    for alternative in alternatives {
+        let mut expanded = String::with_capacity(value.len());
+        expanded.push_str(&value[..start]);
+        expanded.push_str(alternative);
+        expanded.push_str(&value[end + 1..]);
+        out.extend(expand_regex_alternatives(&expanded));
+    }
+    out
+}
+
+fn find_simple_regex_alternation(value: &str) -> Option<(usize, usize, Vec<&str>)> {
+    let bytes = value.as_bytes();
+    let mut start = 0usize;
+    while start < bytes.len() {
+        if bytes[start] != b'(' {
+            start += 1;
+            continue;
+        }
+        let mut end = start + 1;
+        while end < bytes.len() && bytes[end] != b')' {
+            if bytes[end] == b'(' {
+                break;
+            }
+            end += 1;
+        }
+        if end >= bytes.len() || bytes[end] != b')' {
+            start += 1;
+            continue;
+        }
+        let inner = &value[start + 1..end];
+        if inner.contains('|')
+            && inner
+                .split('|')
+                .all(|part| !part.is_empty() && part.chars().all(is_simple_regex_literal_char))
+        {
+            return Some((start, end, inner.split('|').collect()));
+        }
+        start = end + 1;
+    }
+    None
+}
+
+fn is_simple_regex_literal_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
 }
 
 fn extract_path_candidates(value: &str) -> Vec<String> {
@@ -1345,6 +1401,27 @@ mod tests {
         let line = r#"url.pathname.match(/^\/_cokret\/open\/mimi\/strands\/[^/]+\/update$/)"#;
         let paths = extract_regex_path_candidates(line);
         assert_eq!(paths, vec!["/_cokret/open/mimi/strands/{wildcard}/update"]);
+    }
+
+    #[test]
+    fn regex_capture_group_path_preserves_tail_segments() {
+        let line = r#"url.pathname.match(/^\/_cokret\/self\/agents\/([^/]+)\/grants$/)"#;
+        let paths = extract_regex_path_candidates(line);
+        assert_eq!(paths, vec!["/_cokret/self/agents/{wildcard}/grants"]);
+    }
+
+    #[test]
+    fn regex_alternative_group_expands_to_literal_paths() {
+        let line =
+            r#"url.pathname.match(/^\/_cokret\/self\/circles\/([^/]+)\/(archive|restore)$/)"#;
+        let paths = extract_regex_path_candidates(line);
+        assert_eq!(
+            paths,
+            vec![
+                "/_cokret/self/circles/{wildcard}/archive",
+                "/_cokret/self/circles/{wildcard}/restore",
+            ]
+        );
     }
 
     #[test]
