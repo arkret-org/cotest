@@ -27,7 +27,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         )
         .await?;
 
-    expect_status(
+    let bob_second_device = expect_json(
         server
             .http()
             .post(server.url("/_cokret/gate/account/register"))
@@ -36,9 +36,15 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
                 "display_name": BOB_HANDLE.trim_start_matches('@'),
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000b2"
             })),
-        StatusCode::CONFLICT,
+        StatusCode::OK,
     )
     .await?;
+    let bob_devices = bob_second_device["devices"]
+        .as_array()
+        .expect("bob devices array");
+    assert!(bob_devices.iter().any(|device| {
+        device["device_id"].as_str() == Some("ck:device:01904100-0000-7000-8000-0000000000b2")
+    }));
 
     let hidden_bob = expect_json(
         server

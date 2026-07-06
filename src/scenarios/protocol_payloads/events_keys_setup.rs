@@ -7,7 +7,6 @@
 use anyhow::Result;
 use cokret::Did;
 use cokret::auth::principal_control_realm_id;
-use cokret::identity::binding::multicodec_ed25519_public_key;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -40,7 +39,6 @@ async fn authorize_keys_device(
     token: &str,
     device_key: &SigningKey,
 ) -> Result<()> {
-    let device_public_key = multicodec_ed25519_public_key(&device_key.verifying_key());
     let principal = Did::new(KEYS_ACTOR_DID.to_owned())
         .map_err(|error| anyhow::anyhow!("invalid keys actor DID: {error}"))?;
     let control_realm = principal_control_realm_id(&principal);
@@ -57,7 +55,7 @@ async fn authorize_keys_device(
         "payload": crate::scenarios::federation_collaboration::bootstrap_device_authorize_payload(
             KEYS_ACTOR_DID,
             KEYS_DEVICE_ID,
-            &device_public_key,
+            device_key,
         )?,
         "unsigned": {
             "local_operation_idempotency_alias": "ck:operation:0196419b-0000-7000-8000-00000000d0a0"

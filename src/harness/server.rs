@@ -16,9 +16,9 @@ use serde_json::Value;
 use url::Url;
 
 use super::assertions::expect_json;
-use super::{canonical_device_id, fixture_webvh_did};
 use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_handle};
+use super::{canonical_device_id, fixture_webvh_did};
 
 pub struct CokretServer {
     handle: SutHandle,

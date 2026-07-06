@@ -487,7 +487,11 @@ fn collect_vector_evidence(
             // Fixtures with a dedicated negative-cases block bind the block's
             // vector id via `negative_cases_vector_id` (e.g.
             // crypto-signature-fixture.json), not a per-case `vector_id`.
-            if object.get("negative_cases_vector_id").and_then(Value::as_str) == Some(vector_id) {
+            if object
+                .get("negative_cases_vector_id")
+                .and_then(Value::as_str)
+                == Some(vector_id)
+            {
                 push_evidence_ref(
                     evidence_refs,
                     fixture_ref,

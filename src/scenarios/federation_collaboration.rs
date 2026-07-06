@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -326,7 +328,6 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     // `verification_state="verified"` device row (project_device_authorize), so
     // the welcome's device-bound claim signature can be checked on server_b.
     let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
-    let alice_device_public_key = multicodec_ed25519_public_key(&alice_device_key.verifying_key());
     let alice_principal_realm =
         principal_control_realm_id(&Did::new(ALICE_DID.to_owned()).context("invalid alice did")?);
     let alice_device_authorize = signed_federation_event(
@@ -335,7 +336,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &alice_principal_realm,
         ALICE_DID,
         5,
-        bootstrap_device_authorize_payload(ALICE_DID, ALICE_DEVICE_ID, &alice_device_public_key)?,
+        bootstrap_device_authorize_payload(ALICE_DID, ALICE_DEVICE_ID, &alice_device_key)?,
     )?;
     let alice_device_body = peer_events_submit_body(
         &alice_principal_realm,
@@ -495,15 +496,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     );
 
     let bob_device_key = SigningKey::from_bytes(&BOB_DEVICE_KEY_SEED);
-    let bob_device_public_key = multicodec_ed25519_public_key(&bob_device_key.verifying_key());
-    authorize_device_public_key(
-        server_b,
-        &bob,
-        BOB_DID,
-        BOB_DEVICE_ID,
-        &bob_device_public_key,
-    )
-    .await?;
+    authorize_device_public_key(server_b, &bob, BOB_DID, BOB_DEVICE_ID, &bob_device_key).await?;
     let bob_one_time_keys = json!({
         "signed_curve25519:bob-otk1": {
             "algorithm": "signed_curve25519",
@@ -910,19 +903,20 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
 pub(crate) fn bootstrap_device_authorize_payload(
     principal_id: &str,
     device_id: &str,
-    device_public_key: &str,
+    device_signing_key: &SigningKey,
 ) -> Result<Value> {
-    let payload = cokret_core::DeviceAuthorizePayload {
+    let device_public_key = multicodec_ed25519_public_key(&device_signing_key.verifying_key());
+    let mut payload = cokret_core::DeviceAuthorizePayload {
         principal_id: Did::new(principal_id.to_owned())
             .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
         device_id: device_id.to_owned(),
-        device_public_key: device_public_key.to_owned(),
+        device_public_key,
         hpke_key: "z6LSCotestDeviceHpkeKey".to_owned(),
         algorithms: vec![
             "ck.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
             "ck.mls.v1".to_owned(),
         ],
-        device_key_algorithm: None,
+        device_key_algorithm: Some("EdDSA".to_owned()),
         authorized_by: cokret_core::DeviceOrPrincipalRef::Did(
             Did::new(principal_id.to_owned())
                 .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
@@ -932,9 +926,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
             .parse()
             .expect("static timestamp parses"),
         expires_at: None,
-        device_signature: Some(cokret_core::SignatureMaterial::NonEmptyString(
-            "bootstrap-device-signature-placeholder".to_owned(),
-        )),
+        device_signature: None,
         proof: None,
         cross_signing_binding: None,
         bootstrap_binding: Some(cokret_core::DeviceBootstrapBinding {
@@ -944,6 +936,21 @@ pub(crate) fn bootstrap_device_authorize_payload(
         enrollment_authority_binding: None,
         recovery_session_id: None,
     };
+    let signature_input = payload
+        .device_possession_signature_input()
+        .context("build ck.device.authorize device possession signature input")?;
+    let signature = device_signing_key.sign(&signature_input);
+    let mut signature_material = BTreeMap::new();
+    signature_material.insert("alg".to_owned(), json!("EdDSA"));
+    signature_material.insert(
+        "kid".to_owned(),
+        json!(format!("{principal_id}#{device_id}")),
+    );
+    signature_material.insert(
+        "sig".to_owned(),
+        json!(URL_SAFE_NO_PAD.encode(signature.to_bytes())),
+    );
+    payload.device_signature = Some(cokret_core::SignatureMaterial::Variant1(signature_material));
     serde_json::to_value(&payload).context("serialize device.authorize payload")
 }
 
@@ -952,7 +959,7 @@ pub(crate) async fn authorize_device_public_key(
     token: &str,
     actor: &str,
     device_id: &str,
-    device_public_key: &str,
+    device_signing_key: &SigningKey,
 ) -> Result<()> {
     let principal =
         Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
@@ -963,7 +970,7 @@ pub(crate) async fn authorize_device_public_key(
         actor,
         &principal_realm,
         "ck.device.authorize",
-        bootstrap_device_authorize_payload(actor, device_id, device_public_key)?,
+        bootstrap_device_authorize_payload(actor, device_id, device_signing_key)?,
         StatusCode::OK,
     )
     .await?;

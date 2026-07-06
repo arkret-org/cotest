@@ -1,8 +1,8 @@
 //! CT-11 — Key backup restore + MLS history replay.
 //!
 //! Spec references:
-//!   - `cokret-spec/spec/v1/zh/identity/key-management.md` §7.1 (backup contents) — three backup domains
-//!     MUST be isolated:
+//!   - `cokret-spec/spec/v1/zh/identity/key-management.md` §7.1 (backup contents) — three backup
+//!     domains MUST be isolated:
 //!       * `did_recovery` — DID control / recovery key shares.
 //!       * `secret_storage` — `self_signing_key`, `user_signing_key`, recovery secret, MLS group
 //!         secrets backup key.
@@ -28,8 +28,8 @@
 //!       5. client publishes `recover` or `ck.device.authorize`.
 //!       6. for E2EE Realms: pull MLS state, replay historical `ck.mls.commit` events with the
 //!          recovered `mls_history_backup_key` to decrypt pre-loss epoch content.
-//!   - §7.4 (ownership and decryption proofs) — SSK proof binding fields: `challenge / audience / origin /
-//!     service_did / principal_id / key_id / expires_at / nonce`.
+//!   - §7.4 (ownership and decryption proofs) — SSK proof binding fields: `challenge / audience /
+//!     origin / service_did / principal_id / key_id / expires_at / nonce`.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Scenario walk-through

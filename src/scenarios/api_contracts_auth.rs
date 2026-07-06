@@ -65,7 +65,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     .await?;
     assert_eq!(registered["principal_id"], "did:web:alice-auth.example");
 
-    expect_api_error(
+    let second_device = expect_json(
         server
             .http()
             .post(server.url("/_cokret/gate/account/register"))
@@ -74,10 +74,13 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
                 "display_name": "alice-auth",
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000a2"
             })),
-        StatusCode::CONFLICT,
-        "duplicate_conflict",
+        StatusCode::OK,
     )
     .await?;
+    let devices = second_device["devices"].as_array().expect("devices array");
+    assert!(devices.iter().any(|device| {
+        device["device_id"].as_str() == Some("ck:device:01904100-0000-7000-8000-0000000000a2")
+    }));
 
     let login = expect_json(
         server

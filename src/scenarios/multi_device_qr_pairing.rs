@@ -1,8 +1,8 @@
 //! CT-9 — Multi-device QR pairing + cross-signing + MLS Remove on revoke.
 //!
 //! Spec references:
-//!   - `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 (pairing flow, passwordless login) — QR
-//!     pairing handshake:
+//!   - `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 (pairing flow, passwordless
+//!     login) — QR pairing handshake:
 //!       * new device generates local Ed25519 device key + displays QR containing public key +
 //!         challenge nonce.
 //!       * primary device scans QR, verifies the to-device/SAS transcript, and issues a

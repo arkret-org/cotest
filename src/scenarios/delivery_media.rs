@@ -1,5 +1,4 @@
 use anyhow::Result;
-use cokret::identity::binding::multicodec_ed25519_public_key;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -27,9 +26,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     // be authorized, and the upload carries a detached JWS over the canonical
     // body signed by that key). Authorize Alice's device up front.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
-    let device_public_key = multicodec_ed25519_public_key(&device_key.verifying_key());
-    authorize_device_public_key(&server, &token, alice_did, alice_device, &device_public_key)
-        .await?;
+    authorize_device_public_key(&server, &token, alice_did, alice_device, &device_key).await?;
 
     expect_api_error(
         server
