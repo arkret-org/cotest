@@ -377,6 +377,29 @@ export class JointUserPage {
     throw lastError;
   }
 
+  private async selectCreateRealmOption(
+    locator: Locator,
+    value: string,
+    promptHandling: { completeRecoveryKeySetup: boolean },
+  ) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await this.dismissCreateRealmBlockingPrompts(promptHandling);
+      try {
+        await selectDxcOption(locator, value);
+        return;
+      } catch (error) {
+        lastError = error;
+        const handled =
+          await this.dismissCreateRealmBlockingPrompts(promptHandling);
+        if (!handled) {
+          await this.page.waitForTimeout(250);
+        }
+      }
+    }
+    throw lastError;
+  }
+
   private async withPassivePromptRetry(operation: () => Promise<void>) {
     let lastError: unknown;
     const promptHandling = { completeRecoveryKeySetup: true };
@@ -472,27 +495,31 @@ export class JointUserPage {
     await this.clickCreateRealmControl(basicsNext, promptHandling);
 
     if (opts.discoverability !== undefined) {
-      await selectDxcOption(
+      await this.selectCreateRealmOption(
         strand.getByTestId("realm-discoverability-input"),
         opts.discoverability,
+        promptHandling,
       );
     }
     if (opts.joinRule !== undefined) {
-      await selectDxcOption(
+      await this.selectCreateRealmOption(
         strand.getByTestId("realm-policy-join-rule-input"),
         opts.joinRule,
+        promptHandling,
       );
     }
     if (opts.historyVisibility !== undefined) {
-      await selectDxcOption(
+      await this.selectCreateRealmOption(
         strand.getByTestId("realm-policy-history-visibility-input"),
         opts.historyVisibility,
+        promptHandling,
       );
     }
     if (opts.encryptionProfile !== undefined) {
-      await selectDxcOption(
+      await this.selectCreateRealmOption(
         strand.getByTestId("realm-encryption-profile-input"),
         opts.encryptionProfile,
+        promptHandling,
       );
     }
     const policyNext = strand.getByTestId("new-realm-next-button").first();

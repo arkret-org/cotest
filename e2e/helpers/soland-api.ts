@@ -2007,10 +2007,21 @@ function developmentServiceHttpPrivateKey(serviceDid: string) {
 }
 
 function trustDomainFromServiceDid(serviceDid: string): string {
-  const scope = serviceDid
-    .replace(/^did:(web|key|webvh):/, "")
+  const webHost = serviceDid.startsWith("did:web:")
+    ? serviceDid.slice("did:web:".length).split(":")[0]
+    : undefined;
+  const webvhHost = serviceDid.startsWith("did:webvh:")
+    ? serviceDid.slice("did:webvh:".length).split(":")[1]
+    : undefined;
+  const keyScope = serviceDid.startsWith("did:key:")
+    ? serviceDid.slice("did:key:".length)
+    : undefined;
+  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceDid;
+  const scope = rawScope
+    .split(/%3a/i)[0]
+    .replace(/\.+$/, "")
     .toLowerCase()
-    .replace(/:/g, ".");
+    .replace(/[^a-z0-9.\-_:]/g, "");
   return `ck:trust_domain:${scope || "local"}`;
 }
 

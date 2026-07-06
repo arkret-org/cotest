@@ -28,10 +28,10 @@ test.describe("realm links", () => {
       // PROMOTED + reshaped to the real surface. soland's realm-link +
       // inheritance pipeline is fully wired (routing/realms.rs +
       // reducer/realm_links.rs):
-      //   - POST /_soland/self/realms/{id}/links writes ck.realm.link with
+      //   - POST /_cokret/self/realms/{id}/links writes ck.realm.link with
       //     reducer-side cycle / kind / status validation.
       //   - ck.realm.inheritance_policy (signed event) is the §6 opt-in.
-      //   - GET /_soland/self/realms/{id}/effective-policy walks active
+      //   - GET /_cokret/self/realms/{id}/effective-policy walks active
       //     governed_by / inherits_policy_from links and merges the source
       //     realm's allow-lists ONLY when the child opted in (§5 no implicit
       //     cascade), severing inheritance when the link flips to rejected.
@@ -53,21 +53,21 @@ test.describe("realm links", () => {
         title: `models/realm-links Gov Realm ${stamp}`,
         ownerDid: alice.did,
       });
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: govRealmId,
-          kind: "ck.realm.inheritance_policy",
-          payload: {
-            source_realm_id: govRealmId,
-            allowed_policies: [inheritedPolicyId],
-            max_depth: 1,
-          },
-        }),
-        { context: "G declares its inheritable allow-list" },
-      );
+      const govPolicyEnvelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: govRealmId,
+        kind: "ck.realm.inheritance_policy",
+        payload: {
+          source_realm_id: govRealmId,
+          inherits: { policy_rules: [inheritedPolicyId] },
+          mode: "narrow_only",
+          max_depth: 1,
+        },
+      });
+      const govPolicy = await submitSignedEventApi(request, aliceToken, govPolicyEnvelope, {
+        context: "G declares its inheritable allow-list",
+      });
+      expect(govPolicy.rejected ?? []).toEqual([]);
 
       // Phase B — alice creates team Realm T, links T --governed_by--> G,
       // and explicitly opts into inheriting from G (spec §6.1).
@@ -76,7 +76,7 @@ test.describe("realm links", () => {
         ownerDid: alice.did,
       });
       const linkRes = await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(teamRealmId)}/links`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
         {
           headers: aliceAuth,
           data: {
@@ -89,26 +89,26 @@ test.describe("realm links", () => {
       );
       expect(linkRes.ok()).toBeTruthy();
 
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: teamRealmId,
-          kind: "ck.realm.inheritance_policy",
-          payload: {
-            source_realm_id: govRealmId,
-            allowed_policies: [],
-            max_depth: 1,
-          },
-        }),
-        { context: "T opts into inheriting from G" },
-      );
+      const teamPolicyEnvelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: teamRealmId,
+        kind: "ck.realm.inheritance_policy",
+        payload: {
+          source_realm_id: govRealmId,
+          inherits: { policy_rules: [] },
+          mode: "narrow_only",
+          max_depth: 1,
+        },
+      });
+      const teamPolicy = await submitSignedEventApi(request, aliceToken, teamPolicyEnvelope, {
+        context: "T opts into inheriting from G",
+      });
+      expect(teamPolicy.rejected ?? []).toEqual([]);
 
       // Phase C — T's effective policy now derives G's allow-list via the
       // active governed_by link.
       const eff1 = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
         { headers: aliceAuth },
       );
       expect(eff1.ok()).toBeTruthy();
@@ -125,14 +125,14 @@ test.describe("realm links", () => {
         ownerDid: alice.did,
       });
       await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(team2RealmId)}/links`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(team2RealmId)}/links`,
         {
           headers: aliceAuth,
           data: { target_realm_id: govRealmId, link_kind: "governed_by", status: "active" },
         },
       );
       const eff2NoOptIn = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(team2RealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(team2RealmId)}/effective-policy`,
         { headers: aliceAuth },
       );
       const eff2NoOptInBody = await eff2NoOptIn.json();
@@ -144,7 +144,7 @@ test.describe("realm links", () => {
       // Phase E — alice rejects the T --> G link; inheritance is severed even
       // though T's inheritance_policy declaration is still on file (§6.3).
       const rejectRes = await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(teamRealmId)}/links`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
         {
           headers: aliceAuth,
           data: { target_realm_id: govRealmId, link_kind: "governed_by", status: "rejected" },
@@ -153,7 +153,7 @@ test.describe("realm links", () => {
       expect(rejectRes.ok()).toBeTruthy();
 
       const eff3 = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
         { headers: aliceAuth },
       );
       const eff3Body = await eff3.json();
@@ -248,7 +248,12 @@ test.describe("realm links", () => {
             actorDid: alice.did,
             realmId: id,
             kind: "ck.realm.inheritance_policy",
-            payload: { source_realm_id: id, allowed_policies: policies, max_depth: 1 },
+            payload: {
+              source_realm_id: id,
+              inherits: { policy_rules: policies },
+              mode: "narrow_only",
+              max_depth: 1,
+            },
           }),
           { context: `${label} declares allow-list` },
         );
@@ -263,7 +268,7 @@ test.describe("realm links", () => {
       });
       for (const G of [G1, G2]) {
         await request.post(
-          `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(T)}/links`,
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(T)}/links`,
           {
             headers: auth,
             data: { target_realm_id: G, link_kind: "governed_by", status: "active" },
@@ -276,14 +281,19 @@ test.describe("realm links", () => {
             actorDid: alice.did,
             realmId: T,
             kind: "ck.realm.inheritance_policy",
-            payload: { source_realm_id: G, allowed_policies: [], max_depth: 1 },
+            payload: {
+              source_realm_id: G,
+              inherits: { policy_rules: [] },
+              mode: "narrow_only",
+              max_depth: 1,
+            },
           }),
           { context: `T opts into ${G}` },
         );
       }
 
       const eff = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(T)}/effective-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(T)}/effective-policy`,
         { headers: auth },
       );
       const effBody = await eff.json();
@@ -344,7 +354,7 @@ test.describe("realm links", () => {
       // outbound view — the non-propagation invariant holds regardless of
       // declaration side).
       const linkRes = await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(G)}/links`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(G)}/links`,
         {
           headers: aliceAuth,
           data: { target_realm_id: T, link_kind: "governed_by", status: "active" },
