@@ -35,6 +35,7 @@ import {
   createDpopUserSession,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   type JointUser,
   type JointUserPage,
@@ -736,17 +737,16 @@ test.describe("MLS group encryption", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s11-alice");
-    const mallory = uniqueUser("s11-mallory");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, mallory),
+    const [aliceFlow, mallorySession] = await Promise.all([
+      openDpopUserPage(browser, request, "s11-alice"),
+      createDpopUserSession(request, "s11-mallory"),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const malloryToken = await issueDevSession(request, mallory);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    if (!aliceFlow || !mallorySession) {
+      assertJointStackNotRequired("mls admin controls browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -763,10 +763,15 @@ test.describe("MLS group encryption", () => {
       });
 
       // Non-member access to raw events MUST be rejected.
-      const eventsResp = await request.get(
-        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`,
-        { headers: { authorization: `Bearer ${malloryToken}` } },
-      );
+      const eventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
+      const eventsResp = await request.get(eventsUrl, {
+        headers: selfPathGrantHeaders({
+          deviceKey: mallorySession.deviceKey,
+          grantJwt: mallorySession.grantJwt,
+          method: "GET",
+          url: eventsUrl,
+        }),
+      });
       expect([401, 403, 404, 405]).toContain(eventsResp.status());
       await stepShot(alicePage.page, testInfo, "non-member-blocked");
     } finally {

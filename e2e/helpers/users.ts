@@ -242,6 +242,9 @@ export class JointUserPage {
       timeout: 120_000,
     });
     await this.dismissDeviceAuthorizationPrompt();
+    await this.dismissCreateRealmBlockingPrompts({
+      completeRecoveryKeySetup: true,
+    });
   }
 
   async gotoSettings() {
@@ -315,6 +318,10 @@ export class JointUserPage {
       timeout: 120_000,
     });
     await this.dismissDeviceAuthorizationPrompt();
+    await this.dismissPassiveBlockingPrompts();
+    await expect(this.page.getByTestId("message-list")).toBeVisible({
+      timeout: 30_000,
+    });
   }
 
   private async dismissDeviceAuthorizationPrompt() {
@@ -402,16 +409,14 @@ export class JointUserPage {
 
   private async withPassivePromptRetry(operation: () => Promise<void>) {
     let lastError: unknown;
-    const promptHandling = { completeRecoveryKeySetup: true };
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      await this.dismissCreateRealmBlockingPrompts(promptHandling);
+      await this.dismissPassiveBlockingPrompts();
       try {
         await operation();
         return;
       } catch (error) {
         lastError = error;
-        const handled =
-          await this.dismissCreateRealmBlockingPrompts(promptHandling);
+        const handled = await this.dismissPassiveBlockingPrompts();
         if (!handled) {
           await this.page.waitForTimeout(250);
         }
@@ -424,10 +429,33 @@ export class JointUserPage {
     await this.withPassivePromptRetry(() => locator.click({ timeout: 5_000 }));
   }
 
+  async fillWithPassivePromptRetry(locator: Locator, value: string) {
+    await this.withPassivePromptRetry(() =>
+      locator.fill(value, { timeout: 5_000 }),
+    );
+  }
+
+  async checkWithPassivePromptRetry(locator: Locator) {
+    await this.withPassivePromptRetry(() => locator.check({ timeout: 5_000 }));
+  }
+
+  async uncheckWithPassivePromptRetry(locator: Locator) {
+    await this.withPassivePromptRetry(() =>
+      locator.uncheck({ timeout: 5_000 }),
+    );
+  }
+
   async completeRecoveryKeySetupIfPrompted(
     timeoutMs = 5_000,
   ): Promise<string | undefined> {
-    const modal = this.page.getByTestId("recovery-key-setup-modal").last();
+    const modal = this.page
+      .locator(
+        [
+          '[data-testid="recovery-key-setup-modal"]',
+          '[data-testid="recovery-key-setup-banner"]',
+        ].join(","),
+      )
+      .last();
     const visible = await modal
       .waitFor({ state: "visible", timeout: timeoutMs })
       .then(() => true)
@@ -436,10 +464,77 @@ export class JointUserPage {
       return undefined;
     }
 
+    const unauthorized = this.page
+      .getByTestId("recovery-key-setup-device-unauthorized")
+      .last();
+    const restore = this.page.getByTestId("recovery-key-setup-restore").last();
+    const status = this.page.getByTestId("recovery-key-setup-status").last();
+    const closeRecoveryPrompt = async () => {
+      const close = this.page.getByTestId("recovery-key-setup-dismiss").last();
+      if (await close.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await close.click();
+        await expect(modal).toBeHidden({ timeout: 10_000 });
+      }
+    };
+    const hasRecoverableGenerationError = async () => {
+      const text = ((await status.textContent({ timeout: 100 }).catch(() => "")) ?? "")
+        .trim()
+        .toLowerCase();
+      return (
+        text.includes("couldn't reach") ||
+        text.includes("returned 409") ||
+        text.includes("failed") ||
+        text.includes("already exists") ||
+        text.includes("version_not_monotonic") ||
+        text.includes("try again")
+      );
+    };
+    if (
+      (await unauthorized.isVisible({ timeout: 250 }).catch(() => false)) ||
+      (await restore.isVisible({ timeout: 250 }).catch(() => false))
+    ) {
+      await closeRecoveryPrompt();
+      return undefined;
+    }
+
     const generatedKeyField = this.page
       .getByTestId("recovery-key-setup-generated-key")
       .last();
-    await expect(generatedKeyField).toBeVisible({ timeout: 30_000 });
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      if (await modal.isHidden({ timeout: 100 }).catch(() => false)) {
+        return undefined;
+      }
+      if (
+        (await unauthorized.isVisible({ timeout: 100 }).catch(() => false)) ||
+        (await restore.isVisible({ timeout: 100 }).catch(() => false))
+      ) {
+        await closeRecoveryPrompt();
+        return undefined;
+      }
+      if (
+        await generatedKeyField
+          .isVisible({ timeout: 100 })
+          .catch(() => false)
+      ) {
+        break;
+      }
+      if (await hasRecoverableGenerationError()) {
+        await closeRecoveryPrompt();
+        return undefined;
+      }
+      await this.page.waitForTimeout(250);
+    }
+    if (await modal.isHidden({ timeout: 100 }).catch(() => false)) {
+      return undefined;
+    }
+    if (!(await generatedKeyField.isVisible({ timeout: 100 }).catch(() => false))) {
+      if (await hasRecoverableGenerationError()) {
+        await closeRecoveryPrompt();
+        return undefined;
+      }
+    }
+    await expect(generatedKeyField).toBeVisible({ timeout: 0 });
     const recoveryKey = (await generatedKeyField.inputValue()).trim();
     expect(
       recoveryKey.split(/\s+/),
@@ -486,9 +581,15 @@ export class JointUserPage {
     await this.dismissCreateRealmBlockingPrompts(promptHandling);
     const strand = this.page.getByTestId("realm-lifecycle-strand").last();
 
-    await strand.getByTestId("realm-title-input").fill(opts.title);
+    await this.fillWithPassivePromptRetry(
+      strand.getByTestId("realm-title-input"),
+      opts.title,
+    );
     if (opts.summary !== undefined) {
-      await strand.getByTestId("realm-summary-input").fill(opts.summary);
+      await this.fillWithPassivePromptRetry(
+        strand.getByTestId("realm-summary-input"),
+        opts.summary,
+      );
     }
     const basicsNext = strand.getByTestId("new-realm-next-button").first();
     await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
@@ -527,9 +628,10 @@ export class JointUserPage {
     await this.clickCreateRealmControl(policyNext, promptHandling);
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
-      await strand
-        .getByTestId("seed-members-input")
-        .fill(opts.seedMembers.join("\n"));
+      await this.fillWithPassivePromptRetry(
+        strand.getByTestId("seed-members-input"),
+        opts.seedMembers.join("\n"),
+      );
     }
     const createButton = strand.getByTestId("create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
@@ -723,6 +825,7 @@ export class JointUserPage {
     if (!this.page.url().includes(`/chat/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
+    await this.dismissPassiveBlockingPrompts();
     await this.page.getByTestId("chat-input").fill(body);
     await this.clickWithPassivePromptRetry(
       this.page.getByTestId("send-chat-button"),
@@ -762,6 +865,7 @@ export class JointUserPage {
     if (!this.page.url().includes(`/chat/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
+    await this.dismissPassiveBlockingPrompts();
     const events = this.page.getByTestId("chat-message");
     const count = await events.count();
     const out: string[] = [];
@@ -786,6 +890,20 @@ export class JointUserPage {
     });
   }
 
+  async expectTimelineEventVisible(body: string, timeout = 45_000) {
+    await expect
+      .poll(
+        async () => {
+          await this.dismissPassiveBlockingPrompts();
+          return await this.timelineEvent(body).count();
+        },
+        { timeout, intervals: [250, 500, 1_000, 2_000] },
+      )
+      .toBeGreaterThan(0);
+    await this.dismissPassiveBlockingPrompts();
+    await expect(this.timelineEvent(body)).toBeVisible({ timeout: 5_000 });
+  }
+
   async clickTimelineReply(body: string) {
     await this.clickTimelineAction(body, "chat-reply-button");
   }
@@ -794,17 +912,31 @@ export class JointUserPage {
     await this.clickTimelineAction(body, "chat-edit-button");
   }
 
+  async clickTimelineRedact(body: string) {
+    await this.clickTimelineAction(body, "chat-redact-button");
+  }
+
   private async clickTimelineAction(body: string, testId: string) {
     const event = this.timelineEvent(body);
+    await this.dismissPassiveBlockingPrompts();
     await expect(event).toBeVisible({ timeout: 30_000 });
-    await this.withPassivePromptRetry(() => event.hover({ timeout: 5_000 }));
     const action = event.getByTestId(testId);
-    await expect(action).toBeVisible({ timeout: 30_000 });
-    await this.withPassivePromptRetry(() => action.click({ timeout: 5_000 }));
+    await this.withPassivePromptRetry(async () => {
+      await event.scrollIntoViewIfNeeded({ timeout: 5_000 });
+      await event.hover({ timeout: 5_000 });
+      await expect(action).toBeVisible({ timeout: 5_000 });
+      await action.click({ timeout: 5_000 });
+    });
   }
 
   async close() {
     await closeUser(this.session);
+  }
+
+  private async dismissPassiveBlockingPrompts(): Promise<boolean> {
+    return await this.dismissCreateRealmBlockingPrompts({
+      completeRecoveryKeySetup: true,
+    });
   }
 }
 
@@ -1043,6 +1175,41 @@ export async function openDpopUserPage(
     ...opts,
     skipDeviceEnrollment: opts.skipDeviceEnrollment ?? true,
   });
+  return openDpopUserPageFromSession(browser, session, opts);
+}
+
+export async function openDpopUserPageForAccount(
+  browser: Browser,
+  request: APIRequestContext,
+  prefix: string,
+  account: CoauthPasswordAccount,
+  opts: {
+    server?: SolandKey;
+    coauthBase?: string;
+    prepareMlsDevice?: boolean;
+    skipDeviceEnrollment?: boolean;
+  } = {},
+): Promise<DpopUserPageSession | undefined> {
+  const session = await createDpopUserSessionForAccount(
+    request,
+    prefix,
+    account,
+    {
+      ...opts,
+      skipDeviceEnrollment: opts.skipDeviceEnrollment ?? true,
+    },
+  );
+  return openDpopUserPageFromSession(browser, session, opts);
+}
+
+async function openDpopUserPageFromSession(
+  browser: Browser,
+  session: DpopUserSession | undefined,
+  opts: {
+    server?: SolandKey;
+    prepareMlsDevice?: boolean;
+  },
+): Promise<DpopUserPageSession | undefined> {
   if (!session) {
     return undefined;
   }

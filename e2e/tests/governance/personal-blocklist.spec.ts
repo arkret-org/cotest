@@ -18,9 +18,13 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
+  selfPathHeadersForDpopSession,
+  type DpopUserSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -39,6 +43,10 @@ type BlocklistEntry = {
   mode?: string;
   created_at?: string;
 };
+
+type AccountSubscribeOpts = NonNullable<
+  Parameters<typeof accountSubscribeDeltaApi>[2]
+>;
 
 test.describe.configure({ mode: "serial" });
 
@@ -135,20 +143,21 @@ test.describe("personal blocklist", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s31-alice");
-    const bob = uniqueUser("s31-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "s31-alice"),
+      openDpopUserPage(browser, request, "s31-bob"),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      assertJointStackNotRequired("personal blocklist browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    const aliceToken = aliceFlow.session.grantJwt;
+    const aliceSubscribeOpts = () => accountSubscribeDpopOpts(aliceFlow.session);
     const bobDidVisiblePrefix = bob.did.slice(0, 16);
 
     try {
@@ -195,7 +204,13 @@ test.describe("personal blocklist", () => {
 
       await expect
         .poll(
-          async () => await blocklistStoredOpaque(request, aliceToken, bob.did),
+          async () =>
+            await blocklistStoredOpaque(
+              request,
+              aliceToken,
+              bob.did,
+              aliceSubscribeOpts,
+            ),
           {
             timeout: 30_000,
             message: "alice account_data stores an opaque blocklist entry",
@@ -243,7 +258,12 @@ test.describe("personal blocklist", () => {
       await expect
         .poll(
           async () =>
-            await blocklistClearedOrTombstoned(request, aliceToken, bob.did),
+            await blocklistClearedOrTombstoned(
+              request,
+              aliceToken,
+              bob.did,
+              aliceSubscribeOpts,
+            ),
           {
             timeout: 30_000,
             message: "alice account_data tombstoned the blocklist entry",
@@ -492,8 +512,13 @@ async function blocklistStoredOpaque(
   request: APIRequestContext,
   token: string,
   target: string,
+  subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataEntry(request, token);
+  const blocklist = await blocklistAccountDataEntry(
+    request,
+    token,
+    subscribeOpts,
+  );
   if (!blocklist) {
     return false;
   }
@@ -519,8 +544,13 @@ async function blocklistClearedOrTombstoned(
   request: APIRequestContext,
   token: string,
   target: string,
+  subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataEntry(request, token);
+  const blocklist = await blocklistAccountDataEntry(
+    request,
+    token,
+    subscribeOpts,
+  );
   if (!blocklist) {
     return true;
   }
@@ -534,14 +564,23 @@ async function blocklistClearedOrTombstoned(
 async function blocklistAccountDataEntry(
   request: APIRequestContext,
   token: string,
+  subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<Record<string, unknown> | undefined> {
-  const body = await accountSubscribeDeltaApi(request, token);
+  const body = await accountSubscribeDeltaApi(request, token, subscribeOpts?.());
   const accountData = body.account_data as
     | { events?: Array<Record<string, unknown>> }
     | undefined;
   return (accountData?.events ?? []).find(
     (entry) => entry.data_type === BLOCKLIST_DATA_TYPE,
   );
+}
+
+function accountSubscribeDpopOpts(session: DpopUserSession): AccountSubscribeOpts {
+  const url = new URL(`${solandBaseUrl()}/_cokret/self/account/subscribe`);
+  url.searchParams.set("catchup", "true");
+  return {
+    headers: selfPathHeadersForDpopSession(session, "GET", url.toString()),
+  };
 }
 
 async function readNotificationsText(

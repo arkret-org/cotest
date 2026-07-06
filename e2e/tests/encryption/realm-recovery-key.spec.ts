@@ -92,9 +92,9 @@ function mlsGovernanceBinding(
   };
 }
 
-// Build a ck.realm.create envelope declaring content_scheme + durability_policy.
-// createRealmApi() does not thread these fields, so the RRK suite forges the
-// envelope directly (mirrors mls-group.spec.ts createEncryptedRealm).
+// Build a ck.realm.create envelope declaring durability_policy. The RRK suite
+// still forges the envelope directly because durability_policy is not threaded
+// through createRealmApi() (mirrors mls-group.spec.ts createEncryptedRealm).
 function realmCreateEnvelope(args: {
   ownerDid: string;
   realmId: string;

@@ -84,7 +84,7 @@ param(
     # Without it soland advertises no client_id and the browser OIDC bridge gets
     # `could not find client` from coauth's /authorize. See cotest oidc-login-chain.spec.ts.
     [string]$CoauthOAuthClientId = "01GFWR28C4KNE04WG3HKXB7C9R",
-    [int]$StartupTimeoutSeconds = 240,
+    [int]$StartupTimeoutSeconds = 900,
     [switch]$SkipNpmInstall,
     [switch]$SkipBrowserInstall,
     [switch]$KeepServices,
@@ -857,6 +857,7 @@ function Wait-LogContains {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string[]]$Pattern,
+        [string[]]$FailPattern = @(),
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds
     )
 
@@ -865,6 +866,11 @@ function Wait-LogContains {
         if (Test-Path $Path) {
             $content = Get-Content -Path $Path -Raw -ErrorAction SilentlyContinue
             if ($content) {
+                foreach ($candidate in $FailPattern) {
+                    if ($content.Contains($candidate)) {
+                        throw "Log $Path contains failure pattern '$candidate'"
+                    }
+                }
                 foreach ($candidate in $Pattern) {
                     if ($content.Contains($candidate)) {
                         return
@@ -887,7 +893,8 @@ function Test-DioxusBuildPlaceholder {
     $markers = @(
         "We're building your app now",
         "One sec!",
-        "qrcode compiling"
+        "qrcode compiling",
+        "image compiling"
     )
     foreach ($marker in $markers) {
         if ($Content.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
@@ -1872,7 +1879,7 @@ try {
     if (-not $SkipYougen) {
         Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedYougenCommand -and $yougenService) {
-            Wait-LogContains -Path $yougenService.Stdout -Pattern @("Build completed successfully", "Serving your app") -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-LogContains -Path $yougenService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
             Wait-DioxusAppReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
@@ -1887,7 +1894,7 @@ try {
         }
         Wait-HttpReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedYougenBetaCommand -and $yougenBetaService) {
-            Wait-LogContains -Path $yougenBetaService.Stdout -Pattern @("Build completed successfully", "Serving your app") -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-LogContains -Path $yougenBetaService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
             Wait-DioxusAppReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }

@@ -254,10 +254,7 @@ test.describe("workflow: async daily standup", () => {
       // Lin spots the wrong template and redacts their own message. The
       // sender-side tombstone replaces the body in place. (Cross-user
       // receiver tombstone fold is covered by messaging/triad redaction.)
-      const message = linPage.timelineEvent(wrongTemplate);
-      await expect(message).toBeVisible({ timeout: 30_000 });
-      await message.hover();
-      await message.getByTestId("chat-redact-button").click();
+      await linPage.clickTimelineRedact(wrongTemplate);
       await linPage.page.getByTestId("chat-confirm-redact-button").click();
 
       await expect(

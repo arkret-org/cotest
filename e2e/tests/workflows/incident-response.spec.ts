@@ -20,6 +20,7 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
   openDpopUserPage,
@@ -37,28 +38,21 @@ test.describe("workflow: incident response", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const oncall = uniqueUser("wf-incident-oncall");
-    const backend = uniqueUser("wf-incident-backend");
-    const comms = uniqueUser("wf-incident-comms");
-    await Promise.all([
-      ensureRegistered(request, oncall),
-      ensureRegistered(request, backend),
-      ensureRegistered(request, comms),
+    const [oncallFlow, backendFlow, commsFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "wf-incident-oncall"),
+      openDpopUserPage(browser, request, "wf-incident-backend"),
+      openDpopUserPage(browser, request, "wf-incident-comms"),
     ]);
-    const [oncallToken, backendToken, commsToken] = await Promise.all([
-      issueDevSession(request, oncall),
-      issueDevSession(request, backend),
-      issueDevSession(request, comms),
-    ]);
-    const oncallPage = await openUserPage(browser, oncall, {
-      sessionCredential: oncallToken,
-    });
-    const backendPage = await openUserPage(browser, backend, {
-      sessionCredential: backendToken,
-    });
-    const commsPage = await openUserPage(browser, comms, {
-      sessionCredential: commsToken,
-    });
+    if (!oncallFlow || !backendFlow || !commsFlow) {
+      assertJointStackNotRequired("incident response browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const backend = backendFlow.user;
+    const comms = commsFlow.user;
+    const oncallPage = oncallFlow.page;
+    const backendPage = backendFlow.page;
+    const commsPage = commsFlow.page;
 
     const alert = `SEV-2 checkout latency > 3s; impact: EU checkout. ${stamp}`;
     const ack = `Ack. I am taking incident commander. ${stamp}`;
@@ -74,6 +68,7 @@ test.describe("workflow: incident response", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "shared",
+        encryptionProfile: "none",
         seedMembers: [backend.did, comms.did],
       });
       await Promise.all([
@@ -119,9 +114,9 @@ test.describe("workflow: incident response", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await expect(
-        commsPage.page.getByTestId("message-list"),
-      ).not.toContainText("DB pool saturation");
+      await expect(commsPage.timelineEvent(publicUpdate)).not.toContainText(
+        "DB pool saturation",
+      );
       await stepShot(commsPage.page, testInfo, "C-public-update");
 
       await backendPage.gotoTimelineRealm(realmId);

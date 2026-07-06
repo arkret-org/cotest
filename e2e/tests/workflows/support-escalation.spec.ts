@@ -268,9 +268,7 @@ test.describe("workflow: support escalation", () => {
       // Alex redacts their own leaked reply. The sender-side tombstone
       // replaces the body in place.
       await alexPage.gotoTimelineRealm(realmId);
-      const leakedRow = alexPage.timelineEvent(leaked);
-      await expect(leakedRow).toBeVisible({ timeout: 30_000 });
-      await leakedRow.getByTestId("chat-redact-button").click();
+      await alexPage.clickTimelineRedact(leaked);
       await alexPage.page.getByTestId("chat-confirm-redact-button").click();
       await expect(
         alexPage.page.getByTestId("chat-redacted-tombstone"),

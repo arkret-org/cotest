@@ -10,6 +10,8 @@ import {
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 import { base64url } from "./encoding";
 
+export type RealmContentScheme = "mls-rfc9420" | "mls-exporter-aead-v1";
+
 export type OperationKind =
   | "circle"
   | "device"
@@ -191,6 +193,7 @@ export async function createRealmApi(
     discoverability?: string;
     history_visibility?: string;
     encryption_profile?: string;
+    content_scheme?: RealmContentScheme;
     invitees?: string[];
     plaintext_visible_services?: string[];
     public?: boolean;
@@ -241,6 +244,9 @@ export async function createRealmApi(
           default_join_rule: data.default_join_rule ?? "invite",
           history_visibility: data.history_visibility ?? "shared",
           encryption_profile: data.encryption_profile ?? "none",
+          ...(data.content_scheme
+            ? { content_scheme: data.content_scheme }
+            : {}),
           plaintext_visible_services: plaintextVisibleServices,
           ...(data.owning_organizations
             ? { owning_organizations: data.owning_organizations }
@@ -975,7 +981,9 @@ export async function accountSubscribeDeltaApi(
   opts: {
     server?: SolandKey;
     filter?: Record<string, unknown>;
+    catchup?: boolean;
     timeoutMs?: number;
+    headers?: Record<string, string>;
   } = {},
 ): Promise<Record<string, unknown>> {
   const frames = await accountSubscribeFramesApi(request, token, opts);
@@ -992,6 +1000,7 @@ export async function accountSubscribeFramesApi(
     filter?: Record<string, unknown>;
     catchup?: boolean;
     timeoutMs?: number;
+    headers?: Record<string, string>;
   } = {},
 ): Promise<Array<Record<string, unknown>>> {
   void request;
@@ -1016,7 +1025,10 @@ export async function accountSubscribeFramesApi(
 
   try {
     const response = await fetch(url, {
-      headers: { ...authHeaders(token), accept: "application/x-ndjson" },
+      headers: {
+        ...(opts.headers ?? authHeaders(token)),
+        accept: "application/x-ndjson",
+      },
       signal: controller.signal,
     });
     if (response.status !== 200) {

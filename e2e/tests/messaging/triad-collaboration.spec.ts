@@ -22,8 +22,10 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -229,21 +231,21 @@ test.describe("single-server triad collaboration", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s1-alice");
-    const bob = uniqueUser("s1-bob");
-    const carol = uniqueUser("s1-carol");
-
-    await ensureRegistered(request, alice);
-    await ensureRegistered(request, bob);
-    await ensureRegistered(request, carol);
-
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const carolToken = await issueDevSession(request, carol);
-
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
+    const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "s1-alice"),
+      openDpopUserPage(browser, request, "s1-bob"),
+      openDpopUserPage(browser, request, "s1-carol"),
+    ]);
+    if (!aliceFlow || !bobFlow || !carolFlow) {
+      assertJointStackNotRequired("triad collaboration browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bob = bobFlow.user;
+    const carol = carolFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    const carolPage = carolFlow.page;
 
     const m1 = `M1 alice hello ${stamp}`;
     const m2 = `M2 bob reply ${stamp}`;
@@ -258,6 +260,7 @@ test.describe("single-server triad collaboration", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "joined",
+        encryptionProfile: "none",
         seedMembers: [bob.did],
       });
       await stepShot(alicePage.page, testInfo, "A-alice-space-created");
@@ -310,15 +313,14 @@ test.describe("single-server triad collaboration", () => {
 
       // Phase D — post-join message reaches all three.
       await alicePage.sendTimelineMessage(realmId, m3);
-      await expect(carolPage.timelineEvent(m3)).toBeVisible({ timeout: 30_000 });
-      await expect(bobPage.timelineEvent(m3)).toBeVisible({ timeout: 30_000 });
+      await carolPage.expectTimelineEventVisible(m3, 30_000);
+      await bobPage.expectTimelineEventVisible(m3, 30_000);
       await stepShot(carolPage.page, testInfo, "D-carol-sees-m3");
 
       // Phase E — bob redacts his own M2; alice sees tombstone; carol unaffected
       // (she never saw M2 anyway because of history_visibility).
       await bobPage.gotoTimelineRealm(realmId);
-      const m2Tombstone = bobPage.timelineEvent(m2Edited);
-      await m2Tombstone.getByTestId("chat-redact-button").click();
+      await bobPage.clickTimelineRedact(m2Edited);
       await bobPage.page.getByTestId("chat-confirm-redact-button").click();
       await expect(bobPage.page.getByTestId("chat-redacted-tombstone")).toBeVisible({ timeout: 30_000 });
       await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message removed/i);
@@ -333,7 +335,7 @@ test.describe("single-server triad collaboration", () => {
       await carolPage.gotoTimelineRealm(realmId);
       // Carol only sees M3 (and possibly the tombstone marker for M2, but never
       // its original text).
-      await expect(carolPage.timelineEvent(m3)).toBeVisible();
+      await carolPage.expectTimelineEventVisible(m3, 30_000);
       await expect(carolPage.page.getByTestId("message-list")).not.toContainText(m1);
       await expect(carolPage.page.getByTestId("message-list")).not.toContainText(m2Edited);
     } finally {

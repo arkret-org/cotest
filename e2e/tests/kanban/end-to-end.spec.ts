@@ -5,7 +5,13 @@
 //   - models/strand-and-message.md §2-§3 (Strand), §4.3 (discussion track)
 //   - models/relation.md §3.2 (contains)
 
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -18,8 +24,10 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -61,6 +69,25 @@ function recordFloorViolations(page: Page): string[] {
   return hits;
 }
 
+async function addCardThroughColumn(column: Locator, title: string) {
+  const titleInput = column.getByTestId("new-card-title-input").last();
+  if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
+    const addButton = column.getByTestId("add-card-button").last();
+    await expect(addButton).toBeVisible({ timeout: 30_000 });
+    await expect(addButton).toBeEnabled({ timeout: 30_000 });
+    await addButton.click({ timeout: 5_000 }).catch(async (error) => {
+      if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
+        throw error;
+      }
+    });
+  }
+  await expect(titleInput).toBeVisible({ timeout: 30_000 });
+  await titleInput.fill(title);
+  const saveButton = column.getByTestId("save-card-button").last();
+  await expect(saveButton).toBeEnabled({ timeout: 30_000 });
+  await saveButton.click({ timeout: 10_000 });
+}
+
 async function buildEncryptedBoardAndCard(
   page: Page,
   realmId: string,
@@ -80,9 +107,7 @@ async function buildEncryptedBoardAndCard(
   await page.getByTestId("add-column-button").click();
   const column = page.getByTestId("kanban-column").filter({ hasText: columnName }).first();
   await expect(column).toBeVisible({ timeout: 45_000 });
-  await column.getByTestId("add-card-button").click();
-  await column.getByTestId("new-card-title-input").fill(cardTitle);
-  await column.getByTestId("save-card-button").click();
+  await addCardThroughColumn(column, cardTitle);
   await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
     timeout: 45_000,
   });
@@ -151,10 +176,13 @@ test.describe("kanban end-to-end", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("kanban-alice");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(browser, request, "kanban-alice");
+    if (!aliceFlow) {
+      assertJointStackNotRequired("kanban end-to-end browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     const cardA = `Card A ${stamp}`;
     const cardB = `Card B ${stamp}`;
@@ -165,6 +193,7 @@ test.describe("kanban end-to-end", () => {
         title: `Kanban Realm ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
       });
       // Kanban scopes writes to the selected Realm; navigate with the explicit
       // realm_id so the route resolves to the freshly-created Realm (plain
@@ -202,9 +231,7 @@ test.describe("kanban end-to-end", () => {
       // Add two cards in Todo. Each "add-card-button" click reveals the
       // new-card-title-input; fill + save.
       for (const cardName of [cardA, cardB]) {
-        await todoColumn.getByTestId("add-card-button").click();
-        await todoColumn.getByTestId("new-card-title-input").fill(cardName);
-        await todoColumn.getByTestId("save-card-button").click();
+        await addCardThroughColumn(todoColumn, cardName);
         await expect(
           todoColumn.getByTestId("kanban-card").filter({ hasText: cardName }),
         ).toBeVisible({ timeout: 30_000 });

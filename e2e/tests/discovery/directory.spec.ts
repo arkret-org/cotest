@@ -2,6 +2,7 @@
 // Contract: e2e/scenarios/discovery/directory.md
 // Spec: discovery/discovery-directory.md, discovery/profiles-presence.md, identity/identity-handles.md
 
+import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -16,6 +17,7 @@ import {
   openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { canonicalJson, createRealmApi } from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -26,18 +28,15 @@ test.describe("discovery", () => {
   }, testInfo) => {
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
-      openDpopUserPage(browser, request, `s24-alice-${stamp}`, {
-        prepareMlsDevice: false,
-      }),
-      openDpopUserPage(browser, request, `s24-bob-${stamp}`, {
-        prepareMlsDevice: false,
-      }),
+      openDpopUserPage(browser, request, `s24-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s24-bob-${stamp}`),
     ]);
     if (!aliceSession || !bobSession) {
       assertJointStackNotRequired("directory contact browser login");
       test.skip(true, "coauth DPoP session-grant login is unavailable");
       return;
     }
+    const alice = aliceSession.user;
     const alicePage = aliceSession.page;
     const bob = bobSession.user;
     const bobPage = bobSession.page;
@@ -45,11 +44,16 @@ test.describe("discovery", () => {
     try {
       // Pre-contact: directory search for bob from alice returns empty.
       await alicePage.gotoDirectory();
-      await alicePage.page.getByTestId("tab-actors").click();
-      await alicePage.page
-        .getByTestId("directory-search-input")
-        .fill(bob.handle);
-      await alicePage.page.getByTestId("directory-search-button").click();
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("tab-actors"),
+      );
+      await alicePage.fillWithPassivePromptRetry(
+        alicePage.page.getByTestId("directory-search-input"),
+        bob.did,
+      );
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("directory-search-button"),
+      );
       await expect(alicePage.page.getByTestId("directory-panel")).toContainText(
         /No actors found/,
         {
@@ -61,35 +65,52 @@ test.describe("discovery", () => {
       const aliceContact = alicePage.page.getByTestId(
         "directory-contact-tools",
       );
-      await aliceContact.getByTestId("contact-target-did-input").fill(bob.did);
-      await aliceContact.getByTestId("request-contact-button").click();
+      await alicePage.fillWithPassivePromptRetry(
+        aliceContact.getByTestId("contact-target-did-input"),
+        bob.did,
+      );
+      await alicePage.clickWithPassivePromptRetry(
+        aliceContact.getByTestId("request-contact-button"),
+      );
       await expect(aliceContact).toContainText(/pending/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "contact-pending");
 
       // bob accepts via directory contact tools.
       await bobPage.gotoDirectory();
       const bobContact = bobPage.page.getByTestId("directory-contact-tools");
-      await bobContact.getByTestId("list-contacts-button").click();
+      await bobPage.clickWithPassivePromptRetry(
+        bobContact.getByTestId("list-contacts-button"),
+      );
       await expect(bobContact).toContainText(alice.did, { timeout: 30_000 });
       await expect(bobContact).toContainText(/pending/i, { timeout: 30_000 });
-      await bobContact
-        .getByTestId("contact-requester-did-input")
-        .fill(alice.did);
-      await bobContact.getByTestId("accept-contact-button").click();
+      await bobPage.fillWithPassivePromptRetry(
+        bobContact.getByTestId("contact-requester-did-input"),
+        alice.did,
+      );
+      await bobPage.clickWithPassivePromptRetry(
+        bobContact.getByTestId("accept-contact-button"),
+      );
       await expect(bobContact).toContainText(/accepted/i, { timeout: 30_000 });
 
       // bob lists; alice should appear with count 1.
-      await bobContact.getByTestId("list-contacts-button").click();
+      await bobPage.clickWithPassivePromptRetry(
+        bobContact.getByTestId("list-contacts-button"),
+      );
       await expect(bobContact).toContainText(alice.did);
       await expect(bobContact).toContainText(/contacts 1/i);
 
       // Post-contact: alice's directory search now sees bob.
       await alicePage.gotoDirectory();
-      await alicePage.page.getByTestId("tab-actors").click();
-      await alicePage.page
-        .getByTestId("directory-search-input")
-        .fill(bob.handle);
-      await alicePage.page.getByTestId("directory-search-button").click();
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("tab-actors"),
+      );
+      await alicePage.fillWithPassivePromptRetry(
+        alicePage.page.getByTestId("directory-search-input"),
+        bob.did,
+      );
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("directory-search-button"),
+      );
       await expect(
         alicePage.page.locator(
           `[data-testid="actor-result-did"][title="${cssStringEscape(bob.did)}"]`,
@@ -195,7 +216,7 @@ test.describe("discovery", () => {
   }) => {
     // spec: profiles-presence.md §3 — presence is ephemeral and projects into
     // the directory actor row. A client signals `online` while its tab is open
-    // by refreshing presence on `/_cokret/self/events/subscribe?set_presence=...`;
+    // by broadcasting `ck.presence` on `POST /_cokret/self/ephemeral`;
     // closing the tab stops the refresh and the row decays to `offline`
     // (mirroring the Sync presence projection's stale-online TTL). Reopening
     // re-asserts `online`. We drive this through the API rather than the yougen
@@ -210,6 +231,12 @@ test.describe("discovery", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
+    const presenceRealmId = await createRealmApi(request, bobToken, {
+      title: `S24 Presence ${stamp}`,
+      discoverability: "unlisted",
+      history_visibility: "joined",
+      encryption_profile: "none",
+    });
 
     // Directory search filters actors to the caller's accepted contacts;
     // establish the contact edge so alice can see bob's row at all.
@@ -233,7 +260,7 @@ test.describe("discovery", () => {
         `${solandBaseUrl()}/_cokret/find/directory/search-actors`,
         {
           headers: { authorization: `Bearer ${aliceToken}` },
-          data: { query: bob.handle },
+          data: { query: bob.did },
         },
       );
       expect(search.status()).toBe(200);
@@ -247,12 +274,23 @@ test.describe("discovery", () => {
       return row?.preview?.presence?.status;
     };
 
+    const broadcastBobPresence = async (state: "online" | "offline") => {
+      const response = await request.post(
+        `${solandBaseUrl()}/_cokret/self/ephemeral`,
+        {
+          headers: { authorization: `Bearer ${bobToken}` },
+          data: presenceEnvelope(bob.did, bob.deviceId, presenceRealmId, state),
+        },
+      );
+      const text = await response.text();
+      expect(
+        response.ok(),
+        `presence ${state} returned ${response.status()}: ${text}`,
+      ).toBeTruthy();
+    };
+
     // bob's tab is open → presence refreshed to online.
-    const goOnline = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events/subscribe?set_presence=online&max_wait_ms=0`,
-      { headers: { authorization: `Bearer ${bobToken}` } },
-    );
-    expect(goOnline.ok()).toBeTruthy();
+    await broadcastBobPresence("online");
     await expect
       .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
       .toBe("online");
@@ -260,21 +298,13 @@ test.describe("discovery", () => {
     // bob closes the tab → presence refresh stops. We model the closed tab by
     // explicitly flipping presence offline (the same wire the client emits on
     // teardown); the directory row MUST reflect offline.
-    const goOffline = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events/subscribe?set_presence=offline&max_wait_ms=0`,
-      { headers: { authorization: `Bearer ${bobToken}` } },
-    );
-    expect(goOffline.ok()).toBeTruthy();
+    await broadcastBobPresence("offline");
     await expect
       .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
       .toBe("offline");
 
     // bob reopens → presence-online MUST surface within 5s.
-    const reopen = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events/subscribe?set_presence=online&max_wait_ms=0`,
-      { headers: { authorization: `Bearer ${bobToken}` } },
-    );
-    expect(reopen.ok()).toBeTruthy();
+    await broadcastBobPresence("online");
     await expect
       .poll(bobPresenceFromSearch, { timeout: 5_000, intervals: [500] })
       .toBe("online");
@@ -379,7 +409,6 @@ test.describe("discovery", () => {
       browser,
       request,
       `s24-org-ui-${stamp}`,
-      { prepareMlsDevice: false },
     );
     if (!aliceSession) {
       assertJointStackNotRequired("directory organization browser login");
@@ -389,9 +418,16 @@ test.describe("discovery", () => {
     const alicePage = aliceSession.page;
     try {
       await alicePage.gotoDirectory();
-      await alicePage.page.getByTestId("tab-organizations").click();
-      await alicePage.page.getByTestId("directory-search-input").fill("Cokret");
-      await alicePage.page.getByTestId("directory-search-button").click();
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("tab-organizations"),
+      );
+      await alicePage.fillWithPassivePromptRetry(
+        alicePage.page.getByTestId("directory-search-input"),
+        "Cokret",
+      );
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("directory-search-button"),
+      );
       await expect(alicePage.page.getByTestId("org-result")).toBeVisible({
         timeout: 30_000,
       });
@@ -406,4 +442,35 @@ test.describe("discovery", () => {
 
 function cssStringEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function presenceEnvelope(
+  actorDid: string,
+  deviceId: string,
+  realmId: string,
+  state: "online" | "offline",
+): Record<string, unknown> {
+  const sentAt = new Date();
+  const expiresAt = new Date(sentAt.getTime() + 30_000);
+  const envelope: Record<string, unknown> = {
+    kind: "ck.presence",
+    realm_id: realmId,
+    actor_id: actorDid,
+    device_id: deviceId,
+    sent_at: sentAt.toISOString(),
+    expires_at: expiresAt.toISOString(),
+    payload: { state },
+  };
+  const eventDigest = `sha256:${createHash("sha256")
+    .update(canonicalJson(envelope))
+    .digest("hex")}`;
+  envelope.proof = {
+    kind: "detached_jws",
+    alg: "EdDSA",
+    verification_method: `${actorDid}#${deviceId}`,
+    event_digest: eventDigest,
+    created_at: sentAt.toISOString(),
+    jws: "eyJhbGciOiJFZERTQSJ9..c2ln",
+  };
+  return envelope;
 }

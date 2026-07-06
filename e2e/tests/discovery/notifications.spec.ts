@@ -21,10 +21,12 @@ import {
   ensureRegistered,
   issueDevSession,
   openDpopUserPage,
-  openUserPage,
+  openDpopUserPageForAccount,
   uniqueUser,
 } from "../../helpers/users";
 import { selectDxcOption } from "../../helpers/dxc-select";
+import { coauthBaseUrl } from "../../helpers/env";
+import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
 
@@ -88,22 +90,18 @@ test.describe("notifications", () => {
   }, testInfo) => {
     // spec: push-notifications.md §3 + §4.3.1.
     const stamp = Date.now();
-    const alice = uniqueUser("s23-mute-alice");
-    const bob = uniqueUser("s23-mute-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      openDpopUserPage(browser, request, `s23-mute-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s23-mute-bob-${stamp}`),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired("notifications mute browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceSession.page;
+    const bob = bobSession.user;
+    const bobPage = bobSession.page;
     const normalMsg = `muted normal message ${stamp}`;
     const mentionSuffix = `muted mention override ${stamp}`;
 
@@ -179,22 +177,20 @@ test.describe("notifications", () => {
   }, testInfo) => {
     // spec: push-notifications.md §3.2 do-not-disturb preference.
     const stamp = Date.now();
-    const alice = uniqueUser("s23-dnd-alice");
-    const bob = uniqueUser("s23-dnd-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      openDpopUserPage(browser, request, `s23-dnd-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s23-dnd-bob-${stamp}`),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired("notifications dnd browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceSession.user;
+    const alicePage = aliceSession.page;
+    const bob = bobSession.user;
+    const bobPage = bobSession.page;
+    const aliceToken = await issueDevSession(request, alice);
     const suppressedSuffix = `DND suppressed ${stamp}`;
     const resumedSuffix = `DND resumed ${stamp}`;
     const apiActorSeq = 8_000_000_000_000_000 + (stamp % 100_000);
@@ -206,6 +202,7 @@ test.describe("notifications", () => {
         title: `S23 DND ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [bob.did],
       });
       await bobPage.acceptInvite(realmId);
@@ -218,11 +215,14 @@ test.describe("notifications", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await bobPage.page.getByTestId("dnd-enabled-toggle").check();
+      await bobPage.completeRecoveryKeySetupIfPrompted();
+      await bobPage.checkWithPassivePromptRetry(
+        bobPage.page.getByTestId("dnd-enabled-toggle"),
+      );
       await selectDxcOption(bobPage.page.getByTestId("dnd-mode-select"), "now");
-      await bobPage.page
-        .getByTestId("save-notification-settings-button")
-        .click();
+      await bobPage.clickWithPassivePromptRetry(
+        bobPage.page.getByTestId("save-notification-settings-button"),
+      );
       await expect(
         bobPage.page.getByTestId("notification-settings-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
@@ -244,10 +244,13 @@ test.describe("notifications", () => {
       await bobPage.page.goto("/notifications/settings", {
         waitUntil: "domcontentloaded",
       });
-      await bobPage.page.getByTestId("dnd-enabled-toggle").uncheck();
-      await bobPage.page
-        .getByTestId("save-notification-settings-button")
-        .click();
+      await bobPage.completeRecoveryKeySetupIfPrompted();
+      await bobPage.uncheckWithPassivePromptRetry(
+        bobPage.page.getByTestId("dnd-enabled-toggle"),
+      );
+      await bobPage.clickWithPassivePromptRetry(
+        bobPage.page.getByTestId("save-notification-settings-button"),
+      );
       await expect(
         bobPage.page.getByTestId("notification-settings-status"),
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
@@ -279,11 +282,18 @@ test.describe("notifications", () => {
     // advances read cursor state from the client surface.
     const stamp = Date.now();
     const alice = uniqueUser(`s23-mark-${stamp}`);
-    const bob = uniqueUser(`s23-mark-bob-${stamp}`);
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
+    const bobSession = await openDpopUserPage(
+      browser,
+      request,
+      `s23-mark-bob-${stamp}`,
+    );
+    if (!bobSession) {
+      assertJointStackNotRequired("notifications mark-all-read browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bob = bobSession.user;
+    await ensureRegistered(request, alice);
     const [aliceToken, bobToken] = await Promise.all([
       issueDevSession(request, alice),
       issueDevSession(request, bob),
@@ -311,9 +321,7 @@ test.describe("notifications", () => {
       }),
     );
 
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    const bobPage = bobSession.page;
     try {
       await bobPage.gotoNotifications();
       const row = bobPage.page
@@ -364,6 +372,7 @@ test.describe("notifications", () => {
       discoverability: "listed",
       history_visibility: "shared",
       encryption_profile: "mls_rfc9420",
+      content_scheme: "mls-exporter-aead-v1",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await putAccountDataViaEventApi(
@@ -437,27 +446,40 @@ test.describe("notifications", () => {
     // spec: client-preferences.md read marker is per-account, synced to all devices.
     const stamp = Date.now();
     const alice = uniqueUser("s23-crossdev-alice");
-    const bob = uniqueUser("s23-crossdev-bob");
-    const bobDevice2 = {
-      ...bob,
-      name: `${bob.name}-device2`,
-      deviceId: `ck:device:01904100-0000-7000-8000-${String(stamp).padStart(12, "0").slice(-12)}`,
-    };
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
-    const [aliceToken, bobToken1, bobToken2] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, bobDevice2),
-    ]);
-    const bobDevice1 = await openUserPage(browser, bob, {
-      sessionCredential: bobToken1,
+    const coauth = coauthBaseUrl();
+    if (!coauth) {
+      assertJointStackNotRequired("notifications cross-device browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bobAccount = await registerCoauthPasswordAccount(request, coauth, {
+      password: "1amTester!",
     });
-    const bobDevice2Page = await openUserPage(browser, bobDevice2, {
-      sessionCredential: bobToken2,
-    });
+    const [bobDevice1Session, bobDevice2Session] = await Promise.all([
+      openDpopUserPageForAccount(
+        browser,
+        request,
+        `s23-crossdev-bob-${stamp}-d1`,
+        bobAccount,
+      ),
+      openDpopUserPageForAccount(
+        browser,
+        request,
+        `s23-crossdev-bob-${stamp}-d2`,
+        bobAccount,
+      ),
+    ]);
+    if (!bobDevice1Session || !bobDevice2Session) {
+      assertJointStackNotRequired("notifications cross-device browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bob = bobDevice1Session.user;
+    expect(bobDevice2Session.user.did).toBe(bob.did);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const bobDevice1 = bobDevice1Session.page;
+    const bobDevice2Page = bobDevice2Session.page;
 
     try {
       const realmId = await createRealmApi(request, aliceToken, {

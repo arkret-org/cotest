@@ -32,9 +32,12 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
+  selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -85,11 +88,20 @@ test.describe("core object invariants", () => {
     "Phase A — newly created Realm exposes spec §3 common fields (id, created_at, actor, lifecycle_state equivalents) on the read-back wire",
     async ({ browser, request }, testInfo) => {
       const stamp = Date.now();
-      const alice = uniqueUser(`s-coinv-alice-${stamp}`);
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-      const aliceAuth = { authorization: `Bearer ${aliceToken}` };
+      const aliceFlow = await openDpopUserPage(
+        browser,
+        request,
+        `s-coinv-alice-${stamp}`,
+      );
+      if (!aliceFlow) {
+        assertJointStackNotRequired("core object invariants browser login");
+        test.skip(true, "coauth DPoP session-grant login is unavailable");
+        return;
+      }
+      const alice = aliceFlow.user;
+      const alicePage = aliceFlow.page;
+      const authFor = (method: string, url: string) =>
+        selfPathHeadersForDpopSession(aliceFlow.session, method, url);
 
       try {
         // ── Step 1-2: alice creates Realm R via the standard setup wizard
@@ -112,10 +124,10 @@ test.describe("core object invariants", () => {
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
-        const realmRes = await request.get(
-          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
-          { headers: aliceAuth },
-        );
+        const realmUrl = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`;
+        const realmRes = await request.get(realmUrl, {
+          headers: authFor("GET", realmUrl),
+        });
         expect(realmRes.status()).toBe(200);
         const realmBody = (await realmRes.json()) as {
           ok?: boolean;
@@ -140,10 +152,10 @@ test.describe("core object invariants", () => {
         // RealmLifecycleResponse does not currently surface. The events
         // query response item shape follows the Event Envelope projection:
         // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
-        const eventsRes = await request.get(
-          `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`,
-          { headers: aliceAuth },
-        );
+        const eventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
+        const eventsRes = await request.get(eventsUrl, {
+          headers: authFor("GET", eventsUrl),
+        });
         expect(eventsRes.status()).toBe(200);
         const eventsBody = (await eventsRes.json()) as {
           events?: Array<{
