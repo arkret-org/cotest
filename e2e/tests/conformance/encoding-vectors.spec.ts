@@ -178,12 +178,16 @@ test.describe("conformance encoding vectors", () => {
 
   test("§1.1 TS canonical JSON helper rejects non-NFC strings and non-integer numbers", async () => {
     expect(canonicalJson({ text: "\u00E9" })).toBe('{"text":"é"}');
-    expect(() => canonicalJson({ text: "e\u0301" })).toThrow(/non-NFC/);
-    expect(() => canonicalJson({ n: 1.5 })).toThrow(/non-canonical number/);
-    expect(() => canonicalJson({ n: Number.MAX_SAFE_INTEGER + 1 })).toThrow(
-      /non-canonical number/,
+    const nonCanonicalNumber =
+      /non-canonical number|does not allow floating point|ambiguous numbers|outside the JSON safe-integer range|non-JSON number/;
+    expect(() => canonicalJson({ text: "e\u0301" })).toThrow(
+      /non-NFC|not Unicode NFC/,
     );
-    expect(() => canonicalJson({ n: -0 })).toThrow(/non-canonical number/);
+    expect(() => canonicalJson({ n: 1.5 })).toThrow(nonCanonicalNumber);
+    expect(() => canonicalJson({ n: Number.MAX_SAFE_INTEGER + 1 })).toThrow(
+      nonCanonicalNumber,
+    );
+    expect(() => canonicalJson({ n: -0 })).toThrow(nonCanonicalNumber);
   });
 
   test("§1.1 canonical JSON reject (noncanonical numbers) returns 4xx", async ({

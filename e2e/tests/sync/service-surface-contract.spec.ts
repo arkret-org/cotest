@@ -30,6 +30,7 @@ import {
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
+  refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   signedEventEnvelope,
   wireErrCode,
@@ -716,9 +717,20 @@ test.describe("service surface contract — error envelope, pagination, idempote
       });
       (
         envelope.requirements as {
-          critical_extensions: Array<{ id: string; fail_closed: boolean }>;
+          critical_extensions: Array<{
+            id: string;
+            fail_closed: boolean;
+            extension_scope: string;
+          }>;
         }
-      ).critical_extensions = [{ id: criticalExtension, fail_closed: true }];
+      ).critical_extensions = [
+        {
+          id: criticalExtension,
+          fail_closed: true,
+          extension_scope: "payload",
+        },
+      ];
+      refreshEventEnvelopeProof(envelope);
 
       const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: { authorization: `Bearer ${token}` },

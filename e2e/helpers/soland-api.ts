@@ -1210,6 +1210,26 @@ export function signedEventEnvelope(
   };
 }
 
+export function refreshEventEnvelopeProof(
+  envelope: Record<string, unknown>,
+  proofVerificationMethod?: string,
+): void {
+  const actorDid =
+    typeof envelope.actor_id === "string" ? envelope.actor_id : undefined;
+  if (!actorDid) {
+    throw new Error("Event envelope actor_id is required to refresh proofs");
+  }
+  const event = { ...envelope };
+  delete event.proofs;
+  envelope.proofs = [
+    eventEnvelopeProof({
+      actorDid,
+      event,
+      verificationMethod: proofVerificationMethod,
+    }),
+  ];
+}
+
 export function eventProof(args: {
   actorDid: string;
   event: Record<string, unknown>;

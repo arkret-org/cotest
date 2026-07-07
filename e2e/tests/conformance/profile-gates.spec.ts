@@ -31,7 +31,11 @@ import {
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
-import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
+import {
+  refreshEventEnvelopeProof,
+  signedEventEnvelope,
+  wireErrCode,
+} from "../../helpers/soland-api";
 
 // ESM-friendly __dirname so `node --experimental-vm-modules` / Playwright's loader
 // can resolve the spec artifact path regardless of cwd.
@@ -288,6 +292,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
         extension_scope: "payload",
       },
     ];
+    refreshEventEnvelopeProof(envelope);
 
     const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
