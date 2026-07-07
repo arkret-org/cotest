@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::{Did, Event, Hash, Proof, canonical, proof_kind};
+use cokret_core::{Did, Hash, Proof, canonical, proof_kind};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
         "canonical-json" => canonical_json(input)?,
         "sha256-canonical-json" => sha256_canonical_json(input)?,
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
-        "event-envelope-proof" => event_proof(input, EventDigestMode::TypedEventEnvelope)?,
+        "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 
@@ -64,7 +64,6 @@ fn sha256_canonical_json(input: Value) -> Result<Value> {
 #[derive(Clone, Copy)]
 enum EventDigestMode {
     RawCanonicalJson,
-    TypedEventEnvelope,
 }
 
 fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
@@ -97,23 +96,15 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     serde_json::to_value(proof).context("serialize event proof")
 }
 
-fn event_digest(event: &Value, mode: EventDigestMode) -> Result<String> {
-    if matches!(mode, EventDigestMode::TypedEventEnvelope) {
-        let mut event = event.clone();
-        if let Value::Object(map) = &mut event {
-            map.entry("proofs".to_owned())
-                .or_insert_with(|| Value::Array(Vec::new()));
-        }
-        let event: Event = serde_json::from_value(event).context("parse typed Event")?;
-        return event
-            .event_digest()
-            .context("hash typed Event digest payload");
-    }
-
+fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
     let mut event = event.clone();
     if let Value::Object(map) = &mut event {
         map.remove("proofs");
         map.remove("unsigned");
+        map.remove("effective_scope");
+        map.remove("actor_kind");
+        map.remove("canonical_digest");
+        map.remove("canonical_hash");
     }
     canonical::canonical_sha256(&event).context("hash event digest payload")
 }
@@ -131,7 +122,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn typed_event_digest_normalizes_event_wire_shape() {
+    fn event_digest_uses_producer_envelope_canonical_bytes() {
         let event = json!({
             "event_id": "ck:event:019f3b1c-784d-7fc0-965f-0550baae7184",
             "kind": "ck.member.state",
@@ -152,16 +143,27 @@ mod tests {
                 "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
                 "membership": "join",
                 "reason": "invite_accept"
-            }
+            },
+            "unsigned": {"trace": "local"},
+            "effective_scope": {
+                "kind": "realm",
+                "realm_id": "ck:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"
+            },
+            "actor_kind": "native",
+            "proofs": []
         });
 
-        let typed_digest = event_digest(&event, EventDigestMode::TypedEventEnvelope).unwrap();
-        let raw_digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
-        let mut complete_event = event;
-        complete_event["proofs"] = Value::Array(Vec::new());
-        let parsed: Event = serde_json::from_value(complete_event).unwrap();
+        let digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
+        let mut producer_event = event.clone();
+        let map = producer_event.as_object_mut().unwrap();
+        map.remove("proofs");
+        map.remove("unsigned");
+        map.remove("effective_scope");
+        map.remove("actor_kind");
 
-        assert_eq!(typed_digest, parsed.event_digest().unwrap());
-        assert_ne!(typed_digest, raw_digest);
+        assert_eq!(
+            digest,
+            canonical::canonical_sha256(&producer_event).unwrap()
+        );
     }
 }

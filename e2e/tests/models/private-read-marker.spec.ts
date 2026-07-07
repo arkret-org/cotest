@@ -159,8 +159,8 @@ test.describe("private read marker", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`s11-prm-xdev-${stamp}`);
     await ensureRegistered(request, alice);
-    const device1 = `${alice.deviceId}-d1`;
-    const device2 = `${alice.deviceId}-d2`;
+    const device1 = typedId("device");
+    const device2 = typedId("device");
     const token1 = await issueDevSession(request, alice, { deviceId: device1 });
     const token2 = await issueDevSession(request, alice, { deviceId: device2 });
 
@@ -228,8 +228,8 @@ test.describe("private read marker", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`s11-prm-ec-${stamp}`);
     await ensureRegistered(request, alice);
-    const device1 = `${alice.deviceId}-d1`;
-    const device2 = `${alice.deviceId}-d2`;
+    const device1 = typedId("device");
+    const device2 = typedId("device");
     const token1 = await issueDevSession(request, alice, { deviceId: device1 });
     const token2 = await issueDevSession(request, alice, { deviceId: device2 });
 
