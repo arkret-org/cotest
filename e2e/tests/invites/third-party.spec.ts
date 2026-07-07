@@ -14,6 +14,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -84,14 +85,36 @@ async function submitSelfEvent(
   const accepted = Array.isArray(body.accepted)
     ? (body.accepted as string[])
     : [];
-  const rejected = Array.isArray(body.rejected)
+  const rawRejected = Array.isArray(body.rejected)
     ? (body.rejected as Array<{ reason_code?: string; detail?: string }>)
     : [];
+  const topLevelReason = wireErrCode(body);
+  const topLevelError =
+    body.error && typeof body.error === "object"
+      ? (body.error as Record<string, unknown>)
+      : undefined;
+  const topLevelDetail =
+    typeof topLevelError?.detail === "string"
+      ? topLevelError.detail
+      : typeof topLevelError?.message === "string"
+        ? topLevelError.message
+        : typeof body.detail === "string"
+          ? body.detail
+          : typeof body.message === "string"
+            ? body.message
+            : undefined;
+  const rejected =
+    rawRejected.length > 0
+      ? rawRejected
+      : topLevelReason
+        ? [{ reason_code: topLevelReason, detail: topLevelDetail }]
+        : [];
+  const rejectReason = rejected[0]?.reason_code;
   return {
     status: response.status(),
     accepted,
     rejected,
-    rejectReason: rejected[0]?.reason_code,
+    rejectReason,
     body,
   };
 }

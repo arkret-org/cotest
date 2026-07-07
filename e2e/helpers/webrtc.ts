@@ -111,6 +111,51 @@ export function deviceVerifyingKeyHex(
   return deviceSigner(actorDid, deviceId).publicKeyHex;
 }
 
+export function withBroadcastEphemeralProof(
+  envelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const actorDid = envelope.actor_id;
+  const deviceId = envelope.device_id;
+  if (typeof actorDid !== "string" || typeof deviceId !== "string") {
+    throw new Error("broadcast ephemeral proof requires actor_id and device_id");
+  }
+  const signer = deviceSigner(actorDid, deviceId);
+  const createdAt =
+    typeof envelope.sent_at === "string"
+      ? envelope.sent_at
+      : canonicalTimestamp(new Date());
+  const unsigned = { ...envelope };
+  delete unsigned.proof;
+  const eventDigest = `sha256:${createHash("sha256")
+    .update(canonicalJson(unsigned), "utf8")
+    .digest("hex")}`;
+  const bindingObject = {
+    event_digest: eventDigest,
+    actor_id: actorDid,
+    verification_method: signer.verificationMethod,
+    created_at: createdAt,
+  };
+  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const bindingPayload = base64urlJsonCanonical(bindingObject);
+  const signingInput = `${protectedHeader}.${bindingPayload}`;
+  const signature = nodeSign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    signer.privateKey,
+  );
+  return {
+    ...unsigned,
+    proof: {
+      kind: "detached_jws",
+      alg: "EdDSA",
+      verification_method: signer.verificationMethod,
+      event_digest: eventDigest,
+      created_at: createdAt,
+      jws: `${protectedHeader}..${base64url(signature)}`,
+    },
+  };
+}
+
 /**
  * Build a real `ck.call.signal` ephemeral envelope (webrtc-signaling.md §5)
  * with a genuine detached-JWS `proof` (§5.1). `event_digest` =

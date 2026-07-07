@@ -140,8 +140,10 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     // Sanity: the grant the AA minted is bound to OUR device key.
     expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
     expect(grant.audience).toBe(solandServiceDid());
+    expect(grant.principalDid).toMatch(/^did:webvh:/);
     return {
       ...account,
+      actorDid: grant.principalDid,
       deviceKey,
       grant,
     };

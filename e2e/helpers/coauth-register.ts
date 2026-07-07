@@ -144,10 +144,10 @@ export async function registerCoauthPasswordAccount(
   coauthBase: string,
   opts: { handle?: string; password?: string } = {},
 ): Promise<CoauthPasswordAccount> {
-  const slug = (opts.handle ?? `e2e-oidc-${randomUUID()}`)
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, "")
-    .slice(0, 40);
+  const slug = (opts.handle ?? `e2e-oidc-${randomUUID()}`).toLowerCase();
+  if (!/^[a-z0-9_-]+$/.test(slug)) {
+    throw new Error(`coauth test handle must be a bare localpart: ${slug}`);
+  }
   const password = opts.password ?? "CokretE2E!2026";
   const email = `${slug}@example.test`;
   const displayName = `E2E ${slug}`;

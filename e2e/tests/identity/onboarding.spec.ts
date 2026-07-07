@@ -132,15 +132,17 @@ test.describe("account onboarding", () => {
     try {
       await page.gotoLogin();
       await page.page.getByTestId("login-server-url").fill(solandBaseUrl());
-      await page.page.getByTestId("start-server-login-button").click();
-      await page.page.waitForURL(
-        (url) =>
-          url.origin === new URL(coauth!).origin &&
+      const coauthOrigin = new URL(coauth!).origin;
+      const authorizeRequest = page.page.waitForRequest((request) => {
+        const url = new URL(request.url());
+        return (
+          url.origin === coauthOrigin &&
           url.pathname.endsWith("/authorize") &&
-          url.searchParams.get("code_challenge_method") === "S256",
-        { timeout: 60_000 },
-      );
-      const current = new URL(page.page.url());
+          url.searchParams.get("code_challenge_method") === "S256"
+        );
+      }, { timeout: 60_000 });
+      await page.page.getByTestId("start-server-login-button").click();
+      const current = new URL((await authorizeRequest).url());
       expect(current.searchParams.get("resource")).toBe(solandServiceDid());
       expect(current.searchParams.get("response_type")).toBe("code");
       expect(current.searchParams.get("code_challenge")).toBeTruthy();

@@ -22,6 +22,7 @@ import {
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
+import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -70,7 +71,7 @@ test.describe("read receipts + privacy", () => {
       `${solandBaseUrl()}/_cokret/self/ephemeral`,
       {
         headers: authHeaders(aliceToken),
-        data: {
+        data: withBroadcastEphemeralProof({
           kind: "ck.receipt.read",
           realm_id: realmId,
           actor_id: alice.did,
@@ -88,7 +89,7 @@ test.describe("read receipts + privacy", () => {
             },
             created_at: sentAt.toISOString(),
           },
-        },
+        }),
       },
     );
     expect(receipt.status()).toBe(200);
@@ -574,7 +575,7 @@ async function postReceipt(
 ) {
   return await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
     headers: authHeaders(token),
-    data,
+    data: withBroadcastEphemeralProof(data),
   });
 }
 

@@ -28,6 +28,7 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import { grantCircleMemberManageCapability } from "../../helpers/circle-api";
+import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -223,7 +224,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       `${solandBaseUrl()}/_cokret/self/ephemeral`,
       {
         headers: authHeaders(fixture.bobToken),
-        data: {
+        data: withBroadcastEphemeralProof({
           kind: "ck.receipt.read",
           realm_id: fixture.realmId,
           actor_id: fixture.bob.did,
@@ -243,7 +244,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
             event_id: privateMessage.event_id,
             created_at: sentAtIso,
           },
-        },
+        }),
       },
     );
     expect(receipt.status()).toBe(200);

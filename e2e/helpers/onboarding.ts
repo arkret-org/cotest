@@ -202,17 +202,34 @@ export async function resolvePrincipalDid(
   if (!body) {
     throw new Error(`identity resolve ${did} returned non-object JSON: ${text}`);
   }
-  if (body.did !== did) {
-    throw new Error(`identity resolve returned ${body.did}, expected ${did}`);
+  const didDocument = objectRecord(body.did_document);
+  const resolvedDid = stringField(didDocument, "did") ?? stringField(body, "did");
+  if (resolvedDid !== did) {
+    throw new Error(`identity resolve returned ${resolvedDid}, expected ${did}`);
   }
-  const document = objectRecord(body.document);
+  const document = objectRecord(didDocument?.document) ?? objectRecord(body.document);
   if (!document) {
     throw new Error(`identity resolve ${did} omitted document: ${text}`);
   }
-  const log = Array.isArray(body.log)
-    ? body.log.flatMap((entry) => {
+  const logUrl = `${solandBaseUrl(opts.server)}/_cokret/root/identity/log?did=${encodeURIComponent(
+    did,
+  )}`;
+  const logResp = await request.get(logUrl);
+  const logText = await logResp.text();
+  if (!logResp.ok()) {
+    throw new Error(
+      `identity log ${did} returned ${logResp.status()}: ${logText}`,
+    );
+  }
+  const logBody = parseJsonObject(logText);
+  if (!logBody) {
+    throw new Error(`identity log ${did} returned non-object JSON: ${logText}`);
+  }
+  const log = Array.isArray(logBody.events)
+    ? logBody.events.flatMap((entry) => {
         const record = objectRecord(entry);
-        return record ? [record] : [];
+        const operation = objectRecord(record?.operation);
+        return operation ? [operation] : record ? [record] : [];
       })
     : [];
   return { document, log };

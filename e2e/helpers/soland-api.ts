@@ -31,6 +31,11 @@ export type SignedEventEnvelopeArgs = {
   /// parameter is retained so old test call sites compile, but is not emitted.
   anchorRef?: string;
   refs?: Array<Record<string, unknown>>;
+  preconditions?: Array<Record<string, unknown>>;
+  effects?: Array<Record<string, unknown>>;
+  sealRef?: string;
+  sealBasis?: Record<string, unknown>;
+  authContext?: Record<string, unknown>;
 };
 
 export type EventProofMode = "dev-proof" | "detached-jws";
@@ -383,7 +388,11 @@ export async function grantRealmReviewCapabilityApi(
         grant: {
           ...unsignedGrant,
           proofs: [
-            eventProof({ actorDid: args.ownerDid, event: unsignedGrant }),
+            buildDetachedJwsProof({
+              issuerDid: args.ownerDid,
+              payload: unsignedGrant,
+              createdAt: issuedAt,
+            }),
           ],
         },
       },
@@ -437,7 +446,11 @@ export async function grantServiceDelegationApi(
         grant: {
           ...unsignedGrant,
           proofs: [
-            eventProof({ actorDid: args.ownerDid, event: unsignedGrant }),
+            buildDetachedJwsProof({
+              issuerDid: args.ownerDid,
+              payload: unsignedGrant,
+              createdAt: issuedAt,
+            }),
           ],
         },
       },
@@ -1191,6 +1204,11 @@ export function signedEventEnvelope(
     hlc,
     prev_refs: [],
     refs: args.refs ?? [],
+    preconditions: args.preconditions,
+    effects: args.effects,
+    seal_ref: args.sealRef,
+    seal_basis: args.sealBasis,
+    auth_context: args.authContext,
     requirements: {
       schema: args.requirementsSchema ?? [
         args.schemaId ?? schemaIdForEventKind(args.kind),

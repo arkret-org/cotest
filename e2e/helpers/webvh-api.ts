@@ -14,6 +14,10 @@
 //   - proof = ed25519 signature (eddsa-jcs-2022) over the canonical-JCS entry
 //             with `proof` stripped, `verificationMethod = did:key:<mb>#<mb>`
 //             (build_proof / verify_webvh_log_proof).
+//   - witness = ed25519 signature over the canonical-JCS entry with `proof`,
+//             `witness`, and `versionId` stripped. The entry hash includes
+//             `witness[]`, so the witness transcript cannot include the final
+//             `versionId` without creating a cycle.
 //
 // Canonical JSON is the project's JCS profile (sorted keys, integer-only
 // numbers, NFC) — the same `canonicalJson` soland's
@@ -292,10 +296,10 @@ export type RotationInput = {
 /// the new update key.
 ///
 /// Ordering matters and mirrors soland: the `witness[]` attestation is signed
-/// over the proof+witness-stripped body, then the versionId hash is computed
-/// over the body INCLUDING `witness[]` (soland strips only proof + versionId),
-/// and finally the controller `proof[]` is signed over the body including
-/// `witness[]` + `versionId`.
+/// over the proof+witness+versionId-stripped body, then the versionId hash is
+/// computed over the body INCLUDING `witness[]` (soland strips only proof +
+/// versionId), and finally the controller `proof[]` is signed over the body
+/// including `witness[]` + `versionId`.
 export function buildRotationEntry(input: RotationInput): BuiltEntry {
   const seq = parseInt(input.prevVersionId.split("-")[0], 10) + 1;
   const versionTime = input.versionTime ?? new Date().toISOString();
@@ -374,10 +378,10 @@ export function buildRotationEntry(input: RotationInput): BuiltEntry {
   };
 }
 
-/// A witness proof signs the entry with `proof` + `witness` stripped (matching
-/// soland `verify_one_witness_proof`). soland's resolver verifies the
-/// `witness[]` array (distinct from the controller `proof[]`) and counts each
-/// distinct valid signer whose multibase is declared in
+/// A witness proof signs the entry with `proof`, `witness`, and `versionId`
+/// stripped (matching soland `verify_one_witness_proof`). soland's resolver
+/// verifies the `witness[]` array (distinct from the controller `proof[]`) and
+/// counts each distinct valid signer whose multibase is declared in
 /// `parameters.witnesses` toward the witness quorum.
 export function buildWitnessProof(
   entry: Record<string, unknown>,
@@ -386,6 +390,7 @@ export function buildWitnessProof(
   const payloadEntry = { ...entry };
   delete payloadEntry.proof;
   delete payloadEntry.witness;
+  delete payloadEntry.versionId;
   const signature = sign(null, canonicalBytes(payloadEntry), witness.privateKey);
   return {
     type: "DataIntegrityProof",

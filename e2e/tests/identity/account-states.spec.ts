@@ -387,7 +387,7 @@ test.describe("account states", () => {
     expect(suspend.status()).toBe(200);
 
     const audit = await request.get(
-      `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(admin.did)}&limit=20`,
+      `${solandBaseUrl()}/_soland/admin/audit/events?actor=${encodeURIComponent(admin.did)}&limit=20`,
       { headers: authHeaders(adminToken) },
     );
     expect(audit.status()).toBe(200);

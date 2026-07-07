@@ -15,6 +15,7 @@ import {
 } from "@playwright/test";
 import {
   addRealmMemberApi,
+  canonicalTimestamp,
   createRealmApi,
   grantRealmReviewCapabilityApi,
   listMemberApplicationsApi,
@@ -352,7 +353,7 @@ test.describe("knock + application + cooldown", () => {
       application_ttl: "PT1H",
     });
 
-    const pastTtl = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const pastTtl = canonicalTimestamp(new Date(Date.now() - 2 * 60 * 60 * 1000));
     await submitKnockApi(request, bob.token, bob.user.did, realmId, {
       createdAt: pastTtl,
     });

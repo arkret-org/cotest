@@ -6,6 +6,7 @@
 //   - discovery/push-notifications.md (notification is client-side projection of marker)
 //   - crypto-media/device-lifecycle.md §7  (to-device queue carries the marker fan-out)
 
+import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -15,6 +16,7 @@ import {
 } from "../../helpers/api";
 import {
   accountSubscribeDeltaApi,
+  canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -291,6 +293,7 @@ test.describe("private read marker", () => {
       discoverability: "listed",
       history_visibility: "shared",
       encryption_profile: "mls_rfc9420",
+      content_scheme: "mls-exporter-aead-v1",
       invitees: [alice.did],
       ownerDid: bob.did,
     });
@@ -532,6 +535,9 @@ async function sendEncryptedMentionMessage(
   secretBody: string,
 ): Promise<string> {
   const strandId = await resolveDefaultStrandId(request, token, realmId);
+  const ciphertext = Buffer.from(`opaque-ciphertext-${secretBody}`, "utf8").toString(
+    "base64url",
+  );
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
@@ -539,21 +545,57 @@ async function sendEncryptedMentionMessage(
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      encrypted: true,
-      encrypted_content: {
-        content_type: "ck.message.v1",
-        ciphertext: `opaque-ciphertext-${secretBody}`,
-      },
-      content: {
-        // The mention target rides on the (otherwise opaque) message so the
-        // server can derive the per-recipient notification without seeing the
-        // sealed body. Only the mention subject is in the clear.
-        mentions: [{ subject_id: mentionDid }],
-      },
+      mention_sidecar_hash: [mentionSidecarHash(realmId, mentionDid)],
+      encrypted_content: encryptedEnvelope(ciphertext, realmId),
     },
   });
   await submitSignedEventApi(request, token, envelope, {
     context: `send encrypted mention ${realmId}`,
   });
   return String(envelope.event_id);
+}
+
+function mentionSidecarHash(realmId: string, did: string): string {
+  return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
+}
+
+function encryptedEnvelope(
+  ciphertext: string,
+  realmId: string,
+): Record<string, unknown> {
+  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const payloadMetadata = {
+    scheme: "mls-exporter-aead-v1",
+    version: "1.0",
+    group_id: "mls_test",
+    epoch: 1,
+    content_type: "application/vnd.cokret.message+json",
+    aad_visibility_event_id: "hidden",
+    aad,
+    key_ref: {
+      algorithm: "MLS-EXPORTER-AEAD",
+      group_state_ref:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  };
+  return {
+    ...payloadMetadata,
+    ciphertext,
+    aad_digest: sha256Digest(canonicalJson(aad)),
+    payload_digest: encryptedPayloadDigest(payloadMetadata, ciphertext),
+  };
+}
+
+function sha256Digest(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function encryptedPayloadDigest(
+  metadata: Record<string, unknown>,
+  ciphertext: string,
+): string {
+  const hash = createHash("sha256");
+  hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
+  hash.update(Buffer.from(ciphertext, "base64url"));
+  return `sha256:${hash.digest("hex")}`;
 }

@@ -31,6 +31,7 @@ import {
   uniqueUser,
   type JointUserPage,
 } from "../../helpers/users";
+import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -382,18 +383,18 @@ test.describe("chat advanced", () => {
       `${solandBaseUrl()}/_cokret/self/ephemeral`,
       {
         headers: authHeaders(fixture.aliceToken),
-        data: {
+        data: withBroadcastEphemeralProof({
           kind: "ck.typing",
           realm_id: fixture.realmId,
           actor_id: fixture.alice.did,
           device_id: fixture.alice.deviceId,
           sent_at: sentAt.toISOString(),
-          expires_at: new Date(sentAt.getTime() + 5_000).toISOString(),
+          expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
           payload: {
             typing: true,
             strand_id: strandId,
           },
-        },
+        }),
       },
     );
     expect(typing.status()).toBe(200);

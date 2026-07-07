@@ -83,6 +83,7 @@ type ConformanceCatalog = {
   // §2.5 requires a principal server federating MLS-backed Realms to advertise
   // ck.profile.mls_governance_binding.full.v1.
   hardening_profiles?: string[];
+  candidate_profiles?: string[];
   profile_tiers?: {
     v1_profile_catalog?: string[];
     v1_minimal_interop_floor?: string[];
@@ -197,6 +198,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       ...(catalog.profile_tiers?.v1_profile_catalog ?? []),
       ...(catalog.profile_tiers?.extension_profile_implementation ?? []),
       ...(catalog.hardening_profiles ?? []),
+      ...(catalog.candidate_profiles ?? []),
     ]);
     expect(knownProfiles.size, "catalog known-profiles set is non-empty").toBeGreaterThan(0);
 
