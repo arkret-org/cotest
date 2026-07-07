@@ -30,7 +30,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{SecondsFormat, Utc};
 use cotest::harness::{
     CokretServer, add_member, create_realm, event_envelope, expect_api_error, expect_json,
-    register_account, submit_event,
+    expect_text, register_account, submit_event,
 };
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
@@ -329,6 +329,80 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         "agent submit must use the introspection service"
     );
 
+    let agent_event_id = agent_message["event_id"]
+        .as_str()
+        .expect("agent message event_id")
+        .to_owned();
+    let scan_path = format!(
+        "/_cokret/self/events?realms={}&limit=50",
+        urlencoding(&realm_id)
+    );
+    let scan_text = expect_text(
+        agent_session_get(&server, &holder, &scan_path, "scan-after-reply")?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(
+        scan_text.contains(&agent_event_id),
+        "DPoP-bound agent scan must include accepted reply event {agent_event_id}: {scan_text}"
+    );
+
+    let stream_path = format!(
+        "/_cokret/self/events/subscribe?realms={}&include_history=true&max_duration_ms=150&heartbeat_ms=100",
+        urlencoding(&realm_id)
+    );
+    let stream_text = expect_text(
+        agent_session_get(&server, &holder, &stream_path, "stream-after-reply")?,
+        StatusCode::OK,
+    )
+    .await?;
+    let stream_frames = ndjson_frames(&stream_text)?;
+    assert!(
+        stream_frames
+            .iter()
+            .any(|frame| frame["kind"].as_str() == Some("catchup_complete")),
+        "agent stream must emit catchup_complete: {stream_text}"
+    );
+    assert!(
+        stream_text.contains(&agent_event_id),
+        "DPoP-bound agent stream history must include accepted reply event {agent_event_id}: {stream_text}"
+    );
+
+    let paused = server
+        .http()
+        .post(server.url(&format!(
+            "/_cokret/self/agents/{}/pause",
+            urlencoding(&agent_did)
+        )))
+        .bearer_auth(&token)
+        .json(&json!({"reason": "cotest live e2e pause"}))
+        .send()
+        .await?;
+    assert_eq!(paused.status(), StatusCode::OK, "pause must return 200");
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
+
+    let after_pause = event_envelope(
+        &agent_did,
+        &realm_id,
+        "ck.message.create",
+        json!({
+            "body": "agent_key_proof after pause",
+            "content": {"body": "agent_key_proof after pause"},
+            "agent_context": {
+                "agent_id": agent_did,
+                "operator_or_controller": ALICE_DID,
+                "execution_purpose": "reply",
+                "authorization_ref": agent_grant_id,
+            },
+        }),
+    );
+    expect_api_error(
+        agent_session_post(&server, &holder, &after_pause, "reply-after-pause")?,
+        StatusCode::PRECONDITION_FAILED,
+        "agent_paused",
+    )
+    .await?;
+
     let deactivated = server
         .http()
         .post(server.url(&format!(
@@ -348,6 +422,33 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         agent_status(&server, &token, &agent_did).await?,
         "deactivated"
     );
+
+    let after_deactivate = event_envelope(
+        &agent_did,
+        &realm_id,
+        "ck.message.create",
+        json!({
+            "body": "agent_key_proof after deactivate",
+            "content": {"body": "agent_key_proof after deactivate"},
+            "agent_context": {
+                "agent_id": agent_did,
+                "operator_or_controller": ALICE_DID,
+                "execution_purpose": "reply",
+                "authorization_ref": agent_grant_id,
+            },
+        }),
+    );
+    expect_api_error(
+        agent_session_post(
+            &server,
+            &holder,
+            &after_deactivate,
+            "reply-after-deactivate",
+        )?,
+        StatusCode::PRECONDITION_FAILED,
+        "agent_deactivated",
+    )
+    .await?;
 
     mock.set_active(false);
     let after_revoke = event_envelope(
@@ -501,7 +602,13 @@ async fn pair_agent_runtime_key(
                 "public_key_digest": runtime_public_key_digest.as_str(),
                 "accountable_principal_id": ALICE_DID,
                 "agent_key_scope": {
-                    "actions": ["ck.self.events.command.submit"],
+                    "actions": [
+                        "ck.self.events.stream.subscribe",
+                        "ck.self.events.query.scan",
+                        "ck.self.events.command.submit",
+                        "ck.event.read",
+                        "ck.message.create"
+                    ],
                     "resources": [{"kind": "realm", "realm_id": "*"}],
                     "constraints": []
                 },
@@ -617,6 +724,34 @@ fn agent_session_post(
         .header("X-Cokret-Session-Grant-Challenge", "cotest-agent-key-proof")
         .header("X-Cokret-Session-Grant-Proof", "cotest-agent-key-proof-jws")
         .json(event))
+}
+
+fn agent_session_get(
+    server: &CokretServer,
+    holder: &AgentSessionHolder,
+    path: &str,
+    jti_suffix: &str,
+) -> Result<reqwest::RequestBuilder> {
+    let url = server.url(path);
+    let dpop = holder.dpop_proof("GET", &url, jti_suffix)?;
+    Ok(server
+        .http()
+        .get(&url)
+        .bearer_auth(AGENT_SESSION_GRANT)
+        .header("DPoP", dpop)
+        .header("X-Cokret-Session-Grant-Challenge", "cotest-agent-key-proof")
+        .header("X-Cokret-Session-Grant-Proof", "cotest-agent-key-proof-jws"))
+}
+
+fn ndjson_frames(text: &str) -> Result<Vec<Value>> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            serde_json::from_str(line)
+                .map_err(|error| anyhow!("invalid NDJSON frame {line}: {error}"))
+        })
+        .collect()
 }
 
 struct AgentSessionHolder {
@@ -821,8 +956,11 @@ fn handle_introspection_connection(
                 "service_account_id": "agent-live-e2e-account",
                 "audience": service_did,
                 "scopes": [
-                    "ck.agent.action:message.send",
-                    "ck.self.events.command.submit"
+                    "ck.self.events.stream.subscribe",
+                    "ck.self.events.query.scan",
+                    "ck.self.events.command.submit",
+                    "ck.event.read",
+                    "ck.message.create"
                 ],
                 "expires_at": "2026-12-31T23:59:59Z",
                 "revocation_ref": "ck:session:agent-live-e2e-grant",

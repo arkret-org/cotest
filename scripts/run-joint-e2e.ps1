@@ -998,15 +998,70 @@ function Start-ManagedCommand {
     }
 }
 
+function Get-CargoLockPackageVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$CargoLockPath,
+        [Parameter(Mandatory = $true)][string]$PackageName
+    )
+
+    if (-not (Test-Path $CargoLockPath)) {
+        return $null
+    }
+
+    $inPackage = $false
+    $name = $null
+    foreach ($line in Get-Content -Path $CargoLockPath) {
+        if ($line -eq "[[package]]") {
+            $inPackage = $true
+            $name = $null
+            continue
+        }
+        if (-not $inPackage) {
+            continue
+        }
+        if ($line -match '^name = "([^"]+)"') {
+            $name = $Matches[1]
+            continue
+        }
+        if ($line -match '^version = "([^"]+)"') {
+            if ($name -eq $PackageName) {
+                return $Matches[1]
+            }
+            continue
+        }
+    }
+
+    return $null
+}
+
 function Get-DioxusNoDownloadsPathPrefix {
+    param(
+        [string]$ProjectRoot
+    )
+
     $dxHome = if ($env:DX_HOME) { $env:DX_HOME } else { Join-Path $HOME ".dx" }
     $toolsRoot = Join-Path $dxHome "tools"
     $segments = @()
 
     if (Test-Path $toolsRoot) {
+        $preferredWasmBindgenDir = $null
+        if ($ProjectRoot) {
+            $wasmBindgenVersion = Get-CargoLockPackageVersion `
+                -CargoLockPath (Join-Path $ProjectRoot "Cargo.lock") `
+                -PackageName "wasm-bindgen"
+            if ($wasmBindgenVersion) {
+                $candidate = Join-Path $toolsRoot "wasm-bindgen-$wasmBindgenVersion"
+                if (Test-Path $candidate) {
+                    $preferredWasmBindgenDir = (Resolve-Path $candidate).Path
+                    $segments += $preferredWasmBindgenDir
+                }
+            }
+        }
+
         $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "wasm-bindgen-*" -ErrorAction SilentlyContinue |
             Sort-Object -Property Name -Descending |
-            ForEach-Object { $_.FullName }
+            ForEach-Object { $_.FullName } |
+            Where-Object { -not $preferredWasmBindgenDir -or $_ -ne $preferredWasmBindgenDir }
         $segments += Get-ChildItem -Path $toolsRoot -Directory -Filter "esbuild-*" -ErrorAction SilentlyContinue |
             Sort-Object -Property Name -Descending |
             ForEach-Object { $_.FullName }
@@ -1026,10 +1081,11 @@ function Get-DioxusNoDownloadsPathPrefix {
 
 function Add-DioxusNoDownloadsEnvironment {
     param(
-        [Parameter(Mandatory = $true)][string]$Command
+        [Parameter(Mandatory = $true)][string]$Command,
+        [string]$ProjectRoot
     )
 
-    $pathPrefix = Get-DioxusNoDownloadsPathPrefix
+    $pathPrefix = Get-DioxusNoDownloadsPathPrefix -ProjectRoot $ProjectRoot
     $prefix = "`$env:NO_DOWNLOADS='1'; "
     if ($pathPrefix) {
         $escapedPathPrefix = $pathPrefix.Replace("'", "''")
@@ -1904,7 +1960,9 @@ try {
     $yougenBetaService = $null
     $generatedYougenBetaCommand = $false
     if (-not $SkipYougen -and -not $YougenCommand -and $yougenPort) {
-        $YougenCommand = Add-DioxusNoDownloadsEnvironment "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents"
+        $YougenCommand = Add-DioxusNoDownloadsEnvironment `
+            -Command "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents" `
+            -ProjectRoot $YougenRoot
         $generatedYougenCommand = $true
     }
     if ($YougenCommand) {
@@ -1921,7 +1979,9 @@ try {
     }
     if (-not $SkipYougen -and $DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
         if (-not $YougenBetaCommand -and $yougenBetaPort) {
-            $YougenBetaCommand = Add-DioxusNoDownloadsEnvironment "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents"
+            $YougenBetaCommand = Add-DioxusNoDownloadsEnvironment `
+                -Command "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents" `
+                -ProjectRoot $YougenRoot
             $generatedYougenBetaCommand = $true
         }
         if ($YougenBetaCommand) {
