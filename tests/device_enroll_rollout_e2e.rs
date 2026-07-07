@@ -1,9 +1,11 @@
 use anyhow::{Context, Result, anyhow};
-use cokret_core::canonical::{canonical_json_bytes, sha256_digest};
+use cokret_core::canonical::canonical_json_bytes;
 use cokret_core::{
     ed25519_pubkey_to_did_key_multibase, encode_base58btc, encode_multibase_base58btc,
 };
-use cotest::harness::{CokretServer, dev_login, expect_api_error, expect_json};
+use cotest::harness::{
+    CokretServer, dev_login, expect_api_error, expect_json, refresh_event_proof,
+};
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -349,8 +351,7 @@ fn service_attested_device_authorize_event(
         recovery_session_id: None,
     };
     let payload = serde_json::to_value(&payload)?;
-    let payload_digest = sha256_digest(canonical_bytes(&payload)?);
-    Ok(json!({
+    let mut event = json!({
         "event_id": event_id,
         "kind": "ck.device.authorize",
         "realm_id": realm_id,
@@ -364,11 +365,16 @@ fn service_attested_device_authorize_event(
         "authorization_ref": authorization_ref,
         "payload": payload,
         "proofs": [{
-            "type": "dev-proof",
+            "kind": "detached_jws",
+            "alg": "EdDSA",
             "verification_method": authority_verification_method,
-            "payload_digest": payload_digest,
+            "event_digest": "",
+            "created_at": "2026-06-17T00:00:00Z",
+            "jws": "placeholder"
         }],
-    }))
+    });
+    refresh_event_proof(&mut event);
+    Ok(event)
 }
 
 fn assert_accepted_event(body: &Value, event_id: &str) -> Result<()> {

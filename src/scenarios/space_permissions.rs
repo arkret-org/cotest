@@ -35,7 +35,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let unauth_realm_id = "ck:realm:01904100-0000-7000-8000-5pace0000001";
+    let unauth_realm_id = "ck:realm:01904100-0000-7000-8000-000000005ace";
     expect_api_error(
         server
             .http()

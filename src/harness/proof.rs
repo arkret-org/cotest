@@ -6,20 +6,92 @@ use serde_json::Value;
 /// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
 /// which preserves insertion order and would diverge from the SDK.
 pub(crate) fn canonical_event_digest(event: &Value) -> String {
-    let mut canonical = event.clone();
-    if let Value::Object(object) = &mut canonical {
-        object.remove("proofs");
-        object.remove("unsigned");
+    let mut typed_value = event.clone();
+    if let Value::Object(object) = &mut typed_value {
+        match object.get_mut("proofs") {
+            Some(Value::Array(proofs)) => {
+                for proof in proofs {
+                    if let Value::Object(proof_object) = proof {
+                        let missing_or_empty = proof_object
+                            .get("event_digest")
+                            .and_then(Value::as_str)
+                            .is_none_or(str::is_empty);
+                        if missing_or_empty {
+                            proof_object.insert(
+                                "event_digest".to_owned(),
+                                Value::String(
+                                    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                                        .to_owned(),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+            Some(_) => {}
+            None => {
+                object.insert("proofs".to_owned(), Value::Array(Vec::new()));
+            }
+        }
     }
-    cokret_core::canonical::canonical_sha256(&canonical).expect("event JSON is canonicalizable")
+    let typed: cokret_core::Event =
+        serde_json::from_value(typed_value).expect("event envelope matches SDK Event wire shape");
+    typed
+        .event_digest()
+        .expect("event envelope digest is canonicalizable")
 }
 
 /// Fill `proofs[0].event_digest` with the canonical Event digest. The canonical
 /// `event_proof` schema (`additionalProperties:false`) only carries
 /// `event_digest`; there is no proof-level `payload_digest`.
-pub(crate) fn refresh_event_proof(event: &mut Value) {
+pub fn refresh_event_proof(event: &mut Value) {
     let digest = canonical_event_digest(event);
     event["proofs"][0]["event_digest"] = Value::String(digest);
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
+        let event = json!({
+            "event_id": "ck:event:019f3b1c-76c8-7000-8000-000000000001",
+            "kind": "ck.message.create",
+            "realm_id": "ck:realm:019f3b1c-76c8-7000-8000-000000000001",
+            "actor_id": "did:web:alice.example",
+            "actor_seq": 1,
+            "created_at": "2026-07-07T00:00:00Z",
+            "hlc": "019f3b1c76c8-0000-ac7eadec",
+            "prev_refs": [],
+            "refs": [],
+            "requirements": {
+                "features": [],
+                "critical_extensions": []
+            },
+            "payload": {
+                "content": {"kind": "ck.content.text", "body": "hello"},
+                "message_id": "ck:message:019f3b1c-76c8-7000-8000-000000000001",
+                "strand_id": "ck:strand:019f3b1c-76c8-7000-8000-000000000001"
+            },
+            "proofs": [{
+                "kind": "detached_jws",
+                "alg": "EdDSA",
+                "verification_method": "did:web:alice.example#device",
+                "event_digest": "",
+                "created_at": "2026-07-07T00:00:00Z",
+                "jws": "placeholder"
+            }]
+        });
+
+        let digest = super::canonical_event_digest(&event);
+        let mut parseable = event.clone();
+        parseable["proofs"][0]["event_digest"] =
+            json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+        let typed: cokret_core::Event = serde_json::from_value(parseable).unwrap();
+
+        assert_eq!(digest, typed.event_digest().unwrap());
+    }
 }
 
 /// Attach the `ephemeral-envelope.schema.json` broadcast `proof` to an

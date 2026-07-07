@@ -17,12 +17,8 @@
 //! DPoP-bound `agent_key_proof` session grant and backing soland with a local
 //! introspection service.
 
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use base64::Engine as _;
@@ -32,8 +28,11 @@ use cotest::harness::{
     CokretServer, add_member, create_realm, event_envelope, expect_api_error, expect_json,
     expect_text, register_account, submit_event,
 };
+use cotest::scenarios::_helpers::mock_http::{self, MockServer};
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
+use salvo::affix_state;
+use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
 use serial_test::serial;
 use sha2::{Digest, Sha256};
@@ -177,7 +176,8 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         format!("did:web:{service_name}.cotest.local"),
         holder.cnf_jkt.clone(),
         holder.public_jwk.to_string(),
-    )?;
+    )
+    .await?;
     let introspection_url = mock.url();
     let server = CokretServer::spawn_with_env(
         service_name,
@@ -814,63 +814,55 @@ fn jwk_thumbprint_ed25519(x: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes()))
 }
 
-struct MockIntrospection {
-    url: String,
-    addr: String,
-    running: Arc<AtomicBool>,
+#[derive(Clone)]
+struct AgentIntrospectionState {
     active: Arc<AtomicBool>,
     request_count: Arc<AtomicUsize>,
     service_did: Arc<Mutex<String>>,
     subject: Arc<Mutex<Option<String>>>,
-    handle: Option<JoinHandle<()>>,
+    cnf_jkt: String,
+    session_public_key: String,
+}
+
+struct MockIntrospection {
+    url: String,
+    active: Arc<AtomicBool>,
+    request_count: Arc<AtomicUsize>,
+    service_did: Arc<Mutex<String>>,
+    subject: Arc<Mutex<Option<String>>>,
+    _server: MockServer,
 }
 
 impl MockIntrospection {
-    fn spawn(service_did: String, cnf_jkt: String, session_public_key: String) -> Result<Self> {
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
-        let addr = listener.local_addr()?.to_string();
-        let url = format!("http://{addr}/session-grants/introspect");
-        let running = Arc::new(AtomicBool::new(true));
+    async fn spawn(
+        service_did: String,
+        cnf_jkt: String,
+        session_public_key: String,
+    ) -> Result<Self> {
         let active = Arc::new(AtomicBool::new(true));
         let request_count = Arc::new(AtomicUsize::new(0));
         let service_did = Arc::new(Mutex::new(service_did));
         let subject = Arc::new(Mutex::new(None));
-        let thread_running = Arc::clone(&running);
-        let thread_active = Arc::clone(&active);
-        let thread_count = Arc::clone(&request_count);
-        let thread_service_did = Arc::clone(&service_did);
-        let thread_subject = Arc::clone(&subject);
-        let handle = thread::spawn(move || {
-            while thread_running.load(Ordering::SeqCst) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        thread_count.fetch_add(1, Ordering::SeqCst);
-                        handle_introspection_connection(
-                            stream,
-                            thread_active.load(Ordering::SeqCst),
-                            &thread_service_did,
-                            &cnf_jkt,
-                            &session_public_key,
-                            &thread_subject,
-                        );
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
+        let state = AgentIntrospectionState {
+            active: Arc::clone(&active),
+            request_count: Arc::clone(&request_count),
+            service_did: Arc::clone(&service_did),
+            subject: Arc::clone(&subject),
+            cnf_jkt,
+            session_public_key,
+        };
+        let router = Router::with_path("session-grants/introspect")
+            .hoop(affix_state::inject(state))
+            .post(agent_introspect);
+        let server = mock_http::spawn_mock(router).await?;
+        let url = format!("http://{}/session-grants/introspect", server.addr());
         Ok(Self {
             url,
-            addr,
-            running,
             active,
             request_count,
             service_did,
             subject,
-            handle: Some(handle),
+            _server: server,
         })
     }
 
@@ -899,48 +891,43 @@ impl MockIntrospection {
     }
 }
 
-impl Drop for MockIntrospection {
-    fn drop(&mut self) {
-        self.running.store(false, Ordering::SeqCst);
-        let _ = TcpStream::connect(&self.addr);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
-    }
-}
-
-fn handle_introspection_connection(
-    mut stream: TcpStream,
-    active: bool,
-    service_did: &Arc<Mutex<String>>,
-    cnf_jkt: &str,
-    session_public_key: &str,
-    subject: &Arc<Mutex<Option<String>>>,
-) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let request = read_http_request(&mut stream);
-    if !request.contains(&format!(
-        "authorization: bearer {}",
-        INTROSPECTION_BEARER.to_ascii_lowercase()
-    )) {
-        write_json_response(
-            stream,
-            "401 Unauthorized",
+#[handler]
+async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let state = depot
+        .get_typed::<AgentIntrospectionState>()
+        .expect("agent introspection mock state injected")
+        .clone();
+    state.request_count.fetch_add(1, Ordering::SeqCst);
+    let authorized = req
+        .headers()
+        .get(salvo::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .to_ascii_lowercase()
+                .contains(&format!("bearer {INTROSPECTION_BEARER}"))
+        });
+    if !authorized {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        res.render(Json(
             json!({"ok": false, "error": {"errcode": "unauthenticated"}}),
-        );
+        ));
         return;
     }
+    let _body: Value = req.parse_json().await.unwrap_or_else(|_| json!({}));
 
-    let service_did = service_did
+    let service_did = state
+        .service_did
         .lock()
         .map(|guard| guard.clone())
         .unwrap_or_else(|_| "did:web:agent-live-e2e.cotest.local".to_owned());
-    let subject = subject
+    let subject = state
+        .subject
         .lock()
         .ok()
         .and_then(|guard| guard.clone())
         .unwrap_or_else(|| "did:web:agent-unset.example".to_owned());
-    let body = if active {
+    let body = if state.active.load(Ordering::SeqCst) {
         json!({
             "active": true,
             "status": "active",
@@ -964,8 +951,8 @@ fn handle_introspection_connection(
                 ],
                 "expires_at": "2026-12-31T23:59:59Z",
                 "revocation_ref": "ck:session:agent-live-e2e-grant",
-                "session_public_key": session_public_key,
-                "cnf_jkt": cnf_jkt,
+                "session_public_key": state.session_public_key,
+                "cnf_jkt": state.cnf_jkt,
                 "proof_kind": "agent_key_proof",
                 "scope_details": {
                     "agent_principal_id": subject,
@@ -993,61 +980,5 @@ fn handle_introspection_connection(
             "one_time_use_consumed": false
         })
     };
-    write_json_response(stream, "200 OK", body);
-}
-
-fn read_http_request(stream: &mut TcpStream) -> String {
-    let mut bytes = Vec::new();
-    let mut buffer = [0_u8; 1024];
-    let mut header_end = None;
-    let mut content_length = None;
-
-    loop {
-        let bytes_read = match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(bytes_read) => bytes_read,
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) =>
-            {
-                break;
-            }
-            Err(_) => break,
-        };
-        bytes.extend_from_slice(&buffer[..bytes_read]);
-
-        if header_end.is_none()
-            && let Some(position) = bytes.windows(4).position(|window| window == b"\r\n\r\n")
-        {
-            header_end = Some(position + 4);
-            let headers = String::from_utf8_lossy(&bytes[..position]);
-            content_length = headers.lines().find_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                name.eq_ignore_ascii_case("content-length")
-                    .then(|| value.trim().parse::<usize>().ok())
-                    .flatten()
-            });
-        }
-
-        if let Some(header_end) = header_end {
-            let expected = header_end + content_length.unwrap_or(0);
-            if bytes.len() >= expected {
-                break;
-            }
-        }
-    }
-
-    String::from_utf8_lossy(&bytes).to_ascii_lowercase()
-}
-
-fn write_json_response(mut stream: TcpStream, status: &str, body: Value) {
-    let body = serde_json::to_vec(&body).unwrap_or_else(|_| b"{}".to_vec());
-    let header = format!(
-        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-        body.len()
-    );
-    let _ = stream.write_all(header.as_bytes());
-    let _ = stream.write_all(&body);
+    res.render(Json(body));
 }

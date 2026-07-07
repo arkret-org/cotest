@@ -805,7 +805,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             .strip_prefix("ck:realm:")
             .unwrap_or("01999999-0000-7000-8000-000000000451")
     );
-    json!({
+    let mut event = json!({
         "event_id": event_id,
         "kind": "ck.realm.create",
         "realm_id": realm_id,
@@ -838,11 +838,16 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             "local_target_ref": realm_id
         },
         "proofs": [{
-            "type": "dev-proof",
+            "kind": "detached_jws",
+            "alg": "EdDSA",
             "verification_method": format!("{}#device", ctx.alice_did),
-            "payload_digest": canonical_payload_digest(&payload)
+            "event_digest": "",
+            "created_at": "2026-05-22T10:00:00Z",
+            "jws": "placeholder"
         }]
-    })
+    });
+    cotest::harness::refresh_event_proof(&mut event);
+    event
 }
 
 fn call_mock_contract(
@@ -1163,10 +1168,6 @@ fn normalize_value(value: Value) -> Value {
         Value::String(value) => Value::String(normalize_string(&value)),
         other => other,
     }
-}
-
-fn canonical_payload_digest(payload: &Value) -> String {
-    cokret_core::canonical::canonical_sha256(payload).expect("payload JSON is canonicalizable")
 }
 
 fn is_dynamic_key(key: &str) -> bool {
