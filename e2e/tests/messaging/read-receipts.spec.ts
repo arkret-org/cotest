@@ -6,7 +6,6 @@
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
-  allowPlaintextMessagesViaApi,
   authHeaders,
   createSharedRealmViaApi,
   listReadMarkersViaApi,
@@ -57,7 +56,6 @@ test.describe("read receipts + privacy", () => {
         historyVisibility: "shared",
       },
     );
-    await allowPlaintextMessagesViaApi(request, bobToken, realmId);
     const message = await sendPlaintextMessageViaApi(
       request,
       bobToken,
@@ -188,55 +186,7 @@ test.describe("read receipts + privacy", () => {
     ).toHaveLength(0);
   });
 
-  test("alice toggles preference=false; subsequent reads do NOT emit ck.receipt.read; bob's view stops updating", async ({
-    request,
-  }) => {
-    const fixture = await createReceiptFixture(request, "preference-disabled");
-    expect(
-      await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
-    ).toHaveLength(0);
-  });
-
-  test("alice re-enables preference; new reads emit a single fresh ck.receipt.read; reads during the disabled window stay invisible", async ({
-    request,
-  }) => {
-    const fixture = await createReceiptFixture(request, "preference-reenabled");
-    const hiddenWindowMessage = await sendPlaintextMessageViaApi(
-      request,
-      fixture.bobToken,
-      fixture.realmId,
-      `disabled-window ${Date.now()}`,
-      { actorDid: fixture.bob.did },
-    );
-    const freshMessage = await sendPlaintextMessageViaApi(
-      request,
-      fixture.bobToken,
-      fixture.realmId,
-      `reenabled-window ${Date.now()}`,
-      { actorDid: fixture.bob.did },
-    );
-    const receipt = receiptEnvelope(fixture);
-    receipt.payload.event_id = freshMessage.event_id;
-    const response = await postReceipt(request, fixture.aliceToken, receipt);
-    expect(response.status()).toBe(200);
-    expect(JSON.stringify(receipt.payload)).not.toContain(
-      hiddenWindowMessage.event_id,
-    );
-  });
-
-  test("space disclosure=required locks the client toggle; even with preference=false, client sends receipts", async ({
-    request,
-  }) => {
-    const fixture = await createReceiptFixture(request, "disclosure-required");
-    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
-      disclosure: "required",
-    });
-    const receipt = receiptEnvelope(fixture);
-    const response = await postReceipt(request, fixture.aliceToken, receipt);
-    expect(response.status()).toBe(200);
-  });
-
-  test("space disclosure=disabled: Sync Service rejects any inbound ck.receipt.read for the space", async ({
+  test("space disclosure=disabled rejects inbound ck.receipt.read and leaves no peer-visible marker", async ({
     request,
   }) => {
     // spec: read-receipts.md §2.5 — with disclosure=disabled the client does
@@ -259,6 +209,89 @@ test.describe("read receipts + privacy", () => {
     expect(
       await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
     ).toHaveLength(0);
+  });
+
+  test("space disclosure can be re-enabled; blocked-window reads stay invisible", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "disclosure-reenabled");
+    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
+      disclosure: "disabled",
+    });
+    const hiddenWindowMessage = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `disabled-window ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const blocked = receiptEnvelope(fixture);
+    blocked.payload.event_id = hiddenWindowMessage.event_id;
+    const blockedResponse = await postReceipt(
+      request,
+      fixture.aliceToken,
+      blocked,
+    );
+    expect(blockedResponse.status()).toBe(403);
+
+    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
+      disclosure: "required",
+    });
+    const freshMessage = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `reenabled-window ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const receipt = receiptEnvelope(fixture);
+    receipt.payload.event_id = freshMessage.event_id;
+    const response = await postReceipt(request, fixture.aliceToken, receipt);
+    expect(response.status()).toBe(200);
+    const responseBody = await response.json();
+    expect(responseBody.accepted).toBe(true);
+    expect(responseBody.kind).toBe("ck.receipt.read");
+    expect(
+      JSON.stringify(
+        await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
+      ),
+    ).not.toContain(hiddenWindowMessage.event_id);
+  });
+
+  test("space disclosure=required accepts receipts without creating peer-visible durable markers", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "disclosure-required");
+    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
+      disclosure: "required",
+    });
+    const receipt = receiptEnvelope(fixture);
+    const response = await postReceipt(request, fixture.aliceToken, receipt);
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.accepted).toBe(true);
+    expect(body.kind).toBe("ck.receipt.read");
+    expect(body.realm_id).toBe(fixture.realmId);
+    expect(
+      await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
+    ).toHaveLength(0);
+  });
+
+  test("space disclosure=disabled reason is reported consistently", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "disclosure-disabled-reason");
+    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
+      disclosure: "disabled",
+    });
+    const receipt = await postReceipt(
+      request,
+      fixture.aliceToken,
+      receiptEnvelope(fixture),
+    );
+    expect(receipt.status()).toBe(403);
+    const body = await receipt.json();
+    expect(JSON.stringify(body)).toContain("disclosure=disabled");
   });
 
   test("actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
@@ -478,7 +511,6 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
       historyVisibility: "shared",
     },
   );
-  await allowPlaintextMessagesViaApi(request, bobToken, realmId);
   const message = await sendPlaintextMessageViaApi(
     request,
     bobToken,

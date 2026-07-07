@@ -2041,6 +2041,7 @@ try {
         $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
+        $env:COTEST_REQUIRE_DUAL_SOLAND = "1"
         if ($YougenBaseUrl) {
             $env:COTEST_YOUGEN_ALPHA_BASE_URL = $YougenBaseUrl
         } else {
@@ -2056,6 +2057,7 @@ try {
         Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_DID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_REQUIRE_DUAL_SOLAND -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_YOUGEN_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_YOUGEN_BETA_BASE_URL -ErrorAction SilentlyContinue
     }

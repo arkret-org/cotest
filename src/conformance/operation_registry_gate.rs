@@ -1,3 +1,11 @@
+//! Literal HTTP-operation registry scanner.
+//!
+//! This gate intentionally scans source text for literal route/path evidence
+//! across sibling repositories. It can prove that observed literals are present
+//! in the operation registry, but it can miss routes built through macros,
+//! string formatting, or generated code. High-risk services should pair this
+//! with implementation-native route inventories or generated OpenAPI outputs.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};

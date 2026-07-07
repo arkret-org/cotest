@@ -1,5 +1,5 @@
 //! C.8 — Unified mock ↔ live parity framework.
-//!
+#![allow(dead_code)]
 //! Different cotest scenarios (yougen, soland reducers, teabay directory,
 //! floria push) all want the same thing: a fixed vector list whose mock and
 //! live runs must produce *identical* output bytes (canonical JSON, or

@@ -1,9 +1,9 @@
 // Federation outbound signing and trust_domain
 // Contract: e2e/scenarios/federation/signing-and-trust-domain.md
 //
-// These Playwright tests wrap soland's real integration suite so cotest
-// coverage tracks the live federation security contract without mocking the
-// transport or lowering this to a TODO/fixme.
+// These Playwright tests wrap soland's federation_outbox integration tests.
+// They cover signing/trust_domain validation logic with soland's mock peer
+// harness; they are not a full end-to-end federation transport run.
 
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";

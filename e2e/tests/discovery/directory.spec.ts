@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { cssStringEscape } from "../../helpers/dom";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   requestContactCokret,
@@ -439,10 +440,6 @@ test.describe("discovery", () => {
     }
   });
 });
-
-function cssStringEscape(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
 
 function presenceEnvelope(
   actorDid: string,

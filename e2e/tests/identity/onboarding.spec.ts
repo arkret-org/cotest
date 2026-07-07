@@ -29,6 +29,10 @@ import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 
 test.describe.configure({ mode: "serial" });
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 test.describe("account onboarding", () => {
   test("dev-login path issues a token bound to a registered DID (baseline; the real onboarding spec is below)", async ({
     request,
@@ -226,20 +230,24 @@ test.describe("account onboarding", () => {
     const { document, log } = await resolvePrincipalDid(request, onboarded.principalDid);
     expect(document.id).toBe(onboarded.principalDid);
     // The DID Document MUST advertise the principal server.
-    const services: Array<{ type?: string; serviceEndpoint?: string }> =
-      document.service ?? [];
+    const services = Array.isArray(document.service)
+      ? document.service.filter(isRecord)
+      : [];
     const principalService = services.find((s) => s.type === "CokretPrincipalServer");
     expect(principalService, JSON.stringify(services)).toBeTruthy();
     expect(principalService?.serviceEndpoint).toBeTruthy();
     // At least one verificationMethod (the inception key).
-    expect(Array.isArray(document.verificationMethod)).toBeTruthy();
-    expect(document.verificationMethod.length).toBeGreaterThan(0);
+    const verificationMethods = Array.isArray(document.verificationMethod)
+      ? document.verificationMethod
+      : [];
+    expect(verificationMethods.length).toBeGreaterThan(0);
 
     // The history chain (did.jsonl) has at least the genesis entry, and every
     // entry's SCID matches the DID's SCID.
     expect(log.length).toBeGreaterThan(0);
     for (const entry of log) {
-      const entryScid = entry?.parameters?.scid;
+      const parameters = isRecord(entry.parameters) ? entry.parameters : undefined;
+      const entryScid = parameters?.scid;
       if (entryScid) {
         expect(entryScid).toBe(scid);
       }

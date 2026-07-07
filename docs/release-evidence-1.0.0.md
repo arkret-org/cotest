@@ -29,7 +29,7 @@ Generated: 2026-05-27 — bundle for the CKP-0007 circle-rollout milestone.
 | `.github/workflows/ci.yml`            | `typos`              | every push + PR          | docs spelling drift                                                                     |
 | `.github/workflows/ci.yml`            | `deny`               | every push + PR          | dependency advisories / licensing                                                       |
 | `.github/workflows/ci.yml`            | `audit`              | every push + PR          | RustSec advisory scan                                                                   |
-| `.github/workflows/ci.yml`            | `fuzz`               | every push + PR          | `envelope_fuzz` / `snapshot_fuzz` / `anchor_fuzz` (60s each, 5 min cap) — **new in P5** |
+| `.github/workflows/ci.yml`            | `fuzz`               | every push + PR          | `envelope_fuzz` / `snapshot_fuzz` / `seal_fuzz` (60s each, 5 min cap) — **new in P5** |
 | `.github/workflows/ci.yml`            | `e2e` (3 browsers)   | every push + PR          | Playwright spec-list parse smoke                                                        |
 
 ## P5 changes captured in this pack

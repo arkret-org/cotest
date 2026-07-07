@@ -8,6 +8,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   authHeaders,
   createSharedRealmViaApi,
+  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
@@ -544,7 +545,29 @@ async function liftDecision(
   await submitSignedEventApi(request, fixture.reviewerToken, envelope, {
     context: `lift moderation decision ${fixture.decisionId}`,
   });
-  return { decision_id: fixture.decisionId, event_id: String(envelope.event_id) };
+  const events = await listRealmEventsViaApi(
+    request,
+    fixture.reviewerToken,
+    fixture.realmId,
+    { limit: 200 },
+  );
+  const projected = events.find(
+    (event) =>
+      event.event_id === envelope.event_id ||
+      event.id === envelope.event_id ||
+      event.event_ref === envelope.event_id,
+  );
+  expect(projected, `projected decision lift ${String(envelope.event_id)}`).toBeTruthy();
+  const payload = isRecord(projected?.payload) ? projected.payload : {};
+  const decisionRef = payload.decision_ref;
+  expect(decisionRef, `decision lift payload in ${JSON.stringify(projected)}`).toBe(
+    fixture.decisionId,
+  );
+  return { decision_id: String(decisionRef), event_id: String(envelope.event_id) };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function signedModerationEvent(

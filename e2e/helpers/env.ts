@@ -65,6 +65,17 @@ export function hasDualSoland(): boolean {
   );
 }
 
+export function assertDualSolandNotRequired(context: string): void {
+  if (process.env.COTEST_REQUIRE_DUAL_SOLAND === "1") {
+    throw new Error(
+      `${context}: COTEST_REQUIRE_DUAL_SOLAND=1 (dual soland topology declared present) ` +
+        `but alpha/beta soland endpoints are unavailable — refusing to silently skip ` +
+        `federation coverage and report a false green. Pass -DualSoland to ` +
+        `scripts/run-joint-e2e.ps1 or unset COTEST_REQUIRE_DUAL_SOLAND.`,
+    );
+  }
+}
+
 export function yougenBaseUrl(key: SolandKey = "default"): string {
   if (key === "alpha") {
     return optionalEnv("COTEST_YOUGEN_ALPHA_BASE_URL")?.replace(/\/$/, "") ?? yougenBaseUrl();

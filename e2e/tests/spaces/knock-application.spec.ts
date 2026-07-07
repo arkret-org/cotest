@@ -23,6 +23,7 @@ import {
   submitApplicationReviewApi,
   submitInviteCreateApi,
   submitKnockApi,
+  wireErrCode,
   writeJoinPolicyApi,
 } from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
@@ -36,17 +37,9 @@ async function rejectCode(resp: APIResponse): Promise<string> {
   const text = await resp.text();
   try {
     const body = JSON.parse(text) as unknown;
-    if (body && typeof body === "object") {
-      const record = body as Record<string, unknown>;
-      const nested =
-        record.error && typeof record.error === "object"
-          ? (record.error as Record<string, unknown>)
-          : undefined;
-      const code =
-        nested?.code ?? nested?.reason_code ?? record.reason_code ?? record.code;
-      if (typeof code === "string") {
-        return code;
-      }
+    const code = wireErrCode(body);
+    if (code) {
+      return code;
     }
   } catch {
     // fall through to raw text
@@ -239,21 +232,23 @@ test.describe("knock + application + cooldown", () => {
       bob.user.did,
       reviewDigest,
     );
-    expect([200, 201, 400, 412, 422]).toContain(firstResp.status());
+    const firstBody = await firstResp.text();
+    expect(
+      [200, 201],
+      `fresh join_authorised_by accept returned ${firstResp.status()}: ${firstBody}`,
+    ).toContain(firstResp.status());
 
     // ...and the same accept cannot be replayed by a second invite.
-    if (firstResp.ok()) {
-      const replayResp = await submitInviteCreateApi(
-        request,
-        alice.token,
-        alice.user.did,
-        realmId,
-        bob.user.did,
-        reviewDigest,
-      );
-      expect([400, 412, 422]).toContain(replayResp.status());
-      expect(await rejectCode(replayResp)).toContain("join_authorisation_invalid");
-    }
+    const replayResp = await submitInviteCreateApi(
+      request,
+      alice.token,
+      alice.user.did,
+      realmId,
+      bob.user.did,
+      reviewDigest,
+    );
+    expect([400, 412, 422]).toContain(replayResp.status());
+    expect(await rejectCode(replayResp)).toContain("join_authorisation_invalid");
   });
 
   test("E6.C mallory is rejected by alice and CANNOT re-knock until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator", async ({
@@ -303,7 +298,7 @@ test.describe("knock + application + cooldown", () => {
     ).catch((error: unknown) => error);
     // submitApplicationApi throws on non-2xx; capture the rejection signal.
     expect(String(reapplyResp)).toMatch(
-      /failed_precondition|cooldown|412|returned 4\d\d/,
+      /failed_precondition|cooldown_after_reject|cooldown/i,
     );
   });
 
@@ -333,7 +328,9 @@ test.describe("knock + application + cooldown", () => {
       realmId,
       { answers: [{ question_id: "q1", value: "second open application" }] },
     ).catch((error: unknown) => error);
-    expect(String(secondResp)).toMatch(/failed_precondition|412|returned 4\d\d/);
+    expect(String(secondResp)).toMatch(
+      /failed_precondition|max_open_applications_per_actor|max open|open application/i,
+    );
   });
 
   test("E6.E application_ttl expiry — application accepted past TTL is rejected even if reviewer signs accept", async ({
@@ -376,7 +373,7 @@ test.describe("knock + application + cooldown", () => {
       realmId,
       { applicationRef: receiptDigest, decision: "accept", reasonCode: "ok" },
     ).catch((error: unknown) => error);
-    expect(String(reviewResp)).toMatch(/ttl_expired|412|returned 4\d\d/);
+    expect(String(reviewResp)).toMatch(/ttl_expired|application_ttl|expired/i);
   });
 
   test("E6.F reviewer loses ck.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted", async ({

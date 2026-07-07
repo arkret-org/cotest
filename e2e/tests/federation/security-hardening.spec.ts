@@ -10,6 +10,7 @@
 
 import { expect, test } from "@playwright/test";
 import {
+  assertDualSolandNotRequired,
   hasDualSoland,
   optionalEnv,
   solandBaseUrl,
@@ -29,10 +30,10 @@ import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/use
 test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
-  test.skip(
-    !hasDualSoland(),
-    "federation security hardening requires dual soland topology",
-  );
+  if (!hasDualSoland()) {
+    assertDualSolandNotRequired("federation security hardening");
+    test.skip(true, "federation security hardening requires dual soland topology");
+  }
 });
 
 test.describe("federation security hardening", () => {

@@ -349,6 +349,7 @@ fn is_secret_field(name: &str) -> bool {
             | "auth"
             | "password"
             | "secret"
+            | "session_credential"
             | "push_key"
             | "invite_token"
             | "signed_link"

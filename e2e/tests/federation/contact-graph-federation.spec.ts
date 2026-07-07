@@ -20,7 +20,12 @@
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
 import { expect, test } from "@playwright/test";
-import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import {
+  assertDualSolandNotRequired,
+  hasDualSoland,
+  solandBaseUrl,
+  solandServiceDid,
+} from "../../helpers/env";
 import {
   authHeaders,
   createRealmApi,
@@ -43,10 +48,13 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
-  test.skip(
-    !hasDualSoland(),
-    "contact-graph federation requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
-  );
+  if (!hasDualSoland()) {
+    assertDualSolandNotRequired("contact graph federation");
+    test.skip(
+      true,
+      "contact-graph federation requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
+    );
+  }
 });
 
 test.describe("contact graph federation (α/β)", () => {

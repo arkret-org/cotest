@@ -1653,17 +1653,10 @@ test.describe("MLS group encryption", () => {
 
   // Circle counterpart of the realm create-lock.
   //
-  // CONFIRMED GAP (parked pending fix): unlike ck.realm.update, soland's
-  // submit path does NOT enforce the circle create-lock synchronously. The
-  // check exists (operations.rs validate_content_encryption_floor CX_CIRCLE_UPDATE
-  // branch + reducer.rs apply), but `operation_schema_for_kind` has no arm for
-  // ck.circle.create / ck.circle.update, so projection_operation_from_event
-  // returns None and event_log.rs skips ALL submit-time operation validation
-  // for circle events. The create-lock is only caught at the async projection
-  // (reducer) layer — so state stays safe (profile is not actually changed),
-  // but the submit returns a misleading 200 instead of 4xx. Fix = add circle
-  // operation schemas (needs full circle-path regression: it would newly run
-  // validate_operation_policy + policy_gate on circle events at submit).
+  // Historical regression: circle create/update events used to skip submit-time
+  // operation validation, so create-lock enforcement only happened later during
+  // projection. soland now registers circle operation schemas; this test pins
+  // the synchronous rejection.
   test("ck.circle.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {

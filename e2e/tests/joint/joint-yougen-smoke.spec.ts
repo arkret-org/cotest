@@ -6,6 +6,7 @@ import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "../../helpers/joint-fixture";
 import { eventProof } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   type DpopUserSession,
   openDpopUserPage,
   selfPathHeadersForDpopSession,
@@ -59,11 +60,12 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
       openDpopUserPage(browser, request, "joint-invite-alice"),
       openDpopUserPage(browser, request, "joint-invite-bob"),
     ]);
-    test.skip(
-      !aliceFlow || !bobFlow,
-      "coauth DPoP session-grant login is required for joint UI",
-    );
     if (!aliceFlow || !bobFlow) {
+      assertJointStackNotRequired("joint-yougen smoke invite browser login");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for joint UI",
+      );
       return;
     }
     const alice = aliceFlow.user;

@@ -209,7 +209,7 @@ pub async fn try_spawn_with_extra_env(
     }
     let bin_path = locate_external_binary(spec)
         .ok_or_else(|| anyhow!("locate_external_binary returned None after skip_reason check"))?;
-    let port = reserve_port()?;
+    let mut port = reserve_port()?;
     let bind = format!("127.0.0.1:{}", port.port());
     let base_url = format!("http://{bind}");
 
@@ -231,6 +231,7 @@ pub async fn try_spawn_with_extra_env(
         command.env(key, value);
     }
 
+    port.release();
     let child = command.spawn().with_context(|| {
         format!(
             "failed to spawn `{}` binary at {}",

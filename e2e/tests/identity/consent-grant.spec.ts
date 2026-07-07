@@ -24,6 +24,13 @@ import { selectDxcOption } from "../../helpers/dxc-select";
 
 test.describe.configure({ mode: "serial" });
 
+type ConsentCellBody = {
+  holder_did: string;
+  peer_did: string;
+  consent_scope: string;
+  state: "active" | "revoked" | "expired" | "pending";
+} & Record<string, unknown>;
+
 async function requestContact(
   actor: Awaited<ReturnType<typeof openUserPage>>,
   targetDid: string,
@@ -72,11 +79,20 @@ async function expectConsentCell(
     { headers: { authorization: `Bearer ${token}` } },
   );
   expect(cell.status()).toBe(200);
-  const body = await cell.json();
-  expect(JSON.stringify(body)).toContain(peerDid);
-  expect(JSON.stringify(body)).toContain(scope);
-  expect(JSON.stringify(body)).toContain(expectedState);
-  return body as Record<string, unknown>;
+  const body = (await cell.json()) as Partial<ConsentCellBody>;
+  expect(body.holder_did).toBe(holderDid);
+  expect(body.peer_did).toBe(peerDid);
+  expect(body.consent_scope).toBe(consentWireScope(scope));
+  expect(body.state).toBe(expectedState);
+  return body as ConsentCellBody;
+}
+
+function consentWireScope(scope: string): string {
+  return scope === "message"
+    ? "direct_message"
+    : scope === "call"
+      ? "voice_call"
+      : scope;
 }
 
 async function requestContactApi(

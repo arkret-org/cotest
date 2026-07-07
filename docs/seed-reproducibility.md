@@ -92,7 +92,7 @@ the next fuzz run starts with the regression already covered:
 |------------------|-------------------------------------------|
 | `envelope_fuzz`  | `cotest/fuzz/corpus/event_envelope/`      |
 | `snapshot_fuzz`  | `cotest/fuzz/corpus/snapshot_manifest/` and `.../snapshot_chunk_header/` |
-| `anchor_fuzz`    | `cotest/fuzz/corpus/anchor_deep/`         |
+| `seal_fuzz`      | `cotest/fuzz/corpus/seal_deep/`           |
 
 The seed filename should be `regression-<issue-id>` so reviewers can
 trace it back to the originating bug. Reference the seed from the

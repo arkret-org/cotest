@@ -28,6 +28,7 @@ import {
 } from "../../helpers/env";
 import {
   ensureRegistered,
+  assertJointStackNotRequired,
   createDpopUserSessionForAccount,
   issueDevSession,
   openUserPage,
@@ -91,11 +92,12 @@ test.describe("key backup + restore", () => {
     // envelope. No user passphrase is ever requested.
     test.setTimeout(240_000);
     const coauth = coauthBaseUrl();
-    test.skip(
-      !coauth,
-      "coauth DPoP session-grant login is required for device-authorized key backup",
-    );
     if (!coauth) {
+      assertJointStackNotRequired("key backup settings recovery coauth");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for device-authorized key backup",
+      );
       return;
     }
     const account = await registerCoauthPasswordAccount(request, coauth);
@@ -106,8 +108,9 @@ test.describe("key backup + restore", () => {
       account,
       coauth,
     );
-    test.skip(!deviceFlow, "coauth DPoP password login is unavailable");
     if (!deviceFlow) {
+      assertJointStackNotRequired("key backup settings recovery browser login");
+      test.skip(true, "coauth DPoP password login is unavailable");
       return;
     }
     const { page: device, session } = deviceFlow;
@@ -163,11 +166,12 @@ test.describe("key backup + restore", () => {
     test.setTimeout(240_000);
     const stamp = Date.now();
     const coauth = coauthBaseUrl();
-    test.skip(
-      !coauth,
-      "coauth DPoP session-grant login is required for device-authorized key backup",
-    );
     if (!coauth) {
+      assertJointStackNotRequired("A1 MLS restore coauth");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for device-authorized key backup",
+      );
       return;
     }
     const account = await registerCoauthPasswordAccount(request, coauth);
@@ -178,8 +182,9 @@ test.describe("key backup + restore", () => {
       account,
       coauth,
     );
-    test.skip(!deviceAFlow, "coauth DPoP password login is unavailable");
     if (!deviceAFlow) {
+      assertJointStackNotRequired("A1 MLS restore device A login");
+      test.skip(true, "coauth DPoP password login is unavailable");
       return;
     }
     const { page: deviceA, session: deviceASession } = deviceAFlow;
@@ -225,8 +230,9 @@ test.describe("key backup + restore", () => {
         account,
         coauth,
       );
-      test.skip(!deviceBFlow, "coauth DPoP password login is unavailable");
       if (!deviceBFlow) {
+        assertJointStackNotRequired("A1 MLS restore device B login");
+        test.skip(true, "coauth DPoP password login is unavailable");
         return;
       }
       const { page: deviceB, session: deviceBSession } = deviceBFlow;
@@ -293,7 +299,11 @@ test.describe("key backup + restore", () => {
         "COTEST_REAL_MLS_RESTORE_OIDC=1 requires COTEST_COAUTH_BASE_URL; refusing to fall back to dev-login",
       );
     }
-    test.skip(!coauth, "coauth not started for this run");
+    if (!coauth) {
+      assertJointStackNotRequired("A3 real OIDC MLS restore coauth");
+      test.skip(true, "coauth not started for this run");
+      return;
+    }
     test.skip(
       !restoreOptIn && !optionalEnv("COTEST_REAL_OIDC_LOGIN"),
       "set COTEST_REAL_MLS_RESTORE_OIDC=1 to run the real OIDC MLS restore acceptance",
@@ -423,11 +433,12 @@ test.describe("key backup + restore", () => {
     test.setTimeout(300_000);
     const stamp = Date.now();
     const coauth = coauthBaseUrl();
-    test.skip(
-      !coauth,
-      "coauth DPoP session-grant login is required for device-authorized key backup",
-    );
     if (!coauth) {
+      assertJointStackNotRequired("A2 MLS Kanban restore coauth");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for device-authorized key backup",
+      );
       return;
     }
     const account = await registerCoauthPasswordAccount(request, coauth);
@@ -438,8 +449,9 @@ test.describe("key backup + restore", () => {
       account,
       coauth,
     );
-    test.skip(!deviceAFlow, "coauth DPoP password login is unavailable");
     if (!deviceAFlow) {
+      assertJointStackNotRequired("A2 MLS Kanban restore device A login");
+      test.skip(true, "coauth DPoP password login is unavailable");
       return;
     }
     const { page: deviceA, session: deviceASession } = deviceAFlow;
@@ -509,8 +521,9 @@ test.describe("key backup + restore", () => {
         account,
         coauth,
       );
-      test.skip(!deviceBFlow, "coauth DPoP password login is unavailable");
       if (!deviceBFlow) {
+        assertJointStackNotRequired("A2 MLS Kanban restore device B login");
+        test.skip(true, "coauth DPoP password login is unavailable");
         return;
       }
       const { page: deviceB, session: deviceBSession } = deviceBFlow;

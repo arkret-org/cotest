@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { cssStringEscape } from "../../helpers/dom";
 import { stepShot } from "../../helpers/screenshots";
 import {
   addRealmMemberApi,
@@ -74,9 +75,11 @@ test.describe("notifications", () => {
           timeout: 30_000,
         },
       );
-      // We're tolerant — either a notification-item with the message text, or the panel
-      // is empty (notification projection not implemented yet). The fixme tests below
-      // pin the spec contract.
+      await expect(
+        bobPage.page
+          .getByTestId("notification-item")
+          .filter({ hasText: msg }),
+      ).toBeVisible({ timeout: 30_000 });
       await stepShot(bobPage.page, testInfo, "default-notification");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
@@ -543,10 +546,6 @@ test.describe("notifications", () => {
 
 function mentionSidecarHash(realmId: string, did: string): string {
   return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
-
-function cssStringEscape(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function notificationEventsFromDelta(

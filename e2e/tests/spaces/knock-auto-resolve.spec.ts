@@ -18,6 +18,7 @@ import {
   createRealmApi,
   submitJoinWithProofsApi,
   submitLeaveApi,
+  wireErrCode,
   writeJoinPolicyApi,
 } from "../../helpers/soland-api";
 
@@ -30,22 +31,9 @@ async function rejectCode(resp: APIResponse): Promise<string> {
   const text = await resp.text();
   try {
     const body = JSON.parse(text) as unknown;
-    if (body && typeof body === "object") {
-      const record = body as Record<string, unknown>;
-      const nested =
-        record.error && typeof record.error === "object"
-          ? (record.error as Record<string, unknown>)
-          : undefined;
-      const code =
-        nested?.code ??
-        nested?.reason_code ??
-        record.code ??
-        record.reason_code ??
-        record.error ??
-        record.reason;
-      if (typeof code === "string") {
-        return `${code} :: ${text}`;
-      }
+    const code = wireErrCode(body);
+    if (code) {
+      return `${code} :: ${text}`;
     }
   } catch {
     // Not JSON — fall through to the raw text.

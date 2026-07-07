@@ -99,7 +99,7 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         None => return Ok(None),
     };
 
-    let bind_port = match reserve_port() {
+    let mut bind_port = match reserve_port() {
         Ok(p) => p,
         Err(_) => return Ok(None),
     };
@@ -120,6 +120,7 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
+    bind_port.release();
     let child = match command.spawn() {
         Ok(c) => c,
         Err(_) => return Ok(None),

@@ -485,10 +485,10 @@ gap-coverage gaps deferred to R4.
   cryptographic verifier per arm is stubbed in cotest because the SDK's
   verifier is itself a TODO(R3.1). When the SDK verifier lands, the
   stubbed vectors flip to active.
-- **Live media-backend conformance** — call_media vectors run against
-  the SDK's typed builders and a soland-stub backend. Live LiveKit /
-  Mediasoup / Janus / Cokret-native conformance is gated on R4 and
-  marked `#[ignore]` in the suite (see `docs/local-stub-runs.md`).
+- **Live media-backend conformance** — call_media vectors cover protocol
+  shapes and harness-facing behavior, but LiveKit / Mediasoup / Janus /
+  Cokret-native media backend conformance remains gated on R4 and is
+  documented through the current process/compose/docker runtime workflow.
 
 ### Vector ↔ error-code map
 

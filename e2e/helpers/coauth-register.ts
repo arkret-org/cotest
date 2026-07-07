@@ -32,19 +32,48 @@ export type CoauthPasswordAccount = {
 
 type RegStep = string | undefined;
 
+type CoauthRegisterResponse = {
+  status?: string;
+  id?: string;
+  next_step?: string;
+  error?: string;
+  did?: string;
+};
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function parseRegisterResponse(raw: string): CoauthRegisterResponse | null {
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    const record = objectRecord(parsed);
+    if (!record) {
+      return null;
+    }
+    return {
+      status: typeof record.status === "string" ? record.status : undefined,
+      id: typeof record.id === "string" ? record.id : undefined,
+      next_step:
+        typeof record.next_step === "string" ? record.next_step : undefined,
+      error: typeof record.error === "string" ? record.error : undefined,
+      did: typeof record.did === "string" ? record.did : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function postJson(
   request: APIRequestContext,
   url: string,
   data: Record<string, unknown>,
-): Promise<{ status: number; body: any; raw: string }> {
+): Promise<{ status: number; body: CoauthRegisterResponse | null; raw: string }> {
   const resp = await request.post(url, { data });
   const raw = await resp.text();
-  let body: any = null;
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch {
-    body = null;
-  }
+  const body = parseRegisterResponse(raw);
   return { status: resp.status(), body, raw };
 }
 
@@ -97,8 +126,8 @@ async function beginRegistrationWithRetry(
       begin.body?.id
     ) {
       return {
-        id: begin.body.id as string,
-        next: begin.body.next_step as RegStep,
+        id: begin.body.id,
+        next: begin.body.next_step,
       };
     }
     last = begin.raw;

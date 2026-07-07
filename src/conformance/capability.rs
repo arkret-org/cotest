@@ -1,3 +1,11 @@
+//! Capability fixture self-consistency checks.
+//!
+//! cotest does not link soland's reducer authorization engine here. The
+//! delegation helpers below are an executable oracle for the shared fixture
+//! shape and expected outcomes, not a substitute for implementation-level
+//! reducer tests. Keep this boundary explicit so fixture agreement is not
+//! mistaken for cross-implementation conformance.
+
 use std::collections::{BTreeSet, HashSet};
 
 use anyhow::{Result, anyhow, bail};

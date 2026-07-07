@@ -82,9 +82,11 @@ export function wireErrCode(body: unknown): string | undefined {
     stringValue(record.errcode) ??
     stringValue(record.code) ??
     stringValue(record.error_code) ??
+    stringValue(record.reason_code) ??
     stringValue(nested?.errcode) ??
     stringValue(nested?.code) ??
     stringValue(nested?.error_code) ??
+    stringValue(nested?.reason_code) ??
     stringValue(record.reason) ??
     stringValue(nested?.reason)
   );

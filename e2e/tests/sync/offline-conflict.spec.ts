@@ -4,7 +4,6 @@
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
-  allowPlaintextMessagesViaApi,
   createSharedRealmViaApi,
   listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
@@ -65,8 +64,6 @@ test.describe("offline sync + conflict repair", () => {
         historyVisibility: "shared",
       },
     );
-    await allowPlaintextMessagesViaApi(request, aliceToken, realmId);
-
     const before = JSON.stringify(await listRealmEventsViaApi(request, bobToken, realmId));
     expect(before).not.toContain(m1);
     expect(before).not.toContain(m2);
@@ -116,8 +113,6 @@ test.describe("offline sync + conflict repair", () => {
           historyVisibility: "shared",
         },
       );
-      await allowPlaintextMessagesViaApi(request, aliceToken, realmId);
-
       expect(
         orderedMessageBodies(
           await listRealmEventsViaApi(request, bobToken, realmId),

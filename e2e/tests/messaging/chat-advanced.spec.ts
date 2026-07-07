@@ -8,6 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { cssStringEscape } from "../../helpers/dom";
 import {
   authHeaders,
   createSharedRealmViaApi,
@@ -914,10 +915,6 @@ test.describe("chat advanced", () => {
 
 function mentionSidecarHash(realmId: string, did: string): string {
   return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
-
-function cssStringEscape(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function encryptedEnvelope(

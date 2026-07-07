@@ -24,6 +24,7 @@
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
+  assertDualSolandNotRequired,
   hasDualSoland,
   solandBaseUrl,
   solandServiceDid,
@@ -56,10 +57,13 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
-  test.skip(
-    !hasDualSoland(),
-    "S2 requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
-  );
+  if (!hasDualSoland()) {
+    assertDualSolandNotRequired("cross-server federation");
+    test.skip(
+      true,
+      "S2 requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
+    );
+  }
 });
 
 async function waitForInvite(

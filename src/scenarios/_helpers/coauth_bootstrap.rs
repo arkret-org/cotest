@@ -139,12 +139,13 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
     if !docker_available() {
         return Ok(None);
     }
-    let host_port = match reserve_port() {
+    let mut host_port = match reserve_port() {
         Ok(port) => port,
         Err(_) => return Ok(None),
     };
     let container_name = format!("cotest-pg-{}-{}", std::process::id(), host_port.port());
 
+    host_port.release();
     let status = Command::new("docker")
         .args([
             "run",
@@ -483,7 +484,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     };
 
     // 3. Reserve the bind address for coauth's web listener.
-    let bind_port = match reserve_port() {
+    let mut bind_port = match reserve_port() {
         Ok(p) => p,
         Err(_) => return Ok(None),
     };
@@ -491,7 +492,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
 
     // 4. Generate + patch the config YAML.
     step!("generating coauth config");
-    let bundle = match bootstrap_coauth_config(&coauth_bin, &pg.connect_url, &bind_addr) {
+    let mut bundle = match bootstrap_coauth_config(&coauth_bin, &pg.connect_url, &bind_addr) {
         Ok(b) => {
             step!(
                 "config written to {} (internal listener {})",
@@ -529,6 +530,8 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     } else {
         command.stdout(Stdio::null()).stderr(Stdio::null());
     }
+    bind_port.release();
+    bundle.internal_port_reservation.release();
     let child = match command.spawn() {
         Ok(c) => c,
         Err(e) => {

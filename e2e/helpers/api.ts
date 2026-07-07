@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import {
+  authHeaders,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -8,9 +9,7 @@ import {
 } from "./soland-api";
 import type { JointUser } from "./users";
 
-export function authHeaders(token: string) {
-  return { authorization: `Bearer ${token}` };
-}
+export { authHeaders };
 
 export type ApiRealmOpts = {
   title: string;
@@ -144,20 +143,11 @@ export async function createSharedRealmViaApi(
     }),
     { server: opts.server, context: `join ${member.did}` },
   );
+  // The helper writes the member join as the realm owner; the member token is
+  // retained for legacy call-site symmetry until those tests move to direct
+  // owner/member action helpers.
   void memberToken;
   return realmId;
-}
-
-export async function allowPlaintextMessagesViaApi(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  opts: { server?: SolandKey } = {},
-) {
-  void request;
-  void token;
-  void realmId;
-  void opts;
 }
 
 // NOT a thin wrapper over `sendMessageApi` (soland-api.ts): `sendMessageApi`

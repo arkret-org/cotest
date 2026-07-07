@@ -47,6 +47,73 @@ export type OnboardedPrincipal = {
   scopes: string[];
 };
 
+type JsonRecord = Record<string, unknown>;
+
+type CoauthLoginGrant = {
+  grant_jwt: string;
+  id: string;
+  audience: string;
+  scopes: string[];
+};
+
+type CoauthLoginResponse = {
+  status?: string;
+  viewer?: { did?: string };
+  session_grant?: CoauthLoginGrant;
+};
+
+function objectRecord(value: unknown): JsonRecord | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : undefined;
+}
+
+function stringField(
+  record: JsonRecord | undefined,
+  field: string,
+): string | undefined {
+  const value = record?.[field];
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseJsonObject(raw: string): JsonRecord | null {
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    return objectRecord(parsed) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parseCoauthLoginResponse(raw: string): CoauthLoginResponse | null {
+  const record = parseJsonObject(raw);
+  if (!record) {
+    return null;
+  }
+  const grantRecord = objectRecord(record.session_grant);
+  const scopes = grantRecord?.scopes;
+  const grant =
+    stringField(grantRecord, "grant_jwt") &&
+    stringField(grantRecord, "id") &&
+    stringField(grantRecord, "audience") &&
+    Array.isArray(scopes) &&
+    scopes.every((scope) => typeof scope === "string")
+      ? {
+          grant_jwt: stringField(grantRecord, "grant_jwt")!,
+          id: stringField(grantRecord, "id")!,
+          audience: stringField(grantRecord, "audience")!,
+          scopes: scopes as string[],
+        }
+      : undefined;
+  return {
+    status: stringField(record, "status"),
+    viewer: {
+      did: stringField(objectRecord(record.viewer), "did"),
+    },
+    session_grant: grant,
+  };
+}
+
 /// Drive a full, real onboarding via coauth password+DPoP login. Returns the
 /// minted did:webvh principal + a working device-bound session grant. Throws on
 /// any failure (so the test fails loudly), except a 404 login (release build
@@ -90,12 +157,7 @@ export async function loginPrincipalViaCoauth(
     },
   });
   const raw = await login.text();
-  let body: any = null;
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch {
-    body = null;
-  }
+  const body = parseCoauthLoginResponse(raw);
   if (!login.ok() || body?.status !== "success") {
     throw new Error(
       `coauth onboarding login returned ${login.status()}: ${raw}`,
@@ -129,18 +191,31 @@ export async function resolvePrincipalDid(
   request: APIRequestContext,
   did: string,
   opts: { server?: SolandKey } = {},
-): Promise<{ document: any; log: any[] }> {
+): Promise<{ document: JsonRecord; log: JsonRecord[] }> {
   const url = `${solandBaseUrl(opts.server)}/_cokret/root/identity/resolve`;
   const resp = await request.post(url, { data: { did } });
   const text = await resp.text();
   if (!resp.ok()) {
     throw new Error(`identity resolve ${did} returned ${resp.status()}: ${text}`);
   }
-  const body = JSON.parse(text);
+  const body = parseJsonObject(text);
+  if (!body) {
+    throw new Error(`identity resolve ${did} returned non-object JSON: ${text}`);
+  }
   if (body.did !== did) {
     throw new Error(`identity resolve returned ${body.did}, expected ${did}`);
   }
-  return { document: body.document, log: Array.isArray(body.log) ? body.log : [] };
+  const document = objectRecord(body.document);
+  if (!document) {
+    throw new Error(`identity resolve ${did} omitted document: ${text}`);
+  }
+  const log = Array.isArray(body.log)
+    ? body.log.flatMap((entry) => {
+        const record = objectRecord(entry);
+        return record ? [record] : [];
+      })
+    : [];
+  return { document, log };
 }
 
 /// Extract the `<scid>` segment of a `did:webvh:<scid>:<host>:...` DID.

@@ -853,23 +853,11 @@ test.describe("kanban end-to-end", () => {
 
   // Regression: encrypted Strand DISCUSSION comment on the creator device.
   //
-  // CONFIRMED BUG (parked — fix is a sizable SDK+yougen feature). Two layers:
-  //   1. The kanban card Discussion composer's default Send (chat.rs
-  //      `send-chat-button`) ships PLAINTEXT ck.message.create unconditionally;
-  //      soland accepts it (ck.message.create is not gated by the content
-  //      encryption floor — only ck.strand.* is). The encrypt path
-  //      (`run_local_mls_encrypt`) was additionally wasm-stubbed.
-  //   2. Deeper: even when the encrypt path runs, yougen builds the message
-  //      `encrypted_payload` from the loose `core::EncryptedPayload`
-  //      (group.encrypt_payload), which does NOT conform to soland's
-  //      ck.schema.encrypted_envelope.v1 — it is missing `version`,
-  //      `aad_visibility_event_id`, `aad.{realm_id,event_kind}`, `aad_digest`,
-  //      and key_ref.algorithm must be "MLS". So an encrypted message is
-  //      rejected with schema_violation. (kanban strand content "works" only
-  //      because strand patch values aren't validated against that envelope
-  //      schema.) The conforming builder exists in the SDK
-  //      (cokret-rust-sdk crates/sdk/src/mls.rs MessageCrypto::encrypt_with_aad);
-  //      yougen's chat send must be wired to it. Promote once that lands.
+  // Historical regression: this path used to submit plaintext ck.message.create
+  // envelopes from the discussion composer. The client now routes chat sends
+  // through secure_send and SDK encrypted-envelope construction; this test pins
+  // that soland accepts the encrypted event and that plaintext does not appear
+  // in the submitted request body.
   test("alice posts a strand discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.message.create", async ({
     browser,
     request,

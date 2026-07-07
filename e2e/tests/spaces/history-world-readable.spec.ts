@@ -54,9 +54,7 @@ test.describe("world_readable history @fully-implemented", () => {
     );
     expect(events.status()).toBe(200);
     const body = await events.json();
-    // Response shape is the spec's `ck.self.events.query.scan` envelope; we only
-    // need the request to be accepted, not its body content.
-    expect(body).toBeDefined();
+    expectEventsContainRealmCreate(body, realmId);
   });
 
   test("anonymous (no session token) GET /_cokret/self/events succeeds when history_visibility=world_readable", async ({
@@ -85,6 +83,8 @@ test.describe("world_readable history @fully-implemented", () => {
         `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
       );
       expect(anonResp.status()).toBe(200);
+      const body = await anonResp.json();
+      expectEventsContainRealmCreate(body, realmId);
     } finally {
       await anonRequest.dispose();
     }
@@ -188,6 +188,23 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
     ...event,
     proofs: [eventProof({ actorDid, event })],
   };
+}
+
+function expectEventsContainRealmCreate(body: unknown, realmId: string) {
+  const events =
+    isRecord(body) && Array.isArray(body.events) ? body.events : [];
+  expect(
+    events.some((event) => {
+      if (!isRecord(event)) return false;
+      const kind = event.kind ?? event.event_kind;
+      return event.realm_id === realmId && kind === "ck.realm.create";
+    }),
+    `world_readable history response must include ck.realm.create for ${realmId}: ${JSON.stringify(body)}`,
+  ).toBe(true);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function canonicalTimestamp(): string {

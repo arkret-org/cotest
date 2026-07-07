@@ -28,8 +28,8 @@ struct VectorCase {
     watch_level: String,
     #[serde(default)]
     event: EventVector,
-    #[serde(default, rename = "yougen")]
-    _yougen: YougenOverrides,
+    #[serde(default)]
+    client_projection: ClientProjectionInput,
     expected: ExpectedVector,
 }
 
@@ -49,9 +49,8 @@ struct EventVector {
     local_decrypted: bool,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Default, Deserialize)]
-struct YougenOverrides {
+struct ClientProjectionInput {
     #[serde(default = "default_mentions_actor_known")]
     mentions_actor_known: bool,
     #[serde(default)]
@@ -63,13 +62,11 @@ struct ExpectedVector {
     deliver: bool,
     blind_wakeup: bool,
     reason_code: String,
-    #[serde(default, rename = "yougen")]
-    _yougen: Option<ExpectedYougen>,
+    client_projection: ExpectedClientProjection,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-struct ExpectedYougen {
+struct ExpectedClientProjection {
     should_notify: bool,
     watch_suppressed: bool,
     muted_short_circuit: bool,
@@ -175,6 +172,47 @@ fn assert_shared_core(case: &VectorCase) -> Result<()> {
             "reason_code mismatch: expected {}, got {}",
             case.expected.reason_code,
             reason_code
+        );
+    }
+    let projection = &case.expected.client_projection;
+    if decision.visible() != projection.should_notify {
+        bail!(
+            "client_projection.should_notify mismatch: expected {}, got {}",
+            projection.should_notify,
+            decision.visible()
+        );
+    }
+    if blind_wakeup != projection.blind_wakeup_required {
+        bail!(
+            "client_projection.blind_wakeup_required mismatch: expected {}, got {}",
+            projection.blind_wakeup_required,
+            blind_wakeup
+        );
+    }
+    let watch_suppressed = matches!(decision, ShouldNotify::DontNotify);
+    if watch_suppressed != projection.watch_suppressed {
+        bail!(
+            "client_projection.watch_suppressed mismatch: expected {}, got {}",
+            projection.watch_suppressed,
+            watch_suppressed
+        );
+    }
+    let muted_short_circuit = level == WatchLevel::Muted;
+    if muted_short_circuit != projection.muted_short_circuit {
+        bail!(
+            "client_projection.muted_short_circuit mismatch: expected {}, got {}",
+            projection.muted_short_circuit,
+            muted_short_circuit
+        );
+    }
+    let unresolved_client_evaluation = blind_wakeup
+        && (!case.client_projection.mentions_actor_known
+            || case.client_projection.client_side_mentions_rule);
+    if unresolved_client_evaluation != projection.unresolved_client_evaluation {
+        bail!(
+            "client_projection.unresolved_client_evaluation mismatch: expected {}, got {}",
+            projection.unresolved_client_evaluation,
+            unresolved_client_evaluation
         );
     }
     Ok(())
