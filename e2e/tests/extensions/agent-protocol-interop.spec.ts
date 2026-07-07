@@ -54,6 +54,10 @@ import {
 // be a subset of this set.
 const ADAPTER_REGISTRY_IDS = ["a2a", "acp", "mcp_bridge", "http_custom"];
 
+function eventKind(event: Record<string, unknown>): string {
+  return String(event.kind ?? event.event_kind ?? "");
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("agent protocol interop", () => {
@@ -297,7 +301,7 @@ test.describe("agent protocol interop", () => {
           sessionId,
       );
       const hasResult = sessionEvents.some(
-        (event) => event.event_kind === "ck.agent.interop_session.result",
+        (event) => eventKind(event) === "ck.agent.interop_session.result",
       );
       if (hasResult) break;
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -308,7 +312,7 @@ test.describe("agent protocol interop", () => {
     });
 
     // 1. Ordering: start precedes status(working) precedes result(completed).
-    const kinds = sessionEvents.map((event) => event.event_kind);
+    const kinds = sessionEvents.map(eventKind);
     const startIdx = kinds.indexOf("ck.agent.interop_session.start");
     const statusIdx = kinds.indexOf("ck.agent.interop_session.status");
     const resultIdx = kinds.indexOf("ck.agent.interop_session.result");
@@ -429,7 +433,7 @@ test.describe("agent protocol interop", () => {
       const body = await events.json();
       const list: Array<Record<string, unknown>> = body.events ?? [];
       const grantEvent = list.find((event) => {
-        if (event.event_kind !== "ck.capability.grant") {
+        if (eventKind(event) !== "ck.capability.grant") {
           return false;
         }
         const payload = event.payload as Record<string, unknown> | undefined;
@@ -637,7 +641,7 @@ test.describe("agent protocol interop", () => {
       const body = await events.json();
       const list: Array<Record<string, unknown>> = body.events ?? [];
       const strandEvent = list.find((event) => {
-        if (event.event_kind !== "ck.strand.create") {
+        if (eventKind(event) !== "ck.strand.create") {
           return false;
         }
         const payload = event.payload as Record<string, unknown> | undefined;

@@ -81,6 +81,26 @@ async function createStrandApi(
   return strandId;
 }
 
+function relationObject(args: {
+  id: string;
+  realmId: string;
+  relationKind: string;
+  fromRef: string;
+  toRef: string;
+  actorDid: string;
+}): Record<string, unknown> {
+  return {
+    id: args.id,
+    schema: "ck.schema.relation.v1",
+    realm_id: args.realmId,
+    relation_kind: args.relationKind,
+    from_ref: args.fromRef,
+    to_ref: args.toRef,
+    created_by: args.actorDid,
+    created_at: canonicalTimestamp(),
+  };
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("core object invariants", () => {
@@ -420,10 +440,14 @@ test.describe("core object invariants", () => {
             realmId,
             kind: "ck.relation.create",
             payload: {
-              relation_id: relationId,
-              relation_kind: "has_default_view",
-              from_ref: sourceRef,
-              to_ref: viewId,
+              relation: relationObject({
+                id: relationId,
+                realmId,
+                relationKind: "has_default_view",
+                fromRef: sourceRef,
+                toRef: viewId,
+                actorDid: alice.did,
+              }),
             },
           }),
           { context: `has_default_view -> ${viewId}` },
@@ -462,10 +486,14 @@ test.describe("core object invariants", () => {
           realmId,
           kind: "ck.relation.create",
           payload: {
-            relation_id: dupRelationId,
-            relation_kind: "has_default_view",
-            from_ref: sourceRef,
-            to_ref: v2,
+            relation: relationObject({
+              id: dupRelationId,
+              realmId,
+              relationKind: "has_default_view",
+              fromRef: sourceRef,
+              toRef: v2,
+              actorDid: alice.did,
+            }),
           },
         }),
       });
@@ -498,10 +526,14 @@ test.describe("core object invariants", () => {
           realmId,
           kind: "ck.relation.create",
           payload: {
-            relation_id: typedId("relation"),
-            relation_kind: "contains",
-            from_ref: strandInA,
-            to_ref: strandInB,
+            relation: relationObject({
+              id: typedId("relation"),
+              realmId,
+              relationKind: "contains",
+              fromRef: strandInA,
+              toRef: strandInB,
+              actorDid: alice.did,
+            }),
           },
         }),
       });

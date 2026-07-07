@@ -1414,33 +1414,73 @@ test.describe("MLS group encryption", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
-    const alice = uniqueUser("s11-ban-alice");
-    const bob = uniqueUser("s11-ban-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      createDpopUserSession(request, "s11-ban-alice", {
+        skipDeviceEnrollment: true,
+      }),
+      createDpopUserSession(request, "s11-ban-bob", {
+        skipDeviceEnrollment: true,
+      }),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, aliceToken, {
-      title: `S11 MLS ban ${stamp}`,
-      ownerDid: alice.did,
-      history_visibility: "joined",
-      encryption_profile: "mls_rfc9420",
-    });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired(
+        "MLS ban UI requires coauth DPoP session-grant login",
+      );
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for MLS browser auth",
+      );
+      return;
+    }
+    const alice = aliceSession.user;
+    const bob = bobSession.user;
 
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    const [alicePage, bobPage] = await Promise.all([
+      openUserPage(browser, alice, {
+        grantJwt: aliceSession.grantJwt,
+        dpopSeedB64url: aliceSession.dpopSeedB64url,
+        grantId: aliceSession.grantId,
+        grantAudience: aliceSession.grantAudience,
+      }),
+      openUserPage(browser, bob, {
+        grantJwt: bobSession.grantJwt,
+        dpopSeedB64url: bobSession.dpopSeedB64url,
+        grantId: bobSession.grantId,
+        grantAudience: bobSession.grantAudience,
+      }),
+    ]);
 
     try {
+      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
+      await Promise.all([
+        alicePage.completeRecoveryKeySetupIfPrompted(),
+        bobPage.completeRecoveryKeySetupIfPrompted(),
+      ]);
+      await Promise.all([
+        alicePage.acknowledgeRecommendedEncryptionPromptIfVisible(),
+        bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
+      ]);
+
+      const realmId = await alicePage.createRealm({
+        title: `S11 MLS ban ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+      });
+      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
+      expect(inviteStatus).toContain("MLS Welcome queued");
+      await bobPage.acceptInvite(realmId);
+      await bobPage.gotoTimelineRealm(realmId);
+
       await alicePage.gotoRealmAdminSection(realmId, "members");
       const refresh = alicePage.page.getByTestId("refresh-members-button");
       await expect(refresh).toBeVisible({ timeout: 120_000 });
-      const bobRow = alicePage.page.getByTestId("member-row").filter({
-        has: alicePage.page.locator(`[title="${bob.did}"]`),
-      });
+      const bobRow = alicePage.page.locator(
+        `[data-testid="member-row"][data-member-did="${bob.did}"]`,
+      );
       await expect
         .poll(
           async () => {
@@ -1470,7 +1510,7 @@ test.describe("MLS group encryption", () => {
       await expect(alicePage.page.getByTestId("send-chat-button")).toBeDisabled();
       await stepShot(alicePage.page, testInfo, "epoch-update-required-after-ban");
     } finally {
-      await alicePage.close();
+      await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
   });
 

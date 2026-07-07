@@ -69,6 +69,26 @@ function recordFloorViolations(page: Page): string[] {
   return hits;
 }
 
+function relationObject(args: {
+  id: string;
+  realmId: string;
+  relationKind: string;
+  fromRef: string;
+  toRef: string;
+  actorDid: string;
+}): Record<string, unknown> {
+  return {
+    id: args.id,
+    schema: "ck.schema.relation.v1",
+    realm_id: args.realmId,
+    relation_kind: args.relationKind,
+    from_ref: args.fromRef,
+    to_ref: args.toRef,
+    created_by: args.actorDid,
+    created_at: canonicalTimestamp(),
+  };
+}
+
 async function addCardThroughColumn(column: Locator, title: string) {
   const titleInput = column.getByTestId("new-card-title-input").last();
   if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
@@ -393,10 +413,14 @@ test.describe("kanban end-to-end", () => {
       realmId: realmA,
       kind: "ck.relation.create",
       payload: {
-        relation_id: typedId("relation"),
-        relation_kind: "contains",
-        from_ref: cardInA,
-        to_ref: cardInB,
+        relation: relationObject({
+          id: typedId("relation"),
+          realmId: realmA,
+          relationKind: "contains",
+          fromRef: cardInA,
+          toRef: cardInB,
+          actorDid: alice.did,
+        }),
       },
     });
     const response = await request.post(
