@@ -955,6 +955,42 @@ export async function sendMessageApi(
   };
 }
 
+export async function setStrandWatchLevelApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  strandId: string,
+  watcherActorId: string,
+  level: "mentions_only" | "participating" | "all" | "muted" | null,
+  opts: { server?: SolandKey; levelPublic?: boolean; context?: string } = {},
+) {
+  const actorDid = await currentActorDidApi(request, token, opts);
+  const payload: Record<string, unknown> = {
+    strand_id: strandId,
+    watcher_actor_id: watcherActorId,
+    level,
+  };
+  if (level !== null) {
+    payload.level_public = opts.levelPublic ?? false;
+  }
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.strand.watch.set",
+      payload,
+    }),
+    {
+      server: opts.server,
+      context:
+        opts.context ??
+        `set strand watch ${level ?? "mentions_only"} for ${strandId}`,
+    },
+  );
+}
+
 export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,

@@ -13,6 +13,7 @@ import {
   createRealmApi,
   resolveDefaultStrandId,
   sendMessageApi,
+  setStrandWatchLevelApi,
   putAccountDataViaEventApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -32,7 +33,7 @@ import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 test.describe.configure({ mode: "serial" });
 
 test.describe("notifications", () => {
-  test("default notification: alice sends, bob sees the message in /notifications", async ({
+  test("watch-all notification: alice sends, bob sees the message in /notifications", async ({
     browser,
     request,
   }, testInfo) => {
@@ -63,6 +64,16 @@ test.describe("notifications", () => {
         seedMembers: [bob.did],
       });
       await bobPage.acceptInvite(realmId);
+      const bobToken = await issueDevSession(request, bob);
+      const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
+      await setStrandWatchLevelApi(
+        request,
+        bobToken,
+        realmId,
+        strandId,
+        bob.did,
+        "all",
+      );
 
       const msg = `S23 note ${stamp}`;
       await alicePage.sendTimelineMessage(realmId, msg);
@@ -81,18 +92,18 @@ test.describe("notifications", () => {
           .getByTestId("notification-item")
           .filter({ hasText: msg }),
       ).toBeVisible({ timeout: 30_000 });
-      await stepShot(bobPage.page, testInfo, "default-notification");
+      await stepShot(bobPage.page, testInfo, "watch-all-notification");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
   });
 
   test(// @user-promise: e2e/scenarios/discovery/notifications.md
-  "muting a Realm stops push notifications for new messages but mention still notifies (spec §3 mention override)", async ({
+  "muting a Realm stops ordinary and directed notifications", async ({
     browser,
     request,
   }, testInfo) => {
-    // spec: push-notifications.md §3 + §4.3.1.
+    // spec: push-notifications.md §4.3.2.
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
       openDpopUserPage(browser, request, `s23-mute-alice-${stamp}`),
@@ -107,7 +118,7 @@ test.describe("notifications", () => {
     const bob = bobSession.user;
     const bobPage = bobSession.page;
     const normalMsg = `muted normal message ${stamp}`;
-    const mentionSuffix = `muted mention override ${stamp}`;
+    const mentionSuffix = `muted direct mention ${stamp}`;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -167,8 +178,8 @@ test.describe("notifications", () => {
         bobPage.page
           .getByTestId("notification-item")
           .filter({ hasText: mentionMsg }),
-      ).toBeVisible({ timeout: 30_000 });
-      await stepShot(bobPage.page, testInfo, "muted-mention-override");
+      ).toHaveCount(0);
+      await stepShot(bobPage.page, testInfo, "muted-mention-suppressed");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }

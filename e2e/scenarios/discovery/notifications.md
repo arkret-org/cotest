@@ -2,7 +2,7 @@
 
 ## 目标
 
-通知偏好的端到端:bob 在 Realm `R` 中订阅默认通知;mute `R` 后不再收;DnD 时段内静音所有;到期自动恢复;mark-all-read 清空 unread count;mention 触发 push;`evaluation_locus` 在 E2EE 中 client-side 求值。
+通知偏好的端到端:bob 在 Realm `R` 中显式订阅全部通知;mute `R` 后普通与定向通知都不再收;DnD 时段内静音所有;到期自动恢复;mark-all-read 清空 unread count;mention 在未 muted 时触发 push;`evaluation_locus` 在 E2EE 中 client-side 求值。
 
 ## Spec 锚点
 
@@ -25,49 +25,50 @@
 
 ## Steps
 
-### Phase A — 默认通知
+### Phase A — 显式 watch-all 通知
 
 1. alice createRealm,seedMembers=[bob];bob acceptInvite
-2. alice 发消息 `M1`
-3. 断言:bob 的 `/notifications` 显示 `M1` 通知;in-app badge unread=1
+2. bob 对默认 discussion Strand 写入 `ck.strand.watch.set level=all`
+3. alice 发消息 `M1`
+4. 断言:bob 的 `/notifications` 显示 `M1` 通知;in-app badge unread=1
 
 ### Phase B — Mute per-Realm
 
-4. bob 进 `/notifications`,点 `R` 旁的 "Mute"
-5. 客户端写 `yougen.preferences.notifications.<realmId> = "muted"`
-6. alice 发 `M2`
-7. 断言:bob 的 `M2` **不**触发 push 通知(in-app badge 不增);消息**仍** 在 timeline(mute ≠ block)
+5. bob 进 `/notifications`,点 `R` 旁的 "Mute"
+6. 客户端写 `yougen.preferences.notifications.<realmId> = "muted"`
+7. alice 发 `M2`
+8. 断言:bob 的 `M2` **不**触发 push 通知(in-app badge 不增);消息**仍** 在 timeline(mute ≠ block)
 
-### Phase C — Mention 在 muted Realm 中也通知(覆盖规则)
+### Phase C — Mention 在 muted Realm 中同样被抑制
 
-8. alice 发 `M3 = "@bob urgent"`
-9. spec §3:即使 `R` 被 mute,direct mention 应当通知(可配置)
-10. 断言:bob 收到 mention 通知(`mention-notification` testid)
+9. alice 发 `M3 = "@bob urgent"`
+10. spec §4.3.2:`watch_state=muted` MUST 收敛到 `dont_notify`
+11. 断言:bob 不收到 mention 通知
 
 ### Phase D — Do-not-disturb 时段
 
-11. bob 进 `/settings/notifications`,设 DnD `22:00 – 08:00`
-12. 测试 harness 把系统时间 stub 到 23:00
-13. alice 发 `M4`
-14. 断言:bob 没收到 push;DnD 状态下,即使 mention 也安静 (取决于 policy)
-15. 把时间 stub 到 10:00 → DnD 结束
-16. alice 发 `M5`
-17. 断言:bob 立即收到 `M5` 通知
+12. bob 进 `/settings/notifications`,设 DnD `22:00 – 08:00`
+13. 测试 harness 把系统时间 stub 到 23:00
+14. alice 发 `M4`
+15. 断言:bob 没收到 push;DnD 状态下,即使 mention 也安静 (取决于 policy)
+16. 把时间 stub 到 10:00 → DnD 结束
+17. alice 发 `M5`
+18. 断言:bob 立即收到 `M5` 通知
 
 ### Phase E — Mark-all-read
 
-18. 制造 N 条未读消息(alice 连发 5 条)
-19. bob 进 `/notifications`,点 "Mark all read"
-20. 断言:yougen 本地 unread badge 清零,所有通知行标 `read`;客户端按
+19. 制造 N 条未读消息(alice 连发 5 条)
+20. bob 进 `/notifications`,点 "Mark all read"
+21. 断言:yougen 本地 unread badge 清零,所有通知行标 `read`;客户端按
     `discovery/read-receipts.md` 提交 `ck.read_cursor.advance`,通知投影继续通过
     `GET /_cokret/self/account/subscribe?catchup=true` 读取
 
 ### Phase F — `evaluation_locus` 在 E2EE 中
 
-21. 重建一个 E2EE Realm,加 notification rule `contains_keyword: "urgent"`(只 client 可求值,因为服务端看不到明文)
-22. alice 发 `"this is urgent"`
-23. 服务端为 `mention_sidecar_hash` 命中的接收者派生脱敏 notification projection,并在 push 面走 blind wake-up(spec §4.5)
-24. 客户端从 `/_cokret/self/account/subscribe` 拉取 projection,本地解密 → 求值 rule → 显示 urgent notification
+22. 重建一个 E2EE Realm,加 notification rule `contains_keyword: "urgent"`(只 client 可求值,因为服务端看不到明文)
+23. alice 发 `"this is urgent"`
+24. 服务端为 `mention_sidecar_hash` 命中的接收者派生脱敏 notification projection,并在 push 面走 blind wake-up(spec §4.5)
+25. 客户端从 `/_cokret/self/account/subscribe` 拉取 projection,本地解密 → 求值 rule → 显示 urgent notification
 
 ## Edge cases
 
