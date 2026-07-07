@@ -715,10 +715,9 @@ export class JointUserPage {
     return { authorization: `Bearer ${credential}` };
   }
 
-  // Accept a pending invite for this user. Yougen's realm-admin invite list
-  // is session-local, so a fresh-context invitee can't see seed-member invites
-  // via the UI. The old REST mutation endpoint was removed; acceptance now
-  // strands through the canonical event path as an invite -> join member state.
+  // Accept a pending invite for this user. The standard v1 invite lifecycle is
+  // `ck.invite.create` followed by invitee-authored `ck.invite.accept`; soland
+  // then cascades the accepted invite into Realm membership.
   async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
     const list = new URL("/_cokret/self/authz/invites", serverUrl);
@@ -767,14 +766,9 @@ export class JointUserPage {
     const envelope = signedEventEnvelope({
       actorDid: this.user.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ck.invite.accept",
       payload: {
-        realm_id: realmId,
-        actor_id: this.user.did,
-        membership: "join",
-        reason: "invite_accept",
-        invite_ref: inviteId,
-        delivery_status: "unroutable",
+        invite_id: inviteId,
       },
     });
     const eventsUrl = `${serverUrl}/_cokret/self/events`;
@@ -785,7 +779,7 @@ export class JointUserPage {
     if (![200, 201].includes(acceptResp.status())) {
       const text = await acceptResp.text();
       throw new Error(
-        `acceptInviteById: ck.member.state{join} returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
+        `acceptInviteById: ck.invite.accept returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
       );
     }
   }

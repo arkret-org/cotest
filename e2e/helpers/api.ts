@@ -101,14 +101,9 @@ export async function acceptInviteViaApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ck.invite.accept",
       payload: {
-        realm_id: realmId,
-        actor_id: actorDid,
-        membership: "join",
-        reason: "invite_accept",
-        invite_ref: invite!.id,
-        delivery_status: "unroutable",
+        invite_id: invite!.id,
       },
     }),
     { server: opts.server, context: `accept invite ${invite!.id}` },

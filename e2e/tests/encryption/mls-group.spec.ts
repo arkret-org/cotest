@@ -13,7 +13,7 @@ import {
   sign as nodeSign,
   type KeyObject,
 } from "node:crypto";
-import { solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
@@ -36,12 +36,14 @@ import {
   ensureRegistered,
   issueDevSession,
   openDpopUserPage,
+  openDpopUserPageForAccount,
   openUserPage,
   type JointUser,
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
+import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
 
@@ -1779,8 +1781,15 @@ test.describe("MLS group encryption", () => {
     async ({ browser, request }) => {
       test.setTimeout(300_000);
       const stamp = Date.now();
-      const alice = uniqueUser("mls-not-ready-alice");
-      await ensureRegistered(request, alice);
+      const coauth = coauthBaseUrl();
+      if (!coauth) {
+        assertJointStackNotRequired("MLS not-ready browser login");
+        test.skip(
+          true,
+          "coauth DPoP session-grant login is required for fresh-device MLS",
+        );
+        return;
+      }
 
       const boardTitle = `Not-ready Board ${stamp}`;
       const listTitle = `Not-ready Todos ${stamp}`;
@@ -1789,18 +1798,31 @@ test.describe("MLS group encryption", () => {
 
       // 1) deviceA (the MLS group creator) builds the encrypted realm + board +
       //    list + card via the UI so a genuine MLS group exists.
-      const deviceAToken = await issueDevSession(request, alice);
-      const deviceA = await openUserPage(browser, alice, {
-        sessionCredential: deviceAToken,
-      });
+      const account = await registerCoauthPasswordAccount(request, coauth);
+      const deviceAFlow = await openDpopUserPageForAccount(
+        browser,
+        request,
+        `mls-not-ready-a-${stamp}`,
+        account,
+        { coauthBase: coauth },
+      );
+      const deviceBFlow = await openDpopUserPageForAccount(
+        browser,
+        request,
+        `mls-not-ready-b-${stamp}`,
+        account,
+        { coauthBase: coauth, prepareMlsDevice: false },
+      );
+      if (!deviceAFlow || !deviceBFlow) {
+        assertJointStackNotRequired("MLS not-ready browser login");
+        test.skip(true, "coauth DPoP session-grant login is unavailable");
+        return;
+      }
+      const deviceA = deviceAFlow.page;
 
       // 2) deviceB = same account, fresh device id, fresh dev session => empty
       //    local store: NO Welcome applied, NO encrypted-history restore.
-      const deviceBUser = sameActorFreshDevice(alice, "fresh-device-b");
-      const deviceBToken = await issueDevSession(request, deviceBUser);
-      const deviceB = await openUserPage(browser, deviceBUser, {
-        sessionCredential: deviceBToken,
-      });
+      const deviceB = deviceBFlow.page;
 
       // Capture any plaintext private write that would leak the description.
       // A plaintext ck.strand.update would carry `privateDescription` verbatim

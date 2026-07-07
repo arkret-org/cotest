@@ -19,8 +19,10 @@ import {
   uuidV7,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   type JointUser,
   uniqueUser,
@@ -54,12 +56,21 @@ test.describe("moderation appeal", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const appellant = uniqueUser("appeal-ui-appellant");
-    const reviewer = uniqueUser("appeal-ui-reviewer");
-    await Promise.all([
-      ensureRegistered(request, appellant),
-      ensureRegistered(request, reviewer),
+    const [appellantFlow, reviewerFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `appeal-ui-appellant-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, `appeal-ui-reviewer-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
     ]);
+    if (!appellantFlow || !reviewerFlow) {
+      assertJointStackNotRequired("moderation appeal browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const appellant = appellantFlow.user;
+    const reviewer = reviewerFlow.user;
     const [appellantToken, reviewerToken] = await Promise.all([
       issueDevSession(request, appellant),
       issueDevSession(request, reviewer),
@@ -87,8 +98,7 @@ test.describe("moderation appeal", () => {
       targetRef,
       reviewer.did,
     );
-
-    const appellantPage = await openUserPage(browser, appellant, { sessionCredential: appellantToken });
+    const appellantPage = appellantFlow.page;
     try {
       await appellantPage.gotoTimelineRealm(realmId);
       await expect(appellantPage.page.getByTestId("message-list")).toContainText(
@@ -121,7 +131,7 @@ test.describe("moderation appeal", () => {
         .fill("The moderation decision misidentified my message.");
       await expect(submit).toBeEnabled();
     } finally {
-      await appellantPage.close();
+      await Promise.allSettled([appellantPage.close(), reviewerFlow.page.close()]);
     }
   });
 

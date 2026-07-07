@@ -44,8 +44,10 @@ import {
   uuidV7,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -71,10 +73,6 @@ test.describe("agent protocol interop", () => {
     //      `claimed_profiles` now includes `ck.profile.agent_runtime.v1`
     //      (the extension profile that backs this scenario).
     const stamp = Date.now();
-    const alice = uniqueUser(`agent-handoff-alice-${stamp}`);
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-
     const describe = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(describe.status()).toBe(200);
     const describeBody = await describe.json();
@@ -91,7 +89,18 @@ test.describe("agent protocol interop", () => {
       contentType: "application/json",
     });
 
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `agent-handoff-alice-${stamp}`,
+      { prepareMlsDevice: false },
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("agent panel browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
     try {
       await alicePage.page.goto("/agents", { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("agents-panel")).toBeVisible({
@@ -366,21 +375,27 @@ test.describe("agent protocol interop", () => {
     // carries `actions=[ck.agent.interop_session.start]` with a single-valued
     // `allowed_endpoints` pinned to the runtime base URL.
     const stamp = Date.now();
-    const alice = uniqueUser(`agent-handoff-alice-b-${stamp}`);
     const remoteAgent = uniqueUser(`agent-handoff-remote-b-${stamp}`);
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, remoteAgent),
-    ]);
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `agent-handoff-alice-b-${stamp}`,
+      { prepareMlsDevice: false },
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("agent approval browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    await ensureRegistered(request, remoteAgent);
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `agent-approval-${stamp}`,
     });
     const allowedEndpoint = `${mockAgentRuntimeBaseUrl() ?? "https://agent.example"}/v1/a2a/tasks`;
 
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    const alicePage = aliceFlow.page;
     try {
       // Select the realm in-UI so the panel authors the grant into it,
       // then open the agents panel.

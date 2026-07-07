@@ -1036,11 +1036,15 @@ async function createMlsRecoveryBackupFromRecoverySettings(
   await expect(page.getByTestId("recovery-key-section")).toBeVisible({
     timeout: 120_000,
   });
-  const setupRecoveryKey = await completeRecoveryKeySetupPrompt(page, 1_000);
+  const setupRecoveryKey = await completeRecoveryKeySetupPrompt(page, 5_000);
   if (setupRecoveryKey) {
     return setupRecoveryKey;
   }
   await page.getByTestId("recovery-key-regenerate").click();
+  const generatedFromPrompt = await completeRecoveryKeySetupPrompt(page, 5_000);
+  if (generatedFromPrompt) {
+    return generatedFromPrompt;
+  }
 
   const generatedKeyField = page.getByTestId("recovery-key-current");
   let recoveryKey = "";
@@ -1056,9 +1060,11 @@ async function createMlsRecoveryBackupFromRecoverySettings(
     )
     .toBe(24);
   await expect(page.getByTestId("recovery-key-live-warning")).toBeVisible();
+  await page.getByTestId("recovery-key-confirm-input").fill(recoveryKey);
+  await page.getByTestId("recovery-key-clear-live").click();
 
   await expect(page.getByTestId("recovery-key-status")).toContainText(
-    /(?:DID recovery backup is on the server|encrypted history (?:is|are) backed up)/i,
+    /(?:DID recovery backup is on the server|encrypted history (?:is|are) backed up|Recovery Key confirmed)/i,
     { timeout: 30_000 },
   );
   return recoveryKey;

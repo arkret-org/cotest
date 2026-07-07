@@ -15,8 +15,10 @@ import {
   typedId,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -127,16 +129,20 @@ test.describe("consent grant", () => {
   }, testInfo) => {
     // Live G2.T5 UI smoke: the settings page exists and its direct grant form
     // is mounted; the live grant/revoke strand is covered below.
-    const alice = uniqueUser("g2t5-consent-ui-alice");
     const bob = uniqueUser("g2t5-consent-ui-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    await ensureRegistered(request, bob);
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      "g2t5-consent-ui-alice",
+      { prepareMlsDevice: false },
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("consent settings browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     try {
       await gotoConsentSettings(alicePage);

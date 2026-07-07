@@ -132,7 +132,7 @@ test.describe("GDPR / audit / retention", () => {
     // Pre-erasure: bob's directory search returns alice.
     const before = await request.post(`${solandBaseUrl()}/_cokret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
-      data: { query: alice.handle },
+      data: { query: alice.did },
     });
     const beforeBody = await before.json();
     expect(
@@ -152,7 +152,7 @@ test.describe("GDPR / audit / retention", () => {
     // Post-erasure: bob's directory search no longer returns alice.
     const after = await request.post(`${solandBaseUrl()}/_cokret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
-      data: { query: alice.handle },
+      data: { query: alice.did },
     });
     const afterBody = await after.json();
     expect(

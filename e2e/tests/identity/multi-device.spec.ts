@@ -1032,6 +1032,12 @@ test.describe("multi-device pairing + revocation", () => {
     const device2Token = await issueDevSession(request, alice, {
       deviceId: device2Id,
     });
+    await promoteDeviceToVerified(
+      request,
+      alice,
+      device1Token,
+      alice.deviceId,
+    );
 
     // Device 1 (verified, first device) queues a to-device message for Device 2.
     const sendResp = await request.post(
