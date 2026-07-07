@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash, createPrivateKey, randomBytes, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -9,24 +10,6 @@ import {
 } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 import { base64url } from "./encoding";
-
-export type RealmContentScheme = "mls-rfc9420" | "mls-exporter-aead-v1";
-
-export type OperationKind =
-  | "circle"
-  | "device"
-  | "event"
-  | "grant"
-  | "strand"
-  | "invite"
-  | "mls_group"
-  | "mls_keypackage"
-  | "mls_welcome"
-  | "operation"
-  | "realm"
-  | "relation"
-  | "space"
-  | "view";
 
 export type SignedEventEnvelopeArgs = {
   actorDid: string;
@@ -53,7 +36,7 @@ export function authHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
 
-export function typedId(kind: OperationKind): string {
+export function typedId(kind: string): string {
   return `ck:${kind}:${uuidV7()}`;
 }
 
@@ -193,7 +176,7 @@ export async function createRealmApi(
     discoverability?: string;
     history_visibility?: string;
     encryption_profile?: string;
-    content_scheme?: RealmContentScheme;
+    content_scheme?: string;
     invitees?: string[];
     plaintext_visible_services?: string[];
     public?: boolean;
@@ -1242,20 +1225,12 @@ export function eventProof(args: {
     };
   }
 
-  return {
-    kind: "detached_jws",
-    alg: "EdDSA",
-    verification_method: verificationMethod,
-    event_digest: eventDigest,
-    created_at: createdAt,
-    signing_profile: "cotest.detached_jws.fixture.v1",
-    jws: detachedJwsFixture({
-      actorDid: args.actorDid,
-      verificationMethod,
-      eventDigest,
-      createdAt,
-    }),
-  };
+  return sdkEventProof({
+    actorDid: args.actorDid,
+    event: args.event,
+    verificationMethod,
+    createdAt,
+  });
 }
 
 // Generic detached-JWS proof over an arbitrary canonical payload (Seal
@@ -1952,35 +1927,6 @@ function eventProofMode(): EventProofMode {
   return mode;
 }
 
-function detachedJwsFixture(args: {
-  actorDid: string;
-  verificationMethod: string;
-  eventDigest: string;
-  createdAt: string;
-}): string {
-  // encoding.md §2: the detached-JWS protected header is fixed to
-  // {"alg":"EdDSA"} (no kid/typ), and the signed binding object carries the
-  // fixed context tag "ck-event-proof-v1" so an Event proof cannot be confused
-  // with another proof family's binding.
-  const protectedHeader = base64urlJsonCanonical({
-    alg: "EdDSA",
-  });
-  const payload = base64urlJsonCanonical({
-    actor_id: args.actorDid,
-    context: "ck-event-proof-v1",
-    created_at: args.createdAt,
-    event_digest: args.eventDigest,
-    verification_method: args.verificationMethod,
-  });
-  const signature = sign(
-    null,
-    Buffer.from(`${protectedHeader}.${payload}`, "utf8"),
-    developmentServicePrivateKey(args.actorDid),
-  );
-  return `${protectedHeader}..${signature.toString("base64url")}`;
-}
-
-
 // FIXTURE ONLY — publicly derivable, MUST NOT be trusted by any non-test code.
 // The private key is `sha256("soland:anchorer-ephemeral:" + serviceDid)`, so
 // anyone who knows the serviceDid can recompute it. This intentionally mirrors
@@ -2049,25 +1995,32 @@ function nextActorSeq(): number {
   return seq;
 }
 
-// Canonical JSON gate for e2e signing/hash fixtures. This intentionally rejects
-// values outside the Cokret canonical profile instead of silently producing a
-// digest for non-canonical JavaScript data.
-//
-// AUTHORITATIVE SOURCE: this is a TS port of the SDK's canonical JSON
-// (cokret-rust-sdk/crates/core/src/canonical.rs — RFC 8785 JCS, integer-only
-// number profile, UTF-16 key sort, NFC strings). The harness runs on Node and
-// cannot call the Rust SDK directly, so this reimplementation MUST stay
-// byte-for-byte identical to the SDK; soland verifies the signatures this
-// produces using that same SDK. Drift is guarded by the cross-language golden in
-// e2e/fixtures/canonical-cross-check.json, asserted by both
-// e2e/tests/conformance/canonical-cross-lang.spec.ts (this port) and
-// cotest/src/conformance/canonical_cross_lang.rs (the SDK). Keep them in sync.
+type CotestWireCommand =
+  | "canonical-json"
+  | "sha256-canonical-json"
+  | "event-proof";
+
+type CotestWireCanonicalJson = { canonical: string };
+type CotestWireDigest = { digest: string; digest_hex: string };
+
+const cotestRepoRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
+
 export function sha256CanonicalJson(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+  assertJsonTransportable(value, "$");
+  return cotestWire<CotestWireDigest>("sha256-canonical-json", {
+    value,
+  }).digest_hex;
 }
 
 export function canonicalJson(value: unknown): string {
-  return canonicalJsonValue(value, "$");
+  assertJsonTransportable(value, "$");
+  return cotestWire<CotestWireCanonicalJson>("canonical-json", {
+    value,
+  }).canonical;
 }
 
 /// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative
@@ -2091,67 +2044,92 @@ export function base64urlJsonRaw(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-function canonicalJsonValue(value: unknown, path: string): string {
-  if (value === null) {
-    return "null";
+function sdkEventProof(args: {
+  actorDid: string;
+  event: Record<string, unknown>;
+  verificationMethod: string;
+  createdAt: string;
+}): Record<string, unknown> {
+  assertJsonTransportable(args.event, "$.event");
+  return cotestWire<Record<string, unknown>>("event-proof", {
+    actor_did: args.actorDid,
+    event: args.event,
+    verification_method: args.verificationMethod,
+    created_at: args.createdAt,
+  });
+}
+
+function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
+  const binary = process.env.COTEST_WIRE_BIN;
+  const result = spawnSync(
+    binary ?? "cargo",
+    binary
+      ? [command]
+      : ["run", "--quiet", "--bin", "cotest-wire", "--", command],
+    {
+      cwd: cotestRepoRoot,
+      encoding: "utf8",
+      input: JSON.stringify(input),
+      maxBuffer: 10 * 1024 * 1024,
+    },
+  );
+  if (result.error) {
+    throw result.error;
   }
+  if (result.status !== 0) {
+    throw new Error(
+      `cotest-wire ${command} failed with exit ${result.status}:\n${result.stderr}`,
+    );
+  }
+  try {
+    return JSON.parse(result.stdout.trim()) as T;
+  } catch {
+    throw new Error(
+      `cotest-wire ${command} returned non-JSON output: ${result.stdout}`,
+    );
+  }
+}
+
+function assertJsonTransportable(value: unknown, path: string): void {
+  if (value === null) {
+    return;
+  }
+
   switch (typeof value) {
     case "string":
-      assertCanonicalString(value, path);
-      return JSON.stringify(value);
-    case "number":
-      assertCanonicalNumber(value, path);
-      return JSON.stringify(value);
     case "boolean":
-      return value ? "true" : "false";
+      return;
+    case "number":
+      if (!Number.isFinite(value) || Object.is(value, -0)) {
+        throw new TypeError(`non-JSON number at ${path}: ${value}`);
+      }
+      return;
     case "object":
       break;
     default:
-      throw new TypeError(
-        `non-canonical JSON value at ${path}: ${typeof value}`,
-      );
+      throw new TypeError(`non-JSON value at ${path}: ${typeof value}`);
   }
 
   if (Array.isArray(value)) {
-    return `[${value
-      .map((item, index) => canonicalJsonValue(item, `${path}[${index}]`))
-      .join(",")}]`;
+    value.forEach((item, index) => {
+      if (item === undefined) {
+        throw new TypeError(`non-JSON undefined item at ${path}[${index}]`);
+      }
+      assertJsonTransportable(item, `${path}[${index}]`);
+    });
+    return;
   }
 
   const proto = Object.getPrototypeOf(value);
   if (proto !== Object.prototype && proto !== null) {
-    throw new TypeError(`non-canonical JSON object at ${path}`);
+    throw new TypeError(`non-JSON object at ${path}`);
   }
 
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort(compareJsonKeys)
-    .map((key) => {
-      assertCanonicalString(key, `${path}.${key}`);
-      if (record[key] === undefined) {
-        throw new TypeError(`non-canonical undefined member at ${path}.${key}`);
-      }
-      return `${JSON.stringify(key)}:${canonicalJsonValue(record[key], `${path}.${key}`)}`;
-    })
-    .join(",")}}`;
-}
-
-function compareJsonKeys(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function assertCanonicalString(value: string, path: string): void {
-  if (value.includes("\uFEFF")) {
-    throw new TypeError(`non-canonical BOM in string at ${path}`);
-  }
-  if (value.normalize("NFC") !== value) {
-    throw new TypeError(`non-canonical non-NFC string at ${path}`);
-  }
-}
-
-function assertCanonicalNumber(value: number, path: string): void {
-  if (!Number.isSafeInteger(value) || Object.is(value, -0)) {
-    throw new TypeError(`non-canonical number at ${path}: ${value}`);
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (item === undefined) {
+      throw new TypeError(`non-JSON undefined member at ${path}.${key}`);
+    }
+    assertJsonTransportable(item, `${path}.${key}`);
   }
 }
 
