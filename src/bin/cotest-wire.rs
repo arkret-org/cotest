@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::{Did, Hash, Proof, canonical, proof_kind};
+use cokret_core::{Did, Event, Hash, Proof, canonical, proof_kind};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -28,7 +28,8 @@ fn main() -> Result<()> {
     let output = match command.as_str() {
         "canonical-json" => canonical_json(input)?,
         "sha256-canonical-json" => sha256_canonical_json(input)?,
-        "event-proof" => event_proof(input)?,
+        "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
+        "event-envelope-proof" => event_proof(input, EventDigestMode::TypedEventEnvelope)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 
@@ -60,14 +61,21 @@ fn sha256_canonical_json(input: Value) -> Result<Value> {
     }))
 }
 
-fn event_proof(input: Value) -> Result<Value> {
+#[derive(Clone, Copy)]
+enum EventDigestMode {
+    RawCanonicalJson,
+    TypedEventEnvelope,
+}
+
+fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
     let actor = Did::new(input.actor_did.clone()).context("parse actor DID")?;
     let created_at = DateTime::parse_from_rfc3339(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?
         .with_timezone(&Utc);
-    let event_digest = Hash::new(event_digest(&input.event)?).context("parse event digest")?;
+    let event_digest =
+        Hash::new(event_digest(&input.event, digest_mode)?).context("parse event digest")?;
     let signing_key = development_event_signing_key(&input.actor_did);
 
     let mut proof = Proof {
@@ -89,7 +97,19 @@ fn event_proof(input: Value) -> Result<Value> {
     serde_json::to_value(proof).context("serialize event proof")
 }
 
-fn event_digest(event: &Value) -> Result<String> {
+fn event_digest(event: &Value, mode: EventDigestMode) -> Result<String> {
+    if matches!(mode, EventDigestMode::TypedEventEnvelope) {
+        let mut event = event.clone();
+        if let Value::Object(map) = &mut event {
+            map.entry("proofs".to_owned())
+                .or_insert_with(|| Value::Array(Vec::new()));
+        }
+        let event: Event = serde_json::from_value(event).context("parse typed Event")?;
+        return event
+            .event_digest()
+            .context("hash typed Event digest payload");
+    }
+
     let mut event = event.clone();
     if let Value::Object(map) = &mut event {
         map.remove("proofs");
@@ -104,4 +124,44 @@ fn development_event_signing_key(service_did: &str) -> SigningKey {
     hasher.update(service_did.as_bytes());
     let seed: [u8; 32] = hasher.finalize().into();
     SigningKey::from_bytes(&seed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typed_event_digest_normalizes_event_wire_shape() {
+        let event = json!({
+            "event_id": "ck:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "kind": "ck.member.state",
+            "realm_id": "ck:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+            "actor_seq": 1,
+            "created_at": "2026-07-07T05:45:49Z",
+            "hlc": "019f3b1c76c8-0000-ac7eadec",
+            "prev_refs": [],
+            "refs": [],
+            "requirements": {
+                "schema": ["ck.schema.event_payload.v1"],
+                "features": [],
+                "critical_extensions": []
+            },
+            "payload": {
+                "realm_id": "ck:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+                "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+                "membership": "join",
+                "reason": "invite_accept"
+            }
+        });
+
+        let typed_digest = event_digest(&event, EventDigestMode::TypedEventEnvelope).unwrap();
+        let raw_digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
+        let mut complete_event = event;
+        complete_event["proofs"] = Value::Array(Vec::new());
+        let parsed: Event = serde_json::from_value(complete_event).unwrap();
+
+        assert_eq!(typed_digest, parsed.event_digest().unwrap());
+        assert_ne!(typed_digest, raw_digest);
+    }
 }

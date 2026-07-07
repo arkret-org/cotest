@@ -18,6 +18,7 @@ export type SignedEventEnvelopeArgs = {
   payload: Record<string, unknown>;
   actorSeq?: number;
   createdAt?: string;
+  hlc?: string;
   eventId?: string;
   schemaId?: string;
   /// Override the full `requirements.schema[]` binding. morph.md §4.1 S1/S2
@@ -26,6 +27,8 @@ export type SignedEventEnvelopeArgs = {
   /// (the union of from/to schema_refs) here, not just the payload schema id.
   requirementsSchema?: string[];
   proofVerificationMethod?: string;
+  /// @deprecated The Event wire field was renamed to seal_ref/seal_basis. This
+  /// parameter is retained so old test call sites compile, but is not emitted.
   anchorRef?: string;
   refs?: Array<Record<string, unknown>>;
 };
@@ -1174,6 +1177,7 @@ export function signedEventEnvelope(
   args: SignedEventEnvelopeArgs,
 ): Record<string, unknown> {
   const createdAt = args.createdAt ?? canonicalTimestamp();
+  const hlc = args.hlc ?? nextEnvelopeHlc(args.realmId, createdAt);
   const payload = stripUndefined(args.payload) as Record<string, unknown>;
   const event = stripUndefined({
     event_id: args.eventId ?? typedId("event"),
@@ -1182,9 +1186,9 @@ export function signedEventEnvelope(
     actor_id: args.actorDid,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
+    hlc,
     prev_refs: [],
     refs: args.refs ?? [],
-    ...(args.anchorRef ? { anchor_ref: args.anchorRef } : {}),
     requirements: {
       schema: args.requirementsSchema ?? [
         args.schemaId ?? schemaIdForEventKind(args.kind),
@@ -1197,7 +1201,7 @@ export function signedEventEnvelope(
   return {
     ...event,
     proofs: [
-      eventProof({
+      eventEnvelopeProof({
         actorDid: args.actorDid,
         event,
         verificationMethod: args.proofVerificationMethod,
@@ -1226,6 +1230,33 @@ export function eventProof(args: {
   }
 
   return sdkEventProof({
+    actorDid: args.actorDid,
+    event: args.event,
+    verificationMethod,
+    createdAt,
+  });
+}
+
+function eventEnvelopeProof(args: {
+  actorDid: string;
+  event: Record<string, unknown>;
+  verificationMethod?: string;
+}): Record<string, unknown> {
+  const mode = eventProofMode();
+  const verificationMethod =
+    args.verificationMethod ?? `${args.actorDid}#device`;
+  const createdAt = canonicalTimestamp();
+
+  if (mode === "dev-proof") {
+    const eventDigest = `sha256:${sha256CanonicalJson(args.event)}`;
+    return {
+      type: "dev-proof",
+      verification_method: verificationMethod,
+      event_digest: eventDigest,
+    };
+  }
+
+  return sdkEventEnvelopeProof({
     actorDid: args.actorDid,
     event: args.event,
     verificationMethod,
@@ -1363,6 +1394,47 @@ export function deriveDefaultStrandId(realmId: string): string {
 
 export function canonicalTimestamp(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+const cotestHlcNodeSecret = randomBytes(16).toString("hex");
+const cotestHlcStateByNode = new Map<
+  string,
+  { unixMs: number; logical: number }
+>();
+
+function nextEnvelopeHlc(realmId: string, createdAt: string): string {
+  const requestedUnixMs = Date.parse(createdAt);
+  if (!Number.isFinite(requestedUnixMs)) {
+    throw new TypeError(`invalid event created_at for HLC: ${createdAt}`);
+  }
+  const unixMs = Math.trunc(requestedUnixMs);
+  const nodeIdHash = createHash("sha256")
+    .update("cokret-hlc-v1")
+    .update("\0")
+    .update(realmId)
+    .update("\0")
+    .update(cotestHlcNodeSecret)
+    .digest("hex")
+    .slice(0, 8);
+  const stateKey = `${realmId}\0${nodeIdHash}`;
+  const previous = cotestHlcStateByNode.get(stateKey);
+  let nextUnixMs = unixMs;
+  let logical = 0;
+  if (previous) {
+    if (unixMs > previous.unixMs) {
+      nextUnixMs = unixMs;
+    } else {
+      nextUnixMs = previous.unixMs;
+      logical = previous.logical + 1;
+      if (logical > 0xffff) {
+        throw new Error(`cotest HLC logical overflow for realm ${realmId}`);
+      }
+    }
+  }
+  cotestHlcStateByNode.set(stateKey, { unixMs: nextUnixMs, logical });
+  return `${nextUnixMs.toString(16).padStart(12, "0").slice(-12)}-${logical
+    .toString(16)
+    .padStart(4, "0")}-${nodeIdHash}`;
 }
 
 export function makeFederationEvent(args: {
@@ -1998,7 +2070,8 @@ function nextActorSeq(): number {
 type CotestWireCommand =
   | "canonical-json"
   | "sha256-canonical-json"
-  | "event-proof";
+  | "event-proof"
+  | "event-envelope-proof";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
@@ -2052,6 +2125,21 @@ function sdkEventProof(args: {
 }): Record<string, unknown> {
   assertJsonTransportable(args.event, "$.event");
   return cotestWire<Record<string, unknown>>("event-proof", {
+    actor_did: args.actorDid,
+    event: args.event,
+    verification_method: args.verificationMethod,
+    created_at: args.createdAt,
+  });
+}
+
+function sdkEventEnvelopeProof(args: {
+  actorDid: string;
+  event: Record<string, unknown>;
+  verificationMethod: string;
+  createdAt: string;
+}): Record<string, unknown> {
+  assertJsonTransportable(args.event, "$.event");
+  return cotestWire<Record<string, unknown>>("event-envelope-proof", {
     actor_did: args.actorDid,
     event: args.event,
     verification_method: args.verificationMethod,
