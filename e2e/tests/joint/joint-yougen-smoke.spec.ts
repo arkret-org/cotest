@@ -4,7 +4,7 @@
 import { randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "../../helpers/joint-fixture";
-import { eventProof } from "../../helpers/soland-api";
+import { signedEventEnvelope } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
   type DpopUserSession,
@@ -168,7 +168,6 @@ async function submitMessageEvent(
   body: string,
 ) {
   const eventId = `ck:event:${uuidV7()}`;
-  const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const strandId = await resolveDefaultStrandId(request, session, serverUrl, realmId);
   const payload = {
     strand_id: strandId,
@@ -178,26 +177,14 @@ async function submitMessageEvent(
       body,
     },
   };
-  const envelopeWithoutProofs = {
-    event_id: eventId,
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    eventId,
     kind: "ck.message.create",
-    realm_id: realmId,
-    actor_id: actorDid,
-    actor_seq: 9_000_000_000_000_000,
-    created_at: createdAt,
-    prev_refs: [],
-    refs: [],
-    requirements: {
-      schema: ["ck.schema.event.v1"],
-      features: [],
-      critical_extensions: [],
-    },
+    actorSeq: 9_000_000_000_000_000,
     payload,
-  };
-  const envelope = {
-    ...envelopeWithoutProofs,
-    proofs: [eventProof({ actorDid, event: envelopeWithoutProofs })],
-  };
+  });
 
   const url = `${serverUrl}/_cokret/self/events`;
   const response = await request.post(url, {
