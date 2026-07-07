@@ -43,6 +43,16 @@ function eventPayload(event: Record<string, unknown> | undefined): Record<string
     : {};
 }
 
+function expectRedactedPayload(
+  event: Record<string, unknown> | undefined,
+  leakedBody: string,
+): void {
+  expect(event, "redacted event must be present").toBeTruthy();
+  const payload = eventPayload(event);
+  expect(payload).toMatchObject({ redacted: true, state: "redacted" });
+  expect(JSON.stringify(payload)).not.toContain(leakedBody);
+}
+
 function visibleMemberDids(realm: Record<string, unknown>): string[] {
   const members = realm.members;
   if (!Array.isArray(members)) {
@@ -79,11 +89,12 @@ test.describe("single-server triad collaboration", () => {
       title: `triad audit ${stamp}`,
       historyVisibility: "shared",
     });
+    const createBody = `triad create ${stamp}`;
     const created = await sendPlaintextMessageViaApi(
       request,
       aliceToken,
       realmId,
-      `triad create ${stamp}`,
+      createBody,
       { actorDid: alice.did },
     );
 
@@ -130,10 +141,16 @@ test.describe("single-server triad collaboration", () => {
     const events = await listRealmEventsViaApi(request, bobToken, realmId);
     const eventKinds = events.map(eventKind);
     expect(eventKinds).toContain("ck.message.revise");
-    expect(eventKinds).not.toContain("ck.message.create");
+    expect(eventKinds).toContain("ck.message.create");
     expect(eventKinds).not.toContain("ck.message.redact");
-    expect(eventPayload(events.find((event) => eventKind(event) === "ck.message.revise")))
-      .toMatchObject({ target_ref: messageRef });
+    expectRedactedPayload(
+      events.find((event) => eventKind(event) === "ck.message.create"),
+      createBody,
+    );
+    expectRedactedPayload(
+      events.find((event) => eventKind(event) === "ck.message.revise"),
+      revisedBody,
+    );
   });
 
   test("API late-join triad member sees only post-join messages in joined history", async ({

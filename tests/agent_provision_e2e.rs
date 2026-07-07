@@ -35,6 +35,7 @@ use cotest::harness::{
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
+use serial_test::serial;
 use sha2::{Digest, Sha256};
 
 const ALICE_DID: &str = "did:web:cotest-agent-alice.example";
@@ -43,6 +44,7 @@ const AGENT_SESSION_GRANT: &str = "cotest.agent.session.grant";
 const INTROSPECTION_BEARER: &str = "cotest-introspection-bearer";
 
 #[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     let server = CokretServer::spawn("agent-provision-e2e").await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
@@ -167,6 +169,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let service_name = "agent-live-e2e";
     let holder = AgentSessionHolder::new();
@@ -817,7 +820,10 @@ fn handle_introspection_connection(
                 "subject": subject,
                 "service_account_id": "agent-live-e2e-account",
                 "audience": service_did,
-                "scopes": ["ck.agent.action:message.send"],
+                "scopes": [
+                    "ck.agent.action:message.send",
+                    "ck.self.events.command.submit"
+                ],
                 "expires_at": "2026-12-31T23:59:59Z",
                 "revocation_ref": "ck:session:agent-live-e2e-grant",
                 "session_public_key": session_public_key,
@@ -826,7 +832,17 @@ fn handle_introspection_connection(
                 "scope_details": {
                     "agent_principal_id": subject,
                     "controller_did": ALICE_DID,
-                    "resources": {"realm_refs": ["*"]}
+                    "resources": {
+                        "realm_refs": ["*"],
+                        "strand_refs": []
+                    },
+                    "constraints": {
+                        "allowed_tracks": [],
+                        "allowed_data_classes": [],
+                        "allowed_endpoints": []
+                    },
+                    "capability_grant_refs": [],
+                    "policy_refs": []
                 },
                 "freshness_state": "fresh"
             }

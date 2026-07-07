@@ -146,8 +146,8 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let visible_after_redaction = list_realm_events(&alice, &realm_id).await?;
     assert_eq!(
         event_count(&visible_after_redaction, create_event_id)?,
-        0,
-        "redaction tombstone should hide the original create event: {visible_after_redaction}"
+        1,
+        "redaction must retain the original create slot as a tombstone: {visible_after_redaction}"
     );
     assert_eq!(
         event_count(&visible_after_redaction, redact_event_id)?,
@@ -159,6 +159,16 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         1,
         "duplicate redaction replay should not duplicate the visible edit-chain projection: {visible_after_redaction}"
     );
+    assert_event_is_redacted_tombstone(
+        &visible_after_redaction,
+        create_event_id,
+        "message before edit/redact replay",
+    )?;
+    assert_event_is_redacted_tombstone(
+        &visible_after_redaction,
+        revise_event_id,
+        "message after idempotent edit replay",
+    )?;
     assert_eq!(
         event_kind_count(&visible_after_redaction, "ck.message.revise")?,
         1,
@@ -290,6 +300,40 @@ fn event_kind_count(listed: &Value, kind: &str) -> Result<usize> {
                 == Some(kind)
         })
         .count())
+}
+
+fn assert_event_is_redacted_tombstone(
+    listed: &Value,
+    event_id: &str,
+    leaked_body: &str,
+) -> Result<()> {
+    let event = projected_events(listed)?
+        .iter()
+        .find(|event| event["event_id"].as_str() == Some(event_id))
+        .ok_or_else(|| anyhow!("projected event {event_id} missing: {listed}"))?;
+    let payload = event
+        .get("payload")
+        .or_else(|| event.get("content"))
+        .ok_or_else(|| anyhow!("projected event {event_id} missing payload/content: {event}"))?;
+    assert_eq!(
+        payload["redacted"],
+        json!(true),
+        "projected event {event_id} must be marked redacted: {event}"
+    );
+    assert_eq!(
+        payload["state"],
+        json!("redacted"),
+        "projected event {event_id} must be a redaction tombstone: {event}"
+    );
+    assert_ne!(
+        payload["content"]["body"], leaked_body,
+        "projected event {event_id} leaked the redacted body: {event}"
+    );
+    assert!(
+        !serde_json::to_string(event)?.contains(leaked_body),
+        "projected event {event_id} still contains redacted plaintext: {event}"
+    );
+    Ok(())
 }
 
 fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
