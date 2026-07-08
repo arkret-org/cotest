@@ -19,15 +19,15 @@ function adhocRunDir(): string {
 const runDir = process.env.COTEST_JOINT_RUN_DIR ?? adhocRunDir();
 process.env.COTEST_JOINT_RUN_DIR = runDir;
 const baseURL =
-  process.env.YOUGEN_BASE_URL ??
-  process.env.COTEST_YOUGEN_BASE_URL ??
+  process.env.INKSON_BASE_URL ??
+  process.env.COTEST_INKSON_BASE_URL ??
   "http://127.0.0.1:4527";
 
 // COT-08-004: file-level parallelism across spec files. Per-test state is
 // isolated via `uniqueUser` / unique handles (the large majority of specs), and
 // within-file ordering is preserved (`fullyParallel: false`) so multi-step
 // strands stay intact. The worker count is env-tunable so CI can match it to the
-// shared soland/yougen stack's capacity — set `COTEST_PW_WORKERS=1` to fall
+// shared soland/inkson stack's capacity — set `COTEST_PW_WORKERS=1` to fall
 // back to fully serial. Specs that share fixed identities or assert global
 // directory/federation state must either isolate (prefer `uniqueUser`) or tag
 // `test.describe.configure({ mode: "serial" })`; most federation/conformance
@@ -72,7 +72,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      name: "joint-yougen",
+      name: "joint-inkson",
       testDir: "./tests/joint",
       use: { ...devices["Desktop Chrome"], baseURL },
     },

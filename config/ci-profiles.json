@@ -44,7 +44,7 @@
     },
     {
       "profile_id": "compose",
-      "description": "Process-mode multi-service contract matrix. soland is spawned by cotest; coauth/floria/sodmin/yougen can be attached through scripts/run-compose.ps1.",
+      "description": "Process-mode multi-service contract matrix. soland is spawned by cotest; coauth/floria/sodmin/inkson can be attached through scripts/run-compose.ps1.",
       "include_all_tests": false,
       "cargo_filters": [
         "principal_bridge_contracts_are_discoverable",
@@ -80,7 +80,7 @@
         "sync_fixture_suite_matches_reference_semantics",
         "privacy_security_fixture_suite_matches_reference_semantics",
         "push_rule_core_consistency_vectors_match_all_implementations",
-        "yougen_client_profile_manifest_suite_matches_reference_semantics",
+        "inkson_client_profile_manifest_suite_matches_reference_semantics",
         "coauth_account_lifecycle_fixture_suite_matches_reference_semantics",
         "live_describe_profile_gate_suite_matches_reference_semantics",
         "consent_fixture_suite_matches_reference_semantics",
@@ -93,7 +93,7 @@
         "teabay_directory_service_profile_is_discoverable",
         "starid_optional_resolver_profile_is_discoverable",
         "session_grant_presentation_uses_configured_coauth_introspection",
-        "yougen_mock_contract_matches_live_soland_baseline"
+        "inkson_mock_contract_matches_live_soland_baseline"
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": [
@@ -107,10 +107,10 @@
     },
     {
       "profile_id": "mock-parity",
-      "description": "T-P1-10 gate: compare yougen's mocked Cokret contract against a live soland baseline; any non-allowlisted drift fails.",
+      "description": "T-P1-10 gate: compare inkson's mocked Cokret contract against a live soland baseline; any non-allowlisted drift fails.",
       "include_all_tests": false,
       "cargo_filters": [
-        "yougen_mock_contract_matches_live_soland_baseline"
+        "inkson_mock_contract_matches_live_soland_baseline"
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": []

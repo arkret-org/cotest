@@ -54,7 +54,7 @@ mod sync;
 mod vector_registry_gate;
 mod visibility_policy;
 mod wire;
-mod yougen_client;
+mod inkson_client;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -320,7 +320,7 @@ pub use wire::{
     run_redaction_history_visibility_fixture_suite, run_restore_full_workflows_fixture_suite,
     run_state_resolution_quarantine_fixture_suite, run_threshold_multisig_fixture_suite,
 };
-pub use yougen_client::run_yougen_client_profile_manifest_suite;
+pub use inkson_client::run_inkson_client_profile_manifest_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
 

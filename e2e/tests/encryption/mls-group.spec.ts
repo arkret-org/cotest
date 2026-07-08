@@ -855,7 +855,7 @@ test.describe("MLS group encryption", () => {
     // API-first smoke for the G3.S1 subset: MLS group genesis,
     // KeyPackage publish/claim CAS, durable Welcome delivery, and
     // monotonic commit epoch. Full client derivation of epoch secrets
-    // remains a later yougen+MLS concern.
+    // remains a later inkson+MLS concern.
     const stamp = Date.now();
     const aliceFixture = await registerWebvhPrincipal(
       request,
@@ -1770,7 +1770,7 @@ test.describe("MLS group encryption", () => {
   // recoverable "MLS state not ready" affordance and refuses to submit; it
   // never POSTs a plaintext ck.strand.update carrying the private `body`.
   //
-  // yougen guard: encrypt_values_with_device_snapshot returns
+  // inkson guard: encrypt_values_with_device_snapshot returns
   // MlsRuntimeError::MissingWelcome when no local MLS snapshot exists, which
   // dispatch_card_detail_update surfaces into board_status /
   // card-detail-edit-status ("MLS state is not ready on this device yet ...")

@@ -60,8 +60,8 @@ function Assert-PromotionEvidence {
     if (-not $FeatureId) {
         throw "-FeatureId is required before removing .fixme"
     }
-    if ($FeatureId -notmatch '^(soland|yougen|coauth|cotest)#[A-Za-z0-9._-]+$|^GAP-P\d+-\d+$') {
-        throw "-FeatureId must look like soland#feature-id, yougen#feature-id, coauth#feature-id, cotest#feature-id, or GAP-Px-yyy; got '$FeatureId'"
+    if ($FeatureId -notmatch '^(soland|inkson|coauth|cotest)#[A-Za-z0-9._-]+$|^GAP-P\d+-\d+$') {
+        throw "-FeatureId must look like soland#feature-id, inkson#feature-id, coauth#feature-id, cotest#feature-id, or GAP-Px-yyy; got '$FeatureId'"
     }
     if (-not $PassedSpecCommand -or -not $PassedSpecCommand.Trim()) {
         throw "-PassedSpecCommand is required before removing .fixme"

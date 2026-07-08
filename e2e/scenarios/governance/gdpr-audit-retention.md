@@ -31,7 +31,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase B — alice 导出 GDPR 数据
 
 2. alice 进 `/settings/account` → "Export my data"
-3. yougen 调 `GET /_soland/self/account/export`
+3. inkson 调 `GET /_soland/self/account/export`
 4. soland 异步生成 zip 包(可能 base64 inline 或返回 download URL)
 5. 断言:返回 200 + `export_id` + (可选)`download_url`
 6. alice 下载并解压 → 内含 JSON:`{ account: { did, handle, profile }, spaces: [...], messages: [...], devices: [...], audit_log: [...] }`
@@ -79,7 +79,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ## Implementation notes
 
 - **soland**:retention_policy TTL sweeper 已 live;过期 timeline event 返回 `[expired]` tombstone,`event_id` / canonical history 保留不物理删除。跨服务器 erasure fan-out 和历史消息 tombstone 已由 `ck.audit.erasure_receipt` live 覆盖
-- **yougen 缺口**:`/settings/account` 的 export / erase 按钮、确认对话框
+- **inkson 缺口**:`/settings/account` 的 export / erase 按钮、确认对话框
 - **测试侧**:retention 时间快进通过 `/_soland/admin/retention/sweep` 的本地 admin/test surface 或旧 `created_at` fixture 覆盖
 
 ## 风险

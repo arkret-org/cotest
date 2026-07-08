@@ -41,8 +41,8 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
       expect(alicePage.session.context).not.toBe(bobPage.session.context);
       await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
       const [aliceConfigRaw, bobConfigRaw] = await Promise.all([
-        alicePage.page.evaluate(() => window.localStorage.getItem("yougen.config.v1")),
-        bobPage.page.evaluate(() => window.localStorage.getItem("yougen.config.v1")),
+        alicePage.page.evaluate(() => window.localStorage.getItem("inkson.config.v1")),
+        bobPage.page.evaluate(() => window.localStorage.getItem("inkson.config.v1")),
       ]);
       expect(JSON.parse(aliceConfigRaw ?? "{}").account_did).toBe(alice.did);
       expect(JSON.parse(bobConfigRaw ?? "{}").account_did).toBe(bob.did);

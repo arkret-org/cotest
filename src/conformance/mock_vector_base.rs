@@ -1,6 +1,6 @@
 //! C.8 — Unified mock ↔ live parity framework.
 #![allow(dead_code)]
-//! Different cotest scenarios (yougen, soland reducers, teabay directory,
+//! Different cotest scenarios (inkson, soland reducers, teabay directory,
 //! floria push) all want the same thing: a fixed vector list whose mock and
 //! live runs must produce *identical* output bytes (canonical JSON, or
 //! an opaque transcript). Today each scenario reimplements the same
@@ -15,13 +15,13 @@
 //! framework drives the loop and produces a single [`ParityReport`].
 //!
 //! ```ignore
-//! struct YougenParity;
-//! impl MockLiveParity for YougenParity {
+//! struct InksonParity;
+//! impl MockLiveParity for InksonParity {
 //!     fn fixtures(&self) -> Vec<TestVector> { /* ... */ }
 //!     fn run_mock(&self, v: &TestVector) -> Result<Output> { /* ... */ }
 //!     fn run_live(&self, v: &TestVector) -> Result<Output> { /* ... */ }
 //! }
-//! let report = run_parity_suite(&YougenParity);
+//! let report = run_parity_suite(&InksonParity);
 //! report.assert_all_passed()?;
 //! ```
 //!

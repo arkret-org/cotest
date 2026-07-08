@@ -14,7 +14,7 @@
 //
 // STATUS: every case below is `test.fixme`. The wire contract is written to the
 // spec's real expectation, but live execution depends on the parallel soland /
-// yougen RRK implementation (durability_policy projection, RRK-targeted
+// inkson RRK implementation (durability_policy projection, RRK-targeted
 // ck.realm_key.share acceptance + RYW, recovery read surface, the three reducer
 // rejection paths, and the mls-exporter-aead-v1 content seal/open + RRK
 // HPKE seal/open in the client). Per the cotest promote protocol these
@@ -375,7 +375,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     //   ck.realm.create, RRK-targeted ck.realm_key.share acceptance with the
     //   eager-seal RYW guard, and the org recovery read surface that returns the
     //   durable RRK shares for HPKE-open.
-    // @blocking-on rrk-yougen: mls-exporter-aead-v1 content seal/open, per-epoch
+    // @blocking-on rrk-inkson: mls-exporter-aead-v1 content seal/open, per-epoch
     //   history_secret derivation, and the RRK HPKE seal at commit time.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (Phase A)
     // @expected-live-by: 2026Q3
@@ -398,7 +398,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       // CokretRealmHistoryRecoveryKey service entry whose serviceEndpoint
       // .verificationMethod points to a keyAgreement HPKE VM, domain=mls_history,
       // domain-separated from did_recovery (identity-did.md §8.3). The live
-      // helper for this is a yougen/soland concern (publishRrkServiceEntry).
+      // helper for this is a inkson/soland concern (publishRrkServiceEntry).
       const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
 
       const realmId = typedId("realm");
@@ -527,8 +527,8 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       //     expect(restored.get(epoch)).toContain(plaintextByEpoch[epoch - 1]);
       //   }
       //
-      // orgRecoverHistory is the yougen RRK-open + AEAD primitive under
-      // @blocking-on rrk-yougen.
+      // orgRecoverHistory is the inkson RRK-open + AEAD primitive under
+      // @blocking-on rrk-inkson.
       expect(plaintextByEpoch).toHaveLength(EPOCHS);
     },
   );
@@ -540,7 +540,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     // @blocking-on rrk-soland: RRK-source re-share acceptance for a brand-new
     //   member when no live member can re-share, threading the device-lifecycle
     //   §13 key-share eligibility + history-visibility §6 gate.
-    // @blocking-on rrk-yougen: RRK private-key HPKE-open of the sealed range,
+    // @blocking-on rrk-inkson: RRK private-key HPKE-open of the sealed range,
     //   then re-seal of history_secret to dave's device HPKE public key, and the
     //   §2.3.5 late-recovery install on dave.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (Phase B)
@@ -674,8 +674,8 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       //   expect(restored.get(1)).toContain(plaintextByEpoch.get(1));
       //   expect(restored.get(2)).toContain(plaintextByEpoch.get(2));
       //
-      // daveInstallAndDecrypt is the yougen late-recovery install path under
-      // @blocking-on rrk-yougen.
+      // daveInstallAndDecrypt is the inkson late-recovery install path under
+      // @blocking-on rrk-inkson.
       expect(plaintextByEpoch.size).toBe(2);
     },
   );
@@ -750,7 +750,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     //   closed (durability_recovery_recipient_unverified) when verification_method
     //   is not designated by an active CokretRealmHistoryRecoveryKey service
     //   entry, MUST NOT fall back to any other key. §2.10.8 + identity-did §8.3.
-    // @blocking-on rrk-yougen: DID Document resolution of the recovery recipient
+    // @blocking-on rrk-inkson: DID Document resolution of the recovery recipient
     //   at seal time.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C2)
     // @expected-live-by: 2026Q3
@@ -817,7 +817,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     // @blocking-on rrk-soland: the GC precondition surface that raises
     //   failed_precondition(durability_seal_missing_before_gc) when an epoch's
     //   RRK durability ck.realm_key.share is not yet accepted (read-your-writes).
-    // @blocking-on rrk-yougen: the client-side eager-seal-before-GC ordering
+    // @blocking-on rrk-inkson: the client-side eager-seal-before-GC ordering
     //   (MUST retain history_secret[N] until the seal is accepted) — the client
     //   half of the §2.10.8 / §2.10.5 retention guard.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C3)

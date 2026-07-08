@@ -47,7 +47,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
                 "push_gateway": "https://floria.example/_cokret/edge/push/notify",
                 "push_key": "webpush:opaque-token",
                 "platform": "web",
-                "app_id": "yougen"
+                "app_id": "inkson"
             })),
         StatusCode::OK,
     )

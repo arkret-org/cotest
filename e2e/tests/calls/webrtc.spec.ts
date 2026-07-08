@@ -8,7 +8,7 @@
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` +
 // `/_soland/self/calls/*` stack (session create/close, server-derived
 // `call_state`, `recording/start`, `ice-config/refresh`) is gone. The UI / live
-// recording flows that drove it were yougen-UI coverage, not protocol wire, and
+// recording flows that drove it were inkson-UI coverage, not protocol wire, and
 // are out of scope for the cotest wire surface — this file now exercises only
 // the canonical surfaces: `POST /_cokret/self/ephemeral` (ck.call.signal),
 // `POST /_cokret/self/rtc/ice-config`. Recording lifecycle is a durable

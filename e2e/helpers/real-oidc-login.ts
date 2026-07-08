@@ -38,7 +38,7 @@ export async function submitCoauthPasswordCredentials(
   await page.getByTestId("coauth-login-submit").click();
 }
 
-// Drive yougen's server-login button through coauth and back to the signed-in
+// Drive inkson's server-login button through coauth and back to the signed-in
 // app. Robust to both paths: a fresh coauth session shows credentials +
 // consent; a returning coauth browser session may bounce straight back.
 export async function serverLoginViaCoauth(

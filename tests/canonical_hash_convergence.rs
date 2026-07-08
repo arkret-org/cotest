@@ -1,6 +1,6 @@
 //! T5.3 (Round 22, 2026-05-20) — canonical-JSON convergence vectors.
 //!
-//! Every Cokret service (coauth / soland / starid / yougen / floria) now
+//! Every Cokret service (coauth / soland / starid / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
 //! the SDK's `cokret_core::canonical` module and the
 //! `cokret_signatures::EventProofBuilder` facade. This test pins a
@@ -243,7 +243,7 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 /// `coauth::handlers::cokret::canonical_json_sha256`, soland's
 /// `validate_event_proofs`, and starid's `proof::canonical_bytes`), or
 /// the high-level `cokret_signatures::EventProofBuilder` (used by
-/// yougen / floria when emitting a fresh detached-JWS proof). Both
+/// inkson / floria when emitting a fresh detached-JWS proof). Both
 /// must yield the same canonical bytes for the same input; this test
 /// pins the equivalence so a future EventProofBuilder change cannot
 /// silently drift from the canonical encoder.

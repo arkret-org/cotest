@@ -1,4 +1,4 @@
-// Probe: does yougen's RealmAdminPanel see active_section correctly when
+// Probe: does inkson's RealmAdminPanel see active_section correctly when
 // the URL is /realms/<id>/settings/<section> on a fresh navigation?
 
 import { expect, test } from "@playwright/test";
@@ -32,7 +32,7 @@ test.describe("admin section route", () => {
       });
 
       // Land directly on the access admin section via hard navigation (no tab
-      // click). yougen's RealmAdminSectionPage route is
+      // click). inkson's RealmAdminSectionPage route is
       // /realms/:realm_id/settings/:section (routes.rs); `access` is a current
       // RealmAdminSection slug.
       await alicePage.page.goto(`/realms/${realmId}/settings/access`, {

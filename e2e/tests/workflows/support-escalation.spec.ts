@@ -277,7 +277,7 @@ test.describe("workflow: support escalation", () => {
 
       // Both parties reload: the receiver-side tombstone fold is now wired
       // end-to-end (soland projects the redacted ck.message.create as a
-      // tombstone on events_query/sync; yougen chat folds it into
+      // tombstone on events_query/sync; inkson chat folds it into
       // chat-redacted-tombstone), so the plaintext disappears for both and
       // the tombstone surfaces on each reload.
       await alexPage.gotoTimelineRealm(realmId);

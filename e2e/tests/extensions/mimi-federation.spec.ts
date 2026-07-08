@@ -28,7 +28,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("mimi federation", () => {
-  // soland/yougen gap: the MIMI Provider Facade binding + identity-bridging
+  // soland/inkson gap: the MIMI Provider Facade binding + identity-bridging
   // business chain is not implemented yet (MIMI interop is an extension
   // profile, not required for v1 core). cotest already ships
   // helpers/mimi-facade.ts plus the mock facade; the business cases below stay
@@ -66,7 +66,7 @@ test.describe("mimi federation", () => {
       //   through the facade and mints the pairwise DID per spec §6
       //   (did:pairwise:${realmId}/${hash(handle, realmId.salt)}).
       //   Approval is an event-plane action: the admin approval (product
-      //   face /_soland/, or yougen admin panel) results in a
+      //   face /_soland/, or inkson admin panel) results in a
       //   ck.member.state{membership=join} event for the pairwise DID.
       //   Assert membership via the event plane: query /_cokret/self/events
       //   (queryRealmEventsApi) for the ck.member.state event carrying the

@@ -73,16 +73,16 @@ export type OpenUserOpts = {
   keepDeviceAuthorizationModal?: boolean;
   /// Start with server-only config for tests that must exercise real login.
   /// This keeps diagnostics/page helpers but avoids seeding a fixture
-  /// account/device into yougen.config.v1 before the product login flow runs.
+  /// account/device into inkson.config.v1 before the product login flow runs.
   neutralLoginConfig?: boolean;
-  /// Real `ck.session.grant` JWT to inject as yougen's session credential.
-  /// When set together with `dpopSeedB64url`, yougen's dev-only boot injection
+  /// Real `ck.session.grant` JWT to inject as inkson's session credential.
+  /// When set together with `dpopSeedB64url`, inkson's dev-only boot injection
   /// rehydrates the grant + DPoP device key instead of relying on dev-login.
   grantJwt?: string;
   /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
   /// bound to (its thumbprint == the grant's `cnf.jkt`).
   dpopSeedB64url?: string;
-  /// coauth-assigned grant id (DB row id), persisted by yougen with the grant
+  /// coauth-assigned grant id (DB row id), persisted by inkson with the grant
   /// so refresh/logout paths can identify the current grant chain.
   grantId?: string;
   /// Audience the grant is bound to (the soland service DID).
@@ -219,8 +219,8 @@ export class JointUserPage {
   }
 
   async gotoSetup() {
-    // yougen's /setup is the Overview; the Realm wizard lives at the
-    // /setup/realms section. yougen/src/routes.rs §SetupSection.
+    // inkson's /setup is the Overview; the Realm wizard lives at the
+    // /setup/realms section. inkson/src/routes.rs §SetupSection.
     await this.page.goto("/setup/realms", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({
       timeout: 120_000,
@@ -794,7 +794,7 @@ export class JointUserPage {
     }
   }
 
-  // Accept a pending Realm invite through the visible yougen notification UI.
+  // Accept a pending Realm invite through the visible inkson notification UI.
   async acceptInviteFromNotifications(realmId: string) {
     await this.gotoNotifications();
     const refresh = this.page.getByTestId("refresh-notifications");
@@ -1077,7 +1077,7 @@ export async function createDpopUserSessionForAccount(
     server?: SolandKey;
     coauthBase?: string;
     // Skip the harness-side `ck.device.authorize`. Set this for browser MLS
-    // sessions so yougen's own on-connect self-enrollment
+    // sessions so inkson's own on-connect self-enrollment
     // (app/connect.rs enroll_current_session_device) becomes the sole device
     // authority — it enrolls the browser's REAL event-signer key, which is what
     // signs message proofs, so a receiver's chat proof gate resolves a matching
@@ -1131,7 +1131,7 @@ export async function createDpopUserSessionForAccount(
   // enroll authorizes the DPoP *session* key, but the browser's real event-signer
   // key (what signs message proofs) is different — so a receiver's chat proof gate
   // (verify_chat_envelope_proof) would resolve a non-matching key and drop
-  // cross-member chat messages. yougen's on-connect self-enrollment now works
+  // cross-member chat messages. inkson's on-connect self-enrollment now works
   // under the injected-grant seam (connect.rs falls back to the connect-held
   // bearer when local_state has no reconstructed grant), so skipping this lets
   // self-enrollment authorize the correct event-signer key. Because a pre-existing
@@ -1279,36 +1279,36 @@ export async function openUser(
   await context.addInitScript(
     (init) => {
       if (init.neutralLoginConfig) {
-        if (!window.localStorage.getItem("yougen.config.v1")) {
+        if (!window.localStorage.getItem("inkson.config.v1")) {
           window.localStorage.setItem(
-            "yougen.config.v1",
+            "inkson.config.v1",
             JSON.stringify(init.config),
           );
         }
       } else {
         window.localStorage.setItem(
-          "yougen.config.v1",
+          "inkson.config.v1",
           JSON.stringify(init.config),
         );
       }
-      // The harness injects sessions into localStorage; yougen's wasm build is
+      // The harness injects sessions into localStorage; inkson's wasm build is
       // IndexedDB-only for session credentials/secrets by default (SubtleCrypto, non-
       // extractable). Opt into the localStorage compatibility tier so the
       // injected credential/seed are accepted (test-only; production leaves this
-      // unset). See yougen secure_key_store WASM_ALLOW_LOCALSTORAGE_SECRETS_FLAG.
+      // unset). See inkson secure_key_store WASM_ALLOW_LOCALSTORAGE_SECRETS_FLAG.
       window.localStorage.setItem(
-        "yougen.security.allow_localstorage_secrets",
+        "inkson.security.allow_localstorage_secrets",
         "1",
       );
-      // ②(A+②) real-grant injection: hand yougen's dev-only boot path the real
+      // ②(A+②) real-grant injection: hand inkson's dev-only boot path the real
       // ck.session.grant + the DPoP device seed it is bound to, so the wasm
       // client rehydrates a genuine grant (coauth introspection passes, device
-      // enrollment runs) instead of a soland-only dev-login credential. yougen reads
-      // this key only when allow_localstorage_secrets is on. See yougen
+      // enrollment runs) instead of a soland-only dev-login credential. inkson reads
+      // this key only when allow_localstorage_secrets is on. See inkson
       // app.rs inject_test_session_grant.
       if (init.sessionInjection) {
         window.localStorage.setItem(
-          "yougen.test.session_injection.v1",
+          "inkson.test.session_injection.v1",
           JSON.stringify(init.sessionInjection),
         );
       }

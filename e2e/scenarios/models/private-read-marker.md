@@ -45,7 +45,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 - alice 两台 device 各持一个有效 dev session token(`POST /_soland/gate/auth/dev-login`,actor 相同、
   `device_id` 不同 — 沿用 `identity/multi-device` Phase A 的 dev-login proxy)
 - bob 持有效 dev session token
-- 三个 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did +
+- 三个 browser context 都通过 `inkson.config.v1` localStorage 注入 server_url + account_did +
   device_id + session_credential
 
 ## Steps
@@ -71,7 +71,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 ### Phase C — alice device-1 读取并记录 read marker(到 M2)
 
 7. alice (device-1) 进 `/timeline/${realmId}`,等到 `timeline-event` 至少含 M1/M2/M3
-8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 yougen 触发 read-position 上报
+8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 inkson 触发 read-position 上报
 9. 客户端提交 actor-private `ck.read_cursor.advance`,payload 使用 `ck.schema.read_cursor.v1`,
    含 `position.event_id = M2.event_id`、`position.hlc = M2.hlc` 和对应 `read_scope`
 10. 断言:`GET /_cokret/self/account/subscribe?catchup=true` 返回的 actor-private read cursor
@@ -85,7 +85,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 ### Phase E — alice device-2 通过 to-device 收到 marker
 
 13. alice (device-2) 打开第二个 browser context,进 `/settings`(`gotoSettings()`)
-14. 等待 sync 窗口(测试上界 30s);yougen 应通过 to-device 同步把 marker 落到本地
+14. 等待 sync 窗口(测试上界 30s);inkson 应通过 to-device 同步把 marker 落到本地
 15. 断言:device-2 的 settings 也显示 "Last read in S: M2"
 16. 断言:device-2 经 `/_cokret/self/account/subscribe` 看到的 read cursor position 与 device-1 一致
 
@@ -98,7 +98,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ### Phase G — alice device-2 mark-all-read,device-1 在 sync 后归零
 
-20. alice (device-2) 在 yougen `/notifications` 点 "Mark all read",客户端提交最新
+20. alice (device-2) 在 inkson `/notifications` 点 "Mark all read",客户端提交最新
     `ck.read_cursor.advance`
 21. 断言:device-2 本地 notification projection `unread_count = 0`,read cursor position 覆盖 Phase C
 22. 等待 to-device 同步窗口(测试上界 30s)
@@ -137,9 +137,9 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   在 alice 当前 device 上写 actor-private state OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
   Phase G 的 cross-device 断言会 fail。主流程标 `test.fixme`,内联注释说明 gap
 - **soland 现状**:notification projection 的读取面是
-  `GET /_cokret/self/account/subscribe?catchup=true`;单 device 的本地 mark-all-read 由 yougen
+  `GET /_cokret/self/account/subscribe?catchup=true`;单 device 的本地 mark-all-read 由 inkson
   提交 read cursor 并更新本地 projection
-- **yougen gap**:`/settings` 当前没有 `read-position-row` testid;Phase D / E 的 UI 断言依赖该
+- **inkson gap**:`/settings` 当前没有 `read-position-row` testid;Phase D / E 的 UI 断言依赖该
   testid 上线后才能跑(或者改成纯 API 断言绕过)
 - **multi-device dev-login proxy**:沿用 `identity/multi-device` Phase A 的做法 — 对同一 actor 调
   `dev-login` 两次得到两个 session token(可能相同也可能不同),分别注入两个 browser context

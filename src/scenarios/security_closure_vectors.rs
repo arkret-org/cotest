@@ -11,7 +11,7 @@
 //!   without live downstream services.
 //!
 //! The actual end-to-end SUT wiring lives in implementer projects
-//! (soland / coauth / teabay / yougen). Cotest keeps these vector gates
+//! (soland / coauth / teabay / inkson). Cotest keeps these vector gates
 //! live by validating the canonical runner contract locally.
 
 use anyhow::{Context, Result, anyhow};

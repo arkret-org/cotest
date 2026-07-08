@@ -366,7 +366,7 @@ test.describe("account recovery", () => {
 
   test.fixme(
     // @blocking-on: client-side Shamir reconstruction + a live share-holder
-    //   release service (neither exists in yougen/harness), PLUS the recovery
+    //   release service (neither exists in inkson/harness), PLUS the recovery
     //   proof gap shared with the device-2 fixme above. soland accepts a
     //   threshold{k,n,shares[]} recovery policy and validates share_commitment in
     //   the proof layer, but the threshold proof kind itself is not driveable.
@@ -379,7 +379,7 @@ test.describe("account recovery", () => {
       // (§7.5.4). soland accepts a `threshold{k,n,shares[]}` recovery policy
       // and validates share_commitment in the proof layer, but the client-side
       // Shamir share reconstruction (3-of-5 holders → reassembled recovery
-      // private key → HPKE-open) is not implemented in yougen, and the
+      // private key → HPKE-open) is not implemented in inkson, and the
       // share-holder release transcript binding (§8.2) has no live holder
       // service in the harness. Both are out of this task's module boundary.
     },

@@ -29,7 +29,7 @@
 1. alice 在 device-1 `/onboarding`,选 "Sign in with OIDC"
 2. 重定向 mock IdP → 自动返回 ID token
 3. coauth OIDC bridge 校验 → 创建/绑定 DID → 颁 `ck.session.grant`(TTL 30 分钟)
-4. yougen 拿 `{ did, session_credential, control_realm_id }`
+4. inkson 拿 `{ did, session_credential, control_realm_id }`
 5. 断言:`/_soland/self/account/me` 返回 alice.did
 
 ### Phase B — Device 2 via 设备授权链
@@ -44,7 +44,7 @@
 ### Phase C — Session refresh
 
 12. 测试 harness 把 device-1 session_credential 标过期(后端用 `Authorization: Bearer <expired>` → 401)
-13. yougen 客户端捕捉 401 → 自动 `POST /_cokret/gate/account/session-grants/refresh` 用旧 grant + DPoP holder proof
+13. inkson 客户端捕捉 401 → 自动 `POST /_cokret/gate/account/session-grants/refresh` 用旧 grant + DPoP holder proof
 14. coauth 校验 holder proof → 颁新 session grant
 15. 断言:device-1 重新可用,不需要 re-OIDC
 
@@ -67,7 +67,7 @@
 
 - **coauth 缺口**:OIDC bridge 实现度未知;`/_cokret/gate/account/session-grants/refresh` 路由可能未实现;session_grant 短 TTL 机制需要验证
 - **harness 缺口**:mock IdP 必须新增(本会话 harness 改动)
-- **yougen 缺口**:OIDC 重定向流;自动 401 refresh interceptor
+- **inkson 缺口**:OIDC 重定向流;自动 401 refresh interceptor
 
 ## 总耗时预估
 

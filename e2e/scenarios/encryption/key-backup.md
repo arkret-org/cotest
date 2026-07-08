@@ -55,7 +55,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
    - `ciphertext` / `ciphertext_digest` 等 envelope metadata
 5. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
 6. UI 显示 recovery root 已配置;`mls_account_secret` 与自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
-> **§7.10 持续备份时序(yougen 实现语义)**:RK 已配置的账号上,任一加密写引发的
+> **§7.10 持续备份时序(inkson 实现语义)**:RK 已配置的账号上,任一加密写引发的
 > `ck.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
 > successor envelope PUT 上行;同 Realm 后续 commit 受 **5min min-interval** 合并补传。
 > 服务端可断言:同一 Realm 的连续上传 `series_id` 不变、`series_seq` 严格 +1、带
@@ -136,7 +136,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ## Implementation notes
 
-- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list、bearer-only ciphertext read 拒绝(§7.7.1 unlock proof)、DELETE ownership proof,以及 yougen Argon2id + XChaCha20-Poly1305 seal/open round trip、wrong-Recovery-Key local reject(commitment)、24 词 BIP-39 输入校验、late-recovery banner helper。
+- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list、bearer-only ciphertext read 拒绝(§7.7.1 unlock proof)、DELETE ownership proof,以及 inkson Argon2id + XChaCha20-Poly1305 seal/open round trip、wrong-Recovery-Key local reject(commitment)、24 词 BIP-39 输入校验、late-recovery banner helper。
 - **剩余缺口**:本 scenario 的完整"丢设备 → 新设备授权 → MLS commit chain backfill → 历史 E2EE 消息可解"仍未贯通;`key-backup.spec.ts` 保留这些全链路 fixme。
 - **2026-05-30 A1 live**:`key-backup.spec.ts` 覆盖同账号两个 fresh browser profile 的验收路径:device-A 创建 `mls_rfc9420` realm 并写历史 timeline 卡片、`MlsBackupPrompt` 自动生成 24 词 Recovery Key 并上传 `mls_account_secret` backup、device-B 空 profile 登录后出现 `MlsUnlockPrompt`、输入 24 词恢复、device-B 写入后 device-A 可见,同时收集 `keys/backups` PUT 和 subscribe/describe/events/MLS runtime 错误信号。
 - **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `ck.mls.commit` payload `schema_violation`,另一端能看到详情更新。

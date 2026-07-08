@@ -1,14 +1,14 @@
 {
-  "suite": "yougen_client_profile_conformance",
-  "profile": "ck.profile.yougen_client_blackbox_manifest.v1",
-  "service": "yougen",
+  "suite": "inkson_client_profile_conformance",
+  "profile": "ck.profile.inkson_client_blackbox_manifest.v1",
+  "service": "inkson",
   "target_profiles": [
     "ck.profile.full_client.v1",
     "ck.profile.e2ee_client.v1"
   ],
   "runnable_harness": {
     "kind": "headless_contract",
-    "runner": "cotest.yougen.headless_contract.v1",
+    "runner": "cotest.inkson.headless_contract.v1",
     "certification": {
       "status": "certified",
       "format": "json",
@@ -16,7 +16,7 @@
         "ck.profile.full_client.v1",
         "ck.profile.e2ee_client.v1"
       ],
-      "evidence_ref": "target/conformance-transcripts/yougen_client_profile_manifest.jsonl"
+      "evidence_ref": "target/conformance-transcripts/inkson_client_profile_manifest.jsonl"
     },
     "triggered_paths": [
       {

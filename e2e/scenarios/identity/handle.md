@@ -27,7 +27,7 @@
 
 1. alice 完成 onboarding,初始 handle 由 `uniqueUser` 自动分配如 `@alice-s29-<uuid>`
 2. alice 进 `/settings/profile` → "Change handle",新 handle = `@alice-pretty`
-3. yougen 提交 `ck.handle.claim { handle: "@alice-pretty", actor: alice.did }`
+3. inkson 提交 `ck.handle.claim { handle: "@alice-pretty", actor: alice.did }`
 4. soland reducer 校验:
    - handle 格式合法
    - handle 未被占用
@@ -39,13 +39,13 @@
 
 7. mallory 试 `ck.handle.claim { handle: "@alice-pretty" }`
 8. soland reducer 拒,reason `handle_already_claimed`
-9. 断言:mallory 的 yougen UI 显示错误;profile.handle 未变
+9. 断言:mallory 的 inkson UI 显示错误;profile.handle 未变
 
 ### Phase C — alice 转移 handle 给 bob
 
 10. alice 进 `/settings/profile` → "Transfer handle"
 11. 输入 target = bob.did
-12. yougen 提交 `ck.handle.transfer { handle, from: alice.did, to: bob.did }`,alice 签
+12. inkson 提交 `ck.handle.transfer { handle, from: alice.did, to: bob.did }`,alice 签
 13. soland reducer:
     - 校验 alice 是当前 holder
     - 把 handle 绑定改到 bob.did
@@ -71,7 +71,7 @@
 ## Implementation notes
 
 - **soland 缺口**:`ck.handle.{claim,transfer,release}` event kinds + handle registry projection + grace period 状态
-- **yougen 缺口**:`/settings/profile` 的 change handle / transfer 按钮
+- **inkson 缺口**:`/settings/profile` 的 change handle / transfer 按钮
 
 ## 总耗时预估
 

@@ -255,23 +255,23 @@ fn test_oa_cot_5_share_resolve_open_live() {
 // These pin the full cross-service strands that the R3.2 wire changes enable.
 // The SDK-pure vector suites above already lock the wire shapes; the live
 // wiring (soland MID reducer + teabay list_handles_for_subject endpoint +
-// yougen §3.8.2 renderer transitions) lands as the upstream services finish
+// inkson §3.8.2 renderer transitions) lands as the upstream services finish
 // their R3.2 work, so the live legs stay `#[ignore]` with a reason string
 // (cotest CI enforces ignore-comment hygiene).
 
 #[test]
-#[ignore = "R3.2-followup: soland MID reducer + coauth issuer + yougen/floria refresh \
+#[ignore = "R3.2-followup: soland MID reducer + coauth issuer + inkson/floria refresh \
             not yet wired for the end-to-end handle reassignment strand"]
 fn test_cot_1_handle_reassignment_full_strand_live() {
-    // Live integration (soland ↔ SDK ↔ yougen ↔ coauth):
+    // Live integration (soland ↔ SDK ↔ inkson ↔ coauth):
     //   1. coauth issues handle claim H1 for subject S (binding_state=verified).
-    //   2. All views (roster member_display_state_digest, list_handles_for_subject, yougen mention
+    //   2. All views (roster member_display_state_digest, list_handles_for_subject, inkson mention
     //      render) reflect H1 as the §3.2.1 primary handle.
     //   3. coauth revokes H1 and issues H2 for S.
     //   4. roster member_display_state_digest changes (claim digest set folded);
-    //      list_handles_for_subject drops H1, surfaces H2; yougen re-renders the mention to H2 with
+    //      list_handles_for_subject drops H1, surfaces H2; inkson re-renders the mention to H2 with
     //      no `ck.member.identity.update` forged.
-    unreachable!("integration target gated on soland/coauth/yougen R3.2 P0 wiring");
+    unreachable!("integration target gated on soland/coauth/inkson R3.2 P0 wiring");
 }
 
 #[test]
@@ -289,16 +289,16 @@ fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
 }
 
 #[test]
-#[ignore = "R3.2-followup: yougen §3.8.2 mention renderer fallback transitions \
+#[ignore = "R3.2-followup: inkson §3.8.2 mention renderer fallback transitions \
             (verified → cached → name-only → unresolved) not yet observable live"]
 fn test_cot_1_mention_render_fallback_transitions_live() {
-    // Live integration (yougen renderer):
+    // Live integration (inkson renderer):
     //   1. Verified projection → render @localpart:domain (Verified tier).
     //   2. Directory unreachable but local cache present → Cached tier badge.
     //   3. Cache evicted, display_name_at_time present → NameOnly tier badge.
     //   4. Nothing resolvable → Unresolved truncated-DID tier badge.
     // Each transition MUST carry a distinct visual-degradation marker.
-    unreachable!("integration target gated on yougen YG-MENT-2 P0 wiring");
+    unreachable!("integration target gated on inkson YG-MENT-2 P0 wiring");
 }
 
 // ─── P0 / FIX-1 — fixture presence + shape ────────────────────────────────

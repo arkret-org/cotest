@@ -102,7 +102,7 @@
 - **soland 缺口**:`did:webvh` resolver、witness 协议、`degraded_no_witness` 状态机、24h 健康检查 timer — 整组 MUST 但未实现。整个 scenario fixme starter。
 - **WebVH host**:可能由 soland 同进程提供 `/.well-known/did/webvh/<scid>` endpoint;也可能要独立部署。harness 需要确认。
 - **witness 服务**:scripts/run-joint-e2e.ps1 需要 `-StartWitness` 开关或 mock service。
-- **yougen 缺口**:`/settings/account` 的 "Rotate DID controlling key" 入口、DID Doc viewer。
+- **inkson 缺口**:`/settings/account` 的 "Rotate DID controlling key" 入口、DID Doc viewer。
 
 ## 总耗时预估
 

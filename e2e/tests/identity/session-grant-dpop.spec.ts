@@ -183,7 +183,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     expect(JSON.parse(body).principal_id).toBe(ctx!.actorDid);
   });
 
-  test("1b. yougen boots with a real grant and sends self-path DPoP headers", async ({
+  test("1b. inkson boots with a real grant and sends self-path DPoP headers", async ({
     browser,
     request,
   }) => {
@@ -196,10 +196,10 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     );
     const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
     const user = {
-      name: actorDid.split(":").pop() ?? "dpop-yougen",
+      name: actorDid.split(":").pop() ?? "dpop-inkson",
       did: actorDid,
       deviceId,
-      handle: "@dpop-yougen",
+      handle: "@dpop-inkson",
       displayName,
     };
     const jointPage = await openUserPage(browser, user, {

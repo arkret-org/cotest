@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的并发 `ck.realm.update` 不属于当前规范注册的 bottom producer,不得把它当作 `bottom_expose` 冲突来源。当前规范还没有注册可由 yougen 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的并发 `ck.realm.update` 不属于当前规范注册的 bottom producer,不得把它当作 `bottom_expose` 冲突来源。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
 
 ## Spec 锚点
 
@@ -33,8 +33,8 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ### Phase B — bob 离线
 
 3. 测试 harness 用 `page.context().setOffline(true)` 把 bob 断网
-4. bob 在 yougen 中尝试发消息 `M_b_offline`
-5. yougen 客户端:看到网络错误,把 move 写入本地 outbox(IndexedDB / localStorage)
+4. bob 在 inkson 中尝试发消息 `M_b_offline`
+5. inkson 客户端:看到网络错误,把 move 写入本地 outbox(IndexedDB / localStorage)
 6. UI 显示 `M_b_offline` 标 "pending sync" (`pending-sync-message` testid)
 7. 同时 alice 在线发 `M_a_online`
 
@@ -53,7 +53,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ### Phase E — repair 区仍为只读
 
-15. 断言:yougen 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
+15. 断言:inkson 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
 16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空,直到有标准 bottom producer 与 repair event kind 注册并被实现
 17. 备注:后续 CKP 注册 repair kind 后,本阶段再升级为提交标准 repair Move 并验证目标 cell 回到 active
 
@@ -72,7 +72,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ## Implementation notes
 
 - **soland 已落地**:`ck.realm.update` title patch 不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
-- **yougen 已落地**:Realm admin repair 区当前不 mint 未注册的 `ck.conflict.repair`,无 bottom 时保持只读空态。
+- **inkson 已落地**:Realm admin repair 区当前不 mint 未注册的 `ck.conflict.repair`,无 bottom 时保持只读空态。
 - **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖并发 title update 的 non-bottom 语义与 read-only repair surface。
 - **剩余边界**:outbox capacity、标准 bottom producer、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。
 

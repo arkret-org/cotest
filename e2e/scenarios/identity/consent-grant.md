@@ -31,7 +31,7 @@
 
 - 两个 DID 都通过 `POST /_soland/self/account/register` 注册过(与现有 `ensureRegistered` 行为一致)
 - 两个 actor 都持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
-- 两个 actor 的 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
+- 两个 actor 的 browser context 都通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 - alice 的 consent cell 初始为空 or-set(没有任何 `ck.consent.grant` 历史事件)
 
 ## Steps
@@ -41,18 +41,18 @@
 1. `ensureRegistered` × 2 (alice、bob)
 2. `issueDevSession` × 2,拿到两个 token
 3. `openUserPage` × 2,得到 `alicePage` / `bobPage`
-4. 断言:两侧的 yougen 已经加载、`yougen-config-loaded` testid 可见
+4. 断言:两侧的 inkson 已经加载、`inkson-config-loaded` testid 可见
 
 ### Phase B — bob 试图 contact alice (没 consent),被 gate
 
-5. **bob** 通过 yougen 的 `/contacts/new` 流程发起对 `alice.did` 的 contact request
+5. **bob** 通过 inkson 的 `/contacts/new` 流程发起对 `alice.did` 的 contact request
    - 填入 `contact-target-input` = `alice.did`,scope 选 `invite`,点 `send-contact-request-button`
 6. 断言:bob 侧 `contact-request-status` 显示 `pending` (而不是 `accepted` / `failed`);spec §4 要求 holder 没 grant 时进入 pending,不返回 hard fail
 7. 断言:soland 侧投影出 `ck.consent.pending` 事件(可观测的事件类型,具体名以 spec §3 为准),且 `holder = alice.did`、`peer = bob.did`、`scope = invite`
 
 ### Phase C — alice 查看 settings 中 pending consent
 
-8. **alice** 进 `/settings/consent`(或当前 yougen 等价路径,先确认 testid)
+8. **alice** 进 `/settings/consent`(或当前 inkson 等价路径,先确认 testid)
    - 断言:`consent-settings-panel` 可见
    - 断言:`consent-pending-row` 中存在一行,文本含 `bob.did`、`scope=invite`
 9. **alice** 点开 `consent-pending-row` 的 detail
@@ -69,7 +69,7 @@
 
 ### Phase E — bob 重试 contact,本次成功
 
-14. **bob** 在 yougen 触发 contact 流程的下一步(发邀请/打开 DM,具体由 yougen 现有 UI 定),target = `alice.did`
+14. **bob** 在 inkson 触发 contact 流程的下一步(发邀请/打开 DM,具体由 inkson 现有 UI 定),target = `alice.did`
 15. 断言:本次请求 **不再** 进 pending,直接通过 gate,返回 `accepted` / 建立 contact link
 16. 断言:alice 侧 `contact-inbox` 出现来自 `bob.did` 的 contact entry
 
@@ -106,8 +106,8 @@
 ## Implementation notes
 
 - soland 侧的 `ck.consent.*` reducer 截至当前 **未实现**,因此本 scenario 的所有 test 都先用 `test.fixme` 挂起,等 reducer + projection landing 后再去掉 `.fixme`
-- yougen 侧 `/settings/consent` 路由、`consent-settings-panel` / `consent-pending-row` / `grant-consent-button` / `revoke-consent-button` 等 testid 也未实现,跑测前要先确认或者补 UI
-- contact request 的发起入口当前可能是 `/contacts/new`,也可能是 DM 邀请按钮里的子流程;具体 testid 以 yougen 现有 UI 为准,先挂 TODO
+- inkson 侧 `/settings/consent` 路由、`consent-settings-panel` / `consent-pending-row` / `grant-consent-button` / `revoke-consent-button` 等 testid 也未实现,跑测前要先确认或者补 UI
+- contact request 的发起入口当前可能是 `/contacts/new`,也可能是 DM 邀请按钮里的子流程;具体 testid 以 inkson 现有 UI 为准,先挂 TODO
 - `ck.consent.grant` / `ck.consent.revoke` 的 Move payload 字段(scope、not_before、valid_until、peer)以 spec §3 schema 为准,实现时直接对齐 schema,不要在 e2e 这边自创字段
 - E1.1 的 time-window 测试如果设 5s 会让套件总耗时拉长,生产代码 land 后可以考虑用 mock time / time-travel helper(若 cotest harness 引入)替换真实 sleep
 

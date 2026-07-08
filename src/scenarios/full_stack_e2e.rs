@@ -12,7 +12,7 @@
 //!      the teabay binary; falls back to the schema-level validator otherwise.
 //!   4. **soland member_add candidate validation** — the `member_add_with_candidate` audience/now
 //!      invariants from T3.5.
-//!   5. **yougen mock client send_message** — SDK-only: builds a `ck.message.create` Event Envelope
+//!   5. **inkson mock client send_message** — SDK-only: builds a `ck.message.create` Event Envelope
 //!      payload (no Dioxus app required).
 //!   6. **floria notify gateway blind-wakeup payload** — verifies the sanitizer rejects all
 //!      forbidden fields per `push-notifications.md` §4.5.
@@ -31,7 +31,7 @@
 //!    policy is wired.
 //!  - Stable push id leak: a blind payload that smuggles `space_id` / `strand_id` / `event_id` MUST
 //!    be rejected by the sanitizer.
-//!  - Placeholder proof: production-mode soland rejects the yougen `jws="a..b"` placeholder (T1.3
+//!  - Placeholder proof: production-mode soland rejects the inkson `jws="a..b"` placeholder (T1.3
 //!    surface — best-effort live probe).
 //!
 //! ## Live-stack gating
@@ -89,7 +89,7 @@ pub async fn full_stack_e2e_run() -> Result<()> {
     step_4_soland_member_add(&candidate).context("T8.1 step 4: soland member_add")?;
 
     // ── Step 5–7: messaging → blind-wakeup pipeline (always runs) ──────
-    let envelope = step_5_yougen_mock_send_message().context("T8.1 step 5: yougen mock send")?;
+    let envelope = step_5_inkson_mock_send_message().context("T8.1 step 5: inkson mock send")?;
     let blind_payload = step_6_floria_blind_payload(&envelope)
         .context("T8.1 step 6: floria notify gateway blind payload")?;
     step_7_chime_receive_blind_wakeup(&blind_payload)
@@ -237,13 +237,13 @@ fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Resul
     Ok(())
 }
 
-// ── Step 5: yougen mock sends a `ck.message.create` envelope ───────────────
+// ── Step 5: inkson mock sends a `ck.message.create` envelope ───────────────
 
-/// We don't need to boot the Dioxus app to drive this — yougen's
+/// We don't need to boot the Dioxus app to drive this — inkson's
 /// `OperationBuilder` emits a `ck.message.create` Event Envelope shape; we
 /// construct that shape directly and assert it is internally consistent
 /// (T3.5 pattern, mirroring the production envelope soland would accept).
-fn step_5_yougen_mock_send_message() -> Result<Value> {
+fn step_5_inkson_mock_send_message() -> Result<Value> {
     let envelope = json!({
         "event_id": STABLE_EVENT_ID,
         "kind": "ck.message.create",
@@ -252,14 +252,14 @@ fn step_5_yougen_mock_send_message() -> Result<Value> {
         "realm_id": TARGET_REALM_ID,
         "strand_id": STABLE_STRAND_ID,
         "created_at": Utc::now().to_rfc3339(),
-        "hlc": "1747613100000-0-cotest-yougen",
+        "hlc": "1747613100000-0-cotest-inkson",
         "prev_refs": [],
         "refs": [],
         "payload": {"body": "hello alice"},
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
-            "verification_method": format!("{BOB_DID}#yougen"),
+            "verification_method": format!("{BOB_DID}#inkson"),
             "event_digest":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "created_at": Utc::now().to_rfc3339(),
@@ -268,14 +268,14 @@ fn step_5_yougen_mock_send_message() -> Result<Value> {
     });
     // Sanity-check the shape: every field downstream consumers read MUST be
     // present, and the proof MUST NOT be the production-rejected placeholder
-    // (`jws == "a..b"`) — yougen mock builds with a real-shaped jws.
+    // (`jws == "a..b"`) — inkson mock builds with a real-shaped jws.
     let proof_jws = envelope
         .pointer("/proofs/0/jws")
         .and_then(Value::as_str)
         .unwrap_or_default();
     if proof_jws == "a..b" || proof_jws.is_empty() {
         bail!(
-            "T8.1 step 5: yougen mock emitted a placeholder proof (`jws={}`); \
+            "T8.1 step 5: inkson mock emitted a placeholder proof (`jws={}`); \
              the mock client MUST attach a real-shaped (non-placeholder) jws \
              so the production rejection path is exercised in T1.3, not here",
             proof_jws
@@ -491,7 +491,7 @@ fn negative_stable_push_id_leak_rejected() -> Result<()> {
     Ok(())
 }
 
-/// `placeholder_proof_sdk_layer` — the yougen pre-T1.3 placeholder
+/// `placeholder_proof_sdk_layer` — the inkson pre-T1.3 placeholder
 /// (`jws=="a..b"`) MUST NOT round-trip through the SDK as a real proof.
 /// This is the SDK-level positive control for the production gate covered
 /// live by `production_rejects_placeholder_proof_e2e`.
@@ -599,7 +599,7 @@ async fn live_stack_probe() -> Result<()> {
             "proofs": [{
                 "kind": "detached_jws",
                 "alg": "EdDSA",
-                "verification_method": format!("{ALICE_DID}#yougen"),
+                "verification_method": format!("{ALICE_DID}#inkson"),
                 "event_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": Utc::now().to_rfc3339(),

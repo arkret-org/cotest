@@ -43,8 +43,8 @@
 ### Phase A — alice 通过 passkey 注册
 
 1. alice 进 `/onboarding`,选择"Register with passkey"
-2. yougen 调用 navigator.credentials.create(),生成 device key + WebAuthn credential
-3. yougen `POST /_cokret/self/account/create` 提交 `{ method: "passkey", credential, handle: "@alice-s7" }`
+2. inkson 调用 navigator.credentials.create(),生成 device key + WebAuthn credential
+3. inkson `POST /_cokret/self/account/create` 提交 `{ method: "passkey", credential, handle: "@alice-s7" }`
 4. soland → coauth 链路:
    - 生成 inception key
    - 写入 `did:webvh` entry 0 (SCID + updateKeys)
@@ -52,14 +52,14 @@
    - 写入 `ck.device.authorize` 把第一台设备授权
    - 发布 `ck.cross_signing.publish.v1` (PSK / SSK / USK)
    - coauth 颁发首个 `ck.session.grant` (短期)
-5. yougen 收到 `{ did, session_credential, principal_control_realm_id }`,写入 localStorage
+5. inkson 收到 `{ did, session_credential, principal_control_realm_id }`,写入 localStorage
 
 ### Phase B — alice 验证 onboarding 落地
 
 6. alice 进 `/settings/account` 应看到:
    - DID 形如 `did:webvh:<scid>:...`
    - 当前设备列表只有这一台(显示 `ck:device:...` + cross-signing fingerprint)
-   - Principal control Realm ID 已记录(可能不在 UI,但 yougen 客户端状态有)
+   - Principal control Realm ID 已记录(可能不在 UI,但 inkson 客户端状态有)
 7. 测试用 alice 的 session_credential 调 `GET /_soland/self/account/me`,断言返回 `did`、`handle`、device 信息一致
 
 ### Phase C — alice 的 DID Document 可被外部解析
@@ -74,7 +74,7 @@
 ### Phase D — bob 通过 OIDC 注册
 
 11. bob 进 `/onboarding`,选择"Sign in with Google"(mock IdP)
-12. yougen 重定向 mock IdP,mock 直接返回 ID token
+12. inkson 重定向 mock IdP,mock 直接返回 ID token
 13. coauth OIDC bridge 接住 ID token,绑定到新的 DID
 14. 断言 onboarding 完成,bob 拿到 session
 15. 断言:bob 的 DID **不同于** alice 的,但 service endpoint 都指向同一个 soland
@@ -83,7 +83,7 @@
 
 16. carol 进 `/onboarding`,提交邮箱 `carol@example.com`
 17. (mock 邮件服务发出含 verification token 的链接)
-18. carol 点链接 → yougen 把 token 提交回 coauth
+18. carol 点链接 → inkson 把 token 提交回 coauth
 19. coauth 颁发 binding proof,carol 完成 DID 绑定
 20. 断言:onboarding 成功,carol DID 有效
 
@@ -107,7 +107,7 @@
 ## Implementation notes
 
 - **soland 缺口**:`ck.profile.principal_control_realm.v1` profile、`ck.cross_signing.publish` event、`ck.device.authorize` bootstrap binding — 都是 MUST 但当前 soland 未实现。**整条 scenario 是 fixme territory**,等 control stream 落地。
-- **yougen 缺口**:`/onboarding` 真路径不走 dev-login,需要补 passkey / OIDC button、verification 流程。
+- **inkson 缺口**:`/onboarding` 真路径不走 dev-login,需要补 passkey / OIDC button、verification 流程。
 - **coauth 缺口**:OIDC bridge handler 完整度需要审。
 - **harness 缺口**:mock IdP service、mock email service — `scripts/run-joint-e2e.ps1` 需要 `-StartMockIdp` / `-StartMockEmail` 开关。
 

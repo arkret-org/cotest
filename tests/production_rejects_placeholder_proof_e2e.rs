@@ -1,7 +1,7 @@
 //! T1.3 — End-to-end production-mode placeholder-proof rejection gate.
 //!
 //! Spawns soland with `SOLAND_DEVELOPMENT_MODE=false` and posts an
-//! Event Envelope carrying the yougen pre-T1.3 placeholder proof
+//! Event Envelope carrying the inkson pre-T1.3 placeholder proof
 //! (`jws == "a..b"`). The request MUST be rejected with HTTP 401 or
 //! 403 — either with `dev_proof_in_production` (T1.3 proof check
 //! fired) or with `unauthenticated` (auth wall fired first because

@@ -79,7 +79,7 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
     let report = build_operation_registry_gate_report_from_paths(paths(
         &artifacts_root,
         &product_private_path,
-        source_root("yougen", &source_dir, "src/api.rs"),
+        source_root("inkson", &source_dir, "src/api.rs"),
     ))?;
     assert_eq!(report.failed_entries().count(), 1);
     let error = validate_operation_registry_gate_report(&report)
@@ -198,7 +198,7 @@ fn current_workspace_operation_registry_gate_passes() -> Result<()> {
     );
     assert!(
         report.registered_entries().count() > 20,
-        "source scans should find registered soland/SDK/yougen operations"
+        "source scans should find registered soland/SDK/inkson operations"
     );
     validate_operation_registry_gate_report(&report)?;
     assert_eq!(report.failed_entries().count(), 0);

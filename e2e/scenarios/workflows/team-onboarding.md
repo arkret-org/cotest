@@ -58,7 +58,7 @@
 
 - **E-onboarding.1** Yuki 在 `This week` 列也 archive 一张,确认两列的 archive 各自独立
 - **E-onboarding.2** Mei restore `"Set up dev laptop"`(看错了 archive),卡回到 `Today`
-- **E-onboarding.3** Mei 编辑 timeline 欢迎消息两次,write-status 计数器 `revised x2`(需要 yougen 暴露 revision count)
+- **E-onboarding.3** Mei 编辑 timeline 欢迎消息两次,write-status 计数器 `revised x2`(需要 inkson 暴露 revision count)
 
 ## 总耗时预估
 

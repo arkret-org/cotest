@@ -20,8 +20,8 @@ import {
 
 const execFileAsync = promisify(execFile);
 const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
-const YOUGEN_MANIFEST = findSiblingManifest("yougen");
-const YOUGEN_CWD = path.dirname(YOUGEN_MANIFEST);
+const INKSON_MANIFEST = findSiblingManifest("inkson");
+const INKSON_CWD = path.dirname(INKSON_MANIFEST);
 const CARGO_TEST_TIMEOUT_MS = 600_000;
 
 test.describe.configure({ mode: "serial" });
@@ -177,16 +177,16 @@ test.describe("key backup restore live path", () => {
     expect(JSON.stringify(await list.json())).not.toContain(backupId);
   });
 
-  test("yougen crypto and late-recovery banner helpers stay live", async () => {
+  test("inkson crypto and late-recovery banner helpers stay live", async () => {
     test.setTimeout(CARGO_TEST_TIMEOUT_MS * 2);
     // Recovery-Key convergence: the vault-passphrase helpers are gone; the
     // live client contract is the seal/open vault primitives (fed by the
     // 24-word Recovery Key), the commitment-based wrong-key reject, and the
     // BIP-39 24-word input normalization gate.
-    await runYougenLibTest("recovery_crypto::tests::seal_open_round_trip");
-    await runYougenLibTest("recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment");
-    await runYougenLibTest("recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys");
-    await runYougenLibTest("late_recovery::tests::from_audit_policy_access_carries_late_recovery_original_event_id");
+    await runInksonLibTest("recovery_crypto::tests::seal_open_round_trip");
+    await runInksonLibTest("recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment");
+    await runInksonLibTest("recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys");
+    await runInksonLibTest("late_recovery::tests::from_audit_policy_access_carries_late_recovery_original_event_id");
   });
 });
 
@@ -350,13 +350,13 @@ function deleteProof(actorDid: string, backupId: string): string {
   return `dev-ssk-delete:v1:${actorDid}:${backupId}`;
 }
 
-async function runYougenLibTest(filter: string): Promise<void> {
+async function runInksonLibTest(filter: string): Promise<void> {
   const { stdout, stderr } = await execFileAsync(
     CARGO_BIN,
     [
       "test",
       "--manifest-path",
-      YOUGEN_MANIFEST,
+      INKSON_MANIFEST,
       "--lib",
       filter,
       "--",
@@ -364,7 +364,7 @@ async function runYougenLibTest(filter: string): Promise<void> {
       "--nocapture",
     ],
     {
-      cwd: YOUGEN_CWD,
+      cwd: INKSON_CWD,
       timeout: CARGO_TEST_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
       env: { ...process.env, CARGO_TERM_COLOR: "never" },

@@ -59,7 +59,7 @@
 ### Phase B — 默认 allow:invite 触发 /policy/check
 
 4. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入规则:`{ default: { decision: "allow" } }`
-5. **alice** 通过 yougen `/realms/${realmId}/admin` 邀请 **bob**(invite-member → send-invite-button)
+5. **alice** 通过 inkson `/realms/${realmId}/admin` 邀请 **bob**(invite-member → send-invite-button)
 6. soland 在执行 `ck.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
    - `actor_id = alice.did`
    - `action = "ck.invite.create"`
@@ -80,7 +80,7 @@
 11. **alice** 再次走 invite-member → send-invite-button(同样邀请 bob)
 12. soland 调 mock,得到 `{ decision: "deny", reason: "external_policy_blocks_user", obligations: [] }`
 13. soland 拒绝写入,返回 HTTP `412`,body `{ errcode: "policy_denied", reason: "external_policy_blocks_user" }`
-14. 断言:yougen 在 `realm-admin-panel` 渲染错误文本含 `external_policy_blocks_user`(或 testid `invite-error`)
+14. 断言:inkson 在 `realm-admin-panel` 渲染错误文本含 `external_policy_blocks_user`(或 testid `invite-error`)
 15. `${MOCK_POLICY_SERVER_PORT}/inspect.checks` 再增一条
 
 ### Phase D — deny + obligation:soland 执行 obligation
@@ -110,7 +110,7 @@
 
 - Phase A:Realm policy-server projection 中 `policy_server_url` 等于 mock URL,`on_timeout = "fail_closed"`
 - Phase B 步骤 8-9:allow 决策下邀请成功,mock 收到一条 `action = ck.invite.create` 的 check
-- Phase C 步骤 13-14:deny 决策下 HTTP 412,errcode `policy_denied`,yougen 渲染 reason
+- Phase C 步骤 13-14:deny 决策下 HTTP 412,errcode `policy_denied`,inkson 渲染 reason
 - Phase D 步骤 19-20:obligation `log_event` 写入 audit log,且 mock inspect 标记 obligations_executed=true
 - Phase E 步骤 22-23:signed_transcript 包含本次测试所有 check;签名验证成功;每条 entry 五字段齐全
 
@@ -136,7 +136,7 @@
 
 - **soland 缺口**:`PUT /_cokret/self/realms/{realm_id}/policy-server` 已覆盖配置投影;`POST /_cokret/self/policy/check` outbound call 在 cap-gated 路径上未挂;obligation executor (写 audit log + step-up + mask field 三个 kind);cache_ttl 缓存层;on_timeout=fail_closed 兜底分支。
 - **coauth 缺口**:无;policy server 走 soland → external HTTP,coauth 不参与。
-- **yougen 缺口**:邀请失败时的 error 渲染 testid (`invite-error`) 可能需要补;policy reason 文本展示。
+- **inkson 缺口**:邀请失败时的 error 渲染 testid (`invite-error`) 可能需要补;policy reason 文本展示。
 - **mock 缺口**:并行任务的 `mock-policy-server.mjs` 必须支持 `POST /scenarios`(规则注入)、`GET /inspect`(checks + signed_transcript)、ed25519 签名 transcript;这是本测试的硬依赖,本 spec 不重复指定,但任何字段不一致都会让本测试 fail。
 - 每个 `test()` body 内统一在 `try { ... } finally { await Promise.allSettled([...close()]); }` 包起来,与现有 `tests/discovery/notifications.spec.ts` 风格一致。
 - alice 用 `JointUserPage.createRealm` + `JointUserPage.gotoRealmAdmin` 驱动 invite 流;policy 注入用 `request.post(${MOCK_POLICY_SERVER_PORT}/scenarios)` 直接调 mock。

@@ -47,7 +47,7 @@
 
 ### Phase A — alice 建 knock Realm + join policy
 
-1. **alice** 通过 yougen 建 Realm `R` (走 `/setup`,但需要扩 join policy 配置 UI;若 yougen 缺,这一步通过直接 API call 或 cli 注入 cell):
+1. **alice** 通过 inkson 建 Realm `R` (走 `/setup`,但需要扩 join policy 配置 UI;若 inkson 缺,这一步通过直接 API call 或 cli 注入 cell):
    - title = `"spaces/knock-application Knock Space ${stamp}"`
    - discoverability = `listed`
    - join_rule = `knock`
@@ -86,7 +86,7 @@
 
 ### Phase B — bob 敲门 + 提交申请 (happy path)
 
-4. **bob** 在 yougen 中通过 `/directory` 发现 Space S (因为 discoverability=listed)
+4. **bob** 在 inkson 中通过 `/directory` 发现 Space S (因为 discoverability=listed)
 5. **bob** 提交 `ck.member.state{membership=knock}` Move (敲门事件,无正文)
 6. **bob** 提交 `member.application.v1`:
    - `realm_id = realmId`
@@ -131,7 +131,7 @@
 19. **mallory** 立刻再发一次 knock + application
 20. 断言 (§3.11 cooldown):
     - reducer **拒绝** 这次的 knock 或 application Move,reason_code 中包含 `cooldown_active` / `cooldown_after_reject_not_elapsed` 或等价
-    - mallory 的 client UI 显示剩余冷却时间 (如果 yougen 有这个显示)
+    - mallory 的 client UI 显示剩余冷却时间 (如果 inkson 有这个显示)
 
 ### Phase F — Cooldown 过期后允许重申 (sub-test E6.1)
 
@@ -172,8 +172,8 @@
 
 ## Implementation notes
 
-- **JoinPolicy cell 写入路径**:soland 当前是否暴露写 `ck:cell:realm.join_policy.v1:<realm_id>` 的 endpoint 需要先查;若没有,测试要么直接调底层 cell write API,要么 yougen 要补 join policy 编辑 UI
-- **yougen UI 缺口可能很大**:
+- **JoinPolicy cell 写入路径**:soland 当前是否暴露写 `ck:cell:realm.join_policy.v1:<realm_id>` 的 endpoint 需要先查;若没有,测试要么直接调底层 cell write API,要么 inkson 要补 join policy 编辑 UI
+- **inkson UI 缺口可能很大**:
   - knock 申请的 UI(applicant 端填表)
   - 审核队列 UI(reviewer 端看待审 application)
   - reviewer accept/reject UI

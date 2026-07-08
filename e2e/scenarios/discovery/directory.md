@@ -36,13 +36,13 @@
 
 4. alice 在 `/directory` 点 `directory-contact-tools`
 5. 填 `contact-target-did-input = bob.did`,点 "Request"
-6. yougen 提交 `ck.relation.create { relation_kind: "contact", source: alice.did, target: bob.did, fields: { status: "pending" } }`
+6. inkson 提交 `ck.relation.create { relation_kind: "contact", source: alice.did, target: bob.did, fields: { status: "pending" } }`
 7. 断言:contact_state 文本含 `pending`
 
 ### Phase C — bob 接受联系
 
 8. bob 进 `/directory`,在 contact tools 区填 `contact-requester-did-input = alice.did`,点 "Accept"
-9. yougen 提交 `ck.relation.update`,status = `accepted`
+9. inkson 提交 `ck.relation.update`,status = `accepted`
 10. 断言:bob 的 contact_state 含 `accepted`
 11. bob 点 "List contacts" → 看到 alice.did + count 1
 
@@ -54,13 +54,13 @@
 ### Phase E — bob 更新 profile
 
 14. bob 进 `/settings/profile`,改 display_name、bio、avatar
-15. yougen 提交 `ck.profile.update`
+15. inkson 提交 `ck.profile.update`
 16. alice 拉 `GET /_cokret/self/actors/<bob.did>/profile` → 看到新 profile
 17. 断言:在 directory 搜结果中显示 bob 的新 display_name
 
 ### Phase F — Presence
 
-18. bob 关闭 yougen tab(模拟离线)
+18. bob 关闭 inkson tab(模拟离线)
 19. alice 在 directory 看 bob 的状态指示:`presence-offline`
 20. bob 重新打开 → 5s 内 alice 看到 `presence-online`
 

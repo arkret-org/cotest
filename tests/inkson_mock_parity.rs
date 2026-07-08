@@ -110,7 +110,7 @@ struct TemplateContext {
 
 #[tokio::test]
 #[serial]
-async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
+async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixture = load_fixture(&root)?;
     let allowlist = load_allowlist(&root)?;
@@ -121,7 +121,7 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         );
     }
 
-    let server = CokretServer::spawn("yougen-mock-parity").await?;
+    let server = CokretServer::spawn("inkson-mock-parity").await?;
     let alice_token = register_account(
         &server,
         "did:web:alice-mock-parity.example",
@@ -137,8 +137,8 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
 
-    let contract_path = locate_yougen_contract(&root)?
-        .ok_or_else(|| anyhow!("yougen mock contract missing next to {}", root.display()))?;
+    let contract_path = locate_inkson_contract(&root)?
+        .ok_or_else(|| anyhow!("inkson mock contract missing next to {}", root.display()))?;
     assert_mock_contract_format(&contract_path, &fixture, &ctx)?;
     assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)?;
 
@@ -178,7 +178,7 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         .collect();
     if !unexpected.is_empty() {
         bail!(
-            "unexpected yougen mock parity diffs: {} (see mock-parity.md in the cotest artifact directory)",
+            "unexpected inkson mock parity diffs: {} (see mock-parity.md in the cotest artifact directory)",
             unexpected
                 .iter()
                 .map(|result| result.id.as_str())
@@ -191,13 +191,13 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
 }
 
 #[test]
-fn yougen_mock_contract_format_smoke() -> Result<()> {
+fn inkson_mock_contract_format_smoke() -> Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let Some(contract_path) = locate_yougen_contract(&root)? else {
-        if std::env::var_os("COTEST_REQUIRE_YOUGEN_CONTRACT").is_some() {
-            bail!("COTEST_REQUIRE_YOUGEN_CONTRACT is set but sibling yougen contract is missing");
+    let Some(contract_path) = locate_inkson_contract(&root)? else {
+        if std::env::var_os("COTEST_REQUIRE_INKSON_CONTRACT").is_some() {
+            bail!("COTEST_REQUIRE_INKSON_CONTRACT is set but sibling inkson contract is missing");
         }
-        eprintln!("skipping yougen mock contract smoke: sibling yougen checkout not found");
+        eprintln!("skipping inkson mock contract smoke: sibling inkson checkout not found");
         return Ok(());
     };
     let fixture = load_fixture(&root)?;
@@ -212,13 +212,13 @@ fn yougen_mock_contract_format_smoke() -> Result<()> {
 }
 
 #[test]
-fn yougen_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
+fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let Some(contract_path) = locate_yougen_contract(&root)? else {
-        if std::env::var_os("COTEST_REQUIRE_YOUGEN_CONTRACT").is_some() {
-            bail!("COTEST_REQUIRE_YOUGEN_CONTRACT is set but sibling yougen contract is missing");
+    let Some(contract_path) = locate_inkson_contract(&root)? else {
+        if std::env::var_os("COTEST_REQUIRE_INKSON_CONTRACT").is_some() {
+            bail!("COTEST_REQUIRE_INKSON_CONTRACT is set but sibling inkson contract is missing");
         }
-        eprintln!("skipping yougen mock artifact gate: sibling yougen checkout not found");
+        eprintln!("skipping inkson mock artifact gate: sibling inkson checkout not found");
         return Ok(());
     };
     let fixture = load_fixture(&root)?;
@@ -232,22 +232,22 @@ fn yougen_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
     assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)
 }
 
-fn locate_yougen_contract(root: &Path) -> Result<Option<PathBuf>> {
+fn locate_inkson_contract(root: &Path) -> Result<Option<PathBuf>> {
     let path = root
         .parent()
         .ok_or_else(|| anyhow!("cotest root has no parent: {}", root.display()))?
-        .join("yougen")
+        .join("inkson")
         .join("tests")
         .join("e2e")
         .join("mockCokretContract.ts");
     Ok(path.is_file().then_some(path))
 }
 
-fn locate_yougen_mock_api(root: &Path) -> Result<Option<PathBuf>> {
+fn locate_inkson_mock_api(root: &Path) -> Result<Option<PathBuf>> {
     let path = root
         .parent()
         .ok_or_else(|| anyhow!("cotest root has no parent: {}", root.display()))?
-        .join("yougen")
+        .join("inkson")
         .join("tests")
         .join("e2e")
         .join("mockCokretApi.ts");
@@ -266,8 +266,8 @@ fn assert_mock_contract_format(
             .with_context(|| format!("format smoke for {}", case.id))?;
         if snapshot.status == 599 {
             bail!(
-                "yougen mock contract returned undefined for fixture case `{}`; \
-                 update tests/fixtures/yougen_mock_parity.json or the contract branch",
+                "inkson mock contract returned undefined for fixture case `{}`; \
+                 update tests/fixtures/inkson_mock_parity.json or the contract branch",
                 case.id
             );
         }
@@ -293,7 +293,7 @@ fn assert_mock_contract_artifact_gate(
         &contract_source,
         &registry,
     )?;
-    if let Some(api_path) = locate_yougen_mock_api(root)? {
+    if let Some(api_path) = locate_inkson_mock_api(root)? {
         let api_source = fs::read_to_string(&api_path)
             .with_context(|| format!("read {}", api_path.display()))?;
         assert_supported_operation_literals_registered("mockCokretApi.ts", &api_source, &registry)?;
@@ -394,7 +394,7 @@ fn assert_mock_contract_artifact_gate(
 }
 
 fn load_fixture(root: &Path) -> Result<Fixture> {
-    let path = root.join("tests/fixtures/yougen_mock_parity.json");
+    let path = root.join("tests/fixtures/inkson_mock_parity.json");
     let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))
 }
@@ -493,7 +493,7 @@ fn assert_contract_branches_have_fixture_cases(
         .collect::<Vec<_>>();
     if !missing.is_empty() {
         bail!(
-            "yougen mock contract branches missing fixture cases: {}",
+            "inkson mock contract branches missing fixture cases: {}",
             missing.join(", ")
         );
     }
@@ -1022,7 +1022,7 @@ fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {
             // The harness creates a non-deterministic number of realms before
             // this case runs, and the per-item `name`/`description` text is
             // free-form. Collapse to "realms is an array, items expose the
-            // expected key set" — that's what callers (yougen UI) bind to.
+            // expected key set" — that's what callers (inkson UI) bind to.
             let first_keys: Vec<String> = snapshot
                 .body
                 .get("realms")
@@ -1108,7 +1108,7 @@ fn normalize_server_describe(body: Value) -> Value {
 }
 
 /// Reduce a `/_cokret/find/directory/describe` response to the stable semantic
-/// invariants both the yougen mock and a live soland must agree on. The full
+/// invariants both the inkson mock and a live soland must agree on. The full
 /// response carries environment-specific fields (development_mode, trust_domain,
 /// per-deployment base_url) and a growing surface inventory (did methods,
 /// operations, features) that legitimately differs between a fixed mock and the
@@ -1226,7 +1226,7 @@ fn write_report(root: &Path, results: &[CaseResult]) -> Result<()> {
     fs::create_dir_all(&artifact_dir)?;
     let path = artifact_dir.join("mock-parity.md");
     let mut out = String::new();
-    out.push_str("# yougen mock parity\n\n");
+    out.push_str("# inkson mock parity\n\n");
     out.push_str("| case | status | mock HTTP | live HTTP | allowed |\n");
     out.push_str("|---|---:|---:|---:|---|\n");
     for result in results {

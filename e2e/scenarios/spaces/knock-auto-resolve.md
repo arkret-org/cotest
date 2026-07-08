@@ -59,7 +59,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 9. mallory 没有 `acme:employee` VC
 10. mallory 试提交同样的 Move 但 `gate_proofs[]` 缺 claim_presentation 或 issuer 签名无效
 11. reducer 拒,reason `failed_precondition`,具体 gate fail = `g-vc`
-12. 断言:mallory yougen UI 显示 "Missing required credential: acme:employee"
+12. 断言:mallory inkson UI 显示 "Missing required credential: acme:employee"
 
 ### Phase D — Cooldown gate(独立 deny)
 

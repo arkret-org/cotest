@@ -223,12 +223,12 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C42.4 — Yougen full/e2ee client black-box manifest. Covers OIDC
+    /// C42.4 — Inkson full/e2ee client black-box manifest. Covers OIDC
     /// callback/session grant, host secure-store handoff, device
     /// verification, and E2EE fail-closed behavior.
-    yougen_client_profile_manifest_suite_matches_reference_semantics,
-    "yougen_client_profile_manifest",
-    cotest::conformance::run_yougen_client_profile_manifest_suite,
+    inkson_client_profile_manifest_suite_matches_reference_semantics,
+    "inkson_client_profile_manifest",
+    cotest::conformance::run_inkson_client_profile_manifest_suite,
 );
 
 conformance_test!(
@@ -634,7 +634,7 @@ conformance_test!(
 
 conformance_test!(
     /// Push rule core vectors promoted to spec artifacts. Asserts the shared
-    /// SDK core used by soland / chime / yougen keeps watch-level delivery,
+    /// SDK core used by soland / chime / inkson keeps watch-level delivery,
     /// blind-wakeup, and reason-code semantics aligned.
     push_rule_core_fixture_suite_matches_reference_semantics,
     "push_rule_core_fixture",

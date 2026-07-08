@@ -3,7 +3,7 @@
 > ## ✅ 已解决(2026-07-05)—— 真根因 = event proof binding 缺 `context` 域标记
 >
 > 逐层深钻(device_id 漂移 → key 不匹配 → reducer 字段 → server 改字段 → **binding
-> 构造**)全部 live/单测证伪到最底,真根因锁定:**yougen `event_signer` 手搓 detached-JWS
+> 构造**)全部 live/单测证伪到最底,真根因锁定:**inkson `event_signer` 手搓 detached-JWS
 > proof binding 时漏了 SDK `Proof::binding_object` 折入的固定域标记 `context =
 > "ck-event-proof-v1"`(encoding.md §2)。** 发送端签的是 `{event_digest, actor_id,
 > verification_method, created_at}`,验证端(SDK `verify_eddsa_detached_jws_proof`,
@@ -16,7 +16,7 @@
 > 才把 bug 顶到最底。
 >
 > **修复(已 commit + push)**:
-> - yougen `9c68fad`:`event_signer` 改走 SDK 权威 `Proof::canonical_binding_bytes`(signer/verifier
+> - inkson `9c68fad`:`event_signer` 改走 SDK 权威 `Proof::canonical_binding_bytes`(signer/verifier
 >   同一 transcript,永不 drift);`connect.rs` 自入册 grant 兜底;3 处陈旧 chat 测试改走 SDK binding。
 > - cotest `6079aa9`:`createDpopUserSession` 加 `skipDeviceEnrollment`,浏览器 MLS 测试交给自入册
 >   授权正确的 event-signer key(已授权设备会跳过自入册,故必须 skip 而非覆盖)。
@@ -27,7 +27,7 @@
 > 够不到 binding 层)。真正的直接原因是 binding 缺 context,与 0004(holder/device key 生命周期)
 > **正交**:0004 仍是有效的生产正确性项目线(重登不丢身份),但**不是**本 gap 的解药。
 >
-> **姊妹 bug(待修)**:`yougen/src/views/call_signals.rs` 的 webrtc 调用信令 proof 也手搓
+> **姊妹 bug(待修)**:`inkson/src/views/call_signals.rs` 的 webrtc 调用信令 proof 也手搓
 > 无-context binding(测试 `valid_call_proof_verifies_and_routes_to_ring` 长期红),同源同类,应比照修。
 >
 > ---
@@ -46,7 +46,7 @@
 > key 与设备身份 key(§5.2 `device_public_key`)塌缩成同一 Ed25519 seed + device_id 漂移**,
 > 已抽象为 `cotask/decisions/0004-holder-key-vs-device-identity-key-lifecycle-separation.md`。
 > 关键订正:矛盾 B 把"signing seed == DPoP seed"当成**测试注入路径的 quirk**,但 0004 证明
-> 这是 **yougen 生产设计**——`auth_dpop.rs:341` `ensure_device_key` 从同一 `signing_seed`
+> 这是 **inkson 生产设计**——`auth_dpop.rs:341` `ensure_device_key` 从同一 `signing_seed`
 > **既建 DpopHandle 又 `activate_device_signer_from_seed`**。故生产里这两把 key 本就是**同一份
 > 字节**,"DPoP key 不该签 proof"(矛盾 A)的真正区分是**生命周期**而非 key 类型——这反而
 > 坐实了本文档"真凶是 device_id 漂移,不是 key 类型"的结论。0004 是结构框定与修复方向
@@ -60,7 +60,7 @@
    history_visibility 裁剪（消息是 bob 加入后发的）。
 
 2. **丢弃点 = 聊天 receiver-proof 门。**
-   `yougen/src/views/chat/model/events.rs`：
+   `inkson/src/views/chat/model/events.rs`：
    - `chat_message_from_event_with_sidecar` 开头 `verify_chat_envelope_proof(event)`，
      verdict==`Rejected` 直接 `return None`（消息不进列表）。
    - 插桩证明 bob 对 alice 消息 verdict=**Rejected**，reason=**`sig_verify_failed`**：
@@ -72,7 +72,7 @@
    => String::new()` 仍返回一条 locked 消息（不会显示 "No messages yet"）。所以空
    讨论 = 消息被 proof 门丢弃，不是解密失败。
 
-4. **真产品 bug（已修，不在本 gap 内）:** yougen keypackage 发布 effect
+4. **真产品 bug（已修，不在本 gap 内）:** inkson keypackage 发布 effect
    (`app/mod.rs` ~1932) 完全不 gate 在设备授权上，且 `seen_publish_key` 在 spawn
    前就 set → 失败不重试。注入-grant 快路径下 keypackage 上传抢在设备自入册前 →
    `claim_generation_mismatch`（"accepted device authorization is required"）→
@@ -96,8 +96,8 @@
 不该签 proof。** 实测 `sig_verify_failed` 的真相 = **harness 把 DPoP key 错误 enroll 进
 目录**,而 proof 是设备 verify key 签的 → 目录 key ≠ proof key。
 
-**修复裁决:** 停止 harness 的 DPoP enroll;让 yougen 用它的 device verify(signing-seed)
-key 自入册(= 方向②)。残留子问 = yougen 内部到底哪条 signer 路径产出这把 verify key
+**修复裁决:** 停止 harness 的 DPoP enroll;让 inkson 用它的 device verify(signing-seed)
+key 自入册(= 方向②)。残留子问 = inkson 内部到底哪条 signer 路径产出这把 verify key
 签名 → **归入矛盾 B**。
 
 <details><summary>原始两个矛盾信号(存档)</summary>
@@ -112,7 +112,7 @@ key 自入册(= 方向②)。残留子问 = yougen 内部到底哪条 signer 路
 - 当时矛盾点:harness enroll 的是 DPoP key;若升级 :379 激活的 DPoP-seed signer 真用于
   签 proof,则应验签通过——但实测 `sig_verify_failed`,说明 proof 是另一把 key 签的。
   该困惑已由上述 spec 结论消解:proof 该由设备 verify key 签,DPoP 路径无关;残留"哪条
-  yougen signer 路径产出 verify 签名"归入矛盾 B。
+  inkson signer 路径产出 verify 签名"归入矛盾 B。
 
 </details>
 
@@ -136,7 +136,7 @@ key 自入册(= 方向②)。残留子问 = yougen 内部到底哪条 signer 路
 `kanban-decrypt-cursor-device-drift-roots` 同源):**
 - secure-store 升级 `app/mod.rs:463` 把 `device_id` **钉成 secure-store 的稳定值**
   (`load_device_id`),可能 ≠ harness enroll 用的**注入** `device_id`(`seed.deviceId`)。
-- 若漂移:harness 在 `device_A`(注入)下 enroll 了 key;yougen 消息 proof 的
+- 若漂移:harness 在 `device_A`(注入)下 enroll 了 key;inkson 消息 proof 的
   `verification_method` 绑 `#ck:device:device_B`(稳定);receiver 按 proof 的 `device_B`
   解析目录 key,拿到的**不是** harness 在 `device_A` 下 enroll 的那把 → 但实测是
   `sig_verify_failed`(Hit + 验签失败)而非 NegativeHit,说明 `device_B` 名下**确有**一把 key
@@ -146,8 +146,8 @@ key 自入册(= 方向②)。残留子问 = yougen 内部到底哪条 signer 路
 ②proof 的 `verification_method` 里的 device_id;并在 harness 侧打印 enroll 用的
 `device_id`+`device_public_key`;三者一比即真相大白。**这一步同时能证伪/证实 device_id 漂移。**
 
-> 注意:B 与 C 相互独立——即便 B 查明是 device_id 漂移(harness/yougen 侧对齐 device_id 即可),
-> C(自入册拿不到 grant)仍是让 yougen 走**自己**的授权链所必须解的。
+> 注意:B 与 C 相互独立——即便 B 查明是 device_id 漂移(harness/inkson 侧对齐 device_id 即可),
+> C(自入册拿不到 grant)仍是让 inkson 走**自己**的授权链所必须解的。
 
 ### ⚠️ 矛盾 C(根因已确认,有 console 证据):注入的 grant 被反复 reset,自入册读到 None
 
@@ -187,7 +187,7 @@ key 自入册(= 方向②)。残留子问 = yougen 内部到底哪条 signer 路
 | 路径 | keypackage | chat proof |
 |---|---|---|
 | harness enroll（DPoP key） | ✅ 设备被授权,可发 keypackage | ❌ receiver 验签失败 `sig_verify_failed`（**mismatch 源头待定:见矛盾 B 反转——很可能是 device_id 漂移,不是 key 类型**） |
-| 移除 harness,靠 yougen 自入册 | ❌ 自入册读不到 grant(矛盾 C)→ 设备无授权 → 无 keypackage | —(走不到) |
+| 移除 harness,靠 inkson 自入册 | ❌ 自入册读不到 grant(矛盾 C)→ 设备无授权 → 无 keypackage | —(走不到) |
 
 **当前保留 harness enroll(看板绿)+ keypackage-gate 修复。**
 
@@ -195,11 +195,11 @@ key 自入册(= 方向②)。残留子问 = yougen 内部到底哪条 signer 路
 > signing seed 已 == DPoP seed(矛盾 B),key 类型可能本就对齐,真凶更可能是 **device_id 漂移**。
 > **所以下一步不是急着改代码,而是先跑「矛盾 B 下一步」的三方 device_id/key 打印比对**,定死
 > mismatch 到底在 key 还是 device_id:
-> - 若在 **device_id**:harness enroll 与 yougen 签名对齐同一个稳定 device_id 即可,**可能不必碰
+> - 若在 **device_id**:harness enroll 与 inkson 签名对齐同一个稳定 device_id 即可,**可能不必碰
 >   矛盾 C**(harness 继续 enroll,只要 device_id 一致);
-> - 若在 **key**:才回到"让 yougen 自入册"(必须先解矛盾 C)。
+> - 若在 **key**:才回到"让 inkson 自入册"(必须先解矛盾 C)。
 
-**矛盾 A 已裁决(见上,spec §5.2/§8.2 权威)→ 正解锁定「方向②」:让 yougen 用它的
+**矛盾 A 已裁决(见上,spec §5.2/§8.2 权威)→ 正解锁定「方向②」:让 inkson 用它的
 device verify key 自入册。** 前置阻塞 = 矛盾 C(自入册拿不到 grant)。矛盾 B 是理解性子问
 (哪条 signer 路径产出 verify 签名),不阻塞方向②落地。
 
@@ -212,13 +212,13 @@ device verify key 自入册。** 前置阻塞 = 矛盾 C(自入册拿不到 gran
    保留 grant,或让 `enroll_current_session_device` fallback 用 connect 已持有的
    `token`(注入路径下即 grant_jwt)。keypackage-gate 修复已保证发布等授权完成,故 grant
    一到、自入册一成,keypackage 即随之发出。
-2. **解矛盾 C 后移除 harness DPoP enroll:** 目录里就只剩 yougen 自入册的 device verify
+2. **解矛盾 C 后移除 harness DPoP enroll:** 目录里就只剩 inkson 自入册的 device verify
    key = proof key → receiver-proof 验签通过 → 聊天绿。看板不受影响(无 proof 门)。
-3. **(理解性,非阻塞)解矛盾 B:** 在 yougen 发送 `ck.message.create` 处打印
+3. **(理解性,非阻塞)解矛盾 B:** 在 inkson 发送 `ck.message.create` 处打印
    `active_signer().public_key_multibase()`,确认它 = device verify(signing-seed)key,
    排除多路径激活把 signer 覆盖成 DPoP-seed 的隐患。
 4. **兜底(若 C 短期难解):** 浏览器启动后从 localStorage(compat tier
-   `allow_localstorage_secrets=1`)读 yougen 的 signing seed,以 `actor_seq+1` 再 enroll
+   `allow_localstorage_secrets=1`)读 inkson 的 signing seed,以 `actor_seq+1` 再 enroll
    覆盖成对的 key。仅作应急,不如①②根治。
 
 ## 复现

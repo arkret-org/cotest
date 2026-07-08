@@ -51,7 +51,7 @@ pub async fn post_reset_stale_run() -> Result<()> {
     }
 
     // TODO(P4-impl): live recovery — drive cross_signing reset on
-    // yougen, wait 24h+ in test time, attempt recovery against the
+    // inkson, wait 24h+ in test time, attempt recovery against the
     // pre-reset secret_storage envelope; assert errcode
     // backup_post_reset_stale.
     Ok(())

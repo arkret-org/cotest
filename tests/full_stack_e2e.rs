@@ -2,7 +2,7 @@
 //!
 //! Drives the entire cross-project strand from starid DID mint through
 //! coauth handle_claim, teabay directory resolve_handle, soland
-//! member_add, yougen mock message send, floria blind-wakeup gateway,
+//! member_add, inkson mock message send, floria blind-wakeup gateway,
 //! chime mock receive, rebind handover, and revocation.
 //!
 //! The scenario in `cotest::scenarios::full_stack_e2e`:

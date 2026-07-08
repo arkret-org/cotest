@@ -107,7 +107,7 @@ function Get-FixmeEntriesFromSpec {
     $relForId = $relPath -replace '^e2e/tests/', '' -replace '\.spec\.ts$', ''
     $derivedFeatureId = "soland#" + (($relForId -replace '/', '-') + "-gap")
 
-    $featureIdPattern = '^(soland|yougen|coauth|cotest)#[A-Za-z0-9._-]+$'
+    $featureIdPattern = '^(soland|inkson|coauth|cotest)#[A-Za-z0-9._-]+$'
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]

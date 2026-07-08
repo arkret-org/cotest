@@ -357,12 +357,12 @@ test.describe("cross-member encrypted kanban", () => {
       await addEncryptedDescription(alicePage.page, aliceCard, aliceDescription);
       await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
 
-      // 4b) Cross-member DELIVERY gate (isolates soland delivery from yougen
+      // 4b) Cross-member DELIVERY gate (isolates soland delivery from inkson
       //     projection): soland MUST surface alice's post-join board Space create
       //     on bob's own realm events feed — the same feed the kanban backfill
       //     ingests. If the board id is absent here, the bug is soland-side
       //     Space delivery/visibility; if present but the board never appears in
-      //     bob's UI below, the bug is yougen's board projection.
+      //     bob's UI below, the bug is inkson's board projection.
       await expect
         .poll(
           async () => {
@@ -381,7 +381,7 @@ test.describe("cross-member encrypted kanban", () => {
           {
             timeout: 60_000,
             intervals: [1_000, 2_000, 5_000],
-            message: `soland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a yougen projection issue)`,
+            message: `soland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a inkson projection issue)`,
           },
         )
         .toContain(boardId);

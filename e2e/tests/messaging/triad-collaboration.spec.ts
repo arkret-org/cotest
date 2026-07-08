@@ -231,13 +231,13 @@ test.describe("single-server triad collaboration", () => {
   // The history_visibility=joined server gap is now covered live by the
   // API late-join case above plus spaces/history-joined-enforcement.spec.ts.
   // Phases A-D (space lifecycle, invite, mutual messaging, reply, edit) are
-  // fully wired in yougen (chat-* reply/edit testids + the realm-members invite
+  // fully wired in inkson (chat-* reply/edit testids + the realm-members invite
   // modal). Phase E's *receive-side* redaction tombstone is now wired end-to-end:
   // soland folds a redacted ck.message.create into a per-message tombstone on the
   // sync timeline (projection/timeline.rs + sync/snapshot.rs call
   // apply_message_redaction_timeline_projection, which uses the SDK
   // redaction_tombstone_message_value shape: event_id preserved, body stripped,
-  // redacted/state/redacted_at/redaction_ref markers added), and yougen's receive
+  // redacted/state/redacted_at/redaction_ref markers added), and inkson's receive
   // path folds the tombstone onto the existing message (chat_message_from_event
   // sets redacted=true → chat-redacted-tombstone) so alice renders the tombstone
   // on reload, not just bob's optimistic local redact.
@@ -365,7 +365,7 @@ test.describe("single-server triad collaboration", () => {
     // E1.1 — invite creation is idempotent on
     // (realm_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
     // space.rs:627-644): the second create returns the existing invite_id
-    // unchanged. yougen's invite modal drives the same endpoint via
+    // unchanged. inkson's invite modal drives the same endpoint via
     // submit_event_envelope, so re-issuing the same invite produces only one
     // invite-row in realm-admin.
     test("E1.1 idempotent invite — re-issuing the same invite does not duplicate", async ({

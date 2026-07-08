@@ -92,7 +92,7 @@ function Invoke-JointSmokeGate {
         [string]$DockerCacheTo,
         [bool]$DockerPull = $false,
         [bool]$DockerNoCache = $false,
-        [bool]$SkipYougen = $false
+        [bool]$SkipInkson = $false
     )
 
     $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
@@ -134,8 +134,8 @@ function Invoke-JointSmokeGate {
             $args += "-DockerNoCache"
         }
     }
-    if ($SkipYougen) {
-        $args += "-SkipYougen"
+    if ($SkipInkson) {
+        $args += "-SkipInkson"
     }
     $args += @(
         "-RunProfile", $RunProfile,
@@ -1052,7 +1052,7 @@ function New-ReleaseGate {
     $jointSmokeStatus = if ($JointSmokeGate) { $JointSmokeGate.status } else { "skipped" }
     $checks.Add((New-ReleaseGateCheck `
                 -Id "joint_smoke" `
-                -Description "Live soland + yougen + coauth browser smoke completes before release." `
+                -Description "Live soland + inkson + coauth browser smoke completes before release." `
                 -Tests $Tests `
                 -RequiredTests @() `
                 -AdditionalGatePassed ($jointSmokeStatus -eq "passed" -or $jointSmokeStatus -eq "skipped") `
@@ -1701,7 +1701,7 @@ if ($Profile -eq "joint") {
         -RawLog $rawLog `
         -OutputName "joint" `
         -RunProfile "joint-smoke" `
-        -PlaywrightProject "joint-yougen" `
+        -PlaywrightProject "joint-inkson" `
         -StartCoauth $true `
         -SolandRuntime $Runtime `
         -SolandImage $SutImage `

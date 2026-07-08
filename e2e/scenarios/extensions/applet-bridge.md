@@ -34,7 +34,7 @@
 
 - alice 通过 `POST /_soland/self/account/register` 注册过(`ensureRegistered`)
 - alice 持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
-- alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_credential
+- alice 的 browser context 通过 `inkson.config.v1` localStorage 注入 server_url / account_did / device_id / session_credential
 - `process.env.COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 存在;mock-applet-registry 已经 ready(健康检查 `GET /healthz` 返回 200)
 - mock-applet-registry 内置 `applet_service` 的签名密钥;测试只需要调它的 HTTP API,不直接持有密钥
 
@@ -97,12 +97,12 @@
 
 ### Phase D — 链路追溯 UI
 
-16. **alice** 在该消息卡片点 `accountability-trace-button`(yougen UI;若未实现,这一步降级为直接断言 §15 的 HTTP 返回)
+16. **alice** 在该消息卡片点 `accountability-trace-button`(inkson UI;若未实现,这一步降级为直接断言 §15 的 HTTP 返回)
     - 断言:面板显示两级链路 — 第一级 bot `bot_actor_id`,第二级 registry `applet_service.did`
 
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
-17. **alice** 在 `/realms/${realmId}/admin/access` 或 `/settings/applets`(以 yougen 实际路由为准)对 `applet_id` 执行 revoke:
+17. **alice** 在 `/realms/${realmId}/admin/access` 或 `/settings/applets`(以 inkson 实际路由为准)对 `applet_id` 执行 revoke:
     - 调 soland `POST /_cokret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope`、`reason_code` 和 `revoke_mode`
     - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
@@ -142,7 +142,7 @@
   - `POST /bot/:applet_id/accept-invite` → `{ status }`
   - `POST /external-event` → `{ ghost_actor_id, message_id }` 或错误
 - `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 由 cotest harness 在启动 mock 时注入;mock 自身仍用 `MOCK_APPLET_REGISTRY_PORT` 绑定本地监听端口
-- Yougen UI 侧:`ghost-actor-badge`、`accountability-trace-button`、`/settings/applets` 当前都不存在 — 主测试用 timeline 可见性 + HTTP accountability 断言为主
+- Inkson UI 侧:`ghost-actor-badge`、`accountability-trace-button`、`/settings/applets` 当前都不存在 — 主测试用 timeline 可见性 + HTTP accountability 断言为主
 - Portal realm 是 spec §5 引入的"消息归属于 applet 而非 Space"的概念;当前 soland route 返回 `portal_realm_id` 并在 projection payload / content portal metadata 中保留,同时按 `realm_id` 投影到用户 timeline
 
 ## 总耗时预估

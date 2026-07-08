@@ -28,7 +28,7 @@
 //!    `CokretServer::register_client` helper.)
 //!
 //! 2. Generate a fresh `ck:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
-//!    The QR payload itself is a yougen-side UI concern (`verify-device` strand); cotest
+//!    The QR payload itself is a inkson-side UI concern (`verify-device` strand); cotest
 //!    synthesizes the equivalent API calls without driving the QR code itself — this matches the
 //!    spec note that "QR is the transport, not the trust primitive".
 //!
@@ -105,7 +105,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let device_b_signing_key = ed25519_dalek::SigningKey::generate(
     //       &mut rand::rngs::OsRng);
     //   let device_b_verify_key = device_b_signing_key.verifying_key();
-    //   // QR payload (yougen-side):
+    //   // QR payload (inkson-side):
     //   //   { "device_id": device_b,
     //   //     "verify_key": base64url(device_b_verify_key),
     //   //     "pairing_code": <qr_pairing_code>,

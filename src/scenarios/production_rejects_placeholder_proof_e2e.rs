@@ -1,17 +1,17 @@
 //! T1.3 — End-to-end gate: a soland running in production mode
 //! (`SOLAND_DEVELOPMENT_MODE=false`) MUST refuse Event Envelopes that
-//! carry the yougen dev-proof placeholder (`type=="dev-proof"`,
+//! carry the inkson dev-proof placeholder (`type=="dev-proof"`,
 //! `jws=="a..b"`, or empty `jws`).
 //!
 //! ## Why this scenario exists
 //!
-//! yougen historically attached a placeholder proof
+//! inkson historically attached a placeholder proof
 //! (`EventEnvelope::attach_placeholder_proof`) from `OperationBuilder::build`
 //! so the dev-mode soland would accept the envelope. If a user pointed a
-//! dev-feature yougen build at a *production* soland, that placeholder
+//! dev-feature inkson build at a *production* soland, that placeholder
 //! would leak onto the wire. T1.3 closes the hole on both sides:
 //!
-//! - **yougen** (`yougen/src/operation.rs`) — feature-gates the placeholder attach on `dev_proof`;
+//! - **inkson** (`inkson/src/operation.rs`) — feature-gates the placeholder attach on `dev_proof`;
 //!   production builds default to `ProofMode::Production`, and `api.rs::submit_event_envelope` runs
 //!   a pre-submit guard that fails closed when no real signer is wired.
 //! - **soland** (`soland/src/routing/events/event_log.rs`) — even when a client claims
@@ -48,7 +48,7 @@ use crate::scenarios::_helpers::external_binary::{
     SOLAND_SPEC, skip_reason, try_spawn_with_extra_env,
 };
 
-/// Soland production target MUST refuse the yougen dev-proof placeholder.
+/// Soland production target MUST refuse the inkson dev-proof placeholder.
 pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     // Spawn soland with `SOLAND_DEVELOPMENT_MODE=false`. The dynamic
     // env entry takes precedence over `SOLAND_SPEC.extra_env` (which
@@ -80,7 +80,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
         .build()?;
     let url = proc.url("/_cokret/self/events");
 
-    // Build an envelope that *looks* like a yougen `OperationBuilder::build()`
+    // Build an envelope that *looks* like a inkson `OperationBuilder::build()`
     // output before T1.3 — a `ck.message.create` payload with the
     // detached-JWS placeholder proof (`jws == "a..b"`). Production
     // soland's `validate_event_proofs` MUST reject this with
@@ -105,11 +105,11 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
-            "verification_method": format!("{actor}#yougen"),
+            "verification_method": format!("{actor}#inkson"),
             "event_digest":
                 "sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "created_at": "2026-05-19T00:00:00.000Z",
-            // The yougen pre-T1.3 placeholder. T1.3 soland MUST reject
+            // The inkson pre-T1.3 placeholder. T1.3 soland MUST reject
             // this on a production server with `dev_proof_in_production`.
             "jws": "a..b",
         }]

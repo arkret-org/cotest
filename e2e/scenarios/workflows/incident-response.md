@@ -30,6 +30,6 @@
 ## Implementation notes
 
 - 当前主流程先保留 `test.fixme`:已有 timeline 能表达大部分步骤,但 seed-member invite 投射和完整 push notification routing 仍需单独稳定。
-- status FSM 已由 yougen `incident-status-*` 控件和 soland `incident.status.transition` audit 覆盖。
+- status FSM 已由 inkson `incident-status-*` 控件和 soland `incident.status.transition` audit 覆盖。
 - sanitized public-update guard 与 E2EE no-plaintext-leak 检查已 live;完整 DnD override 属于 push notification 策略覆盖。
 - postmortem link controls 与本地版本列表已 live;完整 Document Morph 投影仍归 P2 文档链路。

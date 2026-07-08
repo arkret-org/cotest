@@ -3,7 +3,7 @@ import { expect, type Locator } from "@playwright/test";
 /**
  * Pick an option from a dioxus-components (dxc) Select.
  *
- * Background: after the yougen frontend migrated from a native `<select>` to
+ * Background: after the inkson frontend migrated from a native `<select>` to
  * the dxc `Select` (dioxus-primitives), the dropdown renders as a custom
  * popover — a `button[aria-haspopup="listbox"]` trigger plus a
  * `div[role="listbox"]` container with `div[role="option"]` entries — no
@@ -11,8 +11,8 @@ import { expect, type Locator } from "@playwright/test";
  * `locator.selectOption()` therefore throws
  * `Element is not a <select> element` and every e2e still using it breaks.
  *
- * yougen's `SelectOption` exposes the underlying value as `data-value` (see
- * `yougen/src/ui/select/component.rs`); this helper locates and clicks the
+ * inkson's `SelectOption` exposes the underlying value as `data-value` (see
+ * `inkson/src/ui/select/component.rs`); this helper locates and clicks the
  * option by that value, keeping call semantics equivalent to the original
  * `selectOption(value)` (the string passed in is unchanged).
  *

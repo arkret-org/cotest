@@ -1,7 +1,7 @@
 # demote-test.ps1 - convert a Playwright `test(...)` into `test.fixme(...)`.
 #
 # Use this only as a temporary local harness shim when a regression appears
-# before the backing soland/yougen/coauth feature can be repaired. The inserted
+# before the backing soland/inkson/coauth feature can be repaired. The inserted
 # FIXME comment records why the demotion exists so the static fixme checker can
 # keep the debt attributable.
 #

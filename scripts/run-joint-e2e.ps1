@@ -32,10 +32,10 @@ param(
     # (standalone runs only). 0 disables pruning.
     [int]$KeepRuns = 20,
     [string]$SutManifest,
-    [string]$YougenRoot,
+    [string]$InksonRoot,
     [string]$SolandBaseUrl,
-    [string]$YougenBaseUrl,
-    [string]$YougenBetaBaseUrl,
+    [string]$InksonBaseUrl,
+    [string]$InksonBetaBaseUrl,
     [string]$CoauthBaseUrl,
     [string]$SolandCommand,
     [ValidateSet("process", "docker")]
@@ -47,9 +47,9 @@ param(
     [string]$DockerCacheTo,
     [switch]$DockerPull,
     [switch]$DockerNoCache,
-    [string]$YougenCommand,
-    [string]$YougenBetaCommand,
-    [switch]$SkipYougen,
+    [string]$InksonCommand,
+    [string]$InksonBetaCommand,
+    [switch]$SkipInkson,
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
@@ -80,7 +80,7 @@ param(
     [int]$WebvhDegradedNoWitnessMaxSecs = 30,
     # OAuth `client_id` soland advertises in `/_cokret/describe.auth_metadata.methods[].client_id`
     # (soland config `oidc_client_id`). MUST match a client registered at coauth; the joint
-    # coauth config (coauth/config.dev.yaml) seeds the "Yougen Dev" client under this ULID.
+    # coauth config (coauth/config.dev.yaml) seeds the "Inkson Dev" client under this ULID.
     # Without it soland advertises no client_id and the browser OIDC bridge gets
     # `could not find client` from coauth's /authorize. See cotest oidc-login-chain.spec.ts.
     [string]$CoauthOAuthClientId = "01GFWR28C4KNE04WG3HKXB7C9R",
@@ -330,9 +330,9 @@ function Invoke-JointE2ePreflight {
         [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
         [string]$SolandImage,
         [bool]$WillStartDockerSoland = $false,
-        [string]$YougenBaseUrl,
-        [string]$YougenCommand,
-        [bool]$WillStartDefaultYougen = $false,
+        [string]$InksonBaseUrl,
+        [string]$InksonCommand,
+        [bool]$WillStartDefaultInkson = $false,
         [string]$JsonPath,
         [string]$MarkdownPath
     )
@@ -450,13 +450,13 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if ($WillStartDefaultYougen -or (-not $YougenBaseUrl -and -not $YougenCommand)) {
+    if ($WillStartDefaultInkson -or (-not $InksonBaseUrl -and -not $InksonCommand)) {
         $dx = Find-CommandPath @("dx.exe", "dx")
         if ($dx) {
             $version = (& $dx --version 2>&1) -join "`n"
             Add-PreflightResult $results "dioxus cli" "pass" "$dx $version"
         } else {
-            Add-PreflightResult $results "dioxus cli" "fail" "dx is required to start the default yougen web server"
+            Add-PreflightResult $results "dioxus cli" "fail" "dx is required to start the default inkson web server"
         }
     }
 
@@ -780,7 +780,7 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$PostgresUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBaseUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBind,
-        [Parameter(Mandatory = $true)][string]$YougenBaseUrl,
+        [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
         [Parameter(Mandatory = $true)][string]$SolandServiceDid,
@@ -812,7 +812,7 @@ function New-CoauthJointConfig {
         "--postgres-url", $PostgresUrl,
         "--coauth-base-url", $CoauthBaseUrl,
         "--coauth-bind", $CoauthBind,
-        "--yougen-base-url", $YougenBaseUrl,
+        "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
         "--soland-service-did", $SolandServiceDid,
@@ -1204,10 +1204,10 @@ if (-not $SutManifest) {
     $SutManifest = Join-Path $workspaceRoot "soland\Cargo.toml"
 }
 $SutManifest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SutManifest)
-if (-not $YougenRoot) {
-    $YougenRoot = Join-Path $workspaceRoot "yougen"
+if (-not $InksonRoot) {
+    $InksonRoot = Join-Path $workspaceRoot "inkson"
 }
-$YougenRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($YougenRoot)
+$InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
 
 # Canonical artifacts layout (see cotest/README.md "Artifacts layout"):
 #   <OutputRoot>/runs/<timestamp>/joint-e2e/  — authoritative per-run outputs
@@ -1257,29 +1257,29 @@ if ($DualSoland) {
 if ($SolandRuntime -eq "docker" -and $SolandCommand) {
     throw "-SolandRuntime docker is incompatible with -SolandCommand; omit -SolandCommand so the harness can start the image."
 }
-if ($SkipYougen -and ($YougenCommand -or $YougenBetaCommand -or $PSBoundParameters.ContainsKey("YougenBaseUrl") -or $PSBoundParameters.ContainsKey("YougenBetaBaseUrl"))) {
-    throw "-SkipYougen cannot be combined with Yougen URLs or commands."
+if ($SkipInkson -and ($InksonCommand -or $InksonBetaCommand -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonBetaBaseUrl"))) {
+    throw "-SkipInkson cannot be combined with Inkson URLs or commands."
 }
-$yougenPort = $null
-if (-not $SkipYougen) {
-    if (-not $YougenBaseUrl) {
-        $yougenPort = Get-FreeTcpPort
-        $YougenBaseUrl = "http://127.0.0.1:$yougenPort"
+$inksonPort = $null
+if (-not $SkipInkson) {
+    if (-not $InksonBaseUrl) {
+        $inksonPort = Get-FreeTcpPort
+        $InksonBaseUrl = "http://127.0.0.1:$inksonPort"
     }
 }
-$yougenBetaPort = $null
-$yougenBetaBaseUrl = $null
-$yougenBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("YougenBaseUrl")
-if ($DualSoland -and -not $SkipYougen) {
-    if ($YougenBetaBaseUrl) {
-        $yougenBetaBaseUrl = $YougenBetaBaseUrl
-    } elseif ($YougenBetaCommand) {
-        throw "-YougenBetaCommand requires -YougenBetaBaseUrl so the harness can route browser contexts."
-    } elseif ($YougenCommand -or $yougenBaseUrlWasExplicit) {
-        $yougenBetaBaseUrl = $YougenBaseUrl
+$inksonBetaPort = $null
+$inksonBetaBaseUrl = $null
+$inksonBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("InksonBaseUrl")
+if ($DualSoland -and -not $SkipInkson) {
+    if ($InksonBetaBaseUrl) {
+        $inksonBetaBaseUrl = $InksonBetaBaseUrl
+    } elseif ($InksonBetaCommand) {
+        throw "-InksonBetaCommand requires -InksonBetaBaseUrl so the harness can route browser contexts."
+    } elseif ($InksonCommand -or $inksonBaseUrlWasExplicit) {
+        $inksonBetaBaseUrl = $InksonBaseUrl
     } else {
-        $yougenBetaPort = Get-FreeTcpPort
-        $yougenBetaBaseUrl = "http://127.0.0.1:$yougenBetaPort"
+        $inksonBetaPort = Get-FreeTcpPort
+        $inksonBetaBaseUrl = "http://127.0.0.1:$inksonBetaPort"
     }
 }
 
@@ -1436,7 +1436,7 @@ $ephemeralPostgres = $null
 $exitCode = 1
 $startedAt = Get-Date
 $generatedSolandCommand = $false
-$generatedYougenCommand = $false
+$generatedInksonCommand = $false
 $willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
 $willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($DualSoland -and $null -ne $solandBetaPort)))
 $startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
@@ -1490,9 +1490,9 @@ try {
             -SolandRuntime $SolandRuntime `
             -SolandImage $SolandImage `
             -WillStartDockerSoland $willStartDockerSoland `
-            -YougenBaseUrl $YougenBaseUrl `
-            -YougenCommand $YougenCommand `
-            -WillStartDefaultYougen (-not $SkipYougen -and -not $YougenCommand -and $null -ne $yougenPort) `
+            -InksonBaseUrl $InksonBaseUrl `
+            -InksonCommand $InksonCommand `
+            -WillStartDefaultInkson (-not $SkipInkson -and -not $InksonCommand -and $null -ne $inksonPort) `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
     }
@@ -1621,7 +1621,7 @@ try {
             -PostgresUrl $coauthPostgresDsn `
             -CoauthBaseUrl $CoauthBaseUrl `
             -CoauthBind "127.0.0.1:$coauthPort" `
-            -YougenBaseUrl $YougenBaseUrl `
+            -InksonBaseUrl $InksonBaseUrl `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
             -SolandServiceDid $SolandServiceDid `
@@ -1882,7 +1882,7 @@ try {
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
-    $solandCorsAllowOrigin = if ($YougenBaseUrl) { $YougenBaseUrl } else { "http://127.0.0.1" }
+    $solandCorsAllowOrigin = if ($InksonBaseUrl) { $InksonBaseUrl } else { "http://127.0.0.1" }
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
         $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceDid" } else { "" }
@@ -1926,7 +1926,7 @@ try {
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
         $solandBetaMetricsPort = Get-FreeTcpPort
-        $solandBetaCorsAllowOrigin = if ($yougenBetaBaseUrl) { $yougenBetaBaseUrl } else { $solandCorsAllowOrigin }
+        $solandBetaCorsAllowOrigin = if ($inksonBetaBaseUrl) { $inksonBetaBaseUrl } else { $solandCorsAllowOrigin }
         if ($SolandRuntime -eq "docker") {
             $solandBetaDockerEnv = Build-SolandDockerEnvironment `
                 -BaseUrl $solandBetaBaseUrl `
@@ -1958,42 +1958,42 @@ try {
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
-    $yougenService = $null
-    $yougenBetaService = $null
-    $generatedYougenBetaCommand = $false
-    if (-not $SkipYougen -and -not $YougenCommand -and $yougenPort) {
-        $YougenCommand = Add-DioxusNoDownloadsEnvironment `
-            -Command "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents" `
-            -ProjectRoot $YougenRoot
-        $generatedYougenCommand = $true
+    $inksonService = $null
+    $inksonBetaService = $null
+    $generatedInksonBetaCommand = $false
+    if (-not $SkipInkson -and -not $InksonCommand -and $inksonPort) {
+        $InksonCommand = Add-DioxusNoDownloadsEnvironment `
+            -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonPort --open false --hot-reload false --watch false --features experimental-agents" `
+            -ProjectRoot $InksonRoot
+        $generatedInksonCommand = $true
     }
-    if ($YougenCommand) {
-        $yougenName = if ($DualSoland) { "yougen-alpha" } else { "yougen" }
-        $yougenService = Start-ManagedCommand -Name $yougenName -Command $YougenCommand -WorkingDirectory $YougenRoot -LogDirectory $serviceLogDir
-        $managedServices.Add($yougenService)
+    if ($InksonCommand) {
+        $inksonName = if ($DualSoland) { "inkson-alpha" } else { "inkson" }
+        $inksonService = Start-ManagedCommand -Name $inksonName -Command $InksonCommand -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
+        $managedServices.Add($inksonService)
     }
-    if (-not $SkipYougen) {
-        Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        if ($generatedYougenCommand -and $yougenService) {
-            Wait-LogContains -Path $yougenService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
-            Wait-DioxusAppReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+    if (-not $SkipInkson) {
+        Wait-HttpReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedInksonCommand -and $inksonService) {
+            Wait-LogContains -Path $inksonService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
-    if (-not $SkipYougen -and $DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
-        if (-not $YougenBetaCommand -and $yougenBetaPort) {
-            $YougenBetaCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents" `
-                -ProjectRoot $YougenRoot
-            $generatedYougenBetaCommand = $true
+    if (-not $SkipInkson -and $DualSoland -and $inksonBetaBaseUrl -and $inksonBetaBaseUrl -ne $InksonBaseUrl) {
+        if (-not $InksonBetaCommand -and $inksonBetaPort) {
+            $InksonBetaCommand = Add-DioxusNoDownloadsEnvironment `
+                -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonBetaPort --open false --hot-reload false --watch false --features experimental-agents" `
+                -ProjectRoot $InksonRoot
+            $generatedInksonBetaCommand = $true
         }
-        if ($YougenBetaCommand) {
-            $yougenBetaService = Start-ManagedCommand -Name "yougen-beta" -Command $YougenBetaCommand -WorkingDirectory $YougenRoot -LogDirectory $serviceLogDir
-            $managedServices.Add($yougenBetaService)
+        if ($InksonBetaCommand) {
+            $inksonBetaService = Start-ManagedCommand -Name "inkson-beta" -Command $InksonBetaCommand -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
+            $managedServices.Add($inksonBetaService)
         }
-        Wait-HttpReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        if ($generatedYougenBetaCommand -and $yougenBetaService) {
-            Wait-LogContains -Path $yougenBetaService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
-            Wait-DioxusAppReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        Wait-HttpReady -Url $inksonBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedInksonBetaCommand -and $inksonBetaService) {
+            Wait-LogContains -Path $inksonBetaService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
+            Wait-DioxusAppReady -Url $inksonBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
 
@@ -2009,7 +2009,7 @@ try {
             Pop-Location
         }
     }
-    $needsBundledChromium = ($playwrightProjects -contains "chromium") -or ($playwrightProjects -contains "joint-yougen")
+    $needsBundledChromium = ($playwrightProjects -contains "chromium") -or ($playwrightProjects -contains "joint-inkson")
     if (-not $SkipBrowserInstall -and $needsBundledChromium) {
         Push-Location $e2eRoot
         try {
@@ -2033,10 +2033,10 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
-    if ($YougenBaseUrl) {
-        $env:COTEST_YOUGEN_BASE_URL = $YougenBaseUrl
+    if ($InksonBaseUrl) {
+        $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
-        Remove-Item Env:COTEST_YOUGEN_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_INKSON_BASE_URL -ErrorAction SilentlyContinue
     }
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
@@ -2044,15 +2044,15 @@ try {
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
         $env:COTEST_REQUIRE_DUAL_SOLAND = "1"
-        if ($YougenBaseUrl) {
-            $env:COTEST_YOUGEN_ALPHA_BASE_URL = $YougenBaseUrl
+        if ($InksonBaseUrl) {
+            $env:COTEST_INKSON_ALPHA_BASE_URL = $InksonBaseUrl
         } else {
-            Remove-Item Env:COTEST_YOUGEN_ALPHA_BASE_URL -ErrorAction SilentlyContinue
+            Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         }
-        if ($yougenBetaBaseUrl) {
-            $env:COTEST_YOUGEN_BETA_BASE_URL = $yougenBetaBaseUrl
+        if ($inksonBetaBaseUrl) {
+            $env:COTEST_INKSON_BETA_BASE_URL = $inksonBetaBaseUrl
         } else {
-            Remove-Item Env:COTEST_YOUGEN_BETA_BASE_URL -ErrorAction SilentlyContinue
+            Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue
         }
     } else {
         Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
@@ -2060,8 +2060,8 @@ try {
         Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_DID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_DUAL_SOLAND -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_YOUGEN_ALPHA_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_YOUGEN_BETA_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue
     }
     if ($CoauthBaseUrl) {
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
@@ -2688,8 +2688,8 @@ $summary = [pscustomobject]@{
     soland_beta_base_url = $solandBetaBaseUrl
     soland_beta_service_did = if ($DualSoland) { $SolandBetaServiceDid } else { $null }
     dual_soland = [bool]$DualSoland
-    yougen_alpha_base_url = if ($DualSoland) { $YougenBaseUrl } else { $null }
-    yougen_beta_base_url = if ($DualSoland) { $yougenBetaBaseUrl } else { $null }
+    inkson_alpha_base_url = if ($DualSoland) { $InksonBaseUrl } else { $null }
+    inkson_beta_base_url = if ($DualSoland) { $inksonBetaBaseUrl } else { $null }
     mock_idp_base_url = $mockIdpBaseUrl
     mock_email_base_url = $mockEmailBaseUrl
     mock_witness_base_url = $mockWitnessBaseUrl
@@ -2700,7 +2700,7 @@ $summary = [pscustomobject]@{
     mock_audit_agent_principal_id = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
-    yougen_base_url = $YougenBaseUrl
+    inkson_base_url = $InksonBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
     coauth_config = $coauthConfigPath
@@ -2750,8 +2750,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - soland_beta_base_url: $($summary.soland_beta_base_url)
 - soland_beta_service_did: $($summary.soland_beta_service_did)
 - dual_soland: $($summary.dual_soland)
-- yougen_alpha_base_url: $($summary.yougen_alpha_base_url)
-- yougen_beta_base_url: $($summary.yougen_beta_base_url)
+- inkson_alpha_base_url: $($summary.inkson_alpha_base_url)
+- inkson_beta_base_url: $($summary.inkson_beta_base_url)
 - mock_idp_base_url: $($summary.mock_idp_base_url)
 - mock_email_base_url: $($summary.mock_email_base_url)
 - mock_witness_base_url: $($summary.mock_witness_base_url)
@@ -2762,7 +2762,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_audit_agent_principal_id: $($summary.mock_audit_agent_principal_id)
 - mock_mimi_facade_base_url: $($summary.mock_mimi_facade_base_url)
 - mock_mimi_facade_did: $($summary.mock_mimi_facade_did)
-- yougen_base_url: $($summary.yougen_base_url)
+- inkson_base_url: $($summary.inkson_base_url)
 - coauth_base_url: $($summary.coauth_base_url)
 - coauth_service_did: $($summary.coauth_service_did)
 - coauth_config: $($summary.coauth_config)
@@ -2827,11 +2827,11 @@ if ($mockAuditAgentBaseUrl) {
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"
 }
-if ($YougenBaseUrl) {
-    Write-Host "  yougen      : $YougenBaseUrl"
+if ($InksonBaseUrl) {
+    Write-Host "  inkson      : $InksonBaseUrl"
 }
-if ($DualSoland -and $yougenBetaBaseUrl) {
-    Write-Host "  yougen-beta : $yougenBetaBaseUrl"
+if ($DualSoland -and $inksonBetaBaseUrl) {
+    Write-Host "  inkson-beta : $inksonBetaBaseUrl"
 }
 if ($CoauthBaseUrl) {
     Write-Host "  coauth      : $CoauthBaseUrl"

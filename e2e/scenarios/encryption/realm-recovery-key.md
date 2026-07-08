@@ -80,11 +80,11 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 
 ## 阻塞
 
-整套 scenario 当前全部 `test.fixme`,实跑依赖并行进行的 soland / yougen RRK 实现:
+整套 scenario 当前全部 `test.fixme`,实跑依赖并行进行的 soland / inkson RRK 实现:
 
 - `@blocking-on rrk-soland` — `content_scheme` / `durability_policy` 投影、RRK-targeted
   `ck.realm_key.share` 接受 + RYW、恢复读取面、3 个诊断向量的 reducer 拒绝路径
-- `@blocking-on rrk-yougen` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
+- `@blocking-on rrk-inkson` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
   epoch 推进时的 eager 封存挂钩、披露横幅
 
 着陆后逐 Phase live 化;实跑见 cotask jobs 的最终集成项。

@@ -24,15 +24,15 @@
 // Promotion split for this scenario:
 //   * Phase A (discovery) + Phase E (audit chain) are promoted to live
 //     API-level tests — they need only soland + the events API + the
-//     in-process / outbound bridge, no yougen UI.
+//     in-process / outbound bridge, no inkson UI.
 //   * Phase B (human-approval gate), Phase C (agent-session-row status
 //     stream), and Phase D (publish modal + attribution Strand) stay
-//     fixme because their user-facing assertions are anchored on yougen
+//     fixme because their user-facing assertions are anchored on inkson
 //     /agents UI affordances (publish-modal-*, agent-session-row,
 //     agent-audit-verify-badge, agent-incoming-poll-tick) that are not
 //     wired to the soland capability/session API yet. The soland building
 //     blocks they depend on (discover endpoint, mock runtime, capability
-//     gate on start) are in place; promotion is a yougen-UI task.
+//     gate on start) are in place; promotion is a inkson-UI task.
 
 import { expect, test } from "@playwright/test";
 import { mockAgentRuntimeBaseUrl, solandBaseUrl } from "../../helpers/env";
@@ -63,12 +63,12 @@ function eventKind(event: Record<string, unknown>): string {
 test.describe.configure({ mode: "serial" });
 
 test.describe("agent protocol interop", () => {
-  test("yougen /agents panel mounts (harness reachability smoke)", async ({
+  test("inkson /agents panel mounts (harness reachability smoke)", async ({
     browser,
     request,
   }, testInfo) => {
     // Live probe — asserts two surface invariants:
-    //   1. yougen's `/agents` route mounts and renders `agents-panel`.
+    //   1. inkson's `/agents` route mounts and renders `agents-panel`.
     //   2. soland's `/_cokret/describe` responds 200, and its
     //      `claimed_profiles` now includes `ck.profile.agent_runtime.v1`
     //      (the extension profile that backs this scenario).
@@ -369,7 +369,7 @@ test.describe("agent protocol interop", () => {
   }) => {
     // spec: §4 (explicit + authorizable upgrade), §7 (capability actions +
     // constraint: allowed_endpoints / requires_human_approval), §8
-    // (pre-start capability check). Drives the yougen /agents interop approval
+    // (pre-start capability check). Drives the inkson /agents interop approval
     // modal: the human-approval gate MUST be acknowledged before the
     // controller can confirm, and the resulting `ck.capability.grant`
     // carries `actions=[ck.agent.interop_session.start]` with a single-valued
@@ -476,7 +476,7 @@ test.describe("agent protocol interop", () => {
     // step 5-7. The in-process echo bridge only emits a single
     // status(working); to exercise the full standard transition set the
     // harness injects the intermediate `negotiating` / `accepted` status
-    // events (a real streaming runtime would emit these). The yougen
+    // events (a real streaming runtime would emit these). The inkson
     // /agents `agent-session-row` then renders the latest status, which the
     // test polls until it advances to `working`.
     const stamp = Date.now();
@@ -584,7 +584,7 @@ test.describe("agent protocol interop", () => {
     request,
   }) => {
     // spec: §5.4 (result_objects / artifacts / attribution), §6 step 8-9.
-    // The yougen /agents publish modal authors a synthesis Strand whose
+    // The inkson /agents publish modal authors a synthesis Strand whose
     // actor_id is the controller (alice) but whose `attribution` preserves
     // the executing agent. The signer toggle
     // `publish-modal-signer-self-with-attribution` selects that semantics.

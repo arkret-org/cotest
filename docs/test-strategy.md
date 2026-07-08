@@ -118,10 +118,10 @@ as `ck.profile.core_event_store.v1`, `ck.profile.chat_mvp.v1`, and
 
 `dual-soland` is a local matrix profile, not a remote workflow. It delegates to
 `run-joint-e2e.ps1 -DualSoland -RunProfile joint-full -Grep "cross-server.federation"`,
-starts alpha/beta soland on separate ports, starts alpha/beta yougen when the
+starts alpha/beta soland on separate ports, starts alpha/beta inkson when the
 runner owns the web servers, and injects `COTEST_SOLAND_ALPHA_*`,
-`COTEST_SOLAND_BETA_*`, `COTEST_YOUGEN_ALPHA_BASE_URL`, and
-`COTEST_YOUGEN_BETA_BASE_URL` for federation specs.
+`COTEST_SOLAND_BETA_*`, `COTEST_INKSON_ALPHA_BASE_URL`, and
+`COTEST_INKSON_BETA_BASE_URL` for federation specs.
 
 The local hygiene gate is `scripts/run-hygiene.ps1`. It runs `cargo deny check`,
 `typos`, and `cargo audit`, then records `raw.log`, `summary.json`,
@@ -147,10 +147,10 @@ The joint E2E runner currently targets the first live-product slice:
   `-SolandRuntime docker`; this is the preferred release-quality joint e2e
   path because Playwright drives the packaged server shape instead of a local
   `cargo run` child
-- start or attach `yougen` web
+- start or attach `inkson` web
 - start or attach `coauth`; `scripts/run-cotest.ps1 -Profile joint` enables
   `-StartCoauth` by default so the local promoted profile always exercises the
-  soland + coauth + yougen topology. Direct `run-joint-e2e.ps1` runs may still
+  soland + coauth + inkson topology. Direct `run-joint-e2e.ps1` runs may still
   omit coauth for targeted soland-only debugging. `-StartCoauth` generates a
   fresh coauth YAML config, starts ephemeral Docker PostgreSQL, runs migrations,
   and wires soland's OAuth/session-grant introspection URLs and static service
@@ -169,7 +169,7 @@ private Space lifecycle administration, bidirectional timeline messages with
 edit/redaction, permission-denied UI/API paths, session refresh/logout/revoked
 bearer behavior, and Alice creating a live Space and persisting a message.
 
-Phase 5 adds focused product-surface specs that target yougen UI features
+Phase 5 adds focused product-surface specs that target inkson UI features
 that the smoke matrix does not exercise:
 
 - `onboarding.spec.ts` walks `/onboarding` through DID method, handle, device,
@@ -235,7 +235,7 @@ Recommended local run:
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1 -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
-.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipYougen -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
+.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
 .\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall

@@ -1,7 +1,7 @@
-// Real OIDC browser login — the full yougen → coauth → soland lifecycle.
+// Real OIDC browser login — the full inkson → coauth → soland lifecycle.
 //
 // End-to-end regression net for the login chain brought up on 2026-06-16:
-// yougen Continue → coauth /authorize → password login → consent →
+// inkson Continue → coauth /authorize → password login → consent →
 // /auth/callback → session-grant issuance → self-path grant+DPoP →
 // signed-in app. One serial flow walks the whole account lifecycle:
 //
@@ -31,7 +31,7 @@
 // unconditionally in oidc-login-chain.spec.ts, which runs on CI.
 //
 //   COTEST_REAL_OIDC_LOGIN=1 \
-//   COTEST_COAUTH_BASE_URL=…  COTEST_SOLAND_BASE_URL=…  COTEST_YOUGEN_BASE_URL=… \
+//   COTEST_COAUTH_BASE_URL=…  COTEST_SOLAND_BASE_URL=…  COTEST_INKSON_BASE_URL=… \
 //     npx playwright test identity/oidc-login-flow
 //
 // Optional: set COTEST_OIDC_LOGIN_HANDLE + COTEST_OIDC_LOGIN_PASSWORD to drive
@@ -80,7 +80,7 @@ test.describe("real OIDC browser login lifecycle", () => {
         ? { handle: envHandle, password: envPassword }
         : await registerCoauthPasswordAccount(request, coauth!);
 
-    // Open yougen with no session token so it lands on the login panel; the
+    // Open inkson with no session token so it lands on the login panel; the
     // injected account_did/device_id are placeholders overridden by the OIDC
     // callback identity.
     const jointPage = await openUserPage(browser, uniqueUser("oidc-login"));
@@ -137,7 +137,7 @@ test.describe("real OIDC browser login lifecycle", () => {
         password: `${account.password}-WRONG`,
       });
 
-      // coauth surfaces the error and stays on its login page; yougen never
+      // coauth surfaces the error and stays on its login page; inkson never
       // reaches the signed-in shell.
       await expect(page.locator("#login-error")).toBeVisible({ timeout: 30_000 });
       await expect(page.locator("#login-password")).toBeVisible();

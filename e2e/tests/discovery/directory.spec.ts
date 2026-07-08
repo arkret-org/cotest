@@ -128,9 +128,9 @@ test.describe("discovery", () => {
   }) => {
     // spec: discovery/profiles-presence.md §2 — actor profile updates
     // fan out through the directory's actor projection. We assert via
-    // `POST /_cokret/find/directory/search-actors` (the same endpoint yougen's
-    // tab-actors hits) rather than driving the yougen profile-edit UI
-    // because the yougen profile form is not in scope here.
+    // `POST /_cokret/find/directory/search-actors` (the same endpoint inkson's
+    // tab-actors hits) rather than driving the inkson profile-edit UI
+    // because the inkson profile form is not in scope here.
     const stamp = Date.now();
     const alice = uniqueUser(`s24-profile-alice-${stamp}`);
     const bob = uniqueUser(`s24-profile-bob-${stamp}`);
@@ -220,7 +220,7 @@ test.describe("discovery", () => {
     // by broadcasting `ck.presence` on `POST /_cokret/self/ephemeral`;
     // closing the tab stops the refresh and the row decays to `offline`
     // (mirroring the Sync presence projection's stale-online TTL). Reopening
-    // re-asserts `online`. We drive this through the API rather than the yougen
+    // re-asserts `online`. We drive this through the API rather than the inkson
     // UI because the directory's presence projection — not the renderer — is
     // what this scenario pins.
     const stamp = Date.now();
@@ -372,7 +372,7 @@ test.describe("discovery", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    // API surface check — yougen renders the same response payload.
+    // API surface check — inkson renders the same response payload.
     const orgResp = await request.post(
       `${solandBaseUrl()}/_cokret/find/directory/search-organizations`,
       {

@@ -38,7 +38,7 @@
 - alice 的 DID Document v0 中的 `service` 数组**已包含**一项 `ck.service.tsp` endpoint,`serviceEndpoint` 指向 `http://127.0.0.1:${MOCK_TSP_ENDPOINT_PORT}/tsp`
 - bob_extern 的 `did:web` document 同样包含 `ck.service.tsp` endpoint,指向同一个 mock(mock 通过 `MOCK_TSP_ENDPOINT_VID` 区分入站消息归属哪个 VID)
 - alice 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
-- alice browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
+- alice browser context 通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 - alice 与 bob_extern **之间没有现成的 TSP relationship**(mock 启动时 relationship table 为空)
 
 ## Steps
@@ -47,12 +47,12 @@
 
 1. **alice** 解析自己的 `did:webvh` 文档 (`GET https://<host>/.well-known/did/webvh/<scid>`),断言 `service` 数组里至少存在一项 `type === "ck.service.tsp"`,且 `serviceEndpoint` 与 `MOCK_TSP_ENDPOINT_PORT` 对应
 2. **alice** 解析 `bob_extern` 的 `did:web` 文档 (`GET https://bob-extern-.../did.json`),断言同样存在 `ck.service.tsp` 声明,记录其 `serviceEndpoint`、`supported_vid_schemes`、`supported_modes`、`metadata_privacy.nested_messages === true`
-3. 断言:alice 的 client (yougen) 在 feature discovery view 中将 `bob_extern` 标记为 "TSP-capable" (例如 directory 卡片上出现 `ck.service.tsp` chip / `tsp-capable-badge` testid)
+3. 断言:alice 的 client (inkson) 在 feature discovery view 中将 `bob_extern` 标记为 "TSP-capable" (例如 directory 卡片上出现 `ck.service.tsp` chip / `tsp-capable-badge` testid)
 4. (spec §3 line: DID method adapter SHOULD 暴露 TSP 能力)断言 `GET /_cokret/root/identity/${aliceDid}/transports` 返回数组里包含 `"tsp"`,且 `GET /_cokret/root/identity/${bobExternDid}/transports` 同样含 `"tsp"`
 
 ### Phase B — TSP relationship bootstrap
 
-5. **alice** 通过 yougen 入口触发 "Establish TSP channel with bob_extern" (例如 `/directory` → 找到 bob_extern → `establish-tsp-button`)
+5. **alice** 通过 inkson 入口触发 "Establish TSP channel with bob_extern" (例如 `/directory` → 找到 bob_extern → `establish-tsp-button`)
 6. 客户端组 TSP bootstrap message:
    - `vid_local` = alice 的 VID(`did:webvh:...`)
    - `vid_remote` = bob_extern 的 VID(`did:web:...`)
@@ -65,7 +65,7 @@
 
 ### Phase C — alice 通过 TSP 发送 Cokret invite operation
 
-11. **alice** 在 yougen 中(承接 Phase B 建立的 relationship) 触发 "Invite bob_extern via TSP" 流程,指向一个已存在的 Realm `R_tsp`
+11. **alice** 在 inkson 中(承接 Phase B 建立的 relationship) 触发 "Invite bob_extern via TSP" 流程,指向一个已存在的 Realm `R_tsp`
 12. 客户端组装内层 Cokret operation:
     - `operation = "ck.invite.create"`
     - `realm_id = R_tsp`
@@ -84,7 +84,7 @@
 16. mock(作为 bob_extern)解开外层 → 用 relationship key 解密 → 拿到内层 Cokret payload
 17. mock 验证内层 Cokret event signature(alice 的 webvh key,通过 §4 resolver 拉 DID Doc)→ pass
 18. 断言:mock 把验证结果回成 TSP ACK,`verification.cokret_signature = "ok"`、`verification.tsp_authenticity = "ok"`(spec §5:两者 SHOULD 都验证,且独立)
-19. 断言:alice 侧 yougen `/settings/connections` 该 relationship 的 outbox 标记最后一条 `ck.invite.create` 为 `delivered + acked`
+19. 断言:alice 侧 inkson `/settings/connections` 该 relationship 的 outbox 标记最后一条 `ck.invite.create` 为 `delivered + acked`
 20. 断言:soland audit log 出现 `tsp.message.send` 记录,包含 `relationship_id`、`payload_digest`、`payload_type: "ck.invite.create"`、`verification_result: "ok"`(spec §8)
 
 ### Phase E — 反向通道:bob_extern → alice 的 `ck.member.state{join}`
@@ -112,7 +112,7 @@
 ## Implementation notes
 
 - **soland 缺口**:`ck.service.tsp` endpoint declaration 的注入、TSP envelope verify/route 路径、`tsp.*` audit event、`/_cokret/root/identity/{did}/transports` 暴露 — 整组未实现。整个 scenario fixme starter
-- **yougen 缺口**:`/directory` 上的 `establish-tsp-button`、`/settings/connections` 的 TSP relationship 列表、relationship `trust_level` 的 ⚠ 标记 UI 都缺
+- **inkson 缺口**:`/directory` 上的 `establish-tsp-button`、`/settings/connections` 的 TSP relationship 列表、relationship `trust_level` 的 ⚠ 标记 UI 都缺
 - **mock-tsp-endpoint.mjs**:由并行任务交付;测试只通过 `process.env.MOCK_TSP_ENDPOINT_PORT` 与 `process.env.MOCK_TSP_ENDPOINT_VID` 访问。若两个 env 未设置,本 spec 应当 `test.skip` 而非 fail(下方 spec 用 `optionalEnv` 风格 guard)
 - **WebVH host / DID:web host**:沿用 webvh-rotation / onboarding 的现有 harness;DID Document 中 `ck.service.tsp` 注入需要 harness 支持(否则 Phase A 第 1-2 步会 fail closed)
 - **TSP 是 extension profile,不是 v1 core 必需**:`tsp-integration.md` 顶部明确标注,整个文件目前是 SHOULD/MAY,因此 .spec.ts 全 fixme 不会 block release

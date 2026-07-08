@@ -29,20 +29,20 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 ### Phase A — alice 发起第三方邀请
 
 1. alice createRealm `R`,`joinRule=invite`
-2. alice yougen 点 "Invite by email",输入 `bob@example.com`
+2. alice inkson 点 "Invite by email",输入 `bob@example.com`
 3. 客户端:
    - 生成 random `salt` + `token`
    - `token_commitment = sha256(salt || token)`
    - 生成临时 `verification_public_key`
    - 提交 `ck.invite.third_party { realm_id, token_commitment, verification_public_key, expires_at: +7d }`
-4. yougen 调 mock email service `POST /mock/email/verification/send` 把 `token` 通过邮件投递给 bob(out-of-band)
+4. inkson 调 mock email service `POST /mock/email/verification/send` 把 `token` 通过邮件投递给 bob(out-of-band)
 5. 断言:`/realms/${realmId}/admin` 显示 `pending third-party invite to bob@example.com` (`pending-3pid-invite-row` testid)
 6. 断言:`token_commitment` 在事件链里,**plaintext email 不在事件链**(隐私 invariant)
 
 ### Phase B — bob 注册 DID
 
 7. bob 在 mock email 收件箱看到含 invite link 的邮件
-8. bob 进 yougen `/onboarding`,通过 passkey/OIDC 注册 → 拿到 `did:webvh:bob`(参见 identity/onboarding)
+8. bob 进 inkson `/onboarding`,通过 passkey/OIDC 注册 → 拿到 `did:webvh:bob`(参见 identity/onboarding)
 9. bob 客户端把 invite token 提交给 verification service `POST /mock/email/verification/claim { token, did: bob.did }`
 10. service 校验 token 新鲜性 + claim 数 → 原子消费 → 签 `binding_proof` 说"token holder 的 DID 是 bob"
 
@@ -75,7 +75,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 
 - **soland 缺口**:`ck.invite.third_party`、`ck.invite.claim` event kinds;binding_proof 校验逻辑 — 整组 ✗
 - **harness 缺口**:mock email + verification service 必须新增(见本会话 mock services 改动)
-- **yougen 缺口**:Invite-by-email UI、pending 3PID invite 列表、Verification 等待 UI
+- **inkson 缺口**:Invite-by-email UI、pending 3PID invite 列表、Verification 等待 UI
 
 ## 总耗时预估
 

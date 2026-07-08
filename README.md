@@ -79,18 +79,18 @@ Recommended entrypoints:
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
-.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipYougen `
+.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson `
   -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
 ```
 
 - `process` mode is the fast local path and spawns the SUT with `cargo run`.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
-  attach live `coauth`, `floria`, `sodmin`, `yougen`, or `teabay` services
+  attach live `coauth`, `floria`, `sodmin`, `inkson`, or `teabay` services
   through base URLs or managed service commands.
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
 - Joint Playwright e2e can also run soland from the built image with
-  `run-joint-e2e.ps1 -SolandRuntime docker`, including a `-SkipYougen` mode for
+  `run-joint-e2e.ps1 -SolandRuntime docker`, including a `-SkipInkson` mode for
   soland-only wire/API probes.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
   `soland` plus the sibling `cokret-rust-sdk` checkout using the workspace
@@ -167,15 +167,15 @@ exploratory tools can never be.
 
 ### 1. Bring the stack up, then record
 
-`playwright codegen` needs a running yougen (and the soland/coauth it talks to).
+`playwright codegen` needs a running inkson (and the soland/coauth it talks to).
 Start the stack the usual way, then point the recorder at it:
 
 ```powershell
-# Terminal A — start soland + coauth + yougen and leave them running.
+# Terminal A — start soland + coauth + inkson and leave them running.
 & "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -KeepAlive
 
-# Terminal B — record. Default yougen URL is http://127.0.0.1:4527; override
-# with YOUGEN_BASE_URL if your run prints a different one.
+# Terminal B — record. Default inkson URL is http://127.0.0.1:4527; override
+# with INKSON_BASE_URL if your run prints a different one.
 cd D:\Works\cokret\cotest\e2e
 npx playwright codegen http://127.0.0.1:4527
 ```
@@ -185,7 +185,7 @@ corresponding TypeScript live; copy it out when you are done.
 
 > If `-KeepAlive` is not available on your branch, start the services with your
 > usual local commands (or `run-compose.ps1`) and codegen against the printed
-> yougen URL — codegen only needs a reachable base URL.
+> inkson URL — codegen only needs a reachable base URL.
 
 ### 2. Save it as a spec, following the e2e conventions
 
@@ -200,7 +200,7 @@ Then refit the raw recording onto the harness conventions
 - Open the page via `openUserPage(browser, user)` instead of a bare
   `browser.newPage()` when you want the harness's diagnostics (console + network
   HAR) captured automatically.
-- Prefer `getByTestId(...)` selectors (the recorder picks these up from yougen's
+- Prefer `getByTestId(...)` selectors (the recorder picks these up from inkson's
   `data-testid`s); fall back to `getByRole`. Avoid nth/CSS positional selectors.
 - `test.describe.configure({ mode: "serial" })` when later steps depend on
   earlier ones.
@@ -306,7 +306,7 @@ the proof shape:
 - `compose`: run process-mode bridge-contract tests through
   `scripts/run-compose.ps1`; spawned `soland` remains under cotest lifecycle,
   while external service URLs are passed through `COAUTH_BASE_URL`,
-  `FLORIA_BASE_URL`, `SODMIN_BASE_URL`, and `YOUGEN_BASE_URL`.
+  `FLORIA_BASE_URL`, `SODMIN_BASE_URL`, and `INKSON_BASE_URL`.
 - `docker`: spawn the SUT from `COTEST_SUT_IMAGE` with Docker while the Rust
   tests remain host-side, similar to Complement.
 
@@ -369,7 +369,7 @@ scrolling terminal output.
 
 `-Profile fast-smoke` runs a small PR-oriented set from
 `config/ci-profiles.json`; `-Profile dual-soland` starts alpha/beta soland
-and alpha/beta yougen locally, then runs the federation Playwright matrix;
+and alpha/beta inkson locally, then runs the federation Playwright matrix;
 `-Profile full-nightly` runs the complete suite.
 `scripts/run-hygiene.ps1` is run separately from scenario profiles so
 dependency policy, typo checks, and advisory scans can fail fast without

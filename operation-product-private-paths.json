@@ -38,14 +38,14 @@
       "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Cokret operation."
     },
     {
-      "source": "yougen",
+      "source": "inkson",
       "method": "*",
       "path": "/_cokret/self/blob/resumable",
       "classification": "product-private",
       "reason": "Client-side support for soland's tus companion upload binding, not a registered Cokret operation."
     },
     {
-      "source": "yougen",
+      "source": "inkson",
       "method": "*",
       "path": "/_cokret/self/blob/resumable/{**rest}",
       "classification": "product-private",
@@ -157,14 +157,14 @@
       "reason": "Router prefix container in teabay routing.rs (Router::with_path(\"_cokret/find/directory\")) that mounts the real announce/withdraw/takedown/push operations; the bare prefix is not itself an operation."
     },
     {
-      "source": "yougen",
+      "source": "inkson",
       "method": "GET",
       "path": "/_cokret/self/realms",
       "classification": "product-private",
       "reason": "mockCokretApi.ts uses the literal \"/_cokret/self/realms/\" only as a startsWith() prefix to dispatch to the real /_cokret/self/realms/{realm_id}/spaces and /strands handlers; the bare prefix string is a router predicate, not an operation."
     },
     {
-      "source": "yougen",
+      "source": "inkson",
       "method": "POST",
       "path": "/_cokret/self/circles/({wildcard}",
       "classification": "product-private",

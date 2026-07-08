@@ -17,7 +17,7 @@ All ten subprojects landed their `circle-rollout` branch heads at:
 | sodmin | `f0f43f1` | circle-rollout |
 | floria | `f20bca7` | circle-rollout |
 | chime | `3a054ad` | circle-rollout |
-| yougen | `3a67778` | circle-rollout |
+| inkson | `3a67778` | circle-rollout |
 | cotest | `e7abf7b` (P4 baseline) | circle-rollout |
 | starid | `9f28965` | circle-rollout |
 | teabay | `a2a4716` | circle-rollout |
@@ -36,7 +36,7 @@ session under the `circle-rollout` branch convention).
 |---|---|---|---|
 | GATE-A | SDK lock (P1 → P2) | 2026-05-26 | `cargo check/test --workspace --all-features` green; spec-drift 0; 7 event kinds + 6 caps + 6 errors all registered |
 | GATE-B | Backend API lock (P2 → P3) | 2026-05-26 | soland `/_cokret/self/circles/*` exposed; coauth admin cx.circle.* surface live; floria + chime accept `circle_id`; cargo workspaces green across 7 projects |
-| GATE-C | End-to-end usable (P3 → P4) | 2026-05-26 | sodmin Circle admin UI + yougen Circle UX both shipped; 920 yougen tests + sodmin wasm build clean |
+| GATE-C | End-to-end usable (P3 → P4) | 2026-05-26 | sodmin Circle admin UI + inkson Circle UX both shipped; 920 inkson tests + sodmin wasm build clean |
 | GATE-D | Engineering hygiene (P4 → P5) | 2026-05-26 | all 10 projects have CI, typos, deny.toml, SECURITY.md, CHANGELOG.Unreleased, Dockerfile HEALTHCHECK where applicable |
 | GATE-E | Conformance (P5 → P6) | 2026-05-26 | cotest UJ-A..UJ-I either >= 90% or explicitly deferred (see § 4 and § 5); mock-parity baseline 0; no expired fixme |
 | GATE-F | Docs (P6) | NOT YET | P6 is the next phase |
@@ -45,14 +45,14 @@ session under the `circle-rollout` branch convention).
 
 | project | counted by | count | notes |
 |---|---|---:|---|
-| cokret-rust-sdk | `cargo test --workspace` | 920 | (per `_todos_all.md` P3 GATE-C note "920 yougen tests + sodmin wasm build") — the 920 figure is the workspace-wide SDK count established at P1 close |
+| cokret-rust-sdk | `cargo test --workspace` | 920 | (per `_todos_all.md` P3 GATE-C note "920 inkson tests + sodmin wasm build") — the 920 figure is the workspace-wide SDK count established at P1 close |
 | soland | conformance fixture tests + reducer tests | 28 release-gate passing (per `docs/release-evidence-0.9.0.md`) | release-gate evidence at `artifacts/runs/20260525-055932/release-gate.md` |
 | coauth | backend unit + handler | n/a in this report | P2B `f5ab813` ran green pre-P5 |
 | sodmin | wasm build + 86 warnings clean | n/a | P3A close at `edb92f1` |
 | floria | privacy + circuit-breaker tests | n/a | P2C close at `0e7bb1b` |
 | chime | wasm32 CI green | n/a | P2D close at `3a054ad` |
 | teabay | 12 Circle isolation tests + ingest/filter | 12 | P2E `6e6cb61` |
-| yougen | full test suite | 920 | P3B close at `bf04957` |
+| inkson | full test suite | 920 | P3B close at `bf04957` |
 | starid | cross-service test green | n/a | P2G close at `9f28965` |
 | cotest | `cargo test --workspace --lib` | 107 passed, 0 failed, 1 ignored | run 2026-05-26 in P5 |
 | cotest | `cargo test --test circle_scenarios` | 7 / 7 | new in P2F.3 |
@@ -62,7 +62,7 @@ session under the `circle-rollout` branch convention).
 ## 4. e2e suite status
 
 The Playwright e2e suite at `e2e/tests/*` was NOT run during P5. It requires
-a live soland + coauth + floria + chime + teabay + yougen + sodmin process
+a live soland + coauth + floria + chime + teabay + inkson + sodmin process
 stack (and the `sodmin` admin SPA served on a known port). Spinning that
 up was not feasible in the P5 execution environment because the build
 artifacts for sibling services were not available as runnable binaries; the
@@ -87,7 +87,7 @@ close across 10 projects. A subsequent sweep (this commit) reconciles
 the catalog against the live tree:
 
 - 17 markers have already been resolved in their owning project
-  (cokret-rust-sdk P1.3 + P1.5; coauth P2B.3 + P2B.5; all 11 yougen
+  (cokret-rust-sdk P1.3 + P1.5; coauth P2B.3 + P2B.5; all 11 inkson
   P3B/P4 markers; starid P2G.2 + P2G.5). Those rows have been removed
   from the inventory below.
 - 1 row (coauth circle_capabilities.rs P2B.2/P2B.5) has been rewritten
@@ -174,11 +174,11 @@ was hygiene-only.
 | `src/pages/audit_attestation.rs:19` | `TODO(circle-rollout-P3A.5)` — attestation surface | [deferred to P6 or later] |
 | `src/pages/circles/scope.rs:7` | `TODO(circle-rollout-P2A.4)` — trigger awaits soland reducer wiring | [deferred to P6 or later, gated on soland P2A.4] |
 
-#### yougen (3a67778)
+#### inkson (3a67778)
 
 All 11 `TODO(circle-rollout-Pxxx)` markers closed. A subsequent
-`grep -rn "TODO(circle-rollout" yougen/` returns zero hits across both
-source and CHANGELOG; the entire yougen P3B/P4 follow-up backlog has
+`grep -rn "TODO(circle-rollout" inkson/` returns zero hits across both
+source and CHANGELOG; the entire inkson P3B/P4 follow-up backlog has
 been retired in commits on top of `3a67778`.
 
 #### teabay (a2a4716)

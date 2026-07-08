@@ -60,7 +60,7 @@ e2e/
 ## 设计原则
 
 1. **Spec-contract first** — 每条 fixme 都标了 scenario 引用 + 当前 owner gap。删除 `.fixme` 前必须走 [`docs/fixme-promotion-checklist.md`](../../docs/fixme-promotion-checklist.md)。
-2. **UI 层 + 业务流程** — 每个 scenario 模拟真实多用户业务,不是单页 smoke。例外是 `harness/mocks-selftest`(纯 harness 自检)与 `spaces/admin-section-route`(yougen routing probe),两条都显式标注为 harness/probe-only。
+2. **UI 层 + 业务流程** — 每个 scenario 模拟真实多用户业务,不是单页 smoke。例外是 `harness/mocks-selftest`(纯 harness 自检)与 `spaces/admin-section-route`(inkson routing probe),两条都显式标注为 harness/probe-only。
 3. **Spec-mirrored 目录** — 按 cokret-spec 的域划分(`identity/`、`encryption/`、`sync/` 等),scenario 路径直接对应 spec 路径,导航零成本。
 4. **Mock services 解锁外部依赖** — 9 个 mock 把所有外部依赖(OIDC、email、witness、audit agent、policy server、push gateway、applet registry、TSP endpoint、MIMI facade)mock 化,默认不启动,通过 `-StartMocks` 一次拉起。
 
@@ -125,5 +125,5 @@ e2e/
 - `summary.md` / `scenarios.md` — 整体 + scenario 维度
 - `junit.xml` — CI 友好结构化结果
 - `playwright-report/` — HTML(含 trace/video/failure screenshot)
-- `services/` — soland / coauth / yougen / mock-* 进程日志
+- `services/` — soland / coauth / inkson / mock-* 进程日志
 - `screenshots/` / `diagnostics/`(console + network HAR)

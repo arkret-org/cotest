@@ -23,7 +23,7 @@ COT-ORG-04 守护:directory / teabay 的 **verified organization badge** 与协�
 4. acme-org 签发 active `ck.realm.organization`:
    - `relationship=owner`,scope 含 `official_badge` → 显示 owner verified badge;
    - 或 `relationship=directory_certifier`,scope 含 `directory_listing` → 显示 directory-certified badge。
-5. 断言:UI `organization-verified-badge` 可见;API `verified_badge=true`;yougen 与 teabay 读同一关系语义。
+5. 断言:UI `organization-verified-badge` 可见;API `verified_badge=true`;inkson 与 teabay 读同一关系语义。
 
 ### Case C — revoked / expired / stale 后 badge 消失
 
@@ -32,7 +32,7 @@ COT-ORG-04 守护:directory / teabay 的 **verified organization badge** 与协�
 
 ## 验收
 
-yougen / teabay UI 或 API 读取**同一** verified relationship 语义;directory 不再把 declared-only 当 verified。
+inkson / teabay UI 或 API 读取**同一** verified relationship 语义;directory 不再把 declared-only 当 verified。
 
 ## blocking-on
 

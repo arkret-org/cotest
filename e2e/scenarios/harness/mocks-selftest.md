@@ -1,12 +1,12 @@
 # Harness — Mock Services Self-Test
 
-> **harness / smoke-only**:本 scenario **不验证 soland / yougen / coauth 业务流程**,只验证 cotest 自带的 9 个 mock service 各自的对外契约。是 harness 自检层,跑在任何业务 scenario 之前。
+> **harness / smoke-only**:本 scenario **不验证 soland / inkson / coauth 业务流程**,只验证 cotest 自带的 9 个 mock service 各自的对外契约。是 harness 自检层,跑在任何业务 scenario 之前。
 
 ## 目标
 
 通过直接 HTTP 调用 cotest 的 9 个 mock service,逐条验证它们 `cotest/e2e/mocks/_shared/*.mjs` 文档化的契约形状(端点、状态码、JWT 结构、签名 kid、错误码、`/inspect` 调试 surface);每个 mock 未启动时对应测试通过 `test.skip(!baseUrl, "...")` 自动跳过,而不是失败。本套件的存在意义是:任一业务 scenario 在引用 `mockXxxBaseUrl()` 时,都能假设 mock 的协议层契约仍未漂移 — 否则错误源会从"业务 scenario fail"变成"harness 自检 fail",定位成本大幅降低。
 
-不验证:任何 soland / yougen / coauth 业务流程、任何跨 mock 的协作(那是业务 scenario 的事)、mock 与真实第三方服务的兼容性(mock 只追 spec 契约,不追真实 IdP 行为)。
+不验证:任何 soland / inkson / coauth 业务流程、任何跨 mock 的协作(那是业务 scenario 的事)、mock 与真实第三方服务的兼容性(mock 只追 spec 契约,不追真实 IdP 行为)。
 
 ## Spec 锚点
 
@@ -30,7 +30,7 @@
 
 ## 拓扑
 
-- 0 × soland / coauth / yougen — 本 scenario 完全不依赖业务服务
+- 0 × soland / coauth / inkson — 本 scenario 完全不依赖业务服务
 - 0..9 × mock service — 由 `run-joint-e2e.ps1` 的 `-StartMockXxx` 或 `-StartMocks` 决定启动哪些;未启动的对应测试跳过
 - 1 × Playwright `request` fixture — 直接打 mock 的 HTTP 端点,不开 browser context
 
@@ -48,7 +48,7 @@
 
 - `run-joint-e2e.ps1` 带 `-StartMocks`(或子集 `-StartMockIdp` / `-StartMockEmail` / …),把要测的 mock 拉起并把 `MOCK_<NAME>_BASE_URL` 写到 Playwright 进程的环境变量里
 - `helpers/env.ts` 的 `mockXxxBaseUrl()` 在 mock 未启动时返回 `undefined`,测试用 `test.skip(!baseUrl, "<mock> not started for this run")` 优雅跳过
-- 不需要 soland、coauth、yougen 任何一项;本套件可以单独跑(`-Grep "harness/mocks-selftest"`)做 mock 冒烟
+- 不需要 soland、coauth、inkson 任何一项;本套件可以单独跑(`-Grep "harness/mocks-selftest"`)做 mock 冒烟
 
 ## Steps
 

@@ -27,7 +27,7 @@ async fn register_device(server: &CokretServer, token: &str) -> Result<String> {
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
-                "app_id": "yougen"
+                "app_id": "inkson"
             })),
         StatusCode::OK,
     )

@@ -35,7 +35,7 @@
 ### Phase B — Mute per-Realm
 
 5. bob 进 `/notifications`,点 `R` 旁的 "Mute"
-6. 客户端写 `yougen.preferences.notifications.<realmId> = "muted"`
+6. 客户端写 `inkson.preferences.notifications.<realmId> = "muted"`
 7. alice 发 `M2`
 8. 断言:bob 的 `M2` **不**触发 push 通知(in-app badge 不增);消息**仍** 在 timeline(mute ≠ block)
 
@@ -59,7 +59,7 @@
 
 19. 制造 N 条未读消息(alice 连发 5 条)
 20. bob 进 `/notifications`,点 "Mark all read"
-21. 断言:yougen 本地 unread badge 清零,所有通知行标 `read`;客户端按
+21. 断言:inkson 本地 unread badge 清零,所有通知行标 `read`;客户端按
     `discovery/read-receipts.md` 提交 `ck.read_cursor.advance`,通知投影继续通过
     `GET /_cokret/self/account/subscribe?catchup=true` 读取
 
@@ -80,7 +80,7 @@
 ## Implementation notes
 
 - **soland 约束**:notification projection 只经 `/_cokret/self/account/subscribe` 暴露
-- **yougen 缺口**:`/notifications` panel 完整 UI、per-Realm mute toggle、`/settings/notifications` DnD picker
+- **inkson 缺口**:`/notifications` panel 完整 UI、per-Realm mute toggle、`/settings/notifications` DnD picker
 - **harness 缺口**:可选 mock push gateway 接收 push payload(为了断言 push 真发了)
 
 ## 总耗时预估

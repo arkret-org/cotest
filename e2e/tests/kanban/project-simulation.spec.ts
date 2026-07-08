@@ -505,7 +505,7 @@ test.describe("project simulation", () => {
     request,
   }, testInfo) => {
     // spec: strand-and-message.md §3 — `fields` are opaque to the reducer; the
-    // past-due semantics live in the UI (yougen kanban due_calendar.rs
+    // past-due semantics live in the UI (inkson kanban due_calendar.rs
     // due_value_is_overdue). A Card whose due_date is strictly before today
     // renders the overdue badge; an unscheduled Card does not.
     test.setTimeout(180_000);

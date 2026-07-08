@@ -123,11 +123,11 @@ test.describe("account onboarding", () => {
     expect(verified.next_step).toBe("finish");
   });
 
-  test("yougen starts the coauth OIDC bridge instead of dev-login", async ({ browser }) => {
+  test("inkson starts the coauth OIDC bridge instead of dev-login", async ({ browser }) => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
-    const user = uniqueUser("p1-025-yougen-oidc");
+    const user = uniqueUser("p1-025-inkson-oidc");
     const page = await openUserPage(browser, user);
     try {
       await page.gotoLogin();
@@ -146,8 +146,8 @@ test.describe("account onboarding", () => {
       expect(current.searchParams.get("resource")).toBe(solandServiceDid());
       expect(current.searchParams.get("response_type")).toBe("code");
       expect(current.searchParams.get("code_challenge")).toBeTruthy();
-      // Regression guard (yougen fix/authorize-device-scope): the authorize
-      // request MUST bind the OAuth session to yougen's stable, persisted
+      // Regression guard (inkson fix/authorize-device-scope): the authorize
+      // request MUST bind the OAuth session to inkson's stable, persisted
       // device id via a `urn:cokret:client:device:{id}` scope token. Without
       // it coauth introspection emits no `org.cokret.device_id`, soland derives
       // a per-OAuth-session device id that drifts on every re-auth, and the
@@ -184,7 +184,7 @@ test.describe("account onboarding", () => {
     // a device-bound `ck.session.grant` with `cnf.jkt` == the device key). The
     // WebAuthn ceremony is one of several login factors over the SAME bridge;
     // exercising it specifically needs a CDP virtual authenticator + a coauth
-    // passkey UI surface (coauth owns account creation, not yougen), tracked
+    // passkey UI surface (coauth owns account creation, not inkson), tracked
     // separately. The observable spec contract — real did:webvh + working grant
     // — is fully asserted here.
     const coauth = coauthBaseUrl();

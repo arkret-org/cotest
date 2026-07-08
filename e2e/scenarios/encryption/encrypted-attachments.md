@@ -42,7 +42,7 @@
 ### Phase A — alice 上传 + 发送加密附件
 
 1. alice 在 E2EE Realm `R_e2ee` 中准备发消息,附图 `cat.png`(plaintext)
-2. yougen 客户端:
+2. inkson 客户端:
    - 生成本地 AEAD key + nonce
    - 用 XChaCha20-Poly1305 加密 `cat.png` → ciphertext
    - 计算 `ciphertext_digest = sha256(ciphertext)`
@@ -58,14 +58,14 @@
 
 ### Phase B — bob 下载 + 解密
 
-7. bob yougen 拉 sync → 解 message → 拿到 plaintext `attachments` 数组
+7. bob inkson 拉 sync → 解 message → 拿到 plaintext `attachments` 数组
 8. bob 客户端 `GET /_cokret/self/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
 9. soland Blob Service 校验:
    - bob 是 `R_e2ee` 的当前成员
    - `covered_frontier_cell` 包含必要的 governance frontier(若 E2EE Realm 要求)
 10. 返回 ciphertext bytes + `Content-Type: application/octet-stream` + `Cache-Control: private, no-store`(spec §5.1)
 11. bob 客户端用 plaintext attachments 里携带的 key_ref → 派生解密 key → 解 ciphertext → 拿到原始 `cat.png`
-12. yougen 渲染图片(lock icon + "Encrypted attachment, X KB")
+12. inkson 渲染图片(lock icon + "Encrypted attachment, X KB")
 13. 断言:bob timeline 上消息含 image preview
 
 ### Phase C — Ciphertext digest 校验
@@ -115,7 +115,7 @@
 ## Implementation notes
 
 - **2026-05-25 P2-044 local close**:soland `POST /_cokret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
-- **2026-05-25 P2-044 local close**:yougen 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`CokretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
+- **2026-05-25 P2-044 local close**:inkson 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`CokretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
 - **仍待 audited-e2ee**:`ck.moderation.franking_proof`、audit-agent invite、`ck.audit.accessed` 与 tamper verification 归入 `encryption/audited-e2ee` / GAP-P2-045。
 - **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。
 

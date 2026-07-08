@@ -1445,16 +1445,16 @@ export async function resolveDefaultStrandId(
   if (def?.strand_id) {
     return def.strand_id;
   }
-  // Final fallback: the yougen UI realm-create flow does not emit an explicit
+  // Final fallback: the inkson UI realm-create flow does not emit an explicit
   // ck.realm.set_default_strand, so soland never marks a strand is_default for
-  // those realms. yougen itself addresses the default strand by a deterministic
-  // convention (default_strand_id_for_realm in yougen/src/local_state): the
+  // those realms. inkson itself addresses the default strand by a deterministic
+  // convention (default_strand_id_for_realm in inkson/src/local_state): the
   // realm UUID suffix under the ck:strand: prefix. Derive the same id so events
-  // submitted here land on the strand yougen renders.
+  // submitted here land on the strand inkson renders.
   return deriveDefaultStrandId(realmId);
 }
 
-/// Mirror yougen's `default_strand_id_for_realm` convention: `ck:realm:<uuid>`
+/// Mirror inkson's `default_strand_id_for_realm` convention: `ck:realm:<uuid>`
 /// maps to `ck:strand:<uuid>`.
 export function deriveDefaultStrandId(realmId: string): string {
   const suffix = realmId.startsWith("ck:realm:")

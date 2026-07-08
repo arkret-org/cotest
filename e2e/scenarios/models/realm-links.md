@@ -33,7 +33,7 @@
 
 - 两个 DID 都通过 `POST /_soland/self/account/register` 注册过（与现有 `ensureRegistered` 行为一致）
 - 两个 actor 都持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
-- 两个 actor 的 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
+- 两个 actor 的 browser context 都通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 
 ## Steps
 
@@ -72,7 +72,7 @@
 
 ### Phase D — bob 在 T 发违规消息
 
-10. **bob** 加载 yougen，进入 T 的默认 Space（seed 后自动加入），打开 timeline。
+10. **bob** 加载 inkson，进入 T 的默认 Space（seed 后自动加入），打开 timeline。
 11. **bob** 发消息 `MV = "this contains forbidden-word-${stamp} test"`。
 12. 断言：`write-status` 含 `moderation_hold` 或 `rejected`；timeline 上 `MV` 显示为 `policy-hold-marker`（而非正常 `timeline-event`）。
 13. 断言：moderation decision 的 `applied_rule.source_realm = govRealmId`（来自 inherited，而非 T 本地）。
@@ -109,8 +109,8 @@
 
 ## Implementation notes
 
-- yougen 当前没有 `ck.realm.link` 专用 UI；Phase B 的 step 5/6、Phase F 的 step 16 在 yougen 落地前需要直接调 soland 的 `POST /_cokret/self/realms/${realmId}/events`（或对应 Move endpoint）写 Move。这是已知 gap，主流程留 fixme。
-- `realm-link-list`、`realm-overview-panel`、`policy-hold-marker` 是计划中的 testid；yougen 实现时统一加。
+- inkson 当前没有 `ck.realm.link` 专用 UI；Phase B 的 step 5/6、Phase F 的 step 16 在 inkson 落地前需要直接调 soland 的 `POST /_cokret/self/realms/${realmId}/events`（或对应 Move endpoint）写 Move。这是已知 gap，主流程留 fixme。
+- `realm-link-list`、`realm-overview-panel`、`policy-hold-marker` 是计划中的 testid；inkson 实现时统一加。
 - effective policy projection (`/_cokret/self/realms/:id/policy/effective`) 也是 spec §6 的 derived 端点；soland 当前是否已经实现 link-aware 合并需要先确认 — Phase C 与 Phase E 在 soland 项目逻辑落地前会全员 fixme。
 - 不需要新 helper：`ensureRegistered` / `issueDevSession` / `openUserPage` 已覆盖 actor 准备；`request` (Playwright APIRequestContext) 直接打 soland 处理 Move 与 effective policy 查询。
 - E6.1 cycle detection 是 soland 端拒绝路径，断言 HTTP 4xx + `error_code = "link_cycle_detected"`；不需要 browser context。

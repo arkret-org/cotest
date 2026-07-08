@@ -69,7 +69,7 @@
 20. device-2 继续保持登录状态,尝试发 `M_d2_post_revoke`
 21. soland reducer 校验:device_id 已 revoke
 22. 断言:`POST /_cokret/self/events`(或 sendMessage)返回 4xx,reason_code 含 `device_revoked` / `unauthorized`
-23. device-2 yougen UI 显示 `write-status` 内含上述错误
+23. device-2 inkson UI 显示 `write-status` 内含上述错误
 
 ### Phase E — To-device 队列过期
 
@@ -108,7 +108,7 @@
 
 - **soland 已覆盖**:`ck.device.authorize` + `cross_signing_binding` 验签、`ck.device.revoke` auth gate、device-set projection、to-device grace drop、`keys/query` revoked 目录面、撤销时未消费 ordinary / last-resort MLS KeyPackage retire。
 - **soland 剩余缺口**:完整 E2EE Realm MLS Remove fan-out:KeyPackage claim → Welcome → Commit Remove → epoch advance → revoked device 无法解密后续消息。该缺口保留为 `multi-device.spec.ts` 的 MLS fixme,不能用单纯 auth 拒绝替代。
-- **yougen 缺口**:`/settings/devices` 的 device 列表 + revoke 按钮;QR scan UI(本测试用 evaluate 注入,UI 缺口对测试不致命)
+- **inkson 缺口**:`/settings/devices` 的 device 列表 + revoke 按钮;QR scan UI(本测试用 evaluate 注入,UI 缺口对测试不致命)
 - **harness**:模拟相机扫码用 `page.evaluate` 注入 QR payload 到 device-1 的 add-device input
 
 ## 总耗时预估

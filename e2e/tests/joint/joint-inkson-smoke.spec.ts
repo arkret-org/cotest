@@ -1,5 +1,5 @@
 // T-P0-05 joint harness smoke.
-// Contract: true yougen UI + true soland process create a realm and render messages.
+// Contract: true inkson UI + true soland process create a realm and render messages.
 
 import { randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
@@ -14,15 +14,15 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("joint-yougen smoke @fully-implemented", () => {
-  // The yougen chat view synthesizes a default discussion channel from the
+test.describe("joint-inkson smoke @fully-implemented", () => {
+  // The inkson chat view synthesizes a default discussion channel from the
   // realm id (views/chat/model/strands.rs default_discussion_strand_id /
   // default_discussion_channel) even when soland has not marked any Strand
   // is_default, so the message-list renders without an explicit
   // ck.realm.set_default_strand. The submitted message addresses the same
   // derived ck:strand:<uuid> the channel selects, so it lands on the rendered
   // strand.
-  test("creates a public realm and renders a soland message in yougen", async ({
+  test("creates a public realm and renders a soland message in inkson", async ({
     jointRealm,
     request,
   }) => {
@@ -47,7 +47,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
   // navigates to /realms/:id/members (realm-members-panel), opens the invite
   // modal via open-invite-modal-button, fills invite-target-input, and submits
   // send-invite-button, asserting the "invited ..." realm-members-status. The
-  // yougen route + testids (routes.rs RealmMembersPage, realm_admin/
+  // inkson route + testids (routes.rs RealmMembersPage, realm_admin/
   // members_panel.rs) match the helper, so the cursor-poisoning regression this
   // test guards runs end-to-end.
   test("admin invite remains visible to invitee without poisoning account subscribe cursor", async ({
@@ -61,7 +61,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
       openDpopUserPage(browser, request, "joint-invite-bob"),
     ]);
     if (!aliceFlow || !bobFlow) {
-      assertJointStackNotRequired("joint-yougen smoke invite browser login");
+      assertJointStackNotRequired("joint-inkson smoke invite browser login");
       test.skip(
         true,
         "coauth DPoP session-grant login is required for joint UI",
@@ -257,11 +257,11 @@ async function resolveDefaultStrandId(
   if (def?.strand_id) {
     return def.strand_id;
   }
-  // The yougen UI realm-create flow does not emit an explicit
+  // The inkson UI realm-create flow does not emit an explicit
   // ck.realm.set_default_strand, so soland never marks a strand is_default for
-  // it. yougen addresses the default strand by the deterministic
+  // it. inkson addresses the default strand by the deterministic
   // default_strand_id_for_realm convention (ck:realm:<uuid> -> ck:strand:<uuid>);
-  // derive the same id so the message lands on the strand yougen renders.
+  // derive the same id so the message lands on the strand inkson renders.
   const suffix = realmId.startsWith("ck:realm:")
     ? realmId.slice("ck:realm:".length)
     : realmId;

@@ -618,13 +618,13 @@ test.describe("key backup + restore", () => {
     // wrong Recovery Key locally — the recovering client derives its KEK and
     // compares the recomputed commitment to the envelope's `key_commitment`,
     // so a wrong key fails fast WITHOUT a server GET (no decryption oracle).
-    await runYougenLibTest(
+    await runInksonLibTest(
       "recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys",
     );
-    await runYougenLibTest(
+    await runInksonLibTest(
       "recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment",
     );
-    await runYougenLibTest(
+    await runInksonLibTest(
       "key_backup::tests::recovery_vault_round_trips_through_open",
     );
   });
@@ -634,7 +634,7 @@ test.describe("key backup + restore", () => {
     // spec: key-management.md §7.2 — `ciphertext_digest` covers the ciphertext
     // bytes; the client recomputes it on open and refuses to decrypt a
     // substituted / tampered ciphertext, locally and without a server GET.
-    await runYougenLibTest(
+    await runInksonLibTest(
       "key_backup::tests::open_refuses_tampered_ciphertext_via_digest_mismatch",
     );
   });
@@ -642,17 +642,17 @@ test.describe("key backup + restore", () => {
 
 const execFileAsync = promisify(execFile);
 const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
-const YOUGEN_MANIFEST = findSiblingManifest("yougen");
-const YOUGEN_CWD = path.dirname(YOUGEN_MANIFEST);
+const INKSON_MANIFEST = findSiblingManifest("inkson");
+const INKSON_CWD = path.dirname(INKSON_MANIFEST);
 const CARGO_TEST_TIMEOUT_MS = 600_000;
 
-async function runYougenLibTest(filter: string): Promise<void> {
+async function runInksonLibTest(filter: string): Promise<void> {
   const { stdout, stderr } = await execFileAsync(
     CARGO_BIN,
     [
       "test",
       "--manifest-path",
-      YOUGEN_MANIFEST,
+      INKSON_MANIFEST,
       "--lib",
       filter,
       "--",
@@ -660,7 +660,7 @@ async function runYougenLibTest(filter: string): Promise<void> {
       "--nocapture",
     ],
     {
-      cwd: YOUGEN_CWD,
+      cwd: INKSON_CWD,
       timeout: CARGO_TEST_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
       env: { ...process.env, CARGO_TERM_COLOR: "never" },

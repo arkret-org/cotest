@@ -41,7 +41,7 @@ messaging/triad-collaboration 主流程的小变种:验证 `world_readable` 这�
 ## Implementation notes
 
 - **soland 缺口**:`history_visibility=world_readable` 的 API authz 跳过(可能默认 require auth);anon endpoint 接入
-- **yougen 缺口**:anon 访问 `/timeline/:id` 路由(当前要求 session token)
+- **inkson 缺口**:anon 访问 `/timeline/:id` 路由(当前要求 session token)
 
 ## 总耗时预估
 

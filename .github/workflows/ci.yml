@@ -217,8 +217,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/yougen
-          path: yougen
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 
@@ -256,7 +256,7 @@ jobs:
           ./scripts/run-joint-e2e.ps1
           -SolandRuntime docker
           -SolandImage cotest-soland:pr-${{ github.run_id }}
-          -SkipYougen
+          -SkipInkson
           -SkipNpmInstall
           -SkipBrowserInstall
           -RunProfile joint-smoke

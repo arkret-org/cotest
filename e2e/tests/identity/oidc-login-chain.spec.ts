@@ -1,6 +1,6 @@
 // OIDC login-chain regression guards (API level).
 //
-// These lock the *server-side* contracts that the real yougen→coauth→soland
+// These lock the *server-side* contracts that the real inkson→coauth→soland
 // browser login depends on — the layers that broke (and were fixed) while
 // bringing the login flow up end-to-end on 2026-06-16. The full browser
 // ceremony (login form + consent) lives in oidc-login-flow.spec.ts; it is not
@@ -14,7 +14,7 @@
 //      session-grant POST + its DPoP `htu` line up with coauth, not soland).
 //   2. Self-path auth — a session grant only authenticates a `/_cokret/root/*`
 //      authenticated read when accompanied by a bound DPoP proof; a bare grant
-//      (no DPoP) is rejected. This is the contract the yougen fix relied on
+//      (no DPoP) is rejected. This is the contract the inkson fix relied on
 //      when it started attaching DPoP to `/_cokret/root/` calls (recovery-policy
 //      had been going out as a naked bearer → 401 → spurious logout).
 //
@@ -163,7 +163,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     expect(JSON.parse(okBody)).toHaveProperty("active_policy");
 
     // Same grant as a bare Bearer (no DPoP) → rejected. This is the regression
-    // the yougen root-path DPoP fix protects against: without the DPoP header
+    // the inkson root-path DPoP fix protects against: without the DPoP header
     // soland treats the grant as an opaque OAuth/dev bearer, fails to resolve
     // it, and returns 401 — which the client read as session-expired and logged
     // the user out mid-login.

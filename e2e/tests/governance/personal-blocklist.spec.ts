@@ -384,7 +384,7 @@ test.describe("personal blocklist", () => {
           push_gateway: "https://push.example",
           push_key: `s31e112-${stamp}`,
           platform: "desktop",
-          app_id: "yougen",
+          app_id: "inkson",
         },
       },
     );

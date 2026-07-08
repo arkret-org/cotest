@@ -151,7 +151,7 @@ async function setCardDetailEditorValue(page: Page, value: string): Promise<void
 // API-level Card creation that mirrors kanban/project-simulation's active
 // ck.strand.create payload (full `object` with metadata.fields.status). Returns
 // the new strand id so the API-driven reject tests below can target it without
-// the brittle yougen kanban UI load path.
+// the brittle inkson kanban UI load path.
 async function createCardStrandApi(
   request: APIRequestContext,
   token: string,
@@ -659,7 +659,7 @@ test.describe("kanban end-to-end", () => {
   // helpers/users.ts + soland-api.ts), so soland's content-encryption floor
   // (operations.rs validate_content_encryption_floor) is never armed and the
   // card detail only ever carries a `title`, never a private `body`. The
-  // yougen setup wizard, however, defaults new Realms to `mls_rfc9420` (the
+  // inkson setup wizard, however, defaults new Realms to `mls_rfc9420` (the
   // "Encrypted" badge). Adding a Strand description writes the private `body`
   // patch path, so on an encrypted Realm the client MUST encrypt it before
   // submit; if it ships plaintext, soland rejects the ck.strand.update with 412
@@ -705,7 +705,7 @@ test.describe("kanban end-to-end", () => {
     });
 
     try {
-      // Encrypted Realm — mirrors the yougen setup-wizard default. This is the
+      // Encrypted Realm — mirrors the inkson setup-wizard default. This is the
       // single line that distinguishes this case from the plaintext happy
       // paths above and arms the content-encryption floor.
       const realmId = await alicePage.createRealm({
@@ -810,7 +810,7 @@ test.describe("kanban end-to-end", () => {
 
   // Regression: encrypted Strand SYNTHESIS on the creator device. `synthesis` is
   // a distinct private content path from `body` (see soland operations.rs
-  // strand_operation_carries_plaintext_private_content / yougen
+  // strand_operation_carries_plaintext_private_content / inkson
   // KANBAN_PRIVATE_STRAND_PATCH_PATHS) and rides its own client encryption +
   // commit code path, so it needs its own guard.
   test("alice adds a strand synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.strand.update", async ({

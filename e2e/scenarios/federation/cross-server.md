@@ -62,7 +62,7 @@
 
 ### Phase A — alice@α 创建 Realm + 跨域 invite
 
-1. **alice** 通过 α 的 yougen 进 `/setup`,建 Realm `R`:
+1. **alice** 通过 α 的 inkson 进 `/setup`,建 Realm `R`:
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `joined`
@@ -93,7 +93,7 @@
 
 ### Phase C — bob@β 接受 invite
 
-10. **bob** 通过 β 的 yougen 加载;客户端检测到收到一个 invite (yougen 应该有 invite 列表 UI;如果没有,scenario 注释成需要 yougen 补 UI 或者通过 API call 走)
+10. **bob** 通过 β 的 inkson 加载;客户端检测到收到一个 invite (inkson 应该有 invite 列表 UI;如果没有,scenario 注释成需要 inkson 补 UI 或者通过 API call 走)
 11. bob 触发接受;β 上产生 `ck.invite.accept` Event,refs 指向 `ck.invite.create.event_id`
 12. β 主动把 `ck.invite.accept` push 到 α (反向 federation push)
 13. α 校验后接受;α 上 reducer 收敛 bob 的 `membership=join`
@@ -161,15 +161,15 @@
    - `COTEST_SOLAND_ALPHA_BASE_URL` / `COTEST_SOLAND_ALPHA_SERVICE_DID`
    - `COTEST_SOLAND_BETA_BASE_URL` / `COTEST_SOLAND_BETA_SERVICE_DID`
 4. **新 helper**:
-   - `openUserPage(browser, user, { server: "alpha" | "beta" })` — 在指定 soland 上注册并打开 yougen
-   - 当前 yougen 通过 `yougen.config.v1.server_url` 决定连哪个 soland,所以只要切 server_url 就能实现
+   - `openUserPage(browser, user, { server: "alpha" | "beta" })` — 在指定 soland 上注册并打开 inkson
+   - 当前 inkson 通过 `inkson.config.v1.server_url` 决定连哪个 soland,所以只要切 server_url 就能实现
    - 但 alice@α 和 bob@β 需要分别用 α / β 的 base url 注入
 
 ## 风险 / 前置依赖
 
 - **已落地**:双 soland 拓扑、`peer events submit` / `peer events query` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
 - **仍待后续 GAP**:`reducer_profile_digest` 强校验、服务委托 revoke fanout。
-- **yougen invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `ck.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
+- **inkson invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `ck.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
 
 ## 总耗时预估
 

@@ -124,7 +124,7 @@ export function generateDpopDeviceKey(): DpopDeviceKey {
 }
 
 /// Export an Ed25519 device key's private seed as base64url-no-pad of the 32
-/// raw seed bytes — the exact on-disk form yougen's `DpopDeviceKeyRecord`
+/// raw seed bytes — the exact on-disk form inkson's `DpopDeviceKeyRecord`
 /// persists (`seed_b64`). The JWK `d` member is already base64url-no-pad of the
 /// 32-byte seed, so it is returned verbatim. Used by the joint fixture to inject
 /// the same key whose thumbprint the minted grant is bound to (`cnf.jkt`).

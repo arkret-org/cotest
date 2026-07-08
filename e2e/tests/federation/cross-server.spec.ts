@@ -317,7 +317,7 @@ test.describe("cross-server federation", () => {
     request,
   }) => {
     // API-first smoke for G3.S0: the real β federation ingestion and pull
-    // surfaces accept an α-origin Event. The fully automatic yougen
+    // surfaces accept an α-origin Event. The fully automatic inkson
     // invite/accept round trip remains pinned in the richer fixme below.
     const stamp = Date.now();
     const alice = uniqueUser(`s2-outbound-alice-${stamp}`);

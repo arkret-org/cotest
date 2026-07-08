@@ -260,7 +260,7 @@ test.describe("moderation and ban", () => {
     expect(body.members ?? []).not.toContain(mallory.did);
   });
 
-  test("owner can ban a member from the yougen admin member row", async ({
+  test("owner can ban a member from the inkson admin member row", async ({
     browser,
     request,
   }) => {

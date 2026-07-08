@@ -277,7 +277,7 @@ async function expireCurrentSessionGrantSoon(
       let updated = 0;
       for (let index = 0; index < window.localStorage.length; index += 1) {
         const key = window.localStorage.key(index);
-        if (!key?.startsWith("yougen.local_state.v1.account.")) {
+        if (!key?.startsWith("inkson.local_state.v1.account.")) {
           continue;
         }
         const raw = window.localStorage.getItem(key);

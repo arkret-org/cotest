@@ -34,16 +34,16 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ### Phase A — 1:1 call alice → bob
 
 1. alice 进 bob 的 contact / DM 视图,点 "Call"
-2. yougen 客户端:
+2. inkson 客户端:
    - 创建 Call Morph:`{ morph_type: "call", mode: "p2p", state: "ringing", participants: [alice.did, bob.did], recording_policy: "none" }`
    - 提交 `ck.morph.create`
    - 调 `POST /_cokret/self/rtc/ice-config?call_id=<callId>&device_id=<alice_dev>` 拿 ICE config:`{ stun_servers, turn_servers: [{ url, username: "pairwise-pseudonym", credential, expires_at }] }`(spec §6)
 3. alice 客户端用浏览器 RTCPeerConnection 创建 offer SDP
-4. yougen 发 `ck.call.signal`(ephemeral)`{ kind: "invite", offer_sdp, call_id, target: bob.did }`
+4. inkson 发 `ck.call.signal`(ephemeral)`{ kind: "invite", offer_sdp, call_id, target: bob.did }`
 5. soland Sync Service 路由该 signal 到 bob 的 to-device 队列
-6. bob yougen 收到 → UI 弹 "Incoming call from alice"(`incoming-call-toast` testid)
+6. bob inkson 收到 → UI 弹 "Incoming call from alice"(`incoming-call-toast` testid)
 7. bob 点 "Accept",创建 RTCPeerConnection 应答
-8. yougen 发 `ck.call.signal { kind: "answer", answer_sdp }`
+8. inkson 发 `ck.call.signal { kind: "answer", answer_sdp }`
 9. ICE candidates 多次 `ck.call.signal { kind: "candidate", candidate }` 双向交换
 10. 媒体 channel 建立;Call Morph 状态 `ringing → connecting → active`
 11. 断言:alice/bob 两端的 UI 都进入 in-call 视图,`call-status-active` testid 可见,duration timer 开始
@@ -51,7 +51,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ### Phase B — Mute + screen share
 
 12. alice 点 "Mute mic":本地 track.enabled = false
-13. yougen 发 `ck.call.signal { kind: "mute_state", muted: true }`(ephemeral)
+13. inkson 发 `ck.call.signal { kind: "mute_state", muted: true }`(ephemeral)
 14. 断言:bob 视图 alice 头像旁显示 muted icon
 15. alice 点 "Share screen":
     - 调 `getDisplayMedia()` 拿 screen track
@@ -63,7 +63,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ### Phase C — Hangup
 
 18. alice 点 "Hang up"
-19. yougen 发 `ck.call.signal { kind: "hangup" }`
+19. inkson 发 `ck.call.signal { kind: "hangup" }`
 20. 客户端 close peer connections,Call Morph 提交 `ck.morph.update { state: "ended", ended_at }`
 21. 断言:Call Morph state = ended,call duration 持久化
 
@@ -74,7 +74,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 24. bob、carol 收到 invite signal,先后加入(`ck.call.signal { kind: "focus_join" }`)
 25. SFU 媒体路径建立;三人都能听到看到对方
 26. carol 点 "Start recording"
-27. yougen 客户端:
+27. inkson 客户端:
     - 校验 carol 是否持 `call.record` capability(spec §5)
     - 提交 `ck.call.recording.start`,随后用 `ck.call.state` 推进
       `recording_state`
@@ -86,13 +86,13 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 31. 另起一个 group call,这次 Call Morph 设 `recording_policy: "none"`
 32. carol 点 "Start recording"
-33. yougen 应在本地禁用按钮(预防性);若 bypass,soland 反应 `failed_precondition`、`reason_code = "recording_policy_violation"`
+33. inkson 应在本地禁用按钮(预防性);若 bypass,soland 反应 `failed_precondition`、`reason_code = "recording_policy_violation"`
 34. 断言:UI 报错 "Recording not permitted in this call"
 
 ### Phase F — Mid-call ICE credential refresh
 
 35. 假设 TURN credential 5 分钟过期;长 call 触发 refresh
-36. yougen 重新调 `POST /_cokret/self/rtc/ice-config`,携带同一
+36. inkson 重新调 `POST /_cokret/self/rtc/ice-config`,携带同一
     `realm_id`/`call_id`/`device_id` → 拿新 credential
 37. peer connection ICE restart
 38. 断言:call 不掉线,媒体 channel 持续
@@ -126,7 +126,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
   capability guard、self-device filtering、ban 后 token 拒绝、LiveKit token
   claim;cotest 覆盖 `ck.call.signal` receiver vectors 与 `/_cokret/self/rtc/*`
   realtime policy guards。
-- **yougen 预期**:`/call` 的本地 renderer FSM 暴露
+- **inkson 预期**:`/call` 的本地 renderer FSM 暴露
   `call-status-ringing`、`call-status-connecting`、`call-status-active`、
   `call-status-ended`,并只通过 spec wire 发送
   `invite`/`answer`/`candidate`/`mute_state`/`media_state`/`hangup`。

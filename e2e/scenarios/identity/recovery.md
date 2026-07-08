@@ -100,7 +100,7 @@
 ## Implementation notes
 
 - **soland 缺口**:recovery policy state machine、recovery proof(`ck.schema.recovery_session.v1`)与 `ck.device.authorize` 的端到端绑定仍未贯通;key-backup CRUD + series 链 + unlock-proof 门已实现。整条 scenario 的 device-authorize 段仍 fixme。
-- **yougen 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 先按 device authorization fail-closed,只有 active policy + backup 可用时才进入输入已有 24 词的 restore。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
+- **inkson 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 先按 device authorization fail-closed,只有 active policy + backup 可用时才进入输入已有 24 词的 restore。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 
 ## 风险 / 前置依赖

@@ -22,7 +22,7 @@
   - `morph_schema_refs_evolution_unauthorized`(`ck.morph.update` 修改 schema_refs[] 缺 capability)
   - `morph_schema_refs_transformation_unsupported`(非 additive 走 `ck.morph.update` 或缺 profile)
   - `morph_schema_version_binding_missing`(event 未填 `requirements.schema[]`)
-- 关联实现:soland Morph reducer / event submission 路径;yougen 对未知 Morph type 的 generic fallback render(spec §6)
+- 关联实现:soland Morph reducer / event submission 路径;inkson 对未知 Morph type 的 generic fallback render(spec §6)
 
 ## 拓扑
 

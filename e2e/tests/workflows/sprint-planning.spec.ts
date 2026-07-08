@@ -214,7 +214,7 @@ test.describe("workflow: sprint planning", () => {
         .getByTestId("kanban-column")
         .filter({ hasText: backlog });
 
-      // Add 5 cards back-to-back. yougen surfaces each card's draft-state
+      // Add 5 cards back-to-back. inkson surfaces each card's draft-state
       // independently (data-card-draft) so the batch is observable even
       // before every create event acks.
       for (const story of stories) {

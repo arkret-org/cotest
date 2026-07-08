@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use super::{load_local_fixture_value, required_str, validate_profile};
 use crate::transcripts::record_vector_event;
 
-const FIXTURE: &str = "yougen-client-profile-conformance.json";
-const FIXTURE_PROFILE: &str = "ck.profile.yougen_client_blackbox_manifest.v1";
+const FIXTURE: &str = "inkson-client-profile-conformance.json";
+const FIXTURE_PROFILE: &str = "ck.profile.inkson_client_blackbox_manifest.v1";
 
 const REQUIRED_TARGET_PROFILES: &[&str] =
     &["ck.profile.full_client.v1", "ck.profile.e2ee_client.v1"];
@@ -19,11 +19,11 @@ const REQUIRED_STRANDS: &[&str] = &[
     "e2ee_fail_closed",
 ];
 
-pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
+pub fn run_inkson_client_profile_manifest_suite() -> Result<()> {
     let fixture = load_local_fixture_value(FIXTURE)?;
     validate_profile(&fixture, FIXTURE_PROFILE)?;
-    if fixture.get("service").and_then(Value::as_str) != Some("yougen") {
-        bail!("{FIXTURE} must target service=yougen");
+    if fixture.get("service").and_then(Value::as_str) != Some("inkson") {
+        bail!("{FIXTURE} must target service=inkson");
     }
 
     let target_profiles = string_set(&fixture, "target_profiles")?;
@@ -69,7 +69,7 @@ pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
 
         validate_case_shape(name, strand, profile, expect, case)?;
         record_vector_event(
-            "yougen_client_profile.case",
+            "inkson_client_profile.case",
             case,
             &json!({ "expect": expect, "strand": strand }),
             &json!({ "status": "ok" }),
@@ -86,7 +86,7 @@ pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
     }
     let certification = validate_runnable_harness(&fixture, &covered_strands)?;
     record_vector_event(
-        "yougen_client_profile.certification",
+        "inkson_client_profile.certification",
         certification,
         &json!({ "profiles": REQUIRED_TARGET_PROFILES }),
         &json!({ "status": "ok" }),

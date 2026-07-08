@@ -6,15 +6,15 @@ param(
     [string]$CoauthBaseUrl,
     [string]$FloriaBaseUrl,
     [string]$SodminBaseUrl,
-    [string]$YougenBaseUrl,
+    [string]$InksonBaseUrl,
     [string]$CoauthCommand,
     [string]$FloriaCommand,
     [string]$SodminCommand,
-    [string]$YougenCommand,
+    [string]$InksonCommand,
     [string]$CoauthHealthUrl,
     [string]$FloriaHealthUrl,
     [string]$SodminHealthUrl,
-    [string]$YougenHealthUrl,
+    [string]$InksonHealthUrl,
     [int]$StartupTimeoutSeconds = 120,
     [switch]$AllowSecretLeaks,
     [switch]$FailOnCoverageRegression
@@ -158,13 +158,13 @@ if (-not $SutManifest) {
 $coauthBase = Normalize-BaseUrl $CoauthBaseUrl
 $floriaBase = Normalize-BaseUrl $FloriaBaseUrl
 $sodminBase = Normalize-BaseUrl $SodminBaseUrl
-$yougenBase = Normalize-BaseUrl $YougenBaseUrl
+$inksonBase = Normalize-BaseUrl $InksonBaseUrl
 
 $envNames = @(
     "COAUTH_BASE_URL",
     "FLORIA_BASE_URL",
     "SODMIN_BASE_URL",
-    "YOUGEN_BASE_URL",
+    "INKSON_BASE_URL",
     "COTEST_COMPOSE_PROFILE"
 )
 $originalEnv = @($envNames | ForEach-Object { Save-EnvVar $_ })
@@ -176,13 +176,13 @@ try {
     if ($coauthBase) { $env:COAUTH_BASE_URL = $coauthBase }
     if ($floriaBase) { $env:FLORIA_BASE_URL = $floriaBase }
     if ($sodminBase) { $env:SODMIN_BASE_URL = $sodminBase }
-    if ($yougenBase) { $env:YOUGEN_BASE_URL = $yougenBase }
+    if ($inksonBase) { $env:INKSON_BASE_URL = $inksonBase }
 
     foreach ($service in @(
             [pscustomobject]@{ Name = "coauth"; Command = $CoauthCommand; BaseUrl = $coauthBase; HealthUrl = $CoauthHealthUrl },
             [pscustomobject]@{ Name = "floria"; Command = $FloriaCommand; BaseUrl = $floriaBase; HealthUrl = $FloriaHealthUrl },
             [pscustomobject]@{ Name = "sodmin"; Command = $SodminCommand; BaseUrl = $sodminBase; HealthUrl = $SodminHealthUrl },
-            [pscustomobject]@{ Name = "yougen"; Command = $YougenCommand; BaseUrl = $yougenBase; HealthUrl = $YougenHealthUrl }
+            [pscustomobject]@{ Name = "inkson"; Command = $InksonCommand; BaseUrl = $inksonBase; HealthUrl = $InksonHealthUrl }
         )) {
         $managed = Start-ManagedService `
             -Name $service.Name `

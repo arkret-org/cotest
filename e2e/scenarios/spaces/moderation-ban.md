@@ -40,7 +40,7 @@
 ## Pre-conditions
 
 - 四个 DID 都注册过、都有有效 dev session token
-- alice 持有 `ck.moderation.decision` 与 `ck.message.redact` (作为 owner 默认拥有,通过 yougen 或直接事件链生成)
+- alice 持有 `ck.moderation.decision` 与 `ck.message.redact` (作为 owner 默认拥有,通过 inkson 或直接事件链生成)
 
 ## Steps
 
@@ -61,7 +61,7 @@
 
 ### Phase C — bob 举报 (Reporter 路径,§3.1)
 
-6. **bob** UI 上对 `M_bad` 触发"举报" (yougen 需要有 report 入口;如缺,scenario 注明需要补 UI 或直接 API 调用)
+6. **bob** UI 上对 `M_bad` 触发"举报" (inkson 需要有 report 入口;如缺,scenario 注明需要补 UI 或直接 API 调用)
 7. 测试以 bob 的 token 调用 `POST /_cokret/self/moderation/report`,body:
    ```json
    {
@@ -106,7 +106,7 @@
 
 ### Phase G — Personal Blocklist 验证 (§2.2、§4)
 
-20. **carol** 在 UI 上对 alice 触发 personal mute / block (yougen 应当有该 UI;如缺则 spec 给 yougen 留 TODO)
+20. **carol** 在 UI 上对 alice 触发 personal mute / block (inkson 应当有该 UI;如缺则 spec 给 inkson 留 TODO)
 21. **alice** 再发 `M_post_block = "hello after carol blocks me ${stamp}"`
 22. 断言 (§4.1 屏蔽是 Actor-Private):
     - **alice 视角**:`M_post_block` 在自己 timeline 正常显示
@@ -138,9 +138,9 @@
 
 - **soland report privacy**:`POST /_cokret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_cokret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试投影,只向 realm owner、配置的 admin principal 或持有 moderation review/decision 权限的 actor 返回 report;避免 reporter、被举报人或普通成员枚举 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `ck.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
-- **yougen owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
+- **inkson owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `ck.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
-- **remaining yougen UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 yougen 任务中补。
+- **remaining inkson UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 inkson 任务中补。
 - 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_cokret/self/events?realms=${realmId}&kinds=ck.moderation.decision` 或等价 projection endpoint
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 

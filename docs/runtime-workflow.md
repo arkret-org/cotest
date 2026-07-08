@@ -197,13 +197,13 @@ For the PR-sized soland service-surface probe:
 .\scripts\run-joint-e2e.ps1 `
   -SolandRuntime docker `
   -BuildSolandImage `
-  -SkipYougen `
+  -SkipInkson `
   -RunProfile joint-smoke `
   -PlaywrightProject chromium `
   -Grep "soland /_cokret/describe"
 ```
 
-For the full product topology, keep Yougen and coauth enabled:
+For the full product topology, keep Inkson and coauth enabled:
 
 ```powershell
 .\scripts\run-joint-e2e.ps1 `

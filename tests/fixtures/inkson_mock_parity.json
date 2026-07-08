@@ -1,5 +1,5 @@
 {
-  "comment": "T-P0-04 baseline requests for comparing yougen's e2e mock contract with a live soland process.",
+  "comment": "T-P0-04 baseline requests for comparing inkson's e2e mock contract with a live soland process.",
   "cases": [
     {
       "id": "server_describe",

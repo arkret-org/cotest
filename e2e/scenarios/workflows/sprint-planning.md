@@ -44,7 +44,7 @@
 
 ### Phase C — 每人挑一张
 
-7. Mei "承诺"前 3 张:依次 archive `Story A` / `Story B` / `Story C` 出 Backlog,然后在 `Todo` 列加同名卡。这模拟 "move Backlog → Todo"(yougen 目前没有 cross-column move,所以走 archive + recreate)
+7. Mei "承诺"前 3 张:依次 archive `Story A` / `Story B` / `Story C` 出 Backlog,然后在 `Todo` 列加同名卡。这模拟 "move Backlog → Todo"(inkson 目前没有 cross-column move,所以走 archive + recreate)
 8. Bob 在 timeline 回 `"I'll take Story A."` (reply to Mei's kickoff)
 9. Carol 在 timeline 回 `"I'll grab Story B."` (reply to Mei's kickoff)
 10. Mei 在 timeline 回 `"I'll cover Story C. Let's regroup Friday."`
@@ -65,7 +65,7 @@
 
 ## Edge cases
 
-- **E-sprint.1** 真正的 cross-column move(不是 archive 再加):yougen 拖拽支持 / 需要 cas-register move API
+- **E-sprint.1** 真正的 cross-column move(不是 archive 再加):inkson 拖拽支持 / 需要 cas-register move API
 - **E-sprint.2** 一个工程师把承诺的卡 archive 掉(等价 "我不做了"),timeline 应当通知 Mei
 - **E-sprint.3** Mei 在 sprint 结束时 archive 整个 Sprint board(批量归档)
 

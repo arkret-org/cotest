@@ -5,7 +5,7 @@
 //! This is the protocol-level conformance vector for the joint client/server
 //! PoP path: a client signs a self request with its `ck.session.grant`
 //! session key; the Principal Server verifies it with the shared SDK verifier.
-//! It exercises the same construction yougen produces and soland accepts, and
+//! It exercises the same construction inkson produces and soland accepts, and
 //! pins the negative cases (tampered body, expired window, over-long window,
 //! wrong key) that MUST be rejected.
 
@@ -27,7 +27,7 @@ struct SignedRequest {
     body: Vec<u8>,
 }
 
-/// Sign a self request exactly as the client (yougen) does: cover
+/// Sign a self request exactly as the client (inkson) does: cover
 /// `@method`/`@target-uri`/`@authority` plus `content-digest` over the body.
 fn sign_self_request(
     signing_key: &Ed25519SigningKey,

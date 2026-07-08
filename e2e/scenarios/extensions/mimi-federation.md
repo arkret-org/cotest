@@ -36,9 +36,9 @@
 
 - alice 通过 `POST /_soland/self/account/register` 注册 (与现有 `ensureRegistered` 行为一致)
 - alice 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
-- alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
+- alice 的 browser context 通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 - soland 配置中启用了 `extensions.mimi_interop = true` (extension profile);如果未启用,整个 spec 应该跳过而非失败
-- mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供,真实 soland/yougen federation 仍由当前 `.fixme` 锚定
+- mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供,真实 soland/inkson federation 仍由当前 `.fixme` 锚定
 
 ## Steps
 
@@ -72,7 +72,7 @@
 10. soland 验证 facade 返回的 identity 证明,通过 `extensions/mimi-interop` §6 的规则生成 pairwise DID:
     - DID = `did:pairwise:${realmId}/${hash(bob_mimi.mimi_handle, realmId.salt)}`
     - 同一个 bob_mimi 在不同 Realm 中得到不同的 pairwise DID(不可关联)
-11. 断言:approve 是事件面动作(不存在 `/_cokret/self/realm/:id/federation/mimi/approve` 端点)——alice 在 admin panel(yougen UI 或 `/_soland/` 产品面)执行 approve 后,事件面出现针对 pairwise DID 的 `ck.member.state{membership=join}` 事件,pairwise DID 符合 `did:pairwise:...` 形态
+11. 断言:approve 是事件面动作(不存在 `/_cokret/self/realm/:id/federation/mimi/approve` 端点)——alice 在 admin panel(inkson UI 或 `/_soland/` 产品面)执行 approve 后,事件面出现针对 pairwise DID 的 `ck.member.state{membership=join}` 事件,pairwise DID 符合 `did:pairwise:...` 形态
 12. 断言:bob_mimi 现在是 Realm `R` 的成员——通过 `/_cokret/self/events` 查询(`queryRealmEventsApi`)读取 `ck.member.state` 事件流,包含该 pairwise DID 且带 `mimi` 来源标记(不存在 `GET /_cokret/self/realm/:id/members` 端点)
 
 ### Phase D — 双向消息 + content/policy mapping
@@ -124,4 +124,4 @@
 
 ## 总耗时预估
 
-facade mock 已实装;E5.2/E5.3 已是 live soland API 覆盖,主业务流与 E5.1 outbound fallback 仍为 fixme。当前 live 边界测试预计 < 10s;soland/yougen 侧 federation profile 落地后,单次完整业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。
+facade mock 已实装;E5.2/E5.3 已是 live soland API 覆盖,主业务流与 E5.1 outbound fallback 仍为 fixme。当前 live 边界测试预计 < 10s;soland/inkson 侧 federation profile 落地后,单次完整业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。

@@ -45,7 +45,7 @@ async function gotoChat(page: JointUserPage, realmId: string) {
   await expect(page.page.getByTestId("chat-panel")).toBeVisible({
     timeout: 120_000,
   });
-  // Wait for the discussion list to populate at least one channel — yougen's
+  // Wait for the discussion list to populate at least one channel — inkson's
   // send-chat-button silently no-ops if no selected_channel matches a known
   // channel (chat.rs:2186-2189). Sync hydrates the channel list after mount.
   await expect(page.page.getByTestId("channel-item").first()).toBeVisible({
@@ -664,7 +664,7 @@ test.describe("chat advanced", () => {
     request,
   }, testInfo) => {
     // spec: models/content-types.md §4.9 polls
-    // soland projects poll content state; yougen hydrates poll cards from sync/backfill.
+    // soland projects poll content state; inkson hydrates poll cards from sync/backfill.
     const stamp = Date.now();
     const alice = uniqueUser("s14e-alice");
     const bob = uniqueUser("s14e-bob");

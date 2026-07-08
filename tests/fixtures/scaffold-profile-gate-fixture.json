@@ -18,10 +18,10 @@
       }
     },
     {
-      "name": "yougen_full_e2ee_claim_with_placeholder_crypto_is_rejected",
+      "name": "inkson_full_e2ee_claim_with_placeholder_crypto_is_rejected",
       "expect": "reject",
       "describe": {
-        "service": "yougen",
+        "service": "inkson",
         "supported_profiles": [
           "ck.profile.full_client.v1",
           "ck.profile.e2ee_client.v1"

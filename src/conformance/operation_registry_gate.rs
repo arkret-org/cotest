@@ -326,7 +326,7 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
             OperationSourceRoot::new("teabay", workspace_root.join("teabay"))
                 .with_dir("crates/server/src")
                 .with_dir("crates/admin/src"),
-            OperationSourceRoot::new("yougen", workspace_root.join("yougen"))
+            OperationSourceRoot::new("inkson", workspace_root.join("inkson"))
                 .with_dir("src/api")
                 .with_file("tests/e2e/mockCokretApi.ts")
                 .with_file("tests/e2e/mockCokretContract.ts"),

@@ -35,8 +35,8 @@ import {
 
 const execFileAsync = promisify(execFile);
 const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
-const YOUGEN_MANIFEST = findSiblingManifest("yougen");
-const YOUGEN_CWD = path.dirname(YOUGEN_MANIFEST);
+const INKSON_MANIFEST = findSiblingManifest("inkson");
+const INKSON_CWD = path.dirname(INKSON_MANIFEST);
 const CARGO_TEST_TIMEOUT_MS = 600_000;
 
 test.describe.configure({ mode: "serial" });
@@ -195,8 +195,8 @@ test.describe("encrypted attachments", () => {
     expect(wireErrCode(await missing.json())).toBe("not_found");
   });
 
-  test("yougen encrypts E12.2 thumbnails as separate client-side ciphertext assets", async () => {
-    await runYougenLibTest("blob::tests::thumbnail_is_always_whole_file_and_independent");
+  test("inkson encrypts E12.2 thumbnails as separate client-side ciphertext assets", async () => {
+    await runInksonLibTest("blob::tests::thumbnail_is_always_whole_file_and_independent");
   });
 
   test("E12.4 audited E2EE: ck.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
@@ -384,13 +384,13 @@ function sha256Digest(bytes: Buffer): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
-async function runYougenLibTest(filter: string): Promise<void> {
+async function runInksonLibTest(filter: string): Promise<void> {
   const { stdout, stderr } = await execFileAsync(
     CARGO_BIN,
     [
       "test",
       "--manifest-path",
-      YOUGEN_MANIFEST,
+      INKSON_MANIFEST,
       "--lib",
       filter,
       "--features",
@@ -399,7 +399,7 @@ async function runYougenLibTest(filter: string): Promise<void> {
       "--nocapture",
     ],
     {
-      cwd: YOUGEN_CWD,
+      cwd: INKSON_CWD,
       timeout: CARGO_TEST_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
       env: { ...process.env, CARGO_TERM_COLOR: "never" },

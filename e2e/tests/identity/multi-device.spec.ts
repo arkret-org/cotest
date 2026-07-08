@@ -1122,10 +1122,10 @@ test.describe("multi-device pairing + revocation", () => {
     expect([401, 403]).toContain(afterDrop.status());
   });
 
-  // ── Pairing-approval UX (yougen surfaces; device-lifecycle.md §2.1/§7) ──
+  // ── Pairing-approval UX (inkson surfaces; device-lifecycle.md §2.1/§7) ──
   // §7 MUST: the receiving authorized device puts pairing_code + binding into
   // an explicit user confirmation and never trusts a new device on arrival.
-  // yougen surfaces this two ways: a global approval prompt that pops on any
+  // inkson surfaces this two ways: a global approval prompt that pops on any
   // authorized device, and the /settings/devices/pair "Approve a device" card.
 
   test("device list renders an Element-style verification shield for the current device", async ({
@@ -1133,7 +1133,7 @@ test.describe("multi-device pairing + revocation", () => {
     request,
   }) => {
     // spec: device-lifecycle.md §6 (device list / verification state).
-    // yougen: settings/devices.rs device_verification_badge — verified→green
+    // inkson: settings/devices.rs device_verification_badge — verified→green
     // shield, unverified→amber, revoked→red, else dim. The current device is
     // always present (registered with its device_id), so exactly one row with
     // a `device-verification-badge` must render.
@@ -1505,7 +1505,7 @@ async function promoteDeviceToVerified(
 }
 
 /// Deliver a same-principal `ck.key.verification.request` pairing request to
-/// every authorized sibling over the to-device queue (the API shape yougen's
+/// every authorized sibling over the to-device queue (the API shape inkson's
 /// `pair-device-start-button` produces; driven directly here because that
 /// button reads the device-set projection's `status` field, which exposes
 /// `active`, not the `verified` literal its delivery loop filters on). soland

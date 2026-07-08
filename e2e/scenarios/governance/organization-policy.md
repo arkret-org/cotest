@@ -71,7 +71,7 @@ cotest 还守护 directory / teabay 的 verified badge 与上面**同一**已验
 - **declared-only**:Realm 只在 `owning_organizations` 声明 acme-org,无 active 声明 → directory **不**显示 verified organization badge。
 - **active owner / directory_certifier**:存在 active `ck.realm.organization`(`relationship` ∈ {`owner`, `directory_certifier`} 且 scope 覆盖 `directory_listing` / `official_badge`)→ 显示对应 badge。
 - **revoked / expired / stale**:关系被 revoke / 过期 / 陈旧后 → badge 消失。
-- 验收:yougen / teabay UI 与 API 读取的是**同一** verified relationship 语义,而非各自的本地镜像。
+- 验收:inkson / teabay UI 与 API 读取的是**同一** verified relationship 语义,而非各自的本地镜像。
 
 ## coauth organization bootstrap / delegation(COT-ORG-05)
 

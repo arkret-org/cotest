@@ -9,7 +9,7 @@
 //! asserts:
 //!
 //! 1. Round-trip parses back into the same `(kind, realm_id, payload)` triple (the wire bytes any
-//!    other project — soland / yougen / federation peer — would receive).
+//!    other project — soland / inkson / federation peer — would receive).
 //! 2. [`cokret_core::events::classify_event_kind`] recognises the new kinds in their new family
 //!    (Realm / Space-container).
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no

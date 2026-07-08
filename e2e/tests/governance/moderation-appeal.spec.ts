@@ -51,7 +51,7 @@ test.describe("moderation appeal", () => {
     });
   });
 
-  test("banned appellant sees Appeal this moderation decision entrypoint in yougen timeline", async ({
+  test("banned appellant sees Appeal this moderation decision entrypoint in inkson timeline", async ({
     browser,
     request,
   }) => {

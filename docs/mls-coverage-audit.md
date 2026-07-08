@@ -33,7 +33,7 @@
 | **MLS 未就绪时不得静默降级明文** | ⏸️ 本轮补(fixme) | mls-group E11.8 |
 | 加密附件上传/下载/缩略图分离 | ✅ active(API/blob 层) | `encrypted-attachments.spec.ts` |
 | QR 配对 / MLS Remove 级联 / 设备撤销轮换 | ⏸️ 多数 fixme/ignore | `multi_device_qr_pairing.rs` 等 |
-| welcome 部分失败上报 UI | ❌ 缺口(当前静默打日志) | yougen `app.rs` welcome 应用处 |
+| welcome 部分失败上报 UI | ❌ 缺口(当前静默打日志) | inkson `app.rs` welcome 应用处 |
 | metadata_encryption_floor **服务端强制** | ⚠️ 实现疑点(字段存了,疑似未强制) | `soland/src/reducer.rs` ~7102 — **待核实** |
 
 ---
@@ -70,19 +70,19 @@
 
 ## 5. 实测挖出的两个确认 bug(已 park 为 test.fixme,待修)
 
-### A. 加密 discussion/chat 消息在 yougen 端从未端到端可用 —— ✅ 已修复(2026-06-01,E15.9 实测真绿)
+### A. 加密 discussion/chat 消息在 inkson 端从未端到端可用 —— ✅ 已修复(2026-06-01,E15.9 实测真绿)
 > 修复方案与执行记录见 `cotask/tasks/encrypt_fix.md` / `encrypt_fix_todos.md`。要点:
 > SDK 新增唯一权威合规类型 `EncryptedEnvelopeV1`(精确匹配 `ck.schema.encrypted_envelope.v1`,单测绿);
 > soland 移除手写 `validate_encrypted_payload_envelope` 对消息的校验、改由注册 spec schema 唯一把关
-> (464+ 测试零回归);yougen 新增 `encrypt_message_with_device_snapshot`(带 aad)+ chat 用
+> (464+ 测试零回归);inkson 新增 `encrypt_message_with_device_snapshot`(带 aad)+ chat 用
 > `EncryptedEnvelopeV1::from_payload` 产出合规 envelope(key_ref 绑 commit 事件 id)+ 去 wasm 门 +
 > 加密 channel 默认 Send 自动 MLS 加密(隐藏明文 Send)+ 乐观回显。E15.9 端到端真绿(提交体不含明文 +
 > status<400 + 评论解密渲染)。**以下为原始诊断记录:**
 
 尝试修复时发现是**两层**问题(2026-06-01 实跑确认):
 1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `ck.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `ck.strand.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
-2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。yougen 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban strand 内容"能加密"只因 strand patch 值不走该 envelope schema 校验;消息走,故被拒。**yougen 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `cokret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
-- **修**(sizable):把 yougen chat 消息加密改用 SDK 的 `MessageCrypto::encrypt_with_aad` 合规路径(构造 aad、aad_digest、version、整合 commit),跨 SDK+yougen、需多轮重建。`@blocking-on: yougen#chat-encrypted-message-envelope-nonconforming`。
+2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。inkson 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban strand 内容"能加密"只因 strand patch 值不走该 envelope schema 校验;消息走,故被拒。**inkson 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `cokret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
+- **修**(sizable):把 inkson chat 消息加密改用 SDK 的 `MessageCrypto::encrypt_with_aad` 合规路径(构造 aad、aad_digest、version、整合 commit),跨 SDK+inkson、需多轮重建。`@blocking-on: inkson#chat-encrypted-message-envelope-nonconforming`。
 - 本轮已尝试"去 wasm 门 + 默认 Send 走加密"并实跑:明文泄漏被堵(不再泄漏),但暴露第 2 层后**已 `git checkout` 回退 chat.rs**,避免留下"加密频道发不出消息"的回归。
 
 ### B. circle 事件在 soland 提交时跳过全部操作校验(soland)

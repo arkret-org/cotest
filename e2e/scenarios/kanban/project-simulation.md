@@ -51,15 +51,15 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 9. alice 在 Card 1 详情点 "Assign" → 选 bob.did → 提交 `ck.relation.create`:`{ relation_kind: "assigned_to", source: Card1.strand_id, target: bob.did, fields: { role: "primary" } }`
 10. 同理 alice 把 Card 2 分给 carol,Card 3 分给 bob
 11. 断言:Card 1 / Card 3 卡片上显示 bob 的头像;Card 2 显示 carol 的头像
-12. 断言:bob 进 yougen,`/notifications` 或 dashboard 显示"You were assigned to: Card 1, Card 3"
+12. 断言:bob 进 inkson,`/notifications` 或 dashboard 显示"You were assigned to: Card 1, Card 3"
 
 ### Phase D — bob 推进 Card 1 进度(status FSM)
 
 13. bob 在 Card 1 点 "Move to In Progress"
-14. yougen 提交两个动作:
+14. inkson 提交两个动作:
     - `ck.strand.move` 把 Card 1 从 `Todo.child_order` 挪到 `InProgress.child_order`
     - `ck.strand.update`:`fields.status = "in_progress"`,这是 FSM 转换(spec §3.2 Effect: fsm)
-15. 若 yougen 把 status 建模为独立 FSM cell(`ck:cell:ck.component.strand.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
+15. 若 inkson 把 status 建模为独立 FSM cell(`ck:cell:ck.component.strand.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
 16. 断言:Card 1 在 InProgress 列;alice/bob/carol 三方视图一致
 17. bob 继续 → `in_progress → done`
 
@@ -73,8 +73,8 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 21. 假设当前日期 = 2026-05-24(测试用 env stub system time;或不严格,只要 due_date 在 today 之前即可)
 22. alice 注意到 Card 3 仍在 Todo,逾期
-23. alice 把 Card 3 直接拖到 In Progress(跳过 status FSM 显式更新?)— 取决于 yougen 是否要求 FSM transition
-24. 若 yougen 强 enforce,alice 必须先点 "Move to In Progress" 按钮触发 FSM;若 yougen 让 drag 自由,drag 自动触发 `fields.status = in_progress`
+23. alice 把 Card 3 直接拖到 In Progress(跳过 status FSM 显式更新?)— 取决于 inkson 是否要求 FSM transition
+24. 若 inkson 强 enforce,alice 必须先点 "Move to In Progress" 按钮触发 FSM;若 inkson 让 drag 自由,drag 自动触发 `fields.status = in_progress`
 25. bob 收到通知 / Card 3 旁红色逾期标记
 
 ### Phase G — 并发 assignment 冲突
@@ -89,7 +89,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ### Phase H — Board archive
 
 30. sprint 结束,alice 在 board 视图点 "Archive board"
-31. yougen 提交 `ck.space.update`:`fields.state = "archived"`(或 cascade Move)
+31. inkson 提交 `ck.space.update`:`fields.state = "archived"`(或 cascade Move)
 32. 断言:board 主视图不再列出 Sprint 24 board;archive view 中能找到
 33. 断言:archived board 内的 cards / lists 仍然存在但 read-only(spec §4.4 cascade rules)
 
@@ -106,7 +106,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ## Edge cases / sub-tests
 
 - **E16.1 unassign**:alice 撤销 Card 1 的 bob assignment → `ck.relation.tombstone`(spec §3.2 tombstoned 状态);bob 视图 Card 1 不再标"assigned to me"
-- **E16.2 bob 离职**:alice 把 bob ban 出 Realm(`ck.member.state{ban}`)→ bob 名下的 cards 怎么办?spec 不强 cascade;yougen 可能把 assignment 显示为 "orphaned"
+- **E16.2 bob 离职**:alice 把 bob ban 出 Realm(`ck.member.state{ban}`)→ bob 名下的 cards 怎么办?spec 不强 cascade;inkson 可能把 assignment 显示为 "orphaned"
 - **E16.3 status FSM 非法转换**:bob 尝试 Card 1 直接从 todo 跳到 done(跳过 in_progress)→ FSM precondition 失败,reducer 拒(spec §3.8 类比 membership FSM)
 - **E16.4 due date 修改**:alice 改 Card 3 的 due_date,所有 actor 视图更新
 - **E16.5 board search / filter**:在 archive 之前,搜 "Implement" 应找到 Card 1;archive 之后看 archive filter 是否过滤
@@ -115,7 +115,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ## Implementation notes
 
 - **soland 缺口**:`ck.relation.create assigned_to`、`ck.space.update state=archived`、cascade rules — 多数 partial。Strand `fields.status` FSM 已由 `ck.strand.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
-- **yougen 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
+- **inkson 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 
 ## 总耗时预估

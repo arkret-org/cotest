@@ -75,7 +75,7 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 - **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `ck.message.create` 后自动追加 `ck.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/_soland/self/audit/franking/verify` 做 tamper 校验。
 - **2026-05-25 P2-045 local close**:soland `POST /_cokret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ck.audit.accessed` 记录写入 audit log。
 - **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`ck.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
-- **仍待后续**:policy revoke 后的 `ck.audit.rejected_access` 细化测试保留为 E25.3 fixme;yougen realm-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
+- **仍待后续**:policy revoke 后的 `ck.audit.rejected_access` 细化测试保留为 E25.3 fixme;inkson realm-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
 
 ## 总耗时预估
 

@@ -86,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--postgres-url", required=True)
     parser.add_argument("--coauth-base-url", required=True)
     parser.add_argument("--coauth-bind", required=True)
-    parser.add_argument("--yougen-base-url", required=True)
+    parser.add_argument("--inkson-base-url", required=True)
     parser.add_argument("--oauth-client-id", required=True)
     parser.add_argument("--soland-base-url", required=True)
     parser.add_argument("--soland-service-did", required=True)
@@ -104,7 +104,7 @@ def main() -> int:
     src = args.raw_config.read_text(encoding="utf-8-sig")
     coauth_base = trailing_slash(args.coauth_base_url)
     soland_base = trailing_slash(args.soland_base_url)
-    yougen_callback = trailing_slash(args.yougen_base_url) + "auth/callback"
+    inkson_callback = trailing_slash(args.inkson_base_url) + "auth/callback"
     admin_audience = args.admin_audience or coauth_base.rstrip("/") + "/api/v1"
 
     src = replace_first_line(
@@ -170,10 +170,10 @@ def main() -> int:
     clients = (
         "clients:\n"
         f"- client_id: {yaml_string(args.oauth_client_id)}\n"
-        "  client_name: Yougen Joint E2E\n"
+        "  client_name: Inkson Joint E2E\n"
         "  client_auth_method: none\n"
         "  redirect_uris:\n"
-        f"  - {yaml_string(yougen_callback)}\n"
+        f"  - {yaml_string(inkson_callback)}\n"
         "  - http://127.0.0.1/auth/callback\n"
         "  - http://localhost/auth/callback\n"
     )

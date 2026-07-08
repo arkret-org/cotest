@@ -36,7 +36,7 @@
 
 ### Phase B — Soft logout
 
-3. alice yougen 点 "Log out"
+3. alice inkson 点 "Log out"
 4. 客户端:revoke session grant(coauth)、清 localStorage 的 session_credential
 5. 断言:`/_soland/self/account/me` with old session credential → 401
 6. 断言:account state 仍 `active`(soft_logged_out 是客户端语义;spec 可能也建模为 server state,要查)
@@ -79,7 +79,7 @@
 ## Implementation notes
 
 - **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/_soland/self/account/deactivate`、`/account/me.state` 与 `org.cokret.soland.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
-- **yougen 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
+- **inkson 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
 
 ## 总耗时预估
 

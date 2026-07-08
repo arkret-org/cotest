@@ -10,7 +10,7 @@
 // TSP endpoint (mocks/mock-tsp-endpoint.mjs) which embodies the spec contract
 // the scenario asserts ("the strand, not the wire-level crypto"). When the
 // mock env is unset the suite skips rather than fails (fixme guidance + spec
-// status header). soland/yougen surfaces that are still profile-gated are
+// status header). soland/inkson surfaces that are still profile-gated are
 // asserted opportunistically (assert-if-present) and never block.
 
 import { randomBytes, randomUUID } from "node:crypto";

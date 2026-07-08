@@ -76,14 +76,14 @@ export function assertDualSolandNotRequired(context: string): void {
   }
 }
 
-export function yougenBaseUrl(key: SolandKey = "default"): string {
+export function inksonBaseUrl(key: SolandKey = "default"): string {
   if (key === "alpha") {
-    return optionalEnv("COTEST_YOUGEN_ALPHA_BASE_URL")?.replace(/\/$/, "") ?? yougenBaseUrl();
+    return optionalEnv("COTEST_INKSON_ALPHA_BASE_URL")?.replace(/\/$/, "") ?? inksonBaseUrl();
   }
   if (key === "beta") {
-    return optionalEnv("COTEST_YOUGEN_BETA_BASE_URL")?.replace(/\/$/, "") ?? yougenBaseUrl();
+    return optionalEnv("COTEST_INKSON_BETA_BASE_URL")?.replace(/\/$/, "") ?? inksonBaseUrl();
   }
-  return requiredEnv("COTEST_YOUGEN_BASE_URL").replace(/\/$/, "");
+  return requiredEnv("COTEST_INKSON_BASE_URL").replace(/\/$/, "");
 }
 
 export function coauthBaseUrl(): string | undefined {
@@ -97,7 +97,7 @@ export function coauthServiceDid(): string {
 // The OAuth `client_id` soland is configured to advertise in
 // `/_cokret/describe.auth_metadata.methods[].client_id` (soland config
 // `oidc_client_id`). The joint harness sets this to the coauth-seeded
-// "Yougen Dev" client ULID; tests assert describe surfaces it verbatim.
+// "Inkson Dev" client ULID; tests assert describe surfaces it verbatim.
 export function coauthOidcClientId(): string | undefined {
   return optionalEnv("COTEST_OIDC_CLIENT_ID");
 }

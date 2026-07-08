@@ -92,7 +92,7 @@ jobs:
       - name: production placeholder-proof rejection sentinel
         working-directory: cotest
         # This is the only reverse guard for "production soland rejects the
-        # yougen dev-proof placeholder", so CI wires SOLAND_BIN explicitly and
+        # inkson dev-proof placeholder", so CI wires SOLAND_BIN explicitly and
         # treats missing binary / test failure as red.
         run: cargo test --locked --features test-with-containers --test production_rejects_placeholder_proof_e2e -- --ignored production_rejects_placeholder_proof_e2e
       - name: run live Playwright smoke

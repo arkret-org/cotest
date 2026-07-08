@@ -30,20 +30,20 @@
 
 1. alice createRealm `S_a`,seedMembers=[bob]
 2. bob acceptInvite
-3. Realm 默认 `disclosure = optional`(yougen 应有默认 setting,或测试侧设置)
+3. Realm 默认 `disclosure = optional`(inkson 应有默认 setting,或测试侧设置)
 
 ### Phase B — 默认开启,alice 读 10 条 → bob 看到 receipt
 
 4. bob 在 `S_a` 连发 `M1..M10`
 5. alice 进 timeline,自顶向下滚动阅读
-6. yougen 客户端用 debounce window(≥1s)合并多个 read,在 alice 停顿时发 **一个** `ck.receipt.read` ephemeral,payload `{ realm_id, up_to_event: M10.event_id }`
+6. inkson 客户端用 debounce window(≥1s)合并多个 read,在 alice 停顿时发 **一个** `ck.receipt.read` ephemeral,payload `{ realm_id, up_to_event: M10.event_id }`
 7. 断言:bob 视图 `M10` 旁出现 alice 的"已读"头像 + 时间戳(`read-receipt-alice` testid)
 8. bob 视图的 `M9..M1` 也应隐式显示已读(receipt cover 到 `M10` 表示前面都读了)
 
 ### Phase C — alice 关闭 receipt 发送(client preference)
 
 9. alice 进 `/settings/privacy`,把"Send read receipts"关掉
-10. 客户端存 `yougen.preferences.send_read_receipts = false`
+10. 客户端存 `inkson.preferences.send_read_receipts = false`
 11. bob 再发 `M11..M15`
 12. alice 进 timeline 读完
 13. 客户端**不发** `ck.receipt.read` ephemeral
@@ -62,7 +62,7 @@
 
 21. alice(owner)把 `S_a` 的 read receipt policy 改成 `disclosure = required`
 22. alice 在自己的 `/settings/privacy` 把"Send read receipts"再次关闭(尝试 bypass)
-23. yougen 客户端:检测到 Realm policy = required,把 toggle 锁定;UI 提示"This Realm requires read receipts"
+23. inkson 客户端:检测到 Realm policy = required,把 toggle 锁定;UI 提示"This Realm requires read receipts"
 24. bob 再发 `M21`
 25. alice 读
 26. 即使 client preference = false,policy = required 强制让客户端发 receipt
@@ -79,7 +79,7 @@
 ### Phase G — Read marker 多设备同步(actor-private)
 
 33. alice 在 device-1 读到 `M30`(假设 disclosure 回到 optional)
-34. yougen 在 device-1 写 actor-private encrypted account data:`ck.read_cursor.advance = M30.event_id`
+34. inkson 在 device-1 写 actor-private encrypted account data:`ck.read_cursor.advance = M30.event_id`
 35. alice 在 device-2 拉 sync → 读 marker → 自动滚动到 `M30`
 36. 断言:device-2 timeline 上 `M30` 标"上次读到这里"(`last-read-cursor` testid)
 37. (read marker 不广播给 bob;它是 actor-private)
@@ -99,12 +99,12 @@
 - **E22.2 redacted message receipt**:bob 的 `M5` 被 redact,alice receipt 指向 `M10` 仍合法
 - **E22.3 multi-device receipt 协调**:alice 同时在 device-1/device-2 各读到不同位置;Sync Service 用 HLC 决定 broadcast 哪个 receipt(spec §3.2 末尾)
 - **E22.4 E2EE Realm 中的 receipt**:E2EE Realm 中 receipt 是否能"contains keyword" 类规则?客户端本地求值,服务端只见 blind wake(spec push-notifications.md §4.5)
-- **E22.5 toggle 在阅读中**:alice 在读到 `M50` 时关 toggle → 客户端 flush 已 debounce 的 receipt 还是丢弃?spec §2.3 说允许 flush 或 discard,看 yougen 实现
+- **E22.5 toggle 在阅读中**:alice 在读到 `M50` 时关 toggle → 客户端 flush 已 debounce 的 receipt 还是丢弃?spec §2.3 说允许 flush 或 discard,看 inkson 实现
 
 ## Implementation notes
 
 - **soland 缺口**:`ck.receipt.read` ephemeral 路由、policy enforcement(`required` 强制 / `disabled` reject)、`ck.read_cursor.advance` actor-private account data — 实现度未知
-- **yougen 缺口**:`/settings/privacy` 的 send-read-receipts toggle、space disclosure policy 编辑入口、receipt 头像渲染(`read-receipt-<actor>` testid)— 这些当前可能不全
+- **inkson 缺口**:`/settings/privacy` 的 send-read-receipts toggle、space disclosure policy 编辑入口、receipt 头像渲染(`read-receipt-<actor>` testid)— 这些当前可能不全
 - **测试侧**:用 `Promise.race` 等 receipt 出现 vs 超时 5s 来断言"不出现"
 
 ## 总耗时预估

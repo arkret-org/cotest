@@ -561,7 +561,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
-                "app_id": "yougen"
+                "app_id": "inkson"
             })),
         StatusCode::OK,
     )

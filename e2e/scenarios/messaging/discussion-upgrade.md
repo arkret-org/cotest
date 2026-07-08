@@ -36,7 +36,7 @@
 ### Phase B — alice 创建窄 Circle + discussion Strand
 
 5. alice 在 `F_public` 详情点 "Promote discussion to private thread"
-6. yougen 客户端:
+6. inkson 客户端:
    - 创建 Circle `C_discussion`，members=[alice, bob]，必要时设置 `encryption_profile = "mls_rfc9420"`
    - 创建新 Strand `F_discussion`，`scope_circle_id = C_discussion.id`
    - 创建 Relation `confidential_discussion_of`：`from_ref = F_discussion.id`，`to_ref = F_public.id`
@@ -46,7 +46,7 @@
 ### Phase C — 新消息路由到 discussion Strand
 
 8. alice 在 promoted discussion 输入新消息 `M11`
-9. yougen 客户端因为当前 composer 绑定 `F_discussion`，提交 `ck.message.create` 到 `F_discussion` 的 discussion track
+9. inkson 客户端因为当前 composer 绑定 `F_discussion`，提交 `ck.message.create` 到 `F_discussion` 的 discussion track
 10. 断言:`M11` 出现在 `F_discussion` timeline；不出现在 `F_public` 的原 discussion track
 11. `F_public` 详情的 Comments 区可展示一个 promoted-thread summary；展开后进入 `F_discussion`，老消息 `M1..M10` 仍留在 `F_public`
 
@@ -82,7 +82,7 @@
 ## Implementation notes
 
 - **soland 缺口**:Circle-backed `scope_circle_id` enforcement、`confidential_discussion_of` relation profile、promoted thread projection。
-- **yougen 缺口**:"Promote discussion" 按钮、创建 Circle + discussion Strand 的组合 UI、promoted thread summary / drill-in UI。
+- **inkson 缺口**:"Promote discussion" 按钮、创建 Circle + discussion Strand 的组合 UI、promoted thread summary / drill-in UI。
 - **协议禁项**:`discussion_space_ref` / `discussion_realm_ref` 都不得出现在当前 wire；测试必须 hard-reject 这些字段。
 
 ## 总耗时预估

@@ -35,7 +35,7 @@ export const test = base.extend<{ jointRealm: JointRealmFixture }>({
 export { expect } from "@playwright/test";
 
 // The joint browser fixture uses real coauth-minted ck.session.grant material
-// and registers the same principal/device at soland before opening yougen.
+// and registers the same principal/device at soland before opening inkson.
 async function createJointTwoUserRealm(
   browser: Browser,
   request: APIRequestContext,
