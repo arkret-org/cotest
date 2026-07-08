@@ -11,7 +11,10 @@ use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, expect_json, refresh_event_proof};
+use crate::harness::{
+    CokretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
+    refresh_event_proof,
+};
 use crate::scenarios::federation_collaboration::signed_keys_upload_body;
 
 const KEYS_ACTOR_DID: &str = "did:web:alice.example";
@@ -206,15 +209,10 @@ fn signed_message_event(
     _thread_id: &str,
     body: &str,
 ) -> Result<Value> {
-    let payload = json!({
-        "strand_id": "ck:strand:0196419b-0000-7000-8000-000000000001",
-        "track_name": "discussion",
-        "content": {
-            "kind": "ck.content.text",
-            "body": body,
-            "format": "plain"
-        }
-    });
+    let payload = message_create_text_payload_for_strand(
+        parse_strand_id("ck:strand:0196419b-0000-7000-8000-000000000001")?,
+        body,
+    )?;
     let mut event = json!({
         "event_id": event_id,
         "kind": "ck.message.create",

@@ -3,7 +3,10 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
-use crate::harness::{CokretServer, expect_json, expect_response, expect_status};
+use crate::harness::{
+    CokretServer, expect_json, expect_response, expect_status, message_redact_payload,
+    message_revise_text_payload,
+};
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
     let server = CokretServer::spawn("interaction-messages").await?;
@@ -154,16 +157,14 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         "events query did not include accepted read cursor marker: {markers}"
     );
 
+    let sent_event_id = sent["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("sent message missing event_id: {sent}"))?;
     let revised = alice
         .submit_event(
             &realm_id,
             "ck.message.revise",
-            json!({
-                "body": "edited interaction",
-                "content": {"body": "edited interaction"},
-                "target_event_id": sent["event_id"],
-                "thread_id": "ck:thread:interaction",
-            }),
+            message_revise_text_payload(sent_event_id, "edited interaction")?,
         )
         .await?;
     assert_ne!(revised["event_id"], sent["event_id"]);
@@ -172,9 +173,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .submit_event(
             &realm_id,
             "ck.message.redact",
-            json!({
-                "target_event_id": sent["event_id"],
-            }),
+            message_redact_payload(sent_event_id, None)?,
         )
         .await?;
     assert_eq!(redacted["status"], "accepted");

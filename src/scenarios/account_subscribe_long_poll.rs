@@ -18,7 +18,10 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
-use crate::harness::{TestServerGroup, eventually, expect_response};
+use crate::harness::{
+    TestServerGroup, eventually, expect_response, invite_create_payload,
+    member_join_payload_with_invite_ref, message_create_text_payload,
+};
 
 const QUIET_RESPONSE_BYTES_CEILING: usize = 768;
 
@@ -562,18 +565,14 @@ fn sync_notifications_contain_invite(sync: &Value, invite_id: &str) -> bool {
 async fn send_message_now(
     actor: &crate::harness::TestActorClient,
     realm_id: &str,
-    thread_id: &str,
+    _thread_id: &str,
     body: &str,
 ) -> Result<Value> {
     submit_event_now(
         actor,
         realm_id,
         "ck.message.create",
-        serde_json::json!({
-            "body": body,
-            "content": {"body": body},
-            "thread_id": thread_id,
-        }),
+        message_create_text_payload(realm_id, body)?,
     )
     .await
 }
@@ -584,22 +583,18 @@ async fn create_invite_now(
     invitee: &crate::harness::TestActorClient,
 ) -> Result<String> {
     let invite_id = "ck:invite:01999999-0000-7000-8000-00000000b0b1".to_owned();
-    let expires_at =
-        (chrono::Utc::now() + ChronoDuration::days(7)).to_rfc3339_opts(SecondsFormat::Secs, true);
+    let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
     submit_event_now(
         inviter,
         realm_id,
         "ck.invite.create",
-        serde_json::json!({
-            "invite_id": invite_id,
-            "invitee": invitee.actor.as_str(),
-            "invite_delivery_target": {
-                "recipient_service_did": invitee.service_did(),
-                "recipient_service_type": "principal_server",
-            },
-            "introduction_evidence_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            "expires_at": expires_at,
-        }),
+        invite_create_payload(
+            &invite_id,
+            invitee.actor.as_str(),
+            invitee.service_did(),
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            expires_at,
+        )?,
     )
     .await?;
     Ok(invite_id)
@@ -614,13 +609,7 @@ async fn accept_invite_join_now(
         invitee,
         realm_id,
         "ck.member.state",
-        serde_json::json!({
-            "realm_id": realm_id,
-            "actor_id": invitee.actor.as_str(),
-            "membership": "join",
-            "invite_ref": invite_id,
-            "delivery_status": "unroutable",
-        }),
+        member_join_payload_with_invite_ref(realm_id, invitee.actor.as_str(), invite_id)?,
     )
     .await
 }

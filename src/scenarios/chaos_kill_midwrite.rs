@@ -21,7 +21,10 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tokio::task::JoinSet;
 
-use crate::harness::{CokretServer, TestActorClient, dev_login, event_envelope, expect_json};
+use crate::harness::{
+    CokretServer, TestActorClient, dev_login, event_envelope, expect_json,
+    message_create_text_payload,
+};
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
 
 const TEST_NAME: &str = "chaos-midwrite";
@@ -180,14 +183,7 @@ fn chaos_message_event() -> Value {
         ACTOR_DID,
         REALM_ID,
         "ck.message.create",
-        json!({
-            "body": "doomed",
-            "content": {
-                "kind": "ck.content.text",
-                "body": "doomed"
-            },
-            "thread_id": "ck:thread:chaos-midwrite"
-        }),
+        message_create_text_payload(REALM_ID, "doomed").expect("valid chaos message payload"),
     )
 }
 

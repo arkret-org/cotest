@@ -5,7 +5,7 @@ use cokret_core::canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_api_error, expect_json};
+use crate::harness::{CokretServer, expect_api_error, expect_json, invite_create_payload};
 
 /// Extract the `realm_id` string from a `create_realm` response, turning a
 /// missing/non-string field into a located error instead of a context-free
@@ -89,20 +89,19 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let secret_realm_id = realm_id_from(&secret_realm, "secret")?;
 
     let introduction_evidence = json!({"kind": "same_principal_server"});
+    let invite_expires_at =
+        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00Z")?.with_timezone(&chrono::Utc);
     let invite_event = alice
         .submit_event(
             &invite_only_realm_id,
             "ck.invite.create",
-            json!({
-                "invite_id": "ck:invite:0196419b-0000-7000-8000-000000000202",
-                "invitee": bob.actor,
-                "invite_delivery_target": {
-                    "recipient_service_did": server.service_did(),
-                    "recipient_service_type": "principal_server"
-                },
-                "introduction_evidence_digest": canonical_sha256(&introduction_evidence)?,
-                "expires_at": "2026-12-31T00:00:00Z"
-            }),
+            invite_create_payload(
+                "ck:invite:0196419b-0000-7000-8000-000000000202",
+                bob.actor.as_str(),
+                server.service_did(),
+                canonical_sha256(&introduction_evidence)?,
+                invite_expires_at,
+            )?,
         )
         .await?;
     assert_eq!(

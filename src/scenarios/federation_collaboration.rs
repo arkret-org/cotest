@@ -21,7 +21,8 @@ use url::Url;
 
 use crate::harness::{
     CokretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
-    expect_json, expect_text, register_account, submit_event,
+    expect_json, expect_text, member_join_payload_value, member_join_payload_with_delivery_binding,
+    message_create_text_payload, register_account, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
@@ -113,12 +114,10 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         ALICE_DID,
         &realm_id,
         "ck.member.state",
-        json!({
-            "realm_id": realm_id,
-            "actor_id": ALICE_DID,
-            "membership": "join",
-            "delivery_status": "routable",
-            "delivery_binding": {
+        member_join_payload_with_delivery_binding(
+            &realm_id,
+            ALICE_DID,
+            json!({
                 "recipient_service_did": server_a.service_did(),
                 "recipient_service_type": "principal_server",
                 "binding_scope": "realm",
@@ -126,8 +125,8 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                 "delivery_modes": ["events", "sync"],
                 "service_acceptance_ref": ALICE_DELIVERY_BINDING_EVENT_ID,
                 "resolved_at": "2026-05-02T00:00:00Z"
-            }
-        }),
+            }),
+        )?,
         StatusCode::OK,
     )
     .await?;
@@ -135,17 +134,6 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         .as_str()
         .context("alice server_a binding response missing event_id")?
         .to_owned();
-    // Federation ck.message.create Event payload carries the message
-    // addressing/identity fields soland's federation projection consumes
-    // (event_id, actor_id, strand_id, track_name, content). The forbidden wire
-    // field `sender` is replaced by `actor_id`; Realm/membership metadata
-    // (discoverability, history_visibility, members, encryption_profile, …)
-    // belongs on the Realm object and `ck.member.state`, not the message.
-    let strand_id = format!(
-        "ck:strand:{}",
-        realm_id.strip_prefix("ck:realm:").unwrap_or(&realm_id)
-    );
-
     let realm_create = signed_federation_event(
         REALM_CREATE_EVENT_ID,
         "ck.realm.create",
@@ -168,14 +156,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &realm_id,
         ALICE_DID,
         3,
-        json!({
-            "strand_id": strand_id.clone(),
-            "track_name": "discussion",
-            "content": {
-                "kind": "ck.content.text",
-                "body": "hello bob from server a"
-            }
-        }),
+        message_create_text_payload(&realm_id, "hello bob from server a")?,
     )?;
     let bob_join = signed_federation_event(
         BOB_JOIN_EVENT_ID,
@@ -183,12 +164,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &realm_id,
         ALICE_DID,
         4,
-        json!({
-            "realm_id": realm_id,
-            "actor_id": BOB_DID,
-            "membership": "join",
-            "delivery_status": "unroutable"
-        }),
+        member_join_payload_value(&realm_id, BOB_DID)?,
     )?;
     let a_to_b_body = peer_events_submit_body(
         &realm_id,
@@ -272,14 +248,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &realm_id,
         BOB_DID,
         1,
-        json!({
-            "strand_id": strand_id,
-            "track_name": "discussion",
-            "content": {
-                "kind": "ck.content.text",
-                "body": "hello alice from server b"
-            }
-        }),
+        message_create_text_payload(&realm_id, "hello alice from server b")?,
     )?;
     let b_to_a_delivery_frontier = vec![
         cokret_core::EventId::new(alice_local_binding_frontier)
@@ -688,12 +657,10 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
 }
 
 fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_did: &str) -> Value {
-    json!({
-        "realm_id": realm_id,
-        "actor_id": member_did,
-        "membership": "join",
-        "delivery_status": "routable",
-        "delivery_binding": {
+    member_join_payload_with_delivery_binding(
+        realm_id,
+        member_did,
+        json!({
             "recipient_service_did": service_did,
             "recipient_service_type": "principal_server",
             "binding_scope": "realm",
@@ -701,8 +668,9 @@ fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_did
             "delivery_modes": ["events", "sync", "to_device", "push", "key_packages"],
             "resolved_at": "2026-05-02T00:00:00Z",
             "service_acceptance_ref": "ck:event:01904100-0000-7000-8000-fedc00000005"
-        }
-    })
+        }),
+    )
+    .expect("valid federation member delivery binding payload")
 }
 
 fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
