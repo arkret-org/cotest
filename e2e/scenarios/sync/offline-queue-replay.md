@@ -1,13 +1,15 @@
-# Offline write fail-fast
+# Offline queue replay
 
-当前 v1 spec 没有要求客户端必须提供持久离线写入队列；真实 yougen 也已经移除旧的 `offline_queue`/pending badge/drain worker 链路。离线 compose 需要 fail-fast：本地可以显示失败的 optimistic bubble 和重试入口，但不得把未经签名/未通过当前 auth frontier 的写入缓存成自动 replay 承诺。
+当前 v1 full-client profile 要求客户端暴露 `offline_queue`、`conflict_records` 和 `pending_state`。yougen 在 `navigator.onLine=false` 时把 discussion compose 写入本地 outbox，保留 optimistic row，并在恢复联网后通过标准 `ck.message.create` 写路径 drain。排队条目使用稳定 `ck:message:` id，重放时应由 reducer 幂等折叠。
 
 ## Live 用例
 
-1. Bob 离线发送消息后,yougen timeline 显示本地失败状态,并暴露错误/重试入口。
-2. 该离线失败消息不会出现在 soland 事件流中。
+1. Bob 离线发送消息后，yougen timeline 显示本地 queued-offline 状态，并暴露 outbox banner/count。
+2. 断网期间，该排队消息不会出现在 soland 事件流中。
+3. Bob 恢复联网后，yougen drain outbox，消息发送状态清空，并出现在 soland 事件流中。
 
 ## 不验证
 
-- 自动 pending replay、本地持久 outbox、离线期间成员资格变化后的 drain 决策。这些不是当前 v1 live contract;若未来重新引入,必须同时实现 DPoP/session 绑定、Event signing、actor frontier refresh 和 app-shell drain worker。
-- Kanban card 离线重排和 epoch drift 重新加密。这两段同样依赖完整的本地 outbox/MLS epoch manager。
+- 本地 outbox 跨 reload 持久化（workflow smoke 里覆盖）。
+- 离线期间成员资格变化后的 drain 冲突处理。
+- Kanban card 离线重排和 epoch drift 重新加密。

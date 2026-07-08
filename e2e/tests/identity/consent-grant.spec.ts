@@ -152,7 +152,9 @@ test.describe("consent grant", () => {
         timeout: 30_000,
       });
 
-      await alicePage.page.getByTestId("consent-new-grant-button").click();
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("consent-new-grant-button"),
+      );
       await selectDxcOption(
         alicePage.page.getByTestId("consent-new-grant-scope-input"),
         "message",
@@ -172,7 +174,9 @@ test.describe("consent grant", () => {
         "A-consent-local-grant-form-ready",
       );
 
-      await alicePage.page.getByTestId("consent-new-grant-button").click();
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("consent-new-grant-button"),
+      );
       await expect(
         alicePage.page.getByTestId("consent-new-grant-scope-input"),
       ).toHaveCount(0);

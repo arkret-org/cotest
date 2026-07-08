@@ -36,6 +36,7 @@ import {
   createDpopUserSession,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   selfPathHeadersForDpopSession,
   type DpopUserSession,
   type JointUser,
@@ -1136,10 +1137,19 @@ test.describe("multi-device pairing + revocation", () => {
     // shield, unverified→amber, revoked→red, else dim. The current device is
     // always present (registered with its device_id), so exactly one row with
     // a `device-verification-badge` must render.
-    const alice = uniqueUser(`s10-verif-badge-${Date.now()}`);
-    await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
-    const device = await openUserPage(browser, alice, { sessionCredential: token });
+    const deviceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `s10-verif-badge-${Date.now()}`,
+    );
+    test.skip(
+      !deviceFlow,
+      "coauth DPoP session-grant login is required for device-list UI",
+    );
+    if (!deviceFlow) {
+      return;
+    }
+    const device = deviceFlow.page;
     try {
       await device.gotoHome();
       await device.page.goto("/settings/devices", { waitUntil: "domcontentloaded" });

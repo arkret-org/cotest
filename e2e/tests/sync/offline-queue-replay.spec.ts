@@ -1,4 +1,4 @@
-// Offline write fail-fast
+// Offline queue replay
 // Contract: e2e/scenarios/sync/offline-queue-replay.md
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
@@ -8,36 +8,59 @@ import {
   listRealmEventsViaApi,
 } from "../../helpers/api";
 import {
-  ensureRegistered,
+  assertJointStackNotRequired,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
-  uniqueUser,
   type JointUser,
   type JointUserPage,
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("offline write fail-fast", () => {
-  test("offline compose is marked failed locally and is not written to soland", async ({
+test.describe("offline queue replay", () => {
+  test("offline compose is queued locally and flushed after reconnect", async ({
     browser,
     request,
   }) => {
-    const fixture = await createOfflineFixture(browser, request, "fail-fast");
+    const fixture = await createOfflineFixture(browser, request, "queue-replay");
+    if (!fixture) {
+      assertJointStackNotRequired("offline queue browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
     try {
       await fixture.bobPage.page.context().setOffline(true);
-      const body = `offline fail fast ${Date.now()}`;
+      const body = `offline queued replay ${Date.now()}`;
       await composeMessage(fixture.bobPage, body);
       const row = fixture.bobPage.timelineEvent(body);
-      await expect(row).toHaveClass(/is-failed/);
-      await expect(row).not.toContainText("(pending)");
-      await expect(row.getByTestId("chat-message-error")).toContainText(/error sending request/i);
+      await expect(row.getByTestId("message-send-status")).toHaveAttribute(
+        "data-send-state",
+        "queued_offline",
+        { timeout: 30_000 },
+      );
+      await expect(fixture.bobPage.page.getByTestId("chat-outbox-banner")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        fixture.bobPage.page.getByTestId("chat-outbox-count"),
+      ).toContainText("1", { timeout: 30_000 });
 
-      await fixture.bobPage.page.context().setOffline(false);
-      const serialized = JSON.stringify(
+      let serialized = JSON.stringify(
         await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId),
       );
       expect(serialized).not.toContain(body);
+
+      await fixture.bobPage.page.context().setOffline(false);
+      await fixture.bobPage.gotoTimelineRealm(fixture.realmId);
+      await fixture.bobPage.waitForTimelineEventSettled(body, 60_000);
+      await expect(fixture.bobPage.page.getByTestId("chat-outbox-banner")).toHaveCount(0, {
+        timeout: 60_000,
+      });
+      serialized = JSON.stringify(
+        await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId),
+      );
+      expect(serialized).toContain(body);
     } finally {
       await fixture.bobPage.page.context().setOffline(false).catch(() => undefined);
       await closeFixture(fixture);
@@ -59,11 +82,18 @@ async function createOfflineFixture(
   browser: Parameters<typeof openUserPage>[0],
   request: APIRequestContext,
   label: string,
-): Promise<OfflineFixture> {
+): Promise<OfflineFixture | undefined> {
   const stamp = Date.now();
-  const alice = uniqueUser(`offline-${label}-alice`);
-  const bob = uniqueUser(`offline-${label}-bob`);
-  await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+  const [aliceFlow, bobFlow] = await Promise.all([
+    openDpopUserPage(browser, request, `offline-${label}-alice-${stamp}`),
+    openDpopUserPage(browser, request, `offline-${label}-bob-${stamp}`),
+  ]);
+  if (!aliceFlow || !bobFlow) {
+    await Promise.allSettled([aliceFlow?.page.close(), bobFlow?.page.close()]);
+    return undefined;
+  }
+  const alice = aliceFlow.user;
+  const bob = bobFlow.user;
   const [aliceToken, bobToken] = await Promise.all([
     issueDevSession(request, alice),
     issueDevSession(request, bob),
@@ -79,10 +109,8 @@ async function createOfflineFixture(
       historyVisibility: "shared",
     },
   );
-  const [alicePage, bobPage] = await Promise.all([
-    openUserPage(browser, alice, { sessionCredential: aliceToken }),
-    openUserPage(browser, bob, { sessionCredential: bobToken }),
-  ]);
+  const alicePage = aliceFlow.page;
+  const bobPage = bobFlow.page;
   await Promise.all([alicePage.gotoTimelineRealm(realmId), bobPage.gotoTimelineRealm(realmId)]);
   return { alice, bob, aliceToken, bobToken, alicePage, bobPage, realmId };
 }

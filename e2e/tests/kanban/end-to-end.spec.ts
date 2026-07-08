@@ -496,10 +496,17 @@ test.describe("kanban end-to-end", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("kanban-column-drag-alice");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `kanban-column-drag-alice-${stamp}`,
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("kanban column drag browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     const first = `First-${stamp}`;
     const second = `Second-${stamp}`;

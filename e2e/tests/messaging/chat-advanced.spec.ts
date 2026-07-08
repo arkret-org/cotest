@@ -26,8 +26,10 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
   type JointUserPage,
@@ -38,7 +40,7 @@ test.describe.configure({ mode: "serial" });
 
 async function gotoChat(page: JointUserPage, realmId: string) {
   if (!page.page.url().includes(`/chat/${realmId}`)) {
-    await page.page.goto(`/chat/${realmId}`, { waitUntil: "domcontentloaded" });
+    await page.gotoTimelineRealm(realmId);
   }
   await expect(page.page.getByTestId("chat-panel")).toBeVisible({
     timeout: 120_000,
@@ -54,7 +56,7 @@ async function gotoChat(page: JointUserPage, realmId: string) {
 async function sendChat(page: JointUserPage, realmId: string, body: string) {
   await gotoChat(page, realmId);
   await page.page.getByTestId("chat-input").fill(body);
-  await page.page.getByTestId("send-chat-button").click();
+  await page.clickWithPassivePromptRetry(page.page.getByTestId("send-chat-button"));
   await expect(
     page.page.getByTestId("chat-message").filter({ hasText: body }),
   ).toBeVisible({ timeout: 30_000 });
@@ -439,28 +441,21 @@ test.describe("chat advanced", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s14-alice");
-    const bob = uniqueUser("s14-bob");
-    const carol = uniqueUser("s14-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
+    const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `s14-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s14-bob-${stamp}`),
+      openDpopUserPage(browser, request, `s14-carol-${stamp}`),
     ]);
-    const [aliceToken, bobToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, carol),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
-    const carolPage = await openUserPage(browser, carol, {
-      sessionCredential: carolToken,
-    });
+    if (!aliceFlow || !bobFlow || !carolFlow) {
+      assertJointStackNotRequired("chat reactions browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    const carolPage = carolFlow.page;
+    const bob = bobFlow.user;
+    const carol = carolFlow.user;
 
     const m1 = `S14 ship it ${stamp}`;
     const m2 = `S14 yes ship ${stamp}`;
@@ -470,6 +465,7 @@ test.describe("chat advanced", () => {
         title: `S14 Chat ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [bob.did, carol.did],
       });
       await bobPage.acceptInvite(realmId);
@@ -483,7 +479,10 @@ test.describe("chat advanced", () => {
         .filter({ hasText: m1 })
         .first();
       await expect(bobOnM1).toBeVisible({ timeout: 30_000 });
-      await bobOnM1.getByTestId("chat-react-button").click();
+      await bobOnM1.hover();
+      const bobReact = bobOnM1.getByTestId("chat-react-button");
+      await expect(bobReact).toBeVisible({ timeout: 5_000 });
+      await bobReact.click();
       const bobPicker = bobPage.page.getByTestId("chat-reaction-picker");
       await expect(bobPicker).toBeVisible();
       await bobPicker.getByRole("button").first().click();
@@ -497,7 +496,10 @@ test.describe("chat advanced", () => {
         .filter({ hasText: m1 })
         .first();
       await expect(carolOnM1).toBeVisible({ timeout: 30_000 });
-      await carolOnM1.getByTestId("chat-react-button").click();
+      await carolOnM1.hover();
+      const carolReact = carolOnM1.getByTestId("chat-react-button");
+      await expect(carolReact).toBeVisible({ timeout: 5_000 });
+      await carolReact.click();
       await carolPage.page
         .getByTestId("chat-reaction-picker")
         .getByRole("button")
@@ -543,28 +545,23 @@ test.describe("chat advanced", () => {
   }, testInfo) => {
     // spec: discovery/push-notifications.md §4.3.1 mention_routing_hint
     const stamp = Date.now();
-    const alice = uniqueUser("s14d-alice");
-    const bob = uniqueUser("s14d-bob");
-    const carol = uniqueUser("s14d-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
+    const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `s14d-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s14d-bob-${stamp}`),
+      openDpopUserPage(browser, request, `s14d-carol-${stamp}`),
     ]);
-    const [aliceToken, bobToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, carol),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
-    const carolPage = await openUserPage(browser, carol, {
-      sessionCredential: carolToken,
-    });
+    if (!aliceFlow || !bobFlow || !carolFlow) {
+      assertJointStackNotRequired("chat mention notification browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const carol = carolFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    const carolPage = carolFlow.page;
+    const aliceToken = await issueDevSession(request, alice);
 
     const mentionSuffix = `can you review the incident note? ${stamp}`;
     const apiActorSeq = 8_000_000_300_000_000 + (stamp % 100_000);

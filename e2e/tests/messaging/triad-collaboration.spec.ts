@@ -373,13 +373,20 @@ test.describe("single-server triad collaboration", () => {
       request,
     }) => {
       const stamp = Date.now();
-      const alice = uniqueUser("s1e11-alice");
       const bob = uniqueUser("s1e11-bob");
-      await ensureRegistered(request, alice);
       await ensureRegistered(request, bob);
-      const aliceToken = await issueDevSession(request, alice);
       const bobToken = await issueDevSession(request, bob);
-      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const aliceFlow = await openDpopUserPage(
+        browser,
+        request,
+        `s1e11-alice-${stamp}`,
+      );
+      if (!aliceFlow) {
+        assertJointStackNotRequired("triad invite browser login");
+        test.skip(true, "coauth DPoP session-grant login is unavailable");
+        return;
+      }
+      const alicePage = aliceFlow.page;
 
       try {
         const realmId = await alicePage.createRealm({
