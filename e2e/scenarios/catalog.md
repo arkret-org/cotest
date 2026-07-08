@@ -85,7 +85,7 @@ Totals: 67 scenarios / 67 specs / 269 verified / 399 promised / 130 fixme / 25 s
 | identity/tsp-bootstrap | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |
 | identity/webvh-rotation | 0 | 8 | 0.0% | 8 | 0 | fixme-only | yes |  |
 | invites/third-party | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
-| joint/joint-yougen-smoke | 2 | 2 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
+| joint/joint-inkson-smoke | 2 | 2 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | kanban/end-to-end | 6 | 9 | 66.7% | 3 | 0 | mixed | yes |  |
 | kanban/project-simulation | 2 | 7 | 28.6% | 5 | 0 | mixed | yes |  |
 | messaging/chat-advanced | 11 | 12 | 91.7% | 1 | 0 | mixed | yes |  |

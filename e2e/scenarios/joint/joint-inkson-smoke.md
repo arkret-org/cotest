@@ -15,5 +15,5 @@ Prove the joint harness can run a real inkson web build against a real soland pr
 ## Acceptance
 
 - `run-cotest.ps1 -Profile joint` starts soland, coauth, and inkson through `run-joint-e2e.ps1`.
-- Playwright project `joint-yougen` discovers this scenario under `e2e/tests/joint`.
+- Playwright project `joint-inkson` discovers this scenario under `e2e/tests/joint`.
 - The smoke is tagged `@fully-implemented` so the joint-smoke profile includes it.
