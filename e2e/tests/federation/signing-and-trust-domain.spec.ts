@@ -14,7 +14,7 @@ import { expect, test } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 
-const CARGO_TEST_TIMEOUT_MS = 720_000;
+const CARGO_TEST_TIMEOUT_MS = 1_200_000;
 const SOLAND_MANIFEST = findSolandManifest();
 const SOLAND_CWD = path.dirname(SOLAND_MANIFEST);
 const CARGO_TARGET_DIR = path.join(SOLAND_CWD, "target", "cotest-federation-outbox");

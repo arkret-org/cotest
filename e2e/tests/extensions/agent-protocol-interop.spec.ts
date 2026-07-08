@@ -399,18 +399,16 @@ test.describe("agent protocol interop", () => {
     try {
       // Select the realm in-UI so the panel authors the grant into it,
       // then open the agents panel.
-      await alicePage.page.goto(`/chat/${realmId}`, {
-        waitUntil: "domcontentloaded",
-      });
+      await alicePage.gotoTimelineRealm(realmId);
       await alicePage.page.goto("/agents", { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("agents-panel")).toBeVisible({
         timeout: 120_000,
       });
 
       // Open the interop capability-approval modal.
-      await alicePage.page
-        .getByTestId("agent-interop-approve-open-button")
-        .click();
+      await alicePage.clickWithPassivePromptRetry(
+        alicePage.page.getByTestId("agent-interop-approve-open-button"),
+      );
       const modal = alicePage.page.getByTestId("agent-interop-publish-modal");
       await expect(modal).toBeVisible();
       await modal

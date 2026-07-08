@@ -419,12 +419,35 @@ test.describe("chat advanced", () => {
     browser,
     request,
   }) => {
-    const fixture = await createChatApiFixture(request, "chat-route");
-    const alicePage = await openUserPage(browser, fixture.alice, {
-      sessionCredential: fixture.aliceToken,
+    const aliceFlow = await openDpopUserPage(browser, request, "chat-route-alice", {
+      prepareMlsDevice: false,
     });
+    if (!aliceFlow) {
+      assertJointStackNotRequired("chat route browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = uniqueUser("chat-route-bob");
+    await ensureRegistered(request, bob);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const realmId = await createSharedRealmViaApi(
+      request,
+      alice,
+      aliceToken,
+      bob,
+      bobToken,
+      {
+        title: `chat-route ${Date.now()}`,
+        historyVisibility: "shared",
+      },
+    );
+    const alicePage = aliceFlow.page;
     try {
-      await gotoChat(alicePage, fixture.realmId);
+      await gotoChat(alicePage, realmId);
       await expect(
         alicePage.page.getByTestId("channel-item").first(),
       ).toContainText(/Discussion|Default Strand/);

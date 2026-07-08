@@ -153,7 +153,12 @@ test.describe("workflow: sprint planning", () => {
   }, testInfo) => {
     test.setTimeout(360_000);
     const stamp = Date.now();
-    const meiFlow = await openDpopUserPage(browser, request, "wf-sprint-batch-mei");
+    const meiFlow = await openDpopUserPage(
+      browser,
+      request,
+      "wf-sprint-batch-mei",
+      { prepareMlsDevice: false },
+    );
     test.skip(
       !meiFlow,
       "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",

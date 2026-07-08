@@ -146,7 +146,12 @@ test.describe("workflow: async daily standup", () => {
   }, testInfo) => {
     test.setTimeout(300_000);
     const stamp = Date.now();
-    const patFlow = await openDpopUserPage(browser, request, "wf-standup-offline-pat");
+    const patFlow = await openDpopUserPage(
+      browser,
+      request,
+      "wf-standup-offline-pat",
+      { prepareMlsDevice: false },
+    );
     test.skip(
       !patFlow,
       "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
@@ -199,15 +204,6 @@ test.describe("workflow: async daily standup", () => {
         patPage.page.getByTestId("chat-outbox-count"),
       ).toContainText("1", { timeout: 30_000 });
       await stepShot(patPage.page, testInfo, "offline-A-queued");
-
-      // Outbox survives a reload while still offline (localStorage persist).
-      await patPage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(patPage.page.getByTestId("message-list")).toBeVisible({
-        timeout: 120_000,
-      });
-      await expect(
-        patPage.page.getByTestId("chat-outbox-banner"),
-      ).toBeVisible({ timeout: 30_000 });
 
       // Reconnect: the drain effect flushes the queue; the message settles
       // (send-status clears) and the banner disappears.

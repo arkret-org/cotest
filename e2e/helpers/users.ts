@@ -448,15 +448,16 @@ export class JointUserPage {
   async completeRecoveryKeySetupIfPrompted(
     timeoutMs = 5_000,
   ): Promise<string | undefined> {
-    const modal = this.page
+    const prompt = this.page
       .locator(
         [
           '[data-testid="recovery-key-setup-modal"]',
           '[data-testid="recovery-key-setup-banner"]',
         ].join(","),
       )
-      .last();
-    const visible = await modal
+      .first();
+    const dialog = this.page.getByTestId("recovery-key-setup-banner").last();
+    const visible = await prompt
       .waitFor({ state: "visible", timeout: timeoutMs })
       .then(() => true)
       .catch(() => false);
@@ -471,10 +472,16 @@ export class JointUserPage {
     const status = this.page.getByTestId("recovery-key-setup-status").last();
     const closeRecoveryPrompt = async () => {
       const close = this.page.getByTestId("recovery-key-setup-dismiss").last();
-      if (await close.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await close.click();
-        await expect(modal).toBeHidden({ timeout: 10_000 });
+      if (await close.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await close.click({ timeout: 5_000 });
+      } else {
+        await this.page
+          .getByRole("button", { name: /^(Close|Not now)$/ })
+          .last()
+          .click({ timeout: 2_000 })
+          .catch(() => undefined);
       }
+      await expect(dialog).toBeHidden({ timeout: 10_000 });
     };
     const hasRecoverableGenerationError = async () => {
       const text = ((await status.textContent({ timeout: 100 }).catch(() => "")) ?? "")
@@ -490,8 +497,8 @@ export class JointUserPage {
       );
     };
     if (
-      (await unauthorized.isVisible({ timeout: 250 }).catch(() => false)) ||
-      (await restore.isVisible({ timeout: 250 }).catch(() => false))
+      (await unauthorized.isVisible({ timeout: 1_000 }).catch(() => false)) ||
+      (await restore.isVisible({ timeout: 1_000 }).catch(() => false))
     ) {
       await closeRecoveryPrompt();
       return undefined;
@@ -502,7 +509,7 @@ export class JointUserPage {
       .last();
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
-      if (await modal.isHidden({ timeout: 100 }).catch(() => false)) {
+      if (await dialog.isHidden({ timeout: 100 }).catch(() => false)) {
         return undefined;
       }
       if (
@@ -525,7 +532,7 @@ export class JointUserPage {
       }
       await this.page.waitForTimeout(250);
     }
-    if (await modal.isHidden({ timeout: 100 }).catch(() => false)) {
+    if (await dialog.isHidden({ timeout: 100 }).catch(() => false)) {
       return undefined;
     }
     if (!(await generatedKeyField.isVisible({ timeout: 100 }).catch(() => false))) {
@@ -546,7 +553,7 @@ export class JointUserPage {
       .last()
       .fill(recoveryKey);
     await this.page.getByTestId("recovery-key-setup-saved").last().click();
-    await expect(modal).toBeHidden({ timeout: 30_000 });
+    await expect(dialog).toBeHidden({ timeout: 30_000 });
     return recoveryKey;
   }
 
@@ -580,6 +587,9 @@ export class JointUserPage {
     };
     await this.dismissCreateRealmBlockingPrompts(promptHandling);
     const strand = this.page.getByTestId("realm-lifecycle-strand").last();
+    await expect(strand.getByTestId("realm-title-input")).toBeVisible({
+      timeout: 120_000,
+    });
 
     await this.fillWithPassivePromptRetry(
       strand.getByTestId("realm-title-input"),

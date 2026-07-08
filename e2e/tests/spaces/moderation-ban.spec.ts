@@ -20,9 +20,10 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
-  openUserPage,
+  openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -264,10 +265,18 @@ test.describe("moderation and ban", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s5-ui-alice");
     const mallory = uniqueUser("s5-ui-mallory");
 
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, mallory)]);
+    await ensureRegistered(request, mallory);
+    const aliceFlow = await openDpopUserPage(browser, request, "s5-ui-alice", {
+      prepareMlsDevice: false,
+    });
+    if (!aliceFlow) {
+      assertJointStackNotRequired("moderation ban browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S5 UI Ban ${stamp}`,
@@ -277,7 +286,7 @@ test.describe("moderation and ban", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const alicePage = aliceFlow.page;
     try {
       await alicePage.gotoRealmAdminSection(realmId, "members");
       const malloryRow = alicePage.page.locator(

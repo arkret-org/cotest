@@ -195,16 +195,22 @@ test.describe("consent grant", () => {
     // alice asks bob (the holder) to grant her `message` consent via the
     // `ck.consent.request` entry point; the resulting pending cell surfaces as
     // an outgoing-request row on alice's settings page.
-    const alice = uniqueUser("consent-request-alice");
     const bob = uniqueUser("consent-request-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
+    await ensureRegistered(request, bob);
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      "consent-request-alice",
+      { prepareMlsDevice: false },
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("consent request browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    const alicePage = aliceFlow.page;
 
     try {
       await gotoConsentSettings(alicePage);

@@ -39,9 +39,15 @@ test.describe("workflow: incident response", () => {
   }, testInfo) => {
     const stamp = Date.now();
     const [oncallFlow, backendFlow, commsFlow] = await Promise.all([
-      openDpopUserPage(browser, request, "wf-incident-oncall"),
-      openDpopUserPage(browser, request, "wf-incident-backend"),
-      openDpopUserPage(browser, request, "wf-incident-comms"),
+      openDpopUserPage(browser, request, "wf-incident-oncall", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "wf-incident-backend", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "wf-incident-comms", {
+        prepareMlsDevice: false,
+      }),
     ]);
     if (!oncallFlow || !backendFlow || !commsFlow) {
       assertJointStackNotRequired("incident response browser login");

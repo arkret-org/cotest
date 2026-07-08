@@ -85,8 +85,12 @@ async function createOfflineFixture(
 ): Promise<OfflineFixture | undefined> {
   const stamp = Date.now();
   const [aliceFlow, bobFlow] = await Promise.all([
-    openDpopUserPage(browser, request, `offline-${label}-alice-${stamp}`),
-    openDpopUserPage(browser, request, `offline-${label}-bob-${stamp}`),
+    openDpopUserPage(browser, request, `offline-${label}-alice-${stamp}`, {
+      prepareMlsDevice: false,
+    }),
+    openDpopUserPage(browser, request, `offline-${label}-bob-${stamp}`, {
+      prepareMlsDevice: false,
+    }),
   ]);
   if (!aliceFlow || !bobFlow) {
     await Promise.allSettled([aliceFlow?.page.close(), bobFlow?.page.close()]);

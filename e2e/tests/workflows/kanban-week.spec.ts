@@ -26,7 +26,9 @@ test.describe("workflow: kanban week-in-review", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const patFlow = await openDpopUserPage(browser, request, "wf-kanban-pat");
+    const patFlow = await openDpopUserPage(browser, request, "wf-kanban-pat", {
+      prepareMlsDevice: false,
+    });
     test.skip(
       !patFlow,
       "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
@@ -53,6 +55,7 @@ test.describe("workflow: kanban week-in-review", () => {
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
       });
       await patPage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
