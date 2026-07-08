@@ -35,6 +35,12 @@ jobs:
           path: cokret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -109,6 +115,12 @@ jobs:
           path: cokret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: cotest/Cargo.toml
@@ -126,6 +138,12 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
@@ -163,6 +181,12 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
@@ -205,6 +229,12 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 
