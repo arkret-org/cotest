@@ -642,21 +642,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cokret-client"
-version = "0.3.0"
-dependencies = [
- "chrono",
- "cokret",
- "cokret-core",
- "cokret-http-client",
- "ed25519-dalek",
- "serde",
- "serde_json",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
 name = "cokret-core"
 version = "0.3.0"
 dependencies = [
@@ -715,6 +700,7 @@ dependencies = [
 name = "cokret-http-client"
 version = "0.3.0"
 dependencies = [
+ "base64",
  "chrono",
  "cokret-core",
  "cokret-signatures",
@@ -886,11 +872,11 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "cokret",
- "cokret-client",
  "cokret-core",
  "cokret-http-client",
  "cokret-signatures",
  "ed25519-dalek",
+ "garth",
  "hkdf 0.13.0",
  "hpke-rs",
  "hpke-rs-crypto",
@@ -1522,6 +1508,21 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "garth"
+version = "0.3.0"
+dependencies = [
+ "chrono",
+ "cokret",
+ "cokret-core",
+ "cokret-http-client",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "zeroize",
 ]
 
 [[package]]

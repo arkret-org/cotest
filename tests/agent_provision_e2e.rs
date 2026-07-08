@@ -602,7 +602,7 @@ fn bearer_sdk_client(server: &CokretServer, token: &str) -> Result<SdkClient> {
 fn agent_session_client(server: &CokretServer, holder: &AgentSessionHolder) -> Result<SdkClient> {
     Ok(ClientBuilder::new(server.base_url())
         .allow_insecure_localhost()
-        .auth(Auth::Dpop(cokret_client::session::dpop::access_token_auth(
+        .auth(Auth::Dpop(garth::session::dpop::access_token_auth(
             AGENT_SESSION_GRANT,
             SigningKey::from_bytes(&holder.signing_key.to_bytes()),
         )))
