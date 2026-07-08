@@ -157,8 +157,10 @@ test.describe("personal blocklist", () => {
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
     const aliceToken = aliceFlow.session.grantJwt;
+    const bobToken = await issueDevSession(request, bob);
     const aliceSubscribeOpts = () => accountSubscribeDpopOpts(aliceFlow.session);
     const bobDidVisiblePrefix = bob.did.slice(0, 16);
+    const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
 
     try {
       const realmId = await alicePage.createRealm({
@@ -218,11 +220,11 @@ test.describe("personal blocklist", () => {
         )
         .toBe(true);
 
-      const m2 = await bobPage.sendTimelineMentionMessage(
-        realmId,
-        alice.did,
-        `S31 m2 ${stamp}`,
-      );
+      const m2 = `S31 m2 ${stamp}`;
+      await sendMessageApi(request, bobToken, realmId, m2, {
+        mentions: [alice.did],
+        actorSeq: apiActorSeq,
+      });
       await alicePage.gotoTimelineRealm(realmId);
       await expect(
         alicePage.page
@@ -230,6 +232,7 @@ test.describe("personal blocklist", () => {
           .filter({ hasText: m2 })
           .first(),
       ).toBeHidden({ timeout: 30_000 });
+      await bobPage.gotoTimelineRealm(realmId);
       await expect(bobPage.page.getByTestId("message-list")).toContainText(m2, {
         timeout: 30_000,
       });

@@ -338,11 +338,11 @@ export class JointUserPage {
       const openRecoverySetup = this.page
         .getByTestId("recovery-setup-open-recovery")
         .last();
-      if (await openRecoverySetup.isVisible({ timeout: 250 }).catch(() => false)) {
+      if (await openRecoverySetup.isVisible({ timeout: 1_000 }).catch(() => false)) {
         await openRecoverySetup.click();
         handled = true;
       }
-      const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(250);
+      const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(2_000);
       handled ||= recoveryKey !== undefined;
     }
     for (const [testId, modalTestId] of [

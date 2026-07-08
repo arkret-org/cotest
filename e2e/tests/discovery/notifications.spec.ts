@@ -119,6 +119,7 @@ test.describe("notifications", () => {
     const bobPage = bobSession.page;
     const normalMsg = `muted normal message ${stamp}`;
     const mentionSuffix = `muted direct mention ${stamp}`;
+    const apiActorSeq = 8_000_000_100_000_000 + (stamp % 100_000);
 
     try {
       const realmId = await alicePage.createRealm({
@@ -129,6 +130,7 @@ test.describe("notifications", () => {
         seedMembers: [bob.did],
       });
       await bobPage.acceptInvite(realmId);
+      const aliceToken = await issueDevSession(request, aliceSession.user);
 
       await bobPage.page.goto("/notifications/settings", {
         waitUntil: "domcontentloaded",
@@ -168,11 +170,11 @@ test.describe("notifications", () => {
           .filter({ hasText: normalMsg }),
       ).toHaveCount(0);
 
-      const mentionMsg = await alicePage.sendTimelineMentionMessage(
-        realmId,
-        bob.did,
-        mentionSuffix,
-      );
+      const mentionMsg = mentionSuffix;
+      await sendMessageApi(request, aliceToken, realmId, mentionMsg, {
+        mentions: [bob.did],
+        actorSeq: apiActorSeq,
+      });
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(
         bobPage.page

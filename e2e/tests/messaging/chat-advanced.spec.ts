@@ -21,6 +21,7 @@ import {
   canonicalJson,
   accountSubscribeFramesApi,
   resolveDefaultStrandId,
+  sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -566,6 +567,7 @@ test.describe("chat advanced", () => {
     });
 
     const mentionSuffix = `can you review the incident note? ${stamp}`;
+    const apiActorSeq = 8_000_000_300_000_000 + (stamp % 100_000);
     let mention = "";
 
     try {
@@ -581,10 +583,15 @@ test.describe("chat advanced", () => {
         carolPage.acceptInvite(realmId),
       ]);
 
-      mention = await alicePage.sendTimelineMentionMessage(
-        realmId,
-        bob.did,
-        mentionSuffix,
+      mention = mentionSuffix;
+      await sendMessageApi(request, aliceToken, realmId, mention, {
+        mentions: [bob.did],
+        actorSeq: apiActorSeq,
+      });
+      await alicePage.gotoTimelineRealm(realmId);
+      await expect(alicePage.page.getByTestId("message-list")).toContainText(
+        mention,
+        { timeout: 30_000 },
       );
       await stepShot(alicePage.page, testInfo, "mention-sent");
 

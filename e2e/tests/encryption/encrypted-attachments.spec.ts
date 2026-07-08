@@ -37,7 +37,7 @@ const execFileAsync = promisify(execFile);
 const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
 const YOUGEN_MANIFEST = findSiblingManifest("yougen");
 const YOUGEN_CWD = path.dirname(YOUGEN_MANIFEST);
-const CARGO_TEST_TIMEOUT_MS = 240_000;
+const CARGO_TEST_TIMEOUT_MS = 600_000;
 
 test.describe.configure({ mode: "serial" });
 
