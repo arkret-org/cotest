@@ -24,9 +24,10 @@ use anyhow::{Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{SecondsFormat, Utc};
+use cokret_core::{Error as CokretError, EventsSubscribeFrameKind};
+use cokret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use cotest::harness::{
-    CokretServer, add_member, create_realm, event_envelope, expect_api_error, expect_json,
-    expect_text, register_account, submit_event,
+    CokretServer, add_member, create_realm, event_envelope, register_account, submit_event,
 };
 use cotest::scenarios::_helpers::mock_http::{self, MockServer};
 use ed25519_dalek::{Signer, SigningKey};
@@ -48,91 +49,36 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     let server = CokretServer::spawn("agent-provision-e2e").await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
 
-    // 1. provision -> pending_runtime_key + pairing material.
-    let prov = server
-        .http()
-        .post(server.url("/_cokret/self/agents"))
-        .bearer_auth(&token)
-        .json(&json!({"display_name": "Summary Assistant", "agent_slug": "summary"}))
-        .send()
-        .await?;
-    assert_eq!(
-        prov.status(),
-        StatusCode::CREATED,
-        "provision must return 201"
-    );
-    let prov: Value = prov.json().await?;
-    let agent_did = prov["agent_principal_id"]
-        .as_str()
-        .expect("agent_principal_id")
-        .to_owned();
-    assert!(
-        prov["pairing_request_id"].as_str().is_some(),
-        "pairing_request_id present"
-    );
-    assert!(
-        prov["pairing_code"].as_str().is_some(),
-        "pairing_code present"
-    );
-    assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
-        "pending_runtime_key"
-    );
-
-    // 2. pair the runtime key -> durable ck.agent.key.authorize -> active.
-    let pair = pair_agent_runtime_key(&server, &token, &prov).await?;
-    assert!(
-        pair["authorized_event_ref"].as_str().is_some(),
-        "authorized_event_ref present"
-    );
+    // 1-2. provision -> pending_runtime_key + pairing material -> active.
+    let agent_did =
+        provision_and_pair_agent(&server, &token, "Summary Assistant", "summary").await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
     // 3. grant attach/detach must materialize into the authz projection.
-    let attach = server
-        .http()
-        .post(server.url(&format!(
-            "/_cokret/self/agents/{}/grants",
-            urlencoding(&agent_did)
-        )))
-        .bearer_auth(&token)
-        .json(&json!({
-            "grant": {
-                "actions": ["ck.event.read"]
-            }
-        }))
-        .send()
+    let controller = bearer_sdk_client(&server, &token)?;
+    let attach = controller
+        .agent_grant_attach(
+            &agent_did,
+            &cokret::AgentGrantAttachRequestBody {
+                grant: json!({
+                    "actions": ["ck.event.read"]
+                }),
+            },
+        )
         .await?;
-    assert_eq!(
-        attach.status(),
-        StatusCode::CREATED,
-        "grant attach must return 201"
-    );
-    let attach: Value = attach.json().await?;
-    let grant_id = attach["grant_id"].as_str().expect("grant_id").to_owned();
+    let grant_id = attach.grant_id.to_string();
     let effective_after_attach = effective_grants(&server, &token, &agent_did).await?;
     assert!(
         grant_exists_in(&effective_after_attach, &grant_id),
         "attached grant must appear in effective grants: {effective_after_attach}"
     );
 
-    let detach = server
-        .http()
-        .delete(server.url(&format!(
-            "/_cokret/self/agents/{}/grants/{}",
-            urlencoding(&agent_did),
-            urlencoding(&grant_id)
-        )))
-        .bearer_auth(&token)
-        .send()
-        .await?;
-    assert_eq!(
-        detach.status(),
-        StatusCode::OK,
-        "grant detach must return 200"
-    );
+    let grant_id = cokret::GrantId::new(grant_id)?;
+    let detach = controller.agent_grant_detach(&agent_did, &grant_id).await?;
+    assert!(detach.ok, "grant detach must succeed");
     let effective_after_detach = effective_grants(&server, &token, &agent_did).await?;
     assert!(
-        !grant_exists_in(&effective_after_detach, &grant_id),
+        !grant_exists_in(&effective_after_detach, grant_id.as_str()),
         "detached grant must disappear from effective grants: {effective_after_detach}"
     );
 
@@ -142,21 +88,33 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         ("resume", "active"),
         ("deactivate", "deactivated"),
     ] {
-        let res = server
-            .http()
-            .post(server.url(&format!(
-                "/_cokret/self/agents/{}/{path}",
-                urlencoding(&agent_did)
-            )))
-            .bearer_auth(&token)
-            .json(&json!({}))
-            .send()
-            .await?;
-        assert_eq!(
-            res.status(),
-            StatusCode::OK,
-            "lifecycle {path} must return 200"
-        );
+        let outcome = match path {
+            "pause" => {
+                controller
+                    .agent_pause(&agent_did, &cokret::AgentPauseRequestBody { reason: None })
+                    .await?
+            }
+            "resume" => {
+                controller
+                    .agent_resume(
+                        &agent_did,
+                        &cokret::AgentResumeRequestBody {
+                            sidecar_exposure_ack: None,
+                        },
+                    )
+                    .await?
+            }
+            "deactivate" => {
+                controller
+                    .agent_deactivate(
+                        &agent_did,
+                        &cokret::AgentDeactivateRequestBody { reason: None },
+                    )
+                    .await?
+            }
+            _ => unreachable!(),
+        };
+        assert!(outcome.ok, "lifecycle {path} must succeed");
         assert_eq!(
             agent_status(&server, &token, &agent_did).await?,
             expect,
@@ -202,31 +160,28 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     advance_event_sequence(ALICE_DID, &realm_id, 32);
     add_member(&server, &token, ALICE_DID, &realm_id, &agent_did).await?;
 
-    let participation = expect_json(
-        server
-            .http()
-            .put(server.url(&format!(
-                "/_cokret/self/agents/{}/participation",
-                urlencoding(&agent_did)
-            )))
-            .bearer_auth(&token)
-            .json(&json!({
-                "participation_scope": {
-                    "kind": "realm",
-                    "realm_id": realm_id,
+    let controller = bearer_sdk_client(&server, &token)?;
+    let participation = controller
+        .agent_participation_replace(
+            &agent_did,
+            &cokret::AgentParticipationReplaceRequestBody {
+                scope: cokret::AgentParticipationScope::Realm {
+                    realm_id: cokret::RealmId::new(realm_id.clone())?,
                 },
-                "selection": {
-                    "reply": true,
-                    "accept_third_party_mention": false,
-                    "act_on_behalf": false,
-                }
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(participation["ok"], true, "participation set must succeed");
-    assert_eq!(
-        participation["entries"][0]["effective"]["reply"], true,
+                selection: cokret::AgentParticipation {
+                    reply: true,
+                    accept_third_party_mention: false,
+                    act_on_behalf: false,
+                },
+            },
+        )
+        .await?;
+    assert!(participation.ok, "participation set must succeed");
+    assert!(
+        participation
+            .entries
+            .first()
+            .is_some_and(|entry| entry.effective.reply),
         "effective reply bit must be enabled"
     );
 
@@ -311,16 +266,16 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             },
         }),
     );
-    let accepted = expect_json(
-        agent_session_post(&server, &holder, &agent_message, "reply-before-revoke")?,
-        StatusCode::OK,
-    )
-    .await?;
+    let agent_client = agent_session_client(&server, &holder)?;
+    let accepted = agent_client
+        .events_submit(&event_from_value(&agent_message)?)
+        .await?;
     assert_eq!(
-        accepted["accepted"]
-            .as_array()
-            .and_then(|events| events.first())
-            .and_then(Value::as_str),
+        accepted
+            .accepted
+            .first()
+            .map(|event_id| event_id.to_string())
+            .as_deref(),
         agent_message["event_id"].as_str(),
         "agent-authored message must be accepted"
     );
@@ -333,52 +288,52 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         .as_str()
         .expect("agent message event_id")
         .to_owned();
-    let scan_path = format!(
-        "/_cokret/self/events?realms={}&limit=50",
-        urlencoding(&realm_id)
-    );
-    let scan_text = expect_text(
-        agent_session_get(&server, &holder, &scan_path, "scan-after-reply")?,
-        StatusCode::OK,
-    )
-    .await?;
+    let scan = agent_client
+        .events_query(&realm_id, None, None, None, Some(50))
+        .await?;
     assert!(
-        scan_text.contains(&agent_event_id),
-        "DPoP-bound agent scan must include accepted reply event {agent_event_id}: {scan_text}"
+        scan.events
+            .iter()
+            .any(|event| event.event_id.to_string() == agent_event_id),
+        "DPoP-bound agent scan must include accepted reply event {agent_event_id}: {scan:?}"
     );
 
-    let stream_path = format!(
-        "/_cokret/self/events/subscribe?realms={}&include_history=true&max_duration_ms=150&heartbeat_ms=100",
-        urlencoding(&realm_id)
-    );
-    let stream_text = expect_text(
-        agent_session_get(&server, &holder, &stream_path, "stream-after-reply")?,
-        StatusCode::OK,
-    )
-    .await?;
-    let stream_frames = ndjson_frames(&stream_text)?;
+    let mut stream = agent_client
+        .events_subscribe_frames(
+            &EventsSubscribeOptions::new()
+                .realm(realm_id.clone())
+                .include_history(true)
+                .max_duration_ms(150)
+                .heartbeat_ms(100),
+        )
+        .await?;
+    let mut stream_frames = Vec::new();
+    while let Some(frame) = stream.next_frame().await? {
+        stream_frames.push(frame);
+    }
     assert!(
         stream_frames
             .iter()
-            .any(|frame| frame["kind"].as_str() == Some("catchup_complete")),
-        "agent stream must emit catchup_complete: {stream_text}"
+            .any(|frame| frame.kind == EventsSubscribeFrameKind::CatchupComplete),
+        "agent stream must emit catchup_complete: {stream_frames:?}"
     );
     assert!(
-        stream_text.contains(&agent_event_id),
-        "DPoP-bound agent stream history must include accepted reply event {agent_event_id}: {stream_text}"
+        stream_frames
+            .iter()
+            .any(|frame| serde_json::to_string(frame)
+                .is_ok_and(|frame_json| frame_json.contains(&agent_event_id))),
+        "DPoP-bound agent stream history must include accepted reply event {agent_event_id}: {stream_frames:?}"
     );
 
-    let paused = server
-        .http()
-        .post(server.url(&format!(
-            "/_cokret/self/agents/{}/pause",
-            urlencoding(&agent_did)
-        )))
-        .bearer_auth(&token)
-        .json(&json!({"reason": "cotest live e2e pause"}))
-        .send()
+    let paused = controller
+        .agent_pause(
+            &agent_did,
+            &cokret::AgentPauseRequestBody {
+                reason: Some("cotest live e2e pause".to_owned()),
+            },
+        )
         .await?;
-    assert_eq!(paused.status(), StatusCode::OK, "pause must return 200");
+    assert!(paused.ok, "pause must succeed");
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
 
     let after_pause = event_envelope(
@@ -396,28 +351,23 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             },
         }),
     );
-    expect_api_error(
-        agent_session_post(&server, &holder, &after_pause, "reply-after-pause")?,
+    expect_sdk_api_error(
+        agent_client
+            .events_submit(&event_from_value(&after_pause)?)
+            .await,
         StatusCode::PRECONDITION_FAILED,
         "agent_paused",
-    )
-    .await?;
+    )?;
 
-    let deactivated = server
-        .http()
-        .post(server.url(&format!(
-            "/_cokret/self/agents/{}/deactivate",
-            urlencoding(&agent_did)
-        )))
-        .bearer_auth(&token)
-        .json(&json!({"reason": "cotest live e2e"}))
-        .send()
+    let deactivated = controller
+        .agent_deactivate(
+            &agent_did,
+            &cokret::AgentDeactivateRequestBody {
+                reason: Some("cotest live e2e".to_owned()),
+            },
+        )
         .await?;
-    assert_eq!(
-        deactivated.status(),
-        StatusCode::OK,
-        "deactivate must return 200"
-    );
+    assert!(deactivated.ok, "deactivate must succeed");
     assert_eq!(
         agent_status(&server, &token, &agent_did).await?,
         "deactivated"
@@ -438,17 +388,13 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             },
         }),
     );
-    expect_api_error(
-        agent_session_post(
-            &server,
-            &holder,
-            &after_deactivate,
-            "reply-after-deactivate",
-        )?,
+    expect_sdk_api_error(
+        agent_client
+            .events_submit(&event_from_value(&after_deactivate)?)
+            .await,
         StatusCode::PRECONDITION_FAILED,
         "agent_deactivated",
-    )
-    .await?;
+    )?;
 
     mock.set_active(false);
     let after_revoke = event_envelope(
@@ -460,12 +406,13 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             "content": {"body": "agent_key_proof after revoke"},
         }),
     );
-    expect_api_error(
-        agent_session_post(&server, &holder, &after_revoke, "reply-after-revoke")?,
+    expect_sdk_api_error(
+        agent_client
+            .events_submit(&event_from_value(&after_revoke)?)
+            .await,
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
-    )
-    .await?;
+    )?;
     assert!(
         mock.requests() >= 2,
         "write after revoke must force fresh introspection"
@@ -480,34 +427,18 @@ async fn provision_and_pair_agent(
     display_name: &str,
     agent_slug: &str,
 ) -> Result<String> {
-    let prov = server
-        .http()
-        .post(server.url("/_cokret/self/agents"))
-        .bearer_auth(token)
-        .json(&json!({
-            "display_name": display_name,
-            "agent_slug": agent_slug,
-        }))
-        .send()
+    let controller = bearer_sdk_client(server, token)?;
+    let prov = controller
+        .agent_provision(&cokret::AgentProvisionRequestBody {
+            display_name: Some(display_name.to_owned()),
+            agent_slug: Some(agent_slug.to_owned()),
+            requested_scope: None,
+            accountability: Value::Null,
+            pairing_ttl_ms: None,
+        })
         .await?;
-    assert_eq!(
-        prov.status(),
-        StatusCode::CREATED,
-        "provision must return 201"
-    );
-    let prov: Value = prov.json().await?;
-    let agent_did = prov["agent_principal_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("agent_principal_id missing: {prov}"))?
-        .to_owned();
-    assert!(
-        prov["pairing_request_id"].as_str().is_some(),
-        "pairing_request_id present"
-    );
-    assert!(
-        prov["pairing_code"].as_str().is_some(),
-        "pairing_code present"
-    );
+    let agent_did = prov.agent_principal_id.to_string();
+    assert!(prov.pairing_code.is_some(), "pairing_code present");
     assert_eq!(
         agent_status(server, token, &agent_did).await?,
         "pending_runtime_key"
@@ -515,7 +446,7 @@ async fn provision_and_pair_agent(
 
     let pair = pair_agent_runtime_key(server, token, &prov).await?;
     assert!(
-        pair["authorized_event_ref"].as_str().is_some(),
+        !pair.authorized_event_ref.as_str().is_empty(),
         "authorized_event_ref present"
     );
     assert_eq!(agent_status(server, token, &agent_did).await?, "active");
@@ -525,22 +456,18 @@ async fn provision_and_pair_agent(
 async fn pair_agent_runtime_key(
     server: &CokretServer,
     token: &str,
-    provisioned: &Value,
-) -> Result<Value> {
-    let agent_did = provisioned["agent_principal_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("agent_principal_id missing: {provisioned}"))?;
-    let pairing_request_id = provisioned["pairing_request_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("pairing_request_id missing: {provisioned}"))?;
-    let pairing_code = provisioned["pairing_code"]
-        .as_str()
-        .ok_or_else(|| anyhow!("pairing_code missing: {provisioned}"))?;
-    let pairing_expires_at = provisioned["expires_at"]
-        .as_str()
-        .ok_or_else(|| anyhow!("expires_at missing: {provisioned}"))?;
-    let agent_id = cokret::Did::new(agent_did.to_owned())
-        .map_err(|err| anyhow!("agent_principal_id invalid: {err}"))?;
+    provisioned: &cokret::AgentProvisionOutcome,
+) -> Result<cokret::AgentKeyPairOutcome> {
+    let agent_did = provisioned.agent_principal_id.to_string();
+    let pairing_request_id = provisioned.pairing_request_id.as_str();
+    let pairing_code = provisioned
+        .pairing_code
+        .as_deref()
+        .ok_or_else(|| anyhow!("pairing_code missing"))?;
+    let pairing_expires_at = provisioned
+        .expires_at
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    let agent_id = provisioned.agent_principal_id.clone();
     let controller_id = cokret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
     let verification_method = format!("{agent_did}#runtime-key-1");
@@ -576,7 +503,7 @@ async fn pair_agent_runtime_key(
         &runtime_public_key_digest,
         pairing_request_id,
         pairing_code,
-        pairing_expires_at,
+        &pairing_expires_at,
         server.service_did(),
     )?;
     let body = cokret::models::AgentKeyPairRequestBody {
@@ -624,40 +551,18 @@ async fn pair_agent_runtime_key(
             }
         }),
     };
-    let response = server
-        .http()
-        .post(server.url("/_cokret/gate/account/agent-key-pair"))
-        .bearer_auth(token)
-        .json(&body)
-        .send()
-        .await?;
-    let status = response.status();
-    let body: Value = response.json().await.unwrap_or_else(|_| json!(null));
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "pairing must return 200, got {status}: {body}"
-    );
-    Ok(body)
+    Ok(bearer_sdk_client(server, token)?
+        .agent_key_pair(&body)
+        .await?)
 }
 
 async fn agent_status(server: &CokretServer, token: &str, agent_did: &str) -> Result<String> {
-    let list: Value = server
-        .http()
-        .get(server.url("/_cokret/self/agents"))
-        .bearer_auth(token)
-        .send()
-        .await?
-        .json()
-        .await?;
-    let status = list["agents"]
-        .as_array()
-        .and_then(|agents| {
-            agents
-                .iter()
-                .find(|a| a["agent_principal_id"].as_str() == Some(agent_did))
-        })
-        .and_then(|a| a["status"].as_str())
+    let list = bearer_sdk_client(server, token)?.agent_list().await?;
+    let status = list
+        .agents
+        .iter()
+        .find(|agent| agent["agent_principal_id"].as_str() == Some(agent_did))
+        .and_then(|agents| agents["status"].as_str())
         .unwrap_or_default()
         .to_owned();
     Ok(status)
@@ -673,16 +578,10 @@ async fn effective_grants(server: &CokretServer, token: &str, agent_did: &str) -
     let control_realm = cokret::auth::principal_control_realm_id(
         &cokret::Did::new(ALICE_DID.to_owned()).map_err(|e| anyhow!("alice did invalid: {e}"))?,
     );
-    let effective: Value = server
-        .http()
-        .get(server.url("/_cokret/self/authz/effective-grants"))
-        .bearer_auth(token)
-        .query(&[("subject", agent_did), ("realm_id", control_realm.as_str())])
-        .send()
-        .await?
-        .json()
+    let effective = bearer_sdk_client(server, token)?
+        .authz_effective_grants(control_realm.as_str(), agent_did, None)
         .await?;
-    Ok(effective)
+    Ok(serde_json::to_value(effective)?)
 }
 
 fn grant_exists_in(effective: &Value, grant_id: &str) -> bool {
@@ -693,8 +592,56 @@ fn grant_exists_in(effective: &Value, grant_id: &str) -> bool {
     })
 }
 
-fn urlencoding(did: &str) -> String {
-    did.replace(':', "%3A").replace('/', "%2F")
+fn bearer_sdk_client(server: &CokretServer, token: &str) -> Result<SdkClient> {
+    Ok(ClientBuilder::new(server.base_url())
+        .allow_insecure_localhost()
+        .auth(Auth::Bearer(token.to_owned()))
+        .build()?)
+}
+
+fn agent_session_client(server: &CokretServer, holder: &AgentSessionHolder) -> Result<SdkClient> {
+    Ok(ClientBuilder::new(server.base_url())
+        .allow_insecure_localhost()
+        .auth(Auth::Dpop(cokret_client::session::dpop::access_token_auth(
+            AGENT_SESSION_GRANT,
+            SigningKey::from_bytes(&holder.signing_key.to_bytes()),
+        )))
+        .build()?)
+}
+
+fn event_from_value(value: &Value) -> Result<cokret::Event> {
+    Ok(serde_json::from_value(value.clone())?)
+}
+
+fn expect_sdk_api_error<T>(
+    result: cokret_core::Result<T>,
+    status: StatusCode,
+    code: &str,
+) -> Result<()> {
+    match result {
+        Err(CokretError::Api {
+            status: actual_status,
+            error,
+        }) => {
+            assert_eq!(
+                actual_status,
+                status.as_u16(),
+                "expected SDK API status {status}, got {actual_status}: {error:?}"
+            );
+            assert_eq!(
+                error.code(),
+                code,
+                "expected SDK API error code {code}, got {error:?}"
+            );
+            Ok(())
+        }
+        Err(error) => Err(anyhow!(
+            "expected SDK API error {status}/{code}, got {error}"
+        )),
+        Ok(_) => Err(anyhow!(
+            "expected SDK API error {status}/{code}, got success"
+        )),
+    }
 }
 
 fn advance_event_sequence(actor: &str, realm_id: &str, count: usize) {
@@ -706,52 +653,6 @@ fn advance_event_sequence(actor: &str, realm_id: &str, count: usize) {
             json!({"body": "sequence padding"}),
         );
     }
-}
-
-fn agent_session_post(
-    server: &CokretServer,
-    holder: &AgentSessionHolder,
-    event: &Value,
-    jti_suffix: &str,
-) -> Result<reqwest::RequestBuilder> {
-    let url = server.url("/_cokret/self/events");
-    let dpop = holder.dpop_proof("POST", &url, jti_suffix)?;
-    Ok(server
-        .http()
-        .post(&url)
-        .bearer_auth(AGENT_SESSION_GRANT)
-        .header("DPoP", dpop)
-        .header("X-Cokret-Session-Grant-Challenge", "cotest-agent-key-proof")
-        .header("X-Cokret-Session-Grant-Proof", "cotest-agent-key-proof-jws")
-        .json(event))
-}
-
-fn agent_session_get(
-    server: &CokretServer,
-    holder: &AgentSessionHolder,
-    path: &str,
-    jti_suffix: &str,
-) -> Result<reqwest::RequestBuilder> {
-    let url = server.url(path);
-    let dpop = holder.dpop_proof("GET", &url, jti_suffix)?;
-    Ok(server
-        .http()
-        .get(&url)
-        .bearer_auth(AGENT_SESSION_GRANT)
-        .header("DPoP", dpop)
-        .header("X-Cokret-Session-Grant-Challenge", "cotest-agent-key-proof")
-        .header("X-Cokret-Session-Grant-Proof", "cotest-agent-key-proof-jws"))
-}
-
-fn ndjson_frames(text: &str) -> Result<Vec<Value>> {
-    text.lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            serde_json::from_str(line)
-                .map_err(|error| anyhow!("invalid NDJSON frame {line}: {error}"))
-        })
-        .collect()
 }
 
 struct AgentSessionHolder {
@@ -778,35 +679,6 @@ impl AgentSessionHolder {
             cnf_jkt,
         }
     }
-
-    fn dpop_proof(&self, method: &str, url: &str, jti_suffix: &str) -> Result<String> {
-        let header = json!({
-            "alg": "EdDSA",
-            "typ": "dpop+jwt",
-            "jwk": self.public_jwk,
-        });
-        let ath = URL_SAFE_NO_PAD.encode(Sha256::digest(AGENT_SESSION_GRANT.as_bytes()));
-        let payload = json!({
-            "htm": method,
-            "htu": url,
-            "ath": ath,
-            "jti": format!(
-                "cotest-agent-live-{jti_suffix}-{}",
-                Utc::now().timestamp_nanos_opt().unwrap_or_default()
-            ),
-            "iat": Utc::now().timestamp(),
-        });
-        let header_b64 = b64_json(&header)?;
-        let payload_b64 = b64_json(&payload)?;
-        let signing_input = format!("{header_b64}.{payload_b64}");
-        let signature = self.signing_key.sign(signing_input.as_bytes());
-        let signature_b64 = URL_SAFE_NO_PAD.encode(signature.to_bytes());
-        Ok(format!("{signing_input}.{signature_b64}"))
-    }
-}
-
-fn b64_json(value: &Value) -> Result<String> {
-    Ok(URL_SAFE_NO_PAD.encode(serde_json::to_vec(value)?))
 }
 
 fn jwk_thumbprint_ed25519(x: &str) -> String {

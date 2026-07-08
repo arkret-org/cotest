@@ -49,6 +49,7 @@ base64 = {workspace = true}
 chacha20poly1305 = {workspace = true,default-features = false,features = ["alloc"]}
 chrono = {workspace = true}
 cokret = {workspace = true}
+cokret-client = {workspace = true}
 cokret-core = {workspace = true,features = ["client"]}
 cokret-http-client = {workspace = true}
 cokret-signatures = {workspace = true}
@@ -90,6 +91,7 @@ chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
 cokret = {path = "../cokret-rust-sdk/crates/sdk"}
+cokret-client = {path = "../cokret-rust-sdk/crates/client"}
 cokret-core = {path = "../cokret-rust-sdk/crates/core"}
 cokret-http-client = {path = "../cokret-rust-sdk/crates/http-client"}
 cokret-signatures = {path = "../cokret-rust-sdk/crates/signatures"}
