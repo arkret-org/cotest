@@ -2,7 +2,11 @@ use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{TestActorClient, TestServerGroup, event_envelope, expect_json};
+use crate::harness::{
+    TestActorClient, TestServerGroup, event_envelope, expect_json,
+    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
+    parse_strand_id,
+};
 
 pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<()> {
     let group = TestServerGroup::single("event-idempotency-replay").await?;
@@ -23,15 +27,10 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         &alice.actor,
         &realm_id,
         "ck.message.create",
-        json!({
-            "strand_id": "ck:strand:01999999-0000-7000-8000-00000000feed",
-            "track_name": "discussion",
-            "content": {
-                "kind": "ck.content.text",
-                "body": "idempotent replay body",
-                "format": "plain",
-            },
-        }),
+        message_create_text_payload_for_strand(
+            parse_strand_id("ck:strand:01999999-0000-7000-8000-00000000feed")?,
+            "idempotent replay body",
+        )?,
     );
 
     let first = expect_json(
@@ -92,37 +91,22 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         &alice.actor,
         &realm_id,
         "ck.message.create",
-        json!({
-            "strand_id": "ck:strand:01999999-0000-7000-8000-00000000feed",
-            "track_name": "discussion",
-            "content": {
-                "kind": "ck.content.text",
-                "body": "message before edit/redact replay",
-                "format": "plain",
-            },
-        }),
+        message_create_text_payload_for_strand(
+            parse_strand_id("ck:strand:01999999-0000-7000-8000-00000000feed")?,
+            "message before edit/redact replay",
+        )?,
     );
 
     let created = submit_and_duplicate(&alice, &create_event).await?;
     let create_event_id = submitted_event_id(&created)
         .ok_or_else(|| anyhow!("create response missing event id: {created}"))?;
-    let message_ref = create_event_id.replacen("ck:event:", "ck:message:", 1);
-
     assert_projected_kind_count(&alice, &realm_id, "ck.message.create", 1).await?;
 
     let revise_event = event_envelope(
         &alice.actor,
         &realm_id,
         "ck.message.revise",
-        json!({
-            "target_event_id": create_event_id,
-            "target_ref": message_ref,
-            "content": {
-                "kind": "ck.content.text",
-                "body": "message after idempotent edit replay",
-                "format": "plain",
-            },
-        }),
+        message_revise_text_payload(create_event_id, "message after idempotent edit replay")?,
     );
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
     let revise_event_id = submitted_event_id(&revised)
@@ -134,11 +118,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         &alice.actor,
         &realm_id,
         "ck.message.redact",
-        json!({
-            "target_event_id": create_event_id,
-            "target_ref": message_ref,
-            "reason": "idempotent_redaction_replay",
-        }),
+        message_redact_payload(create_event_id, Some("idempotent_redaction_replay"))?,
     );
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
     let redact_event_id = submitted_event_id(&redacted)

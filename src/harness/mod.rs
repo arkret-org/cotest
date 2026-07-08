@@ -27,6 +27,12 @@ pub use event_builder::{
     add_member, create_realm, dev_login, encrypted_envelope, event_envelope, register_account,
     send_message, submit_event,
 };
+pub(crate) use event_builder::{
+    invite_create_payload, member_join_payload_value, member_join_payload_with_delivery_binding,
+    member_join_payload_with_invite_ref, member_transition_payload, message_create_text_payload,
+    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
+    parse_strand_id,
+};
 // `canonical_event_digest` has no current caller outside `proof`, but the
 // harness contract keeps it reachable as `crate::harness::canonical_event_digest`.
 #[allow(unused_imports)]
@@ -103,12 +109,7 @@ fn fnv1a_48(input: &str) -> u64 {
 /// Canonical `ck.member.state` join payload shared by the harness `add_member`
 /// helpers so the member.state default shape lives in one place.
 pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
-    json!({
-        "realm_id": realm_id,
-        "actor_id": actor_id,
-        "membership": "join",
-        "delivery_status": "unroutable"
-    })
+    member_join_payload_value(realm_id, actor_id).expect("valid cotest member.join payload")
 }
 
 fn next_typed_id(kind: &str) -> String {

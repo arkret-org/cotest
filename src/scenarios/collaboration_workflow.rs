@@ -1,10 +1,14 @@
 use std::collections::BTreeSet;
 
 use anyhow::Result;
+use cokret_core::MembershipPayloadState;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, TestActorClient, expect_json, expect_status};
+use crate::harness::{
+    CokretServer, TestActorClient, expect_json, expect_status, member_join_payload_value,
+    member_transition_payload,
+};
 
 const ALICE_DID: &str = "did:web:cotest-collab-alice.example";
 const BOB_DID: &str = "did:web:cotest-collab-bob.example";
@@ -129,12 +133,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .submit_event(
             &realm_id,
             "ck.member.state",
-            json!({
-                "realm_id": realm_id,
-                "actor_id": BOB_DID,
-                "membership": "join",
-                "delivery_status": "unroutable"
-            }),
+            member_join_payload_value(&realm_id, BOB_DID)?,
         )
         .await?;
     assert_eq!(member_join["status"], "accepted");
@@ -223,12 +222,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .submit_event(
             &realm_id,
             "ck.member.state",
-            json!({
-                "realm_id": realm_id,
-                "actor_id": BOB_DID,
-                "membership": "ban",
-                "delivery_status": "unroutable"
-            }),
+            member_transition_payload(&realm_id, BOB_DID, MembershipPayloadState::Ban, None)?,
         )
         .await?;
     assert_eq!(member_ban["status"], "accepted");

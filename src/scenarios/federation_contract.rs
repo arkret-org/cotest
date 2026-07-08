@@ -11,7 +11,9 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, dev_login, expect_api_error, expect_json, expect_response, submit_event,
+    CokretServer, dev_login, expect_api_error, expect_json, expect_response,
+    member_join_payload_with_delivery_binding, message_create_text_payload, message_redact_payload,
+    submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
@@ -401,12 +403,10 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         realm_id,
         remote_service_did,
         3,
-        json!({
-            "realm_id": realm_id,
-            "actor_id": remote_service_did,
-            "membership": "join",
-            "delivery_status": "routable",
-            "delivery_binding": {
+        member_join_payload_with_delivery_binding(
+            realm_id,
+            remote_service_did,
+            json!({
                 "recipient_service_did": remote_service_did,
                 "recipient_service_type": "principal_server",
                 "binding_scope": "realm",
@@ -414,8 +414,8 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
                 "delivery_modes": ["events", "sync"],
                 "service_acceptance_ref": realm_create_event_id,
                 "resolved_at": "2026-05-02T00:00:00Z"
-            }
-        }),
+            }),
+        )?,
     )?;
     let event = signed_federation_event(
         replay_event_id,
@@ -423,11 +423,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         realm_id,
         remote_service_did,
         4,
-        json!({
-            "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
-            "track_name": "discussion",
-            "content": {"kind": "ck.content.text", "body": "from federation"}
-        }),
+        message_create_text_payload(realm_id, "from federation")?,
     )?;
 
     let first_push_url = server.url("/_cokret/peer/events");
@@ -585,9 +581,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         realm_id,
         remote_service_did,
         6,
-        json!({
-            "target_event_id": replay_event_id
-        }),
+        message_redact_payload(replay_event_id, None)?,
     )?;
     let redaction_push_url = server.url("/_cokret/peer/events");
     let redaction_push_body =
@@ -692,12 +686,10 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "did:web:alice.example",
         realm_id,
         "ck.member.state",
-        json!({
-            "realm_id": realm_id,
-            "actor_id": "did:web:alice.example",
-            "membership": "join",
-            "delivery_status": "routable",
-            "delivery_binding": {
+        member_join_payload_with_delivery_binding(
+            realm_id,
+            "did:web:alice.example",
+            json!({
                 "recipient_service_did": server.service_did(),
                 "recipient_service_type": "principal_server",
                 "binding_scope": "realm",
@@ -705,8 +697,8 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
                 "delivery_modes": ["events", "sync"],
                 "service_acceptance_ref": "ck:event:0196419b-0000-7000-8000-00000000fe10",
                 "resolved_at": "2026-05-02T00:00:00Z"
-            }
-        }),
+            }),
+        )?,
         StatusCode::OK,
     )
     .await?;

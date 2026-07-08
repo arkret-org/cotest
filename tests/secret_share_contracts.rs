@@ -4,8 +4,8 @@ use anyhow::{Result, anyhow, bail};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
+use cokret::{SecretShareRequestContent, SecretShareSendContent};
 use cokret_core::canonical::{canonical_json_bytes, from_canonical_json_slice};
-use cokret_core::events::{SecretRequestContent, SecretSendContent};
 use cokret_core::{
     DeviceId, DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody, Did,
 };
@@ -77,7 +77,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     assert!(request_value.get("type").is_none());
     assert!(request_value.get("event").is_none());
 
-    let parsed_request: SecretRequestContent = serde_json::from_value(
+    let parsed_request: SecretShareRequestContent = serde_json::from_value(
         request_value["messages"][ACCOUNT_DID][OLD_DEVICE]["content"].clone(),
     )?;
     assert_eq!(parsed_request.request_id, REQUEST_ID);
@@ -195,22 +195,24 @@ fn d2d_root_secret_aad_is_stable_across_rfc3339_utc_forms() -> Result<()> {
     Ok(())
 }
 
-fn request_content(request: &PendingRequest, recipient_pk: &[u8]) -> Result<SecretRequestContent> {
-    Ok(SecretRequestContent {
+fn request_content(
+    request: &PendingRequest,
+    recipient_pk: &[u8],
+) -> Result<SecretShareRequestContent> {
+    Ok(SecretShareRequestContent {
         request_id: request.request_id.clone(),
         secret_id: request.secret_id.clone(),
         from_device: device_id(NEW_DEVICE)?,
         recipient_hpke_public_key: URL_SAFE_NO_PAD.encode(recipient_pk),
-        extra: BTreeMap::new(),
     })
 }
 
 fn seal_secret_send(
-    request: &SecretRequestContent,
+    request: &SecretShareRequestContent,
     secret: &str,
     secret_version: u32,
     expires_at: &str,
-) -> Result<SecretSendContent> {
+) -> Result<SecretShareSendContent> {
     if request.secret_id != SECRET_ID {
         bail!("unsupported secret_id");
     }
@@ -218,14 +220,13 @@ fn seal_secret_send(
     let plaintext = secret_plaintext(secret, secret_version, &request.request_id)?;
     let aad = send_aad(OLD_DEVICE, request.from_device.as_str(), expires_at)?;
     let sealed = hpke_seal(&recipient_pk, HPKE_INFO, &aad, &plaintext)?;
-    Ok(SecretSendContent {
+    Ok(SecretShareSendContent {
         request_id: request.request_id.clone(),
         secret_id: request.secret_id.clone(),
         from_device: device_id(OLD_DEVICE)?,
         scheme: SCHEME.to_owned(),
         enc: URL_SAFE_NO_PAD.encode(sealed.enc),
         ciphertext: URL_SAFE_NO_PAD.encode(sealed.ciphertext),
-        extra: BTreeMap::new(),
     })
 }
 
@@ -236,7 +237,7 @@ fn open_secret_send(
     if envelope.kind != SEND_KIND {
         bail!("not a ck.secret.send envelope");
     }
-    let content: SecretSendContent = serde_json::from_value(envelope.content.clone())?;
+    let content: SecretShareSendContent = serde_json::from_value(envelope.content.clone())?;
     if content.request_id != request.request_id {
         bail!("unsolicited ck.secret.send");
     }

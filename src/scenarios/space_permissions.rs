@@ -4,7 +4,8 @@ use serde_json::json;
 
 use crate::harness::{
     CokretServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
-    expect_json, register_account, send_message, submit_event,
+    expect_json, member_join_payload_value, message_create_text_payload, register_account,
+    send_message, submit_event,
 };
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
@@ -91,12 +92,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                 "did:web:bob-space.example",
                 &realm_id,
                 "ck.member.state",
-                json!({
-                    "realm_id": realm_id,
-                    "actor_id": "did:web:bob-space.example",
-                    "membership": "join",
-                    "delivery_status": "unroutable"
-                }),
+                member_join_payload_value(&realm_id, "did:web:bob-space.example")?,
             )),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -167,11 +163,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                 "did:web:bob-visible.example",
                 &realm_id,
                 "ck.message.create",
-                json!({
-                    "body": "not a member",
-                    "content": {"body": "not a member"},
-                    "thread_id": "ck:thread:space-denied",
-                }),
+                message_create_text_payload(&realm_id, "not a member")?,
             )),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -215,11 +207,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                 "did:web:alice.example",
                 &realm_id,
                 "ck.message.create",
-                json!({
-                    "body": "after delete",
-                    "content": {"body": "after delete"},
-                    "thread_id": "ck:thread:space",
-                }),
+                message_create_text_payload(&realm_id, "after delete")?,
             )),
         StatusCode::CONFLICT,
         // The top-level wire error code is `failed_precondition`; the

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use crate::harness::{
     CokretServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
-    refresh_event_proof, register_account,
+    member_join_payload_value, refresh_event_proof, register_account,
 };
 use crate::scenarios::federation_collaboration::{
     authorize_device_public_key, signed_keys_upload_body,
@@ -471,12 +471,10 @@ fn signed_membership_event(
     member_actor: &str,
     membership: &str,
 ) -> Result<Value> {
-    let payload = json!({
-        "realm_id": realm_id,
-        "actor_id": member_actor,
-        "membership": membership,
-        "delivery_status": "unroutable"
-    });
+    let payload = match membership {
+        "join" => member_join_payload_value(realm_id, member_actor)?,
+        other => anyhow::bail!("unsupported signed membership fixture state: {other}"),
+    };
     signed_event(
         event_id,
         actor_seq,

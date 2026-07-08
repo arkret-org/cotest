@@ -1,7 +1,14 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::{Result, anyhow};
+use chrono::{DateTime, Utc};
+use cokret_core::{
+    ContentBlock, DeliveryStatus, Did, EventId, Hash, InviteCreatePayload, InviteDeliveryTarget,
+    InviteId, MembershipPayload, MembershipPayloadState, MessageCreatePayload, MessageId,
+    MessageRedactPayload, MessageRevisePayload, RealmId, StrandId,
+};
 use reqwest::StatusCode;
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::assertions::expect_json;
@@ -129,20 +136,17 @@ pub async fn send_message(
     token: &str,
     actor: &str,
     realm_id: &str,
-    thread_id: &str,
+    _thread_id: &str,
     body: &str,
 ) -> Result<Value> {
+    let payload = message_create_text_payload(realm_id, body)?;
     submit_event(
         server,
         token,
         actor,
         realm_id,
         "ck.message.create",
-        json!({
-            "body": body,
-            "content": {"body": body},
-            "thread_id": thread_id,
-        }),
+        payload,
         StatusCode::OK,
     )
     .await
@@ -319,6 +323,189 @@ fn message_ref_from_event_ref(value: Value) -> Value {
         return Value::String(format!("ck:message:{suffix}"));
     }
     value
+}
+
+pub(crate) fn message_create_text_payload(realm_id: &str, body: &str) -> Result<Value> {
+    message_create_text_payload_for_strand(strand_id_for_realm(realm_id)?, body)
+}
+
+pub(crate) fn message_create_text_payload_for_strand(
+    strand_id: StrandId,
+    body: &str,
+) -> Result<Value> {
+    let content = ContentBlock::text(body)
+        .to_value()
+        .map_err(|err| anyhow!("message content serialize: {err}"))?;
+    MessageCreatePayload::with_content(strand_id, "discussion", content)
+        .to_value()
+        .map_err(|err| anyhow!("message create payload serialize: {err}"))
+}
+
+pub(crate) fn parse_strand_id(strand_id: &str) -> Result<StrandId> {
+    StrandId::new(strand_id.to_owned()).map_err(|err| anyhow!("invalid strand_id: {err}"))
+}
+
+pub(crate) fn message_revise_text_payload(target_event_id: &str, body: &str) -> Result<Value> {
+    serialize_payload(
+        &MessageRevisePayload {
+            message_id: Some(message_id_from_event_id(target_event_id)?),
+            target_ref: None,
+            revision_of: None,
+            track_name: None,
+            content: Some(ContentBlock::text(body)),
+            encrypted_content: None,
+            metadata: None,
+            encrypted_metadata: None,
+            reason: None,
+        },
+        "message revise payload",
+    )
+}
+
+pub(crate) fn message_redact_payload(target_event_id: &str, reason: Option<&str>) -> Result<Value> {
+    serialize_payload(
+        &MessageRedactPayload {
+            message_id: Some(message_id_from_event_id(target_event_id)?),
+            target_ref: None,
+            event_id: None,
+            target_event_id: Some(
+                EventId::new(target_event_id.to_owned())
+                    .map_err(|err| anyhow!("invalid message target event_id: {err}"))?,
+            ),
+            track_name: None,
+            reason: reason.map(ToOwned::to_owned),
+            preserve: None,
+        },
+        "message redact payload",
+    )
+}
+
+pub(crate) fn member_join_payload_value(realm_id: &str, actor_id: &str) -> Result<Value> {
+    member_payload(
+        realm_id,
+        actor_id,
+        MembershipPayloadState::Join,
+        Some(DeliveryStatus::Unroutable),
+        None,
+        None,
+        None,
+    )
+}
+
+pub(crate) fn member_join_payload_with_delivery_binding(
+    realm_id: &str,
+    actor_id: &str,
+    delivery_binding: Value,
+) -> Result<Value> {
+    member_payload(
+        realm_id,
+        actor_id,
+        MembershipPayloadState::Join,
+        Some(DeliveryStatus::Routable),
+        Some(delivery_binding),
+        None,
+        None,
+    )
+}
+
+pub(crate) fn member_join_payload_with_invite_ref(
+    realm_id: &str,
+    actor_id: &str,
+    invite_ref: &str,
+) -> Result<Value> {
+    member_payload(
+        realm_id,
+        actor_id,
+        MembershipPayloadState::Join,
+        Some(DeliveryStatus::Unroutable),
+        None,
+        Some(invite_ref.to_owned()),
+        None,
+    )
+}
+
+pub(crate) fn member_transition_payload(
+    realm_id: &str,
+    actor_id: &str,
+    membership: MembershipPayloadState,
+    reason: Option<&str>,
+) -> Result<Value> {
+    member_payload(
+        realm_id,
+        actor_id,
+        membership,
+        None,
+        None,
+        None,
+        reason.map(ToOwned::to_owned),
+    )
+}
+
+pub(crate) fn invite_create_payload(
+    invite_id: &str,
+    invitee: &str,
+    recipient_service_did: &str,
+    introduction_evidence_digest: impl Into<String>,
+    expires_at: DateTime<Utc>,
+) -> Result<Value> {
+    InviteCreatePayload::new(
+        InviteId::new(invite_id.to_owned()).map_err(|err| anyhow!("invalid invite_id: {err}"))?,
+        Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee did: {err}"))?,
+        InviteDeliveryTarget::principal_server(
+            Did::new(recipient_service_did.to_owned())
+                .map_err(|err| anyhow!("invalid recipient_service_did: {err}"))?,
+        ),
+        Hash::new(introduction_evidence_digest.into())
+            .map_err(|err| anyhow!("invalid introduction_evidence_digest: {err}"))?,
+        expires_at,
+    )
+    .to_value()
+    .map_err(|err| anyhow!("invite create payload serialize: {err}"))
+}
+
+fn member_payload(
+    realm_id: &str,
+    actor_id: &str,
+    membership: MembershipPayloadState,
+    delivery_status: Option<DeliveryStatus>,
+    delivery_binding: Option<Value>,
+    invite_ref: Option<String>,
+    reason: Option<String>,
+) -> Result<Value> {
+    MembershipPayload {
+        membership,
+        strand_id: None,
+        realm_id: Some(RealmId::new(realm_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
+        actor_id: Some(Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
+        delivery_status,
+        delivery_binding,
+        gate_proofs: Vec::new(),
+        via_service_dids: Vec::new(),
+        reason,
+        invite_ref,
+    }
+    .to_value()
+    .map_err(|err| anyhow!("member state payload serialize: {err}"))
+}
+
+fn strand_id_for_realm(realm_id: &str) -> Result<StrandId> {
+    let suffix = realm_id
+        .strip_prefix("ck:realm:")
+        .ok_or_else(|| anyhow!("realm_id must start with ck:realm:"))?;
+    StrandId::new(format!("ck:strand:{suffix}"))
+        .map_err(|err| anyhow!("invalid derived strand_id: {err}"))
+}
+
+fn message_id_from_event_id(event_id: &str) -> Result<MessageId> {
+    let message_id = event_id
+        .strip_prefix("ck:event:")
+        .map(|suffix| format!("ck:message:{suffix}"))
+        .unwrap_or_else(|| event_id.to_owned());
+    MessageId::new(message_id).map_err(|err| anyhow!("invalid message_id: {err}"))
+}
+
+fn serialize_payload<T: Serialize>(payload: &T, context: &str) -> Result<Value> {
+    serde_json::to_value(payload).map_err(|err| anyhow!("{context} serialize: {err}"))
 }
 
 pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {

@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::harness::{
     CokretServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
-    expect_response, expect_status,
+    expect_response, expect_status, invite_create_payload,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
@@ -53,20 +53,19 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await?;
     let invite_realm_id = invite_realm["realm_id"].as_str().unwrap().to_owned();
     let introduction_evidence = json!({"kind": "same_principal_server"});
+    let invite_expires_at =
+        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00Z")?.with_timezone(&chrono::Utc);
     let invite_event = alice
         .submit_event(
             &invite_realm_id,
             "ck.invite.create",
-            json!({
-                "invite_id": "ck:invite:0196419b-0000-7000-8000-000000000201",
-                "invitee": bob.actor,
-                "invite_delivery_target": {
-                    "recipient_service_did": server.service_did(),
-                    "recipient_service_type": "principal_server"
-                },
-                "introduction_evidence_digest": canonical_sha256(&introduction_evidence)?,
-                "expires_at": "2026-12-31T00:00:00Z"
-            }),
+            invite_create_payload(
+                "ck:invite:0196419b-0000-7000-8000-000000000201",
+                bob.actor.as_str(),
+                server.service_did(),
+                canonical_sha256(&introduction_evidence)?,
+                invite_expires_at,
+            )?,
         )
         .await?;
     assert_eq!(

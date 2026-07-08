@@ -6,7 +6,9 @@ use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{ensure_submit_event_id, event_envelope};
-use super::{member_join_payload, next_typed_id, realm_create_payload};
+use super::{
+    member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
+};
 
 #[derive(Clone)]
 pub struct TestActorClient {
@@ -91,15 +93,16 @@ impl TestActorClient {
         .await
     }
 
-    pub async fn send_message(&self, realm_id: &str, thread_id: &str, body: &str) -> Result<Value> {
+    pub async fn send_message(
+        &self,
+        realm_id: &str,
+        _thread_id: &str,
+        body: &str,
+    ) -> Result<Value> {
         self.submit_event(
             realm_id,
             "ck.message.create",
-            json!({
-                "body": body,
-                "content": {"body": body},
-                "thread_id": thread_id,
-            }),
+            message_create_text_payload(realm_id, body)?,
         )
         .await
     }
