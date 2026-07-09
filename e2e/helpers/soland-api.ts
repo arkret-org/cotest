@@ -2111,7 +2111,7 @@ function trustDomainFromServiceDid(serviceDid: string): string {
     .replace(/\.+$/, "")
     .toLowerCase()
     .replace(/[^a-z0-9.\-_:]/g, "");
-  return `ck:trust_domain:${scope || "local"}`;
+  return `ak:trust_domain:${scope || "local"}`;
 }
 
 function stringValue(value: unknown): string | undefined {

@@ -33,7 +33,7 @@ test.describe("sovereign deployment", () => {
         did: `did:web:rogue-${fixture.stamp}.evil`,
         handle: `@rogue${fixture.short}`,
         display_name: "Rogue",
-        device_id: `ck:device:01904100-0000-7000-8000-${fixture.short}00000001`,
+        device_id: `ak:device:01904100-0000-7000-8000-${fixture.short}00000001`,
       },
     });
     expect(rogue.status()).toBe(403);
@@ -168,7 +168,7 @@ test.describe("sovereign deployment", () => {
         did: fixture.bobDid,
         handle: `@direct${fixture.short}`,
         display_name: "Direct Bob",
-        device_id: `ck:device:01904100-0000-7000-8000-${fixture.short}00000002`,
+        device_id: `ak:device:01904100-0000-7000-8000-${fixture.short}00000002`,
       },
     });
     expect(mainReject.status()).toBe(403);

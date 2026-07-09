@@ -33,7 +33,7 @@ export type OnboardedPrincipal = {
   account: CoauthPasswordAccount;
   /// `did:webvh:<scid>:<host>:webvh:<ulid>` minted by coauth via soland.
   principalDid: string;
-  /// `ck:device:<uuidv7>` the session grant is bound to.
+  /// `ak:device:<uuidv7>` the session grant is bound to.
   deviceId: string;
   /// The device DPoP key (`cnf.jkt` == its thumbprint).
   deviceKey: DpopDeviceKey;
