@@ -8,7 +8,7 @@
 // used by other specs (helpers/soland-api.ts + consent-grant.spec.ts). Do not
 // route new contact-graph coverage through the legacy surface.
 //
-// Wire shapes mirror cokret-rust-sdk core::http + core::model::invite_addressing
+// Wire shapes mirror arkret-rust-sdk core::http + core::model::invite_addressing
 // and soland src/routing/identity/account.rs + src/routing/invites.rs.
 
 import {
@@ -420,7 +420,7 @@ async function solandTrustDomain(
     response,
     "describe trust_domain",
   );
-  return body.trust_domain ?? "ck:trust_domain:soland.joint-e2e.local";
+  return body.trust_domain ?? "ak:trust_domain:soland.joint-e2e.local";
 }
 
 async function submitFixtureDidDocument(

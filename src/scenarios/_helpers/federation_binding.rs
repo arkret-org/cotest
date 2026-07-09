@@ -1,7 +1,7 @@
 //! Shared `service_binding_ref` construction for federation peer-submit
 //! scenarios (`POST /_cokret/peer/events`).
 //!
-//! Spec: `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 request table and
+//! Spec: `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 request table and
 //! §4.1.1 (`reducer_profile_digest` computation, normative):
 //!
 //! * `reducer_profile_digest` — registry-derived canonical digest of the
@@ -48,7 +48,7 @@ pub fn batch_frontier_event_ids(events: &[Event]) -> Result<Vec<EventId>> {
         .collect();
     if heads.is_empty() {
         Ok(vec![
-            EventId::new("ck:event:01904100-0000-7000-8000-fedc00000000".to_owned())
+            EventId::new("ak:event:01904100-0000-7000-8000-fedc00000000".to_owned())
                 .context("fallback federation frontier event id is invalid")?,
         ])
     } else {

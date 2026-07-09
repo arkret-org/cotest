@@ -267,8 +267,8 @@ async function resolveDefaultStrandId(
   // it. inkson addresses the default strand by the deterministic
   // default_strand_id_for_realm convention (ck:realm:<uuid> -> ck:strand:<uuid>);
   // derive the same id so the message lands on the strand inkson renders.
-  const suffix = realmId.startsWith("ck:realm:")
-    ? realmId.slice("ck:realm:".length)
+  const suffix = realmId.startsWith("ak:realm:")
+    ? realmId.slice("ak:realm:".length)
     : realmId;
   return `ck:strand:${suffix}`;
 }

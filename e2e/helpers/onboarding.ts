@@ -171,7 +171,7 @@ export async function loginPrincipalViaCoauth(
   expect(principalDid).toMatch(/^did:webvh:/);
   expect(grant.audience).toBe(audience);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
-  expect(grant.scopes).toContain(`urn:cokret:client:device:${deviceId}`);
+  expect(grant.scopes).toContain(`urn:arkret:client:device:${deviceId}`);
   return {
     account,
     principalDid,

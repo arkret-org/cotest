@@ -1,10 +1,10 @@
-// Mock applet-registry — simulates the Cokret Applet Registry that creates
+// Mock applet-registry — simulates the Arkret Applet Registry that creates
 // controller-signed Applet Packages and forwards external applet activity into
 // soland's canonical Applet transaction endpoint.
 //
 // Spec references:
-//   cokret-spec/spec/v1/zh/extensions/applet-integration.md
-//   cokret-spec/spec/v1/zh/extensions/applet-schema.md
+//   arkret-spec/spec/v1/zh/extensions/applet-integration.md
+//   arkret-spec/spec/v1/zh/extensions/applet-schema.md
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
 // harness wires soland (and other consumers) to MOCK_APPLET_REGISTRY_DID so
@@ -133,7 +133,7 @@ function signedPackage(body) {
   const namespace = body.namespace ?? body.metadata?.namespace ?? "bridge.demo";
   const safe = safeToken(namespace);
   const appletId =
-    typeof body.applet_id === "string" && body.applet_id.startsWith("ck:applet:")
+    typeof body.applet_id === "string" && body.applet_id.startsWith("ak:applet:")
       ? body.applet_id
       : typedId("applet");
   const createdAt = rfc3339Now();
@@ -235,7 +235,7 @@ function signedPackage(body) {
   const sealed = { ...packageBase, package_digest: packageDigest };
   const payloadDigest = canonicalHash(sealed);
   // Detached JWS per RFC 7515 appendix F, matching the SDK contract
-  // (cokret-rust-sdk signatures/proof.rs): wire form is `header..signature`
+  // (arkret-rust-sdk signatures/proof.rs): wire form is `header..signature`
   // with an empty payload segment, signed over `header.BASE64URL(payload)`.
   const jwsHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
   const signingInput = `${jwsHeader}.${Buffer.from(canonicalJson(sealed), "utf8").toString("base64url")}`;

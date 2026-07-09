@@ -134,7 +134,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("missing mls governance binding requirement block"))?;
     if !mls_binding
         .required_cells
-        .contains("ck:cell:ck.component.covered_seals.v1:<realm_id>")
+        .contains("ak:cell:ck.component.covered_seals.v1:<realm_id>")
     {
         bail!("mls governance binding requirement block missing covered_seals cell");
     }
@@ -531,7 +531,7 @@ fn collect_cell_refs(
         if value.trim().is_empty() {
             bail!("requirement {field} contains an empty value");
         }
-        if require_cell_prefix && !value.starts_with("ck:cell:") {
+        if require_cell_prefix && !value.starts_with("ak:cell:") {
             bail!("requirement {field} references non-cell value {value}");
         }
         refs.insert(value.to_owned());

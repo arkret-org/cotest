@@ -34,7 +34,7 @@ import {
 const SERVICE_DID = "did:web:media.example";
 const ISSUER_KID = `${SERVICE_DID}#media-token`;
 const LIVEKIT_FOCUS: MediaFocusConfig = {
-  focus_id: "ck:focus:livekit-lhr",
+  focus_id: "ak:focus:livekit-lhr",
   type: "livekit",
   issuer_kid: ISSUER_KID,
   connect_url: "wss://livekit.media.example",
@@ -141,7 +141,7 @@ test.describe("media token exchange", () => {
         call_id: callId,
         actor_id: alice.did,
         device_id: alice.deviceId,
-        focus_id: "ck:focus:unknown-focus",
+        focus_id: "ak:focus:unknown-focus",
       });
       expect(denied.status()).toBe(409);
       expect(wireErrCode(await denied.json())).toBe("focus_mismatch");

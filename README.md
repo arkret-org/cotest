@@ -1,11 +1,11 @@
 # cotest
 
-> **Spec target**: the sibling [cokret-spec](../cokret-spec) checkout used by
+> **Spec target**: the sibling [arkret-spec](../arkret-spec) checkout used by
 > the current run; cotest does not pin a stale README hash.
 
-`cotest` is an out-of-repository black-box Cokret server test harness modeled
+`cotest` is an out-of-repository black-box Arkret server test harness modeled
 after Complement. It starts real server processes or real server containers,
-drives public HTTP endpoints, and uses `cokret-rust-sdk` where typed protocol
+drives public HTTP endpoints, and uses `arkret-rust-sdk` where typed protocol
 helpers and client smoke coverage are useful.
 
 ## Pre-commit hook setup
@@ -19,7 +19,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
 a branch, copy it from
-[`cokret-rust-sdk`](https://github.com/cokret/cokret-rust-sdk) and
+[`arkret-rust-sdk`](https://github.com/arkret/arkret-rust-sdk) and
 adapt to your local toolchain.
 
 The current default server under test is the sibling
@@ -35,7 +35,7 @@ The harness constructs fixtures with current v1 wire names only:
 
 ## Protocol Review Closures
 
-The current harness tracks the sibling `cokret-spec` checkout and includes:
+The current harness tracks the sibling `arkret-spec` checkout and includes:
 
 - **12 new security-closure vectors** (`ck.vector.*` from
   `security-closure-vectors.json`) driven through a runner contract
@@ -93,7 +93,7 @@ Recommended entrypoints:
   `run-joint-e2e.ps1 -SolandRuntime docker`, including a `-SkipInkson` mode for
   soland-only wire/API probes.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
-  `soland` plus the sibling `cokret-rust-sdk` checkout using the workspace
+  `soland` plus the sibling `arkret-rust-sdk` checkout using the workspace
   root as Docker build context.
 - Each scripted run writes `raw.log`, `transcript.ndjson`, `summary.json`,
   `summary.md`, `summary.html`, `junit.xml`, coverage/gap reports, and
@@ -172,11 +172,11 @@ Start the stack the usual way, then point the recorder at it:
 
 ```powershell
 # Terminal A — start soland + coauth + inkson and leave them running.
-& "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -KeepAlive
+& "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -KeepAlive
 
 # Terminal B — record. Default inkson URL is http://127.0.0.1:4527; override
 # with INKSON_BASE_URL if your run prints a different one.
-cd D:\Works\cokret\cotest\e2e
+cd D:\Works\arkret\cotest\e2e
 npx playwright codegen http://127.0.0.1:4527
 ```
 
@@ -234,12 +234,12 @@ test("register → create realm smoke", async ({ browser }, testInfo) => {
 
 ```powershell
 # Whole suite (or a domain / single spec via -Grep), with services managed for you.
-& "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -RunProfile joint-full
-& "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -Grep "smoke/"
+& "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -RunProfile joint-full
+& "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -Grep "smoke/"
 
 # Or directly against an already-running stack (outputs land in a fresh
 # artifacts/runs/<ts>-adhoc/joint-e2e/ directory):
-cd D:\Works\cokret\cotest\e2e
+cd D:\Works\arkret\cotest\e2e
 npm test                 # headless
 npm run test:headed      # watch it click
 ```
@@ -318,14 +318,14 @@ for the full startup model, Docker image contract, and result artifacts.
 - `src/harness/`: process lifecycle, test actor helpers, and shared HTTP
   assertion utilities.
 - `src/conformance/`: artifact-driven offline conformance runner wired to
-  `cokret-spec/spec/v1/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
+  `arkret-spec/spec/v1/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
   bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
 - `config/coverage-profiles.json`: machine-readable profile-to-suite coverage
   mapping used by the runner.
 - `docs/test-strategy.md`: harness model and suite grouping.
-- `docs/complement-map.md`: how Complement concepts map onto Cokret.
+- `docs/complement-map.md`: how Complement concepts map onto Arkret.
 - `docs/runtime-workflow.md`: runtime modes, Docker image strand, runner scripts,
   and result presentation.
 
@@ -336,7 +336,7 @@ for the full startup model, Docker image contract, and result artifacts.
   permissions, payload contracts, and extension surface gaps.
 - Offline conformance surface: Event Envelope, encoding, redaction,
   capability, sync, federation, privacy/security, and state-resolution fixtures
-  loaded from `cokret-spec/spec/v1/artifacts`.
+  loaded from `arkret-spec/spec/v1/artifacts`.
 - Multi-server surface: federation readiness, contract validation, and
   cross-server collaboration strands.
 
@@ -472,5 +472,5 @@ The suite is organized by protocol and behavior, not milestone folders.
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_cotest_todos.md` in the parent `cokret/` directory for the
+> `_cotest_todos.md` in the parent `arkret/` directory for the
 > circle-rollout (CKP-0007) work item list and per-stage checkpoints.

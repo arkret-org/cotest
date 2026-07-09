@@ -1,4 +1,4 @@
-//! Complement-style black-box conformance harness for Cokret servers.
+//! Complement-style black-box conformance harness for Arkret servers.
 //!
 //! This module is organized into focused submodules:
 //! - [`server`]: [`CokretServer`]/[`TestServerGroup`] process/Docker orchestration.
@@ -65,7 +65,7 @@ pub(crate) fn fixture_webvh_did(host: &str) -> String {
 }
 
 pub(crate) fn canonical_device_id(input: &str) -> String {
-    if input.starts_with("ck:device:") {
+    if input.starts_with("ak:device:") {
         return input.to_owned();
     }
 
@@ -92,9 +92,9 @@ pub(crate) fn canonical_device_id(input: &str) -> String {
         "dev_realm_only" => "00000000e002",
         "dev_x" => "0000000000e4",
         "dev_y" => "0000000000e3",
-        _ => return format!("ck:device:01904100-0000-7000-8000-{:012x}", fnv1a_48(input)),
+        _ => return format!("ak:device:01904100-0000-7000-8000-{:012x}", fnv1a_48(input)),
     };
-    format!("ck:device:01904100-0000-7000-8000-{suffix}")
+    format!("ak:device:01904100-0000-7000-8000-{suffix}")
 }
 
 fn fnv1a_48(input: &str) -> u64 {
@@ -114,7 +114,7 @@ pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
 
 fn next_typed_id(kind: &str) -> String {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("ck:{kind}:01999999-0000-7000-8000-{seq:012x}")
+    format!("ak:{kind}:01999999-0000-7000-8000-{seq:012x}")
 }
 
 /// Normalise a single `plaintext_visible_services` entry into the spec-typed
@@ -213,7 +213,7 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
         "title": title,
         "summary": summary,
         "created_by": actor,
-        "trust_domain": "ck:trust_domain:soland.local",
+        "trust_domain": "ak:trust_domain:soland.local",
         "schema_refs": ["ck.schema.realm.v1"],
         "default_discoverability": discoverability,
         "default_join_rule": join_rule,

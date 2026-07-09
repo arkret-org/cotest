@@ -84,7 +84,7 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     assert!(
         external_root["expected_trust_domain"]
             .as_str()
-            .is_some_and(|trust_domain| trust_domain.starts_with("ck:trust_domain:")),
+            .is_some_and(|trust_domain| trust_domain.starts_with("ak:trust_domain:")),
         "external starid trust root must bind the expected trust domain: {external_root}"
     );
     assert!(

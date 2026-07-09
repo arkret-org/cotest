@@ -13,7 +13,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use cokret::identity::{PrimaryHandleSelectInput, select_primary_handle};
+use arkret::identity::{PrimaryHandleSelectInput, select_primary_handle};
 use cokret_core::Did;
 use cokret_core::models::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList, Handle,
@@ -163,8 +163,8 @@ pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
 
 pub fn run_audience_filter_applied_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
-    let other_ctx = "ck:realm:01904100-0000-7000-8000-0000000000bb";
+    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
+    let other_ctx = "ak:realm:01904100-0000-7000-8000-0000000000bb";
 
     // Directory has two claims; one is scoped to a different audience.
     let in_scope = claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?;
@@ -241,7 +241,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
         as_of: now_anchor(),
-        next_cursor: Some("ck:cursor:eyJ2IjoiMSIsIngiOjF9".to_owned()),
+        next_cursor: Some("ak:cursor:eyJ2IjoiMSIsIngiOjF9".to_owned()),
         has_more: true,
     };
     page1
@@ -251,7 +251,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         .next_cursor
         .as_deref()
         .ok_or_else(|| anyhow!("has_more=true MUST carry next_cursor"))?;
-    if !cursor.starts_with("ck:cursor:") {
+    if !cursor.starts_with("ak:cursor:") {
         bail!("next_cursor MUST be an opaque `ck:cursor:` token; got `{cursor}`");
     }
 
@@ -297,7 +297,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
 
 pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
     let snapshot = vec![
         claim_for("alice:other.example", &s, OTHER_ISSUER, None)?,
         claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?,

@@ -13,14 +13,14 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
             "did:web:bob-directory.example",
             "@bob-directory",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
 
@@ -60,7 +60,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             &invite_realm_id,
             "ck.invite.create",
             invite_create_payload(
-                "ck:invite:0196419b-0000-7000-8000-000000000201",
+                "ak:invite:0196419b-0000-7000-8000-000000000201",
                 bob.actor.as_str(),
                 server.service_did(),
                 canonical_sha256(&introduction_evidence)?,
@@ -91,7 +91,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
-            .json(&json!({"invite_token": "ck:invite-token:invalid"})),
+            .json(&json!({"invite_token": "ak:invite-token:invalid"})),
         StatusCode::NOT_FOUND,
     )
     .await?;
@@ -158,7 +158,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let sent = alice
         .send_message(
             &shared_realm_id,
-            "ck:thread:directory-workflow",
+            "ak:thread:directory-workflow",
             "hello directory workflow",
         )
         .await?;
@@ -173,7 +173,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         sent["event_id"]
             .as_str()
             .unwrap()
-            .replacen("ck:event:", "ck:operation:", 1);
+            .replacen("ak:event:", "ak:operation:", 1);
     assert!(
         exported["operations"]
             .as_array()
@@ -185,7 +185,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let waited_sync = expect_response(
         alice
             .get("/_cokret/self/account/subscribe?catchup=true")
-            .header("x-cokret-wait-for", sent["cursor"].as_str().unwrap())
+            .header("x-arkret-wait-for", sent["cursor"].as_str().unwrap())
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )
@@ -193,7 +193,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     assert_eq!(
         waited_sync
             .headers
-            .get("x-cokret-wait-for-satisfied")
+            .get("x-arkret-wait-for-satisfied")
             .and_then(|value| value.to_str().ok()),
         Some("true")
     );
@@ -211,7 +211,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     expect_status(
         alice
             .get("/_cokret/self/account/subscribe?catchup=true")
-            .header("x-cokret-wait-for", "not-a-sync-token")
+            .header("x-arkret-wait-for", "not-a-sync-token")
             .header("accept", "application/x-ndjson"),
         StatusCode::BAD_REQUEST,
     )

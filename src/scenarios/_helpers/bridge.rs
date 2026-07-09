@@ -245,16 +245,16 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "proof_required": false,
         "one_time_use_consumed": false,
         "grant": {
-            "id": "ck:grant:0196419b-0000-7000-8000-000000000901",
+            "id": "ak:grant:0196419b-0000-7000-8000-000000000901",
             "issuer": "did:web:coauth.cotest.local",
             "subject": subject,
             "service_account_id": "alice-session-grant",
             "device_id": device_id,
             "audience": audience,
-            "scopes": ["urn:cokret:principal-server:session.bind"],
+            "scopes": ["urn:arkret:principal-server:session.bind"],
             "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
             "revoked_at": null,
-            "revocation_ref": "ck:session:mock",
+            "revocation_ref": "ak:session:mock",
             // `SessionGrantIntrospectGrant.session_public_key` is a required
             // (non-Option) field in the SDK wire type; omitting it makes soland
             // fail to deserialize the introspection outcome and return 503.

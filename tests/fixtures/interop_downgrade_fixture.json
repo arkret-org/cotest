@@ -3,10 +3,10 @@
   "profile": "ck.profile.mimi_interop_vectors.v1",
   "version": 1,
   "source_refs": [
-    "cokret-spec/spec/v1/zh/extensions/mimi-interop.md#10-identifiers-and-consent",
-    "cokret-spec/spec/v1/zh/extensions/mimi-interop.md#12-conformance",
-    "cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md",
-    "cokret-spec/spec/v1/zh/sync/sovereign-deployment.md#3-2-sovereign-baseline"
+    "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#10-identifiers-and-consent",
+    "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#12-conformance",
+    "arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md",
+    "arkret-spec/spec/v1/zh/sync/sovereign-deployment.md#3-2-sovereign-baseline"
   ],
   "vectors": [
     {
@@ -42,7 +42,7 @@
       },
       "input": {
         "operation_id": "ck.open.mimi.command.request_consent",
-        "consent_id": "ck:consent:0196419b-0000-7000-8000-00000000d001",
+        "consent_id": "ak:consent:0196419b-0000-7000-8000-00000000d001",
         "consent_state": {
           "holder_did": "did:web:alice.example",
           "peer_did": "did:web:bob.example",
@@ -152,7 +152,7 @@
           "allowed_protocols": []
         },
         "capability_refs": [
-          "ck:capability:0196419b-0000-7000-8000-00000000c001"
+          "ak:capability:0196419b-0000-7000-8000-00000000c001"
         ]
       },
       "expected": {
@@ -177,7 +177,7 @@
           "allowed_protocols": []
         },
         "capability_refs": [
-          "ck:capability:0196419b-0000-7000-8000-00000000c002"
+          "ak:capability:0196419b-0000-7000-8000-00000000c002"
         ]
       },
       "expected": {

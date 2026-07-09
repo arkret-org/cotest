@@ -109,13 +109,13 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     // Stateful reducer over the [1, 2, 1] stream the e2e relay delivers
     // verbatim: the trailing 1 is the only rejection.
     let key = CallSignalSeqKey::new(
-        cokret_core::RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000000".to_owned())
+        cokret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("realm id: {e}"))?,
-        cokret_core::CallId::new("ck:call:0196441c-0000-7000-8000-000000000000".to_owned())
+        cokret_core::CallId::new("ak:call:0196441c-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("call id: {e}"))?,
         cokret_core::Did::new("did:web:alice.example.com".to_owned())
             .map_err(|e| anyhow!("did: {e}"))?,
-        cokret_core::DeviceId::new("ck:device:01964137-0000-7000-8000-000000000000".to_owned())
+        cokret_core::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("device id: {e}"))?,
     );
     let mut state = CallSignalState::new();
@@ -156,14 +156,14 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     let created_at_str = created_at.to_rfc3339_opts(SecondsFormat::Secs, true);
     let mut envelope = json!({
         "kind": "ck.call.signal",
-        "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": actor_id,
-        "device_id": "ck:device:01964137-0000-7000-8000-000000000000",
+        "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
         "sent_at": created_at_str,
         "expires_at": Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 30).unwrap()
             .to_rfc3339_opts(SecondsFormat::Secs, true),
         "payload": {
-            "call_id": "ck:call:0196441c-0000-7000-8000-000000000000",
+            "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
             "signal_type": "invite",
             "seq": 12,
             "data": {}
@@ -255,13 +255,13 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 fn call_signal_envelope_value(signal_type: &str, seq: u64) -> Value {
     json!({
         "kind": "ck.call.signal",
-        "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": "did:web:alice.example.com",
-        "device_id": "ck:device:01964137-0000-7000-8000-000000000000",
+        "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
         "sent_at": "2026-04-26T00:00:00Z",
         "expires_at": "2026-04-26T00:00:30Z",
         "payload": {
-            "call_id": "ck:call:0196441c-0000-7000-8000-000000000000",
+            "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
             "signal_type": signal_type,
             "seq": seq,
             "data": {}

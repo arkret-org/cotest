@@ -181,7 +181,7 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Valu
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let hlc_logical = seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
-    let event_id = format!("ck:event:{suffix}");
+    let event_id = format!("ak:event:{suffix}");
     normalize_message_payload(kind, realm_id, &mut payload);
     let mut event = json!({
         "event_id": event_id,
@@ -195,7 +195,7 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Valu
         "refs": [],
         "payload": payload,
         "unsigned": {
-            "local_operation_idempotency_alias": format!("ck:operation:{suffix}"),
+            "local_operation_idempotency_alias": format!("ak:operation:{suffix}"),
         },
         "proofs": [{
             "kind": "detached_jws",
@@ -218,9 +218,9 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
     match kind {
         "ck.message.create" => {
             let strand_id = realm_id
-                .strip_prefix("ck:realm:")
-                .map(|suffix| format!("ck:strand:{suffix}"))
-                .unwrap_or_else(|| "ck:strand:01904100-0000-7000-8000-f10dc0000001".to_owned());
+                .strip_prefix("ak:realm:")
+                .map(|suffix| format!("ak:strand:{suffix}"))
+                .unwrap_or_else(|| "ak:strand:01904100-0000-7000-8000-f10dc0000001".to_owned());
             object
                 .entry("strand_id".to_owned())
                 .or_insert_with(|| Value::String(strand_id));
@@ -249,15 +249,15 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
                 if let Some(event_id) = object.get("event_id").cloned() {
                     object.insert("target_event_id".to_owned(), event_id);
                 } else if let Some(target_ref) = object.get("target_ref").and_then(Value::as_str) {
-                    if target_ref.starts_with("ck:event:") {
+                    if target_ref.starts_with("ak:event:") {
                         object.insert(
                             "target_event_id".to_owned(),
                             Value::String(target_ref.to_owned()),
                         );
-                    } else if let Some(suffix) = target_ref.strip_prefix("ck:message:") {
+                    } else if let Some(suffix) = target_ref.strip_prefix("ak:message:") {
                         object.insert(
                             "target_event_id".to_owned(),
-                            Value::String(format!("ck:event:{suffix}")),
+                            Value::String(format!("ak:event:{suffix}")),
                         );
                     }
                 }
@@ -318,9 +318,9 @@ fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
 
 fn message_ref_from_event_ref(value: Value) -> Value {
     if let Some(event_id) = value.as_str()
-        && let Some(suffix) = event_id.strip_prefix("ck:event:")
+        && let Some(suffix) = event_id.strip_prefix("ak:event:")
     {
-        return Value::String(format!("ck:message:{suffix}"));
+        return Value::String(format!("ak:message:{suffix}"));
     }
     value
 }
@@ -490,16 +490,16 @@ fn member_payload(
 
 fn strand_id_for_realm(realm_id: &str) -> Result<StrandId> {
     let suffix = realm_id
-        .strip_prefix("ck:realm:")
+        .strip_prefix("ak:realm:")
         .ok_or_else(|| anyhow!("realm_id must start with ck:realm:"))?;
-    StrandId::new(format!("ck:strand:{suffix}"))
+    StrandId::new(format!("ak:strand:{suffix}"))
         .map_err(|err| anyhow!("invalid derived strand_id: {err}"))
 }
 
 fn message_id_from_event_id(event_id: &str) -> Result<MessageId> {
     let message_id = event_id
-        .strip_prefix("ck:event:")
-        .map(|suffix| format!("ck:message:{suffix}"))
+        .strip_prefix("ak:event:")
+        .map(|suffix| format!("ak:message:{suffix}"))
         .unwrap_or_else(|| event_id.to_owned());
     MessageId::new(message_id).map_err(|err| anyhow!("invalid message_id: {err}"))
 }
@@ -512,7 +512,7 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
     json!({
         "scheme": "mls-rfc9420",
         "version": 1,
-        "group_id": "ck:mls:test",
+        "group_id": "ak:mls:test",
         "epoch": 1,
         "content_type": content_type,
         "ciphertext": ciphertext,

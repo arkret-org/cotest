@@ -377,7 +377,7 @@ test.describe("discovery", () => {
       `${solandBaseUrl()}/_cokret/find/directory/search-organizations`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
-        data: { query: "Cokret" },
+        data: { query: "Arkret" },
       },
     );
     expect(orgResp.status()).toBe(200);
@@ -392,15 +392,15 @@ test.describe("discovery", () => {
         source_refs?: string[];
         policy_revision?: string;
       }) =>
-        r.handle === "@cokret-demo" ||
-        r.display_name === "Cokret Demo Organization",
+        r.handle === "@arkret-demo" ||
+        r.display_name === "Arkret Demo Organization",
     );
     const demo = demoEnvelope;
     expect(
       demo,
       "demo organization must appear in search results",
     ).toBeTruthy();
-    expect(demo!.display_name).toBe("Cokret Demo Organization");
+    expect(demo!.display_name).toBe("Arkret Demo Organization");
     expect(Array.isArray(demo!.source_refs)).toBe(true);
     expect(demo!.source_refs!.length).toBeGreaterThan(0);
     expect(typeof demo!.policy_revision).toBe("string");
@@ -424,7 +424,7 @@ test.describe("discovery", () => {
       );
       await alicePage.fillWithPassivePromptRetry(
         alicePage.page.getByTestId("directory-search-input"),
-        "Cokret",
+        "Arkret",
       );
       await alicePage.clickWithPassivePromptRetry(
         alicePage.page.getByTestId("directory-search-button"),
@@ -433,7 +433,7 @@ test.describe("discovery", () => {
         timeout: 30_000,
       });
       await expect(alicePage.page.getByTestId("org-result")).toContainText(
-        "Cokret Demo",
+        "Arkret Demo",
       );
     } finally {
       await alicePage.close();

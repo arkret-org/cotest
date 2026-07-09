@@ -15,8 +15,8 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
             .json(&json!({
                 // soland validates that the reported target exists; point at the
                 // adapter message Event authored in the events/keys setup phase.
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000101",
-                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000101",
+                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
             })),

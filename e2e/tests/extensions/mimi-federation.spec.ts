@@ -3,7 +3,7 @@
 // Spec: extensions/mimi-interop.md §1-§7
 //   §1 Provider Facade overview
 //   §2 Realm `federation_profile = "mimi_interop"` + endpoint exposure
-//   §3 Room binding: Cokret Strand ↔ MIMI room; event ↔ Message translation
+//   §3 Room binding: Arkret Strand ↔ MIMI room; event ↔ Message translation
 //   §4 Content mapping: standard MIMI content type ↔ `ck.morph` kind; unknown → quarantine
 //   §5 Policy mapping: join_rule / history_visibility ↔ MIMI room policy
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
@@ -58,7 +58,7 @@ test.describe("mimi federation", () => {
       //   below for the already-live pattern).
       //
       // Phase B — mimi_facade (mock) simulates a join request from the
-      //   external MIMI network, translated into a Cokret ck.invite.request /
+      //   external MIMI network, translated into a Arkret ck.invite.request /
       //   knock event submitted to soland; alice's /realm/:id/admin shows the
       //   federation-inbound-panel with a mimi origin marker.
       //
@@ -76,11 +76,11 @@ test.describe("mimi federation", () => {
       //   the facade mock records an outbound MIMI event; the soland message
       //   carries ck.morph.federation_outbound = "mimi" + mimi_event_id.
       //   The facade translates bob_mimi's MM2 from the MIMI network into a
-      //   Cokret Message; alice's timeline shows MM2 within 30s with the
+      //   Arkret Message; alice's timeline shows MM2 within 30s with the
       //   pairwise DID as sender; the message carries
       //   ck.morph.federation_inbound = "mimi" + mimi_origin_event_id.
       //   alice replies to MM2 with M3; the reply relation is preserved in
-      //   both directions across MIMI <-> Cokret.
+      //   both directions across MIMI <-> Arkret.
       //
       // Phase E — the Phase B approval implies per-Realm consent only;
       //   bob_mimi's pairwise DID is valid for the current Realm alone, and a
@@ -97,7 +97,7 @@ test.describe("mimi federation", () => {
     async () => {
       // The facade mock deliberately returns 5xx / times out;
       // alice's M1 must still persist locally on soland and stay visible to
-      // Cokret members; the message carries
+      // Arkret members; the message carries
       // ck.morph.federation_outbound_status = "deferred";
       // once the facade recovers, soland retries delivery and the status
       // transitions to "delivered".
@@ -274,7 +274,7 @@ async function createBoundMimiRoom(
     mls_group_id: `mls:${roomId}`,
     update: {
       kind: "ck.mimi.room_binding",
-      payload: opaquePayload(roomBinding, "application/vnd.cokret.mimi.room-binding+json"),
+      payload: opaquePayload(roomBinding, "application/vnd.arkret.mimi.room-binding+json"),
     },
     epoch: 1,
     sender_actor_id: MIMI_SOURCE_SERVICE_DID,
@@ -352,7 +352,7 @@ async function postSignedMimiMessage(
 
 const MIMI_SOURCE_SERVICE_DID = "did:web:mimi.example";
 const MIMI_PROVIDER_ID = "mimi://mimi.example";
-const MIMI_DEVICE_ID = "ck:device:018f6f50-6a23-7abc-8def-0123456789ab";
+const MIMI_DEVICE_ID = "ak:device:018f6f50-6a23-7abc-8def-0123456789ab";
 
 function opaquePayload(value: unknown, contentType: string): Record<string, string> {
   const canonical = canonicalJson(value);

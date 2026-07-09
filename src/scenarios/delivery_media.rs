@@ -12,14 +12,14 @@ use crate::scenarios::federation_collaboration::{
     authorize_device_public_key, signed_keys_upload_body,
 };
 
-const BLOB_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-00000000d101";
-const BLOB_REALM_CREATE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000000d100";
-const BLOB_REALM_MEMBER_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000000d102";
+const BLOB_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-00000000d101";
+const BLOB_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000000d100";
+const BLOB_REALM_MEMBER_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000000d102";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = CokretServer::spawn("delivery-keys").await?;
     let alice_did = "did:web:alice.example";
-    let alice_device = "ck:device:01904100-0000-7000-8000-0000000000a1";
+    let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let token = dev_login(&server, alice_did, alice_device).await?;
 
     // soland binds keys/upload to the authoritative device key (the device must
@@ -62,7 +62,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&signed_keys_upload_body(
                 alice_did,
-                "ck:device:01904100-0000-7000-8000-0000000000f0",
+                "ak:device:01904100-0000-7000-8000-0000000000f0",
                 &device_key,
                 json!({}),
                 json!({}),
@@ -101,14 +101,14 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"ck:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
+                    "did:web:alice.example": {"ak:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        first_claim["one_time_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+        first_claim["one_time_keys"]["did:web:alice.example"]["ak:device:01904100-0000-7000-8000-0000000000a1"]
             ["key"],
         "single-use"
     );
@@ -120,7 +120,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"ck:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
+                    "did:web:alice.example": {"ak:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
@@ -141,7 +141,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let token = dev_login(
         &server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
 
@@ -177,7 +177,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ck.mls.application",
                             "content": encrypted_envelope("ck.mls.application", "opaque-to-device"),
                             "expires_at": "2026-12-31T00:00:00Z"
@@ -190,7 +190,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     .await?;
     assert_eq!(
         send["delivered"]["did:web:alice.example"][0],
-        "ck:device:01904100-0000-7000-8000-0000000000a1"
+        "ak:device:01904100-0000-7000-8000-0000000000a1"
     );
 
     let duplicate = expect_json(
@@ -202,7 +202,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ck.mls.application",
                             "content": encrypted_envelope("ck.mls.application", "opaque-to-device"),
                             "expires_at": "2026-12-31T00:00:00Z"
@@ -270,21 +270,21 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
             "did:web:bob-blob.example",
             "@bob-blob",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
     let carol = server
         .register_client(
             "did:web:carol-blob.example",
             "@carol-blob",
-            "ck:device:01904100-0000-7000-8000-000000000ca0",
+            "ak:device:01904100-0000-7000-8000-000000000ca0",
         )
         .await?;
     let realm_id = create_blob_access_realm(&alice, &bob).await?;
@@ -304,7 +304,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice.token)
             .header(
-                "x-cokret-content-digest",
+                "x-arkret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .multipart(blob_upload_form(b"blob-bytes", "text/plain")?),
@@ -318,7 +318,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .http()
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice.token)
-            .header("x-cokret-realm-id", &realm_id)
+            .header("x-arkret-realm-id", &realm_id)
             .multipart(blob_upload_form(b"encrypted-bytes", "text/plain")?),
         StatusCode::OK,
     )
@@ -431,7 +431,7 @@ fn signed_realm_create_event(
             "schema": "ck.schema.realm.v1",
             "title": title,
             "summary": title,
-            "trust_domain": "ck:trust_domain:delivery-media.cotest.local",
+            "trust_domain": "ak:trust_domain:delivery-media.cotest.local",
             "created_by": actor_id,
             "schema_refs": ["ck.schema.realm.v1"],
             "default_discoverability": "public",
@@ -522,14 +522,14 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let alice = dev_login(
         &server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
     let bob = register_account(
         &server,
         "did:web:bob-delivery.example",
         "@bob-delivery",
-        "ck:device:01904100-0000-7000-8000-0000000000b0",
+        "ak:device:01904100-0000-7000-8000-0000000000b0",
     )
     .await?;
 
@@ -553,7 +553,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
                 "notification": {
-                    "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000ff"}],
+                    "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}],
                     "content": {"body": "plaintext leak"}
                 }
             })),
@@ -567,8 +567,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
                 "notification": {
-                    "push_target_id": "ck:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
-                    "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000ff"}]
+                    "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
+                    "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
                 }
             })),
         StatusCode::OK,
@@ -581,8 +581,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_cokret/self/moderation/report"))
             .json(&json!({
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
+                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
             })),
@@ -596,8 +596,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/self/moderation/report"))
             .bearer_auth(&alice)
             .json(&json!({
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
+                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             })),
@@ -611,8 +611,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/self/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
+                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             })),

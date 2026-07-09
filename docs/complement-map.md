@@ -1,8 +1,8 @@
-# Complement-Inspired Cokret Test Map
+# Complement-Inspired Arkret Test Map
 
 Complement treats a homeserver as a black box: deploy real instances, create
 high-level test clients, and validate protocol behavior by domain. `cotest`
-applies the same pattern to Cokret.
+applies the same pattern to Arkret.
 
 ## Concept Mapping
 
@@ -10,7 +10,7 @@ applies the same pattern to Cokret.
   `cotest` now supports both host-spawned local processes and Docker-backed SUT
   instances under the same harness.
 - Complement client helpers map to `TestActorClient`, shared HTTP assertions,
-  and selected `cokret-rust-sdk` helpers.
+  and selected `arkret-rust-sdk` helpers.
 - Complement's domain-oriented test packages map to `src/scenarios/*.rs`.
 - Complement federation coverage maps to `federation_readiness`,
   `federation_contract`, and `federation_collaboration`.
@@ -38,9 +38,9 @@ Complement typically expects a prebuilt homeserver image selected through
   builds `cotest-soland:latest`.
 - Image source:
   [docker/soland.Dockerfile](../docker/soland.Dockerfile)
-  compiles `soland` together with the sibling `cokret-rust-sdk` checkout.
+  compiles `soland` together with the sibling `arkret-rust-sdk` checkout.
 - Build context control:
-  `E:\Works\cokret\.dockerignore` limits Docker context to the trees needed
+  `E:\Works\arkret\.dockerignore` limits Docker context to the trees needed
   for the SUT image, instead of sending the entire workspace.
 - Runtime selector:
   `COTEST_SUT_MODE=process|docker` chooses either local `cargo run` or
@@ -86,10 +86,10 @@ without making users reconstruct the run from terminal scrollback.
 In addition to runtime results, `cotest` now has an offline fixture-driven
 conformance surface in [src/conformance/](../src/conformance/),
 which consumes the spec-owned machine-readable artifacts under
-`cokret-spec/spec/v1/artifacts`: schemas, registries, profiles, OpenAPI, non-HTTP
+`arkret-spec/spec/v1/artifacts`: schemas, registries, profiles, OpenAPI, non-HTTP
 bindings, and fixtures. Complement does not need this exact layer because
 Matrix homeserver behavior is mostly expressed directly through networked
-black-box tests; Cokret benefits from keeping protocol vectors and server
+black-box tests; Arkret benefits from keeping protocol vectors and server
 scenarios side by side.
 
 ## Coverage Translation

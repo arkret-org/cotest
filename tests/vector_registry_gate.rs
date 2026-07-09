@@ -173,7 +173,7 @@ fn fixture_backed_active_vector_with_digest_drift_fails() -> Result<()> {
     write_json(
         &artifacts_root.join("reports").join("fixture-digests.json"),
         &json!({
-            "schema": "cokret.fixture-digests.v1",
+            "schema": "arkret.fixture-digests.v1",
             "hash": "sha256",
             "fixtures_root": "spec/v1/artifacts/fixtures",
             "files": [{
@@ -362,7 +362,7 @@ fn write_fixture_digest_report(artifacts_root: &Path, fixture_refs: &[&str]) -> 
     write_json(
         &artifacts_root.join("reports").join("fixture-digests.json"),
         &json!({
-            "schema": "cokret.fixture-digests.v1",
+            "schema": "arkret.fixture-digests.v1",
             "hash": "sha256",
             "fixtures_root": "spec/v1/artifacts/fixtures",
             "files": files,

@@ -4,7 +4,7 @@
 //! scenario:
 //!
 //!   1. coauth (T3.2) issues a `handle_claim` whose `handle` is the canonical
-//!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, cokret-spec @ 7157ee8) and
+//!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, arkret-spec @ 7157ee8) and
 //!      whose `member_delivery_binding` points at a recipient principal server.
 //!   2. teabay (T3.4) hosts `ck.find.directory.query.resolve_handle(intent="member_add")` and
 //!      filters candidates against the target Realm's `allowed_recipient_services`.
@@ -52,7 +52,7 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 /// Stable Realm DID used as the candidate audience for the happy path. Picked
 /// so the assertions read as a Realm identifier and not as a free-form string.
-const TARGET_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-handle2joinaa";
+const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-handle2joinaa";
 
 /// Stable principal-server DID that appears as both the issuer and the
 /// recipient on the candidate. T3.4's allow-list test uses the same shape.
@@ -67,13 +67,13 @@ const ALICE_DID: &str = "did:web:alice.acme.example";
 
 /// Canonical handle for Alice — R3.1 wire form `<localpart>:<domain>`. The
 /// acct: alias appears in `handle_aliases[]` as the interop form, mirroring
-/// the coauth `issue_handle_claim` output (cokret-spec @ 7157ee8).
+/// the coauth `issue_handle_claim` output (arkret-spec @ 7157ee8).
 const ALICE_HANDLE: &str = "alice:acme.example";
 
 /// Source-ref event id the directory would echo back on a real
 /// `ck.find.directory.query.resolve_handle` envelope. Carried so `source_refs[]` is
 /// non-empty (a candidate validator MUST-rule).
-const SOURCE_REF_EVENT_ID: &str = "ck:event:01890000-0000-7000-8000-source0001";
+const SOURCE_REF_EVENT_ID: &str = "ak:event:01890000-0000-7000-8000-source0001";
 
 // ── Public scenario entry-point ────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
     // The candidate's canonical `handle` MUST round-trip through the
     // canonical `<localpart>:<domain>` form — guards against directory
     // caches that silently rewrite to `acct:` or to the retired
-    // `cokret://` URI form (forbidden per T3.1 / R3.1).
+    // `arkret://` URI form (forbidden per T3.1 / R3.1).
     let canonical = candidate.handle.canonical();
     let mut colon_parts = canonical.split(':');
     let local = colon_parts.next().unwrap_or_default();
@@ -139,11 +139,11 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
         bail!(
             "T3.5 happy path: candidate.handle is not canonical \
              `<localpart>:<domain>`; got `{canonical}`. The directory MUST \
-             NOT emit acct:/cokret:// handles (identity-handles.md §3.1, \
+             NOT emit acct:/arkret:// handles (identity-handles.md §3.1, \
              R3.1 wire rename)."
         );
     }
-    if canonical.starts_with("cokret://") || canonical.starts_with("acct:") {
+    if canonical.starts_with("arkret://") || canonical.starts_with("acct:") {
         bail!(
             "T3.5 happy path: candidate.handle leaked a retired URI form \
              (`{canonical}`); only `<localpart>:<domain>` is accepted on the \
@@ -268,7 +268,7 @@ fn negative_case_expired() -> Result<()> {
 fn negative_case_audience_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
     let ctx =
-        CandidateValidationContext::new("ck:realm:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned());
+        CandidateValidationContext::new("ak:realm:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned());
 
     match candidate.validate(&ctx) {
         Err(CandidateError::AudienceMismatch { .. }) => Ok(()),
@@ -311,7 +311,7 @@ fn negative_case_service_not_allowed() -> Result<()> {
 /// `acct_canonical_rejected` — R3.1 canonical form is
 /// `<localpart>:<domain>`. `acct:<local>@<domain>` may appear in
 /// `handle_aliases[]` but MUST NOT appear as the canonical `handle`. The
-/// retired `cokret://...` URI form is also rejected. The SDK's
+/// retired `arkret://...` URI form is also rejected. The SDK's
 /// `Handle::parse` enforces this at construction time, so we exercise the
 /// rejection by feeding a serialised candidate where the `handle` field
 /// carries the forbidden `acct:` string.
@@ -502,9 +502,9 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(
-                "ck:event:01890000-0000-7000-8000-acceptance01".to_owned(),
+                "ak:event:01890000-0000-7000-8000-acceptance01".to_owned(),
             ),
-            policy_event_ref: Some("ck:event:01890000-0000-7000-8000-policyref001".to_owned()),
+            policy_event_ref: Some("ak:event:01890000-0000-7000-8000-policyref001".to_owned()),
         },
         issuer_service_did: principal,
         audience: TARGET_REALM_ID.to_owned(),

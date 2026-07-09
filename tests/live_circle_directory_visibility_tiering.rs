@@ -61,13 +61,13 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
             glyph: CircleGlyph::Globe,
         },
     };
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007vis000".to_owned())
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-ckp0007vis000".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let cid_members = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007vis001".to_owned())
+    let cid_members = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007vis001".to_owned())
         .map_err(|e| anyhow!("cid_members: {e}"))?;
-    let cid_realm = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007vis002".to_owned())
+    let cid_realm = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007vis002".to_owned())
         .map_err(|e| anyhow!("cid_realm: {e}"))?;
-    let cid_default = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007vis003".to_owned())
+    let cid_default = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007vis003".to_owned())
         .map_err(|e| anyhow!("cid_default: {e}"))?;
 
     let circle_members = {
@@ -132,7 +132,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .register_client(
             "did:web:admin.ckp0007.example",
             "@admin",
-            "ck:device:01904100-0000-7000-8000-00000000ad01",
+            "ak:device:01904100-0000-7000-8000-00000000ad01",
         )
         .await?;
     let outsider = stack
@@ -140,7 +140,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .register_client(
             "did:web:outsider.ckp0007.example",
             "@outsider",
-            "ck:device:01904100-0000-7000-8000-00000000e005",
+            "ak:device:01904100-0000-7000-8000-00000000e005",
         )
         .await?;
     let realm_only = stack
@@ -148,7 +148,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .register_client(
             "did:web:realm-only.ckp0007.example",
             "@realm-only",
-            "ck:device:01904100-0000-7000-8000-00000000e002",
+            "ak:device:01904100-0000-7000-8000-00000000e002",
         )
         .await?;
     let circle_member = stack
@@ -156,7 +156,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .register_client(
             "did:web:incircle.ckp0007.example",
             "@incircle",
-            "ck:device:01904100-0000-7000-8000-0000000000e1",
+            "ak:device:01904100-0000-7000-8000-0000000000e1",
         )
         .await?;
     let _ = (

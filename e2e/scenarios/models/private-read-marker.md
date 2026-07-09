@@ -12,15 +12,15 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/models/private-objects.md` §2 — Private object 总览:read marker 属于
+- `arkret-spec/spec/v1/zh/models/private-objects.md` §2 — Private object 总览:read marker 属于
   actor-scope account data;与 Event 链解耦,只在 actor 自己的 device 之间复制
-- `cokret-spec/spec/v1/zh/discovery/read-receipts.md` §6 — Read Cursor schema
+- `arkret-spec/spec/v1/zh/discovery/read-receipts.md` §6 — Read Cursor schema
   (`position.event_id` + `position.hlc` + `read_scope`);actor-private propagation;eventual consistency 窗口
-- `cokret-spec/spec/v1/zh/discovery/read-receipts.md` — server 不持久化 per-message read state;
+- `arkret-spec/spec/v1/zh/discovery/read-receipts.md` — server 不持久化 per-message read state;
   marker 是单点游标,inbox unread 一律由 marker 衍生
-- `cokret-spec/spec/v1/zh/discovery/push-notifications.md` §2-§4 — notification 是 client-side
+- `arkret-spec/spec/v1/zh/discovery/push-notifications.md` §2-§4 — notification 是 client-side
   projection,read marker 推进后该 device 的 inbox 清零
-- `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §7 — to-device queue,marker 同步走这条
+- `arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §7 — to-device queue,marker 同步走这条
   通道
 
 ## 拓扑

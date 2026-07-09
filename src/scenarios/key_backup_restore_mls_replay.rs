@@ -1,7 +1,7 @@
 //! CT-11 — Key backup restore + MLS history replay.
 //!
 //! Spec references:
-//!   - `cokret-spec/spec/v1/zh/identity/key-management.md` §7.1 (backup contents) — three backup
+//!   - `arkret-spec/spec/v1/zh/identity/key-management.md` §7.1 (backup contents) — three backup
 //!     domains MUST be isolated:
 //!       * `did_recovery` — DID control / recovery key shares.
 //!       * `secret_storage` — `self_signing_key`, `user_signing_key`, recovery secret, MLS group
@@ -40,12 +40,12 @@
 //!    on the timeline; encrypted body is opaque to the server.
 //! 3. Mint a key backup envelope client-side:
 //!       * derive `kdf_key = argon2id(passphrase, salt, params)`.
-//!       * derive `commitment_key = HKDF(kdf_key, info="cokret-key-backup- commitment-v1")`.
+//!       * derive `commitment_key = HKDF(kdf_key, info="arkret-key-backup- commitment-v1")`.
 //!       * compute `key_commitment = sha256(commitment_key)`.
 //!       * pack `secret_storage` plaintext = `{self_signing_key, user_signing_key}`; pack
 //!         `mls_history` plaintext = `{mls_history_backup_key, epoch_key_material[*]}`.
 //!       * encrypt each domain's plaintext under its own subdomain key (HKDF info =
-//!         `"cokret-key-backup/<class>/<sub>/v1"`) with XChaCha20-Poly1305; AAD covers `actor_id,
+//!         `"arkret-key-backup/<class>/<sub>/v1"`) with XChaCha20-Poly1305; AAD covers `actor_id,
 //!         device_id, backup_class, backup_version, item_type, created_at, schema_id`.
 //!       * upload via `PUT /_cokret/self/keys/backups/{backup_id}` (current soland surface; see
 //!         `routing/identity/key_backup.rs`).
@@ -111,7 +111,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     let _group = TestServerGroup::single("ct11-key-backup-replay").await?;
     // let server = group.server(0);
     //
-    //   let device_a = new_prefixed_uuid7("ck:device:");
+    //   let device_a = new_prefixed_uuid7("ak:device:");
     //   let alice = server.register_client(
     //       "did:web:alice.ct11.cotest.local",
     //       "@alice-ct11",
@@ -155,14 +155,14 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   };
     //   let kdf_key = argon2id(passphrase.as_bytes(), &salt, &kdf_params);
     //   let commitment_key = hkdf::<Sha256>(
-    //       &kdf_key, b"cokret-key-backup-commitment-v1", 32);
+    //       &kdf_key, b"arkret-key-backup-commitment-v1", 32);
     //   let key_commitment = sha256(&commitment_key);
     //
     //   // Per-domain subkeys (§7.1 isolation rule).
     //   let secret_storage_key = hkdf::<Sha256>(
-    //       &kdf_key, b"cokret-key-backup/secret_storage/v1/v1", 32);
+    //       &kdf_key, b"arkret-key-backup/secret_storage/v1/v1", 32);
     //   let mls_history_key = hkdf::<Sha256>(
-    //       &kdf_key, b"cokret-key-backup/mls_history/v1/v1", 32);
+    //       &kdf_key, b"arkret-key-backup/mls_history/v1/v1", 32);
     //
     //   let ssk_plaintext = serde_json::to_vec(&json!({
     //       "self_signing_key": alice.ssk_secret(),
@@ -176,7 +176,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       })).collect::<Vec<_>>(),
     //   }))?;
     //
-    //   let backup_id = new_prefixed_uuid7("ck:backup:");
+    //   let backup_id = new_prefixed_uuid7("ak:backup:");
     //   let aad = canonical_json(json!({
     //       "actor_id": alice.actor,
     //       "device_id": device_a,
@@ -232,7 +232,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   // scaffold uses a synthetic sibling (`device_pair`) authorized
     //   // out-of-band purely so the revoke can fire from someone
     //   // OTHER than device-A:
-    //   let device_pair = new_prefixed_uuid7("ck:device:");
+    //   let device_pair = new_prefixed_uuid7("ak:device:");
     //   let pair_token = ... pair via CT-9 strand ...;
     //   expect_json(
     //       server.http()
@@ -252,7 +252,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
 
     // ── Step 5: onboard new device-B + claim the backup ─────────────────
     //
-    //   let device_b = new_prefixed_uuid7("ck:device:");
+    //   let device_b = new_prefixed_uuid7("ak:device:");
     //   // 5a. dev-login under device-B (in production this is gated by
     //   //     SSK proof per §7.4; soland's dev-login bypass is enough
     //   //     for the harness).
@@ -275,7 +275,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       &Argon2Params::from_json(&envelope["encryption"]["kdf"]
     //                                       ["params"])?);
     //   let commitment_key_2 = hkdf::<Sha256>(
-    //       &kdf_key_2, b"cokret-key-backup-commitment-v1", 32);
+    //       &kdf_key_2, b"arkret-key-backup-commitment-v1", 32);
     //   let computed_commitment = format!("sha256:{}",
     //                                hex(&sha256(&commitment_key_2)));
     //   assert_eq!(envelope["encryption"]["key_commitment"]
@@ -286,7 +286,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //
     //   // 5d. derive subdomain keys + decrypt:
     //   let ss_key = hkdf::<Sha256>(
-    //       &kdf_key_2, b"cokret-key-backup/secret_storage/v1/v1", 32);
+    //       &kdf_key_2, b"arkret-key-backup/secret_storage/v1/v1", 32);
     //   let ss_plain = xchacha20_open_with_aad(&ss_key, &nonce,
     //                       &ct_from_envelope, aad.as_bytes())?;
     //   // ... same for mls_history envelope to recover

@@ -1,6 +1,6 @@
 //! T5.3 (Round 22, 2026-05-20) — canonical-JSON convergence vectors.
 //!
-//! Every Cokret service (coauth / soland / starid / inkson / floria) now
+//! Every Arkret service (coauth / soland / starid / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
 //! the SDK's `cokret_core::canonical` module and the
 //! `cokret_signatures::EventProofBuilder` facade. This test pins a
@@ -15,7 +15,7 @@
 //! first place it surfaces (instead of inscrutable cross-service signature
 //! failures in federation / replication tests).
 
-use cokret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
+use arkret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
 use cokret_core::canonical::{
     blake3_digest, canonical_hash, canonical_json_bytes, canonical_sha256, verify_digest,
 };
@@ -37,19 +37,19 @@ fn vectors() -> Vec<CanonicalVector> {
             vector_id: "ck.cotest_vector.canonical_hash.coauth_handle_claim.v1",
             label: "coauth handle_claim digest input",
             // Mirrors coauth's `HandleClaimDigestInput` shape from
-            // `crates/backend/src/handlers/cokret.rs`. RFC 3339 UTC strings
+            // `crates/backend/src/handlers/arkret.rs`. RFC 3339 UTC strings
             // for timestamps; integer-only numbers; all-string scalar fields.
             //
-            // R3.1 wire rename (cokret-spec @ 7157ee8): the previous
-            // `handle_uri: "cokret://cokret.example/users/alice"` field
-            // is now `handle: "alice:cokret.example"`. Field order is
+            // R3.1 wire rename (arkret-spec @ 7157ee8): the previous
+            // `handle_uri: "arkret://arkret.example/users/alice"` field
+            // is now `handle: "alice:arkret.example"`. Field order is
             // irrelevant in canonical JSON (keys are sorted), but the digest
             // changes because both the field name and the value bytes change.
             payload: json!({
                 "type": "ck.handle.claim",
                 "subject_id": "did:web:alice.example",
-                "handle": "alice:cokret.example",
-                "handle_aliases": ["acct:alice@cokret.example"],
+                "handle": "alice:arkret.example",
+                "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_service_did": "did:web:coauth.example",
                 "audience": "https://soland.example/_cokret",
                 "member_delivery_binding": {
@@ -78,8 +78,8 @@ fn vectors() -> Vec<CanonicalVector> {
             // stripping `proofs` / `unsigned` from the on-wire envelope.
             payload: json!({
                 "actor_id": "did:web:alice.example",
-                "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
-                "realm_id": "ck:realm:01904100-0000-7000-8000-668e2181b41d",
+                "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
+                "realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",
                 "kind": "ck.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
@@ -87,7 +87,7 @@ fn vectors() -> Vec<CanonicalVector> {
                         "kind": "ck.content.text",
                         "body": "hello"
                     },
-                    "strand_id": "ck:strand:01904100-0000-7000-8000-6c663fa0205f",
+                    "strand_id": "ak:strand:01904100-0000-7000-8000-6c663fa0205f",
                     "track_name": "discussion",
                 },
                 "schema_version": 1,
@@ -129,8 +129,8 @@ fn vectors() -> Vec<CanonicalVector> {
             payload: json!({
                 "type": "ck.handle.claim",
                 "subject_id": "did:webvh:zcotesthandleclaimscid000000000000:alice.example",
-                "handle": "alice:cokret.example",
-                "handle_aliases": ["acct:alice@cokret.example"],
+                "handle": "alice:arkret.example",
+                "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_service_did": "did:webvh:zcotestcoauthscid0000000000000000:coauth.example",
                 "audience": "https://soland.example/_cokret",
                 "member_delivery_binding": {
@@ -240,7 +240,7 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 
 /// Every service ultimately goes through one of two SDK entry points:
 /// the low-level `cokret_core::canonical::canonical_sha256` (used by
-/// `coauth::handlers::cokret::canonical_json_sha256`, soland's
+/// `coauth::handlers::arkret::canonical_json_sha256`, soland's
 /// `validate_event_proofs`, and starid's `proof::canonical_bytes`), or
 /// the high-level `cokret_signatures::EventProofBuilder` (used by
 /// inkson / floria when emitting a fresh detached-JWS proof). Both
@@ -269,7 +269,7 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
     }
 }
 
-// ─── R3.2 (cokret-spec @ b56cab1) — MemberIdentity / roster digests ──────
+// ─── R3.2 (arkret-spec @ b56cab1) — MemberIdentity / roster digests ──────
 //
 // VECT-COT-5: the R3.2 wire-breaking rename split the single
 // `identity_state_digest` into three distinct digests with distinct
@@ -293,11 +293,11 @@ fn pinned_r3_2_inputs() -> (
     };
     use cokret_core::{Did, EventId, Hash, RealmId};
 
-    let realm = RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap();
+    let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap();
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {
-            event_id: EventId::new("ck:event:01904100-0000-7000-8000-000000000a01").unwrap(),
+            event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000a01").unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -305,7 +305,7 @@ fn pinned_r3_2_inputs() -> (
             .unwrap(),
         },
         EffectiveIdentityEntry {
-            event_id: EventId::new("ck:event:01904100-0000-7000-8000-000000000a02").unwrap(),
+            event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000a02").unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:2222222222222222222222222222222222222222222222222222222222222222",

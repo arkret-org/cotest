@@ -687,7 +687,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     }
     let principal = did("did:web:alice.example")?;
     let device = device(required_str(vector, "device_id")?)?;
-    let realm = realm("ck:realm:0196419b-0000-7000-8000-000000000000")?;
+    let realm = realm("ak:realm:0196419b-0000-7000-8000-000000000000")?;
     let expires_at = parse_time("2100-01-01T00:00:00Z")?;
     let mut old = MiniKeypackage::new_last_resort(
         required_str(vector, "old_last_resort_keypackage_ref")?,
@@ -767,7 +767,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         bail!("last-resort feature id drifted");
     }
     let principal = did("did:web:alice.example")?;
-    let device = device("ck:device:0196419b-0000-7000-8000-000000000001")?;
+    let device = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let r1 = realm(required_str(vector, "realm_r1")?)?;
     let r2 = realm(required_str(vector, "realm_r2")?)?;
     let expires_at = parse_time("2100-01-01T00:00:00Z")?;
@@ -842,7 +842,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
     json!({
         "keypackage_id": "kp-1",
         "principal_id": "did:web:alice.example",
-        "device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+        "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_digest,
         "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
@@ -878,7 +878,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
         "mls_group_id": "mls-group-a",
         "epoch": 1,
         "recipient_principal_id": "did:web:alice.example",
-        "recipient_device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
+        "recipient_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "keypackage_ref": fixture.keypackage_ref,
         "keypackage_digest": fixture.top_digest,
         "claim_id": fixture.claim_id,
@@ -935,7 +935,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         keypackage_ref,
         digest,
         &did("did:web:alice.example")?,
-        &device("ck:device:0196419b-0000-7000-8000-000000000001")?,
+        &device("ak:device:0196419b-0000-7000-8000-000000000001")?,
         false,
         parse_time("2100-01-01T00:00:00Z")?,
     );
@@ -1031,7 +1031,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         bail!("mismatched claim_ref keypackage_digest was accepted");
     }
     let bad_realm_value = welcome_payload_value(WelcomePayloadFixture {
-        intended_realm_id: "ck:realm:0196419b-0000-7000-8000-000000000002",
+        intended_realm_id: "ak:realm:0196419b-0000-7000-8000-000000000002",
         ..good_welcome
     });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_realm_value)?;

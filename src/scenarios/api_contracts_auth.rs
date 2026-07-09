@@ -45,7 +45,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_cokret/gate/account/register"))
-            .json(&json!({"principal_id": "bad", "device_id": "ck:device:01904100-0000-7000-8000-000000000bad"})),
+            .json(&json!({"principal_id": "bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"})),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
     )
@@ -58,7 +58,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
             .json(&json!({
                 "principal_id": "did:web:alice-auth.example",
                 "display_name": "alice-auth",
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
             })),
         StatusCode::OK,
     )
@@ -72,14 +72,14 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
             .json(&json!({
                 "principal_id": "did:web:alice-auth.example",
                 "display_name": "alice-auth",
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a2"
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a2"
             })),
         StatusCode::OK,
     )
     .await?;
     let devices = second_device["devices"].as_array().expect("devices array");
     assert!(devices.iter().any(|device| {
-        device["device_id"].as_str() == Some("ck:device:01904100-0000-7000-8000-0000000000a2")
+        device["device_id"].as_str() == Some("ak:device:01904100-0000-7000-8000-0000000000a2")
     }));
 
     let login = expect_json(
@@ -88,7 +88,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
             .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&json!({
                 "actor": "did:web:alice-auth.example",
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "display_name": "Alice"
             })),
         StatusCode::OK,
@@ -146,7 +146,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .json(&json!({
                 "principal_id": "did:web:alice-contact.example",
                 "display_name": "Alice",
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
             })),
         StatusCode::OK,
     )
@@ -159,7 +159,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&json!({
                 "actor": "did:web:alice-contact.example",
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "display_name": "Alice"
             })),
         StatusCode::OK,
@@ -174,7 +174,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .json(&json!({
                 "principal_id": "did:web:bob-contact.example",
                 "display_name": "Bob",
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000b0"
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000b0"
             })),
         StatusCode::OK,
     )

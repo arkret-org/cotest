@@ -232,7 +232,7 @@ test.describe("agent protocol interop", () => {
     request,
   }, testInfo) => {
     // spec: §5 (full event family), §5.3 (status enum + transitions),
-    // §5.4 (result + audit_binding), §9 (audit modes), §13 (Cokret is the
+    // §5.4 (result + audit_binding), §9 (audit modes), §13 (Arkret is the
     // durable audit layer). Drives the in-process echo bridge: submitting
     // `ck.agent.interop_session.start` fans out status(working) +
     // result(completed) carrying the Ed25519 audit_binding.

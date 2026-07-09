@@ -38,7 +38,7 @@ import {
 const SERVICE_DID = "did:web:media.example";
 const ISSUER_KID = `${SERVICE_DID}#media-token`;
 const LIVEKIT_FOCUS: MediaFocusConfig = {
-  focus_id: "ck:focus:livekit-lhr",
+  focus_id: "ak:focus:livekit-lhr",
   type: "livekit",
   issuer_kid: ISSUER_KID,
   connect_url: "wss://livekit.media.example",

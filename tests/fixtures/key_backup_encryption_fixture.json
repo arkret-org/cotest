@@ -13,7 +13,7 @@
     "envelope_aead": "XChaCha20-Poly1305",
     "envelope_nonce_bytes": 24,
     "ciphertext_field": "ciphertext",
-    "backup_id_format": "ck:backup:<uuid-v7>",
+    "backup_id_format": "ak:backup:<uuid-v7>",
     "backup_version_format": "kb_<label>",
     "server_endpoint_upload": "PUT /_cokret/self/keys/backups/{backup_id}",
     "server_endpoint_restore": "GET /_cokret/self/keys/backups/{backup_id}"
@@ -43,7 +43,7 @@
     {
       "name": "server_side_blob_storage_opaque",
       "comment": "After client encrypts, the upload is ck.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
-      "backup_id": "ck:backup:01964137-0000-7000-8000-000000000000",
+      "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "blob_size_bytes": 4096,
       "server_treats_as_opaque": true,
@@ -59,7 +59,7 @@
     {
       "name": "restore_path_redrives_key_and_decrypts",
       "comment": "Client restores: GET /_cokret/self/keys/backups/{backup_id} -> re-derive master key from local passphrase + envelope salt + Argon2id params -> decrypt with XChaCha20-Poly1305 using envelope nonce/auth tag -> recover MLS history or secret-storage material. Successful decryption proves passphrase correctness and blob integrity.",
-      "backup_id": "ck:backup:01964137-0000-7000-8000-000000000000",
+      "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "passphrase_correct": true,
       "salt_b64": "AAECAwQFBgcICQoLDA0ODw",
@@ -81,8 +81,8 @@
     {
       "name": "rotation_mints_new_version_and_reencrypts",
       "comment": "User rotates passphrase. Client derives a new master key with a new salt, re-encrypts all covered material, and uploads a new backup object/version. Server retains the old envelope until migration is confirmed or retention expires. Rotation must not silently drop covered material.",
-      "old_backup_id": "ck:backup:01964137-0000-7000-8000-000000000000",
-      "new_backup_id": "ck:backup:01964137-0000-7000-8000-000000000002",
+      "old_backup_id": "ak:backup:01964137-0000-7000-8000-000000000000",
+      "new_backup_id": "ak:backup:01964137-0000-7000-8000-000000000002",
       "old_version_id": "kb_1",
       "new_version_id": "kb_2",
       "old_backup_version": "kb_1",

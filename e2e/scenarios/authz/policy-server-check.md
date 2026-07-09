@@ -8,10 +8,10 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/authz/policy-server.md` §2 — Realm `ck.realm.policy_server` Move 形状与 endpoint 字段
-- `cokret-spec/spec/v1/zh/authz/policy-server.md` §3 — `POST /_cokret/self/policy/check` request / response 契约,`{decision, reason, obligations[]}`
-- `cokret-spec/spec/v1/zh/authz/policy-server.md` §4 — obligation kinds (`log_event`、`require_step_up`、`mask_field`...) 与 fail-closed 默认
-- (附属) `cokret-spec/spec/v1/zh/authz/capabilities.md` §3 — 一次 cap-gated 操作的入口点(grant + policy_server 串行检查)
+- `arkret-spec/spec/v1/zh/authz/policy-server.md` §2 — Realm `ck.realm.policy_server` Move 形状与 endpoint 字段
+- `arkret-spec/spec/v1/zh/authz/policy-server.md` §3 — `POST /_cokret/self/policy/check` request / response 契约,`{decision, reason, obligations[]}`
+- `arkret-spec/spec/v1/zh/authz/policy-server.md` §4 — obligation kinds (`log_event`、`require_step_up`、`mask_field`...) 与 fail-closed 默认
+- (附属) `arkret-spec/spec/v1/zh/authz/capabilities.md` §3 — 一次 cap-gated 操作的入口点(grant + policy_server 串行检查)
 
 ## 拓扑
 

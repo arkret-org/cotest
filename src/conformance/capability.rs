@@ -83,7 +83,7 @@ fn str_vec(value: &Value, pointer: &str) -> Vec<String> {
 }
 
 fn grant_id_of_event(event_id: &str) -> String {
-    event_id.replacen("ck:event:", "ck:grant:", 1)
+    event_id.replacen("ak:event:", "ak:grant:", 1)
 }
 
 fn action_implies(granted: &str, requested: &str) -> bool {

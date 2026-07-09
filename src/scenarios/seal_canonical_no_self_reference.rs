@@ -8,7 +8,7 @@
 //! notary signature. The receiver MUST:
 //!
 //!   (a) recompute `H = sha256(canonical_bytes)`; the embedded `id`
-//!       MUST satisfy `id == "ck:seal:sha256:" || hex(H)` (content-
+//!       MUST satisfy `id == "ak:seal:sha256:" || hex(H)` (content-
 //!       addressed form), and
 //!   (b) verify `notary_signature` covers exactly `canonical_bytes` (i.e.
 //!       the byte stream with `id` / `notary_signature` removed).
@@ -25,7 +25,7 @@ use cokret_core::{
 };
 
 fn realm() -> Result<RealmId> {
-    RealmId::new("ck:realm:0196419b-0000-7000-8000-00000000014a".to_owned())
+    RealmId::new("ak:realm:0196419b-0000-7000-8000-00000000014a".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
@@ -36,7 +36,7 @@ fn move_id(hex_byte: u8) -> Result<MoveId> {
 
 fn seal_id(hex_byte: u8) -> Result<SealId> {
     let hex = format!("{hex_byte:02x}").repeat(32);
-    SealId::new(format!("ck:seal:sha256:{hex}")).map_err(|e| anyhow!("seal id: {e}"))
+    SealId::new(format!("ak:seal:sha256:{hex}")).map_err(|e| anyhow!("seal id: {e}"))
 }
 
 fn hash(hex_byte: u8) -> Result<Hash> {

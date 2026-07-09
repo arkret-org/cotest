@@ -74,7 +74,7 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
         .register_client(
             "did:web:admin.ckp0007.example",
             "@admin",
-            "ck:device:01904100-0000-7000-8000-00000000ad01",
+            "ak:device:01904100-0000-7000-8000-00000000ad01",
         )
         .await?;
     let alice = stack
@@ -82,7 +82,7 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
         .register_client(
             "did:web:alice.ckp0007.example",
             "@alice",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = stack
@@ -90,13 +90,13 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
         .register_client(
             "did:web:bob.ckp0007.example",
             "@bob",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
 
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007tomb01".to_owned())
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-ckp0007tomb01".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007tomb02".to_owned())
+    let circle_id = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007tomb02".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let actor_admin: Did = "did:web:admin.ckp0007.example"
         .parse()

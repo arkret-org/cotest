@@ -47,8 +47,8 @@ test.describe("encrypted attachments", () => {
   }) => {
     const uploadResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
       headers: {
-        "x-cokret-realm-id": "ck:realm:0196419b-0000-7000-8000-00000000prob",
-        "x-cokret-content-digest":
+        "x-arkret-realm-id": "ak:realm:0196419b-0000-7000-8000-00000000prob",
+        "x-arkret-content-digest":
           "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       },
       multipart: {
@@ -119,11 +119,11 @@ test.describe("encrypted attachments", () => {
     const upload = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
       headers: {
         ...authHeaders(aliceToken),
-        "x-cokret-filename": "cat.png",
-        "x-cokret-realm-id": realmId,
-        "x-cokret-blob-encrypted": "true",
-        "x-cokret-attachment-envelope": JSON.stringify(envelope),
-        "x-cokret-content-digest": ciphertextDigest,
+        "x-arkret-filename": "cat.png",
+        "x-arkret-realm-id": realmId,
+        "x-arkret-blob-encrypted": "true",
+        "x-arkret-attachment-envelope": JSON.stringify(envelope),
+        "x-arkret-content-digest": ciphertextDigest,
       },
       multipart: {
         content: {
@@ -187,7 +187,7 @@ test.describe("encrypted attachments", () => {
 
     const missing = await request.get(
       `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(
-        "ck:blob:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "ak:blob:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       )}&purpose=message_attachment`,
       { headers: authHeaders(malloryToken) },
     );
@@ -332,7 +332,7 @@ test.describe("encrypted attachments", () => {
     // The franking receipt is independently verifiable via the audit surface
     // without disclosing plaintext.
     const audit = await request.get(
-      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=org.cokret.soland.audit.report`,
+      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=org.arkret.soland.audit.report`,
       { headers: authHeaders(aliceToken) },
     );
     const auditText = await audit.text();
@@ -357,7 +357,7 @@ function encryptedAttachmentEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.cokret.attachment+json",
+    content_type: "application/vnd.arkret.attachment+json",
     aad_visibility_event_id: "hidden",
     aad,
     key_ref: {

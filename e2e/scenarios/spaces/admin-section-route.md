@@ -13,7 +13,7 @@
 
 ## Spec 锚点
 
-本 probe 没有 cokret-spec § 锚点 — 它锚定的是 **inkson 自己的 routing 约定**:当 URL 是 `/realms/<id>/admin/<section>` 时,`RealmAdminPanel` 应通过 React Router 把 `section` 解析进 `active_section` 状态,并把人类可读名称(`"Members"`、`"Settings"` 等)渲染到 `data-testid="realm-admin-active-section"` 里。
+本 probe 没有 arkret-spec § 锚点 — 它锚定的是 **inkson 自己的 routing 约定**:当 URL 是 `/realms/<id>/admin/<section>` 时,`RealmAdminPanel` 应通过 React Router 把 `section` 解析进 `active_section` 状态,并把人类可读名称(`"Members"`、`"Settings"` 等)渲染到 `data-testid="realm-admin-active-section"` 里。
 
 实现锚点:[`tests/spaces/admin-section-route.spec.ts`](../../tests/spaces/admin-section-route.spec.ts) 是本 probe 的唯一 spec 文件,共 1 个 live test,无 fixme。
 

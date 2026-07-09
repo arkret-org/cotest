@@ -4,8 +4,8 @@
 //! `handle-claim.schema.json`.
 //!
 //! These vectors drive the SDK's deterministic selection algorithm
-//! ([`cokret::identity::select_primary_handle`]) and the canonical claim
-//! digest ([`cokret::identity::claim_digest`]) directly, so every
+//! ([`arkret::identity::select_primary_handle`]) and the canonical claim
+//! digest ([`arkret::identity::claim_digest`]) directly, so every
 //! implementation (inkson / sodmin / soland / teabay) agrees byte-for-byte.
 //!
 //! The §3.2.1 algorithm is a pure function of a six-tuple:
@@ -16,7 +16,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use cokret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
+use arkret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
 use cokret_core::models::{Handle, HandleBindingState, HandleClaim, PayloadProof};
 use cokret_core::{Did, Hash};
 
@@ -161,7 +161,7 @@ pub fn run_single_candidate_passthrough_vector() -> Result<()> {
 
 pub fn run_audience_match_wins_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
     // Newer, holder-flagged, but no audience.
     let newer = claim(
         "alice:other.example",
@@ -484,7 +484,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     let expires = at(2026, 6, 25);
     let mut canonical = claim("alice:acme.example", ACME_ISSUER, created, expires, None)?;
     canonical.handle_aliases = vec!["acct:alice@acme.example".to_owned()];
-    canonical.source_refs = vec!["ck:event:01904100-0000-7000-8000-000000000abc".to_owned()];
+    canonical.source_refs = vec!["ak:event:01904100-0000-7000-8000-000000000abc".to_owned()];
 
     let base = claim_digest(&canonical).map_err(|e| anyhow!("claim_digest base: {e}"))?;
 

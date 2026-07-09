@@ -46,6 +46,6 @@ fn testcontainers_postgres_bringup_smoke() {
     };
     assert!(
         pg.connect_url
-            .starts_with("postgresql://cokret:cokret@127.0.0.1:")
+            .starts_with("postgresql://arkret:arkret@127.0.0.1:")
     );
 }

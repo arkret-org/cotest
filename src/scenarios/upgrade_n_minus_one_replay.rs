@@ -10,11 +10,11 @@
 //! on replay is a release-blocker bug.
 //!
 //! Spec:
-//!   - `cokret-spec/spec/v1/zh/state/event-log.md` — event log is the source of truth; projections
+//!   - `arkret-spec/spec/v1/zh/state/event-log.md` — event log is the source of truth; projections
 //!     are derived and disposable.
-//!   - `cokret-spec/spec/v1/zh/conformance/event-schemas.md` — event-kind versioning +
+//!   - `arkret-spec/spec/v1/zh/conformance/event-schemas.md` — event-kind versioning +
 //!     forward-compat reducer rules.
-//!   - `cokret-spec/spec/v1/zh/state/snapshot-schema.md` — when a snapshot from N-1 is restored
+//!   - `arkret-spec/spec/v1/zh/state/snapshot-schema.md` — when a snapshot from N-1 is restored
 //!     under N, the snapshot schema must either be exactly compatible OR auto-migrate.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@
 //!   * **No schema-migration manifest.** Today there is no machine-readable list of "event kind X
 //!     changed shape between v0.4.0 and v0.5.0; here's the migrator". Without one, step 6 can only
 //!     do a strict byte-equality check, which makes the test fail every time any reducer touches
-//!     the projection shape — defeating the point. A `cokret-spec/state/migrations/*.json` manifest
+//!     the projection shape — defeating the point. A `arkret-spec/state/migrations/*.json` manifest
 //!     (or a Rust `inventory!`-style registry) would close this.
 //!   * **Per-rev data dir / DB schema isolation.** The N-1 binary and the N binary MUST share the
 //!     same on-disk state, but two concurrent CT-17 invocations MUST NOT share. Need a `Pg
@@ -95,7 +95,7 @@
 //!      semantically meaningful tags are preferred).
 //!   2. Add `cotest::scenarios::_helpers::cross_version_build` with worktree management + caching.
 //!   3. Add a migration manifest schema + at least an empty manifest under
-//!      `cokret-spec/state/migrations/`.
+//!      `arkret-spec/state/migrations/`.
 //!   4. Add `spawn_with_postgres` to the harness (shared with CT-16).
 //!   5. Replace each `unimplemented!("step N: …")` below with the real call.
 //!
@@ -139,7 +139,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   ).await?;
     //   let alice = register_account(&server_old, "did:web:alice.example",
     //                                "@alice",
-    // "ck:device:01904100-0000-7000-8000-0000000000a1").await?;   let realm_id =
+    // "ak:device:01904100-0000-7000-8000-0000000000a1").await?;   let realm_id =
     // create_realm(&server_old, &alice, "Upgrade Realm").await?;   let mut sent = Vec::new();
     //   for i in 0..16 {
     //       sent.push(send_message(&server_old, &alice, &realm_id,

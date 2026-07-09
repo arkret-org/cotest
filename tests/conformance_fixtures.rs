@@ -138,7 +138,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C10.C — exercises the SDK's `cokret-lattice` crate against the normative
+    /// C10.C — exercises the SDK's `arkret-lattice` crate against the normative
     /// scenarios from `cba-lattice-fixture.json` by reifying
     /// the symbolic ops as real `LatticeOp` + `SealedOp` values and asserting
     /// the spec's join semantics (CasRegister conflict ? Bottom, OrSet
@@ -273,7 +273,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// CES-03 - MIMI Provider Facade artifact vectors from cokret-spec.
+    /// CES-03 - MIMI Provider Facade artifact vectors from arkret-spec.
     /// Covers draft pinning, room binding, KeyPackage claim lifecycle,
     /// content mapping, identifier privacy, consent isolation, proxy download,
     /// and unsupported-draft fail-closed behavior.

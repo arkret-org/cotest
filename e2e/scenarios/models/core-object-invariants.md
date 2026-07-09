@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 Cokret 协作图 **所有 canonical object** 在线必须维持的五条核心不变量：
+验证 Arkret 协作图 **所有 canonical object** 在线必须维持的五条核心不变量：
 
 1. **公共字段完整性** — 任何 durable Event 与 Materialized Object 在 wire 上 MUST 携带 `common-fields.md` §3 列出的公共字段（`id` / typed prefix、`created_at`、actor 主体引用、`lifecycle_state` 等价物），不允许在 happy-path serializer 上"省略"以节省字节。
 2. **Patch precondition (CAS)** — 任何携带 `preconditions[].head_eq` 的 Move/patch 在 pre-state 与 actor 声明值不一致时 MUST `failed_precondition`，并且 **不得** 对目标 cell 执行 `effects[]`（不能"先写后报错"）。
@@ -14,17 +14,17 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/models/common-fields.md` §3 — Common Object Fields 表（`id` / `created_at` / `created_by` / `state` / `state_changed_at` / `schema`）
-- `cokret-spec/spec/v1/zh/models/common-fields.md` §5、§5.1 — Lifecycle state 枚举与 canonical state-transition 表（`<kind>_not_active` / `<kind>_already_terminal` / 同 state self-transition 禁止）
-- `cokret-spec/spec/v1/zh/models/event-and-patch.md` §2.2 — Event Envelope 必填字段（`event_id` / `kind` / `actor_id` / `actor_seq` / `created_at` / `prev_refs` / `refs` / `payload` / `proofs`）
-- `cokret-spec/spec/v1/zh/models/event-and-patch.md` §2.6 — `actor_seq` fork 约束（同 `(actor_id, actor_seq)` sibling fork 上限）
-- `cokret-spec/spec/v1/zh/models/event-and-patch.md` §4.2.3 / §4.2.4 / §4.2.5 — Patch selector 语义、redactable 字段保护、reducer-managed 字段保护、`preconditions[].head_eq` CAS 不匹配时 `failed_precondition`
-- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §2.5 / §2.5.1 — Realm tombstone vs destroy；destroy 后 `realm_terminal_state` / child cascade / erasure receipt
-- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`ck.space.archive` 不级联子 Space、`ck.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
-- `cokret-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
-- `cokret-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
-- `cokret-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → strand 派生，不依赖预先注册 View
-- `cokret-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionView` 形状（`view_id` 缺失时仍能返回派生 projection）
+- `arkret-spec/spec/v1/zh/models/common-fields.md` §3 — Common Object Fields 表（`id` / `created_at` / `created_by` / `state` / `state_changed_at` / `schema`）
+- `arkret-spec/spec/v1/zh/models/common-fields.md` §5、§5.1 — Lifecycle state 枚举与 canonical state-transition 表（`<kind>_not_active` / `<kind>_already_terminal` / 同 state self-transition 禁止）
+- `arkret-spec/spec/v1/zh/models/event-and-patch.md` §2.2 — Event Envelope 必填字段（`event_id` / `kind` / `actor_id` / `actor_seq` / `created_at` / `prev_refs` / `refs` / `payload` / `proofs`）
+- `arkret-spec/spec/v1/zh/models/event-and-patch.md` §2.6 — `actor_seq` fork 约束（同 `(actor_id, actor_seq)` sibling fork 上限）
+- `arkret-spec/spec/v1/zh/models/event-and-patch.md` §4.2.3 / §4.2.4 / §4.2.5 — Patch selector 语义、redactable 字段保护、reducer-managed 字段保护、`preconditions[].head_eq` CAS 不匹配时 `failed_precondition`
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §2.5 / §2.5.1 — Realm tombstone vs destroy；destroy 后 `realm_terminal_state` / child cascade / erasure receipt
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`ck.space.archive` 不级联子 Space、`ck.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
+- `arkret-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
+- `arkret-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
+- `arkret-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → strand 派生，不依赖预先注册 View
+- `arkret-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionView` 形状（`view_id` 缺失时仍能返回派生 projection）
 
 ## 拓扑
 

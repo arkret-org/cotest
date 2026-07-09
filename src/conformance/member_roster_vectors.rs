@@ -65,11 +65,11 @@ fn alice_subject() -> Result<Did> {
 }
 
 fn fake_realm() -> Result<RealmId> {
-    RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").map_err(|e| anyhow!("realm: {e}"))
+    RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").map_err(|e| anyhow!("realm: {e}"))
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
-    EventId::new(format!("ck:event:01904100-0000-7000-8000-{suffix:012x}"))
+    EventId::new(format!("ak:event:01904100-0000-7000-8000-{suffix:012x}"))
         .map_err(|e| anyhow!("invalid event id: {e}"))
 }
 
@@ -182,13 +182,13 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
 /// such a frame as the complete member set.
 pub fn run_member_roster_limited_vector() -> Result<()> {
     let frame = json!({
-        "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
+        "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
         "members": [
             {
                 "actor_id": "did:web:alice.acme.example",
                 "membership": "join",
                 "identity_event_ids": [
-                    "ck:event:01904100-0000-7000-8000-00000000ea01"
+                    "ak:event:01904100-0000-7000-8000-00000000ea01"
                 ],
                 "member_display_state_digest":
                     "sha256:abababababababababababababababababababababababababababababababab"
@@ -196,7 +196,7 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         ],
         "members_limited": true,
         "members_next_cursor":
-            "ck:cursor:eyJ2IjoiMSIsInB1cnBvc2UiOiJzdHJlYW0iLCJ0IjoiMjAyNi0wNS0yN1QwMDowMDowMFoiLCJ4IjoxOTAwMDAwMDAwMDAwfQ"
+            "ak:cursor:eyJ2IjoiMSIsInB1cnBvc2UiOiJzdHJlYW0iLCJ0IjoiMjAyNi0wNS0yN1QwMDowMDowMFoiLCJ4IjoxOTAwMDAwMDAwMDAwfQ"
     });
 
     if frame.get("members_limited").and_then(Value::as_bool) != Some(true) {
@@ -208,14 +208,14 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         .ok_or_else(|| {
             anyhow!("VECT-ROST-2: a truncated roster MUST carry `members_next_cursor`")
         })?;
-    if !cursor.starts_with("ck:cursor:") {
+    if !cursor.starts_with("ak:cursor:") {
         bail!(
             "VECT-ROST-2: members_next_cursor MUST be a `ck:cursor:` opaque \
              cursor; got `{cursor}`"
         );
     }
     let unlimited = json!({
-        "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
+        "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
         "members": []
     });
     if unlimited.get("members_limited").is_some() {
@@ -238,35 +238,35 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
         "membership": "join",
         "subject_id": "did:web:alice.principal.example",
         "identity_event_ids": [
-            "ck:event:01904100-0000-7000-8000-00000000ea01",
-            "ck:event:01904100-0000-7000-8000-00000000ea02"
+            "ak:event:01904100-0000-7000-8000-00000000ea01",
+            "ak:event:01904100-0000-7000-8000-00000000ea02"
         ],
         "member_display_state_digest":
             "sha256:abababababababababababababababababababababababababababababababab",
         "identity_events": [
             {
-                "event_id": "ck:event:01904100-0000-7000-8000-00000000ea01",
+                "event_id": "ak:event:01904100-0000-7000-8000-00000000ea01",
                 "kind": "ck.member.identity.update",
-                "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
-                    "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
+                    "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "identity_payload": {"member_identity": {"placeholder": "v1"}}
                 }
             },
             {
-                "event_id": "ck:event:01904100-0000-7000-8000-00000000ea02",
+                "event_id": "ak:event:01904100-0000-7000-8000-00000000ea02",
                 "kind": "ck.member.identity.update",
-                "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
-                    "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
+                    "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "replaces": [{
-                        "event_id": "ck:event:01904100-0000-7000-8000-00000000ea01",
+                        "event_id": "ak:event:01904100-0000-7000-8000-00000000ea01",
                         "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
                     }],
                     "identity_payload": {"member_identity": {"placeholder": "v2"}}

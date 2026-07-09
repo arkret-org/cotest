@@ -7,7 +7,7 @@ use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionSer
 
 pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
     let principal_id = "did:web:alice-session-grant.example";
-    let device_id = "ck:device:0196419b-0000-7000-8000-000000000501";
+    let device_id = "ak:device:0196419b-0000-7000-8000-000000000501";
     let coauth = MockCoauthIntrospectionServer::spawn(principal_id, device_id).await?;
     let _env = EnvOverride::set(&[
         ("SOLAND_SESSION_GRANT_INTROSPECTION_URL", Some(coauth.url())),
@@ -35,11 +35,11 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         server
             .http()
             .post(server.url("/_cokret/edge/push/register-device"))
-            .header("X-Cokret-Session-Grant", "coauth.session.jwt")
-            .header("X-Cokret-Principal-Id", principal_id)
-            .header("X-Cokret-Session-Grant-Challenge", "soland-push-challenge")
+            .header("X-Arkret-Session-Grant", "coauth.session.jwt")
+            .header("X-Arkret-Principal-Id", principal_id)
+            .header("X-Arkret-Session-Grant-Challenge", "soland-push-challenge")
             .header(
-                "X-Cokret-Session-Grant-Proof",
+                "X-Arkret-Session-Grant-Proof",
                 "client.session-key.push-proof.jwt",
             )
             .json(&json!({
@@ -62,7 +62,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         .as_str()
         .expect("registration_id must be a string");
     let pseudonym_body = registration_id
-        .strip_prefix("ck:pseudonym:push:")
+        .strip_prefix("ak:pseudonym:push:")
         .unwrap_or_else(|| {
             panic!("registration_id must be a push pseudonym, got: {registration_id}")
         });

@@ -22,7 +22,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     // Publish bob's primary handle so directory search resolves a concrete
@@ -39,7 +39,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             "did:web:bob-privacy.example",
             "@bob-privacy",
             &format!("bob-privacy-example:{service_host}"),
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
 
@@ -96,7 +96,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             &invite_only_realm_id,
             "ck.invite.create",
             invite_create_payload(
-                "ck:invite:0196419b-0000-7000-8000-000000000202",
+                "ak:invite:0196419b-0000-7000-8000-000000000202",
                 bob.actor.as_str(),
                 server.service_did(),
                 canonical_sha256(&introduction_evidence)?,

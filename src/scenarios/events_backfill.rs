@@ -15,12 +15,12 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = TestActorBuilder::new(server, "@bob-backfill")
         .with_did("did:web:bob-backfill.example")
-        .with_device("ck:device:01904100-0000-7000-8000-0000000000b0")
+        .with_device("ak:device:01904100-0000-7000-8000-0000000000b0")
         .create()
         .await?;
     let bob_client = bob.client();
@@ -30,13 +30,13 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let sent = [
         alice
-            .send_message(&realm_id, "ck:thread:backfill", "first event before gap")
+            .send_message(&realm_id, "ak:thread:backfill", "first event before gap")
             .await?,
         alice
-            .send_message(&realm_id, "ck:thread:backfill", "second event inside gap")
+            .send_message(&realm_id, "ak:thread:backfill", "second event inside gap")
             .await?,
         alice
-            .send_message(&realm_id, "ck:thread:backfill", "third event after gap")
+            .send_message(&realm_id, "ak:thread:backfill", "third event after gap")
             .await?,
     ];
     let expected_message_ids = sent

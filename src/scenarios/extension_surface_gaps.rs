@@ -10,7 +10,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let realm_id = alice.create_realm("Applet Surface Realm").await?;
@@ -36,7 +36,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
         alice
             .post(&format!("/_cokret/self/realms/{realm_id}/applets"))
             .json(&json!({
-                "applet_id": "ck:applet:board",
+                "applet_id": "ak:applet:board",
                 "manifest": {"name": "Board"}
             })),
         StatusCode::NOT_FOUND,
@@ -53,7 +53,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let realm_id = alice.create_realm("Agent Surface Realm").await?;

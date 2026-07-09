@@ -25,7 +25,7 @@ use cokret_core::{CircleId, Did, RealmId, Strand, StrandId};
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000602".to_owned())
+    RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000602".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
@@ -33,17 +33,17 @@ fn strand_id() -> Result<StrandId> {
     // `Strand::new` now takes a typed `StrandId` (was a raw String). The id MUST be
     // a strict `ck:strand:<uuid7>` literal; all four prev/next states below share
     // the same entity id so the scope-rebind helper compares the same Strand.
-    StrandId::new("ck:strand:0196419b-0000-7000-8000-000000000605".to_owned())
+    StrandId::new("ak:strand:0196419b-0000-7000-8000-000000000605".to_owned())
         .map_err(|e| anyhow!("strand id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000603".to_owned())
+    CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000603".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000604".to_owned())
+    CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000604".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

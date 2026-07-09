@@ -1,5 +1,5 @@
-// Mock policy-server — implements the Cokret Policy Server contract
-// (spec: cokret-spec/spec/v1/zh/authz/policy-server.md).
+// Mock policy-server — implements the Arkret Policy Server contract
+// (spec: arkret-spec/spec/v1/zh/authz/policy-server.md).
 //
 // The mock evaluates authorization decisions for the joint-e2e harness:
 // callers POST {action, actor_id, target, context} to /_cokret/self/policy/check

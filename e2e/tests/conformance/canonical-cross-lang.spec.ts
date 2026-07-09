@@ -1,6 +1,6 @@
 // Conformance — Cross-language canonical-JSON parity (TS side)
 //
-// The TS port `canonicalJson` (e2e/helpers/soland-api.ts) reimplements Cokret
+// The TS port `canonicalJson` (e2e/helpers/soland-api.ts) reimplements Arkret
 // canonical JSON because the e2e harness runs on Node and cannot call the Rust
 // SDK directly. The authoritative implementation is the SDK's
 // `cokret_core::canonical` (RFC 8785 JCS, integer-only number profile), and the

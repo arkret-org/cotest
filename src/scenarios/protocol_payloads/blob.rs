@@ -22,7 +22,7 @@ async fn sha_mismatch_is_rejected(server: &CokretServer, token: &str) -> Result<
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(token)
             .header(
-                "x-cokret-content-digest",
+                "x-arkret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .multipart(crate::scenarios::delivery_media::blob_upload_form(
@@ -53,7 +53,7 @@ async fn upload_then_range_get(server: &CokretServer, token: &str) -> Result<()>
         blob["blob_ref"]
             .as_str()
             .unwrap()
-            .starts_with("ck:blob:sha256:")
+            .starts_with("ak:blob:sha256:")
     );
 
     let range = expect_text(

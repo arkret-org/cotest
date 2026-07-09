@@ -63,7 +63,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
         for mv in moves {
             let kind = required_str(mv, "kind")?;
             let move_id = required_str(mv, "move_id")?;
-            if !move_id.starts_with("ck:event:") {
+            if !move_id.starts_with("ak:event:") {
                 bail!(
                     "vector {name} move_id {move_id} must use typed ck:event:<uuidv7> form (C19 wire-break)"
                 );
@@ -83,7 +83,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("ck:cell:ck.component.consent.grant.v1:") {
+                        if !cell.starts_with("ak:cell:ck.component.consent.grant.v1:") {
                             bail!(
                                 "vector {name} grant effect cell must be the consent.grant.v1 cell, got {cell}"
                             );
@@ -121,7 +121,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     let mut removed_anything = false;
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("ck:cell:ck.component.consent.grant.v1:") {
+                        if !cell.starts_with("ak:cell:ck.component.consent.grant.v1:") {
                             bail!(
                                 "vector {name} revoke effect cell must be the consent.grant.v1 cell, got {cell}"
                             );
@@ -183,7 +183,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                         let holder = required_str(pre, "holder")?;
                         let peer = required_str(pre, "peer")?;
                         let scope = required_str(pre, "scope")?;
-                        let cell = format!("ck:cell:ck.component.consent.grant.v1:{holder}");
+                        let cell = format!("ak:cell:ck.component.consent.grant.v1:{holder}");
                         let active_tags = or_set.get(&cell);
                         let resolved = active_tags
                             .map(|tags| {

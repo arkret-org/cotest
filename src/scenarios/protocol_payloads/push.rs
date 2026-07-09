@@ -23,7 +23,7 @@ async fn register_device(server: &CokretServer, token: &str) -> Result<String> {
             .post(server.url("/_cokret/edge/push/register-device"))
             .bearer_auth(token)
             .json(&json!({
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
@@ -50,7 +50,7 @@ async fn notify_blind_wakeup(server: &CokretServer, push_target_id: &str) -> Res
                 "notification": {
                     "push_target_id": push_target_id,
                     "wakeup_kind": "message",
-                    "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ck:device:01904100-0000-7000-8000-00000000dead"}]
+                    "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ak:device:01904100-0000-7000-8000-00000000dead"}]
                 }
             })),
         StatusCode::OK,

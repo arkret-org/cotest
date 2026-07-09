@@ -8,16 +8,16 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/sync/federation.md` §2.1 — Event Chain 是信任锚点
-- `cokret-spec/spec/v1/zh/sync/federation.md` §2.2 — Principal Server 是受控同步边界,不是全局权威
-- `cokret-spec/spec/v1/zh/sync/federation.md` §3.1-§3.2 — 基于 DID 的服务器身份 + RFC 9421 请求签名
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_cokret/peer/peer/events` 请求字段
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1.0 — Push 时序图(信任根说明)
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1.1 — 批量推送幂等 (`(origin, destination, event_id)` 去重)
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.2 — Pull / Backfill (`peer events query`)
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.5 — Fork Detection / Frontier Exchange
-- `cokret-spec/spec/v1/zh/sync/federation.md` §5.1 — 跨域邀请流程 (6 步)
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.4 — Capability Revoke Fanout
+- `arkret-spec/spec/v1/zh/sync/federation.md` §2.1 — Event Chain 是信任锚点
+- `arkret-spec/spec/v1/zh/sync/federation.md` §2.2 — Principal Server 是受控同步边界,不是全局权威
+- `arkret-spec/spec/v1/zh/sync/federation.md` §3.1-§3.2 — 基于 DID 的服务器身份 + RFC 9421 请求签名
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_cokret/peer/peer/events` 请求字段
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.0 — Push 时序图(信任根说明)
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.1 — 批量推送幂等 (`(origin, destination, event_id)` 去重)
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.2 — Pull / Backfill (`peer events query`)
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.5 — Fork Detection / Frontier Exchange
+- `arkret-spec/spec/v1/zh/sync/federation.md` §5.1 — 跨域邀请流程 (6 步)
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.4 — Capability Revoke Fanout
 
 ## 拓扑
 
@@ -152,7 +152,7 @@
 1. **双 soland 启动**:
    - 当前 script 只起一个 soland。需要参数化:`-SolandInstances 2` 或新加参数 `-Soland2Manifest`、`-Soland2BaseUrl`
    - 每个 soland 自己的 service DID、自己的 service_did 配置、自己的 objects root 目录
-   - coauth 的 `cokret.principal_servers[]` 配置要包含两个 soland 的 entry
+   - coauth 的 `arkret.principal_servers[]` 配置要包含两个 soland 的 entry
 2. **soland 之间的联邦发现**:
    - 需要 soland 支持 "已知 federation peers" 配置(看 soland 实现是 env var 还是 config)
    - 或者 soland 通过 DID Document `service.CokretPrincipalServer` 自动发现

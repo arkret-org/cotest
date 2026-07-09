@@ -101,7 +101,7 @@
 - **E7.1**:重复用同一 passkey 注册 → coauth 拒绝(`account_already_registered`)
 - **E7.2**:OIDC ID token 过期 → 注册失败,UI 显示 token expired
 - **E7.3**:email verification 链接已用过 → 拒绝,UI 显示 already consumed
-- **E7.4**:WebVH host 不可达(DNS 故障)→ resolver 进入 `degraded_no_witness` 状态(≤24h)([identity-did.md §4.2.1](../../../cokret-spec/spec/v1/zh/identity/identity-did.md))
+- **E7.4**:WebVH host 不可达(DNS 故障)→ resolver 进入 `degraded_no_witness` 状态(≤24h)([identity-did.md §4.2.1](../../../arkret-spec/spec/v1/zh/identity/identity-did.md))
 - **E7.5**:handle conflict (`@alice-s7` 已被占)→ coauth 拒绝 `handle_already_claimed`,客户端要求另选
 
 ## Implementation notes

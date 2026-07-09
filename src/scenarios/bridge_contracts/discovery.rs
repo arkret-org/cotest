@@ -15,7 +15,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     .await?;
     assert_eq!(
         integration["contract"],
-        "cokret.rest.integration_manifest.v1"
+        "arkret.rest.integration_manifest.v1"
     );
     assert_eq!(integration["service"], "soland");
     assert_eq!(integration["service_kind"], "principal_server");
@@ -59,7 +59,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(auth_bridge["contract"], "cokret.rest.principal_bridge.v1");
+    assert_eq!(auth_bridge["contract"], "arkret.rest.principal_bridge.v1");
     assert_eq!(
         auth_bridge["auth"]["session_grant_issuance_path"],
         "/_cokret/gate/account/session-grants"
@@ -90,7 +90,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     .await?;
     assert_eq!(
         push_bridge["contract"],
-        "cokret.rest.outbound_push_bridge.v1"
+        "arkret.rest.outbound_push_bridge.v1"
     );
     assert_eq!(
         push_bridge["gateway_contract"]["resolve_path"],

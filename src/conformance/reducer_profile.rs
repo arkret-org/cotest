@@ -1,6 +1,6 @@
 //! `service_binding_ref.reducer_profile_digest` computation (federation).
 //!
-//! Spec: `cokret-spec/spec/v1/zh/sync/federation.md` §4.1.1 (normative) — the
+//! Spec: `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.1 (normative) — the
 //! only machine-readable source for the digest is
 //! `spec/v1/artifacts/registry/reducer-profile-registry.json`. Senders MUST
 //! resolve the registry row whose `profile_id` equals the Realm's declared

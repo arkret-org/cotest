@@ -4,7 +4,7 @@
   "inherits": ["_shared/_canonical_uuids.json"],
   "comment": "Anchor compaction round-trip vectors per spec authz/event-auth-state-resolution.md §6 (Anchor DAG, effective_anchor_view, signed compaction). Each vector pins (a) a multi-leaf Anchor DAG input, (b) the expected effective_anchor_view (pure function over leaves), (c) a signed compaction Anchor that MUST be join-equivalent (state_root, frontier) to the multi-leaf view it replaces, and (d) the bottom diagnostics that MUST survive compaction (compaction is information-preserving for ⊥ cells). Anchor ids are content-addressed hex SHA-256 digests under the ck:anchor:sha256:<hex> special form.",
   "encoder": {
-    "anchor_id": "ck:anchor:sha256:<sha256-hex>",
+    "anchor_id": "ak:anchor:sha256:<sha256-hex>",
     "frontier_canonical_form": "ascending lex sort of ck:anchor:... leaf ids in JSON array",
     "state_root_basis": "merkle-leaf hash over canonical (cell_id, lattice_join_value) pairs"
   },
@@ -14,7 +14,7 @@
       "comment": "Trivial baseline: single-leaf Anchor DAG. effective_anchor_view = {leaf}. No compaction required; the leaf itself is the canonical anchor.",
       "anchors": [
         {
-          "id": "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "id": "ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
           "frontier": [],
           "state_root": "sha256:aaa1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": []
@@ -22,7 +22,7 @@
       ],
       "expected_effective_anchor_view": {
         "leaves": [
-          "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          "ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"
         ],
         "frontier": [],
         "state_root": "sha256:aaa1111111111111111111111111111111111111111111111111111111111111",
@@ -35,35 +35,35 @@
       "comment": "Two concurrent leaves over disjoint cells join cleanly (no ⊥). Compaction emits a single signed Anchor whose state_root and frontier match the multi-leaf effective_anchor_view exactly.",
       "anchors": [
         {
-          "id": "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          "frontier": ["ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+          "id": "ak:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "frontier": ["ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
           "state_root": "sha256:bbb1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": []
         },
         {
-          "id": "ck:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333",
-          "frontier": ["ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+          "id": "ak:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "frontier": ["ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
           "state_root": "sha256:ccc1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": []
         }
       ],
       "expected_effective_anchor_view": {
         "leaves": [
-          "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          "ck:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          "ak:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "ak:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333"
         ],
         "frontier": [
-          "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          "ck:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          "ak:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "ak:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333"
         ],
         "state_root": "sha256:ddd1111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": []
       },
       "signed_compaction": {
-        "id": "ck:anchor:sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "id": "ak:anchor:sha256:4444444444444444444444444444444444444444444444444444444444444444",
         "frontier": [
-          "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          "ck:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          "ak:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "ak:anchor:sha256:3333333333333333333333333333333333333333333333333333333333333333"
         ],
         "state_root": "sha256:ddd1111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [],
@@ -79,62 +79,62 @@
       "comment": "Two concurrent leaves disagree on a cas-register cell, surfacing ⊥ Conflict. Compaction MUST preserve the bottom_diagnostics entry (cell_id + concurrent heads) so a downstream conflict-repair Move has the surface it needs. The compaction Anchor's state_root is the same as the effective view (lattice join is associative; Bottom is a stable join element).",
       "anchors": [
         {
-          "id": "ck:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
-          "frontier": ["ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+          "id": "ak:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "frontier": ["ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
           "state_root": "sha256:eee1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": [
-                "ck:event:01970e58-0000-7000-8000-000000000010",
-                "ck:event:01970e58-0000-7000-8000-000000000011"
+                "ak:event:01970e58-0000-7000-8000-000000000010",
+                "ak:event:01970e58-0000-7000-8000-000000000011"
               ]
             }
           ]
         },
         {
-          "id": "ck:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666",
-          "frontier": ["ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+          "id": "ak:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666",
+          "frontier": ["ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
           "state_root": "sha256:fff1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": []
         }
       ],
       "expected_effective_anchor_view": {
         "leaves": [
-          "ck:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
-          "ck:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666"
+          "ak:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "ak:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666"
         ],
         "frontier": [
-          "ck:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
-          "ck:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666"
+          "ak:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "ak:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666"
         ],
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
-              "ck:event:01970e58-0000-7000-8000-000000000010",
-              "ck:event:01970e58-0000-7000-8000-000000000011"
+              "ak:event:01970e58-0000-7000-8000-000000000010",
+              "ak:event:01970e58-0000-7000-8000-000000000011"
             ]
           }
         ]
       },
       "signed_compaction": {
-        "id": "ck:anchor:sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "id": "ak:anchor:sha256:7777777777777777777777777777777777777777777777777777777777777777",
         "frontier": [
-          "ck:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
-          "ck:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666"
+          "ak:anchor:sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "ak:anchor:sha256:6666666666666666666666666666666666666666666666666666666666666666"
         ],
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
-              "ck:event:01970e58-0000-7000-8000-000000000010",
-              "ck:event:01970e58-0000-7000-8000-000000000011"
+              "ak:event:01970e58-0000-7000-8000-000000000010",
+              "ak:event:01970e58-0000-7000-8000-000000000011"
             ]
           }
         ],
@@ -152,22 +152,22 @@
       "comment": "A compaction Anchor whose bottom_diagnostics is empty when the effective view's diagnostics are non-empty MUST be rejected: compaction is information-preserving for ⊥ cells. Validator computes (compaction.bottom_diagnostics ⊆ effective_view.bottom_diagnostics) and a missing diagnostic is a structural error.",
       "anchors": [
         {
-          "id": "ck:anchor:sha256:8888888888888888888888888888888888888888888888888888888888888888",
-          "frontier": ["ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+          "id": "ak:anchor:sha256:8888888888888888888888888888888888888888888888888888888888888888",
+          "frontier": ["ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
           "state_root": "sha256:8a81111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
               "kind": "conflict",
-              "concurrent_heads": ["ck:event:01970e58-0000-7000-8000-000000000020"]
+              "concurrent_heads": ["ak:event:01970e58-0000-7000-8000-000000000020"]
             }
           ]
         }
       ],
       "drift_compaction": {
-        "id": "ck:anchor:sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "id": "ak:anchor:sha256:9999999999999999999999999999999999999999999999999999999999999999",
         "frontier": [
-          "ck:anchor:sha256:8888888888888888888888888888888888888888888888888888888888888888"
+          "ak:anchor:sha256:8888888888888888888888888888888888888888888888888888888888888888"
         ],
         "state_root": "sha256:8a81111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [],
@@ -184,16 +184,16 @@
       "comment": "A compaction Anchor whose state_root differs from the effective view's state_root MUST be rejected. Lattice join is deterministic; any drift indicates the anchorer recomputed against a different leaf set or used a stale cell snapshot.",
       "anchors": [
         {
-          "id": "ck:anchor:sha256:aa00000000000000000000000000000000000000000000000000000000000000",
-          "frontier": ["ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+          "id": "ak:anchor:sha256:aa00000000000000000000000000000000000000000000000000000000000000",
+          "frontier": ["ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111"],
           "state_root": "sha256:aa11111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": []
         }
       ],
       "drift_compaction": {
-        "id": "ck:anchor:sha256:bb00000000000000000000000000000000000000000000000000000000000000",
+        "id": "ak:anchor:sha256:bb00000000000000000000000000000000000000000000000000000000000000",
         "frontier": [
-          "ck:anchor:sha256:aa00000000000000000000000000000000000000000000000000000000000000"
+          "ak:anchor:sha256:aa00000000000000000000000000000000000000000000000000000000000000"
         ],
         "state_root": "sha256:dead0000000000000000000000000000000000000000000000000000000000ff",
         "bottom_diagnostics": [],

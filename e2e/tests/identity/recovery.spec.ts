@@ -106,7 +106,7 @@ function secretStorageEnvelope(opts: {
       key_commitment: "sha256:" + randomBytes(32).toString("hex"),
     },
     domain_separation: {
-      hkdf_info: `cokret-key-backup/${backupClass}/${subdomain}/v1`,
+      hkdf_info: `arkret-key-backup/${backupClass}/${subdomain}/v1`,
       subdomain,
       aead_aad: {
         schema: "ck.schema.key_backup.v1",

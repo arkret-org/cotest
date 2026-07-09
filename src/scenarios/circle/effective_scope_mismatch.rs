@@ -16,17 +16,17 @@ use cokret_core::{CircleId, EffectiveScope, RealmId};
 use serde_json::{Value, json};
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000401".to_owned())
+    RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000401".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000402".to_owned())
+    CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000402".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000403".to_owned())
+    CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000403".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

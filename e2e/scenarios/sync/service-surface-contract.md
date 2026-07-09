@@ -8,24 +8,24 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/sync/service-surface.md` §2.3 — 接口必须天然支持幂等重试
-- `cokret-spec/spec/v1/zh/sync/service-surface.md` §2.4 — 服务必须公布自己的实现 profile
-- `cokret-spec/spec/v1/zh/sync/service-surface.md` §3 — `GET /_cokret/describe` canonical shape
-- `cokret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels(`supported_operations` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` / `development_mode`)
-- `cokret-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ck:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
-- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
-- `cokret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
-- `cokret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ck.server.*` / `ck.events.*` / `ck.sync.*` 等)
-- `cokret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ck.schema.service_describe.v1` wire schema
-- `cokret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
-- 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/cokret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §2.3 — 接口必须天然支持幂等重试
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §2.4 — 服务必须公布自己的实现 profile
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §3 — `GET /_cokret/describe` canonical shape
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels(`supported_operations` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` / `development_mode`)
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ck:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
+- `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
+- `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ck.server.*` / `ck.events.*` / `ck.sync.*` 等)
+- `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ck.schema.service_describe.v1` wire schema
+- `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
+- 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/arkret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
 
 ## 拓扑
 
@@ -106,7 +106,7 @@
 17. 断言:
     - 三页 `items` 的 ID 集合两两不相交(no overlap)
     - 三页 union 至少覆盖 step 12 播种的全部 ID(no gap)
-    - 任意页的 cursor `base64url_decode(cursor.slice("ck:cursor:".length))` 不抛错,且 decoded 字节中**不含**任何 event_id / item id 的明文子串(opacity:客户端不得据此推断排序/权限)
+    - 任意页的 cursor `base64url_decode(cursor.slice("ak:cursor:".length))` 不抛错,且 decoded 字节中**不含**任何 event_id / item id 的明文子串(opacity:客户端不得据此推断排序/权限)
 18. **Cursor expiry 子断言**:把 step 14 的 `next_cursor` 篡改一个字符(保持 base64url 合法),POST 给 list endpoint
 19. 断言:`error.code ∈ { "invalid_param", "cursor_expired" }` 且 HTTP 4xx;**不得** 静默从头返回 page 1
 
@@ -167,7 +167,7 @@
 ## Implementation notes
 
 - **soland describe 已实现**:`soland/src/routing/system/describe.rs` + `soland/src/wire.rs` 已经写入 `claimed_profiles` / `verified_profiles` / `implemented_features` 等字段;Phase A 在 soland 侧可以**直接 live**
-- **coauth describe 已实现**:`coauth/crates/backend/src/handlers/cokret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
+- **coauth describe 已实现**:`coauth/crates/backend/src/handlers/arkret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
 - **Phase C list endpoint 已 live**:当前用 `/_cokret/self/events?after=...` 覆盖 §7.1 pagination shape、opaque cursor、tamper reject、gap-free / non-overlap 分页;`/sync/operations` 不存在不再阻塞本场景
 - **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
 - **Idempotency-Key header 已在 events write live**:Phase D 覆盖 `POST /_cokret/self/events` 的同键同 body replay 与同键不同 body `duplicate_conflict`;其它 write endpoint 的一致性可另开场景

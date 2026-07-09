@@ -1,7 +1,7 @@
 // Session-grant + DPoP self-path authentication (②(A+②) model).
 //
 // Contract: cotask/tasks/_auth_todos.md "## ② 最终路线" (D1–D6) and
-// cokret-spec/spec/v1/zh/sync/api-conventions.md §3.3.
+// arkret-spec/spec/v1/zh/sync/api-conventions.md §3.3.
 //
 // Under ②, soland does not mint a second local credential. A client reaches
 // `/_cokret/self/*` by presenting

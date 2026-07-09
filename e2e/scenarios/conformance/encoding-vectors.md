@@ -8,7 +8,7 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/conformance/conformance-vectors.md` §1 — Encoding & Crypto Vectors
+- `arkret-spec/spec/v1/zh/conformance/conformance-vectors.md` §1 — Encoding & Crypto Vectors
   - §1.3–§1.5.1 — Canonical JSON (basic / nested / reject non-canonical / reject malformed)
   - §1.6 — Event digest
   - §1.7 — Event batch receipt digest
@@ -17,22 +17,22 @@
   - §1.11 — Cursor opaqueness
   - §1.12 — Encrypted envelope digest
   - §1.13 — 覆盖矩阵
-- `cokret-spec/spec/v1/zh/conformance/conformance-vectors.md` §3 — Redaction Vectors
+- `arkret-spec/spec/v1/zh/conformance/conformance-vectors.md` §3 — Redaction Vectors
   - §3.2 — 字段保留规则
   - §3.2.1 — Space target redaction payload schema
   - §3.3 — Redaction 与 policy scope
   - §3.4 — Hard erasure receipt
   - §3.5 — Snapshot pruning retains verification stub
-- `cokret-spec/spec/v1/zh/encoding.md` — canonical JSON / digest 实现 profile
-- `cokret-spec/spec/v1/zh/models/event-and-attestation.md` — signature binding payload
-- 关联 artifact: `cokret-spec/spec/v1/artifacts/fixtures/` (canonical vector JSON 入口,本 scenario 通过 harness 装载并下发到 soland)
+- `arkret-spec/spec/v1/zh/encoding.md` — canonical JSON / digest 实现 profile
+- `arkret-spec/spec/v1/zh/models/event-and-attestation.md` — signature binding payload
+- 关联 artifact: `arkret-spec/spec/v1/artifacts/fixtures/` (canonical vector JSON 入口,本 scenario 通过 harness 装载并下发到 soland)
 - 关联实现:`cotest/src/conformance/encoding.rs`, `cotest/src/conformance/redaction.rs`, `cotest/src/conformance/envelope.rs` (Rust 侧已有 fixture-driven 单元测试;本 e2e 任务把同一组 vector 通过 HTTP 端点驱动)
 
 ## 拓扑
 
 - 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`,暴露 `/_cokret/_conformance/*` 端点
 - 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使签名向量阶段可以拿到一个真实的 actor signing key
-- 1 × conformance harness (Playwright `request` fixture) — 加载 `cokret-spec/spec/v1/artifacts/fixtures/*.json` vector,逐项 POST 到 soland,断言响应字段与 `expected_*` 字段相等
+- 1 × conformance harness (Playwright `request` fixture) — 加载 `arkret-spec/spec/v1/artifacts/fixtures/*.json` vector,逐项 POST 到 soland,断言响应字段与 `expected_*` 字段相等
 
 (都是 cotest 现有 harness 直接提供的,不需要改 scripts/run-joint-e2e.ps1;但 §1 的 endpoint 目前未实现,见 Implementation notes。)
 
@@ -158,7 +158,7 @@
 ## Implementation notes
 
 - **soland 缺口**:`/_cokret/_conformance/{encode,sign,hlc-merge,cursor,envelope,redact}` 端点目前**未实现**。当前 conformance 只跑在 Rust 侧 (`cotest/src/conformance/encoding.rs`、`...redaction.rs`、`...envelope.rs`) 的 integration tests,直接调内部 trait,不走 HTTP。本 e2e scenario 的价值正是要把同一组 vector 通过 HTTP 暴露出来,确保 wire-level 一致(避免内部 canonicalizer 与 HTTP layer 之间的 serializer drift)
-- **fixture loader**:spec fixture 落在 `cokret-spec/spec/v1/artifacts/fixtures/<vector_id>.json`;harness 可在测试 setup 阶段一次性读入,挂在 `test.use({ vectors: ... })` 或顶层 `beforeAll` 里。Rust 侧已有 `cotest/tests/fixtures/*.json` 的 loader 范式可参考,但 e2e 侧要重写为 TS
+- **fixture loader**:spec fixture 落在 `arkret-spec/spec/v1/artifacts/fixtures/<vector_id>.json`;harness 可在测试 setup 阶段一次性读入,挂在 `test.use({ vectors: ... })` 或顶层 `beforeAll` 里。Rust 侧已有 `cotest/tests/fixtures/*.json` 的 loader 范式可参考,但 e2e 侧要重写为 TS
 - **signing key 注入**:Phase B 用的是 alice 的 dev session signing key,通过 `issueDevSession` 拿到 token 后,从 coauth 拉 actor 的 public key (`GET /_cokret/self/account/keys`) 用来本地 verify
 - **cursor opacity 断言**:不要 hardcode cursor 字节格式;只断言 (a) 同输入稳定 (b) 不含明文 event_id 子串 (c) base64url decode 不报错
 - **redaction visibility 投影**:vector 里的 `expected_retained_fields_*` 是 key path 列表,断言用 `lodash.pick` / 手写 walker 把 actual / expected 都裁到同一 key 集合后 diff

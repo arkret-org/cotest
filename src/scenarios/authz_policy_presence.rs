@@ -14,7 +14,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-a11ce0000001",
+            "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
@@ -22,7 +22,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         .register_client(
             "did:web:bob-authz.example",
             "@bob-authz",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
@@ -53,7 +53,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         "authz/check is diagnostic and must not mint signed policy decisions"
     );
 
-    let manage_grant_id = "ck:grant:01999999-0000-7000-8000-0000000000a1";
+    let manage_grant_id = "ak:grant:01999999-0000-7000-8000-0000000000a1";
     let manage_grant = submit_event(
         &server,
         &alice.token,
@@ -135,10 +135,10 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     alice.add_member(&realm_id, &bob).await?;
-    let id_suffix = realm_id.trim_start_matches("ck:realm:");
-    let strand_id = format!("ck:strand:{id_suffix}");
-    let relation_id = format!("ck:relation:{id_suffix}");
-    let morph_id = format!("ck:morph:{id_suffix}");
+    let id_suffix = realm_id.trim_start_matches("ak:realm:");
+    let strand_id = format!("ak:strand:{id_suffix}");
+    let relation_id = format!("ak:relation:{id_suffix}");
+    let morph_id = format!("ak:morph:{id_suffix}");
     let negative_checks = [
         (
             "ck.message.create",
@@ -185,7 +185,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "kind": "relation",
                 "id": relation_id,
                 "realm_id": realm_id,
-                "cell": format!("ck:cell:ck.component.relation.v1:{relation_id}")
+                "cell": format!("ak:cell:ck.component.relation.v1:{relation_id}")
             }),
             "capability_denied",
         ),
@@ -195,7 +195,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "kind": "morph",
                 "id": morph_id,
                 "realm_id": realm_id,
-                "cell": format!("ck:cell:ck.component.morph.v1:{morph_id}")
+                "cell": format!("ak:cell:ck.component.morph.v1:{morph_id}")
             }),
             "capability_denied",
         ),
@@ -268,7 +268,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-a11ce0000001",
+            "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
 
@@ -413,7 +413,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         .register_client(
             "did:web:observer-presence.example",
             "@observer-presence",
-            "ck:device:01904100-0000-7000-8000-0000000000e0",
+            "ak:device:01904100-0000-7000-8000-0000000000e0",
         )
         .await?;
     alice.add_member(&presence_realm_id, &observer).await?;
@@ -472,7 +472,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
     let policy_document = expect_json(
         alice.post("/_soland/self/policies").json(&json!({
-            "policy_id": "ck:policy:presence-policy-allow",
+            "policy_id": "ak:policy:presence-policy-allow",
             "scope": policy_realm_id,
             "subject_ref": alice.actor,
             "policy_type": "ck.message.create",
@@ -546,7 +546,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post("/_cokret/self/policy/check")
             .json(&json!({
                 "request_id": "req-invalid",
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
                 // `actor_id` is a typed Did; a bare "alice" parses as JSON but
@@ -567,7 +567,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let ice = expect_json(
         alice.post("/_cokret/self/rtc/ice-config").json(&json!({
             "realm_id": policy_realm_id,
-            "call_id": "ck:call:01964137-0000-7000-8000-000000000001",
+            "call_id": "ak:call:01964137-0000-7000-8000-000000000001",
             "actor_id": alice.actor.as_str(),
             "device_id": alice.device_id.as_str(),
             "mode": "p2p"

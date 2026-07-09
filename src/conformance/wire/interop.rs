@@ -206,7 +206,7 @@ fn validate_external_marker_inert(vector: &Value) -> Result<()> {
         bail!("vector {name} missing external_marker input");
     }
     if expected_outcome(vector, name)? != "reject" {
-        bail!("vector {name} external marker downgrade must reject without Cokret authority");
+        bail!("vector {name} external marker downgrade must reject without Arkret authority");
     }
     if expected.get("marker_authorizes").and_then(Value::as_bool) != Some(false) {
         bail!("vector {name} external marker must not authorize");

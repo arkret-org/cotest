@@ -1,5 +1,5 @@
 //! Round 4 / A2 — per-vector scenario stubs for the security closure
-//! fixture (`cokret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`).
+//! fixture (`arkret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`).
 //!
 //! Every vector listed in the spec snapshot is registered here. For each
 //! one we:

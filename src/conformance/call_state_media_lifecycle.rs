@@ -210,15 +210,15 @@ fn ts(value: &str) -> DateTime<Utc> {
 }
 
 fn realm_id() -> RealmId {
-    RealmId::new("ck:realm:019a7360-0000-7000-8000-000000000000").unwrap()
+    RealmId::new("ak:realm:019a7360-0000-7000-8000-000000000000").unwrap()
 }
 
 fn call_id() -> CallId {
-    CallId::new("ck:call:019a7360-0000-7000-8000-000000000001").unwrap()
+    CallId::new("ak:call:019a7360-0000-7000-8000-000000000001").unwrap()
 }
 
 fn start_event_id() -> EventId {
-    EventId::new("ck:event:019a7360-0000-7000-8000-000000000003").unwrap()
+    EventId::new("ak:event:019a7360-0000-7000-8000-000000000003").unwrap()
 }
 
 fn hash(ch: char) -> Hash {
@@ -233,7 +233,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         recording_id: "rtc-recording-019a7360-0000-7000-8000-000000000002".to_owned(),
         recording_start_event_id: start_event_id(),
         artifact_kind: CallRecordingArtifactKind::Recording,
-        blob_ref: BlobRef::new("ck:blob:019a7360-0000-7000-8000-000000000004").unwrap(),
+        blob_ref: BlobRef::new("ak:blob:019a7360-0000-7000-8000-000000000004").unwrap(),
         content_digest: hash('a'),
         ciphertext_digest: hash('b'),
         size_bytes: 1_048_576,
@@ -253,7 +253,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
             ciphertext_digest: hash('b'),
         },
         retention_policy_id: Some(
-            PolicyId::new("ck:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
+            PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
         ),
         retention: CallRecordingRetention {
             retention_expires_at: Some(ts("2026-06-20T00:00:00Z")),
@@ -263,7 +263,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         },
         produced_by: Did::new("did:web:recorder.example").unwrap(),
         recording_initiator_capability_ref: GrantId::new(
-            "ck:grant:019a7360-0000-7000-8000-000000000006",
+            "ak:grant:019a7360-0000-7000-8000-000000000006",
         )
         .unwrap(),
         created_at: ts("2026-06-19T00:00:00Z"),
@@ -274,7 +274,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
             trigger_event_id: None,
             requested_at: ts("2026-06-20T00:00:00Z"),
             completed_at: Some(ts("2026-06-20T00:00:01Z")),
-            erasure_receipt_ref: Some("ck:receipt:019a7360-0000-7000-8000-000000000007".to_owned()),
+            erasure_receipt_ref: Some("ak:receipt:019a7360-0000-7000-8000-000000000007".to_owned()),
             legal_hold_ref: None,
             failure_reason_code: None,
         }),
@@ -519,7 +519,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
             media_type: Some("text/vtt".to_owned()),
             language: Some("en-US".to_owned()),
             retention_policy_id: Some(
-                PolicyId::new("ck:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
+                PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
             ),
             retention: Some(CallRecordingRetention {
                 retention_expires_at: Some(ts("2026-06-20T00:00:00Z")),
@@ -615,13 +615,13 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
     // same actor on a different device is NOT blocked by a device-scoped kick.
     let kicked = [RemovedParticipant {
         actor_id: "did:web:bob.example",
-        device_id: Some("ck:device:bob-1"),
+        device_id: Some("ak:device:bob-1"),
     }];
-    match token_reissue_allowed(&kicked, "did:web:bob.example", "ck:device:bob-1") {
+    match token_reissue_allowed(&kicked, "did:web:bob.example", "ak:device:bob-1") {
         Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
         other => bail!("kicked device re-issue must be call_participant_removed, got {other:?}"),
     }
-    token_reissue_allowed(&kicked, "did:web:bob.example", "ck:device:bob-2")
+    token_reissue_allowed(&kicked, "did:web:bob.example", "ak:device:bob-2")
         .map_err(|code| anyhow::anyhow!("same-actor new device must rejoin after kick: {code}"))?;
 
     // Step 3/4 — a banned actor (device_id omitted) is refused for any device.
@@ -629,7 +629,7 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
         actor_id: "did:web:bob.example",
         device_id: None,
     }];
-    for device in ["ck:device:bob-1", "ck:device:bob-2"] {
+    for device in ["ak:device:bob-1", "ak:device:bob-2"] {
         match token_reissue_allowed(&banned, "did:web:bob.example", device) {
             Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
             other => bail!(
@@ -639,7 +639,7 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
     }
 
     // Control — an unrelated actor is not gated.
-    token_reissue_allowed(&banned, "did:web:carol.example", "ck:device:carol-1")
+    token_reissue_allowed(&banned, "did:web:carol.example", "ak:device:carol-1")
         .map_err(|code| anyhow::anyhow!("unrelated actor unexpectedly gated: {code}"))?;
     Ok(())
 }

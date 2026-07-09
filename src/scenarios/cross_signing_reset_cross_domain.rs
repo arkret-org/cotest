@@ -31,7 +31,7 @@ use cokret_core::{
 pub const EXPECTED_CROSS_DOMAIN_REPLAY: &str = "cross_domain_replay_rejected";
 pub const EXPECTED_RESET_EVENT_ID_MISMATCH: &str = "reset_event_id_mismatch";
 
-pub const TRUST_DOMAIN_ID_PREFIX: &str = "ck:trust_domain:";
+pub const TRUST_DOMAIN_ID_PREFIX: &str = "ak:trust_domain:";
 
 /// Wire-level executable check: the SDK's `TypedTrustDomainId` validator
 /// MUST accept two distinct, well-formed trust domain ids — replaying a
@@ -60,9 +60,9 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
     }
     // Validate the SDK accepts two well-formed trust domain ids and that
     // they are distinct (cross-domain replay precondition).
-    let domain_a = TypedTrustDomainId::new("ck:trust_domain:alpha.example")
+    let domain_a = TypedTrustDomainId::new("ak:trust_domain:alpha.example")
         .map_err(|e| anyhow!("SDK rejected well-formed trust domain id alpha: {e}"))?;
-    let domain_b = TypedTrustDomainId::new("ck:trust_domain:beta.example")
+    let domain_b = TypedTrustDomainId::new("ak:trust_domain:beta.example")
         .map_err(|e| anyhow!("SDK rejected well-formed trust domain id beta: {e}"))?;
     if domain_a.as_str() == domain_b.as_str() {
         return Err(anyhow!(
@@ -102,9 +102,9 @@ pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
             "error-code-registry missing reason code {REASON_RESET_EVENT_ID_MISMATCH}"
         ));
     }
-    let id_a = EventId::new("ck:event:01904100-0000-7000-8000-000000000001")
+    let id_a = EventId::new("ak:event:01904100-0000-7000-8000-000000000001")
         .map_err(|e| anyhow!("SDK rejected well-formed EventId a: {e}"))?;
-    let id_b = EventId::new("ck:event:01904100-0000-7000-8000-000000000002")
+    let id_b = EventId::new("ak:event:01904100-0000-7000-8000-000000000002")
         .map_err(|e| anyhow!("SDK rejected well-formed EventId b: {e}"))?;
     if id_a.as_str() == id_b.as_str() {
         return Err(anyhow!("EventId equality broke: a and b must be distinct"));

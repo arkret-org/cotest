@@ -230,7 +230,7 @@ async function createRealm(
           title: `history ${historyVisibility} ${Date.now()}`,
           summary: "cotest joined-history enforcement fixture",
           created_by: actor.did,
-          trust_domain: "ck:trust_domain:soland.local",
+          trust_domain: "ak:trust_domain:soland.local",
           schema_refs: ["ck.schema.realm.v1"],
           default_discoverability: "public",
           default_join_rule: "invite",

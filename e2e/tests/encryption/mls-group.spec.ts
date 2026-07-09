@@ -285,7 +285,7 @@ async function solandTrustDomain(
   const response = await request.get(`${solandBaseUrl()}/_cokret/describe`);
   expect(response.ok()).toBeTruthy();
   const body = await response.json();
-  return String(body.trust_domain ?? "ck:trust_domain:soland.joint-e2e.local");
+  return String(body.trust_domain ?? "ak:trust_domain:soland.joint-e2e.local");
 }
 
 function crossSigningBindingInput(args: {
@@ -422,7 +422,7 @@ async function createEncryptedRealm(
           schema: "ck.schema.realm.v1",
           title,
           created_by: ownerDid,
-          trust_domain: "ck:trust_domain:soland.local",
+          trust_domain: "ak:trust_domain:soland.local",
           schema_refs: ["ck.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",
@@ -824,7 +824,7 @@ test.describe("MLS group encryption", () => {
               schema: "ck.schema.realm.v1",
               title: `S11 MLS incompatible ${stamp}`,
               created_by: alice.did,
-              trust_domain: "ck:trust_domain:soland.local",
+              trust_domain: "ak:trust_domain:soland.local",
               schema_refs: ["ck.schema.realm.v1"],
               default_discoverability: "listed",
               default_join_rule: "invite",

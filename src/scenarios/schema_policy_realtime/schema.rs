@@ -9,7 +9,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let schema_id = "com.example.schema.widget.v1";

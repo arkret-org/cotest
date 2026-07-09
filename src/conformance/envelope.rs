@@ -57,7 +57,7 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
                 "01970e589d21-0001-a13f9c2e",
                 "2026-05-02T00:00:00Z",
                 json!({
-                    "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+                    "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
                     "body": "legacy alias"
                 }),
             );
@@ -320,7 +320,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00Z",
         json!({
-            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "hello"
@@ -347,7 +347,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
-            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "a"
@@ -360,7 +360,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
-            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "b"
@@ -382,7 +382,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00Z",
         json!({
-            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "future"
@@ -408,7 +408,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02Z",
         json!({
-            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "backdated"
@@ -432,14 +432,14 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03Z",
         json!({
-            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "legacy field"
             }
         }),
     );
-    unknown_field_event["space_id"] = json!("ck:space:019a7360-0000-7000-8000-000000000000");
+    unknown_field_event["space_id"] = json!("ak:space:019a7360-0000-7000-8000-000000000000");
     let unknown_field_decision =
         validate_event_envelope(&unknown_field_event, event_kinds, &context)?;
     assert_event_decision(
@@ -566,13 +566,13 @@ fn validate_event_envelope(
             ));
         }
     }
-    if !value_field_str(event, "event_id")?.starts_with("ck:event:") {
+    if !value_field_str(event, "event_id")?.starts_with("ak:event:") {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "invalid event_id",
         ));
     }
-    if !value_field_str(event, "realm_id")?.starts_with("ck:realm:") {
+    if !value_field_str(event, "realm_id")?.starts_with("ak:realm:") {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "invalid realm_id",
@@ -621,11 +621,11 @@ fn validate_event_envelope(
     }
     let event_id = value_field_str(event, "event_id")?;
     // Spec post-2026-05-08: `refs[]` entries MUST be typed-ref objects
-    // `{id: "ck:<kind>:<ulid>", role, critical, ...}`. v1 is unreleased,
+    // `{id: "ak:<kind>:<ulid>", role, critical, ...}`. v1 is unreleased,
     // so no dual-pattern accommodation: bare string entries fail loudly.
     // `prev_refs[]` is a bare-string list of `ck:event:` ids per spec
     // §refs.
-    let valid_ref = |s: &str| s.starts_with("ck:");
+    let valid_ref = |s: &str| s.starts_with("ak:");
     let extra_refs_invalid = extra_refs.iter().any(|value| {
         value
             .get("id")
@@ -635,7 +635,7 @@ fn validate_event_envelope(
     let prev_refs_invalid = prev_refs.iter().any(|value| {
         value
             .as_str()
-            .is_none_or(|event_ref| !event_ref.starts_with("ck:event:"))
+            .is_none_or(|event_ref| !event_ref.starts_with("ak:event:"))
     });
     if extra_refs_invalid || prev_refs_invalid {
         return Ok(EventEnvelopeDecision::reject(
@@ -996,16 +996,16 @@ fn sample_envelope_event(
     // Synthetic events emit the active spec shape directly (top-level fields
     // restricted to the canonical envelope property set — no `schema`).
     let mut event = json!({
-        "event_id": "ck:event:019a6b10-0000-7000-8000-000000000000",
+        "event_id": "ak:event:019a6b10-0000-7000-8000-000000000000",
         "kind": kind,
-        "realm_id": "ck:realm:019a7360-0000-7000-8000-000000000000",
+        "realm_id": "ak:realm:019a7360-0000-7000-8000-000000000000",
         "actor_id": "did:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,
         "prev_refs": [],
         "refs": [{
-            "id": "ck:event:5139099c-b114-7e4c-8149-a8048971a269",
+            "id": "ak:event:5139099c-b114-7e4c-8149-a8048971a269",
             "role": "reply_to",
             "critical": false
         }],
@@ -1020,7 +1020,7 @@ fn sample_envelope_event(
             "verification_method": "did:web:alice.example#k1",
             "event_digest": "",
             "created_at": created_at,
-            "domain": "cokret-event-v1",
+            "domain": "arkret-event-v1",
             "jws": "eyJhbGciOiJFZERTQSJ9..synthetic_placeholder_signature_bytes"
         }]
     });

@@ -278,7 +278,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
         let name = required_str(vector, "name")?;
         let shape = required_str(vector, "shape")?;
         let cell_id = required_str(vector, "cell_id")?;
-        if !cell_id.starts_with("ck:cell:ck.component.anchorer.v1:") {
+        if !cell_id.starts_with("ak:cell:ck.component.anchorer.v1:") {
             bail!("vector {name} cell_id must be the anchorer.v1 cell, got {cell_id}");
         }
         match name {
@@ -369,7 +369,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                 let mut seen_move_ids = std::collections::BTreeSet::new();
                 for op in ops {
                     let move_id = required_str(op, "move_id")?;
-                    if !move_id.starts_with("ck:event:") {
+                    if !move_id.starts_with("ak:event:") {
                         bail!(
                             "vector {name} concurrent op move_id {move_id} must use ck:event:<UUIDv7> form"
                         );
@@ -870,7 +870,7 @@ pub fn run_late_arriving_anchor_idempotency_check() -> Result<()> {
     Ok(())
 }
 fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
-    let Some(rest) = id.strip_prefix("ck:anchor:sha256:") else {
+    let Some(rest) = id.strip_prefix("ak:anchor:sha256:") else {
         bail!("{ctx} anchor id {id} must use ck:anchor:sha256:<hex> special form");
     };
     if rest.len() != 64

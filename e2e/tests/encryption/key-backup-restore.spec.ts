@@ -275,7 +275,7 @@ function makeBackupBody(
       key_commitment: sha256Ref(`commitment:${backupId}`),
     },
     domain_separation: {
-      hkdf_info: "cokret-key-backup/secret_storage/aead/v1",
+      hkdf_info: "arkret-key-backup/secret_storage/aead/v1",
       subdomain: "aead",
       aead_aad: {
         schema: "ck.schema.key_backup.v1",
@@ -296,7 +296,7 @@ function makeBackupBody(
     // *verification* happens receiver-side at restore, so a shape-valid
     // token is sufficient for these storage-contract tests.
     auth_data: {
-      device_id: "ck:device:01904100-0000-7000-8000-000000000001",
+      device_id: "ak:device:01904100-0000-7000-8000-000000000001",
       verification_method:
         "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH#z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
       signature_algorithm: "Ed25519",

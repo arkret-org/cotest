@@ -2,7 +2,7 @@
 //! payload + protocol-semantic regression gate.
 //!
 //! cotest is the "declared organization != verified organization" regression
-//! gate. These tests drive the *shared* cokret-rust-sdk surfaces so cotest
+//! gate. These tests drive the *shared* arkret-rust-sdk surfaces so cotest
 //! never re-implements the organization-side invariants:
 //!
 //!   * `cokret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches

@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use cokret::auth::principal_control_realm_id;
+use arkret::auth::principal_control_realm_id;
 use cokret_core::{Did, Hash, Proof, canonical, proof_kind};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
@@ -140,9 +140,9 @@ mod tests {
     #[test]
     fn event_digest_uses_producer_envelope_canonical_bytes() {
         let event = json!({
-            "event_id": "ck:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
             "kind": "ck.member.state",
-            "realm_id": "ck:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49Z",
@@ -155,7 +155,7 @@ mod tests {
                 "critical_extensions": []
             },
             "payload": {
-                "realm_id": "ck:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+                "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
                 "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
                 "membership": "join",
                 "reason": "invite_accept"
@@ -163,7 +163,7 @@ mod tests {
             "unsigned": {"trace": "local"},
             "effective_scope": {
                 "kind": "realm",
-                "realm_id": "ck:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"
+                "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"
             },
             "actor_kind": "native",
             "proofs": []

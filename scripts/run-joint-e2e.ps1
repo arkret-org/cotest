@@ -277,7 +277,7 @@ function Invoke-SolandImageBuild {
     $buildDockerfilePath = Join-Path $buildRepoRoot "docker\soland.Dockerfile"
     foreach ($path in @(
             (Join-Path $buildWorkspaceRoot "soland"),
-            (Join-Path $buildWorkspaceRoot "cokret-rust-sdk"),
+            (Join-Path $buildWorkspaceRoot "arkret-rust-sdk"),
             $buildDockerfilePath
         )) {
         if (-not (Test-Path $path)) {
@@ -738,9 +738,9 @@ function Start-EphemeralPostgres {
         "--rm",
         "-d",
         "--name", $containerName,
-        "-e", "POSTGRES_USER=cokret",
-        "-e", "POSTGRES_PASSWORD=cokret",
-        "-e", "POSTGRES_DB=cokret",
+        "-e", "POSTGRES_USER=arkret",
+        "-e", "POSTGRES_PASSWORD=arkret",
+        "-e", "POSTGRES_DB=arkret",
         "-p", "127.0.0.1:$port`:5432",
         $Image
     )
@@ -751,12 +751,12 @@ function Start-EphemeralPostgres {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
-        $readyOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @("exec", $containerName, "pg_isready", "-U", "cokret", "-d", "cokret")
+        $readyOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @("exec", $containerName, "pg_isready", "-U", "arkret", "-d", "arkret")
         if ($LASTEXITCODE -eq 0) {
             return [pscustomobject]@{
                 ContainerName = $containerName
                 HostPort = $port
-                Url = "postgresql://cokret:cokret@127.0.0.1:$port/cokret"
+                Url = "postgresql://arkret:arkret@127.0.0.1:$port/arkret"
             }
         }
         $lastError = $readyOutput -join "`n"
@@ -795,7 +795,7 @@ function New-CoauthJointConfig {
     $configPath = Join-Path $JointDir "coauth.yaml"
     $generateLog = Join-Path $JointDir "coauth-config-generate.log"
     # coauth (07-02 service-DID bootstrap flow) requires either an explicit
-    # cokret.service_did or the local-development `--dev` mode; the joint
+    # arkret.service_did or the local-development `--dev` mode; the joint
     # harness patches its own service DID afterwards, so --dev is correct here.
     $generateOutput = & $CoauthBinary config generate --dev 2>"$generateLog"
     if ($LASTEXITCODE -ne 0) {

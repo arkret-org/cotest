@@ -14,7 +14,7 @@ fn artifacts_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("cotest is under workspace root")
-        .join("cokret-spec/spec/v1/artifacts")
+        .join("arkret-spec/spec/v1/artifacts")
 }
 
 fn load_registry(file: &str) -> Value {
@@ -99,7 +99,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
         .validate_payload(
             kinds::RSVP_SET,
             &json!({
-                "event_ref": "ck:strand:01904100-0000-7000-8000-000000000001",
+                "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
                 "status": "accepted",
                 "occurrence": null
             }),
@@ -110,7 +110,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             .validate_payload(
                 kinds::RSVP_SET,
                 &json!({
-                    "event_ref": "ck:strand:01904100-0000-7000-8000-000000000001",
+                    "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
                     "status": "yes",
                     "occurrence": null
                 }),
@@ -121,14 +121,14 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     let pin_scope = json!({
         "kind": "strand",
-        "id": "ck:strand:01904100-0000-7000-8000-000000000001"
+        "id": "ak:strand:01904100-0000-7000-8000-000000000001"
     });
     catalog
         .validate_payload(
             kinds::PIN_ADD,
             &json!({
                 "pin_scope": pin_scope,
-                "target_ref": "ck:message:01904100-0000-7000-8000-000000000002",
+                "target_ref": "ak:message:01904100-0000-7000-8000-000000000002",
                 "rank": "a0"
             }),
         )
@@ -199,8 +199,8 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 #[test]
 fn private_account_data_keys_do_not_leak_raw_refs() {
     let ns = b"cotest productivity namespace";
-    let message_id = MessageId::new("ck:message:01904100-0000-7000-8000-000000000001").unwrap();
-    let realm_id = RealmId::new("ck:realm:01904100-0000-7000-8000-000000000002").unwrap();
+    let message_id = MessageId::new("ak:message:01904100-0000-7000-8000-000000000001").unwrap();
+    let realm_id = RealmId::new("ak:realm:01904100-0000-7000-8000-000000000002").unwrap();
     let target_ref = message_id.as_str();
 
     let scheduled_send_key = scheduled_send_account_data_key(&message_id);

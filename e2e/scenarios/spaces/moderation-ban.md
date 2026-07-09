@@ -12,17 +12,17 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.1 — 审核权由 Realm Owner 行使
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.2 — 屏蔽是本地行为
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.3 — 举报留痕但不公开
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.5.0 — Capability / Moderation / Personal Blocklist 三层判定 (流程图)
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.5 — Moderation 决策 MUST Anchored
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.1 — `POST /_cokret/self/moderation/report` 字段
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.2 — 举报原因枚举
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.3 — 举报的处理 (只有 moderator 可见、被举报人不通知)
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §4.1-§4.3 — 个人屏蔽是 Actor-Private,不进 cell
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.1 — `ck.message.redact` 需要 `ck.message.redact`
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.2 — `ck.member.state{membership="ban"}` 封禁后被封者未来 Operation 被拒
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.1 — 审核权由 Realm Owner 行使
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.2 — 屏蔽是本地行为
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.3 — 举报留痕但不公开
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5.0 — Capability / Moderation / Personal Blocklist 三层判定 (流程图)
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5 — Moderation 决策 MUST Anchored
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.1 — `POST /_cokret/self/moderation/report` 字段
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.2 — 举报原因枚举
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.3 — 举报的处理 (只有 moderator 可见、被举报人不通知)
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §4.1-§4.3 — 个人屏蔽是 Actor-Private,不进 cell
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §5.1 — `ck.message.redact` 需要 `ck.message.redact`
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §5.2 — `ck.member.state{membership="ban"}` 封禁后被封者未来 Operation 被拒
 
 ## 拓扑
 

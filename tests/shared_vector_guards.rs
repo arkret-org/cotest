@@ -34,9 +34,9 @@ fn principal_control_realm_vectors_match_sdk() -> Result<()> {
     assert!(!fixture.vectors.is_empty(), "PCR vector fixture is empty");
 
     for vector in fixture.vectors {
-        let principal = cokret::Did::new(vector.principal_id.clone())
+        let principal = arkret::Did::new(vector.principal_id.clone())
             .map_err(|error| anyhow!("invalid vector DID {}: {error}", vector.principal_id))?;
-        let actual = cokret::auth::principal_control_realm_id(&principal);
+        let actual = arkret::auth::principal_control_realm_id(&principal);
         assert_eq!(
             actual, vector.principal_control_realm_id,
             "principal_control_realm_id drift for {}",
@@ -58,7 +58,7 @@ fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
         manifest_dir()
             .parent()
             .expect("cotest has workspace parent")
-            .join("cokret-spec")
+            .join("arkret-spec")
             .join("spec")
             .join("v1")
             .join("artifacts")

@@ -13,9 +13,9 @@ use serde_json::Value;
 
 use crate::harness::{CokretServer, TestServerGroup, expect_json, expect_response};
 
-const BACKUP_ID: &str = "ck:backup:01975510-0000-7000-8000-0000000000d3";
-const DEVICE_A: &str = "ck:device:01975510-0000-7000-8000-0000000000a1";
-const DEVICE_B: &str = "ck:device:01975510-0000-7000-8000-0000000000b2";
+const BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000d3";
+const DEVICE_A: &str = "ak:device:01975510-0000-7000-8000-0000000000a1";
+const DEVICE_B: &str = "ak:device:01975510-0000-7000-8000-0000000000b2";
 
 pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let group = TestServerGroup::single("d3-key-backup-negative").await?;
@@ -27,7 +27,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         .register_client(
             "did:web:bob-d3.example",
             "@bob-d3",
-            "ck:device:01904100-0000-7000-8000-000000000bd3",
+            "ak:device:01904100-0000-7000-8000-000000000bd3",
         )
         .await?;
 
@@ -48,7 +48,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let body_id_mismatch = backup_body(
         &alice.actor,
         DEVICE_A,
-        "ck:backup:01975510-0000-7000-8000-0000000000ff",
+        "ak:backup:01975510-0000-7000-8000-0000000000ff",
     )?;
     expect_backup_error(
         alice
@@ -98,7 +98,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 }
 
 async fn reject_wrong_device_on_put(server: &CokretServer, token: &str, actor: &str) -> Result<()> {
-    let id = "ck:backup:01975510-0000-7000-8000-0000000000d4";
+    let id = "ak:backup:01975510-0000-7000-8000-0000000000d4";
     let body = backup_body(actor, DEVICE_B, id)?;
     expect_backup_error(
         server
@@ -117,7 +117,7 @@ async fn reject_digest_mismatch_on_put(
     token: &str,
     actor: &str,
 ) -> Result<()> {
-    let id = "ck:backup:01975510-0000-7000-8000-0000000000d5";
+    let id = "ak:backup:01975510-0000-7000-8000-0000000000d5";
     let mut body = backup_body(actor, DEVICE_A, id)?;
     body["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
     body["ciphertext_digest"] = Value::String(
@@ -164,7 +164,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             extra: BTreeMap::new(),
         },
         domain_separation: KeyBackupDomainSeparation {
-            hkdf_info: "cokret-key-backup/mls_history/test/v1".to_owned(),
+            hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
             subdomain: "test".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ck.schema.key_backup.v1".to_owned(),
@@ -206,7 +206,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             extra: BTreeMap::new(),
         }),
         retention: None,
-        series_id: BackupSeriesId::new(backup_id.replacen("ck:backup:", "ck:backup_series:", 1))?,
+        series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,
         series_seq: 0,
         supersedes: None,
         supersedes_digest: None,

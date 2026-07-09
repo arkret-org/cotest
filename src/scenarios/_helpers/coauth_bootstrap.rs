@@ -154,11 +154,11 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
             "--name",
             &container_name,
             "-e",
-            "POSTGRES_USER=cokret",
+            "POSTGRES_USER=arkret",
             "-e",
-            "POSTGRES_PASSWORD=cokret",
+            "POSTGRES_PASSWORD=arkret",
             "-e",
-            "POSTGRES_DB=cokret",
+            "POSTGRES_DB=arkret",
             "-p",
             &format!("{}:5432", host_port.port()),
             "postgres:16-alpine",
@@ -173,7 +173,7 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
 
     let pg = EphemeralPg {
         connect_url: format!(
-            "postgresql://cokret:cokret@127.0.0.1:{}/cokret",
+            "postgresql://arkret:arkret@127.0.0.1:{}/arkret",
             host_port.port()
         ),
         container_name,
@@ -622,9 +622,9 @@ fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
                 &pg.container_name,
                 "pg_isready",
                 "-U",
-                "cokret",
+                "arkret",
                 "-d",
-                "cokret",
+                "arkret",
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -661,9 +661,9 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
     let docker = DOCKER.get_or_init(Cli::default);
 
     let image = GenericImage::new("postgres", "16-alpine")
-        .with_env_var("POSTGRES_USER", "cokret")
-        .with_env_var("POSTGRES_PASSWORD", "cokret")
-        .with_env_var("POSTGRES_DB", "cokret")
+        .with_env_var("POSTGRES_USER", "arkret")
+        .with_env_var("POSTGRES_PASSWORD", "arkret")
+        .with_env_var("POSTGRES_DB", "arkret")
         .with_wait_for(WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ));
@@ -676,7 +676,7 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
     std::mem::forget(container);
 
     let pg = EphemeralPg {
-        connect_url: format!("postgresql://cokret:cokret@127.0.0.1:{host_port}/cokret"),
+        connect_url: format!("postgresql://arkret:arkret@127.0.0.1:{host_port}/arkret"),
         container_name,
         cleanup: true,
         _port_reservation: None,

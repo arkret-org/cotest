@@ -277,7 +277,7 @@ fn write_minimal_artifacts(
     write_json(
         &artifacts_root
             .join("openapi")
-            .join("cokret-service-api.openapi.yaml"),
+            .join("arkret-service-api.openapi.yaml"),
         &json!({"openapi": "3.1.0", "paths": Value::Object(paths)}),
     )?;
 

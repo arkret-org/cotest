@@ -1,6 +1,6 @@
 //! Cross-language canonical-JSON parity gate.
 //!
-//! The e2e harness runs on Node and re-implements Cokret canonical JSON in
+//! The e2e harness runs on Node and re-implements Arkret canonical JSON in
 //! TypeScript (`canonicalJson` in `e2e/helpers/soland-api.ts`) because it cannot
 //! call the Rust SDK directly. The authoritative implementation is the SDK's
 //! `cokret_core::canonical` (RFC 8785 JCS, integer-only number profile), and the

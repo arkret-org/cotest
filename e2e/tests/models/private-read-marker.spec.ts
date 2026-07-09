@@ -569,7 +569,7 @@ function encryptedEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.cokret.message+json",
+    content_type: "application/vnd.arkret.message+json",
     aad_visibility_event_id: "hidden",
     aad,
     key_ref: {

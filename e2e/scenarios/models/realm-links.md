@@ -8,11 +8,11 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/models/realm-links.md` §2 — 设计原则（有向图、无隐式级联、narrow-only 继承）
-- `cokret-spec/spec/v1/zh/models/realm-links.md` §3 — 标准 link kind 表（`governed_by` / `inherits_policy_from` / `confidential_extension_of` / `discoverable_from` 等）
-- `cokret-spec/spec/v1/zh/models/realm-links.md` §4 — Link 状态机（`active` / `rejected` / `tombstoned`，派生 `confirmed` / `unconfirmed_link`）
-- `cokret-spec/spec/v1/zh/models/realm-links.md` §5 — 禁止隐式级联清单（membership / capability / history / E2EE key / policy / notification …）
-- `cokret-spec/spec/v1/zh/models/realm-links.md` §6 — 显式继承（`ck.realm.inheritance_policy` opt-in，narrow-only，本地 deny 覆盖，`max_depth=1`）
+- `arkret-spec/spec/v1/zh/models/realm-links.md` §2 — 设计原则（有向图、无隐式级联、narrow-only 继承）
+- `arkret-spec/spec/v1/zh/models/realm-links.md` §3 — 标准 link kind 表（`governed_by` / `inherits_policy_from` / `confidential_extension_of` / `discoverable_from` 等）
+- `arkret-spec/spec/v1/zh/models/realm-links.md` §4 — Link 状态机（`active` / `rejected` / `tombstoned`，派生 `confirmed` / `unconfirmed_link`）
+- `arkret-spec/spec/v1/zh/models/realm-links.md` §5 — 禁止隐式级联清单（membership / capability / history / E2EE key / policy / notification …）
+- `arkret-spec/spec/v1/zh/models/realm-links.md` §6 — 显式继承（`ck.realm.inheritance_policy` opt-in，narrow-only，本地 deny 覆盖，`max_depth=1`）
 
 ## 拓扑
 

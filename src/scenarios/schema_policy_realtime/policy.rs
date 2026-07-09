@@ -11,14 +11,14 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
             "did:web:bob-policy.example",
             "@bob-policy",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
 
@@ -44,7 +44,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     )
     .await?;
     let policy_id = policy["policy_id"].as_str().unwrap().to_owned();
-    assert!(policy_id.starts_with("ck:policy:"));
+    assert!(policy_id.starts_with("ak:policy:"));
     assert_eq!(policy["owner"], alice.actor);
 
     // Negative vector: the legacy `deny` decision is no longer a valid wire
@@ -87,7 +87,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
 
     let denied = expect_json(
         bob.post("/_cokret/self/policy/check").json(&json!({
-            "request_id": "ck:request:policy-deny",
+            "request_id": "ak:request:policy-deny",
             "request_canonical_digest": REQUEST_HASH,
             "action": "ck.message.create",
             "actor_id": bob.actor,
@@ -136,7 +136,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
 
     let allowed = expect_json(
         bob.post("/_cokret/self/policy/check").json(&json!({
-            "request_id": "ck:request:policy-allow",
+            "request_id": "ak:request:policy-allow",
             "request_canonical_digest": REQUEST_HASH,
             "action": "ck.message.create",
             "actor_id": bob.actor,

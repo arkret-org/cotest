@@ -10,13 +10,13 @@
 //! handle / display strings are audit metadata.
 //!
 //! Rendering (§3.8.2) is driven through the SDK
-//! [`cokret::identity::render_mention`] helper, which runs §3.2.1 over the
+//! [`arkret::identity::render_mention`] helper, which runs §3.2.1 over the
 //! Realm-scoped claim projection then walks the degraded fallback ladder
 //! `Verified → Cached → NameOnly → Unresolved`.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use cokret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
+use arkret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
 use cokret_core::Did;
 use cokret_core::models::{Handle, HandleBindingState, HandleClaim, Mention};
 use serde_json::json;
@@ -144,7 +144,7 @@ pub fn run_render_step1_unique_success_vector() -> Result<()> {
 
 pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
     // Two candidates: the Realm-scoped projection is "not unique" until the
     // live audience context discriminates. With context set, §3.2.1 picks
     // the audience-matched claim deterministically (the §3.8.2 step-2 live

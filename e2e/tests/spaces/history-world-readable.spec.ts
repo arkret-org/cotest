@@ -154,7 +154,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       schema: "ck.schema.realm.v1",
       title: `incompat ${Date.now()}`,
       created_by: actorDid,
-      trust_domain: "ck:trust_domain:soland.local",
+      trust_domain: "ak:trust_domain:soland.local",
       schema_refs: ["ck.schema.realm.v1"],
       default_discoverability: "listed",
       default_join_rule: "invite",

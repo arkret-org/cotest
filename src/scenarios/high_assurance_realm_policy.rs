@@ -17,7 +17,7 @@ use cokret_core::{
     JoinRule, NotaryProfile, NotaryValue, Realm, RealmId, SecurityClass, TypedTrustDomainId,
 };
 
-const REALM_ID: &str = "ck:realm:01904100-0000-7000-8000-000000000aa1";
+const REALM_ID: &str = "ak:realm:01904100-0000-7000-8000-000000000aa1";
 
 fn realm_id() -> Result<RealmId> {
     RealmId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
@@ -37,7 +37,7 @@ fn build_realm(
     // TODO(sdk-trust-domain-dep): A1 added required `trust_domain` to Realm.
     // Cotest uses a fixed canonical trust domain id here so the high-assurance
     // policy scenario stays representative.
-    let trust_domain = TypedTrustDomainId::new("ck:trust_domain:example.net".to_owned())
+    let trust_domain = TypedTrustDomainId::new("ak:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Realm {
         schema: "ck.profile.realm.v1".to_owned(),

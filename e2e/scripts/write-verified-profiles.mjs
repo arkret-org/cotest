@@ -7,7 +7,7 @@
 // Reads Playwright's `junit.xml` from a joint-e2e artifacts directory, walks
 // the test entries, and — for the small allow-list of strict profile-contract
 // suites in PROFILE_SUITE_MAP — emits `<artifacts_dir>/verified-profiles.json`
-// describing which canonical Cokret v1 profile IDs the run actually
+// describing which canonical Arkret v1 profile IDs the run actually
 // verified end-to-end. The Rust side of the pipeline (soland + coauth) loads
 // this file at startup behind a per-service env var
 // (SOLAND_VERIFIED_PROFILES_ARTIFACT / COAUTH_VERIFIED_PROFILES_ARTIFACT) and
@@ -83,7 +83,7 @@ const PROFILE_SUITE_MAP = {
   'cotest/e2e/tests/conformance/registry-drift.spec.ts': [],
   // Grow this map as additional strict profile contract suites land. Each
   // entry MUST be backed by a spec section + canonical profile id in
-  // cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json.
+  // arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json.
 };
 
 function printUsage() {

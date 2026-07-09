@@ -45,7 +45,7 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
         let items = value_array(required_field(group, "items")?, "group.items")?;
         for item in items {
             let object = required_field(item, "object")?;
-            if !value_field_str(object, "id")?.starts_with("ck:strand:") {
+            if !value_field_str(object, "id")?.starts_with("ak:strand:") {
                 bail!("sync artifact collection item object id was not a strand");
             }
             let position = required_field(item, "position")?;
@@ -53,7 +53,7 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
             if model != "relation" && model != "relation_container" {
                 bail!("sync artifact collection item position model was invalid");
             }
-            if !value_field_str(position, "relation_id")?.starts_with("ck:relation:") {
+            if !value_field_str(position, "relation_id")?.starts_with("ak:relation:") {
                 bail!("sync artifact collection item relation id was invalid");
             }
         }
@@ -63,20 +63,20 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
 
 fn validate_strand_discussion_timeline(value: &Value) -> Result<()> {
     let timeline = required_field(value, "strand_discussion_timeline")?;
-    if !value_field_str(timeline, "strand_id")?.starts_with("ck:strand:") {
+    if !value_field_str(timeline, "strand_id")?.starts_with("ak:strand:") {
         bail!("sync artifact strand discussion timeline strand id was invalid");
     }
-    if !value_field_str(timeline, "next_cursor")?.starts_with("ck:cursor:") {
+    if !value_field_str(timeline, "next_cursor")?.starts_with("ak:cursor:") {
         bail!("sync artifact strand discussion timeline cursor was invalid");
     }
     for entry in value_array(
         required_field(timeline, "entries")?,
         "strand_discussion_timeline.entries",
     )? {
-        if !value_field_str(entry, "event_id")?.starts_with("ck:event:") {
+        if !value_field_str(entry, "event_id")?.starts_with("ak:event:") {
             bail!("sync artifact strand discussion timeline event id was invalid");
         }
-        if !value_field_str(entry, "message_id")?.starts_with("ck:message:") {
+        if !value_field_str(entry, "message_id")?.starts_with("ak:message:") {
             bail!("sync artifact strand discussion timeline message id was invalid");
         }
     }

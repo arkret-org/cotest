@@ -61,7 +61,7 @@ test.describe.fixme("events submit batch Realm bootstrap", () => {
           title: `Batch bootstrap ${Date.now()}`,
           summary: "cotest batch realm bootstrap fixture",
           created_by: alice.did,
-          trust_domain: "ck:trust_domain:soland.local",
+          trust_domain: "ak:trust_domain:soland.local",
           schema_refs: ["ck.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",

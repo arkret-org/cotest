@@ -1,6 +1,6 @@
 //! Round 4 / A2 — security-closure-vectors runner contract.
 //!
-//! Loads `cokret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`
+//! Loads `arkret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`
 //! (13 vector ids, runner contract introduced by spec commit
 //! `892c5d7 test: add security closure runner contract`) and verifies the
 //! wire-level shape every conformant implementer is expected to expose:

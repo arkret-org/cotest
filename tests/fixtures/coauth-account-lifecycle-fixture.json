@@ -50,7 +50,7 @@
         "dev_or_password_fallback_used": false,
         "session_grant": {
           "active": true,
-          "scope": "urn:cokret:principal-server:session.bind",
+          "scope": "urn:arkret:principal-server:session.bind",
           "audience": "did:web:soland.local"
         }
       }

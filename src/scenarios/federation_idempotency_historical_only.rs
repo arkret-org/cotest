@@ -1,7 +1,7 @@
 //! C3 — multi-server federation idempotency + historical_only
 //! scenario.
 //!
-//! Spec: sibling `cokret-spec` checkout, federation idempotency and
+//! Spec: sibling `arkret-spec` checkout, federation idempotency and
 //! `historical_only` diagnostic semantics.
 //!
 //! Scenario shape (cross-project wire-shape, in-memory; no live
@@ -211,9 +211,9 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     // Server A → Server B identifiers.
     let source_did = "did:web:server-a.example".to_owned();
     let dest_did = "did:web:server-b.example".to_owned();
-    let source_td = TypedTrustDomainId::new("ck:trust_domain:a")
+    let source_td = TypedTrustDomainId::new("ak:trust_domain:a")
         .map_err(|e| anyhow!("typed source trust domain construction failed: {e}"))?;
-    let dest_td = TypedTrustDomainId::new("ck:trust_domain:b")
+    let dest_td = TypedTrustDomainId::new("ak:trust_domain:b")
         .map_err(|e| anyhow!("typed destination trust domain construction failed: {e}"))?;
 
     // Request body X — canonical-JSON over a small federation_transaction.
@@ -298,7 +298,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     }
 
     // Drive Server B against the scenario.
-    let mut server_b = SimulatedFederationReceiver::new("ck:trust_domain:b");
+    let mut server_b = SimulatedFederationReceiver::new("ak:trust_domain:b");
 
     // 1) First push — fresh accept.
     let first = server_b.receive(&initial_key, dest_td.as_str(), || {
@@ -376,7 +376,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     //    cross_domain_replay_rejected.
     let wrong_dest = server_b.receive(
         &post_rotation_key,
-        "ck:trust_domain:wrong",
+        "ak:trust_domain:wrong",
         || json!({"unreachable": true}),
     );
     match wrong_dest {
@@ -414,8 +414,8 @@ mod tests {
     /// driver runs entirely against an in-memory simulated receiver.
     #[test]
     fn federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values() {
-        let source_td = TypedTrustDomainId::new("ck:trust_domain:a").unwrap();
-        let dest_td = TypedTrustDomainId::new("ck:trust_domain:b").unwrap();
+        let source_td = TypedTrustDomainId::new("ak:trust_domain:a").unwrap();
+        let dest_td = TypedTrustDomainId::new("ak:trust_domain:b").unwrap();
         let request_canonical_digest = Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
         let fragment = federation_trust_domain_transcript_fragment(
             &source_td,

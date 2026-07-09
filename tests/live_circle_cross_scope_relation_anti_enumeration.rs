@@ -81,7 +81,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
         .register_client(
             "did:web:admin.ckp0007.example",
             "@admin",
-            "ck:device:01904100-0000-7000-8000-00000000ad01",
+            "ak:device:01904100-0000-7000-8000-00000000ad01",
         )
         .await?;
     let circle_member = stack
@@ -89,7 +89,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
         .register_client(
             "did:web:incircle.ckp0007.example",
             "@incircle",
-            "ck:device:01904100-0000-7000-8000-0000000000e1",
+            "ak:device:01904100-0000-7000-8000-0000000000e1",
         )
         .await?;
     let realm_only = stack
@@ -97,7 +97,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
         .register_client(
             "did:web:realm-only.ckp0007.example",
             "@realm-only",
-            "ck:device:01904100-0000-7000-8000-00000000e002",
+            "ak:device:01904100-0000-7000-8000-00000000e002",
         )
         .await?;
     let _ = (circle_member.actor.as_str(), realm_only.actor.as_str());
@@ -105,9 +105,9 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     let admin_did: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007rel001".to_owned())
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-ckp0007rel001".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007rel002".to_owned())
+    let circle_id = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007rel002".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let display = CircleDisplay {
         short_name: "Rel".to_owned(),

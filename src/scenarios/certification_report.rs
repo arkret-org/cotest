@@ -19,7 +19,7 @@ pub struct StackCertificationReport {
     /// entries from `profile_registry::build_profile_gate_report`). Present
     /// when the runtime gate report could be built from the spec artifact;
     /// `None` when the artifact is unreachable (e.g. running from a release
-    /// tarball without `cokret-spec/`).
+    /// tarball without `arkret-spec/`).
     pub profile_gate: Option<ProfileGateReport>,
 }
 

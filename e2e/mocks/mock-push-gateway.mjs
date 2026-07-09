@@ -4,7 +4,7 @@
 // (E2EE-friendly desensitized payloads).
 //
 // Implements the wire contract described by
-// `cokret-spec/spec/v1/zh/discovery/push-notifications.md`:
+// `arkret-spec/spec/v1/zh/discovery/push-notifications.md`:
 //   - blind wakeup as the default interop privacy baseline
 //   - per-pusher registration with optional DnD windows
 //   - signed delivery receipts (Ed25519 JWT-shaped) so senders can prove the

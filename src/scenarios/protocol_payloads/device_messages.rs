@@ -25,7 +25,7 @@ async fn send_application_message(server: &CokretServer, token: &str) -> Result<
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ck.mls.application",
                             "content": encrypted_envelope("ck.mls.application", "base64url-opaque-ciphertext"),
                             "expires_at": "2026-12-31T00:00:00Z"
@@ -50,7 +50,7 @@ async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Res
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ck.mls.application",
                             "content": encrypted_envelope("ck.mls.application", "base64url-opaque-ciphertext"),
                             "expires_at": "2026-12-31T00:00:00Z"
@@ -94,7 +94,7 @@ async fn send_verification_message(server: &CokretServer, token: &str) -> Result
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ck.key.verification.request",
                             "content": encrypted_envelope(
                                 "ck.key.verification.request",

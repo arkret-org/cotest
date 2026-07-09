@@ -335,7 +335,7 @@ fn evaluate_projection_response(
         let Some(cursor) = response.get("next_cursor").and_then(Value::as_str) else {
             return Ok(json!({"decision": "reject", "reason": "invalid_response"}));
         };
-        if !cursor.starts_with("ck:cursor:") {
+        if !cursor.starts_with("ak:cursor:") {
             return Ok(json!({"decision": "reject", "reason": "invalid_response"}));
         }
         let binding = required_object(response, "cursor_binding")?;

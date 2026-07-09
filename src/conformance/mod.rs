@@ -427,7 +427,7 @@ pub(crate) struct NamedCase {
     pub(crate) inputs: Option<Vec<Value>>,
     pub(crate) expected: Option<Value>,
     // ck.vector.federation.reducer_profile_digest.v1 case fields
-    // (federation-fixture.json, registered by cokret-spec ec404fd).
+    // (federation-fixture.json, registered by arkret-spec ec404fd).
     pub(crate) canonical_input: Option<Value>,
     pub(crate) expected_digest: Option<String>,
     pub(crate) sender_reducer_profile_digest: Option<String>,
@@ -465,7 +465,7 @@ pub(crate) fn spec_artifacts_root() -> PathBuf {
 
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
-        .join("cokret-spec")
+        .join("arkret-spec")
         .join("spec")
         .join("v1")
         .join("artifacts")
@@ -488,7 +488,7 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
 }
 
 /// Resolve a fixture that lives in cotest's own `tests/fixtures/` tree (as
-/// opposed to [`fixture_path`], which resolves cokret-spec artifact fixtures).
+/// opposed to [`fixture_path`], which resolves arkret-spec artifact fixtures).
 /// Exposed to the integration-test crate so `tests/*.rs` can share one local
 /// loader instead of re-deriving the root.
 pub fn local_fixture_path(file_name: &str) -> PathBuf {
@@ -599,7 +599,7 @@ pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
 }
 
 pub(crate) fn canonical_json(value: &Value) -> Result<String> {
-    // Delegate to the SDK's canonical encoder so every Cokret implementation
+    // Delegate to the SDK's canonical encoder so every Arkret implementation
     // sorts keys / encodes numbers identically. `canonical_json_bytes` is the
     // single normative source of canonical bytes (spec encoding.md §9.5); the
     // bytes are valid UTF-8 so the historical `String` return type is preserved.
@@ -643,7 +643,7 @@ pub(crate) fn canonical_proof_payload(event: &Value) -> Result<Map<String, Value
 pub(crate) fn encode_cursor_shape(shape: &CursorShape) -> Result<String> {
     let canonical = canonical_json(&serde_json::to_value(shape)?)?;
     Ok(format!(
-        "ck:cursor:{}",
+        "ak:cursor:{}",
         base64::Engine::encode(
             &base64::engine::general_purpose::URL_SAFE_NO_PAD,
             canonical.as_bytes()
@@ -654,7 +654,7 @@ pub(crate) fn encode_cursor_shape(shape: &CursorShape) -> Result<String> {
 pub(crate) fn decode_cursor_shape(encoded: &str) -> Result<CursorShape> {
     use base64::Engine as _;
     let payload = encoded
-        .strip_prefix("ck:cursor:")
+        .strip_prefix("ak:cursor:")
         .ok_or_else(|| anyhow!("cursor must start with ck:cursor:"))?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload)?;
     serde_json::from_slice(&bytes).map_err(Into::into)

@@ -68,8 +68,8 @@
         "constraint_type": "scope_limitation",
         "effect": "allow",
         "evaluation_class": "space_state",
-        "allowed_from_container_refs": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9"],
-        "allowed_to_container_refs": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f0"]
+        "allowed_from_container_refs": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9"],
+        "allowed_to_container_refs": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f0"]
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "space_state", "fast_path_eligible": false }
     },

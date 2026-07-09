@@ -34,18 +34,18 @@ use serde_json::{Value, json};
 
 use crate::harness::{CokretServer, expect_json};
 
-pub const BACKUP_ID: &str = "ck:backup:01964137-0000-7000-8000-000000000000";
+pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
 const ACTOR_ID: &str = "did:web:alice.example";
 /// Must match the device id minted by `dev_login` in
 /// [`super::events_keys_device_blob_push_and_moderation_surfaces_work`]: the
 /// unlock proof binds `requesting_device_id` to the authenticated session
 /// device.
-const DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
-const SERIES_ID: &str = "ck:backup_series:01964137-0000-7000-8000-000000000000";
+const DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
+const SERIES_ID: &str = "ak:backup_series:01964137-0000-7000-8000-000000000000";
 /// Typed device id carried inside the envelope (`auth_data.device_id` must be
 /// a `ck:device:` typed id; it is not required to equal the session device).
-const ENVELOPE_DEVICE_ID: &str = "ck:device:01964137-0000-7000-8000-000000000000";
+const ENVELOPE_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000000";
 const CIPHERTEXT_DIGEST: &str =
     "sha256:2108421084217842908421084210842121084210842178429084210842108421";
 
@@ -115,7 +115,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             extra: BTreeMap::new(),
         },
         domain_separation: KeyBackupDomainSeparation {
-            hkdf_info: "cokret-key-backup/mls_history/test/v1".to_owned(),
+            hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
             subdomain: "test".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ck.schema.key_backup.v1".to_owned(),
@@ -265,7 +265,7 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
     let mut proof = KeyBackupUnlockProof {
         schema: "ck.schema.key_backup_unlock_proof.v1".to_owned(),
         recovery_session_id: RecoverySessionId::new(
-            "ck:recovery_session:01964137-0000-7000-8000-0000000000aa",
+            "ak:recovery_session:01964137-0000-7000-8000-0000000000aa",
         )?,
         principal_id: did(ACTOR_ID)?,
         requesting_device_id: DEVICE_ID.to_owned(),

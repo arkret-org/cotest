@@ -8,12 +8,12 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §2 — Space 概念与字段
-- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — `default_join_rule` 与 discoverability / history_visibility 三个轴独立
-- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §3.8 — Membership 状态机扩展
-- `cokret-spec/spec/v1/zh/models/strand-and-message.md` §8 — Message 概览
-- `cokret-spec/spec/v1/zh/models/strand-and-message.md` §8.4 — Chat 模式示例 (mention、reply、reaction、edit 的事件链)
-- `cokret-spec/spec/v1/zh/models/strand-and-message.md` §8.5 — 冲突与收敛规则 (revision chain、redact tombstone)
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §2 — Space 概念与字段
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — `default_join_rule` 与 discoverability / history_visibility 三个轴独立
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.8 — Membership 状态机扩展
+- `arkret-spec/spec/v1/zh/models/strand-and-message.md` §8 — Message 概览
+- `arkret-spec/spec/v1/zh/models/strand-and-message.md` §8.4 — Chat 模式示例 (mention、reply、reaction、edit 的事件链)
+- `arkret-spec/spec/v1/zh/models/strand-and-message.md` §8.5 — 冲突与收敛规则 (revision chain、redact tombstone)
 
 ## 拓扑
 

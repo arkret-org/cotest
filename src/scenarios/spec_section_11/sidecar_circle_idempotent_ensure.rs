@@ -32,7 +32,7 @@ fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<S
     let seg4_rest = &hex[17..20];
     let seg5 = &hex[20..32];
     Ok(format!(
-        "ck:circle:{seg1}-{seg2}-7{seg3_rest}-8{seg4_rest}-{seg5}"
+        "ak:circle:{seg1}-{seg2}-7{seg3_rest}-8{seg4_rest}-{seg5}"
     ))
 }
 

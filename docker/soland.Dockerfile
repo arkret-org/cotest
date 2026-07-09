@@ -2,7 +2,7 @@ FROM rust:1.96-bookworm AS build
 
 WORKDIR /workspace
 ENV RUSTFLAGS="-C link-arg=-lssl -C link-arg=-lcrypto"
-COPY cokret-rust-sdk ./cokret-rust-sdk
+COPY arkret-rust-sdk ./arkret-rust-sdk
 COPY soland ./soland
 
 WORKDIR /workspace/soland

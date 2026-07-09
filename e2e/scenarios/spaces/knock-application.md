@@ -14,16 +14,16 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §2 — Join Policy 设计原则 (gate 是组合的、申请材料对外不可见、审核决策必须上链、密码学绑定到 join、capability 是 allow 唯一来源)
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §3 — Cell Family `ck:cell:realm.join_policy.v1:<realm_id>`、JoinPolicy schema 字段表
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §3.1 — Gate 类型表 (`application_form`、`manual_review`、`cooldown`)
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §3.3 — `application_form.questions[]` schema
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §4 — `default_join_rule` 与 join policy 的交叉表 (knock 行)
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §7 — 申请-审核路径
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §7.2 — `member.application` 字段
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §7.3 — `member.application.review` 字段
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §7.5 — 接受后的 invite 链
-- `cokret-spec/spec/v1/zh/governance/join-policy.md` §11 — 反滥用约束 (含 cooldown)
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §2 — Join Policy 设计原则 (gate 是组合的、申请材料对外不可见、审核决策必须上链、密码学绑定到 join、capability 是 allow 唯一来源)
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §3 — Cell Family `ck:cell:realm.join_policy.v1:<realm_id>`、JoinPolicy schema 字段表
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §3.1 — Gate 类型表 (`application_form`、`manual_review`、`cooldown`)
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §3.3 — `application_form.questions[]` schema
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §4 — `default_join_rule` 与 join policy 的交叉表 (knock 行)
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §7 — 申请-审核路径
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §7.2 — `member.application` 字段
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §7.3 — `member.application.review` 字段
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §7.5 — 接受后的 invite 链
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §11 — 反滥用约束 (含 cooldown)
 
 ## 拓扑
 

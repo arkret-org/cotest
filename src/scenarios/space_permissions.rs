@@ -15,14 +15,14 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     let alice = dev_login(
         server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
     let bob = register_account(
         server,
         "did:web:bob-space.example",
         "@bob-space",
-        "ck:device:01904100-0000-7000-8000-0000000000b0",
+        "ak:device:01904100-0000-7000-8000-0000000000b0",
     )
     .await?;
 
@@ -36,7 +36,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let unauth_realm_id = "ck:realm:01904100-0000-7000-8000-000000005ace";
+    let unauth_realm_id = "ak:realm:01904100-0000-7000-8000-000000005ace";
     expect_api_error(
         server
             .http()
@@ -52,7 +52,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                         "title": "No Auth",
                         "summary": "No Auth",
                         "created_by": "did:web:alice.example",
-                        "trust_domain": "ck:trust_domain:soland.local",
+                        "trust_domain": "ak:trust_domain:soland.local",
                         "schema_refs": ["ck.schema.realm.v1"],
                         "default_discoverability": "invite_only",
                         "default_join_rule": "invite",
@@ -116,14 +116,14 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
             "did:web:bob-visible.example",
             "@bob-visible",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
     let created = alice
@@ -183,7 +183,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &bob.token,
         "did:web:bob-visible.example",
         &realm_id,
-        "ck:thread:space",
+        "ak:thread:space",
         "member can send",
     )
     .await?;

@@ -53,9 +53,9 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
             glyph: CircleGlyph::Key,
         },
     };
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007mls001".to_owned())
+    let circle_id = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007mls001".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007mls000".to_owned())
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-ckp0007mls000".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
     let circle = Circle::new(
         circle_id.clone(),
@@ -95,7 +95,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
         .register_client(
             "did:web:admin.ckp0007.example",
             "@admin",
-            "ck:device:01904100-0000-7000-8000-00000000ad01",
+            "ak:device:01904100-0000-7000-8000-00000000ad01",
         )
         .await?;
     let client_realm_default = stack
@@ -103,7 +103,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
         .register_client(
             "did:web:probe.ckp0007.example",
             "@probe-realm",
-            "ck:device:01904100-0000-7000-8000-00000000e006",
+            "ak:device:01904100-0000-7000-8000-00000000e006",
         )
         .await?;
     let client_circle_only = stack
@@ -111,7 +111,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
         .register_client(
             "did:web:probe.ckp0007.example",
             "@probe-circle",
-            "ck:device:01904100-0000-7000-8000-00000000e007",
+            "ak:device:01904100-0000-7000-8000-00000000e007",
         )
         .await?;
 

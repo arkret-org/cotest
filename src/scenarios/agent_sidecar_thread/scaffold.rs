@@ -33,9 +33,9 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
     }
 
     // (3) typed-id round-trip — sidecar circles are plain Circles.
-    let sidecar = CircleId::new("ck:circle:01999999-0000-7000-8000-00000000c001".to_owned())
+    let sidecar = CircleId::new("ak:circle:01999999-0000-7000-8000-00000000c001".to_owned())
         .map_err(|e| anyhow!("sidecar CircleId: {e}"))?;
-    if !sidecar.as_str().starts_with("ck:circle:") {
+    if !sidecar.as_str().starts_with("ak:circle:") {
         return Err(anyhow!("sidecar CircleId lost canonical prefix: {sidecar}"));
     }
 

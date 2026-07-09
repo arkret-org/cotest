@@ -28,7 +28,7 @@ export function sendJson(res, status, body) {
 /// code unit, no whitespace). This is the single canonical-JSON implementation
 /// for the `.mjs` runtime (mocks + scripts), kept in lock-step with the
 /// TypeScript authority `canonicalJson` in `e2e/helpers/soland-api.ts` (itself
-/// a port of cokret-rust-sdk/crates/core/src/canonical.rs) so mock/script
+/// a port of arkret-rust-sdk/crates/core/src/canonical.rs) so mock/script
 /// computed digests cannot drift from the harness. The full canonical-profile
 /// validation matches the TS port: safe-integer-only numbers, `-0` rejected,
 /// BOM / non-NFC strings rejected, `undefined` object members rejected, and
@@ -102,7 +102,7 @@ function assertCanonicalNumber(value, path) {
 
 /// Canonical RFC 3339 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`, seconds only).
 /// soland validates every string `*_at` field inside event content blocks with
-/// cokret-sdk `validate_timestamp_canonical`, which rejects fractional
+/// arkret-sdk `validate_timestamp_canonical`, which rejects fractional
 /// seconds — never emit a raw `toISOString()` from a mock. Mirrors
 /// `canonicalTimestamp` in e2e/helpers/soland-api.ts.
 export function canonicalTimestamp(date = new Date()) {

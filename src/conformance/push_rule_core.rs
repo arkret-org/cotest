@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow, bail};
-use cokret::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
+use arkret::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
 use serde::Deserialize;
 use serde_json::Value;
 

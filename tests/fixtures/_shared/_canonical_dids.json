@@ -7,25 +7,25 @@
       "did": "did:web:alice.example",
       "role": "regular_member",
       "default_handle": "@alice",
-      "default_device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
+      "default_device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
     },
     "bob": {
       "did": "did:web:bob.example",
       "role": "regular_member",
       "default_handle": "@bob",
-      "default_device_id": "ck:device:01904100-0000-7000-8000-0000000000b0"
+      "default_device_id": "ak:device:01904100-0000-7000-8000-0000000000b0"
     },
     "carol": {
       "did": "did:web:carol.example",
       "role": "regular_member",
       "default_handle": "@carol",
-      "default_device_id": "ck:device:01904100-0000-7000-8000-000000000ca0"
+      "default_device_id": "ak:device:01904100-0000-7000-8000-000000000ca0"
     },
     "admin": {
       "did": "did:web:admin.example",
       "role": "realm_admin",
       "default_handle": "@admin",
-      "default_device_id": "ck:device:01904100-0000-7000-8000-00000000ad01"
+      "default_device_id": "ak:device:01904100-0000-7000-8000-00000000ad01"
     },
     "attacker": {
       "did": "did:web:attacker.example",

@@ -1,8 +1,8 @@
 // Circle administration HTTP helpers (`/_cokret/self/circles/*`).
 //
-// Face note: Circle administration is now a NORMATIVE Cokret protocol surface.
+// Face note: Circle administration is now a NORMATIVE Arkret protocol surface.
 // The `ck.self.circle.*` operations (list/create/get/members/scope-rotate/
-// archive/restore/tombstone) are published in the cokret-spec OpenAPI artifact
+// archive/restore/tombstone) are published in the arkret-spec OpenAPI artifact
 // (`/_cokret/self/circles*`), the operation registry, and the contract catalog,
 // so soland mounts them under the `/_cokret` tree. (Previously these were
 // CKP-0014 §5 implementation-local DRAFT candidates served under

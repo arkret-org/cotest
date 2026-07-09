@@ -8,17 +8,17 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/models/morph.md` §2 — Morph schema 字段表(`schema_refs[]` 是字段验证真源)
-- `cokret-spec/spec/v1/zh/models/morph.md` §4.0 — 决策矩阵(Schema 演进 → §4.1 S2/S3 真源)
-- `cokret-spec/spec/v1/zh/models/morph.md` §4.1 — `schema_refs[]` Evolution Policy
+- `arkret-spec/spec/v1/zh/models/morph.md` §2 — Morph schema 字段表(`schema_refs[]` 是字段验证真源)
+- `arkret-spec/spec/v1/zh/models/morph.md` §4.0 — 决策矩阵(Schema 演进 → §4.1 S2/S3 真源)
+- `arkret-spec/spec/v1/zh/models/morph.md` §4.1 — `schema_refs[]` Evolution Policy
   - §4.1 S1 — per-event `requirements.schema[]` 版本绑定
   - §4.1 S2 — `ck.morph.update` schema_refs[] 变化必须走 schema-evolution gate;非 additive MUST reject
   - §4.1 S3 — `ck.morph.schema_migrate` 一等 event;`compatibility_class ∈ {additive, breaking, transformation}`;breaking/transformation 需 `ck.profile.morph.schema_migration_transformations.v1` opt-in
-- `cokret-spec/spec/v1/zh/models/morph.md` §6 — Schema Evolution 通用约束
-- Profile 定义:`cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json` → `ck.profile.morph.schema_migration_transformations.v1`(`required_event_kinds: [ck.morph.schema_migrate]`、`feature_discovery.required: [supported_compatibility_classes, transformation_rules_dialect, schema_migrate_capability_action]`)
-- Type 决策表(canonical):`cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json`(4 个 precedence 顺序、3 条 merge_rules、4 个 conflict_resolution case、4 个 conformance_must_test)
-- Event kind:`cokret-spec/spec/v1/artifacts/registry/event-kind-registry.json` → `ck.morph.schema_migrate` (category=morph, reducer_input=true, status=active)
-- Error code:`cokret-spec/spec/v1/artifacts/registry/error-code-registry.json`
+- `arkret-spec/spec/v1/zh/models/morph.md` §6 — Schema Evolution 通用约束
+- Profile 定义:`arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json` → `ck.profile.morph.schema_migration_transformations.v1`(`required_event_kinds: [ck.morph.schema_migrate]`、`feature_discovery.required: [supported_compatibility_classes, transformation_rules_dialect, schema_migrate_capability_action]`)
+- Type 决策表(canonical):`arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json`(4 个 precedence 顺序、3 条 merge_rules、4 个 conflict_resolution case、4 个 conformance_must_test)
+- Event kind:`arkret-spec/spec/v1/artifacts/registry/event-kind-registry.json` → `ck.morph.schema_migrate` (category=morph, reducer_input=true, status=active)
+- Error code:`arkret-spec/spec/v1/artifacts/registry/error-code-registry.json`
   - `morph_schema_refs_evolution_unauthorized`(`ck.morph.update` 修改 schema_refs[] 缺 capability)
   - `morph_schema_refs_transformation_unsupported`(非 additive 走 `ck.morph.update` 或缺 profile)
   - `morph_schema_version_binding_missing`(event 未填 `requirements.schema[]`)
@@ -42,7 +42,7 @@
 ## Pre-conditions
 
 - soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
-- harness 能 ESM resolve `cokret-spec/spec/v1/artifacts/{registry,profiles}/*.json`(相对 `tests/models/*.spec.ts` 向上 4 级到 repo root)
+- harness 能 ESM resolve `arkret-spec/spec/v1/artifacts/{registry,profiles}/*.json`(相对 `tests/models/*.spec.ts` 向上 4 级到 repo root)
 - alice 通过 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 拿到 bearer token
 - alice 已创建一个 test Realm `R`,记录 `realmId`,作为 Morph 容器
 
@@ -99,14 +99,14 @@
 
 ### Phase D — Deterministic transform 向量(若有 fixture)
 
-17. **harness** 尝试加载 `cokret-spec/spec/v1/artifacts/fixtures/ck.vector.morph.*.json` 形态的 transform fixture(若未来 spec 引入)
+17. **harness** 尝试加载 `arkret-spec/spec/v1/artifacts/fixtures/ck.vector.morph.*.json` 形态的 transform fixture(若未来 spec 引入)
 18. 若 fixture 存在:对每个 vector,driver alice 写入 `input` Morph 状态,发对应 `ck.morph.schema_migrate` event,然后 `GET` 该 Morph 当前投影
 19. 断言:投影 bytes(`canonical_json` after sort)与 vector `expected_output` 字节相等;digest 也匹配(若 vector 暴露 `expected_digest`)
 20. 当前 spec 仓库**无** `ck.vector.morph.*` fixture(本 scenario 写作时已 grep 确认),Phase D 整体 `test.fixme` 钉住 contract,等 spec 侧 publish 后再 live
 
 ### Phase E — Type registry alignment (LIVE)
 
-21. **harness** 加载 `cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json` → 收集 `precedence[*].source` 4 项与 `precedence[*].consumed_by[*]` decision name set(`reducer.field_validation`、`capability.allowed_morph_types_match`、`view.default_renderer_pick`、...)
+21. **harness** 加载 `arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json` → 收集 `precedence[*].source` 4 项与 `precedence[*].consumed_by[*]` decision name set(`reducer.field_validation`、`capability.allowed_morph_types_match`、`view.default_renderer_pick`、...)
 22. **harness** 同时加载 `ck.profile.morph.schema_migration_transformations.v1` profile 块,断言以下结构性约束:
     - `required_event_kinds` 含 `ck.morph.schema_migrate`
     - `additional_requirements` 含 `capability_must`、`from_set_check_must`、`deterministic_transformation_must`
@@ -133,7 +133,7 @@
 
 ## Implementation notes
 
-- **artifact loader**:复用 G1.T4 (`tests/conformance/registry-drift.spec.ts`) 的 `import.meta.url` + `dirname` + `resolve` 模式;artifacts 落在 `<repo_root>/cokret-spec/spec/v1/artifacts/`,相对 `cotest/e2e/tests/models/*.spec.ts` 是 `../../../../cokret-spec/spec/v1/artifacts`。Playwright 配置 `"type": "module"`(见 `e2e/package.json`),原生支持 ESM `import.meta.url`
+- **artifact loader**:复用 G1.T4 (`tests/conformance/registry-drift.spec.ts`) 的 `import.meta.url` + `dirname` + `resolve` 模式;artifacts 落在 `<repo_root>/arkret-spec/spec/v1/artifacts/`,相对 `cotest/e2e/tests/models/*.spec.ts` 是 `../../../../arkret-spec/spec/v1/artifacts`。Playwright 配置 `"type": "module"`(见 `e2e/package.json`),原生支持 ESM `import.meta.url`
 - **profile loader**:`conformance-profiles.json` 是单个大对象,profile-id → requirements 映射在 `profile_requirements.<profile_id>`,全局 v1 catalog 列表在 `implementation_profiles[]`;harness 解析后直接索引 `parsed.profile_requirements["ck.profile.morph.schema_migration_transformations.v1"]`,不要 deep-walk(profile id 是稳定 wire key,不存在 fallback)
 - **describe key 名 fallback**:Phase A step 2 / Phase E step 23 — soland 暴露的 profile feature discovery 字段路径未敲定,harness 按顺序尝试:`describe.implemented_features.profile_features[<profile_id>]` → `describe.profile_features[<profile_id>]` → `describe.feature_discovery[<profile_id>]`,第一个非空对象即视为有效 hint;全部 missing 时该子断言 `test.skip()`
 - **audit log scope**:Phase C 的 `schema_migration_breaking` 检查需要一个 audit query 端点;若 soland 仅暴露 per-event 检索而无 audit kind 过滤,harness 改为拉 `/_cokret/self/realms/${realmId}/events?kinds=ck.audit.*` 后 filter `audit_kind` field

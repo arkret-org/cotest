@@ -5,8 +5,8 @@
 //! the upload is visible.
 
 use anyhow::Result;
-use cokret::Did;
-use cokret::auth::principal_control_realm_id;
+use arkret::Did;
+use arkret::auth::principal_control_realm_id;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -18,11 +18,11 @@ use crate::harness::{
 use crate::scenarios::federation_collaboration::signed_keys_upload_body;
 
 const KEYS_ACTOR_DID: &str = "did:web:alice.example";
-const KEYS_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
+const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
-const ADAPTER_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-000000000101";
-const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-000000000100";
-const ADAPTER_MESSAGE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-000000000001";
+const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-000000000101";
+const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000100";
+const ADAPTER_MESSAGE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
 
 pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     // soland's keys/upload requires a verified, authorized device record whose
@@ -46,7 +46,7 @@ async fn authorize_keys_device(
         .map_err(|error| anyhow::anyhow!("invalid keys actor DID: {error}"))?;
     let control_realm = principal_control_realm_id(&principal);
     let mut event = json!({
-        "event_id": "ck:event:0196419b-0000-7000-8000-00000000d0a0",
+        "event_id": "ak:event:0196419b-0000-7000-8000-00000000d0a0",
         "kind": "ck.device.authorize",
         "realm_id": control_realm,
         "actor_id": KEYS_ACTOR_DID,
@@ -61,7 +61,7 @@ async fn authorize_keys_device(
             device_key,
         )?,
         "unsigned": {
-            "local_operation_idempotency_alias": "ck:operation:0196419b-0000-7000-8000-00000000d0a0"
+            "local_operation_idempotency_alias": "ak:operation:0196419b-0000-7000-8000-00000000d0a0"
         },
         "proofs": [{
             "kind": "detached_jws",
@@ -93,8 +93,8 @@ async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> 
         3,
         &realm_id,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
-        "ck:thread:adapter",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:thread:adapter",
         "hello",
     )?;
 
@@ -149,7 +149,7 @@ fn signed_realm_create_event(
             "schema": "ck.schema.realm.v1",
             "title": title,
             "summary": title,
-            "trust_domain": "ck:trust_domain:protocol-payloads.cotest.local",
+            "trust_domain": "ak:trust_domain:protocol-payloads.cotest.local",
             "created_by": actor_id,
             "schema_refs": ["ck.schema.realm.v1"],
             "default_discoverability": "public",
@@ -183,8 +183,8 @@ fn signed_realm_create_event(
         "payload": payload,
         "unsigned": {
             "local_operation_idempotency_alias": format!(
-                "ck:operation:{}",
-                event_id.trim_start_matches("ck:event:")
+                "ak:operation:{}",
+                event_id.trim_start_matches("ak:event:")
             )
         },
         "proofs": [{
@@ -210,7 +210,7 @@ fn signed_message_event(
     body: &str,
 ) -> Result<Value> {
     let payload = message_create_text_payload_for_strand(
-        parse_strand_id("ck:strand:0196419b-0000-7000-8000-000000000001")?,
+        parse_strand_id("ak:strand:0196419b-0000-7000-8000-000000000001")?,
         body,
     )?;
     let mut event = json!({
@@ -226,8 +226,8 @@ fn signed_message_event(
         "payload": payload,
         "unsigned": {
             "local_operation_idempotency_alias": format!(
-                "ck:operation:{}",
-                event_id.trim_start_matches("ck:event:")
+                "ak:operation:{}",
+                event_id.trim_start_matches("ak:event:")
             )
         },
         "proofs": [{
@@ -276,13 +276,13 @@ async fn upload_and_inspect_keys(
             .http()
             .post(server.url("/_cokret/self/keys/query"))
             .bearer_auth(token)
-            .json(&json!({"device_keys": {"did:web:alice.example": ["ck:device:01904100-0000-7000-8000-0000000000a1"]}})),
+            .json(&json!({"device_keys": {"did:web:alice.example": ["ak:device:01904100-0000-7000-8000-0000000000a1"]}})),
         StatusCode::OK,
     )
     .await?;
     // The stored device_signature is the authoritative detached-JWS bundle
     // (alg / kid / jws) the upload was verified with, not a stub `signature`.
-    let queried_signature = &query_keys["device_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+    let queried_signature = &query_keys["device_keys"]["did:web:alice.example"]["ak:device:01904100-0000-7000-8000-0000000000a1"]
         ["algorithms"]["device_signature"];
     assert_eq!(queried_signature["alg"], "EdDSA");
     assert!(
@@ -297,14 +297,14 @@ async fn upload_and_inspect_keys(
             .bearer_auth(token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"ck:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
+                    "did:web:alice.example": {"ak:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        claimed["one_time_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+        claimed["one_time_keys"]["did:web:alice.example"]["ak:device:01904100-0000-7000-8000-0000000000a1"]
             ["key"],
         "one-time"
     );

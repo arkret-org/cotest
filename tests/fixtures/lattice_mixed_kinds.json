@@ -1,7 +1,7 @@
 {
   "profile": "ck.profile.lattice_mixed_kinds_vectors.v1",
   "version": "2026-05-18",
-  "comment": "CT-2 — verifies Cokret state resolution when a single Space has cells of different lattice types (cas-register + or-set + mv-register) updating concurrently. Spec authority: cokret-spec/spec/v1/zh/models/realm-and-space.md (lattice cell registry / co_write_policy) + cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md §3 (lattice_op kinds) and §5.3 (per-lattice reference impl). Each cell family has its own lattice; a single Move MAY write multiple cells, and concurrent Moves are resolved per-cell by the cell's own lattice — there is no cross-cell winner reconstruction.",
+  "comment": "CT-2 — verifies Arkret state resolution when a single Space has cells of different lattice types (cas-register + or-set + mv-register) updating concurrently. Spec authority: arkret-spec/spec/v1/zh/models/realm-and-space.md (lattice cell registry / co_write_policy) + arkret-spec/spec/v1/zh/authz/event-auth-state-resolution.md §3 (lattice_op kinds) and §5.3 (per-lattice reference impl). Each cell family has its own lattice; a single Move MAY write multiple cells, and concurrent Moves are resolved per-cell by the cell's own lattice — there is no cross-cell winner reconstruction.",
   "notes": [
     "Move objects in these vectors describe protocol-level semantics. Wire-required fields space_id / hlc / sig are elided for readability per the CBA lattice fixture convention.",
     "Cell ids follow ck:cell:<component>:<subject>; subject placeholders use safe ULIDs and dotted DID forms.",
@@ -12,42 +12,42 @@
       "name": "cas_register_or_set_coexist",
       "description": "A single Move writes one cas-register cell (space.locked) and one or-set cell (space.tags) in the same batch. Both effects apply atomically; the two cells advance independently under their own lattices.",
       "pre_state": {
-        "anchor": "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "anchor": "ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "cells": {
-          "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas_register",
-            "head": "ck:event:21084210-8421-7842-9084-210842108421",
+            "head": "ak:event:21084210-8421-7842-9084-210842108421",
             "value": false
           },
-          "ck:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or_set",
             "active_tags": []
           }
         }
       },
       "move": {
-        "id": "ck:event:6b5ad6b5-ad6b-7ad6-b5ad-6b5ad6b5ad6b",
+        "id": "ak:event:6b5ad6b5-ad6b-7ad6-b5ad-6b5ad6b5ad6b",
         "issuer": "did:web:admin.example",
-        "anchor_ref": "ck:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "anchor_ref": "ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "preconditions": [
           {
-            "cell": "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+            "cell": "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
             "predicate": {
               "op": "head_eq",
-              "value": "ck:event:21084210-8421-7842-9084-210842108421"
+              "value": "ak:event:21084210-8421-7842-9084-210842108421"
             }
           }
         ],
         "effects": [
           {
-            "cell": "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+            "cell": "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
             "op": {
               "kind": "set",
               "value": true
             }
           },
           {
-            "cell": "ck:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+            "cell": "ak:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
             "op": {
               "kind": "add",
               "tag": "tag:launch",
@@ -60,11 +60,11 @@
         "verify_move": "pass",
         "atomicity": "all_effects_or_none",
         "cell_states": {
-          "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas_register",
             "value": true
           },
-          "ck:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or_set",
             "active_tags": ["tag:launch"]
           }
@@ -74,18 +74,18 @@
     {
       "name": "mv_register_concurrent_writers",
       "description": "Two concurrent Moves from different actors set the same mv-register cell (space.draft_title) in the same Anchor batch. mv-register never reduces to a single winner; per event-auth-state-resolution.md §5.3.2 the join exposes both values as multiple heads. bottom=expose is the normal case for mv-register: projection surfaces {status:'conflict', heads:[...]} rather than choosing.",
-      "cell": "ck:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+      "cell": "ak:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
       "lattice": {
         "type": "mv_register",
         "bottom": "expose"
       },
       "concurrent_moves": [
         {
-          "id": "ck:event:84210842-1084-7108-8210-842108421084",
+          "id": "ak:event:84210842-1084-7108-8210-842108421084",
           "issuer": "did:web:alice.example",
           "effects": [
             {
-              "cell": "ck:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+              "cell": "ak:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": "Launch Plan v1"
@@ -94,11 +94,11 @@
           ]
         },
         {
-          "id": "ck:event:a5294a52-94a5-794a-9294-a5294a5294a5",
+          "id": "ak:event:a5294a52-94a5-794a-9294-a5294a5294a5",
           "issuer": "did:web:bob.example",
           "effects": [
             {
-              "cell": "ck:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+              "cell": "ak:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": "Launch Plan v2"
@@ -111,8 +111,8 @@
         "query": {
           "status": "conflict",
           "heads": [
-            "ck:event:84210842-1084-7108-8210-842108421084",
-            "ck:event:a5294a52-94a5-794a-9294-a5294a5294a5"
+            "ak:event:84210842-1084-7108-8210-842108421084",
+            "ak:event:a5294a52-94a5-794a-9294-a5294a5294a5"
           ],
           "values": ["Launch Plan v1", "Launch Plan v2"]
         },
@@ -124,18 +124,18 @@
       "name": "cas_or_set_mv_one_anchor",
       "description": "All three lattice types are written across moves in one Anchor batch: cas-register (space.locked), or-set (space.tags), and mv-register (space.draft_title). The Anchor's state surface MUST contain all three expected outputs computed by each cell's own lattice. The Anchor batch verifies each Move against predecessor pre-state per §4.3 — Moves do NOT read each other's effects.",
       "pre_state": {
-        "anchor": "ck:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "anchor": "ak:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "cells": {
-          "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas_register",
-            "head": "ck:event:42108421-0842-7084-a108-421084210842",
+            "head": "ak:event:42108421-0842-7084-a108-421084210842",
             "value": false
           },
-          "ck:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or_set",
             "active_tags": ["tag:existing"]
           },
-          "ck:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "mv_register",
             "heads": []
           }
@@ -143,20 +143,20 @@
       },
       "anchor_frontier_moves": [
         {
-          "id": "ck:event:c6318c63-18c6-718c-a318-c6318c6318c6",
+          "id": "ak:event:c6318c63-18c6-718c-a318-c6318c6318c6",
           "issuer": "did:web:admin.example",
           "preconditions": [
             {
-              "cell": "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+              "cell": "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
               "predicate": {
                 "op": "head_eq",
-                "value": "ck:event:42108421-0842-7084-a108-421084210842"
+                "value": "ak:event:42108421-0842-7084-a108-421084210842"
               }
             }
           ],
           "effects": [
             {
-              "cell": "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+              "cell": "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": true
@@ -165,11 +165,11 @@
           ]
         },
         {
-          "id": "ck:event:e739ce73-9ce7-79ce-b39c-e739ce739ce7",
+          "id": "ak:event:e739ce73-9ce7-79ce-b39c-e739ce739ce7",
           "issuer": "did:web:alice.example",
           "effects": [
             {
-              "cell": "ck:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+              "cell": "ak:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "add",
                 "tag": "tag:new",
@@ -179,11 +179,11 @@
           ]
         },
         {
-          "id": "ck:event:f8417f84-17f8-7f84-c417-f8417f8417f8",
+          "id": "ak:event:f8417f84-17f8-7f84-c417-f8417f8417f8",
           "issuer": "did:web:bob.example",
           "effects": [
             {
-              "cell": "ck:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
+              "cell": "ak:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": "Single draft title"
@@ -195,17 +195,17 @@
       "expected": {
         "verify_anchor": "accept",
         "state_surface": {
-          "ck:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.locked.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas_register",
             "value": true
           },
-          "ck:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.tags.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or_set",
             "active_tags": ["tag:existing", "tag:new"]
           },
-          "ck:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
+          "ak:cell:ck.component.realm.draft_title.v1:ck.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "mv_register",
-            "heads": ["ck:event:f8417f84-17f8-7f84-c417-f8417f8417f8"],
+            "heads": ["ak:event:f8417f84-17f8-7f84-c417-f8417f8417f8"],
             "values": ["Single draft title"]
           }
         },

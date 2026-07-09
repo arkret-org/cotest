@@ -33,9 +33,9 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     let authorization_ref = format!("{principal_id}#enrollment-authority");
     assert_enrollment_authority_service(&registered, &authorization_ref, &authority.did)?;
 
-    let session_device = "ck:device:01904100-0000-7000-8000-00000000e100";
+    let session_device = "ak:device:01904100-0000-7000-8000-00000000e100";
     let token = dev_login(&server, principal_id, session_device).await?;
-    let enrolled_device = "ck:device:01904100-0000-7000-8000-00000000e101";
+    let enrolled_device = "ak:device:01904100-0000-7000-8000-00000000e101";
     let enrolled_device_key = SigningKey::from_bytes(&[41u8; 32]);
     let enrolled_device_public_key = multibase_public_key(&enrolled_device_key);
 
@@ -47,7 +47,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         enrolled_device,
         &enrolled_device_public_key,
         1,
-        "ck:event:01904100-0000-7000-8000-00000000e101",
+        "ak:event:01904100-0000-7000-8000-00000000e101",
     )?;
     let accepted = expect_json(
         server
@@ -58,7 +58,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_accepted_event(&accepted, "ck:event:01904100-0000-7000-8000-00000000e101")?;
+    assert_accepted_event(&accepted, "ak:event:01904100-0000-7000-8000-00000000e101")?;
 
     let query = expect_json(
         server
@@ -87,10 +87,10 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         &imposter.did,
         &imposter.verification_method,
         &authorization_ref,
-        "ck:device:01904100-0000-7000-8000-00000000e102",
+        "ak:device:01904100-0000-7000-8000-00000000e102",
         &multibase_public_key(&SigningKey::from_bytes(&[42u8; 32])),
         2,
-        "ck:event:01904100-0000-7000-8000-00000000e102",
+        "ak:event:01904100-0000-7000-8000-00000000e102",
     )?;
     expect_api_error(
         server
@@ -314,9 +314,9 @@ fn service_attested_device_authorize_event(
     actor_seq: u64,
     event_id: &str,
 ) -> Result<Value> {
-    let principal = cokret::Did::new(principal_id.to_owned())
+    let principal = arkret::Did::new(principal_id.to_owned())
         .map_err(|error| anyhow!("invalid principal DID: {error}"))?;
-    let realm_id = cokret::auth::principal_control_realm_id(&principal);
+    let realm_id = arkret::auth::principal_control_realm_id(&principal);
     // Typed wire payload: device-lifecycle.md §5.4 — the enrollment authority
     // attests the device verify key, HPKE sealing key AND the canonical
     // algorithm set. Built on the SDK counterpart so schema drift fails here.

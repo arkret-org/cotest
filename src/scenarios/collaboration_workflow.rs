@@ -20,14 +20,14 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .register_client(
             ALICE_DID,
             "@cotest-collab-alice",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
             BOB_DID,
             BOB_HANDLE,
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
 
@@ -38,7 +38,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .json(&json!({
                 "principal_id": BOB_DID,
                 "display_name": BOB_HANDLE.trim_start_matches('@'),
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000b2"
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
             })),
         StatusCode::OK,
     )
@@ -47,7 +47,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .as_array()
         .expect("bob devices array");
     assert!(bob_devices.iter().any(|device| {
-        device["device_id"].as_str() == Some("ck:device:01904100-0000-7000-8000-0000000000b2")
+        device["device_id"].as_str() == Some("ak:device:01904100-0000-7000-8000-0000000000b2")
     }));
 
     let hidden_bob = expect_json(
@@ -153,12 +153,12 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let sent = alice
         .send_message(
             &realm_id,
-            "ck:thread:collaboration",
+            "ak:thread:collaboration",
             "hello from collaboration workflow",
         )
         .await?;
     assert_eq!(sent["status"], "accepted");
-    assert!(sent["event_id"].as_str().unwrap().starts_with("ck:event:"));
+    assert!(sent["event_id"].as_str().unwrap().starts_with("ak:event:"));
 
     let bob_sync = bob.sync().await?;
     let bob_events = timeline_events(&bob_sync, &realm_id)?;
@@ -172,7 +172,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let bob_reply = bob
         .send_message(
             &realm_id,
-            "ck:thread:collaboration",
+            "ak:thread:collaboration",
             "hello alice from collaboration workflow",
         )
         .await?;
@@ -181,7 +181,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         bob_reply["event_id"]
             .as_str()
             .unwrap()
-            .starts_with("ck:event:")
+            .starts_with("ak:event:")
     );
 
     let alice_sync = alice.sync().await?;
@@ -208,7 +208,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     .await?;
     // Spec rename: the snapshot manifest's own identifier field is `id`
     // (`snapshot_ref` is only used at external reference positions).
-    assert!(snapshot["id"].as_str().unwrap().starts_with("ck:snapshot:"));
+    assert!(snapshot["id"].as_str().unwrap().starts_with("ak:snapshot:"));
     // `ck.self.snapshot.query.manifest_head` returns the full signed
     // `ck.schema.snapshot.v1` manifest whose frontier is
     // {event_ids, timeline_hlc}.
@@ -284,7 +284,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 }
 
 async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
-    let realm_id = "ck:realm:01904100-0000-7000-8000-c011ab000001".to_owned();
+    let realm_id = "ak:realm:01904100-0000-7000-8000-c011ab000001".to_owned();
     let created = alice
         .submit_event(
             &realm_id,
@@ -295,7 +295,7 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
                     "schema": "ck.schema.realm.v1",
                     "title": "Collaboration Workflow Space",
                     "summary": "single server collaboration",
-                    "trust_domain": "ck:trust_domain:collaboration-workflow.cotest.local",
+                    "trust_domain": "ak:trust_domain:collaboration-workflow.cotest.local",
                     "created_by": &alice.actor,
                     "schema_refs": ["ck.schema.realm.v1"],
                     "default_discoverability": "invite_only",

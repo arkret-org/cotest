@@ -1,6 +1,6 @@
 // Session-grant + DPoP (RFC 9449) helpers for the ②(A+②) authentication model.
 //
-// Contract: cokret-spec/spec/v1/zh/sync/api-conventions.md §3.3 and
+// Contract: arkret-spec/spec/v1/zh/sync/api-conventions.md §3.3 and
 // cotask/tasks/_auth_todos.md "## ② 最终路线".
 //
 // Under ②, the Principal Server (soland) does not mint a second local
@@ -13,7 +13,7 @@
 // These helpers obtain a real DPoP-bound grant WITHOUT driving the full OIDC
 // browser ceremony, via coauth's cotest debug seam:
 //   POST /_coauth/account/test/debug/issue-dpop-grant
-// (coauth: crates/backend/src/handlers/cokret/mod.rs::debug_issue_dpop_grant).
+// (coauth: crates/backend/src/handlers/arkret/mod.rs::debug_issue_dpop_grant).
 // That route is mounted only in debug builds with COAUTH_ENABLE_TEST_ENDPOINTS
 // enabled; `mintDpopBoundGrant` returns `undefined` when it is unavailable so
 // callers can `test.skip` cleanly.
@@ -76,7 +76,7 @@ export type MintDpopGrantOpts = {
   /// because soland rejects a grant whose audience is not its own service_did.
   audience?: string;
   /// Scopes to bake into the grant. Defaults (applied server-side) carry the
-  /// principal-server session.bind scope + a `urn:cokret:client:device:<id>`
+  /// principal-server session.bind scope + a `urn:arkret:client:device:<id>`
   /// scope, which is exactly what the self-path requires.
   scopes?: string[];
   server?: SolandKey;
@@ -145,7 +145,7 @@ export function jwkThumbprintEd25519(x: string): string {
 }
 
 /// `ath` claim per RFC 9449 §4.3: base64url-encoded SHA-256 of the presented
-/// session credential, unpadded. In Cokret this is the `ck.session.grant` JWT.
+/// session credential, unpadded. In Arkret this is the `ck.session.grant` JWT.
 export function dpopAth(grantJwt: string): string {
   return base64url(createHash("sha256").update(grantJwt).digest());
 }

@@ -4,7 +4,7 @@
 //! `zh/conformance/encoding.md` section 10.1.
 
 use anyhow::{Result, anyhow, bail};
-use cokret::{
+use arkret::{
     AEAD_NONCE_AES_GCM_LEN, AEAD_NONCE_EXPORTER_LABEL, AEAD_NONCE_XCHACHA20_POLY1305_LEN,
     AEAD_PROFILE_AES_256_GCM, AEAD_PROFILE_XCHACHA20_POLY1305, AeadNonceContext,
     AeadNonceReplayTracker, Error, compose_aead_nonce, derive_aead_sender_nonce_prefix,
@@ -31,8 +31,8 @@ pub const ALL_MEDIA_AEAD_NONCE_VECTOR_IDS: &[&str] = &[
 
 const MEDIA_AEAD_NONCE_FIXTURE_FILE: &str = "media-aead-nonce-fixture.json";
 const MEDIA_AEAD_NONCE_PROFILE: &str = "ck.profile.e2ee_client.v1";
-const DEVICE_ONE: &str = "ck:device:01964137-0000-7000-8000-000000000001";
-const DEVICE_TWO: &str = "ck:device:01964137-0000-7000-8000-000000000002";
+const DEVICE_ONE: &str = "ak:device:01964137-0000-7000-8000-000000000001";
+const DEVICE_TWO: &str = "ak:device:01964137-0000-7000-8000-000000000002";
 const PURPOSE_MESSAGE_PAYLOAD: &str = "ck.message.encrypted_payload";
 const EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX: &str = "3625435ed962752ae133dd014413a855";
 const EXPORTER_SECRET: [u8; 32] = [0x24u8; 32];
@@ -74,7 +74,7 @@ fn nonce_context(device_id: &str, aead_profile: &str) -> AeadNonceContext {
     AeadNonceContext {
         key_ref: json!({
             "algorithm": "MLS",
-            "group_state_ref": "ck:event:01964148-0000-7000-8000-000000000000"
+            "group_state_ref": "ak:event:01964148-0000-7000-8000-000000000000"
         }),
         epoch: 42,
         device_id: device_id.to_owned(),
@@ -109,7 +109,7 @@ fn hex_lower(bytes: &[u8]) -> String {
 }
 
 pub fn run_aead_nonce_sender_domain_collision_vector() -> Result<()> {
-    if AEAD_NONCE_EXPORTER_LABEL != "cokret-aead-sender-nonce-prefix-v1" {
+    if AEAD_NONCE_EXPORTER_LABEL != "arkret-aead-sender-nonce-prefix-v1" {
         bail!("AEAD nonce exporter label drifted: {AEAD_NONCE_EXPORTER_LABEL}");
     }
 

@@ -92,7 +92,7 @@ test.describe("audited E2EE", () => {
       const report = await fileModerationReport(request, setup);
 
       const routed = await request.get(
-        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.arkret.soland.audit.report`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const routedText = await routed.text();
@@ -152,7 +152,7 @@ test.describe("audited E2EE", () => {
 
       // The historical audit.report routing record is durable.
       const historicalRouted = await request.get(
-        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.arkret.soland.audit.report`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const historicalRoutedText = await historicalRouted.text();
@@ -207,7 +207,7 @@ test.describe("audited E2EE", () => {
       // 4. The historical accessed / routed records from before the revoke
       // remain intact (revocation is prospective only).
       const routedAfter = await request.get(
-        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.arkret.soland.audit.report`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const routedAfterText = await routedAfter.text();
@@ -403,7 +403,7 @@ function encryptedEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.cokret.message+json",
+    content_type: "application/vnd.arkret.message+json",
     aad_visibility_event_id: "hidden",
     aad,
     key_ref: {

@@ -2,12 +2,12 @@
   "profile": "ck.profile.realm_organization_statement_negative_vectors.v1",
   "version": "2026-06-25",
   "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
-  "comment": "COT-ORG-02 — protocol-semantic negative vectors for ck.realm.organization (RealmOrganizationPayload). Every vector is consumed by tests/realm_organization_statement_negative.rs which drives the cokret-core EventPayloadValidatorCatalog::validate_payload (strong schema dispatch on `ck.realm.organization`) and the cokret_core::models::realm_governance::verify_realm_organization_statement verifier. `surface=verifier` cases MUST be rejected by verify_realm_organization_statement under the declared resolver, and the verifier error embeds the pinned spec wire reason-code (error-code-registry / reason-code-registry) — the test asserts that exact code token, never a project-private string. `surface=schema` cases MUST be rejected by the strong payload JSON-schema; that validator echoes the schema $id, not the registry token, so for schema cases the test asserts rejection and expected.reason_code stays documentary (it classifies the wire failure as schema_violation). A declared-but-unverified organization (only owning_organizations, no active statement) is NOT modelled here because there is no statement to validate — that gap is covered by the organization-policy e2e (case A).",
-  "expected_realm_id": "ck:realm:0196419b-0000-7000-8000-000000000010",
+  "comment": "COT-ORG-02 — protocol-semantic negative vectors for ck.realm.organization (RealmOrganizationPayload). Every vector is consumed by tests/realm_organization_statement_negative.rs which drives the arkret-core EventPayloadValidatorCatalog::validate_payload (strong schema dispatch on `ck.realm.organization`) and the cokret_core::models::realm_governance::verify_realm_organization_statement verifier. `surface=verifier` cases MUST be rejected by verify_realm_organization_statement under the declared resolver, and the verifier error embeds the pinned spec wire reason-code (error-code-registry / reason-code-registry) — the test asserts that exact code token, never a project-private string. `surface=schema` cases MUST be rejected by the strong payload JSON-schema; that validator echoes the schema $id, not the registry token, so for schema cases the test asserts rejection and expected.reason_code stays documentary (it classifies the wire failure as schema_violation). A declared-but-unverified organization (only owning_organizations, no active statement) is NOT modelled here because there is no statement to validate — that gap is covered by the organization-policy e2e (case A).",
+  "expected_realm_id": "ak:realm:0196419b-0000-7000-8000-000000000010",
   "now": "2026-06-25T12:00:00Z",
   "base_active_statement": {
     "statement_id": "org-stmt-1",
-    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000010",
+    "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000010",
     "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
     "relationship": "owner",
     "status": "active",
@@ -64,7 +64,7 @@
       "name": "non_delegated_role_with_delegation_ref",
       "surface": "verifier",
       "comment": "organization_did is NOT a delegated role; carrying a delegation_ref is invalid coupling ⇒ schema_violation.",
-      "mutation": { "set": { "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001" } },
+      "mutation": { "set": { "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001" } },
       "resolver": "no_delegation",
       "expected": { "outcome": "reject", "reason_code": "schema_violation" }
     },
@@ -75,7 +75,7 @@
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
         }
       },
       "resolver": "no_delegation",
@@ -88,7 +88,7 @@
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
         }
       },
       "resolver": "delegation_not_live",
@@ -101,7 +101,7 @@
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
         }
       },
       "resolver": "delegation_covers_realm_admin_only",
@@ -115,7 +115,7 @@
         "set": {
           "relationship": "governance",
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
         }
       },
       "resolver": "delegation_covers_owner_only",
@@ -141,7 +141,7 @@
       "name": "realm_id_mismatch",
       "surface": "verifier",
       "comment": "payload.realm_id must equal the enclosing Event.realm_id; a statement bound to another Realm cannot endorse this one.",
-      "mutation": { "set": { "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000099" } },
+      "mutation": { "set": { "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000099" } },
       "resolver": "no_delegation",
       "expected": { "outcome": "reject", "reason_code": "schema_violation" }
     },

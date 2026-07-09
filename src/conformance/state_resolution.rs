@@ -521,7 +521,7 @@ fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) 
     let canonical = canonical_json(body_value)?;
     let digest = sha256_prefixed(canonical.as_bytes());
     let expected_id = required_pointer_str(vector, "/expected/id", vector_name)?;
-    let computed_id = format!("ck:seal:{digest}");
+    let computed_id = format!("ak:seal:{digest}");
     if expected_id != computed_id.as_str() {
         bail!("vector {vector_name} expected id must be {computed_id}, got {expected_id}");
     }
@@ -923,7 +923,7 @@ fn validate_notary_fault_equivocation_quarantine(vector: &Value, vector_name: &s
     let notary_seq = required_u64(vector, "/fault_pair/notary_seq", vector_name)?;
     let seal_a_id = required_pointer_str(vector, "/fault_pair/seal_a/id", vector_name)?;
     let seal_b_id = required_pointer_str(vector, "/fault_pair/seal_b/id", vector_name)?;
-    if !seal_a_id.starts_with("ck:seal:sha256:") || !seal_b_id.starts_with("ck:seal:sha256:") {
+    if !seal_a_id.starts_with("ak:seal:sha256:") || !seal_b_id.starts_with("ak:seal:sha256:") {
         bail!("vector {vector_name} fault seals must use ck:seal:sha256 typed ids");
     }
     let seal_a_digest = required_pointer_str(

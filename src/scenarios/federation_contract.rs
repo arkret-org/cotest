@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use cokret::http_signature::{
+use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
@@ -166,14 +166,14 @@ fn trust_domain_from_service_did(service_did: &str) -> String {
         let scid = parts.next().unwrap_or_default();
         if let Some(host) = parts.next() {
             if !scid.is_empty() && !host.is_empty() {
-                return format!("ck:trust_domain:{}", host.to_ascii_lowercase());
+                return format!("ak:trust_domain:{}", host.to_ascii_lowercase());
             }
         }
     }
     if let Some(rest) = service_did.strip_prefix("did:web:") {
         if let Some(host) = rest.split(':').next() {
             if !host.is_empty() {
-                return format!("ck:trust_domain:{}", host.to_ascii_lowercase());
+                return format!("ak:trust_domain:{}", host.to_ascii_lowercase());
             }
         }
     }
@@ -182,10 +182,10 @@ fn trust_domain_from_service_did(service_did: &str) -> String {
         .unwrap_or(service_did)
         .to_ascii_lowercase()
         .replace(':', ".");
-    format!("ck:trust_domain:{scope}")
+    format!("ak:trust_domain:{scope}")
 }
 
-fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_did: &str) -> arkret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
     hasher.update(service_did.as_bytes());
@@ -360,13 +360,13 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         &[("SOLAND_FEDERATION_REPLICA_OBSERVER", "1")],
     )
     .await?;
-    let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fed0";
-    let realm_create_event_id = "ck:event:0196419b-0000-7000-8000-00000000f100";
-    let policy_event_id = "ck:event:0196419b-0000-7000-8000-00000000f0fe";
-    let member_event_id = "ck:event:0196419b-0000-7000-8000-00000000f0ff";
-    let replay_event_id = "ck:event:0196419b-0000-7000-8000-00000000f101";
-    let invalid_event_id = "ck:event:0196419b-0000-7000-8000-00000000f102";
-    let redaction_event_id = "ck:event:0196419b-0000-7000-8000-00000000f103";
+    let realm_id = "ak:realm:0196419b-0000-7000-8000-00000000fed0";
+    let realm_create_event_id = "ak:event:0196419b-0000-7000-8000-00000000f100";
+    let policy_event_id = "ak:event:0196419b-0000-7000-8000-00000000f0fe";
+    let member_event_id = "ak:event:0196419b-0000-7000-8000-00000000f0ff";
+    let replay_event_id = "ak:event:0196419b-0000-7000-8000-00000000f101";
+    let invalid_event_id = "ak:event:0196419b-0000-7000-8000-00000000f102";
+    let redaction_event_id = "ak:event:0196419b-0000-7000-8000-00000000f103";
     let remote_service_did = "did:web:remote.example";
 
     let realm_create = signed_federation_event(
@@ -636,10 +636,10 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     let alice = dev_login(
         &server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
-    let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fe20";
+    let realm_id = "ak:realm:0196419b-0000-7000-8000-00000000fe20";
     let created = submit_event(
         &server,
         &alice,
@@ -695,7 +695,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
                 "binding_scope": "realm",
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
-                "service_acceptance_ref": "ck:event:0196419b-0000-7000-8000-00000000fe10",
+                "service_acceptance_ref": "ak:event:0196419b-0000-7000-8000-00000000fe10",
                 "resolved_at": "2026-05-02T00:00:00Z"
             }),
         )?,
@@ -708,7 +708,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         .context("member.state binding response missing event_id")?
         .to_owned();
 
-    let event_id = "ck:event:0196419b-0000-7000-8000-00000000fe22";
+    let event_id = "ak:event:0196419b-0000-7000-8000-00000000fe22";
     let event = signed_federation_event(
         event_id,
         "ck.message.create",
@@ -716,7 +716,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "did:web:alice.example",
         100,
         json!({
-            "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
+            "strand_id": realm_id.replacen("ak:realm:", "ak:strand:", 1),
             "track_name": "discussion",
             "content": {
                 "kind": "ck.content.text",

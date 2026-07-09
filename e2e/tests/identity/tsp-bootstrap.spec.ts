@@ -1,8 +1,8 @@
-// TSP relationship bootstrap and Cokret-over-TSP envelope
+// TSP relationship bootstrap and Arkret-over-TSP envelope
 // Contract: e2e/scenarios/identity/tsp-bootstrap.md
 // Spec refs:
 //   - identity/tsp-integration.md §2 (TSP applicability), §3 (VID/Endpoint/Relationship mapping)
-//   - §4 (ck.service.tsp endpoint declaration), §5 (Cokret over TSP rules)
+//   - §4 (ck.service.tsp endpoint declaration), §5 (Arkret over TSP rules)
 //   - §8 (Security requirements: VID verification, audit log fields)
 //
 // TSP is an interop *extension profile*; v1 core defaults to HTTPS JWE / MLS
@@ -120,7 +120,7 @@ test.describe("tsp bootstrap", () => {
     }
   });
 
-  test("alice and bob_extern bootstrap TSP relationship; alice sends Cokret invite via TSP; bob_extern verifies + ACKs", async ({
+  test("alice and bob_extern bootstrap TSP relationship; alice sends Arkret invite via TSP; bob_extern verifies + ACKs", async ({
     request,
   }) => {
     const endpoint = await tspEndpoint();
@@ -146,18 +146,18 @@ test.describe("tsp bootstrap", () => {
     expect(bootstrap.endpoint_vid).toBe(bobExternVid);
     expect(bootstrap.endpoint_public_jwk).toBeTruthy();
 
-    // Phase C — wrap a Cokret `ck.invite.create` as a TSP application payload
-    // (nested mode: the outer envelope's VID is pairwise; the inner Cokret
+    // Phase C — wrap a Arkret `ck.invite.create` as a TSP application payload
+    // (nested mode: the outer envelope's VID is pairwise; the inner Arkret
     // operation carries alice's real DID + event signature).
     const realmId = `ck:realm:${randomUUID()}`;
     const innerCokret = {
       type: "ck.invite.create",
-      content_type: "application/cokret+json",
+      content_type: "application/arkret+json",
       operation: "ck.invite.create",
       realm_id: realmId,
       invitee: bobExternVid,
       actor: alice.did,
-      // The Cokret event signature is independent of TSP authenticity (§5).
+      // The Arkret event signature is independent of TSP authenticity (§5).
       cokret_signature: randomBytes(64).toString("base64url"),
     };
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
@@ -186,7 +186,7 @@ test.describe("tsp bootstrap", () => {
     const received = inbox.find(
       (envelope) => envelope.decoded_preview?.type === "ck.invite.create",
     );
-    expect(received, "mock must record the inbound Cokret-over-TSP invite").toBeTruthy();
+    expect(received, "mock must record the inbound Arkret-over-TSP invite").toBeTruthy();
 
     await expect
       .poll(
@@ -354,10 +354,10 @@ test.describe("tsp bootstrap", () => {
     const bobExternVid = identity.vid;
     await bootstrapRelationship(request, endpoint.base, alice.did);
 
-    // Nested mode: the inner Cokret operation (real vid_local + operation name
+    // Nested mode: the inner Arkret operation (real vid_local + operation name
     // + payload) is opaque to any intermediary. We model the on-the-wire outer
     // envelope as what a relay would forward: pairwise sender VID + a
-    // payload_digest, with the inner Cokret bytes carried as opaque base64.
+    // payload_digest, with the inner Arkret bytes carried as opaque base64.
     const innerCokret = {
       type: "ck.invite.create",
       operation: "ck.invite.create",
@@ -373,7 +373,7 @@ test.describe("tsp bootstrap", () => {
       data: {
         from_vid: alice.did,
         to_vid: bobExternVid,
-        // The terminus (bob_extern) receives the full inner Cokret payload.
+        // The terminus (bob_extern) receives the full inner Arkret payload.
         payload_b64: innerBytesB64,
         signature_b64: randomBytes(64).toString("base64"),
       },
@@ -390,7 +390,7 @@ test.describe("tsp bootstrap", () => {
     );
     expect(
       terminus,
-      "the terminus (bob_extern) MUST be able to decrypt and execute the inner Cokret payload",
+      "the terminus (bob_extern) MUST be able to decrypt and execute the inner Arkret payload",
     ).toBeTruthy();
 
     // The relay view: what an intermediary observes is the outer envelope —

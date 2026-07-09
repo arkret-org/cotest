@@ -331,7 +331,7 @@ test.describe("account states", () => {
     const auditActions = (
       eraseBody.audit_log as Array<{ action: string; target?: unknown }>
     ).map((event) => event.action);
-    expect(auditActions).toContain("org.cokret.soland.account.state_change");
+    expect(auditActions).toContain("org.arkret.soland.account.state_change");
     expect(JSON.stringify(eraseBody.audit_log)).toContain(
       '"to":"erasure_pending"',
     );
@@ -366,7 +366,7 @@ test.describe("account states", () => {
     ).toBe(false);
   });
 
-  test("audit: each state transition writes org.cokret.soland.account.state_change with from/to/actor/reason/timestamp", async ({
+  test("audit: each state transition writes org.arkret.soland.account.state_change with from/to/actor/reason/timestamp", async ({
     request,
   }) => {
     const alice = uniqueUser("s28-audit-alice");
@@ -399,7 +399,7 @@ test.describe("account states", () => {
       }>
     ).find(
       (event) =>
-        event.action === "org.cokret.soland.account.state_change" &&
+        event.action === "org.arkret.soland.account.state_change" &&
         event.payload?.subject === alice.did,
     );
     expect(transition).toBeTruthy();

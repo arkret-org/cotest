@@ -91,9 +91,9 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
             "IDENTITY_ACCOUNTABILITY_GRANT spelling drifted: {IDENTITY_ACCOUNTABILITY_GRANT}"
         ));
     }
-    let grant_ref = EventId::new("ck:event:01999999-0000-7000-8000-0000000ab001".to_owned())
+    let grant_ref = EventId::new("ak:event:01999999-0000-7000-8000-0000000ab001".to_owned())
         .map_err(|e| anyhow!("accountability_grant_ref EventId: {e}"))?;
-    if !grant_ref.as_str().starts_with("ck:event:") {
+    if !grant_ref.as_str().starts_with("ak:event:") {
         return Err(anyhow!(
             "accountability_grant_ref lost canonical event prefix: {grant_ref}"
         ));

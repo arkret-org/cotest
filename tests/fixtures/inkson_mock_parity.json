@@ -13,7 +13,7 @@
       "method": "POST",
       "path": "/_cokret/self/events",
       "auth": "alice",
-      "headers": { "x-cokret-request-id": "mock-parity-events-submit" },
+      "headers": { "x-arkret-request-id": "mock-parity-events-submit" },
       "body_template": "realm_create_event"
     },
     {
@@ -41,7 +41,7 @@
         "pairing_code": "pairing-code",
         "new_device_pubkey": {
           "kty": "OKP",
-          "kid": "ck:device:01999999-0000-7000-8000-000000000452",
+          "kid": "ak:device:01999999-0000-7000-8000-000000000452",
           "alg": "EdDSA",
           "public_key": "emtleQ"
         },

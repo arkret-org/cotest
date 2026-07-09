@@ -12,7 +12,7 @@
 //! `tests/r3_conformance_vectors.rs`.
 //!
 //! Grammar invariants pinned here:
-//!   * `web+cokret:` ⇄ HTTPS-fragment forms parse to the SAME ParsedAddress.
+//!   * `web+arkret:` ⇄ HTTPS-fragment forms parse to the SAME ParsedAddress.
 //!   * realm-only / strand / message hierarchy forms.
 //!   * unknown keyword and wrong hierarchy order fail closed (`parse_address` returns Err); retired
 //!     `via` hints are ignored.
@@ -81,19 +81,19 @@ const F: &str = "01904100-0000-7000-8000-0000000000bb";
 const F2: &str = "01904100-0000-7000-8000-0000000000cc";
 const M: &str = "01904100-0000-7000-8000-0000000000dd";
 const VIA: &str = "did:web:relay.example";
-const LANDING: &str = "https://share.cokret.example";
+const LANDING: &str = "https://share.arkret.example";
 
 // ════════════════════════════════════════════════════════════════════════════
 // OA-COT-1 — Grammar
 // ════════════════════════════════════════════════════════════════════════════
 
-/// OA-COT-1.1 — `web+cokret:` ⇄ HTTPS-fragment equivalence. Both envelopes
+/// OA-COT-1.1 — `web+arkret:` ⇄ HTTPS-fragment equivalence. Both envelopes
 /// share ONE grammar after the shell is stripped, so they MUST parse to the
 /// byte-equal same [`ParsedAddress`], and a freshly built landing URL MUST
 /// round-trip back through the parser.
 pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
     // Same logical address expressed in both envelopes.
-    let scheme_form = format!("web+cokret:realm/{R}/strand/{F}?via={VIA}&action=join");
+    let scheme_form = format!("web+arkret:realm/{R}/strand/{F}?via={VIA}&action=join");
     let from_scheme = parse_address(&scheme_form).map_err(|e| anyhow!("parse scheme form: {e}"))?;
 
     let landing_form = format!("{LANDING}/#realm/{R}/strand/{F}?via={VIA}&action=join");
@@ -102,7 +102,7 @@ pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
 
     if from_scheme != from_landing {
         bail!(
-            "web+cokret: and HTTPS-fragment forms MUST parse to the same \
+            "web+arkret: and HTTPS-fragment forms MUST parse to the same \
              ParsedAddress; scheme={from_scheme:?} landing={from_landing:?}"
         );
     }
@@ -118,7 +118,7 @@ pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
         bail!("built HTTPS landing MUST reparse to the original ParsedAddress");
     }
 
-    // build_address round-trips the canonical web+cokret: form too.
+    // build_address round-trips the canonical web+arkret: form too.
     let rebuilt = build_address(&from_scheme);
     let reparsed_scheme = parse_address(&rebuilt).map_err(|e| anyhow!("reparse rebuilt: {e}"))?;
     if reparsed_scheme != from_scheme {
@@ -132,7 +132,7 @@ pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
 pub fn run_realm_strand_message_forms_vector() -> Result<()> {
     // Realm-only: no strand/message.
     let realm =
-        parse_address(&format!("web+cokret:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
+        parse_address(&format!("web+arkret:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
     if !realm.is_realm() || realm.is_strand() || realm.is_message() {
         bail!("realm-only form MUST classify as realm");
     }
@@ -144,7 +144,7 @@ pub fn run_realm_strand_message_forms_vector() -> Result<()> {
     }
 
     // Strand: realm/<r>/strand/<f>. Retired `via` is ignored if present.
-    let strand = parse_address(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))
+    let strand = parse_address(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))
         .map_err(|e| anyhow!("strand: {e}"))?;
     if !strand.is_strand() || strand.is_realm() || strand.is_message() {
         bail!("strand form MUST classify as strand");
@@ -155,7 +155,7 @@ pub fn run_realm_strand_message_forms_vector() -> Result<()> {
 
     // Message: realm/<r>/strand/<f>/m/<msg>. Retired `via` is ignored if present.
     let msg = parse_address(&format!(
-        "web+cokret:realm/{R}/strand/{F}/m/{M}?via={VIA}&action=reply"
+        "web+arkret:realm/{R}/strand/{F}/m/{M}?via={VIA}&action=reply"
     ))
     .map_err(|e| anyhow!("message: {e}"))?;
     if !msg.is_message() || msg.is_realm() || msg.is_strand() {
@@ -176,9 +176,9 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
     // Unknown keyword (not in the v1 legal set realm/strand/m) — forward-compat
     // fail-closed, never a fork.
     for unknown in [
-        format!("web+cokret:space/{R}"),
-        format!("web+cokret:realm/{R}/thread/{F}?via={VIA}"),
-        format!("web+cokret:realm/{R}/strand/{F}/reply/{M}?via={VIA}"),
+        format!("web+arkret:space/{R}"),
+        format!("web+arkret:realm/{R}/thread/{F}?via={VIA}"),
+        format!("web+arkret:realm/{R}/strand/{F}/reply/{M}?via={VIA}"),
     ] {
         if parse_address(&unknown).is_ok() {
             bail!("unknown keyword MUST fail closed: {unknown}");
@@ -187,9 +187,9 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
 
     // Wrong hierarchy order.
     for misordered in [
-        format!("web+cokret:strand/{F}/realm/{R}?via={VIA}"),
+        format!("web+arkret:strand/{F}/realm/{R}?via={VIA}"),
         // `m/` without an intermediate `strand/` level.
-        format!("web+cokret:realm/{R}/m/{M}?via={VIA}"),
+        format!("web+arkret:realm/{R}/m/{M}?via={VIA}"),
     ] {
         if parse_address(&misordered).is_ok() {
             bail!("wrong hierarchy order MUST fail closed: {misordered}");
@@ -198,9 +198,9 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
 
     // Control: strand/message addresses without `via` now parse; join routing
     // comes from Directory `join_candidates[]`.
-    parse_address(&format!("web+cokret:realm/{R}/strand/{F}"))
+    parse_address(&format!("web+arkret:realm/{R}/strand/{F}"))
         .map_err(|e| anyhow!("control: strand without via MUST parse: {e}"))?;
-    parse_address(&format!("web+cokret:realm/{R}/strand/{F}/m/{M}"))
+    parse_address(&format!("web+arkret:realm/{R}/strand/{F}/m/{M}"))
         .map_err(|e| anyhow!("control: message without via MUST parse: {e}"))?;
     Ok(())
 }
@@ -210,14 +210,14 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
 /// classifies as [`RealmRef::Alias`].
 pub fn run_realm_id_vs_alias_vector() -> Result<()> {
     let uuid_form =
-        parse_address(&format!("web+cokret:realm/{R}")).map_err(|e| anyhow!("uuid realm: {e}"))?;
+        parse_address(&format!("web+arkret:realm/{R}")).map_err(|e| anyhow!("uuid realm: {e}"))?;
     match &uuid_form.realm {
         RealmRef::RealmId(id) if id == R => {}
         other => bail!("a UUIDv7 realm segment MUST be RealmRef::RealmId; got {other:?}"),
     }
 
     for alias in ["team.example.com", "acme.example"] {
-        let parsed = parse_address(&format!("web+cokret:realm/{alias}"))
+        let parsed = parse_address(&format!("web+arkret:realm/{alias}"))
             .map_err(|e| anyhow!("alias realm: {e}"))?;
         match &parsed.realm {
             RealmRef::Alias(a) if a == alias => {}
@@ -250,14 +250,14 @@ fn digest_for(addr: &str) -> Result<String> {
 /// the identity tuple + link_type only).
 pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // Baseline strand target (reference link).
-    let base = digest_for(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))?;
+    let base = digest_for(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))?;
     if !base.starts_with("sha256:") {
         bail!("target_digest MUST be a `sha256:<hex>` digest; got {base}");
     }
 
     // Extra via hints + an action hint — identity unchanged → same digest.
     let more_hints = digest_for(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via=did:web:a&via=did:web:b&action=join"
+        "web+arkret:realm/{R}/strand/{F}?via=did:web:a&via=did:web:b&action=join"
     ))?;
     if base != more_hints {
         bail!("adding via/action hints MUST NOT change target_digest");
@@ -269,7 +269,7 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // in their (ignored) hints. The invite/reference distinction is asserted
     // separately below.
     let no_hints = digest_for(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&action=view"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&action=view"
     ))?;
     if base != no_hints {
         bail!("the default action=view hint MUST NOT change target_digest");
@@ -279,10 +279,10 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // digest, but a token's `tok` value never does. Build two invite addresses
     // with different tokens but the same identity — same digest.
     let invite_tok_x = digest_for(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=token-x"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=token-x"
     ))?;
     let invite_tok_y = digest_for(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=token-y"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=token-y"
     ))?;
     if invite_tok_x != invite_tok_y {
         bail!("the opaque `tok` value MUST NOT change target_digest");
@@ -297,19 +297,19 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
 /// OA-COT-2.2 — switching `strand_id` or `message_id` DOES change the digest
 /// (scope identity is bound into the digest).
 pub fn run_target_digest_tracks_object_vector() -> Result<()> {
-    let strand_a = digest_for(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))?;
-    let strand_b = digest_for(&format!("web+cokret:realm/{R}/strand/{F2}?via={VIA}"))?;
+    let strand_a = digest_for(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))?;
+    let strand_b = digest_for(&format!("web+arkret:realm/{R}/strand/{F2}?via={VIA}"))?;
     if strand_a == strand_b {
         bail!("switching strand_id MUST change target_digest");
     }
 
-    let message = digest_for(&format!("web+cokret:realm/{R}/strand/{F}/m/{M}?via={VIA}"))?;
+    let message = digest_for(&format!("web+arkret:realm/{R}/strand/{F}/m/{M}?via={VIA}"))?;
     if strand_a == message {
         bail!("promoting strand → message MUST change target_digest");
     }
 
     // Realm-only differs from any strand under it.
-    let realm = digest_for(&format!("web+cokret:realm/{R}"))?;
+    let realm = digest_for(&format!("web+arkret:realm/{R}"))?;
     if realm == strand_a {
         bail!("a realm target MUST differ from a strand target under it");
     }
@@ -325,12 +325,12 @@ pub fn run_target_digest_tracks_object_vector() -> Result<()> {
 pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // Realm-only target → strand_id / message_id absent.
     let realm =
-        parse_address(&format!("web+cokret:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
+        parse_address(&format!("web+arkret:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
     let desc = TargetDescriptor::from_parsed(&realm);
     if desc.strand_id.is_some() || desc.message_id.is_some() {
         bail!("realm-only descriptor MUST have absent strand_id / message_id");
     }
-    if desc.realm_id != format!("ck:realm:{R}") {
+    if desc.realm_id != format!("ak:realm:{R}") {
         bail!(
             "descriptor realm_id MUST be the typed canonical id; got {}",
             desc.realm_id
@@ -360,8 +360,8 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // omitted form, not the null form.
     let digest = target_digest(&desc).map_err(|e| anyhow!("digest: {e}"))?;
 
-    let omitted_bytes = b"{\"link_type\":\"reference\",\"realm_id\":\"ck:realm:01904100-0000-7000-8000-0000000000aa\"}";
-    let null_bytes = b"{\"strand_id\":null,\"link_type\":\"reference\",\"message_id\":null,\"realm_id\":\"ck:realm:01904100-0000-7000-8000-0000000000aa\"}";
+    let omitted_bytes = b"{\"link_type\":\"reference\",\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
+    let null_bytes = b"{\"strand_id\":null,\"link_type\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
     let omitted_expected = super::sha256_prefixed(omitted_bytes);
     let null_expected = super::sha256_prefixed(null_bytes);
 
@@ -396,11 +396,11 @@ fn token_descriptor_for(addr: &str) -> Result<TargetDescriptor> {
 pub fn run_scope_confusion_replay_vector() -> Result<()> {
     // Token minted for strand A.
     let addr_a = parse_address(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_a: {e}"))?;
     let token_desc = token_descriptor_for(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))?;
 
     // Positive control: A-token validates against the A-address.
@@ -410,7 +410,7 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
 
     // Replay onto a different strand B → MUST fail closed.
     let addr_b = parse_address(&format!(
-        "web+cokret:realm/{R}/strand/{F2}?via={VIA}&lt=invite&tok=t"
+        "web+arkret:realm/{R}/strand/{F2}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_b: {e}"))?;
     if verify_token_target(&token_desc, &addr_b, LinkType::Invite) {
@@ -419,7 +419,7 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
 
     // Replay onto a message under the same strand → still a different object.
     let addr_msg = parse_address(&format!(
-        "web+cokret:realm/{R}/strand/{F}/m/{M}?via={VIA}&lt=invite&tok=t"
+        "web+arkret:realm/{R}/strand/{F}/m/{M}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_msg: {e}"))?;
     if verify_token_target(&token_desc, &addr_msg, LinkType::Invite) {
@@ -435,12 +435,12 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
 pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
     // The token was minted as an INVITE for strand A.
     let token_desc = token_descriptor_for(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))?;
 
     // The presented URL, however, was DOWNGRADED to a reference link (the
     // attacker stripped `lt=invite`). Its parsed link_type is Reference.
-    let downgraded = parse_address(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))
+    let downgraded = parse_address(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))
         .map_err(|e| anyhow!("downgraded: {e}"))?;
     if downgraded.link_type != LinkType::Reference {
         bail!("vector setup: the downgraded URL MUST parse as a reference link");
@@ -464,7 +464,7 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
     // Symmetric case: a reference token presented under an invite URL still
     // compares under the trusted (reference) link_type → no privilege escalation.
     let ref_token = {
-        let parsed = parse_address(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))
+        let parsed = parse_address(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))
             .map_err(|e| anyhow!("ref token addr: {e}"))?;
         TargetDescriptor::from_parsed(&parsed)
     };
@@ -472,7 +472,7 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
         bail!("vector setup: reference token descriptor MUST carry Reference link_type");
     }
     let upgraded_url = parse_address(&format!(
-        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
+        "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("upgraded url: {e}"))?;
     // Under the trusted Reference link_type the reference token matches; it
@@ -495,16 +495,16 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
 pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let wire = json!({
         "target_kind": "strand",
-        "object_preview": { "strand_id": format!("ck:strand:{F}"), "title": "Launch planning" },
+        "object_preview": { "strand_id": format!("ak:strand:{F}"), "title": "Launch planning" },
         "join_rule": "knock",
         "as_of": "2026-05-27T00:00:00Z",
         "source_refs": [
-            "ck:event:01904100-0000-7000-8000-0000000000e1",
-            "ck:event:01904100-0000-7000-8000-0000000000e2"
+            "ak:event:01904100-0000-7000-8000-0000000000e1",
+            "ak:event:01904100-0000-7000-8000-0000000000e2"
         ],
         "join_candidates": [
             {
-                "realm_id": format!("ck:realm:{R}"),
+                "realm_id": format!("ak:realm:{R}"),
                 "service_did": "did:web:relay.example",
                 "service_type": "principal_server",
                 "role": "primary",
@@ -512,17 +512,17 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 0,
                 "source": "directory_ingest",
-                "source_refs": ["ck:event:01904100-0000-7000-8000-0000000000e1"],
+                "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
                 "as_of": "2026-05-27T00:00:00Z",
                 "expires_at": "2026-05-27T00:15:00Z",
                 "seal_basis": {
-                    "leaves": ["ck:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+                    "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
                     "control_event_set_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                     "state_root": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                 }
             },
             {
-                "realm_id": format!("ck:realm:{R}"),
+                "realm_id": format!("ak:realm:{R}"),
                 "service_did": "did:web:teabay.example",
                 "service_type": "principal_server",
                 "role": "mirror",
@@ -530,11 +530,11 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 1,
                 "source": "directory_ingest",
-                "source_refs": ["ck:event:01904100-0000-7000-8000-0000000000e2"],
+                "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e2"],
                 "as_of": "2026-05-27T00:00:00Z",
                 "expires_at": "2026-05-27T00:15:00Z",
                 "seal_basis": {
-                    "leaves": ["ck:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+                    "leaves": ["ak:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
                     "control_event_set_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                     "state_root": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                 }
@@ -593,7 +593,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
     let wire = json!({
         "target_kind": "realm",
         "realm_preview": {
-            "realm_id": format!("ck:realm:{R}"),
+            "realm_id": format!("ak:realm:{R}"),
             "title": "Acme HQ",
             "as_of": "2026-05-27T00:00:00Z",
             "policy_revision": "rev-1",
@@ -601,7 +601,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         },
         "join_rule": "invite",
         "as_of": "2026-05-27T00:00:00Z",
-        "source_refs": ["ck:event:01904100-0000-7000-8000-0000000000e1"],
+        "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
         "join_candidates": []
     });
     let body: DirectoryTargetResolutionOutcome =
@@ -614,7 +614,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         .realm_preview
         .as_ref()
         .ok_or_else(|| anyhow!("a realm target MUST carry realm_preview"))?;
-    if preview.realm_id.as_str() != format!("ck:realm:{R}") {
+    if preview.realm_id.as_str() != format!("ak:realm:{R}") {
         bail!("realm_preview.realm_id MUST round-trip the typed realm id");
     }
     if preview.title.as_deref() != Some("Acme HQ") {

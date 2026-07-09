@@ -9,8 +9,8 @@
 //     §5 Space/Relation/View limits, §8 error semantics)
 //   - conformance/conformance-vectors.md (vector loader pattern: same as the
 //     sibling encoding-vectors suite — `ck.vector.<domain>.<scenario>.v1`
-//     fixtures live in cokret-spec/spec/v1/artifacts/fixtures/)
-// Fixtures: cokret-spec/spec/v1/artifacts/fixtures/ck.vector.snapshot.*.json,
+//     fixtures live in arkret-spec/spec/v1/artifacts/fixtures/)
+// Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ck.vector.snapshot.*.json,
 //           ck.vector.query.*.json, ck.vector.scalability.*.json
 //
 // Phases A-E exercise the test-only conformance endpoints under the
@@ -44,15 +44,15 @@ const __filename_ = fileURLToPath(import.meta.url);
 const __dirname_ = dirname(__filename_);
 
 // From cotest/e2e/tests/conformance/<this-file>.spec.ts walk up four levels
-// (conformance → tests → e2e → cotest) to reach the cokret root, then
-// into cokret-spec/spec/v1/artifacts/fixtures.
+// (conformance → tests → e2e → cotest) to reach the arkret root, then
+// into arkret-spec/spec/v1/artifacts/fixtures.
 const FIXTURES_DIR = resolve(
   __dirname_,
   "..",
   "..",
   "..",
   "..",
-  "cokret-spec",
+  "arkret-spec",
   "spec",
   "v1",
   "artifacts",
@@ -114,8 +114,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
     const chunkHashes = chunks.map(chunkDigest);
     const manifest = {
-      id: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000001:fixture",
-      realm_id: "ck:realm:01904100-0000-7000-8000-000000000001",
+      id: "ak:snapshot:ck:realm:01904100-0000-7000-8000-000000000001:fixture",
+      realm_id: "ak:realm:01904100-0000-7000-8000-000000000001",
       reducer_profile: "ck.reducer.v1",
       schema_profile_refs: ["ck.schema.core.v1"],
       chunk_hashes: chunkHashes,
@@ -154,8 +154,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const signerDid = "did:web:soland.conformance-signer";
     const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
     const manifest = {
-      id: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000002:signed",
-      realm_id: "ck:realm:01904100-0000-7000-8000-000000000002",
+      id: "ak:snapshot:ck:realm:01904100-0000-7000-8000-000000000002:signed",
+      realm_id: "ak:realm:01904100-0000-7000-8000-000000000002",
       reducer_profile: "ck.reducer.v1",
       schema_profile_refs: ["ck.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),

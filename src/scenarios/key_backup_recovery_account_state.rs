@@ -16,9 +16,9 @@ use serde_json::Value;
 
 use crate::harness::{TestServerGroup, expect_json, expect_response};
 
-const DEVICE_A: &str = "ck:device:01975510-0000-7000-8000-0000000000a1";
-const POLICY_ID: &str = "ck:policy:01975510-0000-7000-8000-0000000000a1";
-const DID_RECOVERY_BACKUP_ID: &str = "ck:backup:01975510-0000-7000-8000-0000000000a2";
+const DEVICE_A: &str = "ak:device:01975510-0000-7000-8000-0000000000a1";
+const POLICY_ID: &str = "ak:policy:01975510-0000-7000-8000-0000000000a1";
+const DID_RECOVERY_BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000a2";
 
 pub async fn key_backup_recovery_account_state_run() -> Result<()> {
     let signing = SigningKey::from_bytes(&[81u8; 32]);
@@ -131,7 +131,7 @@ fn unsigned_recovery_policy(
         principal_id: Did::new(principal_id.to_owned())?,
         version: 1,
         supersedes: None,
-        trust_domain: TypedTrustDomainId::new("ck:trust_domain:soland.local".to_owned())?,
+        trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local".to_owned())?,
         allowed_proof_kinds: vec![RecoveryProofKind::PrincipalSigning],
         threshold: None,
         device_quorum: None,
@@ -198,7 +198,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             extra: BTreeMap::new(),
         },
         domain_separation: KeyBackupDomainSeparation {
-            hkdf_info: "cokret-key-backup/did_recovery/recovery_policy/v1".to_owned(),
+            hkdf_info: "arkret-key-backup/did_recovery/recovery_policy/v1".to_owned(),
             subdomain: "recovery_policy".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ck.schema.key_backup.v1".to_owned(),
@@ -256,7 +256,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
         }),
         retention: None,
         series_id: BackupSeriesId::new(
-            "ck:backup_series:01975510-0000-7000-8000-0000000000a2".to_owned(),
+            "ak:backup_series:01975510-0000-7000-8000-0000000000a2".to_owned(),
         )?,
         series_seq: 0,
         supersedes: None,

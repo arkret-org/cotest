@@ -182,7 +182,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../coauth/crates/backend/src/handlers/cokret/tests.rs",
+          "path": "../coauth/crates/backend/src/handlers/arkret/tests.rs",
           "markers": [
             "ck.gate.account.command.logout_auth_session",
             "/_cokret/gate/account/session-grants/introspect"

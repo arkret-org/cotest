@@ -4,7 +4,7 @@
 //! canonical blob encrypted_attachment schema together.
 
 use anyhow::{Result, anyhow, bail};
-use cokret::{
+use arkret::{
     ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, Error, KeyRefObject, SCHEME_STREAM,
     StreamDecryptor, StreamEncryptParams, decrypt_stream, encrypt_stream,
 };
@@ -78,7 +78,7 @@ fn key() -> [u8; 32] {
 fn key_ref() -> KeyRefObject {
     KeyRefObject {
         algorithm: "MLS".to_owned(),
-        group_state_ref: "ck:event:01964148-0000-7000-8000-000000000000".to_owned(),
+        group_state_ref: "ak:event:01964148-0000-7000-8000-000000000000".to_owned(),
     }
 }
 
@@ -142,7 +142,7 @@ fn split_segments(ciphertext: &[u8], env: &EncryptedAttachmentEnvelope) -> Resul
 fn schema_ready_envelope_value(env: &EncryptedAttachmentEnvelope) -> Result<Value> {
     let mut value = serde_json::to_value(env)?;
     value["blob_ref"] =
-        json!("ck:blob:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        json!("ak:blob:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
     Ok(value)
 }
 

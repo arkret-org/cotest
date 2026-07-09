@@ -39,7 +39,7 @@ use serial_test::serial;
 use sha2::{Digest, Sha256};
 
 const ALICE_DID: &str = "did:web:cotest-agent-alice.example";
-const ALICE_DEVICE: &str = "ck:device:01904100-0000-7000-8000-00000000a901";
+const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a901";
 const AGENT_SESSION_GRANT: &str = "cotest.agent.session.grant";
 const INTROSPECTION_BEARER: &str = "cotest-introspection-bearer";
 
@@ -59,7 +59,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     let attach = controller
         .agent_grant_attach(
             &agent_did,
-            &cokret::AgentGrantAttachRequestBody {
+            &arkret::AgentGrantAttachRequestBody {
                 grant: json!({
                     "actions": ["ck.event.read"]
                 }),
@@ -73,7 +73,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         "attached grant must appear in effective grants: {effective_after_attach}"
     );
 
-    let grant_id = cokret::GrantId::new(grant_id)?;
+    let grant_id = arkret::GrantId::new(grant_id)?;
     let detach = controller.agent_grant_detach(&agent_did, &grant_id).await?;
     assert!(detach.ok, "grant detach must succeed");
     let effective_after_detach = effective_grants(&server, &token, &agent_did).await?;
@@ -91,14 +91,14 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         let outcome = match path {
             "pause" => {
                 controller
-                    .agent_pause(&agent_did, &cokret::AgentPauseRequestBody { reason: None })
+                    .agent_pause(&agent_did, &arkret::AgentPauseRequestBody { reason: None })
                     .await?
             }
             "resume" => {
                 controller
                     .agent_resume(
                         &agent_did,
-                        &cokret::AgentResumeRequestBody {
+                        &arkret::AgentResumeRequestBody {
                             sidecar_exposure_ack: None,
                         },
                     )
@@ -108,7 +108,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                 controller
                     .agent_deactivate(
                         &agent_did,
-                        &cokret::AgentDeactivateRequestBody { reason: None },
+                        &arkret::AgentDeactivateRequestBody { reason: None },
                     )
                     .await?
             }
@@ -164,11 +164,11 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let participation = controller
         .agent_participation_replace(
             &agent_did,
-            &cokret::AgentParticipationReplaceRequestBody {
-                scope: cokret::AgentParticipationScope::Realm {
-                    realm_id: cokret::RealmId::new(realm_id.clone())?,
+            &arkret::AgentParticipationReplaceRequestBody {
+                scope: arkret::AgentParticipationScope::Realm {
+                    realm_id: arkret::RealmId::new(realm_id.clone())?,
                 },
-                selection: cokret::AgentParticipation {
+                selection: arkret::AgentParticipation {
                     reply: true,
                     accept_third_party_mention: false,
                     act_on_behalf: false,
@@ -189,7 +189,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     // derives `strand_id` from the realm id). soland's agent-reply participation
     // gate resolves the message scope through the projected Strand, so the
     // Strand must exist first — create it as the realm owner.
-    let default_strand_id = realm_id.replace("ck:realm:", "ck:strand:");
+    let default_strand_id = realm_id.replace("ak:realm:", "ak:strand:");
     let strand = submit_event(
         &server,
         &token,
@@ -217,7 +217,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     // capability grant for the agent IN THE EVENT'S REALM, with an action
     // covering the operation's canonical kind. Grant the agent `ck.message.create`
     // in the reply Realm so the reply's agent_context references a real grant.
-    let agent_grant_id = "ck:grant:01999999-0000-7000-8000-0000000000c1";
+    let agent_grant_id = "ak:grant:01999999-0000-7000-8000-0000000000c1";
     let agent_grant = submit_event(
         &server,
         &token,
@@ -328,7 +328,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let paused = controller
         .agent_pause(
             &agent_did,
-            &cokret::AgentPauseRequestBody {
+            &arkret::AgentPauseRequestBody {
                 reason: Some("cotest live e2e pause".to_owned()),
             },
         )
@@ -362,7 +362,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let deactivated = controller
         .agent_deactivate(
             &agent_did,
-            &cokret::AgentDeactivateRequestBody {
+            &arkret::AgentDeactivateRequestBody {
                 reason: Some("cotest live e2e".to_owned()),
             },
         )
@@ -429,7 +429,7 @@ async fn provision_and_pair_agent(
 ) -> Result<String> {
     let controller = bearer_sdk_client(server, token)?;
     let prov = controller
-        .agent_provision(&cokret::AgentProvisionRequestBody {
+        .agent_provision(&arkret::AgentProvisionRequestBody {
             display_name: Some(display_name.to_owned()),
             agent_slug: Some(agent_slug.to_owned()),
             requested_scope: None,
@@ -456,8 +456,8 @@ async fn provision_and_pair_agent(
 async fn pair_agent_runtime_key(
     server: &CokretServer,
     token: &str,
-    provisioned: &cokret::AgentProvisionOutcome,
-) -> Result<cokret::AgentKeyPairOutcome> {
+    provisioned: &arkret::AgentProvisionOutcome,
+) -> Result<arkret::AgentKeyPairOutcome> {
     let agent_did = provisioned.agent_principal_id.to_string();
     let pairing_request_id = provisioned.pairing_request_id.as_str();
     let pairing_code = provisioned
@@ -468,7 +468,7 @@ async fn pair_agent_runtime_key(
         .expires_at
         .to_rfc3339_opts(SecondsFormat::Millis, true);
     let agent_id = provisioned.agent_principal_id.clone();
-    let controller_id = cokret::Did::new(ALICE_DID.to_owned())
+    let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
     let verification_method = format!("{agent_did}#runtime-key-1");
     let signing_key = SigningKey::from_bytes(&[13_u8; 32]);
@@ -478,8 +478,8 @@ async fn pair_agent_runtime_key(
         "alg": "Ed25519",
         "key": URL_SAFE_NO_PAD.encode(signing_key.verifying_key().to_bytes()),
     });
-    let runtime_public_key_digest = cokret::agent::agent_runtime_public_key_digest(&public_key)?;
-    let request_digest = cokret::agent::agent_key_pair_proof_request_binding_digest(
+    let runtime_public_key_digest = arkret::agent::agent_runtime_public_key_digest(&public_key)?;
+    let request_digest = arkret::agent::agent_key_pair_proof_request_binding_digest(
         pairing_request_id,
         &agent_id,
         &verification_method,
@@ -488,7 +488,7 @@ async fn pair_agent_runtime_key(
     )?;
     let proof_expires_at =
         chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
-    let signing_input = cokret::agent::agent_key_pair_proof_signing_input(
+    let signing_input = arkret::agent::agent_key_pair_proof_signing_input(
         verification_method.clone(),
         pairing_request_id.to_owned(),
         server.service_did().to_owned(),
@@ -496,7 +496,7 @@ async fn pair_agent_runtime_key(
         request_digest.clone(),
     );
     let signature = signing_key.sign(&signing_input.canonical_bytes()?);
-    let pairing_binding_digest = cokret::agent::agent_key_pairing_request_binding_digest(
+    let pairing_binding_digest = arkret::agent::agent_key_pairing_request_binding_digest(
         &controller_id,
         &agent_id,
         &verification_method,
@@ -506,7 +506,7 @@ async fn pair_agent_runtime_key(
         &pairing_expires_at,
         server.service_did(),
     )?;
-    let body = cokret::models::AgentKeyPairRequestBody {
+    let body = arkret::models::AgentKeyPairRequestBody {
         pairing_request_id: pairing_request_id.to_owned(),
         agent_principal_id: agent_id,
         verification_method: verification_method.clone(),
@@ -524,7 +524,7 @@ async fn pair_agent_runtime_key(
             "actor_id": ALICE_DID,
             "payload": {
                 "agent_principal_id": agent_did,
-                "key_id": "ck:agent_key:01999999000070008000000000000001",
+                "key_id": "ak:agent_key:01999999000070008000000000000001",
                 "verification_method": verification_method,
                 "public_key_digest": runtime_public_key_digest.as_str(),
                 "accountable_principal_id": ALICE_DID,
@@ -544,7 +544,7 @@ async fn pair_agent_runtime_key(
                 "expires_at": "2999-01-01T00:00:00Z",
                 "approval_evidence": {
                     "kind": "approval_event",
-                    "ref": "ck:event:01999999-0000-7000-8000-000000000001",
+                    "ref": "ak:event:01999999-0000-7000-8000-000000000001",
                     "request_canonical_digest": pairing_binding_digest.as_str(),
                     "approved_by": ALICE_DID
                 }
@@ -578,8 +578,8 @@ async fn effective_grants(server: &CokretServer, token: &str, agent_did: &str) -
     // owns (anti-enumeration); a bare `subject` query defaults to realm `*` and
     // is denied. Scope the query to the controller's principal-control Realm,
     // which the controller owns and where the agent grant lives.
-    let control_realm = cokret::auth::principal_control_realm_id(
-        &cokret::Did::new(ALICE_DID.to_owned()).map_err(|e| anyhow!("alice did invalid: {e}"))?,
+    let control_realm = arkret::auth::principal_control_realm_id(
+        &arkret::Did::new(ALICE_DID.to_owned()).map_err(|e| anyhow!("alice did invalid: {e}"))?,
     );
     let effective = bearer_sdk_client(server, token)?
         .authz_effective_grants(control_realm.as_str(), agent_did, None)
@@ -612,7 +612,7 @@ fn agent_session_client(server: &CokretServer, holder: &AgentSessionHolder) -> R
         .build()?)
 }
 
-fn event_from_value(value: &Value) -> Result<cokret::Event> {
+fn event_from_value(value: &Value) -> Result<arkret::Event> {
     Ok(serde_json::from_value(value.clone())?)
 }
 
@@ -812,7 +812,7 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 // `SessionGrantIntrospectGrant.id` is a typed `GrantId`
                 // (`ck:grant:<uuidv7>`); a bare label fails SDK deserialization
                 // and soland reports the introspection response as invalid (503).
-                "id": "ck:grant:01964137-0000-7000-8000-000000000a01",
+                "id": "ak:grant:01964137-0000-7000-8000-000000000a01",
                 "issuer": "did:web:coauth.cotest.local",
                 "subject": subject,
                 "service_account_id": "agent-live-e2e-account",
@@ -825,7 +825,7 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                     "ck.message.create"
                 ],
                 "expires_at": "2026-12-31T23:59:59Z",
-                "revocation_ref": "ck:session:agent-live-e2e-grant",
+                "revocation_ref": "ak:session:agent-live-e2e-grant",
                 "session_public_key": state.session_public_key,
                 "cnf_jkt": state.cnf_jkt,
                 "proof_kind": "agent_key_proof",

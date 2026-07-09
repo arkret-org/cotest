@@ -85,7 +85,7 @@ function normalizeSendPayload(body) {
   return {
     to,
     token,
-    subject: body.subject ?? "Cokret invite",
+    subject: body.subject ?? "Arkret invite",
     body: body.body ?? body.text_body ?? `You've been invited. Open: invite://${token}`,
     body_html:
       body.body_html ??

@@ -37,7 +37,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
         match name {
             "covered_frontier_accumulates_governance_refs_idempotent" => {
                 let cell_id = required_str(vector, "cell_id")?;
-                if !cell_id.starts_with("ck:cell:ck.component.mls.covered_frontier.v1:") {
+                if !cell_id.starts_with("ak:cell:ck.component.mls.covered_frontier.v1:") {
                     bail!("vector {name} cell_id wrong family: {cell_id}");
                 }
                 let ops = vector
@@ -158,7 +158,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                 for effect in effects {
                     let cell = required_str(effect, "cell")?;
                     let family = cell
-                        .strip_prefix("ck:cell:")
+                        .strip_prefix("ak:cell:")
                         .and_then(|tail| tail.split(':').next())
                         .ok_or_else(|| anyhow!("vector {name} cell {cell} malformed"))?;
                     cell_families.insert(family);

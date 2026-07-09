@@ -1,6 +1,6 @@
 // Cross-signing key-management harness for the device-lifecycle §5 ingest path.
 //
-// Contract: cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md §5.1
+// Contract: arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md §5.1
 // (ck.cross_signing.publish — PSK→{SSK,USK} bindings) + §5.2 (per-device
 // cross_signing_binding, the SSK signature over the ck-device-trust-bind-v1
 // canonical input).
@@ -182,7 +182,7 @@ export function generateCrossSigningIdentity(args: {
 }): CrossSigningIdentity {
   return {
     principalId: args.principalId,
-    trustDomain: args.trustDomain ?? "ck:trust_domain:soland.local",
+    trustDomain: args.trustDomain ?? "ak:trust_domain:soland.local",
     generation: args.generation ?? 1,
     psk: generateCrossSigningKey(),
     ssk: generateCrossSigningKey(),

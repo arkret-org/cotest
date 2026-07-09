@@ -13,7 +13,7 @@
       "name": "key_ref_not_in_trust_set_b22_violation",
       "comment": "B-22 strict_key_ref: recipient's key_ref trust-set is built from the sender's most-recent device.authorized.cell active tags. If the envelope's key_ref does NOT appear in that trust-set (e.g. an attacker forged a signing key not yet authorized) the recipient MUST reject the envelope BEFORE attempting decryption. Reason: key_ref_not_authorized.",
       "envelope": {
-        "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000001",
+        "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000001",
         "sender_device_id": "did:ck:dev:dev_alice_01",
         "recipient_device_id": "did:ck:dev:dev_bob_01",
         "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-99999",
@@ -36,7 +36,7 @@
       "name": "key_ref_wrong_did_namespace_b22_violation",
       "comment": "B-22 strict_key_ref: key_ref's DID prefix MUST match sender_device_id's DID. An envelope claiming to be from Alice but signed under Bob's DID-namespace key MUST reject as cross-actor key reuse.",
       "envelope": {
-        "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000002",
+        "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000002",
         "sender_device_id": "did:ck:dev:dev_alice_01",
         "recipient_device_id": "did:ck:dev:dev_bob_01",
         "key_ref": "did:ck:dev:dev_carol_01#mls-leaf-7",
@@ -55,7 +55,7 @@
       "name": "unauthorized_sender_scope_mismatch",
       "comment": "Sender device's `device.authorized` content.scopes set does NOT include `device_messages.send`. Even though the envelope key_ref IS in trust set, the sending device is not authorized for this scope.",
       "envelope": {
-        "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000003",
+        "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000003",
         "sender_device_id": "did:ck:dev:dev_alice_01",
         "recipient_device_id": "did:ck:dev:dev_bob_01",
         "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-7",
@@ -84,7 +84,7 @@
       "name": "expired_session_grant_proof",
       "comment": "session_grant_proof.expires_at < now (recv_time). Recipient MUST reject expired grants pre-decryption.",
       "envelope": {
-        "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000004",
+        "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000004",
         "sender_device_id": "did:ck:dev:dev_alice_01",
         "recipient_device_id": "did:ck:dev:dev_bob_01",
         "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-7",
@@ -113,7 +113,7 @@
       "name": "replay_window_duplicate_envelope_id",
       "comment": "Recipient maintains a dedup cache keyed by envelope_id within a replay window (300s default). A second envelope with the same envelope_id MUST reject; the first delivery is canonical.",
       "envelope": {
-        "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000005",
+        "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000005",
         "sender_device_id": "did:ck:dev:dev_alice_01",
         "recipient_device_id": "did:ck:dev:dev_bob_01",
         "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-7",
@@ -131,7 +131,7 @@
         "did:ck:dev:dev_alice_01#mls-leaf-7"
       ],
       "dedup_cache_seen": [
-        "ck:envelope:01970e58-0a01-7a01-8a01-000000000005"
+        "ak:envelope:01970e58-0a01-7a01-8a01-000000000005"
       ],
       "recv_time": "2026-05-09T12:01:00.000Z",
       "expected": {
@@ -145,7 +145,7 @@
       "name": "key_ref_stale_b22_violation",
       "comment": "B-22 strict_key_ref: key_ref points to a leaf that has been ROTATED OUT (no longer in trust_set; was revoked by a later ck.device.revoke Move). The envelope is technically signed but cryptographically stale — must reject.",
       "envelope": {
-        "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000006",
+        "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000006",
         "sender_device_id": "did:ck:dev:dev_alice_01",
         "recipient_device_id": "did:ck:dev:dev_bob_01",
         "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-3",

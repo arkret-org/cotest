@@ -75,7 +75,7 @@ pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-const STABLE_REALM_ID: &str = "ck:realm:01904100-0000-7000-8000-000000000001";
+const STABLE_REALM_ID: &str = "ak:realm:01904100-0000-7000-8000-000000000001";
 const ALICE_ACTOR_DID: &str = "did:web:alice.acme.example";
 const ALICE_SUBJECT_DID: &str = "did:web:alice.principal.example";
 
@@ -92,7 +92,7 @@ fn fake_subject() -> Result<Did> {
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
-    EventId::new(format!("ck:event:01904100-0000-7000-8000-{suffix:012x}"))
+    EventId::new(format!("ak:event:01904100-0000-7000-8000-{suffix:012x}"))
         .map_err(|e| anyhow!("invalid event id: {e}"))
 }
 

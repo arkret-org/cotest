@@ -4,10 +4,10 @@
 //       §4.0 (decision matrix — schema evolution row),
 //       §6 (schema evolution generic constraints).
 // Profile: ck.profile.morph.schema_migration_transformations.v1
-//   defined in cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
+//   defined in arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
 //   — opt-in Realm profile permitting ck.morph.schema_migrate events with
 //     compatibility_class ∈ {breaking, transformation}.
-// Decision table (canonical): cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
+// Decision table (canonical): arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
 //   — 4 precedence sources for "what a Morph is and what it allows" merge.
 // Event kind: ck.morph.schema_migrate (event-kind-registry.json, category=morph,
 //             status=active, reducer_input=true).
@@ -48,10 +48,10 @@ import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/use
 // Artifact loader (mirrors the G1.T4 registry-drift pattern)
 // ---------------------------------------------------------------------------
 // From cotest/e2e/tests/models/<spec>.spec.ts → four levels up to the repo
-// root, then down into cokret-spec/spec/v1/artifacts. cwd-independent.
+// root, then down into arkret-spec/spec/v1/artifacts. cwd-independent.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const artifactsRoot = resolve(__dirname, "../../../../cokret-spec/spec/v1/artifacts");
+const artifactsRoot = resolve(__dirname, "../../../../arkret-spec/spec/v1/artifacts");
 const registryRoot = resolve(artifactsRoot, "registry");
 const profilesRoot = resolve(artifactsRoot, "profiles");
 
@@ -140,7 +140,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     // spec: morph.md §4 (four sources merge precedence) + the artifact
     //       itself which is marked source_of_truth=true.
     expect(decisionTable.source_of_truth).toBe(true);
-    expect(decisionTable.applies_to).toBe("ck:morph:");
+    expect(decisionTable.applies_to).toBe("ak:morph:");
 
     // §4 lists exactly four declaration sources (1 schema_refs[], 2 realm
     // profile, 3 morph_type, 4 facets). The artifact MUST mirror that.
@@ -299,7 +299,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     ).toContain(wireErrCode(result.body));
 
     // No partially-applied Morph / transcript echoed back.
-    expect(result.text).not.toMatch(/"morph_id"\s*:\s*"ck:morph:/);
+    expect(result.text).not.toMatch(/"morph_id"\s*:\s*"ak:morph:/);
 
     // Re-GET: schema_refs[] unchanged.
     const projection = await readMorphProjection(request, token, realmId, morphId);
@@ -551,7 +551,7 @@ test.describe("morph schema migration @fully-implemented", () => {
 // ---------------------------------------------------------------------------
 
 function morphTypedId(): string {
-  return typedId("operation").replace("ck:operation:", "ck:morph:");
+  return typedId("operation").replace("ak:operation:", "ak:morph:");
 }
 
 function nowIso(): string {

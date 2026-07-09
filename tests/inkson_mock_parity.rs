@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use serial_test::serial;
 
-const MOCK_PARITY_ALICE_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
+const MOCK_PARITY_ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -133,8 +133,8 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token,
         service_did: server.service_did().to_owned(),
-        realm_id: "ck:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
 
     let contract_path = locate_inkson_contract(&root)?
@@ -205,8 +205,8 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
         service_did: "did:web:soland.mock-parity-smoke.local".to_owned(),
-        realm_id: "ck:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_format(&contract_path, &fixture, &ctx)
 }
@@ -226,8 +226,8 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
         service_did: "did:web:soland.mock-parity-gate.local".to_owned(),
-        realm_id: "ck:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)
 }
@@ -426,7 +426,7 @@ fn spec_artifacts_root(root: &Path) -> PathBuf {
         }
     }
     root.join("..")
-        .join("cokret-spec")
+        .join("arkret-spec")
         .join("spec")
         .join("v1")
         .join("artifacts")
@@ -694,19 +694,19 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
     match case.body_template.as_deref() {
         Some("realm_create_event") => Some(realm_create_event(
             ctx,
-            "ck:realm:01999999-0000-7000-8000-000000000451",
+            "ak:realm:01999999-0000-7000-8000-000000000451",
             "Mock parity setup",
             9_000_000_000_000_451,
         )),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
-            "ck:realm:01999999-0000-7000-8000-000000000452",
+            "ak:realm:01999999-0000-7000-8000-000000000452",
             "Mock Parity Realm",
             9_000_000_000_000_452,
         )),
         Some("realm_create_event_3") => Some(realm_create_event(
             ctx,
-            "ck:realm:01999999-0000-7000-8000-000000000453",
+            "ak:realm:01999999-0000-7000-8000-000000000453",
             "Mock Parity Space",
             9_000_000_000_000_453,
         )),
@@ -726,7 +726,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                 "payload": {
                     "actor_id": ctx.alice_did,
                     "realm_id": ctx.realm_id,
-                    "strand_id": "ck:strand:01999999-0000-7000-8000-000000000451",
+                    "strand_id": "ak:strand:01999999-0000-7000-8000-000000000451",
                     "track_name": "discussion",
                     "typing": true,
                     "ttl_ms": 30000
@@ -771,13 +771,13 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 }
 
 fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_seq: u64) -> Value {
-    let cell = format!("ck:cell:ck.component.realm.create.v1:{realm_id}");
+    let cell = format!("ak:cell:ck.component.realm.create.v1:{realm_id}");
     let payload = json!({
         "object": {
             "id": realm_id,
             "schema": "ck.schema.realm.v1",
             "title": title,
-            "trust_domain": "ck:trust_domain:mock-parity.cotest.local",
+            "trust_domain": "ak:trust_domain:mock-parity.cotest.local",
             "created_by": ctx.alice_did,
             "schema_refs": ["ck.schema.realm.v1"],
             "summary": "created by T-P0-04 parity baseline",
@@ -800,9 +800,9 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         }
     });
     let event_id = format!(
-        "ck:event:{}",
+        "ak:event:{}",
         realm_id
-            .strip_prefix("ck:realm:")
+            .strip_prefix("ak:realm:")
             .unwrap_or("01999999-0000-7000-8000-000000000451")
     );
     let mut event = json!({
@@ -834,7 +834,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             }
         }],
         "unsigned": {
-            "local_operation_idempotency_alias": format!("ck:operation:{}", realm_id.strip_prefix("ck:realm:").unwrap_or("01999999-0000-7000-8000-000000000451")),
+            "local_operation_idempotency_alias": format!("ak:operation:{}", realm_id.strip_prefix("ak:realm:").unwrap_or("01999999-0000-7000-8000-000000000451")),
             "local_target_ref": realm_id
         },
         "proofs": [{
@@ -982,7 +982,7 @@ async fn inject_live_default_strand_id(
     // Strand id is derived from the realm id (ck:realm:<uuid> -> ck:strand:<uuid>),
     // which is the same id the message/typing envelopes target.
     let _ = server;
-    let strand_id = ctx.realm_id.replace("ck:realm:", "ck:strand:");
+    let strand_id = ctx.realm_id.replace("ak:realm:", "ak:strand:");
     if let Some(payload) = body.get_mut("payload").and_then(Value::as_object_mut) {
         payload.insert("strand_id".to_owned(), Value::String(strand_id));
     }
@@ -1196,15 +1196,15 @@ fn is_dynamic_key(key: &str) -> bool {
 }
 
 fn normalize_string(value: &str) -> String {
-    if value.starts_with("ck:space:") {
+    if value.starts_with("ak:space:") {
         "<ck:space>".to_owned()
-    } else if value.starts_with("ck:realm:") {
+    } else if value.starts_with("ak:realm:") {
         "<ck:realm>".to_owned()
-    } else if value.starts_with("ck:event:") {
+    } else if value.starts_with("ak:event:") {
         "<ck:event>".to_owned()
-    } else if value.starts_with("ck:operation:") {
+    } else if value.starts_with("ak:operation:") {
         "<ck:operation>".to_owned()
-    } else if value.starts_with("ck:backup:") {
+    } else if value.starts_with("ak:backup:") {
         "<ck:backup>".to_owned()
     } else if value.starts_with("did:web:") {
         "<did:web>".to_owned()

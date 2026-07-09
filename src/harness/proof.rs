@@ -2,7 +2,7 @@ use serde_json::Value;
 
 /// Canonical `event_digest` over an Event envelope with `proofs`/`unsigned`
 /// stripped, hashed via the SDK's canonical (sorted-key, integer-number)
-/// encoding so every Cokret implementation agrees on the bytes. Shared by all
+/// encoding so every Arkret implementation agrees on the bytes. Shared by all
 /// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
 /// which preserves insertion order and would diverge from the SDK.
 pub(crate) fn canonical_event_digest(event: &Value) -> String {
@@ -56,9 +56,9 @@ mod tests {
     #[test]
     fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
         let event = json!({
-            "event_id": "ck:event:019f3b1c-76c8-7000-8000-000000000001",
+            "event_id": "ak:event:019f3b1c-76c8-7000-8000-000000000001",
             "kind": "ck.message.create",
-            "realm_id": "ck:realm:019f3b1c-76c8-7000-8000-000000000001",
+            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00Z",
@@ -71,8 +71,8 @@ mod tests {
             },
             "payload": {
                 "content": {"kind": "ck.content.text", "body": "hello"},
-                "message_id": "ck:message:019f3b1c-76c8-7000-8000-000000000001",
-                "strand_id": "ck:strand:019f3b1c-76c8-7000-8000-000000000001"
+                "message_id": "ak:message:019f3b1c-76c8-7000-8000-000000000001",
+                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001"
             },
             "proofs": [{
                 "kind": "detached_jws",

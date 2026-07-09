@@ -56,9 +56,9 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
     for case in fixture.cases.proof_payload {
         let event = json!({
-            "event_id": "ck:event:01970e58-0003-7000-8000-000000000010",
+            "event_id": "ak:event:01970e58-0003-7000-8000-000000000010",
             "kind": "ck.message.create",
-            "realm_id": "ck:realm:01970e58-0003-7000-8000-000000000011",
+            "realm_id": "ak:realm:01970e58-0003-7000-8000-000000000011",
             "content": {"kind": "ck.content.text", "body": "covered"},
             "proofs": [{"alg": "none"}],
             "unsigned": {"hint": "not covered"}
@@ -97,7 +97,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
     for case in fixture.cases.cursor {
         let encoded = encode_cursor_shape(&case.shape)?;
-        if !encoded.starts_with("ck:cursor:") {
+        if !encoded.starts_with("ak:cursor:") {
             bail!(
                 "encoding fixture {} did not produce ck:cursor prefix",
                 case.name
@@ -253,7 +253,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
         }),
         json!({
             "mode": "relation_container",
-            "board_space_id": "ck:space:019640b6-8000-7000-8000-000000000000",
+            "board_space_id": "ak:space:019640b6-8000-7000-8000-000000000000",
             "container_relation_kind": "contains",
             "item_relation_kind": "contains",
             "rank": "V"
@@ -304,7 +304,7 @@ pub(crate) fn validate_projection_position(position: &Value) -> Result<()> {
         }
         "relation_container" => {
             let board_space_id = require_position_field(position, "board_space_id")?;
-            if !board_space_id.starts_with("ck:space:") {
+            if !board_space_id.starts_with("ak:space:") {
                 bail!("relation_container grouping board_space_id must be a ck:space: id");
             }
             // `container_relation_kind` is optional (defaults to `contains`);

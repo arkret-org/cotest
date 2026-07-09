@@ -5,8 +5,8 @@
 // placeholder that was `test.skip`'d in contact-graph.spec.ts (soland now ships
 // the `/_cokret/self/circles/*` admin surface — CKP-0007).
 //
-// HTTP face: `/_cokret/self/circles` (now a normative Cokret surface — the
-// `ck.self.circle.*` operations are published in the cokret-spec OpenAPI
+// HTTP face: `/_cokret/self/circles` (now a normative Arkret surface — the
+// `ck.self.circle.*` operations are published in the arkret-spec OpenAPI
 // artifact, operation registry, and contract catalog; see helpers/circle-api.ts
 // header for the full reasoning. The legacy `/_soland` mirror was retired).
 // Spec refs: CKP-0007 — `ck.circle.*` data model, reducer invariant

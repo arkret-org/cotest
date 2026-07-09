@@ -27,12 +27,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: cotest
-      # cokret-rust-sdk is a path dependency; check it out as a sibling so
-      # `cargo check` resolves crates/* under ../cokret-rust-sdk.
+      # arkret-rust-sdk is a path dependency; check it out as a sibling so
+      # `cargo check` resolves crates/* under ../arkret-rust-sdk.
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-rust-sdk
-          path: cokret-rust-sdk
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: actions/checkout@v4
@@ -111,8 +111,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-rust-sdk
-          path: cokret-rust-sdk
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: actions/checkout@v4
@@ -136,8 +136,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-rust-sdk
-          path: cokret-rust-sdk
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: actions/checkout@v4
@@ -179,8 +179,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-rust-sdk
-          path: cokret-rust-sdk
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: actions/checkout@v4
@@ -227,8 +227,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-rust-sdk
-          path: cokret-rust-sdk
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: actions/checkout@v4
@@ -240,8 +240,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-spec
-          path: cokret-spec
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
           ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 

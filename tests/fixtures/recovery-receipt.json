@@ -9,15 +9,15 @@
       "expect": "pass",
       "receipt": {
         "schema": "ck.schema.recovery_receipt.v1",
-        "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a2",
+        "recovery_session_id": "ak:recovery_session:01999999-0000-7000-8000-0000000000b1",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a2",
         "policy_epoch": 2,
         "evidence": {
           "kind": "device_quorum",
           "signers": [
-            "ck:device:01999999-0000-7000-8000-0000000000d1",
-            "ck:device:01999999-0000-7000-8000-0000000000d2",
-            "ck:device:01999999-0000-7000-8000-0000000000d3"
+            "ak:device:01999999-0000-7000-8000-0000000000d1",
+            "ak:device:01999999-0000-7000-8000-0000000000d2",
+            "ak:device:01999999-0000-7000-8000-0000000000d3"
           ],
           "threshold_met": true
         },
@@ -35,8 +35,8 @@
       "expect": "pass",
       "receipt": {
         "schema": "ck.schema.recovery_receipt.v1",
-        "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b2",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a1",
+        "recovery_session_id": "ak:recovery_session:01999999-0000-7000-8000-0000000000b2",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a1",
         "policy_epoch": 1,
         "evidence": {
           "kind": "recovery_unlock",
@@ -56,8 +56,8 @@
       "reason": "receipt policy_epoch does not match active policy",
       "receipt": {
         "schema": "ck.schema.recovery_receipt.v1",
-        "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b3",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a1",
+        "recovery_session_id": "ak:recovery_session:01999999-0000-7000-8000-0000000000b3",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a1",
         "policy_epoch": 99,
         "evidence": {"kind": "recovery_unlock", "commitment_match": true},
         "bound_proof": {"alg": "ed25519", "kid": "did:web:server.example#recovery-1", "sig": "X"},
@@ -70,8 +70,8 @@
       "reason": "recovery_witness_revoke_lagging",
       "receipt": {
         "schema": "ck.schema.recovery_receipt.v1",
-        "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b4",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a3",
+        "recovery_session_id": "ak:recovery_session:01999999-0000-7000-8000-0000000000b4",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a3",
         "policy_epoch": 3,
         "evidence": {"kind": "trusted_recovery_service", "witness_id": "witness-1"},
         "bound_proof": {"alg": "ed25519", "kid": "did:web:server.example#recovery-1", "sig": "Y"},

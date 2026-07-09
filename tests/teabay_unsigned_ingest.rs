@@ -12,13 +12,13 @@
 //!
 //! This end-to-end scenario remains `#[ignore]` because it spawns the
 //! teabay binary and exercises the live HTTP stack — it requires
-//! `TEABAY_BIN` (or a debug build at `cokret/teabay/target/debug/`)
+//! `TEABAY_BIN` (or a debug build at `arkret/teabay/target/debug/`)
 //! plus a Postgres `DATABASE_URL`. Opt in locally with:
 //!
 //!   cargo test --test teabay_unsigned_ingest -- --ignored
 //!
 //! When run, an unsigned envelope MUST come back 401
-//! `unauthenticated` (the canonical Cokret v1 errcode for missing
+//! `unauthenticated` (the canonical Arkret v1 errcode for missing
 //! transport auth). If the test fails with 200, TB-1's `.hoop(...)`
 //! got dropped from the router; if it fails with anything other than
 //! 401/403, a future change weakened the middleware.

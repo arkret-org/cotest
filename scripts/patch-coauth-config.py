@@ -179,8 +179,8 @@ def main() -> int:
     )
     src = replace_top_level_section(src, "clients", clients)
 
-    cokret = (
-        "cokret:\n"
+    arkret = (
+        "arkret:\n"
         "  principal_servers:\n"
         "  - name: soland\n"
         f"    audience: {yaml_string(args.soland_service_did)}\n"
@@ -202,7 +202,7 @@ def main() -> int:
         f"  principal_server_url: {yaml_string(soland_base)}\n"
         "  password_login_session_grants_enabled: true\n"
     )
-    src = replace_top_level_section(src, "cokret", cokret)
+    src = replace_top_level_section(src, "arkret", arkret)
 
     args.output_config.parent.mkdir(parents=True, exist_ok=True)
     args.output_config.write_text(src, encoding="utf-8")

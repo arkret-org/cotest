@@ -3,7 +3,7 @@
 //! Loads every fixture listed in [`SCHEMA_VALIDATION_FIXTURE_FILES`]
 //! (`schema-validation-fixture.json`, `key-backup-fixture.json`,
 //! `realm-organization-fixture.json` under
-//! `cokret-spec/spec/v1/artifacts/fixtures/`) and runs each
+//! `arkret-spec/spec/v1/artifacts/fixtures/`) and runs each
 //! positive/negative case against the schema referenced by
 //! `schema_ref`. `schema_ref` syntax (mirrors the Python lint
 //! `check_fixture_schema_validation_cases`):
@@ -11,7 +11,7 @@
 //! ```text
 //! schemas/<name>.schema.json                         -- whole schema
 //! schemas/<name>.schema.json#/$defs/<subschema>      -- sub-schema fragment
-//! openapi/cokret-service-api.openapi.yaml#/components/schemas/<Name>
+//! openapi/arkret-service-api.openapi.yaml#/components/schemas/<Name>
 //!                                                   -- OpenAPI component
 //! ```
 //!
@@ -67,8 +67,8 @@ pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
 ];
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://cokret.org/v1/";
-const OPENAPI_FILE: &str = "openapi/cokret-service-api.openapi.yaml";
+const SCHEMA_ID_PREFIX: &str = "https://arkret.org/v1/";
+const OPENAPI_FILE: &str = "openapi/arkret-service-api.openapi.yaml";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct SchemaValidationFixture {
@@ -262,7 +262,7 @@ impl SchemaEnv {
         // Three shapes the fixture uses:
         //  (a) `schemas/<file>.schema.json`
         //  (b) `schemas/<file>.schema.json#/$defs/<name>`
-        //  (c) `openapi/cokret-service-api.openapi.yaml#/components/schemas/<Name>`
+        //  (c) `openapi/arkret-service-api.openapi.yaml#/components/schemas/<Name>`
         if let Some(rest) = schema_ref.strip_prefix("schemas/") {
             let (file_path, fragment) = split_fragment(rest);
             let key = format!("{SCHEMA_DIR}/{file_path}");
@@ -300,7 +300,7 @@ impl SchemaEnv {
                 anyhow!("openapi document not loaded; cannot resolve `{schema_ref}`")
             })?;
             let (file_path, fragment) = split_fragment(rest);
-            if file_path != "cokret-service-api.openapi.yaml" {
+            if file_path != "arkret-service-api.openapi.yaml" {
                 bail!("schema_ref points at unknown openapi file: {file_path}");
             }
             let fragment =
@@ -313,7 +313,7 @@ impl SchemaEnv {
             // so we don't need a separate openapi-aware registry.
             let inlined = inline_openapi_refs(component, openapi)?;
             let base_uri = Some(format!(
-                "{SCHEMA_ID_PREFIX}openapi/cokret-service-api.openapi.yaml"
+                "{SCHEMA_ID_PREFIX}openapi/arkret-service-api.openapi.yaml"
             ));
             let mut schema = inlined;
             if let Value::Object(map) = &mut schema {

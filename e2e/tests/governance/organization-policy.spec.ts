@@ -12,7 +12,7 @@
 // surface.
 //
 // The payload + protocol-semantic invariants are already exercised statically
-// by tests/realm_organization_statement_negative.rs against the cokret-rust-sdk
+// by tests/realm_organization_statement_negative.rs against the arkret-rust-sdk
 // validator + verifier. The cases below are the live soland projection of the
 // same semantics; they are `test.fixme` until the soland organization surface
 // (SOL-ORG-02/03/05) lands, at which point they become the red-on-regression

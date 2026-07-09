@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::{load_artifact_json, required_str, spec_artifacts_root};
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://cokret.org/v1/";
+const SCHEMA_ID_PREFIX: &str = "https://arkret.org/v1/";
 
 pub fn run_schema_validation_suite() -> Result<()> {
     let root = spec_artifacts_root();
@@ -156,7 +156,7 @@ pub fn run_schema_validation_suite() -> Result<()> {
                 if let Some(pattern) = prop.get("pattern").and_then(Value::as_str)
                     && pattern.starts_with("^ck:")
                 {
-                    for bogus in [json!("ck:invalid:!!!"), json!("not-a-typed-id"), json!("")] {
+                    for bogus in [json!("ak:invalid:!!!"), json!("not-a-typed-id"), json!("")] {
                         if prop_validator.is_valid(&bogus) {
                             bail!(
                                 "schema {schema_id} property {field} accepted invalid typed-id {bogus}"

@@ -4,7 +4,7 @@
 //!
 //! ```ignore
 //! let server = CokretServer::spawn("my-scenario").await?;
-//! let alice = server.register_client("did:webvh:z6mkfixture:alice.example", "@alice", "ck:device:01904100-0000-7000-8000-0000000000a1").await?;
+//! let alice = server.register_client("did:webvh:z6mkfixture:alice.example", "@alice", "ak:device:01904100-0000-7000-8000-0000000000a1").await?;
 //! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
 //!
@@ -13,7 +13,7 @@
 //! ```ignore
 //! let alice = TestActorBuilder::new(&server, "@alice")
 //!     .with_did("did:webvh:z6mkfixture:alice.example")
-//!     .with_device("ck:device:01904100-0000-7000-8000-0000000000a1")
+//!     .with_device("ak:device:01904100-0000-7000-8000-0000000000a1")
 //!     .with_realm("Some Realm")
 //!     .create()
 //!     .await?;
@@ -248,7 +248,7 @@ mod tests {
         );
         assert_eq!(
             canonical_device_id(&format!("dev_{bare}")),
-            "ck:device:01904100-0000-7000-8000-0000000000a1"
+            "ak:device:01904100-0000-7000-8000-0000000000a1"
         );
     }
 

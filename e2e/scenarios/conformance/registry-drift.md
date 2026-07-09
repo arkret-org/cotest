@@ -2,19 +2,19 @@
 
 ## 目标
 
-把 `cokret-spec/spec/v1/artifacts/migration/*.json` 中的 removed/deprecated 真源与 `artifacts/registry/operation-registry.json` 当作 e2e 级别的 schema-drift detector,对 soland 实际暴露的 wire surface (`/_cokret/describe`、事件写入、operation 调用) 做反向扫描:确保移除的 event kind / operation id 在写入路径上 hard-reject,deprecated profile 在 describe 中不被声明,且 describe 自称的 operation 在 `operation-registry.json` 中全部有 canonical 条目。
+把 `arkret-spec/spec/v1/artifacts/migration/*.json` 中的 removed/deprecated 真源与 `artifacts/registry/operation-registry.json` 当作 e2e 级别的 schema-drift detector,对 soland 实际暴露的 wire surface (`/_cokret/describe`、事件写入、operation 调用) 做反向扫描:确保移除的 event kind / operation id 在写入路径上 hard-reject,deprecated profile 在 describe 中不被声明,且 describe 自称的 operation 在 `operation-registry.json` 中全部有 canonical 条目。
 
 不验证:具体 profile 内部 `requirements_role` 的 MUST/SHOULD 行为 (见 conformance/profile-gates.md);也不验证 `/server/describe` 的 envelope shape / `claimed_profiles` 分区 (见 sync/service-surface-contract.md)。本文件只关心 *registry vs. wire* 的 drift。
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `ck.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
-- `cokret-spec/spec/v1/artifacts/migration/removed-event-kinds.json` — 32 个被移除的 `ck.*` event.kind,`hard_reject` rejection level
-- `cokret-spec/spec/v1/artifacts/migration/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
-- `cokret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json` — 被废弃的 profile id
-- `cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — prose / identifier 级别的禁用术语
-- `cokret-spec/spec/v1/artifacts/registry/operation-registry.json` — canonical operation 注册表 (82 个 operation_id × 14 个 surface_groups),HTTP / gRPC / MQ 绑定的唯一真源
-- 关联 OpenAPI 视图: `cokret-spec/spec/v1/artifacts/openapi/cokret-service-api.openapi.yaml` (按 `registry_rules` 中 "MUST NOT introduce/rename/remove operation_id" 的约束,是 operation-registry 的派生 view,不是第二个 namespace)
+- `arkret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `ck.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
+- `arkret-spec/spec/v1/artifacts/migration/removed-event-kinds.json` — 32 个被移除的 `ck.*` event.kind,`hard_reject` rejection level
+- `arkret-spec/spec/v1/artifacts/migration/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
+- `arkret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json` — 被废弃的 profile id
+- `arkret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — prose / identifier 级别的禁用术语
+- `arkret-spec/spec/v1/artifacts/registry/operation-registry.json` — canonical operation 注册表 (82 个 operation_id × 14 个 surface_groups),HTTP / gRPC / MQ 绑定的唯一真源
+- 关联 OpenAPI 视图: `arkret-spec/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml` (按 `registry_rules` 中 "MUST NOT introduce/rename/remove operation_id" 的约束,是 operation-registry 的派生 view,不是第二个 namespace)
 - 关联实现: soland `/_cokret/describe` 处的 `implemented_features` / `supported_operations` / `claimed_profiles` 字段 (确切 key 名 see Implementation notes)
 
 ## 拓扑
@@ -35,7 +35,7 @@
 ## Pre-conditions
 
 - soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
-- harness 能 ESM resolve `cokret-spec/spec/v1/artifacts/{migration,registry}/*.json` (相对 `tests/conformance/<spec>.spec.ts` 向上 4 级到 `cokret-spec/`)
+- harness 能 ESM resolve `arkret-spec/spec/v1/artifacts/{migration,registry}/*.json` (相对 `tests/conformance/<spec>.spec.ts` 向上 4 级到 `arkret-spec/`)
 - `removed-event-kinds.json.entries[*].rejection_level === "hard_reject"` 的子集在 cotest 看来是测试输入(其他 `migration_only` 等暂不构造)
 - alice 通过标准 account helper 获取 bearer token (仅 Phase A/F)
 
@@ -103,7 +103,7 @@
 
 ## Implementation notes
 
-- **artifact loader**:用 `import { readFileSync } from "node:fs"` + `import.meta.url` 推 `__dirname`;artifacts 落在 `<repo_root>/cokret-spec/spec/v1/artifacts/registry/`,相对 `cotest/e2e/tests/conformance/*.spec.ts` 是 `../../../../cokret-spec/spec/v1/artifacts`。Playwright (package.json `"type": "module"`) 原生支持 `import.meta.url`。
+- **artifact loader**:用 `import { readFileSync } from "node:fs"` + `import.meta.url` 推 `__dirname`;artifacts 落在 `<repo_root>/arkret-spec/spec/v1/artifacts/registry/`,相对 `cotest/e2e/tests/conformance/*.spec.ts` 是 `../../../../arkret-spec/spec/v1/artifacts`。Playwright (package.json `"type": "module"`) 原生支持 `import.meta.url`。
 - **describe key 名**:scenario 写的是 `describe.implemented_features.operations`,但当前 soland 的实际字段名可能是 `supported_operations` / `operations`。spec ref:`sync/service-api-schema.mdx` + `service-surface.md`。spec 实现时 harness 应按以下顺序回退:`describe.implemented_features?.operations` → `describe.supported_operations` → `describe.operations`,第一个 non-empty array 即视为 claimed list。
 - **deep-walk helper**:不要新增 `helpers/deep-walk.ts`;直接在本 spec 文件顶部写一个 `function* walkKeys(node, path = []): Iterable<{ path: string[]; key: string; value: unknown }>` generator,handle object 与 array 两类容器,leaf primitive 跳过,用于 profile id 与 model-term 扫描。
 - **错误码集合**:registry 没有强制一个统一的拒绝码 (spec 写 `schema_violation`),实测 soland 可能返回 `unknown_event_kind` / `kind_not_supported`。Phase A/B 使用宽集合 + status 是 4xx 即视为通过,以免过早咬死。

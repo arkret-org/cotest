@@ -38,7 +38,7 @@ pub const APPEAL_KIND_CLOSE: &str = "ck.moderation.appeal.close";
 pub const DECISION_LIFT_KIND: &str = "ck.moderation.decision.lift";
 
 pub const APPEAL_SCHEMA: &str = "ck.schema.moderation_appeal.v1";
-pub const APPEAL_ID_PREFIX: &str = "ck:appeal:";
+pub const APPEAL_ID_PREFIX: &str = "ak:appeal:";
 
 /// Error codes the reducer SHOULD surface on the negative branches.
 pub const EXPECTED_OVERTURN_MISSING_LIFT: &str = "appeal_overturn_missing_lift";
@@ -79,7 +79,7 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
         ));
     }
     // Typed appeal id round-trip.
-    let appeal = TypedAppealId::new("ck:appeal:01904100-0000-7000-8000-000000000aaa")
+    let appeal = TypedAppealId::new("ak:appeal:01904100-0000-7000-8000-000000000aaa")
         .map_err(|e| anyhow!("SDK rejected well-formed TypedAppealId: {e}"))?;
     if !appeal.as_str().starts_with(APPEAL_ID_PREFIX) {
         return Err(anyhow!(

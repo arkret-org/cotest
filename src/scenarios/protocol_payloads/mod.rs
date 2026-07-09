@@ -43,7 +43,7 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     let token = dev_login(
         &server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
 

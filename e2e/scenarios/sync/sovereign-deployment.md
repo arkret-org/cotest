@@ -2,17 +2,17 @@
 
 ## 目标
 
-验证组织独立运行一套主权 Cokret 网络的完整链路:`soland_main` 配置严格的 DID resolver 信任根、独立部署的 `soland_enclave` 作为「受控外部协作 Realm (enclave)」的承载节点;内部成员 `alice_internal` 在主域日常工作,外部用户 `bob_external` 仅能通过 enclave Realm 加入与内部协作,且**无法 escape 主域**(看不到主域私密资源、directory 搜索被截断);enclave 内的会话、文件、消息均落 enclave 节点,审计日志记录 bob 的全部访问范围;`soland_main ↔ soland_enclave` 出现网络中断时 enclave 走 store-and-forward 而非离线模式,链路恢复后状态收敛。
+验证组织独立运行一套主权 Arkret 网络的完整链路:`soland_main` 配置严格的 DID resolver 信任根、独立部署的 `soland_enclave` 作为「受控外部协作 Realm (enclave)」的承载节点;内部成员 `alice_internal` 在主域日常工作,外部用户 `bob_external` 仅能通过 enclave Realm 加入与内部协作,且**无法 escape 主域**(看不到主域私密资源、directory 搜索被截断);enclave 内的会话、文件、消息均落 enclave 节点,审计日志记录 bob 的全部访问范围;`soland_main ↔ soland_enclave` 出现网络中断时 enclave 走 store-and-forward 而非离线模式,链路恢复后状态收敛。
 
 不验证:跨 realm 的 federation 协议本身(见 federation/cross-server)、E2EE 密钥分发(见 crypto/key-distribution)、DID 注册撤销(见 identity/did-revocation)、enclave 内部的冲突修复细节(见 sync/offline-conflict)。
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/sync/sovereign-deployment.md` §2 — Sovereign client + 信任根概念
-- `cokret-spec/spec/v1/zh/sync/sovereign-deployment.md` §3 — DID resolver policy (内部 method 信任白名单)
-- `cokret-spec/spec/v1/zh/sync/sovereign-deployment.md` §4 — Controlled collaboration Realm / enclave 部署
-- `cokret-spec/spec/v1/zh/sync/sovereign-deployment.md` §5 — Enclave 边界(外部成员无法访问主域资源)
-- `cokret-spec/spec/v1/zh/sync/sovereign-deployment.md` §6 — Network outage / store-and-forward 行为 + 审计
+- `arkret-spec/spec/v1/zh/sync/sovereign-deployment.md` §2 — Sovereign client + 信任根概念
+- `arkret-spec/spec/v1/zh/sync/sovereign-deployment.md` §3 — DID resolver policy (内部 method 信任白名单)
+- `arkret-spec/spec/v1/zh/sync/sovereign-deployment.md` §4 — Controlled collaboration Realm / enclave 部署
+- `arkret-spec/spec/v1/zh/sync/sovereign-deployment.md` §5 — Enclave 边界(外部成员无法访问主域资源)
+- `arkret-spec/spec/v1/zh/sync/sovereign-deployment.md` §6 — Network outage / store-and-forward 行为 + 审计
 
 ## 拓扑
 

@@ -129,7 +129,7 @@ fn validate_room_binding_case(case: &Value) -> Result<()> {
         bail!("room binding must use a MIMI room URI");
     }
     let scope = required_field(payload, "binding_scope")?;
-    if !required_str(scope, "realm_id")?.starts_with("ck:realm:") {
+    if !required_str(scope, "realm_id")?.starts_with("ak:realm:") {
         bail!("room binding scope must include realm_id");
     }
     require_expected(case, "mimi_room_is_projection_not_canonical_truth")
@@ -252,9 +252,9 @@ fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
 
 /// W8 — MIMI Room Policy Component round-trip matrix.
 ///
-/// Spec extensions/mimi-interop.md §9.1 defines the Cokret `component_type`
+/// Spec extensions/mimi-interop.md §9.1 defines the Arkret `component_type`
 /// ↔ MIMI policy-component mapping; §9.2 defines the criticality ↔ MIMI
-/// unknown-handling mapping. The cotest test cross-references every Cokret
+/// unknown-handling mapping. The cotest test cross-references every Arkret
 /// component named in the fixture against the active event-kind registry's
 /// component_type set, asserts that bidirectional vectors carry both legs
 /// (`cokret_component_type` + `mimi_path`), and asserts that
@@ -283,17 +283,17 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             crit_vectors.len()
         );
     }
-    for (vector, (cokret, mimi)) in crit_vectors.iter().zip(expected_pairs.iter()) {
-        let actual_cokret = required_str(vector, "cokret")?;
+    for (vector, (arkret, mimi)) in crit_vectors.iter().zip(expected_pairs.iter()) {
+        let actual_cokret = required_str(vector, "arkret")?;
         let actual_mimi = required_str(vector, "mimi_unknown_handling")?;
-        if actual_cokret != *cokret || actual_mimi != *mimi {
+        if actual_cokret != *arkret || actual_mimi != *mimi {
             bail!(
-                "criticality mapping drift: expected ({cokret} <-> {mimi}), got ({actual_cokret} <-> {actual_mimi})"
+                "criticality mapping drift: expected ({arkret} <-> {mimi}), got ({actual_cokret} <-> {actual_mimi})"
             );
         }
         if vector.get("round_trip").and_then(Value::as_bool) != Some(true) {
             bail!(
-                "criticality mapping {cokret} must declare round_trip=true (no information loss)"
+                "criticality mapping {arkret} must declare round_trip=true (no information loss)"
             );
         }
     }
@@ -337,9 +337,9 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             }
             "cokret_only" => {
                 let media = required_str(vector, "facade_media_type")?;
-                if media != "application/vnd.cokret.component+json" {
+                if media != "application/vnd.arkret.component+json" {
                     bail!(
-                        "cokret_only component {component_type} must use the application/vnd.cokret.component+json media type, got {media}"
+                        "cokret_only component {component_type} must use the application/vnd.arkret.component+json media type, got {media}"
                     );
                 }
                 if vector.get("mimi_path").is_some() {
@@ -367,7 +367,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     }
     if cokret_only < 5 {
         bail!(
-            "mimi component fixture must cover at least 5 Cokret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {cokret_only}"
+            "mimi component fixture must cover at least 5 Arkret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {cokret_only}"
         );
     }
 

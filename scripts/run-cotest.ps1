@@ -671,7 +671,7 @@ function Get-SpecMetadata {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
     $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-    $specRoot = Join-Path $workspaceRoot "cokret-spec"
+    $specRoot = Join-Path $workspaceRoot "arkret-spec"
     $artifactRoot = Join-Path $specRoot "spec\v1\artifacts"
     $fixtureRoot = Join-Path $artifactRoot "fixtures"
     return [pscustomobject]@{
@@ -1897,7 +1897,7 @@ if ($FailOnCoverageRegression -and $coverageGate.status -eq "failed") {
     $exitCode = 1
 }
 $unresolved = Get-UnresolvedTodoItems -TodoPath (Join-Path $repoRoot "_todos.md")
-$specArtifactsRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "cokret-spec" | Join-Path -ChildPath "spec\v1\artifacts"
+$specArtifactsRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "arkret-spec" | Join-Path -ChildPath "spec\v1\artifacts"
 if (-not (Test-Path $specArtifactsRoot)) {
     $specArtifactsRoot = $null
 }
@@ -1907,7 +1907,7 @@ if ($specArtifactsRoot -and (Test-Path (Join-Path $repoRoot "config/coverage-pro
 }
 
 # Spec artifact sync gate
-$specRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "cokret-spec"
+$specRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "arkret-spec"
 $specSyncResult = Test-SpecArtifactSync -SpecRoot $specRoot
 $sutDescribeAlignment = [pscustomobject]@{
     status               = "skipped"

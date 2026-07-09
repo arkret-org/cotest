@@ -1,4 +1,4 @@
-//! Complement-style black-box conformance harness for Cokret servers.
+//! Complement-style black-box conformance harness for Arkret servers.
 //!
 //! `cotest` keeps the executable harness and scenario logic in the main crate.
 //! Integration test files are intentionally thin entrypoints.

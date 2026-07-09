@@ -9,7 +9,7 @@
       "expect": "pass",
       "policy": {
         "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a1",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a1",
         "lifecycle": "active",
         "epoch": 1,
         "body": {
@@ -24,7 +24,7 @@
       "expect": "pass",
       "policy": {
         "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a2",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a2",
         "lifecycle": "active",
         "epoch": 2,
         "body": {
@@ -39,7 +39,7 @@
       "expect": "pass",
       "policy": {
         "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a3",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a3",
         "lifecycle": "active",
         "epoch": 3,
         "body": {
@@ -55,7 +55,7 @@
       "expect": "pass",
       "policy": {
         "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a4",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a4",
         "lifecycle": "active",
         "epoch": 4,
         "body": {
@@ -70,7 +70,7 @@
       "reason": "lifecycle=retired blocks new recovery sessions",
       "policy": {
         "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a5",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a5",
         "lifecycle": "retired",
         "epoch": 5,
         "body": {
@@ -87,7 +87,7 @@
       "prior_epoch": 7,
       "policy": {
         "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a6",
+        "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a6",
         "lifecycle": "active",
         "epoch": 6,
         "body": {

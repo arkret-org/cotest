@@ -15,7 +15,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     // Bob / Carol / Dave are freshly registered via the builder. Default
@@ -24,17 +24,17 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // each gets an explicit `-interaction` suffix in the DID/device.
     let bob_actor = TestActorBuilder::new(&server, "@bob-interaction")
         .with_did("did:web:bob-interaction.example")
-        .with_device("ck:device:01904100-0000-7000-8000-0000000000b0")
+        .with_device("ak:device:01904100-0000-7000-8000-0000000000b0")
         .create()
         .await?;
     let carol_actor = TestActorBuilder::new(&server, "@carol-interaction")
         .with_did("did:web:carol-interaction.example")
-        .with_device("ck:device:01904100-0000-7000-8000-000000000ca0")
+        .with_device("ak:device:01904100-0000-7000-8000-000000000ca0")
         .create()
         .await?;
     let dave_actor = TestActorBuilder::new(&server, "@dave-interaction")
         .with_did("did:web:dave-interaction.example")
-        .with_device("ck:device:01904100-0000-7000-8000-000000000da0")
+        .with_device("ak:device:01904100-0000-7000-8000-000000000da0")
         .create()
         .await?;
     let bob = bob_actor.client();
@@ -47,7 +47,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     }
 
     let sent = alice
-        .send_message(&realm_id, "ck:thread:interaction", "hello interaction")
+        .send_message(&realm_id, "ak:thread:interaction", "hello interaction")
         .await?;
 
     expect_status(
@@ -101,7 +101,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // `ck:thread:` string. Derive it from the root message's event id.
     let thread_root_ref = sent["event_id"]
         .as_str()
-        .map(|event_id| event_id.replacen("ck:event:", "ck:message:", 1))
+        .map(|event_id| event_id.replacen("ak:event:", "ak:message:", 1))
         .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
     let marker = dave
         .submit_event(
@@ -111,7 +111,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                 "id": sent["event_id"]
                     .as_str()
                     .expect("sent event id")
-                    .replacen("ck:event:", "ck:read_cursor:", 1),
+                    .replacen("ak:event:", "ak:read_cursor:", 1),
                 "schema": "ck.schema.read_cursor.v1",
                 "actor_id": dave.actor,
                 "device_id": dave.device_id,

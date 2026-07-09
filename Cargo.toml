@@ -22,15 +22,15 @@ test-with-containers = ["dep:testcontainers"]
 # Real Ed25519 detached-JWS verification in the security-negative conformance
 # suite (`conformance/security_negative.rs`) so a forged event with a correct
 # digest but invalid signature is actually rejected, not just digest-compared.
-# R3.2 (cokret-spec @ b56cab1) — the §3.2.1 primary-handle-selection,
+# R3.2 (arkret-spec @ b56cab1) — the §3.2.1 primary-handle-selection,
 # `claim_digest`, and §3.8.2 mention-render helpers live in the high-level
-# `cokret` facade (`cokret::identity::*`). cotest's primary-handle /
+# `arkret` facade (`arkret::identity::*`). cotest's primary-handle /
 # mention vectors drive these directly so every implementation agrees on
 # the deterministic selection + canonical claim digest.
 # T5.3 (Round 22) — canonical hash convergence vectors in
 # `tests/canonical_hash_convergence.rs` exercise the high-level
 # `EventProofBuilder` facade alongside the low-level canonical helpers
-# to pin that every Cokret service hashes payloads identically.
+# to pin that every Arkret service hashes payloads identically.
 # lattice round-trip vectors: cotest exercises the SDK's
 # `cokret_core::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
@@ -48,11 +48,11 @@ arbitrary = {workspace = true,features = ["derive"]}
 base64 = {workspace = true}
 chacha20poly1305 = {workspace = true,default-features = false,features = ["alloc"]}
 chrono = {workspace = true}
-cokret = {workspace = true}
+arkret = {workspace = true}
 garth = {workspace = true}
-cokret-core = {workspace = true,features = ["client"]}
-cokret-http-client = {workspace = true}
-cokret-signatures = {workspace = true}
+arkret-core = {workspace = true,features = ["client"]}
+arkret-http-client = {workspace = true}
+arkret-signatures = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
 hkdf = {workspace = true}
 hpke-rs = {workspace = true}
@@ -90,11 +90,11 @@ blake3 = {version = "1.5.5",default-features = false}
 chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
-cokret = {path = "../cokret-rust-sdk/crates/sdk"}
+arkret = {path = "../arkret-rust-sdk/crates/sdk"}
 garth = {path = "../garth"}
-cokret-core = {path = "../cokret-rust-sdk/crates/core"}
-cokret-http-client = {path = "../cokret-rust-sdk/crates/http-client"}
-cokret-signatures = {path = "../cokret-rust-sdk/crates/signatures"}
+arkret-core = {path = "../arkret-rust-sdk/crates/core"}
+arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
+arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"
 hpke-rs = "0.6"

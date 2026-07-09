@@ -77,7 +77,7 @@ test.describe("account auth + device strand", () => {
     //
     // We model two devices of ONE account each acquiring a grant bound to its
     // own device key + device id. The grants are distinct, carry distinct
-    // `urn:cokret:client:device:<id>` scopes, and each authorizes the self-path
+    // `urn:arkret:client:device:<id>` scopes, and each authorizes the self-path
     // with its own DPoP key. The QR-pairing + cross-signing ceremony that a
     // brand-new device walks before login is owned by the device-lifecycle
     // workstream; what this test pins is the account-authority promise that each
@@ -97,9 +97,9 @@ test.describe("account auth + device strand", () => {
     expect(device2.principalDid).toBe(device1.principalDid);
     expect(device2.deviceId).not.toBe(device1.deviceId);
     expect(device2.grantJwt).not.toBe(device1.grantJwt);
-    expect(device2.scopes).toContain(`urn:cokret:client:device:${device2.deviceId}`);
+    expect(device2.scopes).toContain(`urn:arkret:client:device:${device2.deviceId}`);
     expect(device2.scopes).not.toContain(
-      `urn:cokret:client:device:${device1.deviceId}`,
+      `urn:arkret:client:device:${device1.deviceId}`,
     );
 
     // Device-2's grant authorizes the self-path with device-2's own key.

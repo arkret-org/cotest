@@ -40,7 +40,7 @@ pub struct ExternalBinarySpec {
     /// Env var that, when set, overrides the binary path
     /// (e.g. `"STARID_BIN"`).
     pub bin_env: &'static str,
-    /// Sibling-checkout convention path segments under `cokret/`
+    /// Sibling-checkout convention path segments under `arkret/`
     /// (e.g. `&["starid", "target", "debug"]`). The binary file name is
     /// derived from `service` (`+ ".exe"` on Windows).
     pub sibling_path: &'static [&'static str],
@@ -179,7 +179,7 @@ pub fn skip_reason(spec: &ExternalBinarySpec) -> Option<SkipReason> {
     }
     if locate_external_binary(spec).is_none() {
         let searched = format!(
-            "`{}` env var or `cokret/{}/target/debug/{}`",
+            "`{}` env var or `arkret/{}/target/debug/{}`",
             spec.bin_env,
             spec.sibling_path.first().copied().unwrap_or(spec.service),
             spec.service,
@@ -266,7 +266,7 @@ pub async fn spawn_required(spec: &ExternalBinarySpec) -> Result<SpawnedExternal
                 .unwrap_or_else(|| {
                     format!(
                         "could not locate `{}` binary — set `{}=path/to/{}` or build the sibling \
-                         checkout under `cokret/{}/target/debug/`",
+                         checkout under `arkret/{}/target/debug/`",
                         spec.service,
                         spec.bin_env,
                         spec.service,
@@ -294,10 +294,10 @@ async fn wait_until_healthy(base_url: &str, path: &str, timeout: Duration) -> Re
     bail!("liveness probe {url} did not become healthy in {timeout:?}: {last_err:?}")
 }
 
-/// Resolve the `cokret/` workspace root by walking up from the cotest
+/// Resolve the `arkret/` workspace root by walking up from the cotest
 /// crate manifest dir until a sibling layout is detected.
 fn workspace_root() -> Option<PathBuf> {
-    // CARGO_MANIFEST_DIR points at .../cokret/cotest at compile time.
+    // CARGO_MANIFEST_DIR points at .../arkret/cotest at compile time.
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     manifest_dir.parent().map(Path::to_path_buf)
 }

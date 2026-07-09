@@ -29,7 +29,7 @@ import { encodeEd25519PubkeyMultibase, rawEd25519PublicKey } from "./encoding";
 // trailing "\n" included.
 const BINDING_PROOF_TRANSCRIPT_DOMAIN = "ck.invite.claim.binding_proof.v1\n";
 const SUBJECT_PROOF_TRANSCRIPT_DOMAIN = "ck.invite.claim.subject_proof.v1\n";
-const INVITE_AUDIENCE = "cokret.invite.claim";
+const INVITE_AUDIENCE = "arkret.invite.claim";
 
 export type DidKeyIdentity = {
   did: string;

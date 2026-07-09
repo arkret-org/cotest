@@ -1,8 +1,8 @@
 # cotest Test Strategy
 
-`cotest` is a black-box Cokret server conformance suite. Each scenario starts
+`cotest` is a black-box Arkret server conformance suite. Each scenario starts
 the server processes it needs, creates test actors through public APIs, and
-asserts only public HTTP behavior plus limited `cokret-rust-sdk` smoke paths.
+asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
 
 ## Harness Model
 
@@ -77,7 +77,7 @@ asserts only public HTTP behavior plus limited `cokret-rust-sdk` smoke paths.
 
 ## SDK Usage Policy
 
-- Use `cokret-rust-sdk` for typed protocol objects, commit construction, and
+- Use `arkret-rust-sdk` for typed protocol objects, commit construction, and
   generic client smoke coverage.
 - Prefer raw HTTP assertions for authoritative server-contract checks when the
   current SDK wire model lags the server's live JSON surface.
@@ -215,7 +215,7 @@ The coauth/soland test mapping is fixed by the runner:
 
 - soland audience/service DID: `did:webvh:z6mkfixture:soland.joint-e2e.local`
 - coauth service/issuer DID: `did:webvh:z6mkfixture:coauth.joint-e2e.local`
-- coauth publishes soland under `cokret.principal_servers`
+- coauth publishes soland under `arkret.principal_servers`
 - soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
 - soland introspects session grants at
   `<coauth>/_cokret/gate/account/session-grants/introspect`
@@ -487,7 +487,7 @@ gap-coverage gaps deferred to R4.
   stubbed vectors flip to active.
 - **Live media-backend conformance** — call_media vectors cover protocol
   shapes and harness-facing behavior, but LiveKit / Mediasoup / Janus /
-  Cokret-native media backend conformance remains gated on R4 and is
+  Arkret-native media backend conformance remains gated on R4 and is
   documented through the current process/compose/docker runtime workflow.
 
 ### Vector ↔ error-code map

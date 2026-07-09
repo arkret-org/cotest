@@ -180,7 +180,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     }
 
     const callId = newCallId();
-    const focusId = "ck:focus:livekit-lhr";
+    const focusId = "ak:focus:livekit-lhr";
 
     await postCallSignal(
       request,

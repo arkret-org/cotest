@@ -3,7 +3,7 @@
   "profile": "ck.profile.agent_payload_vectors.v1",
   "schema_ref": "ck.schema.event_payload.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/event-payload.schema.json",
-  "comment": "R3 sync (cokret-spec @ b47ff6ec) — minimal payload shapes for the new agent event kinds. Live reducer wiring is R3.1; this fixture only pins wire-shape.",
+  "comment": "R3 sync (arkret-spec @ b47ff6ec) — minimal payload shapes for the new agent event kinds. Live reducer wiring is R3.1; this fixture only pins wire-shape.",
   "cases": [
     {
       "name": "agent_pause_payload_minimal",
@@ -63,11 +63,11 @@
       "payload": {
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
-        "draft_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c001",
+        "draft_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c001",
         "proposed_action": "ck.message.create",
         "target": {
           "kind": "realm",
-          "realm_id": "ck:realm:01999999-0000-7000-8000-000000000001"
+          "realm_id": "ak:realm:01999999-0000-7000-8000-000000000001"
         },
         "content_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "created_at": "2026-05-27T07:00:00Z",
@@ -83,11 +83,11 @@
       "payload": {
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
-        "request_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c002",
+        "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c002",
         "proposed_action": "ck.message.create",
         "target": {
           "kind": "realm",
-          "realm_id": "ck:realm:01999999-0000-7000-8000-000000000001"
+          "realm_id": "ak:realm:01999999-0000-7000-8000-000000000001"
         },
         "request_canonical_digest": "sha256:1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "created_at": "2026-05-27T07:01:00Z",
@@ -101,14 +101,14 @@
       "payload_def_ref": "agent_action_approve_payload",
       "reducer_input": false,
       "payload": {
-        "approval_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c004",
-        "request_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c002",
+        "approval_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c004",
+        "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c002",
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
         "proposed_action": "ck.message.create",
         "target": {
           "kind": "realm",
-          "realm_id": "ck:realm:01999999-0000-7000-8000-000000000001"
+          "realm_id": "ak:realm:01999999-0000-7000-8000-000000000001"
         },
         "approved_payload_digest": "sha256:2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "approval_nonce": "agent-approval-nonce-1",
@@ -123,8 +123,8 @@
       "payload_def_ref": "agent_action_reject_payload",
       "reducer_input": false,
       "payload": {
-        "rejection_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c005",
-        "request_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c003",
+        "rejection_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c005",
+        "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c003",
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
         "reason": "policy_violation",

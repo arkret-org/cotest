@@ -7,7 +7,7 @@
 //! missing bridge between those two surfaces.
 
 use anyhow::{Result, bail};
-use cokret::{
+use arkret::{
     CokretMlsGroup, CokretMlsIdentity, CryptoStore, DeviceId, Did, MemoryCryptoStore,
     MlsDeviceWorkflowAction, MlsRecoveryAction, late_device_join_steps,
 };
@@ -218,6 +218,6 @@ fn did(name: &str) -> Result<Did> {
 
 fn device(suffix: &str) -> Result<DeviceId> {
     Ok(DeviceId::new(format!(
-        "ck:device:01904100-0000-7000-8000-{suffix}"
+        "ak:device:01904100-0000-7000-8000-{suffix}"
     ))?)
 }

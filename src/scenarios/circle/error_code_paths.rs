@@ -1,4 +1,4 @@
-//! P2F.3 — every CKP-0007 reason code is reachable from `cokret-core`.
+//! P2F.3 — every CKP-0007 reason code is reachable from `arkret-core`.
 //!
 //! Eight of the nine CKP-0007 error codes are `failed_precondition` /
 //! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)

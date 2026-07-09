@@ -82,7 +82,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
         .register_client(
             "did:web:admin.ckp0007.example",
             "@admin",
-            "ck:device:01904100-0000-7000-8000-00000000ad01",
+            "ak:device:01904100-0000-7000-8000-00000000ad01",
         )
         .await?;
     let actor_y = stack
@@ -90,7 +90,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
         .register_client(
             "did:web:y.ckp0007.example",
             "@y",
-            "ck:device:01904100-0000-7000-8000-0000000000e3",
+            "ak:device:01904100-0000-7000-8000-0000000000e3",
         )
         .await?;
     let _ = actor_y.actor.as_str();
@@ -98,9 +98,9 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     let admin_did: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007cap001".to_owned())
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-ckp0007cap001".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007cap002".to_owned())
+    let circle_id = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007cap002".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let display = CircleDisplay {
         short_name: "Cap".to_owned(),

@@ -83,7 +83,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .register_client(
             "did:web:admin.ckp0007.example",
             "@admin",
-            "ck:device:01904100-0000-7000-8000-00000000ad01",
+            "ak:device:01904100-0000-7000-8000-00000000ad01",
         )
         .await?;
     let _alice_client = stack
@@ -91,7 +91,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .register_client(
             "did:web:alice.ckp0007.example",
             "@alice",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let _bob_client = stack
@@ -99,7 +99,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .register_client(
             "did:web:bob.ckp0007.example",
             "@bob",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
     let _x_client = stack
@@ -107,15 +107,15 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .register_client(
             "did:web:x.ckp0007.example",
             "@xeno",
-            "ck:device:01904100-0000-7000-8000-0000000000e4",
+            "ak:device:01904100-0000-7000-8000-0000000000e4",
         )
         .await?;
 
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007memb01".to_owned())
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-ckp0007memb01".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let alpha_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007alpha".to_owned())
+    let alpha_id = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007alpha".to_owned())
         .map_err(|e| anyhow!("alpha id: {e}"))?;
-    let beta_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007beta0".to_owned())
+    let beta_id = CircleId::new("ak:circle:0196419b-0000-7000-8000-ckp0007beta0".to_owned())
         .map_err(|e| anyhow!("beta id: {e}"))?;
 
     // Build SDK Circle structs so the wire payload's schema id, display,

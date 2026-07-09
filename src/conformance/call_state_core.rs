@@ -7,7 +7,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use cokret::{
+use arkret::{
     MediaServiceAnchors, call_media_token_exchange, participant_binding_signing_input,
     verify_call_media_token_outcome,
 };
@@ -134,10 +134,10 @@ fn anchors_with_issuer_key(key: &SigningKey) -> MediaServiceAnchors {
 
 fn token_request() -> CallMediaTokenExchangeRequestBody {
     call_media_token_exchange(
-        RealmId::new("ck:realm:01904100-0000-7000-8000-9b64700c6ee8").unwrap(),
-        CallId::new("ck:call:0196441c-0000-7000-8000-000000000000").unwrap(),
+        RealmId::new("ak:realm:01904100-0000-7000-8000-9b64700c6ee8").unwrap(),
+        CallId::new("ak:call:0196441c-0000-7000-8000-000000000000").unwrap(),
         did("alice"),
-        DeviceId::new("ck:device:01904100-0000-7000-8000-000000000005").unwrap(),
+        DeviceId::new("ak:device:01904100-0000-7000-8000-000000000005").unwrap(),
         "fra-1",
     )
 }
@@ -146,7 +146,7 @@ fn unsigned_token_outcome(
     request: &CallMediaTokenExchangeRequestBody,
     expires_at: DateTime<Utc>,
 ) -> CallMediaTokenExchangeOutcome {
-    let identity = "ck:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned();
+    let identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned();
     CallMediaTokenExchangeOutcome {
         focus_id: request.focus_id.clone(),
         backend_type: "livekit".to_owned(),
@@ -277,7 +277,7 @@ pub fn run_participant_binding_invalid_vector() -> Result<()> {
 
 fn cell() -> CellRef {
     CellRef::new(
-        "ck:cell:ck.component.call.state.v1:ck.call.0196441c-0000-7000-8000-000000000000"
+        "ak:cell:ck.component.call.state.v1:ck.call.0196441c-0000-7000-8000-000000000000"
             .to_owned(),
     )
     .expect("fixture cell id should be valid")

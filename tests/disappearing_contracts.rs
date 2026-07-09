@@ -26,7 +26,7 @@ struct ProjectionOutcome {
 }
 
 fn strand_id() -> StrandId {
-    StrandId::new("ck:strand:01904100-0000-7000-8000-000000000002").unwrap()
+    StrandId::new("ak:strand:01904100-0000-7000-8000-000000000002").unwrap()
 }
 
 fn expiry(trigger: DisappearingMessageExpiryTrigger) -> DisappearingMessageExpiry {
@@ -41,7 +41,7 @@ fn payload_for(trigger: DisappearingMessageExpiryTrigger) -> Value {
         "discussion",
         ContentBlock::text("temporary body").to_value().unwrap(),
     )
-    .with_message_id("ck:message:01904100-0000-7000-8000-000000000003")
+    .with_message_id("ak:message:01904100-0000-7000-8000-000000000003")
     .with_expiry(expiry(trigger))
     .to_value()
     .unwrap()
@@ -79,13 +79,13 @@ fn project_on_send(
         body_present: false,
         key_material_present: false,
         stub: json!({
-            "message_id": "ck:message:01904100-0000-7000-8000-000000000003",
+            "message_id": "ak:message:01904100-0000-7000-8000-000000000003",
             "strand_id": strand_id().as_str(),
             "track_name": "discussion",
             "expiry_stub": true,
             "expiry_reason": "disappearing_expired",
             "expired_at_ms": expires_at_ms,
-            "audit_ref": "ck:event:01904100-0000-7000-8000-000000000004"
+            "audit_ref": "ak:event:01904100-0000-7000-8000-000000000004"
         }),
     }
 }

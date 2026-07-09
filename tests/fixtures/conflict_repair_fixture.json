@@ -11,12 +11,12 @@
     {
       "name": "head_in_single_op_resolves_existing_bottom",
       "comment": "Anchor view AFTER recovery: only the repair Move is in scope (the earlier conflict pair was rolled back / superseded by the recovery anchor). cas-register sees a single anchored op ⇒ resolves to Value, clearing the prior Bottom.",
-      "cell_id": "ck:cell:ck.component.realm.policy.v1:ck.realm.01js0sp01000000000000000000",
+      "cell_id": "ak:cell:ck.component.realm.policy.v1:ck.realm.01js0sp01000000000000000000",
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
-          "ck:event:01970e58-0001-7a10-8010-000000000010",
-          "ck:event:01970e58-0001-7a11-8011-000000000011"
+          "ak:event:01970e58-0001-7a10-8010-000000000010",
+          "ak:event:01970e58-0001-7a11-8011-000000000011"
         ],
         "heads": [
           {"role": "admin"},
@@ -24,18 +24,18 @@
         ]
       },
       "repair_move": {
-        "move_id": "ck:event:01970e58-0001-7a12-8012-000000000012",
+        "move_id": "ak:event:01970e58-0001-7a12-8012-000000000012",
         "op_type": "set",
         "head_in": [
-          "ck:event:01970e58-0001-7a10-8010-000000000010",
-          "ck:event:01970e58-0001-7a11-8011-000000000011"
+          "ak:event:01970e58-0001-7a10-8010-000000000010",
+          "ak:event:01970e58-0001-7a11-8011-000000000011"
         ],
         "recovery_capability": "cap:01js0rc0a100000000000000",
         "value": {
           "role": "admin",
           "repair_of": [
-            "ck:event:01970e58-0001-7a10-8010-000000000010",
-            "ck:event:01970e58-0001-7a11-8011-000000000011"
+            "ak:event:01970e58-0001-7a10-8010-000000000010",
+            "ak:event:01970e58-0001-7a11-8011-000000000011"
           ]
         }
       },
@@ -47,10 +47,10 @@
     {
       "name": "self_authorising_winner_rejected_at_lattice_layer",
       "comment": "Two concurrent set-Moves where one self-references its own 'winner' capability remain a Bottom at the lattice layer. The cas-register doesn't peek at payload semantics; it sees concurrent writes and surfaces Bottom. Self-authorisation prevention is the AUTH layer's job (verify_move), but the lattice MUST NOT be tricked into picking a winner just because one payload claims authority.",
-      "cell_id": "ck:cell:ck.component.realm.policy.v1:ck.realm.01js0sp02000000000000000000",
+      "cell_id": "ak:cell:ck.component.realm.policy.v1:ck.realm.01js0sp02000000000000000000",
       "concurrent_anchored_ops": [
         {
-          "move_id": "ck:event:01970e58-0001-7a13-8013-000000000013",
+          "move_id": "ak:event:01970e58-0001-7a13-8013-000000000013",
           "op_type": "set",
           "value": {
             "role": "admin",
@@ -59,7 +59,7 @@
           }
         },
         {
-          "move_id": "ck:event:01970e58-0001-7a14-8014-000000000014",
+          "move_id": "ak:event:01970e58-0001-7a14-8014-000000000014",
           "op_type": "set",
           "value": {"role": "moderator"}
         }
@@ -73,12 +73,12 @@
     {
       "name": "manual_repair_via_recovery_capability_holder",
       "comment": "Manual repair scenario: an operator with `cap:01js0rc0...` capability picks one of the conflicting values, writes a fresh signed Move that carries `repair_of [move_id_a, move_id_b]`, and the lattice resolves to that single Value. The recovery_capability MUST be issued by the Space's anchorer (no self-authorising loops).",
-      "cell_id": "ck:cell:ck.component.realm.policy.v1:ck.realm.01js0sp03000000000000000000",
+      "cell_id": "ak:cell:ck.component.realm.policy.v1:ck.realm.01js0sp03000000000000000000",
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
-          "ck:event:01970e58-0001-7a15-8015-000000000015",
-          "ck:event:01970e58-0001-7a16-8016-000000000016"
+          "ak:event:01970e58-0001-7a15-8015-000000000015",
+          "ak:event:01970e58-0001-7a16-8016-000000000016"
         ],
         "heads": [
           {"join_rule": "invite"},
@@ -86,11 +86,11 @@
         ]
       },
       "repair_move": {
-        "move_id": "ck:event:01970e58-0001-7a17-8017-000000000017",
+        "move_id": "ak:event:01970e58-0001-7a17-8017-000000000017",
         "op_type": "set",
         "head_in": [
-          "ck:event:01970e58-0001-7a15-8015-000000000015",
-          "ck:event:01970e58-0001-7a16-8016-000000000016"
+          "ak:event:01970e58-0001-7a15-8015-000000000015",
+          "ak:event:01970e58-0001-7a16-8016-000000000016"
         ],
         "recovery_capability": "cap:01js0rc0d100000000000000",
         "issuer_did": "did:web:operator.example",
@@ -101,8 +101,8 @@
         "value": {
           "join_rule": "invite",
           "repair_of": [
-            "ck:event:01970e58-0001-7a15-8015-000000000015",
-            "ck:event:01970e58-0001-7a16-8016-000000000016"
+            "ak:event:01970e58-0001-7a15-8015-000000000015",
+            "ak:event:01970e58-0001-7a16-8016-000000000016"
           ]
         }
       },
@@ -116,13 +116,13 @@
     {
       "name": "repair_without_recovery_capability_rejected",
       "comment": "A Move with `head_in` but NO `recovery_capability` MUST be rejected at verify_move. The lattice would happily resolve a single op to Value; the AUTH layer is the gate.",
-      "cell_id": "ck:cell:ck.component.realm.policy.v1:ck.realm.01js0sp04000000000000000000",
+      "cell_id": "ak:cell:ck.component.realm.policy.v1:ck.realm.01js0sp04000000000000000000",
       "repair_move": {
-        "move_id": "ck:event:01970e58-0001-7a1a-801a-00000000001a",
+        "move_id": "ak:event:01970e58-0001-7a1a-801a-00000000001a",
         "op_type": "set",
         "head_in": [
-          "ck:event:01970e58-0001-7a18-8018-000000000018",
-          "ck:event:01970e58-0001-7a19-8019-000000000019"
+          "ak:event:01970e58-0001-7a18-8018-000000000018",
+          "ak:event:01970e58-0001-7a19-8019-000000000019"
         ],
         "value": {"role": "admin"}
       },
@@ -135,20 +135,20 @@
     {
       "name": "repair_head_in_does_not_match_actual_bottom_heads",
       "comment": "head_in declares heads [x, y] but the cell's actual Bottom heads are [a, b]. The Move MUST be rejected (drifted repair target).",
-      "cell_id": "ck:cell:ck.component.realm.policy.v1:ck.realm.01js0sp05000000000000000000",
+      "cell_id": "ak:cell:ck.component.realm.policy.v1:ck.realm.01js0sp05000000000000000000",
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
-          "ck:event:01970e58-0001-7a1b-801b-00000000001b",
-          "ck:event:01970e58-0001-7a1c-801c-00000000001c"
+          "ak:event:01970e58-0001-7a1b-801b-00000000001b",
+          "ak:event:01970e58-0001-7a1c-801c-00000000001c"
         ]
       },
       "repair_move": {
-        "move_id": "ck:event:01970e58-0001-7a1d-801d-00000000001d",
+        "move_id": "ak:event:01970e58-0001-7a1d-801d-00000000001d",
         "op_type": "set",
         "head_in": [
-          "ck:event:01970e58-0001-7a27-8027-000000000027",
-          "ck:event:01970e58-0001-7a28-8028-000000000028"
+          "ak:event:01970e58-0001-7a27-8027-000000000027",
+          "ak:event:01970e58-0001-7a28-8028-000000000028"
         ],
         "recovery_capability": "cap:01js0rc01000000000000000",
         "value": {"role": "admin"}

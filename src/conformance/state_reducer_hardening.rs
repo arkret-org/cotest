@@ -238,7 +238,7 @@ fn run_strand_tracks_update_atomic_case(case: &Value) -> Result<()> {
         .get("input")
         .ok_or_else(|| anyhow!("strand_tracks case missing input"))?;
     let cell_id = required_str(input, "cell_id")?;
-    let expected_prefix = format!("ck:cell:{STRAND_TRACKS_CELL_FAMILY}:");
+    let expected_prefix = format!("ak:cell:{STRAND_TRACKS_CELL_FAMILY}:");
     if !cell_id.starts_with(&expected_prefix) {
         bail!("strand tracks vector cell_id is not bound to {STRAND_TRACKS_CELL_FAMILY}");
     }

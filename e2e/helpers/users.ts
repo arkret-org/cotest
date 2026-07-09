@@ -1108,7 +1108,7 @@ export async function createDpopUserSessionForAccount(
   expect(grant.audience).toBe(audience);
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
-  expect(grant.scopes).toContain(`urn:cokret:client:device:${seed.deviceId}`);
+  expect(grant.scopes).toContain(`urn:arkret:client:device:${seed.deviceId}`);
   // Model-B identity: adopt the minted `did:webvh:…:webvh:<ulid>` principal DID
   // the grant subject is bound to (coauth debug seam), NOT the coauth-local
   // `user_did_for` fallback (`…:users:<ulid>`) that account.did carries. Only the

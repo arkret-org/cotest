@@ -2,7 +2,7 @@
   "profiles": [
     {
       "profile_id": "ck.profile.core_event_store.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "DID / service discovery", "status": "implemented", "sources": ["service_surface", "identity_directory", "federation_readiness"], "tests": ["server_exposes_core_service_surface"] },
@@ -18,7 +18,7 @@
     },
     {
       "profile_id": "ck.profile.chat_mvp.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "Space lifecycle", "status": "implemented", "sources": ["collaboration_workflow", "space_permissions"], "tests": ["space_permissions_and_owner_mutations_are_enforced"] },
@@ -34,7 +34,7 @@
     },
     {
       "profile_id": "ck.profile.kanban_mvp.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "Board Space / List Space / Strand(kind=\"card\")", "status": "partial", "sources": ["interaction_models", "schema_policy_realtime", "conformance_sync"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
@@ -47,7 +47,7 @@
     },
     {
       "profile_id": "ck.profile.principal_server_events_api.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "events.describe", "status": "partial", "sources": ["service_surface"], "tests": ["server_exposes_core_service_surface"] },
@@ -61,7 +61,7 @@
     },
     {
       "profile_id": "ck.profile.principal_server.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "subscribe / sync stream", "status": "implemented", "sources": ["interaction_models", "collaboration_workflow"], "tests": ["collaboration_workflow_supports_space_message_and_sync"] },
@@ -77,7 +77,7 @@
     },
     {
       "profile_id": "ck.profile.directory_service.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "Directory describe / profile discovery", "status": "implemented", "sources": ["directory_service"], "tests": ["teabay_directory_service_profile_is_discoverable"] },
@@ -91,7 +91,7 @@
     },
     {
       "profile_id": "ck.profile.identity_registry.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "DID resolve", "status": "implemented", "sources": ["identity_directory"], "tests": ["identity_surface_and_receipts_work"] },
@@ -104,7 +104,7 @@
     },
     {
       "profile_id": "ck.profile.blob_node.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "upload", "status": "implemented", "sources": ["delivery_media", "protocol_payloads"], "tests": ["delivery_media_and_device_paths_are_enforced"] },
@@ -118,7 +118,7 @@
     },
     {
       "profile_id": "ck.profile.push_gateway.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "register_device", "status": "implemented", "sources": ["authz_policy_presence"], "tests": ["authz_policy_presence_push_and_media_edges_are_enforced"] },
@@ -132,7 +132,7 @@
     },
     {
       "profile_id": "ck.profile.federation_minimal.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "HTTP Message Signature", "status": "partial", "sources": ["federation_contract", "conformance_federation"], "tests": ["federation_fixture_suite_matches_reference_semantics"] },
@@ -144,7 +144,7 @@
     },
     {
       "profile_id": "ck.profile.e2ee_client.v1",
-      "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
         { "name": "KeyPackage lifecycle", "status": "pending", "sources": [], "tests": [] },

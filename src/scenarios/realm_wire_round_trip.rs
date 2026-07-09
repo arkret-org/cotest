@@ -78,7 +78,7 @@ fn positive_vectors() -> Vec<WireVector> {
             kind: REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
-                "target_realm_id": "ck:realm:01904100-0000-7000-8000-668e2181b41d",
+                "target_realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",
             }),
             expected_class: EventClass::Realm,
         },
@@ -86,7 +86,7 @@ fn positive_vectors() -> Vec<WireVector> {
 }
 
 fn fixture_realm_id() -> Result<RealmId> {
-    RealmId::new("ck:realm:01904100-0000-7000-8000-000000000a01".to_owned())
+    RealmId::new("ak:realm:01904100-0000-7000-8000-000000000a01".to_owned())
         .map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 

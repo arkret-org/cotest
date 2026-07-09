@@ -4,10 +4,10 @@
 //       §3 (event type constraints) / §6 (evolution constraints + critical
 //       extension fail-closed)
 // Artifacts (machine-readable source-of-truth):
-//   - cokret-spec/spec/v1/artifacts/migration/removed-event-kinds.json
-//   - cokret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json
-//   - cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
-//   - cokret-spec/spec/v1/artifacts/registry/operation-registry.json
+//   - arkret-spec/spec/v1/artifacts/migration/removed-event-kinds.json
+//   - arkret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json
+//   - arkret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
+//   - arkret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
 // Treat the artifacts as the source-of-truth and walk soland's live
 // `/_cokret/describe` for drift. The LIVE phases below (C / E)
@@ -40,10 +40,10 @@ import {
 // ---------------------------------------------------------------------------
 // Resolves relative to this spec file so cwd doesn't matter. From
 // cotest/e2e/tests/conformance/<spec>.spec.ts that's four levels up to land at
-// the repo root, then down into cokret-spec/spec/v1/artifacts.
+// the repo root, then down into arkret-spec/spec/v1/artifacts.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const artifactsRoot = resolve(__dirname, "../../../../cokret-spec/spec/v1/artifacts");
+const artifactsRoot = resolve(__dirname, "../../../../arkret-spec/spec/v1/artifacts");
 const migrationRoot = resolve(artifactsRoot, "migration");
 const registryRoot = resolve(artifactsRoot, "registry");
 
@@ -418,7 +418,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "ck:realm:01904100-0000-7000-8000-000000000998",
+      realmId: "ak:realm:01904100-0000-7000-8000-000000000998",
       kind: removed!.id,
       payload: {},
     });
@@ -463,7 +463,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       headers: auth,
       data: signedEventEnvelope({
         actorDid: alice.did,
-        realmId: "ck:realm:01904100-0000-7000-8000-000000000997",
+        realmId: "ak:realm:01904100-0000-7000-8000-000000000997",
         kind: "ck.read_cursor.advance",
         payload: {},
       }),

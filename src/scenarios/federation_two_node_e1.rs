@@ -9,7 +9,7 @@
 //!
 //! C33.4 wired the spawn through the reusable `external_binary` helper:
 //! `TestServerGroup::try_multi_external` resolves `SOLAND_BIN` (or sibling-
-//! checkout `cokret/soland/target/debug/soland[.exe]`) and spawns the
+//! checkout `arkret/soland/target/debug/soland[.exe]`) and spawns the
 //! pre-built binary directly — no `cargo run` slow path. When neither is
 //! available the scenario silently returns `Ok(())` so CI runners that have
 //! not built soland do not flake.
@@ -23,7 +23,7 @@
 //! is locatable (and silently skips otherwise).
 
 use anyhow::{Context, Result};
-use cokret::http_signature::{
+use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
@@ -47,7 +47,7 @@ use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 ///   5. server_b's `/_cokret/peer/events/frontier` reports a Realm frontier
 ///
 /// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling
-/// `cokret/soland/target/debug/soland[.exe]` exists (silent skip path).
+/// `arkret/soland/target/debug/soland[.exe]` exists (silent skip path).
 pub async fn two_node_federation_harness_starts() -> Result<()> {
     let Some(group) = TestServerGroup::try_multi_external("e2-federation-two-node", 2).await?
     else {
@@ -80,11 +80,11 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     );
 
     // ── Step 2: actor + Realm + message Event on server_a ───────────────
-    // C35.2 — `device_id` MUST be a canonical Cokret wire DeviceId
+    // C35.2 — `device_id` MUST be a canonical Arkret wire DeviceId
     // (`ck:device:<uuidv7>`) per `cokret_identifiers::DeviceId`. Mint a
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
-    let device_alice = new_prefixed_uuid7("ck:device:");
+    let device_alice = new_prefixed_uuid7("ak:device:");
     // alice is homed on server_a, so her DID MUST live under server_a's trust
     // domain. Appending `:alice-e2` to server_a's `did:webvh:<scid>:<host>...`
     // service DID keeps the host segment (the one soland derives the trust
@@ -367,7 +367,7 @@ fn with_peer_headers_for_digest(
     Ok(builder)
 }
 
-fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_did: &str) -> arkret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
     hasher.update(service_did.as_bytes());
@@ -376,7 +376,7 @@ fn development_service_signing_key(service_did: &str) -> cokret::http_signature:
 }
 
 fn trust_domain_for(service_did: &str) -> String {
-    format!("ck:trust_domain:{}", did_host_from_service_did(service_did))
+    format!("ak:trust_domain:{}", did_host_from_service_did(service_did))
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,

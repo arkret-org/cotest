@@ -174,12 +174,12 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         issuer_service_did: Some(Did::new("did:web:directory.acme.example".to_owned())?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
-        audience: Some("ck:realm:0196419b-0000-7000-8000-000000000000".to_owned()),
+        audience: Some("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned()),
         claim_scope: Default::default(),
         expires_at: None,
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
         verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
-        source_refs: vec!["ck:event:0196419b-0000-7000-8000-000000000001".to_owned()],
+        source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
         proofs: vec![json!({"kind": "detached_jws", "alg": "EdDSA"})],
     })
 }
@@ -191,7 +191,7 @@ fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorR
         agent_slug: claim.agent_slug.clone(),
         verified: true,
         selector_claim: claim,
-        source_refs: vec!["ck:event:0196419b-0000-7000-8000-000000000001".to_owned()],
+        source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
         expires_at: None,
     };
     outcome.validate()?;
@@ -434,7 +434,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         AgentParticipationScope::Realm { realm_id } => realm_id,
         other => bail!("session overlay vector expected Realm scope, got {other:?}"),
     };
-    if realm_id != RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000000".to_owned())? {
+    if realm_id != RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())? {
         bail!("session overlay Realm scope drifted");
     }
     Ok(())

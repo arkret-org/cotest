@@ -8,7 +8,7 @@
 //       sync/service-api-schema.mdx §2 (canonical ServiceDescribe required fields)
 //
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
-// (`coauth/crates/backend/src/handlers/cokret.rs::server_describe`) already serve
+// (`coauth/crates/backend/src/handlers/arkret.rs::server_describe`) already serve
 // `GET /_cokret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
@@ -334,7 +334,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §4.2 (`ck.self.events.command.submit` write surface).
       //
       // Matrix Complement's transaction replay coverage maps most directly to
-      // Cokret's canonical Event ID replay: exact same Event is duplicate/no-op;
+      // Arkret's canonical Event ID replay: exact same Event is duplicate/no-op;
       // same event_id with a different canonical body is a conflict.
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-event-id-alice-${stamp}`);
@@ -415,7 +415,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //
       // The `ck.self.events.query.scan` list surface at GET /_cokret/self/events
       // is the first list endpoint to reach the §7.1 wire shape exactly:
-      // `{ events, next_cursor: "ck:cursor:<base64url>", has_more, prev_cursor }`.
+      // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-page-alice-${stamp}`);
       await ensureRegistered(request, alice);
@@ -484,7 +484,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           // §7 — opaque ck:cursor token; decoding it MUST NOT reveal any seeded id.
           expect(page.next_cursor, "next_cursor wire form").toMatch(cursorRe);
           const decoded = Buffer.from(
-            page.next_cursor.slice("ck:cursor:".length),
+            page.next_cursor.slice("ak:cursor:".length),
             "base64url",
           ).toString("utf8");
           for (const id of seededEventIds) {
@@ -665,10 +665,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         eventId,
-        realmId: "ck:realm:01904100-0000-7000-8000-000000001101",
+        realmId: "ak:realm:01904100-0000-7000-8000-000000001101",
         kind: "ck.message.create",
         payload: {
-          strand_id: "ck:strand:01904100-0000-7000-8000-000000001101",
+          strand_id: "ak:strand:01904100-0000-7000-8000-000000001101",
           track_name: "discussion",
           content: { kind: "ck.content.text", body: "must not accept unknown feature" },
         },
@@ -704,10 +704,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         eventId,
-        realmId: "ck:realm:01904100-0000-7000-8000-000000001102",
+        realmId: "ak:realm:01904100-0000-7000-8000-000000001102",
         kind: "ck.message.create",
         payload: {
-          strand_id: "ck:strand:01904100-0000-7000-8000-000000001102",
+          strand_id: "ak:strand:01904100-0000-7000-8000-000000001102",
           track_name: "discussion",
           content: {
             kind: "ck.content.text",

@@ -302,7 +302,7 @@ fn observed_runner_round_trip_smoke_covers_every_vector() {
 fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
     // Belt-and-braces: with no `COTEST_SPEC_ARTIFACTS_ROOT` / `COTEST_SPEC_ROOT`
     // override, the default fixture path must land inside
-    // `cokret-spec/spec/v1/artifacts/fixtures` and the file must exist.
+    // `arkret-spec/spec/v1/artifacts/fixtures` and the file must exist.
     //
     // We deliberately do NOT mutate process env (other tests in this binary
     // might race) — instead, when overrides are present we just verify the
@@ -323,8 +323,8 @@ fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
         && std::env::var_os("COTEST_SPEC_ROOT").is_none()
     {
         // Both override env vars unset → resolved path must end with
-        // `cokret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`.
-        let canonical_tail = std::path::Path::new("cokret-spec")
+        // `arkret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`.
+        let canonical_tail = std::path::Path::new("arkret-spec")
             .join("spec")
             .join("v1")
             .join("artifacts")

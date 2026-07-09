@@ -1,9 +1,9 @@
 // Conformance — Encoding & Crypto / Redaction Vectors
 // Contract: e2e/scenarios/conformance/encoding-vectors.md
 // Spec: conformance/conformance-vectors.md §1 (encoding/crypto), §3 (redaction)
-// Fixtures: cokret-spec/spec/v1/artifacts/fixtures/encoding-fixture.json,
-//           cokret-spec/spec/v1/artifacts/fixtures/crypto-signature-fixture.json,
-//           cokret-spec/spec/v1/artifacts/fixtures/redaction-fixture.json
+// Fixtures: arkret-spec/spec/v1/artifacts/fixtures/encoding-fixture.json,
+//           arkret-spec/spec/v1/artifacts/fixtures/crypto-signature-fixture.json,
+//           arkret-spec/spec/v1/artifacts/fixtures/redaction-fixture.json
 // Rust parity: cotest/src/conformance/{encoding,envelope,redaction}.rs already
 // drive these vectors against in-process traits; this suite re-runs the same
 // vectors over the HTTP surface to catch wire-level canonicalizer drift.
@@ -24,13 +24,13 @@ import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
 // ---------------------------------------------------------------------------
 // Fixture loader — resolves relative to this spec file so cwd doesn't matter.
 // From cotest/e2e/tests/conformance/<spec>.spec.ts that's four levels up to
-// the repo root, then into cokret-spec/spec/v1/artifacts/fixtures.
+// the repo root, then into arkret-spec/spec/v1/artifacts/fixtures.
 // ---------------------------------------------------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const fixturesRoot = resolve(
   __dirname,
-  "../../../../cokret-spec/spec/v1/artifacts/fixtures",
+  "../../../../arkret-spec/spec/v1/artifacts/fixtures",
 );
 
 type EncodingVector = {
@@ -451,9 +451,9 @@ test.describe("conformance encoding vectors", () => {
     // cursor handler folds events into an order-independent digest, so both
     // POSTs MUST return the same cursor string.
     const events = [
-      { event_id: "ck:event:019640ed-8000-7000-8000-000000000001" },
-      { event_id: "ck:event:019640ed-8000-7000-8000-000000000002" },
-      { event_id: "ck:event:019640ed-8000-7000-8000-000000000003" },
+      { event_id: "ak:event:019640ed-8000-7000-8000-000000000001" },
+      { event_id: "ak:event:019640ed-8000-7000-8000-000000000002" },
+      { event_id: "ak:event:019640ed-8000-7000-8000-000000000003" },
     ];
     const shuffled = [events[2], events[0], events[1]];
 
@@ -481,8 +481,8 @@ test.describe("conformance encoding vectors", () => {
 
     // Cursor MUST be opaque: decoding the base64url payload (after the
     // `ck:cursor:` prefix) MUST NOT reveal raw event_id substrings.
-    expect(bodyA.cursor.startsWith("ck:cursor:")).toBe(true);
-    const payload = bodyA.cursor.slice("ck:cursor:".length);
+    expect(bodyA.cursor.startsWith("ak:cursor:")).toBe(true);
+    const payload = bodyA.cursor.slice("ak:cursor:".length);
     const decoded = Buffer.from(payload, "base64url").toString("utf8");
     for (const event of events) {
       expect(
@@ -565,11 +565,11 @@ test.describe("conformance encoding vectors", () => {
     const ownerDid = "did:web:alice.example";
     const guestDid = "did:web:guest.example";
     const event = {
-      event_id: "ck:event:019640ed-8000-7000-8000-000000000abc",
+      event_id: "ak:event:019640ed-8000-7000-8000-000000000abc",
       kind: "ck.message.create",
       sender_actor_id: ownerDid,
       payload: {
-        strand_id: "ck:strand:019640ed-8000-7000-8000-000000000000",
+        strand_id: "ak:strand:019640ed-8000-7000-8000-000000000000",
         content: { kind: "ck.content.text", body: "private message" },
       },
     };
@@ -684,7 +684,7 @@ test.describe("conformance encoding vectors", () => {
     const blockedReceipt = {
       ...receipt,
       outcome: "blocked_by_legal_hold",
-      legal_hold_ref: "ck:policy:01970e58-0004-7000-8000-0000000004b9",
+      legal_hold_ref: "ak:policy:01970e58-0004-7000-8000-0000000004b9",
     };
     const blockedResp = await request.post(
       `${conformanceBaseUrl()}/erase-receipt`,

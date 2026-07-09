@@ -36,7 +36,7 @@ pub const ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS: &[&str] = &[
 ];
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://cokret.org/v1/";
+const SCHEMA_ID_PREFIX: &str = "https://arkret.org/v1/";
 const HANDLE_CLAIM_SCHEMA_FILE: &str = "schemas/handle-claim.schema.json";
 
 /// Compile the `handle-claim.schema.json` artifact with the full schema
@@ -164,8 +164,8 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
 
     // SDK validator: typed-id subjects MUST reject.
     for typed in [
-        "ck:actor:01904100-0000-7000-8000-000000000001",
-        "ck:account:01904100-0000-7000-8000-000000000002",
+        "ak:actor:01904100-0000-7000-8000-000000000001",
+        "ak:account:01904100-0000-7000-8000-000000000002",
     ] {
         let did = Did::new(typed.to_owned());
         // Some typed ids may not even parse as a Did; if they do, the
@@ -189,8 +189,8 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
     // typed `ck:actor:` / `ck:account:` id or a bare resource id MUST
     // schema-reject.
     for bad_subject in [
-        "ck:actor:01904100-0000-7000-8000-000000000001",
-        "ck:account:01904100-0000-7000-8000-000000000002",
+        "ak:actor:01904100-0000-7000-8000-000000000001",
+        "ak:account:01904100-0000-7000-8000-000000000002",
         "resource-handle-7",
     ] {
         let mut claim = base_claim();

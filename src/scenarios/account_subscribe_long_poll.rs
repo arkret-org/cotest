@@ -31,12 +31,12 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let realm_id = alice.create_realm("Long-Poll Recovery Realm").await?;
     alice
-        .send_message(&realm_id, "ck:thread:long-poll", "baseline message")
+        .send_message(&realm_id, "ak:thread:long-poll", "baseline message")
         .await?;
 
     // Full sync establishes the baseline + a cursor the rest of the
@@ -130,7 +130,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     let waker = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
         alice_for_wake
-            .send_message(&realm_id_for_wake, "ck:thread:long-poll", "wake the poll")
+            .send_message(&realm_id_for_wake, "ak:thread:long-poll", "wake the poll")
             .await
     });
 
@@ -168,12 +168,12 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = TestActorBuilder::new(server, "@bob-sync")
         .with_did("did:web:bob-sync.example")
-        .with_device("ck:device:01904100-0000-7000-8000-0000000000b1")
+        .with_device("ak:device:01904100-0000-7000-8000-0000000000b1")
         .create()
         .await?;
     let bob_client = bob.client();
@@ -195,7 +195,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     let pre_join = alice
         .send_message(
             &realm_id,
-            "ck:thread:joined-history",
+            "ak:thread:joined-history",
             "alice before bob joined",
         )
         .await?;
@@ -291,7 +291,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     let alice_after_join = send_message_now(
         &alice,
         &realm_id,
-        "ck:thread:joined-history",
+        "ak:thread:joined-history",
         "alice after bob joined",
     )
     .await?;
@@ -332,7 +332,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     let bob_after_join = send_message_now(
         bob_client,
         &realm_id,
-        "ck:thread:joined-history",
+        "ak:thread:joined-history",
         "bob after joining",
     )
     .await?;
@@ -385,12 +385,12 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = TestActorBuilder::new(server, "@bob-cancel")
         .with_did("did:web:bob-cancel.example")
-        .with_device("ck:device:01904100-0000-7000-8000-0000000000b2")
+        .with_device("ak:device:01904100-0000-7000-8000-0000000000b2")
         .create()
         .await?;
     let bob_client = bob.client();
@@ -582,7 +582,7 @@ async fn create_invite_now(
     realm_id: &str,
     invitee: &crate::harness::TestActorClient,
 ) -> Result<String> {
-    let invite_id = "ck:invite:01999999-0000-7000-8000-00000000b0b1".to_owned();
+    let invite_id = "ak:invite:01999999-0000-7000-8000-00000000b0b1".to_owned();
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
     submit_event_now(
         inviter,

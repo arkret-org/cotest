@@ -20,7 +20,7 @@
 //
 // Spec refs: sync/service-surface.md §2.5.1 (Account Authority discovery),
 // sync/api-conventions.md §3.3 (session-grant + DPoP self-path), and
-// cokret-rust-sdk service-describe.schema.json (auth_metadata shape).
+// arkret-rust-sdk service-describe.schema.json (auth_metadata shape).
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {

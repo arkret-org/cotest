@@ -17,7 +17,7 @@ use serde_json::Value;
 use super::spec_artifacts_root;
 
 const OPERATION_REGISTRY_REF: &str = "registry/operation-registry.json";
-const OPENAPI_REF: &str = "openapi/cokret-service-api.openapi.yaml";
+const OPENAPI_REF: &str = "openapi/arkret-service-api.openapi.yaml";
 const OPERATION_COMPLETENESS_REF: &str = "reports/operation-completeness-report.json";
 const OPERATION_SCHEMA_INDEX_REF: &str = "reports/operation-schema-index.json";
 const PRODUCT_PRIVATE_REF: &str = "operation-product-private-paths.json";
@@ -312,7 +312,7 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
                 .with_dir("crates/server/src/routing")
                 .with_file("crates/server/src/wire.rs")
                 .with_file("crates/server/src/did_resolver_chain.rs"),
-            OperationSourceRoot::new("sdk", workspace_root.join("cokret-rust-sdk"))
+            OperationSourceRoot::new("sdk", workspace_root.join("arkret-rust-sdk"))
                 .with_dir("crates/core/src")
                 .with_dir("crates/http-client/src")
                 .with_dir("crates/sdk/src")

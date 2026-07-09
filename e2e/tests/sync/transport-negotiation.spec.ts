@@ -7,7 +7,7 @@
 //     HTTP Message Signature for service-to-service, error envelope)
 //   - sync/federation.md §3.2 (RFC 9421 request signature) + §4.1 (push)
 //
-// soland status (2026-06 re-audit against cokret-spec v1):
+// soland status (2026-06 re-audit against arkret-spec v1):
 //   ✓ POST /_cokret/peer/events handler routed (canonical single rail)
 //   ✓ Envelope validation + idempotency on signed Event IDs
 //   ✓ RFC 9421 INBOUND: full — Content-Digest, Request-Canonical-Digest,

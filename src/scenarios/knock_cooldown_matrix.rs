@@ -1,6 +1,6 @@
 //! CT-4 — Knock + member.application + cooldown matrix.
 //!
-//! Spec: `cokret-spec/spec/v1/zh/models/realm-and-space.md`
+//! Spec: `arkret-spec/spec/v1/zh/models/realm-and-space.md`
 //!   - §3.3 — `default_join_rule` enum + gate composition
 //!   - §3.6.2 — `member.application` schema
 //!   - §3.6.3 — `member.application.review` (accept / reject / request_changes)
@@ -65,9 +65,9 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     //   let server = CokretServer::spawn("knock-cooldown-matrix").await?;
     //   let alice = register_account(&server, "did:web:alice.example",
     //                                "@alice",
-    // "ck:device:01904100-0000-7000-8000-0000000000a1").await?;   let bob   =
+    // "ak:device:01904100-0000-7000-8000-0000000000a1").await?;   let bob   =
     // register_account(&server, "did:web:bob.example",                                "@bob",
-    // "ck:device:01904100-0000-7000-8000-0000000000b0").await?;
+    // "ak:device:01904100-0000-7000-8000-0000000000b0").await?;
     //
     //   let realm_id = create_knock_realm(&server, &alice,
     //       "Knock Test Realm", /*application_ttl=*/"10s",

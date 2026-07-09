@@ -19,14 +19,14 @@ use cotest::scenarios::four_service_smoke::four_service_smoke_run;
 #[ignore]
 async fn dump_patched_coauth_config() -> Result<()> {
     use std::path::Path;
-    let bin = Path::new("D:/Works/cokret/coauth/target/debug/coauth.exe");
+    let bin = Path::new("D:/Works/arkret/coauth/target/debug/coauth.exe");
     if !bin.exists() {
         eprintln!("skip: coauth binary not found");
         return Ok(());
     }
     let bundle = bootstrap_coauth_config(
         bin,
-        "postgresql://cokret:cokret@127.0.0.1:5432/cokret",
+        "postgresql://arkret:arkret@127.0.0.1:5432/arkret",
         "127.0.0.1:9999",
     )?;
     eprintln!("internal_addr: {}", bundle.internal_addr);

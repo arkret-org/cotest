@@ -8,9 +8,9 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/identity/consent-model.md` §2 — Consent cell 的 or-set lattice 结构、scope 粒度 (invite/message/call)、time window (not_before/valid_until)
-- `cokret-spec/spec/v1/zh/identity/consent-model.md` §3 — `ck.consent.grant` / `ck.consent.revoke` Move,or-set add/remove 的收敛规则
-- `cokret-spec/spec/v1/zh/identity/consent-model.md` §4 — Gate 语义:contact request 被 holder 当前 consent state 评估,无 grant 则进入 pending,有 grant 则放行;revoke 立即生效到后续请求(已建立的会话不强制断开,在 spec §4.3)
+- `arkret-spec/spec/v1/zh/identity/consent-model.md` §2 — Consent cell 的 or-set lattice 结构、scope 粒度 (invite/message/call)、time window (not_before/valid_until)
+- `arkret-spec/spec/v1/zh/identity/consent-model.md` §3 — `ck.consent.grant` / `ck.consent.revoke` Move,or-set add/remove 的收敛规则
+- `arkret-spec/spec/v1/zh/identity/consent-model.md` §4 — Gate 语义:contact request 被 holder 当前 consent state 评估,无 grant 则进入 pending,有 grant 则放行;revoke 立即生效到后续请求(已建立的会话不强制断开,在 spec §4.3)
 
 ## 拓扑
 

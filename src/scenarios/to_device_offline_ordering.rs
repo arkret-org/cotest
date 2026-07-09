@@ -1,9 +1,9 @@
 //! CT-10 — To-device queue offline ordering.
 //!
 //! Spec:
-//!   - `cokret-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device` cursor / position progresses
+//!   - `arkret-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device` cursor / position progresses
 //!     monotonically per (actor, device).
-//!   - `cokret-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued to-device messages preserve
+//!   - `arkret-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued to-device messages preserve
 //!     send order across disconnect / reconnect; cursor-acked eviction ensures no replay or skip.
 //!
 //! Scenario walk-through:
@@ -45,11 +45,11 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let alice_token = dev_login(
         &server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
     let bob_did = "did:web:bob-offline-ordering.example";
-    let bob_device = "ck:device:01904100-0000-7000-8000-0000000000ba";
+    let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
     let bob_token = dev_login(&server, bob_did, bob_device).await?;
     // Sanity: alice can also log in on a separate device id so the
     // sender's session is a separate row from the recipient's. (Not
@@ -58,7 +58,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let _alice_token_b = dev_login(
         &server,
         "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000ab",
+        "ak:device:01904100-0000-7000-8000-0000000000ab",
     )
     .await?;
 

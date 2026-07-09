@@ -93,7 +93,7 @@ test.describe("chat advanced", () => {
       `reaction target ${Date.now()}`,
       { actorDid: fixture.alice.did },
     );
-    const messageRef = message.event_id.replace(/^ck:event:/, "ck:message:");
+    const messageRef = message.event_id.replace(/^ck:event:/, "ak:message:");
 
     await submitSignedEventApi(
       request,
@@ -151,7 +151,7 @@ test.describe("chat advanced", () => {
       `root ${Date.now()}`,
       { actorDid: fixture.alice.did },
     );
-    const rootMessageRef = root.event_id.replace(/^ck:event:/, "ck:message:");
+    const rootMessageRef = root.event_id.replace(/^ck:event:/, "ak:message:");
     const strandId = await resolveDefaultStrandId(
       request,
       fixture.aliceToken,
@@ -283,7 +283,7 @@ test.describe("chat advanced", () => {
       context: "root mention",
     });
     const rootEventId = String(root.event_id);
-    const rootMessageRef = rootEventId.replace(/^ck:event:/, "ck:message:");
+    const rootMessageRef = rootEventId.replace(/^ck:event:/, "ak:message:");
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
@@ -958,7 +958,7 @@ function encryptedEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.cokret.message+json",
+    content_type: "application/vnd.arkret.message+json",
     aad_visibility_event_id: "hidden",
     aad,
     key_ref: {

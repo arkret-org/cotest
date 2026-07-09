@@ -2,7 +2,7 @@
 //! cycle (model B/C) regression gate.
 //!
 //! This is the positive counterpart to `realm_organization_statement_negative`.
-//! It drives the *shared* cokret-rust-sdk surfaces end to end so cotest never
+//! It drives the *shared* arkret-rust-sdk surfaces end to end so cotest never
 //! re-implements the organization-side crypto:
 //!
 //!   * `cokret_signatures::realm_organization_statement_sign` signs the canonical transcript with
@@ -48,7 +48,7 @@ fn org_control_key() -> SigningKey {
 fn active_statement() -> RealmOrganizationPayload {
     RealmOrganizationPayload {
         statement_id: "org-stmt-cot-org-03".to_owned(),
-        realm_id: RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000010").unwrap(),
+        realm_id: RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000010").unwrap(),
         organization_id: Did::new(ORG_DID.to_owned()).unwrap(),
         relationship: RealmOrganizationRelationship::Owner,
         status: RealmOrganizationStatus::Active,

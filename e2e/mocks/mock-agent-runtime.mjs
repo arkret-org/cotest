@@ -1,8 +1,8 @@
 // Mock agent-runtime — stands in for an external A2A / ACP agent endpoint
-// that a Cokret agent hands a task off to.
+// that a Arkret agent hands a task off to.
 //
 // Spec references:
-//   cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md
+//   arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md
 //     §5.1 (ck.agent.endpoint: agent_card_url / metadata_url / transport / auth)
 //     §6 step 4 (endpoint validation: DID Document service binding host pin)
 //     §11 (adapter registry: a2a / acp / mcp_bridge / http_custom)
@@ -82,9 +82,9 @@ function agentCard() {
   const url = baseUrl();
   return {
     name: "mock-agent-runtime",
-    description: "Cokret joint-e2e mock A2A agent endpoint",
+    description: "Arkret joint-e2e mock A2A agent endpoint",
     url,
-    provider: { organization: "cokret-cotest", url },
+    provider: { organization: "arkret-cotest", url },
     version: "1.0.0",
     protocol: "a2a",
     capabilities: { streaming: true, pushNotifications: false },

@@ -1,9 +1,9 @@
 // Device holder-proof helpers for session-grant refresh + soft-logout restore.
 //
-// Contract: cokret-spec/spec/v1/zh/identity/account-lifecycle.md §4.1 +
+// Contract: arkret-spec/spec/v1/zh/identity/account-lifecycle.md §4.1 +
 // crypto-media/device-lifecycle.md §5.4 (service_attested enrollment), and the
 // coauth refresh handler
-// (coauth/crates/backend/src/handlers/cokret/session_grant/refresh.rs).
+// (coauth/crates/backend/src/handlers/arkret/session_grant/refresh.rs).
 //
 // The refresh / soft-logout-restore holder proof is signed by the device's
 // `ck.device.authorize`-authorized signing key. coauth verifies that proof by

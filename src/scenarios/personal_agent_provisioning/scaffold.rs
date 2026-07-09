@@ -78,15 +78,15 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
         ));
     }
     AgentInteropSessionId::new(
-        "ck:agent_interop_session:01999999-0000-7000-8000-000000000003".to_owned(),
+        "ak:agent_interop_session:01999999-0000-7000-8000-000000000003".to_owned(),
     )
     .map_err(|e| anyhow!("AgentInteropSessionId construction: {e}"))?;
-    EventId::new("ck:event:01999999-0000-7000-8000-000000000004".to_owned())
+    EventId::new("ak:event:01999999-0000-7000-8000-000000000004".to_owned())
         .map_err(|e| anyhow!("accountability_grant_ref EventId construction: {e}"))?;
 
     // (d) ill-formed DID / typed-ids MUST be rejected. This is the
     //     wire-form fail-closed gate for downstream parsers.
-    let bad_principal = Did::new("ck:agent:not-a-uuidv7".to_owned());
+    let bad_principal = Did::new("ak:agent:not-a-uuidv7".to_owned());
     if bad_principal.is_ok() {
         return Err(anyhow!(
             "Did accepted ill-formed agent principal value `ck:agent:not-a-uuidv7`"

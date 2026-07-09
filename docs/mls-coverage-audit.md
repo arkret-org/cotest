@@ -81,7 +81,7 @@
 
 尝试修复时发现是**两层**问题(2026-06-01 实跑确认):
 1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `ck.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `ck.strand.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
-2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。inkson 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban strand 内容"能加密"只因 strand patch 值不走该 envelope schema 校验;消息走,故被拒。**inkson 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `cokret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
+2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。inkson 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban strand 内容"能加密"只因 strand patch 值不走该 envelope schema 校验;消息走,故被拒。**inkson 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `arkret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
 - **修**(sizable):把 inkson chat 消息加密改用 SDK 的 `MessageCrypto::encrypt_with_aad` 合规路径(构造 aad、aad_digest、version、整合 commit),跨 SDK+inkson、需多轮重建。`@blocking-on: inkson#chat-encrypted-message-envelope-nonconforming`。
 - 本轮已尝试"去 wasm 门 + 默认 Send 走加密"并实跑:明文泄漏被堵(不再泄漏),但暴露第 2 层后**已 `git checkout` 回退 chat.rs**,避免留下"加密频道发不出消息"的回归。
 

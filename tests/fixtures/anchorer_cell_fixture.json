@@ -4,7 +4,7 @@
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "Anchorer cell governance vectors per spec authz/event-auth-state-resolution.md §6.4 (anchorer profiles, split-anchorer Bottom, signature mismatch, threshold-below-quorum). The anchorer cell is `ck:cell:ck.component.anchorer.v1:<realm_id>`, a cas-register holding the anchorer profile descriptor (single_did | threshold k-of-n | open_set | mixed). Each happy-path vector pins a single anchored Move that sets the cell to a normative AnchorerValue shape; concurrent reconfigurations (split anchorer) MUST surface Bottom — Realm-wide pause condition, not LWW. Negative vectors cover signature mismatch and threshold-below-quorum admission errors. The validator is structural: it doesn't verify the lattice round-trip itself (that's `lattice_round_trip.rs::anchorer_cell_*`); it asserts each declared input has the spec-mandated shape and each negative vector carries the correct rejection reason.",
   "encoder": {
-    "anchorer_cell_id": "ck:cell:ck.component.anchorer.v1:<realm_id>",
+    "anchorer_cell_id": "ak:cell:ck.component.anchorer.v1:<realm_id>",
     "lattice": "cas_register",
     "bottom_kind_on_split": "Conflict"
   },
@@ -12,13 +12,13 @@
     {
       "name": "single_did_happy_path",
       "shape": "single_did",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp01000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp01000000000000000000",
       "anchorer_value": {
         "shape": "single_did",
         "did": "did:web:hub.example"
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a07-8007-000000000007",
+        "move_id": "ak:event:01970e58-0001-7a07-8007-000000000007",
         "op_type": "set"
       },
       "expected": {
@@ -29,7 +29,7 @@
     {
       "name": "threshold_k_of_n_happy_path",
       "shape": "threshold",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp02000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp02000000000000000000",
       "anchorer_value": {
         "shape": "threshold",
         "k": 2,
@@ -41,7 +41,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a08-8008-000000000008",
+        "move_id": "ak:event:01970e58-0001-7a08-8008-000000000008",
         "op_type": "set"
       },
       "expected": {
@@ -52,7 +52,7 @@
     {
       "name": "open_set_happy_path",
       "shape": "open_set",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp03000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp03000000000000000000",
       "anchorer_value": {
         "shape": "open_set",
         "members": [
@@ -61,7 +61,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a09-8009-000000000009",
+        "move_id": "ak:event:01970e58-0001-7a09-8009-000000000009",
         "op_type": "set"
       },
       "expected": {
@@ -72,7 +72,7 @@
     {
       "name": "mixed_recovery_happy_path",
       "shape": "mixed",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp04000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp04000000000000000000",
       "anchorer_value": {
         "shape": "mixed",
         "primary": "did:web:hub.example",
@@ -82,7 +82,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a0a-800a-00000000000a",
+        "move_id": "ak:event:01970e58-0001-7a0a-800a-00000000000a",
         "op_type": "set"
       },
       "expected": {
@@ -93,10 +93,10 @@
     {
       "name": "concurrent_reconfig_returns_bottom_conflict",
       "shape": "single_did",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp05000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp05000000000000000000",
       "concurrent_anchored_ops": [
         {
-          "move_id": "ck:event:01970e58-0001-7a0b-800b-00000000000b",
+          "move_id": "ak:event:01970e58-0001-7a0b-800b-00000000000b",
           "op_type": "set",
           "value": {
             "shape": "single_did",
@@ -104,7 +104,7 @@
           }
         },
         {
-          "move_id": "ck:event:01970e58-0001-7a0c-800c-00000000000c",
+          "move_id": "ak:event:01970e58-0001-7a0c-800c-00000000000c",
           "op_type": "set",
           "value": {
             "shape": "single_did",
@@ -123,13 +123,13 @@
     {
       "name": "signature_mismatch_rejected",
       "shape": "single_did",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp06000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp06000000000000000000",
       "anchorer_value": {
         "shape": "single_did",
         "did": "did:web:hub.example"
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a0d-800d-00000000000d",
+        "move_id": "ak:event:01970e58-0001-7a0d-800d-00000000000d",
         "op_type": "set"
       },
       "drift": {
@@ -150,7 +150,7 @@
     {
       "name": "threshold_below_quorum_rejected",
       "shape": "threshold",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp07000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp07000000000000000000",
       "anchorer_value": {
         "shape": "threshold",
         "k": 2,
@@ -162,7 +162,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a0e-800e-00000000000e",
+        "move_id": "ak:event:01970e58-0001-7a0e-800e-00000000000e",
         "op_type": "set"
       },
       "drift": {
@@ -179,7 +179,7 @@
     {
       "name": "kn_geometry_violation_rejected",
       "shape": "threshold",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp08000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp08000000000000000000",
       "anchorer_value": {
         "shape": "threshold",
         "k": 4,
@@ -191,7 +191,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "ck:event:01970e58-0001-7a0f-800f-00000000000f",
+        "move_id": "ak:event:01970e58-0001-7a0f-800f-00000000000f",
         "op_type": "set"
       },
       "drift": {
@@ -208,7 +208,7 @@
     {
       "name": "missing_cell_family_for_anchorer_kind_rejected",
       "shape": "single_did",
-      "cell_id": "ck:cell:ck.component.anchorer.v1:ck.realm.01js0sp09000000000000000000",
+      "cell_id": "ak:cell:ck.component.anchorer.v1:ck.realm.01js0sp09000000000000000000",
       "anchorer_value": {
         "shape": "single_did",
         "did": "did:web:hub.example"

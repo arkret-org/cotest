@@ -1,11 +1,11 @@
 //! CT-1 - Three-server federation fork quarantine.
 //!
 //! Spec references:
-//! - `cokret-spec/spec/v1/zh/sync/federation.md` section 4.1: federation Event exchange uses `POST
+//! - `arkret-spec/spec/v1/zh/sync/federation.md` section 4.1: federation Event exchange uses `POST
 //!   /_cokret/peer/events`.
-//! - `cokret-spec/spec/v1/zh/sync/federation.md` section 4.2: federation backfill uses `GET
+//! - `arkret-spec/spec/v1/zh/sync/federation.md` section 4.2: federation backfill uses `GET
 //!   /_cokret/peer/events?realms=...`.
-//! - `cokret-spec/spec/v1/zh/sync/federation.md` section 4.5: federation peers exchange signed
+//! - `arkret-spec/spec/v1/zh/sync/federation.md` section 4.5: federation peers exchange signed
 //!   Realm frontier evidence via `GET /_cokret/peer/events/frontier?realm_id=...`; if two peers
 //!   expose incompatible evidence for the same `(realm_id, actor_id, actor_seq)` or the same
 //!   `event_id`, receivers MUST quarantine and report `duplicate_conflict` or

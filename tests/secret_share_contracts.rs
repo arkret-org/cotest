@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, bail};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
-use cokret::{SecretShareRequestContent, SecretShareSendContent};
+use arkret::{SecretShareRequestContent, SecretShareSendContent};
 use cokret_core::canonical::{canonical_json_bytes, from_canonical_json_slice};
 use cokret_core::{
     DeviceId, DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody, Did,
@@ -15,9 +15,9 @@ use hpke_rs_rust_crypto::HpkeRustCrypto;
 use serde_json::{Value, json};
 
 const ACCOUNT_DID: &str = "did:web:alice.example";
-const OLD_DEVICE: &str = "ck:device:01904100-0000-7000-8000-00000000000a";
-const NEW_DEVICE: &str = "ck:device:01904100-0000-7000-8000-00000000000b";
-const OTHER_DEVICE: &str = "ck:device:01904100-0000-7000-8000-00000000000c";
+const OLD_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000a";
+const NEW_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000b";
+const OTHER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000c";
 const REQUEST_ID: &str = "secret-share-request-001";
 const SECRET_ID: &str = "inkson_mls_account_secret";
 const SEND_KIND: &str = "ck.secret.send";

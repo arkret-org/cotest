@@ -1,7 +1,7 @@
 # Integration report: circle-rollout milestone
 
 Date: 2026-05-26
-Spec baseline: cokret-spec @ `2b0d70d` (tracked from `9cb47c1`)
+Spec baseline: arkret-spec @ `2b0d70d` (tracked from `9cb47c1`)
 Phase: P5 (cross-project joint testing), report owner: cotest
 Release status: NO release. NO git tag. NO version bump. Commit-only milestone.
 
@@ -11,7 +11,7 @@ All ten subprojects landed their `circle-rollout` branch heads at:
 
 | project | final commit | branch |
 |---|---|---|
-| cokret-rust-sdk | `97d9dc8` | circle-rollout |
+| arkret-rust-sdk | `97d9dc8` | circle-rollout |
 | soland | `a6953b8` | circle-rollout |
 | coauth | `53a95ad` | circle-rollout |
 | sodmin | `f0f43f1` | circle-rollout |
@@ -24,7 +24,7 @@ All ten subprojects landed their `circle-rollout` branch heads at:
 
 cotest then added two P5 commits on top of `e7abf7b`:
 - P5 evidence report. Hash recorded in
-  `D:\Works\cokret\_todos_all.md` § 11 after this commit lands.
+  `D:\Works\arkret\_todos_all.md` § 11 after this commit lands.
 
 ## 2. Gate pass timestamps
 
@@ -45,7 +45,7 @@ session under the `circle-rollout` branch convention).
 
 | project | counted by | count | notes |
 |---|---|---:|---|
-| cokret-rust-sdk | `cargo test --workspace` | 920 | (per `_todos_all.md` P3 GATE-C note "920 inkson tests + sodmin wasm build") — the 920 figure is the workspace-wide SDK count established at P1 close |
+| arkret-rust-sdk | `cargo test --workspace` | 920 | (per `_todos_all.md` P3 GATE-C note "920 inkson tests + sodmin wasm build") — the 920 figure is the workspace-wide SDK count established at P1 close |
 | soland | conformance fixture tests + reducer tests | 28 release-gate passing (per `docs/release-evidence-0.9.0.md`) | release-gate evidence at `artifacts/runs/20260525-055932/release-gate.md` |
 | coauth | backend unit + handler | n/a in this report | P2B `f5ab813` ran green pre-P5 |
 | sodmin | wasm build + 86 warnings clean | n/a | P3A close at `edb92f1` |
@@ -87,7 +87,7 @@ close across 10 projects. A subsequent sweep (this commit) reconciles
 the catalog against the live tree:
 
 - 17 markers have already been resolved in their owning project
-  (cokret-rust-sdk P1.3 + P1.5; coauth P2B.3 + P2B.5; all 11 inkson
+  (arkret-rust-sdk P1.3 + P1.5; coauth P2B.3 + P2B.5; all 11 inkson
   P3B/P4 markers; starid P2G.2 + P2G.5). Those rows have been removed
   from the inventory below.
 - 1 row (coauth circle_capabilities.rs P2B.2/P2B.5) has been rewritten
@@ -123,14 +123,14 @@ These were present at HEAD `e7abf7b` (P4 close) before P5 began. They are
 caused by spec rename collisions between the canonical registry artifacts
 fetched by SDK and the cotest fixture corpus. Disposition: defer to next
 milestone, tracked alongside the per-project markers below. Owner: cotest +
-cokret-rust-sdk fixture maintenance.
+arkret-rust-sdk fixture maintenance.
 
 ### 5.B Per-project TODO inventory
 
-#### cokret-rust-sdk (97d9dc8)
+#### arkret-rust-sdk (97d9dc8)
 
 All `TODO(circle-rollout-Pxxx)` markers closed. Per
-`cokret-rust-sdk/CHANGELOG.md` lines 57–62, `TODO(circle-rollout-P1.3)`
+`arkret-rust-sdk/CHANGELOG.md` lines 57–62, `TODO(circle-rollout-P1.3)`
 in `crates/sdk/src/authz/engine.rs` was resolved in the follow-on round
 on top of `97d9dc8`.
 

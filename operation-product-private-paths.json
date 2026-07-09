@@ -28,28 +28,28 @@
       "method": "*",
       "path": "/_cokret/self/blob/resumable",
       "classification": "product-private",
-      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Cokret operation."
+      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "sdk",
       "method": "*",
       "path": "/_cokret/self/blob/resumable/{**rest}",
       "classification": "product-private",
-      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Cokret operation."
+      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "inkson",
       "method": "*",
       "path": "/_cokret/self/blob/resumable",
       "classification": "product-private",
-      "reason": "Client-side support for soland's tus companion upload binding, not a registered Cokret operation."
+      "reason": "Client-side support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "inkson",
       "method": "*",
       "path": "/_cokret/self/blob/resumable/{**rest}",
       "classification": "product-private",
-      "reason": "Client-side support for soland's tus companion upload binding, not a registered Cokret operation."
+      "reason": "Client-side support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "cotest",

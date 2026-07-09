@@ -3,7 +3,7 @@
 // Spec: conformance/conformance-profiles.md §2 / §2.1 / §3 (profile tiers, fail-closed
 //         on unsupported event kind, critical extension fail-closed),
 //       sync/service-surface.md §3.0 (claim-level partition; dev-mode verified_profiles=[]).
-// Catalog artifact: cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
+// Catalog artifact: arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
 //
 // soland gap: `soland/src/routing/system/describe.rs::apply_claim_level_partition`
 //   already emits `claimed_profiles[]` (4 self_claimed entries) + `verified_profiles=[]`
@@ -12,7 +12,7 @@
 //   (critical extension fail-closed at submit time) now run live against soland's
 //   submit reject path.
 //
-// coauth note: `coauth/crates/backend/src/handlers/cokret.rs` now self-claims
+// coauth note: `coauth/crates/backend/src/handlers/arkret.rs` now self-claims
 //   `ck.profile.auth_server.v1` and intentionally does NOT claim
 //   `ck.profile.identity_registry.v1` / `ck.profile.principal_server.v1`. The
 //   coauth-specific partition test runs live when COTEST_COAUTH_BASE_URL is
@@ -42,10 +42,10 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Repo-relative path from cotest/e2e/tests/conformance/ → cokret-spec/.
+// Repo-relative path from cotest/e2e/tests/conformance/ → arkret-spec/.
 const CATALOG_PATH = path.resolve(
   __dirname,
-  "../../../../cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json",
+  "../../../../arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json",
 );
 
 type ClaimedProfileEntry = {
@@ -250,9 +250,9 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "ck:realm:01904100-0000-7000-8000-000000000999",
+      realmId: "ak:realm:01904100-0000-7000-8000-000000000999",
       kind: "ck.edge.applet.command.transaction",
-      payload: { transaction_id: "ck:txn:profile-gate", params: {} },
+      payload: { transaction_id: "ak:txn:profile-gate", params: {} },
     });
 
     const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
@@ -279,10 +279,10 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "ck:realm:01904100-0000-7000-8000-000000001000",
+      realmId: "ak:realm:01904100-0000-7000-8000-000000001000",
       kind: "ck.message.create",
       payload: {
-        strand_id: "ck:strand:01904100-0000-7000-8000-000000001000",
+        strand_id: "ak:strand:01904100-0000-7000-8000-000000001000",
         track_name: "discussion",
         content: { kind: "ck.content.text", body: "must not accept unknown critical extension" },
       },

@@ -405,7 +405,7 @@ test.describe("applet bridge", () => {
 });
 
 // Spec: extensions/applet-integration.md §7.3.1. The inbound direction
-// app/bridge → cokret edge (`POST /_cokret/edge/applet/transactions`) MUST
+// app/bridge → arkret edge (`POST /_cokret/edge/applet/transactions`) MUST
 // verify an RFC 9421 HTTP Message Signature per delivery before processing any
 // event or side effect.
 test.describe("applet inbound transaction push — per-delivery source signature", () => {
@@ -828,7 +828,7 @@ function installRegistrationFromResponse(
 }
 
 function typedAppletId(): string {
-  return typedId("operation").replace("ck:operation:", "ck:applet:");
+  return typedId("operation").replace("ak:operation:", "ak:applet:");
 }
 
 function appletEventProof(

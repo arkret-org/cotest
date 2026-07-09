@@ -13,21 +13,21 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "ck:device:01904100-0000-7000-8000-0000000000a1",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
             "did:web:bob-typing.example",
             "@bob-typing",
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
     let carol = server
         .register_client(
             "did:web:carol-typing.example",
             "@carol-typing",
-            "ck:device:01904100-0000-7000-8000-000000000ca0",
+            "ak:device:01904100-0000-7000-8000-000000000ca0",
         )
         .await?;
 
@@ -38,7 +38,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     expect_api_error(
         carol.post("/_cokret/self/ephemeral").json(&typing_envelope(
             &carol.actor,
-            "ck:device:01904100-0000-7000-8000-000000000ca0",
+            "ak:device:01904100-0000-7000-8000-000000000ca0",
             &realm_id,
             &strand_id,
             true,
@@ -51,7 +51,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let typing = expect_json(
         bob.post("/_cokret/self/ephemeral").json(&typing_envelope(
             &bob.actor,
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
             &realm_id,
             &strand_id,
             true,
@@ -80,7 +80,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let stopped = expect_json(
         bob.post("/_cokret/self/ephemeral").json(&typing_envelope(
             &bob.actor,
-            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
             &realm_id,
             &strand_id,
             false,
@@ -115,7 +115,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "encrypted_account_data": true,
             "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "content_type": "application/vnd.cokret.account-data+json",
+        "content_type": "application/vnd.arkret.account-data+json",
         "ciphertext": "opaque-client-envelope"
     });
     let rules_written = bob
@@ -175,7 +175,7 @@ fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value>
 /// create, and the ephemeral/typing scope resolves through the projected Strand,
 /// so it must exist before typing into it.
 async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    let strand_id = realm_id.replace("ck:realm:", "ck:strand:");
+    let strand_id = realm_id.replace("ak:realm:", "ak:strand:");
     let created = client
         .submit_event(
             realm_id,

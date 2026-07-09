@@ -2,15 +2,15 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 cokret 时的完整生命周期:applet registry 提交 controller-signed `ck.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ck.applet.registration`、颁发 `bot_actor_id` 与 capability grant → typed applet ingress 为外部用户生成 `ghost_actor_id` 并写 portal 消息 → Realm 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet install 后,后续 ingress 被拒。
+验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期:applet registry 提交 controller-signed `ck.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ck.applet.registration`、颁发 `bot_actor_id` 与 capability grant → typed applet ingress 为外部用户生成 `ghost_actor_id` 并写 portal 消息 → Realm 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet install 后,后续 ingress 被拒。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §3–§4b — Applet Package、install preview/commit/revoke 与 `bot_actor_id` 颁发
-- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §5 — Ghost actor 的 accountability 模型(`actor_id = ghost_actor_id`、DID Document 的 `accountability` 指向 bot + registry)
-- `cokret-spec/spec/v1/zh/extensions/applet-schema.md` — Manifest JSON schema、portal realm 路由约定
+- `arkret-spec/spec/v1/zh/extensions/applet-integration.md` §3–§4b — Applet Package、install preview/commit/revoke 与 `bot_actor_id` 颁发
+- `arkret-spec/spec/v1/zh/extensions/applet-integration.md` §5 — Ghost actor 的 accountability 模型(`actor_id = ghost_actor_id`、DID Document 的 `accountability` 指向 bot + registry)
+- `arkret-spec/spec/v1/zh/extensions/applet-schema.md` — Manifest JSON schema、portal realm 路由约定
 
 ## 拓扑
 
@@ -43,7 +43,7 @@
 ### Phase A — applet package install + bot 颁发
 
 1. **applet_service** (通过 mock-applet-registry) 构造 signed applet package:
-   - `applet_id = "ck:applet:<uuidv7>"`
+   - `applet_id = "ak:applet:<uuidv7>"`
    - `namespace = "bridge.demo"`
    - `display_name = "Demo Bridge Applet"`
    - `requested_scopes = ["ck.message.create", "ck.applet.ghost.provision"]`

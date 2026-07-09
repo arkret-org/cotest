@@ -149,15 +149,15 @@
       "preferences": {
         "default": { "send": true },
         "realms": {
-          "ck:realm:01JS0SP00000000000000RR000": { "send": false }
+          "ak:realm:01JS0SP00000000000000RR000": { "send": false }
         },
         "strands": {
-          "ck:strand:01JS1FL00000000000000RR000": { "send": true }
+          "ak:strand:01JS1FL00000000000000RR000": { "send": true }
         }
       },
       "scope_lookup": {
-        "realm_id": "ck:realm:01JS0SP00000000000000RR000",
-        "strand_id": "ck:strand:01JS1FL00000000000000RR000"
+        "realm_id": "ak:realm:01JS0SP00000000000000RR000",
+        "strand_id": "ak:strand:01JS1FL00000000000000RR000"
       },
       "expected": {
         "decision": "send",
@@ -177,11 +177,11 @@
       "preferences": {
         "default": { "send": true },
         "realms": {
-          "ck:realm:01JS0SP00000000000000RR000": { "send": false }
+          "ak:realm:01JS0SP00000000000000RR000": { "send": false }
         }
       },
       "scope_lookup": {
-        "realm_id": "ck:realm:01JS0SP00000000000000RR000"
+        "realm_id": "ak:realm:01JS0SP00000000000000RR000"
       },
       "expected": {
         "decision": "skip",

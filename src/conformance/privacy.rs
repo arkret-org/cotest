@@ -756,7 +756,7 @@ fn anti_enumeration_blob_error(_hidden: bool) -> &'static str {
 
 fn blind_wakeup_payload() -> Value {
     json!({
-        "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+        "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
         "wakeup": true
     })
 }

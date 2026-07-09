@@ -21,17 +21,17 @@
     {
       "name": "realm_policy_default",
       "kind": "ck.realm.policy",
-      "components_array": ["ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "default"],
+      "components_array": ["ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "default"],
       "components_order_source": "[realm_id, policy_name]",
-      "expected_canonical_json": "[\"ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"default\"]",
+      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"default\"]",
       "expected_state_subject": "P_IbskluscutN7D40mhfaPXknaBYkRLZAvdVfrz3ND8"
     },
     {
       "name": "realm_member_carol",
       "kind": "ck.realm.member",
-      "components_array": ["ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:carol.example"],
+      "components_array": ["ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
-      "expected_canonical_json": "[\"ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",
+      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",
       "expected_state_subject": "IMygOMFOzXqPRmNlCoQ3lJJ2qVfcw06ZTTBfuMzxR84"
     }
   ],
@@ -39,27 +39,27 @@
     {
       "name": "strand_track_member_alice",
       "kind": "cx.strand.track.member",
-      "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
       "expected_state_subject": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "strand_track_history_visibility_main",
       "kind": "cx.strand.track.history_visibility",
-      "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
       "expected_state_subject": "YPdgraaCA5NGx7Pf_2JBr878BtR3_SX0Wjd3vsC2dW0",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "strand_track_member_alice_distinct_track",
       "kind": "cx.strand.track.member",
-      "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
       "expected_state_subject": "W9a0EsHYHDjLgbcNzP3LfnBmmuVJiX5XzOFrdz_i5IA",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same strand_id + actor_id as strand_track_member_alice but different track segment — must produce a distinct state_subject."
@@ -69,7 +69,7 @@
     {
       "name": "wrong_component_order_must_differ",
       "kind": "cx.strand.track.member",
-      "components_array": ["main", "ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
+      "components_array": ["main", "ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "Component reordering (track before strand_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
       "must_differ_from": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84"
     }
@@ -87,7 +87,7 @@
     },
     {
       "name": "compaction_reserved_rejected",
-      "components_array": ["ck:realm:01js0sp01000000000000000000", "__compaction__"],
+      "components_array": ["ak:realm:01js0sp01000000000000000000", "__compaction__"],
       "comment": "`__compaction__` is the spec-reserved compaction-marker surface name. Even when not the sole component, ANY position MUST trigger rejection.",
       "expected": {
         "outcome": "reject",

@@ -218,7 +218,7 @@ export async function createRealmApi(
           title: data.title,
           summary: data.summary,
           created_by: ownerDid,
-          trust_domain: "ck:trust_domain:soland.local",
+          trust_domain: "ak:trust_domain:soland.local",
           schema_refs: ["ck.schema.realm.v1"],
           default_discoverability:
             data.discoverability ?? (data.public ? "public" : "listed"),
@@ -1182,7 +1182,7 @@ function encryptedAccountDataMarker(
       profile_id: "ck.profile.e2ee_client.v1",
       payload_digest: payloadDigest,
     },
-    content_type: "application/vnd.cokret.account-data+json",
+    content_type: "application/vnd.arkret.account-data+json",
     ciphertext: `opaque-client-account-data:${payloadDigest.slice("sha256:".length)}`,
   };
 }
@@ -1445,8 +1445,8 @@ export async function resolveDefaultStrandId(
 /// Mirror inkson's `default_strand_id_for_realm` convention: `ck:realm:<uuid>`
 /// maps to `ck:strand:<uuid>`.
 export function deriveDefaultStrandId(realmId: string): string {
-  const suffix = realmId.startsWith("ck:realm:")
-    ? realmId.slice("ck:realm:".length)
+  const suffix = realmId.startsWith("ak:realm:")
+    ? realmId.slice("ak:realm:".length)
     : realmId;
   return `ck:strand:${suffix}`;
 }
@@ -1468,7 +1468,7 @@ function nextEnvelopeHlc(realmId: string, createdAt: string): string {
   }
   const unixMs = Math.trunc(requestedUnixMs);
   const nodeIdHash = createHash("sha256")
-    .update("cokret-hlc-v1")
+    .update("arkret-hlc-v1")
     .update("\0")
     .update(realmId)
     .update("\0")
@@ -1705,22 +1705,22 @@ function schemaIdForEventKind(kind: string): string {
 }
 
 // ── Federation reducer profile digest ───────────────────────────────────────
-// Spec: cokret-spec/spec/v1/zh/sync/federation.md §4.1.1 (normative). The only
+// Spec: arkret-spec/spec/v1/zh/sync/federation.md §4.1.1 (normative). The only
 // machine-readable source for service_binding_ref.reducer_profile_digest is
 // spec/v1/artifacts/registry/reducer-profile-registry.json: resolve the row
 // whose profile_id equals the Realm's declared reducer profile and hash ONLY
-// that row's digest_input object (Cokret canonical JSON → sha256 lowercase
+// that row's digest_input object (Arkret canonical JSON → sha256 lowercase
 // hex). Registered vector: ck.vector.federation.reducer_profile_digest.v1
 // (federation-fixture.json case reducer_profile_digest_federation_minimal),
 // used below as a drift guard on the computed value.
 
-// helpers → e2e → cotest → cokret root → cokret-spec/spec/v1/artifacts.
+// helpers → e2e → cotest → arkret root → arkret-spec/spec/v1/artifacts.
 const SPEC_ARTIFACTS_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
   "..",
-  "cokret-spec",
+  "arkret-spec",
   "spec",
   "v1",
   "artifacts",

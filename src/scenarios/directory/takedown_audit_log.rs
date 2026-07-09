@@ -55,7 +55,7 @@ pub fn validate_audit_row(
     if actor_id.is_empty() {
         return Err(anyhow!("takedown audit row missing actor_id"));
     }
-    if !target_realm_id.starts_with("ck:realm:") {
+    if !target_realm_id.starts_with("ak:realm:") {
         return Err(anyhow!(
             "takedown audit row target_realm_id MUST be a typed ck:realm: id; got `{target_realm_id}`"
         ));
@@ -104,7 +104,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
     let now = Utc::now();
     validate_audit_row(
         "did:web:moderator.example",
-        "ck:realm:0196419b-0000-7000-8000-000000000501",
+        "ak:realm:0196419b-0000-7000-8000-000000000501",
         TakedownReason::PolicyViolation,
         now,
     )
@@ -124,7 +124,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
     // Sanity: a round-tripped audit row keeps every field.
     let row = json!({
         "actor_id": "did:web:moderator.example",
-        "target_realm_id": "ck:realm:0196419b-0000-7000-8000-000000000501",
+        "target_realm_id": "ak:realm:0196419b-0000-7000-8000-000000000501",
         "reason": "subject_request",
         "created_at": now.to_rfc3339(),
     });

@@ -372,8 +372,8 @@ test.describe("consent grant", () => {
     expect(pending.state).toBe("pending_outgoing");
 
     const consentId = typedId("operation").replace(
-      "ck:operation:",
-      "ck:consent:",
+      "ak:operation:",
+      "ak:consent:",
     );
     const grantEnvelope = signedEventEnvelope({
       actorDid: alice.did,

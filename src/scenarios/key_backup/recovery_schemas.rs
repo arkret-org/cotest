@@ -20,9 +20,9 @@ pub async fn recovery_schemas_run() -> Result<()> {
         ));
     }
     // UUIDv7 literal: lowercase hex, version nibble = 7, variant nibble ∈
-    // {8,9,a,b}; see `cokret-rust-sdk crates/identifiers` is_lowercase_uuidv7.
+    // {8,9,a,b}; see `arkret-rust-sdk crates/identifiers` is_lowercase_uuidv7.
     let _session = RecoverySessionId::new(
-        "ck:recovery_session:01999999-0000-7000-8000-0000000aa001".to_owned(),
+        "ak:recovery_session:01999999-0000-7000-8000-0000000aa001".to_owned(),
     )
     .map_err(|e| anyhow!("RecoverySessionId: {e}"))?;
 

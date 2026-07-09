@@ -1,14 +1,14 @@
 //! CT-2 — Mixed lattice cell types conformance suite.
 //!
 //! Validates `tests/fixtures/lattice_mixed_kinds.json`, which exercises
-//! Cokret state resolution when a single Space has cells of different
+//! Arkret state resolution when a single Space has cells of different
 //! lattice types (cas_register + or_set + mv_register) updating
 //! concurrently in the same Move batch or across the same Anchor frontier.
 //!
 //! Spec authority:
-//!   * `cokret-spec/spec/v1/zh/models/realm-and-space.md` (lattice cell registry /
+//!   * `arkret-spec/spec/v1/zh/models/realm-and-space.md` (lattice cell registry /
 //!     `co_write_policy`)
-//!   * `cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md` §3 (lattice_op kinds) and §5.3
+//!   * `arkret-spec/spec/v1/zh/authz/event-auth-state-resolution.md` §3 (lattice_op kinds) and §5.3
 //!     (per-lattice reference impl)
 //!
 //! Each cell family has its own lattice; a single Move MAY write multiple

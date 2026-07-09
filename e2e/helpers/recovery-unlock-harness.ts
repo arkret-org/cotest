@@ -97,7 +97,7 @@ export type RecoveryKeyEntry = {
   revoked_at?: string | null;
 };
 
-const TRUST_DOMAIN = "ck:trust_domain:soland.local";
+const TRUST_DOMAIN = "ak:trust_domain:soland.local";
 const POLICY_SIGNATURE_TYPE = "ck.identity.recovery_policy.signature.v1";
 // soland's verify_recovery_policy auth path allows exactly these signed_fields
 // and requires all of them (POLICY_REQUIRED_SIGNED_FIELDS == ALLOWED in wire.rs).

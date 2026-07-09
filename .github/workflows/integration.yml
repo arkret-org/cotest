@@ -34,8 +34,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/cokret-rust-sdk
-          path: cokret-rust-sdk
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
       # P5.1 — upstream checkout failures MUST hard-fail the job. The previous
       # `continue-on-error: true` markers were a circle-rollout bootstrap

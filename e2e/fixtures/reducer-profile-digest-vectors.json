@@ -1,6 +1,6 @@
 {
   "schema": "cotest.reducer_profile_digest_vectors.v1",
-  "source": "cokret-spec/spec/v1/artifacts/registry/reducer-profile-registry.json",
+  "source": "arkret-spec/spec/v1/artifacts/registry/reducer-profile-registry.json",
   "canonicalization": "json_jcs",
   "digest_suite": "sha256",
   "vectors": [

@@ -29,9 +29,9 @@ use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_
 
 const TEST_NAME: &str = "chaos-midwrite";
 const ACTOR_DID: &str = "did:web:chaos-midwrite.cotest.local";
-const DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-00000000c0de";
+const DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-00000000c0de";
 const SERVICE_DID: &str = "did:web:chaos-midwrite.cotest.local";
-const REALM_ID: &str = "ck:realm:019e5fbd-0000-7000-8000-000000000016";
+const REALM_ID: &str = "ak:realm:019e5fbd-0000-7000-8000-000000000016";
 
 pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let Some(database) = ChaosDatabase::provision()? else {
@@ -153,7 +153,7 @@ fn chaos_realm_event() -> Value {
                 "schema": "ck.schema.realm.v1",
                 "title": "Chaos Midwrite",
                 "summary": "Chaos Midwrite",
-                "trust_domain": "ck:trust_domain:chaos-midwrite.cotest.local",
+                "trust_domain": "ak:trust_domain:chaos-midwrite.cotest.local",
                 "created_by": ACTOR_DID,
                 "schema_refs": ["ck.schema.realm.v1"],
                 "default_discoverability": "public",

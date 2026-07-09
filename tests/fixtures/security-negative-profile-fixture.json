@@ -10,9 +10,9 @@
       "input": {
         "signing_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
         "event": {
-          "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
+          "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
           "kind": "ck.message.create",
-          "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 1,
           "created_at": "2026-05-02T00:00:00Z",
@@ -20,7 +20,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ak:strand:01970e589d21-7000-8000-000000000010",
             "body": "signed body"
           },
           "proofs": [
@@ -47,9 +47,9 @@
       "operation_id": "ck.self.events.command.submit",
       "input": {
         "stored_event": {
-          "event_id": "ck:event:01970e589d22-0001-a13f9c2e",
+          "event_id": "ak:event:01970e589d22-0001-a13f9c2e",
           "kind": "ck.message.create",
-          "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 2,
           "created_at": "2026-05-02T00:00:01Z",
@@ -57,15 +57,15 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ak:strand:01970e589d21-7000-8000-000000000010",
             "body": "canonical body a"
           },
           "proofs": []
         },
         "incoming_event": {
-          "event_id": "ck:event:01970e589d22-0001-a13f9c2e",
+          "event_id": "ak:event:01970e589d22-0001-a13f9c2e",
           "kind": "ck.message.create",
-          "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 2,
           "created_at": "2026-05-02T00:00:01Z",
@@ -73,7 +73,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ak:strand:01970e589d21-7000-8000-000000000010",
             "body": "canonical body b"
           },
           "proofs": []
@@ -91,9 +91,9 @@
       "operation_id": "ck.self.events.command.submit",
       "input": {
         "event": {
-          "event_id": "ck:event:01970e589d23-0001-a13f9c2e",
+          "event_id": "ak:event:01970e589d23-0001-a13f9c2e",
           "kind": "ck.message.create",
-          "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 3,
           "created_at": "2026-05-02T00:00:02Z",
@@ -122,9 +122,9 @@
           "actor_seq": 4
         },
         "event": {
-          "event_id": "ck:event:01970e589d24-0001-a13f9c2e",
+          "event_id": "ak:event:01970e589d24-0001-a13f9c2e",
           "kind": "ck.message.create",
-          "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 4,
           "created_at": "2026-05-02T00:00:03Z",
@@ -132,7 +132,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ak:strand:01970e589d21-7000-8000-000000000010",
             "body": "replay"
           },
           "proofs": []
@@ -153,9 +153,9 @@
         "attempted_profile": "ck.profile.full_client.v1",
         "supported_features": [],
         "event": {
-          "event_id": "ck:event:01970e589d25-0001-a13f9c2e",
+          "event_id": "ak:event:01970e589d25-0001-a13f9c2e",
           "kind": "ck.message.create",
-          "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 5,
           "created_at": "2026-05-02T00:00:04Z",
@@ -171,7 +171,7 @@
             ]
           },
           "payload": {
-            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ak:strand:01970e589d21-7000-8000-000000000010",
             "body": "must not downgrade"
           },
           "proofs": []

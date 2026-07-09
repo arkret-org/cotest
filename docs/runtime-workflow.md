@@ -70,9 +70,9 @@ The harness reads these environment variables:
 
 The default image asset is [docker/soland.Dockerfile](../docker/soland.Dockerfile).
 It is built from the workspace root one level above `cotest`, because `soland`
-depends on the sibling checkout `cokret-rust-sdk`. The workspace root
+depends on the sibling checkout `arkret-rust-sdk`. The workspace root
 `.dockerignore` trims the build context so Docker only receives the `soland`,
-`cokret-rust-sdk`, and `cotest/docker` trees instead of the whole workspace.
+`arkret-rust-sdk`, and `cotest/docker` trees instead of the whole workspace.
 
 The image contract is intentionally simple:
 
@@ -86,7 +86,7 @@ The current implementation source-builds `soland` inside Docker:
 
 - build stage: `rust:1.96-bookworm`
 - runtime stage: `debian:bookworm-slim` with `ca-certificates` and `libssl3`
-- copied source trees: `soland` and `cokret-rust-sdk`
+- copied source trees: `soland` and `arkret-rust-sdk`
 - build command: `cargo build --release --locked`
 
 The image does not define an in-container `HEALTHCHECK`. Instead, the harness
@@ -103,9 +103,9 @@ identical between `process` and `docker` modes.
 
 This script:
 
-- uses `E:\Works\cokret` as the Docker build context by default
+- uses `E:\Works\arkret` as the Docker build context by default
 - reads [docker/soland.Dockerfile](../docker/soland.Dockerfile)
-- expects sibling `soland` and `cokret-rust-sdk` checkouts to exist
+- expects sibling `soland` and `arkret-rust-sdk` checkouts to exist
 - produces `cotest-soland:latest` unless `-ImageTag` overrides it
 - accepts Docker cache controls through `-CacheFrom`, `-CacheTo`, `-Pull`, and
   `-NoCache`
@@ -160,7 +160,7 @@ then stops those processes after the run:
 ```powershell
 .\scripts\run-compose.ps1 `
   -FloriaBaseUrl http://127.0.0.1:5000 `
-  -FloriaCommand '$env:FLORIA_CONF="D:\Works\cokret\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\cokret\floria\Cargo.toml'
+  -FloriaCommand '$env:FLORIA_CONF="D:\Works\arkret\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\arkret\floria\Cargo.toml'
 ```
 
 ### Run in Docker mode

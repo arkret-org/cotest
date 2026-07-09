@@ -13,7 +13,7 @@
 // (COA-ORG-02/03/04) and soland delegation acceptance (SOL-ORG-03) land. The
 // issuer-role / delegation coupling invariants themselves are already enforced
 // statically by tests/realm_organization_statement_negative.rs against the
-// cokret-rust-sdk verifier.
+// arkret-rust-sdk verifier.
 
 import { expect, test } from "@playwright/test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";

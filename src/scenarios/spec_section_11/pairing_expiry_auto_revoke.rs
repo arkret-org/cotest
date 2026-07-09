@@ -11,7 +11,7 @@ use cokret_core::AgentInteropSessionId;
 
 pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
     let session = AgentInteropSessionId::new(
-        "ck:agent_interop_session:01999999-0000-7000-8000-00000000e001".to_owned(),
+        "ak:agent_interop_session:01999999-0000-7000-8000-00000000e001".to_owned(),
     )
     .map_err(|e| anyhow!("AgentInteropSessionId: {e}"))?;
     // A past `expires_at` deterministically marks the session as
@@ -22,7 +22,7 @@ pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
             "expected expired_at < now; got {expired_at} >= now"
         ));
     }
-    if !session.as_str().starts_with("ck:agent_interop_session:") {
+    if !session.as_str().starts_with("ak:agent_interop_session:") {
         return Err(anyhow!("AgentInteropSessionId lost canonical prefix"));
     }
     // TODO(P4-impl): once soland persists agent_session rows, drive

@@ -55,7 +55,7 @@ pub const VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED: &str =
 pub const VECTOR_ID_E2EE_KEY_SOURCE: &str = "ck.vector.media_binding.e2ee_key_source.v1";
 pub const VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED: &str =
     "ck.vector.media_binding.participant_identity_unrecognised.v1";
-pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB: &str =
+pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB: &str =
     "ck.vector.media_binding.recording_artifact_via_cokret_blob.v1";
 pub const VECTOR_ID_RECORDING_EXPORTER_LABEL: &str =
     "ck.vector.media_binding.recording_exporter_label.v1";
@@ -71,7 +71,7 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED,
     VECTOR_ID_E2EE_KEY_SOURCE,
     VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED,
-    VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB,
+    VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB,
     VECTOR_ID_RECORDING_EXPORTER_LABEL,
 ];
 
@@ -114,12 +114,12 @@ fn validate_media_binding_fixture_metadata() -> Result<()> {
 /// Known media-backend type tags from `ck.realm.media_service.foci[].type`.
 /// Mirrors `cokret_sdk::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
-/// minimal `cokret-core` dep slice.
+/// minimal `arkret-core` dep slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
     "livekit",
     "mediasoup",
     "janus",
-    "cokret-native",
+    "arkret-native",
     "moq-relay",
 ];
 
@@ -163,12 +163,12 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
     let alice = CallMember {
         actor_id: "did:web:alice.example",
         joined_at_unix_ms: 1_700_000_000_000,
-        foci_preferred: &["focus.livekit.lhr", "focus.cokret.lhr"],
+        foci_preferred: &["focus.livekit.lhr", "focus.arkret.lhr"],
     };
     let bob = CallMember {
         actor_id: "did:web:bob.example",
         joined_at_unix_ms: 1_700_000_005_000,
-        foci_preferred: &["focus.cokret.lhr", "focus.livekit.lhr"],
+        foci_preferred: &["focus.arkret.lhr", "focus.livekit.lhr"],
     };
     let expected_focus = alice.foci_preferred[0];
     let members = [alice, bob];
@@ -211,7 +211,7 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
     let mut cell = SessionFocusCell::default();
     cell.commit("focus.livekit.lhr")
         .map_err(|e| anyhow!("first commit unexpectedly failed: {e}"))?;
-    let second = cell.commit("focus.cokret.lhr");
+    let second = cell.commit("focus.arkret.lhr");
     match second {
         Err(code) if code == REASON_SESSION_FOCUS_ALREADY_COMMITTED => {}
         other => bail!("second write must surface session_focus_already_committed, got {other:?}"),
@@ -408,12 +408,12 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
         0xf0, 0x01,
     ];
     let actor_id = "did:web:alice.example.com";
-    let call_id = "ck:call:0196441c-0000-7000-8000-000000000000";
-    let device_id = "ck:device:01964137-0000-7000-8000-000000000000";
+    let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
+    let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
     let expires_at = "2026-05-27T12:34:56Z";
     let focus_id = "fra-1";
-    let participant_identity = "ck:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
-    let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
+    let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
+    let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000000";
 
     let signing_input = participant_binding_signing_input(
         actor_id,
@@ -448,15 +448,15 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
     // 2. Tampering each authoritative field breaks verification.
     let tampers: [(&str, &str); 7] = [
         (actor_id, "did:web:eve.example.com"),
-        (call_id, "ck:call:0196441c-0000-7000-8000-00000000dead"),
-        (device_id, "ck:device:01964137-0000-7000-8000-00000000dead"),
+        (call_id, "ak:call:0196441c-0000-7000-8000-00000000dead"),
+        (device_id, "ak:device:01964137-0000-7000-8000-00000000dead"),
         (expires_at, "2099-01-01T00:00:00Z"),
         (focus_id, "fra-2"),
         (
             participant_identity,
-            "ck:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
+            "ak:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
         ),
-        (realm_id, "ck:realm:0196419b-0000-7000-8000-00000000dead"),
+        (realm_id, "ak:realm:0196419b-0000-7000-8000-00000000dead"),
     ];
     for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
         let tampered = participant_binding_signing_input(
@@ -601,12 +601,12 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// activated-call residual deferred to the live round.
 fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // The canonical Context MUST be exactly this 6-tuple.
-    let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
-    let call_id = "ck:call:0196441c-0000-7000-8000-000000000000";
+    let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000000";
+    let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
     let focus_id = "fra-1";
-    let epoch_id = "ck:mls_epoch:7";
-    let participant_identity = "ck:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
-    let device_id = "ck:device:01964137-0000-7000-8000-000000000000";
+    let epoch_id = "ak:mls_epoch:7";
+    let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
+    let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
 
     let context = sframe_context(
         realm_id,
@@ -672,7 +672,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         focus_id,
         epoch_id,
         participant_identity,
-        "ck:device:01964137-0000-7000-8000-0000000000ff",
+        "ak:device:01964137-0000-7000-8000-0000000000ff",
     )?;
     let mut other_info = Vec::new();
     other_info.extend_from_slice(LABEL_RTC_FRAME_KEY.as_bytes());
@@ -722,14 +722,14 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     // The backend MUST signal only identities that match an entry in
     // `ck.call.state.participants[]`. Unknown identities fail closed
     // — clients MUST NOT trust them.
-    let known: &[&str] = &["ck:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
-    let unknown = "ck:rtc_participant:01999999-0000-7000-8000-deadbeefdead";
+    let known: &[&str] = &["ak:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
+    let unknown = "ak:rtc_participant:01999999-0000-7000-8000-deadbeefdead";
     if known.contains(&unknown) {
         bail!("participant identity leak: unknown id in known set");
     }
     // `rtc_participant` id-kind MUST keep the canonical `ck:rtc_participant:` prefix.
     for id in known {
-        if !id.starts_with("ck:rtc_participant:") {
+        if !id.starts_with("ak:rtc_participant:") {
             bail!("rtcpart id lost canonical prefix: {id}");
         }
     }
@@ -744,14 +744,14 @@ pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
             "REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
         );
     }
-    // Egress MUST land on a Cokret blob endpoint. Direct S3 / GCS
+    // Egress MUST land on a Arkret blob endpoint. Direct S3 / GCS
     // / arbitrary http upload is bypass.
     let is_cokret_blob = |url: &str| {
         url.starts_with("https://")
-            && (url.contains("/_matrix/cokret/v1/media") || url.contains("/cokret/v1/media"))
+            && (url.contains("/_matrix/arkret/v1/media") || url.contains("/arkret/v1/media"))
     };
-    if !is_cokret_blob("https://server.example/cokret/v1/media/upload") {
-        bail!("legit cokret blob endpoint not accepted");
+    if !is_cokret_blob("https://server.example/arkret/v1/media/upload") {
+        bail!("legit arkret blob endpoint not accepted");
     }
     for bad in [
         "https://s3.amazonaws.com/bucket/recording.mp4",
@@ -759,7 +759,7 @@ pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
         "https://storage.googleapis.com/foo",
     ] {
         if is_cokret_blob(bad) {
-            bail!("non-cokret egress endpoint `{bad}` leaked past pipeline check");
+            bail!("non-arkret egress endpoint `{bad}` leaked past pipeline check");
         }
     }
     Ok(())
@@ -802,12 +802,12 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     let context = recording_context(
-        "ck:realm:0196419b-0000-7000-8000-000000000000",
-        "ck:call:0196441c-0000-7000-8000-000000000000",
+        "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "ak:call:0196441c-0000-7000-8000-000000000000",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
-        "ck:event:019a7360-0000-7000-8000-000000000003",
+        "ak:event:019a7360-0000-7000-8000-000000000003",
     )?;
 
     for (label, candidate_context) in [
@@ -874,12 +874,12 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     let other_context = recording_context(
-        "ck:realm:0196419b-0000-7000-8000-000000000000",
-        "ck:call:0196441c-0000-7000-8000-000000000000",
+        "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "ak:call:0196441c-0000-7000-8000-000000000000",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
-        "ck:event:019a7360-0000-7000-8000-000000000004",
+        "ak:event:019a7360-0000-7000-8000-000000000004",
     )?;
     let mut other_info =
         Vec::with_capacity(LABEL_RTC_RECORDING_KEY.len() + 1 + other_context.len());

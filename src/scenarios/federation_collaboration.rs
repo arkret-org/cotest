@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use cokret::auth::principal_control_realm_id;
-use cokret::http_signature::{
+use arkret::auth::principal_control_realm_id;
+use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use cokret::identity::binding::multicodec_ed25519_public_key;
+use arkret::identity::binding::multicodec_ed25519_public_key;
 use cokret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
@@ -30,26 +30,26 @@ use crate::scenarios::_helpers::federation_binding::{
 
 const ALICE_DID: &str = "did:web:federation-collaboration-0.cotest.local";
 const BOB_DID: &str = "did:web:federation-collaboration-1.cotest.local";
-const ALICE_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
-const BOB_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000bb";
-const REALM_CREATE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc011ab000";
-const ALICE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000001";
-const BOB_JOIN_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000002";
-const BOB_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000003";
-const ALICE_DELIVERY_BINDING_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000004";
-const E2EE_REALM_ID: &str = "ck:realm:01904100-0000-7000-8000-fedc011ab0e2";
-const E2EE_REALM_CREATE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e01";
-const E2EE_BOB_JOIN_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e02";
-const E2EE_MLS_GENESIS_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e03";
-const E2EE_MLS_WELCOME_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e04";
-const E2EE_MLS_COMMIT_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e05";
-const E2EE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e06";
+const ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
+const BOB_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000bb";
+const REALM_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc011ab000";
+const ALICE_MESSAGE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000001";
+const BOB_JOIN_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000002";
+const BOB_MESSAGE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000003";
+const ALICE_DELIVERY_BINDING_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000004";
+const E2EE_REALM_ID: &str = "ak:realm:01904100-0000-7000-8000-fedc011ab0e2";
+const E2EE_REALM_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e01";
+const E2EE_BOB_JOIN_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e02";
+const E2EE_MLS_GENESIS_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e03";
+const E2EE_MLS_WELCOME_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e04";
+const E2EE_MLS_COMMIT_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e05";
+const E2EE_MESSAGE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e06";
 const E2EE_MLS_GROUP_ID: &str = "peer_dm_mls_group";
 const E2EE_MESSAGE_CIPHERTEXT: &str = "opaque_cross_server_e2ee_message";
 const E2EE_MESSAGE_PLAINTEXT: &str = "cross-server e2ee plaintext must stay client-side";
 const BOB_DEVICE_KEY_SEED: [u8; 32] = [187u8; 32];
 const ALICE_DEVICE_KEY_SEED: [u8; 32] = [161u8; 32];
-const ALICE_DEVICE_AUTHORIZE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000a11";
+const ALICE_DEVICE_AUTHORIZE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a11";
 
 pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
@@ -436,7 +436,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     assert_eq!(pending_welcomes["welcomes"].as_array().unwrap().len(), 1);
     assert_eq!(
         pending_welcomes["welcomes"][0]["welcome_id"],
-        "ck:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2"
+        "ak:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2"
     );
     assert_eq!(
         pending_welcomes["welcomes"][0]["mls_group_ref"],
@@ -500,7 +500,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .json(&json!({
                 "messages": {
                     BOB_DID: {
-                        "ck:device:01904100-0000-7000-8000-0000000000bb": {
+                        "ak:device:01904100-0000-7000-8000-0000000000bb": {
                             "kind": "ck.mls.welcome",
                             "content": encrypted_envelope("ck.mls.welcome", "opaque-cross-server-welcome"),
                             "expires_at": "2026-12-31T00:00:00Z"
@@ -592,7 +592,7 @@ async fn create_federated_realm(
     alice: &str,
     visible_services: &[String],
 ) -> Result<String> {
-    let realm_id = "ck:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
+    let realm_id = "ak:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
     let created = submit_event(
         server,
         alice,
@@ -632,7 +632,7 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
             "schema": "ck.schema.realm.v1",
             "title": "Federated Collaboration Space",
             "summary": "cross server collaboration",
-            "trust_domain": "ck:trust_domain:federation-collaboration.cotest.local",
+            "trust_domain": "ak:trust_domain:federation-collaboration.cotest.local",
             "created_by": ALICE_DID,
             "schema_refs": ["ck.schema.realm.v1"],
             "default_discoverability": "invite_only",
@@ -667,7 +667,7 @@ fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_did
             "binding_source": "explicit",
             "delivery_modes": ["events", "sync", "to_device", "push", "key_packages"],
             "resolved_at": "2026-05-02T00:00:00Z",
-            "service_acceptance_ref": "ck:event:01904100-0000-7000-8000-fedc00000005"
+            "service_acceptance_ref": "ak:event:01904100-0000-7000-8000-fedc00000005"
         }),
     )
     .expect("valid federation member delivery binding payload")
@@ -680,7 +680,7 @@ fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
             "schema": "ck.schema.realm.v1",
             "title": "Federated E2EE DM Realm",
             "summary": "cross personal server E2EE DM replication",
-            "trust_domain": "ck:trust_domain:federation-collaboration.e2ee.cotest.local",
+            "trust_domain": "ak:trust_domain:federation-collaboration.e2ee.cotest.local",
             "created_by": ALICE_DID,
             "schema_refs": ["ck.schema.realm.v1"],
             "default_discoverability": "invite_only",
@@ -815,7 +815,7 @@ fn mls_welcome_payload(
                 "sig": URL_SAFE_NO_PAD.encode(claim_signature.to_bytes())
             }
         },
-        "welcome_ref": "ck:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2",
+        "welcome_ref": "ak:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2",
         "ciphertext": welcome_bytes,
         "expires_at": "2026-05-25T01:00:00Z",
         "commit_ref": E2EE_MLS_COMMIT_EVENT_ID,
@@ -837,8 +837,8 @@ fn mls_commit_payload(realm_id: &str) -> Value {
 
 fn encrypted_message_payload(realm_id: &str) -> Value {
     let strand_id = format!(
-        "ck:strand:{}",
-        realm_id.strip_prefix("ck:realm:").unwrap_or(realm_id)
+        "ak:strand:{}",
+        realm_id.strip_prefix("ak:realm:").unwrap_or(realm_id)
     );
     json!({
         "strand_id": strand_id,
@@ -848,7 +848,7 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
             "version": "1.0",
             "group_id": E2EE_MLS_GROUP_ID,
             "epoch": 1,
-            "content_type": "application/vnd.cokret.message+json",
+            "content_type": "application/vnd.arkret.message+json",
             "ciphertext": E2EE_MESSAGE_CIPHERTEXT,
             "aad_visibility_event_id": "hidden",
             "aad": {
@@ -957,7 +957,7 @@ pub(crate) fn signed_keys_upload_body(
     fallback_keys: Value,
 ) -> Result<Value> {
     let signing_input = keys_upload_signing_input(device_id, &one_time_keys, &fallback_keys)?;
-    let jws = cokret::jws::sign_jws_ed25519(&signing_input, signing_key)
+    let jws = arkret::jws::sign_jws_ed25519(&signing_input, signing_key)
         .map_err(anyhow::Error::msg)
         .context("sign keys/upload body")?;
     Ok(json!({
@@ -1171,7 +1171,7 @@ fn with_federation_trust_headers_for_digest(
 }
 
 fn trust_domain_for(service_did: &str) -> String {
-    format!("ck:trust_domain:{}", did_host_from_service_did(service_did))
+    format!("ak:trust_domain:{}", did_host_from_service_did(service_did))
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,
@@ -1206,7 +1206,7 @@ fn did_host_from_service_did(service_did: &str) -> String {
         .replace(':', ".")
 }
 
-fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_did: &str) -> arkret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
     hasher.update(service_did.as_bytes());

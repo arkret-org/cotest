@@ -2,25 +2,25 @@
 
 ## 目标
 
-验证 cokret v1 在 agent-protocol-interop extension profile 下的完整 handoff 闭环:Alice 通过 inkson 选定一个支持 A2A/ACP 的 agent endpoint → 完成 capability approval (含 human-approval gate) → soland 校验 endpoint 与目标 DID Document 的 service binding 一致 → 颁发 `ck.agent.protocol_session.start` 并把执行权移交给外部 agent runtime → 远端 agent 通过节流 `protocol_session.status` 回写进度并最终回写 `protocol_session.result` (含 audit_binding) → result 被 reducer 接受后 publish 一个 Strand/Morph 落地到 source space → audit chain 上 `start / status* / result` 全链能被 inkson agents-panel 验证签名通过。
+验证 arkret v1 在 agent-protocol-interop extension profile 下的完整 handoff 闭环:Alice 通过 inkson 选定一个支持 A2A/ACP 的 agent endpoint → 完成 capability approval (含 human-approval gate) → soland 校验 endpoint 与目标 DID Document 的 service binding 一致 → 颁发 `ck.agent.protocol_session.start` 并把执行权移交给外部 agent runtime → 远端 agent 通过节流 `protocol_session.status` 回写进度并最终回写 `protocol_session.result` (含 audit_binding) → result 被 reducer 接受后 publish 一个 Strand/Morph 落地到 source space → audit chain 上 `start / status* / result` 全链能被 inkson agents-panel 验证签名通过。
 
-过程中 cokret 始终持有身份 / capability / 任务登记 / 审计,外部协议只承担实时执行通道。
+过程中 arkret 始终持有身份 / capability / 任务登记 / 审计,外部协议只承担实时执行通道。
 
 不验证:applet bot / ghost actor 链路 (见 `extensions/applet-bridge`)、MIMI federation handoff (见 `extensions/mimi-federation`)、capability chain 的 delegation 细节 (见 `authz/capability-chain`)、policy server obligation executor (见 `authz/policy-server-check`)、纯 MCP tool 调用 (见 §10,与 v1 agent-to-agent upgrade 无关)。
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §4 — 升级触发条件 (显式、可授权、可审计)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.1 — `ck.agent.endpoint` 声明 (agent_card_url / metadata_url / transport / auth)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.2 — `ck.agent.protocol_session.start` 字段集 (session_id / counterparty_agent / capability_grant / audit_mode)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.3 — `ck.agent.protocol_session.status` 节流回写与标准状态枚举
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.4 — `ck.agent.protocol_session.result` 的 `result_objects` / `artifacts` / `external_transcript_digest`
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §6 步骤 4 — Endpoint validation 是 normative MUST (DID Document service binding + TLS / HTTP Sig pinning)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §7 — Capability actions (`ck.agent.protocol.discover` / `protocol_session.start` / `cancel` / `stream_status` / `attach_artifact` / `read_transcript`) 与 constraint (`allowed_protocols` / `allowed_endpoints` / `requires_human_approval` / `max_duration_seconds` / `max_artifact_bytes` / `egress_policy`)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §8 — 安全边界 (启动前 capability 检查、不信任外部 task status、artifact hash/MIME/size/policy 扫描)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §9 — `audit_mode` 四档 (`status_only` / `summary_and_artifacts` / `full_transcript_hash` / `full_transcript`)
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §11 — Adapter registry (a2a / acp / mcp_bridge / http_custom) 与 adapter MUST 声明项
-- `cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §12 — 失败码集合 (`discovery_failed` / `protocol_not_supported` / `auth_failed` / `policy_denied` / `remote_rejected` / `timeout` / `cancelled` / `artifact_rejected`)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §4 — 升级触发条件 (显式、可授权、可审计)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.1 — `ck.agent.endpoint` 声明 (agent_card_url / metadata_url / transport / auth)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.2 — `ck.agent.protocol_session.start` 字段集 (session_id / counterparty_agent / capability_grant / audit_mode)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.3 — `ck.agent.protocol_session.status` 节流回写与标准状态枚举
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §5.4 — `ck.agent.protocol_session.result` 的 `result_objects` / `artifacts` / `external_transcript_digest`
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §6 步骤 4 — Endpoint validation 是 normative MUST (DID Document service binding + TLS / HTTP Sig pinning)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §7 — Capability actions (`ck.agent.protocol.discover` / `protocol_session.start` / `cancel` / `stream_status` / `attach_artifact` / `read_transcript`) 与 constraint (`allowed_protocols` / `allowed_endpoints` / `requires_human_approval` / `max_duration_seconds` / `max_artifact_bytes` / `egress_policy`)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §8 — 安全边界 (启动前 capability 检查、不信任外部 task status、artifact hash/MIME/size/policy 扫描)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §9 — `audit_mode` 四档 (`status_only` / `summary_and_artifacts` / `full_transcript_hash` / `full_transcript`)
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §11 — Adapter registry (a2a / acp / mcp_bridge / http_custom) 与 adapter MUST 声明项
+- `arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md` §12 — 失败码集合 (`discovery_failed` / `protocol_not_supported` / `auth_failed` / `policy_denied` / `remote_rejected` / `timeout` / `cancelled` / `artifact_rejected`)
 
 ## 拓扑
 
@@ -78,7 +78,7 @@
 
 ### Phase D — Publish-to-source (§5.4 / §6 步骤 8-9)
 
-16. **mock-agent-runtime** 模拟终态,向 soland 回写 `ck.agent.protocol_session.result` 事件 body:`{ session_id, status: "completed", result_objects: [{ object_type: "strand", object_ref: "ck:strand:<uuid>", track: "synthesis", role: "primary_result" }], artifacts: [{ artifact_type: "text", object_ref: "ck:morph:<uuid>", hash: "sha256:..." }], external_transcript_digest: "sha256:...", completed_at: "<iso>" }`;
+16. **mock-agent-runtime** 模拟终态,向 soland 回写 `ck.agent.protocol_session.result` 事件 body:`{ session_id, status: "completed", result_objects: [{ object_type: "strand", object_ref: "ak:strand:<uuid>", track: "synthesis", role: "primary_result" }], artifacts: [{ artifact_type: "text", object_ref: "ak:morph:<uuid>", hash: "sha256:..." }], external_transcript_digest: "sha256:...", completed_at: "<iso>" }`;
 17. soland 用 `REFERENCE_AGENT_AUDIT_ED25519_SEED` 给 `audit_binding` 块签 Ed25519,canonical subject 形如 `{session_id, agent_id, result.echo, actor}`,断言响应里 `audit_binding.binding_kind === "ed25519_v1"` 且 `audit_binding.key_id === "soland.reference.agent_echo.ed25519_v1"`;
 18. **alice** 在 inkson `/agents` 的 `agent-incoming-results` 看到一条 `agent-incoming-result-row`,`agent-audit-verify-badge` 文本严格等于 `audit valid` (绿色徽章);
 19. **alice** 在 `/agents` 的对应 protocol session detail 区确认 result artifact;保留 remote_agent attribution,点 `publish-modal-confirm`;
@@ -122,7 +122,7 @@
   - publish modal 的 "保留 remote_agent attribution" 选项 (testid `publish-modal-signer-self-with-attribution`) 需要从 protocol session result 状态进入。
   - `/agents` 顶部的 `agent-incoming-poll-tick` 与 `agent-incoming-status` 已存在 (4s 轮询 + diff 提示),Phase E 步骤 24 可直接断言。
 - **mock-agent-runtime 缺口**:**当前没有 `cotest/scripts/mock-agent-runtime.mjs`**。短期方案:在测试代码里复用 `mockAppletRegistryBaseUrl()` 作为 HTTP echo target,只跑 Phase A 的 endpoint registry + DID document lookup 路径,Phase C-E 全 fixme;长期方案:新增 `cotest/scripts/mock-agent-runtime.mjs`,实现 `/.well-known/agent-card.json` + `/info` + `/v1/a2a/tasks` + `/v1/acp/tasks` 四个端点,以及对 soland status webhook 的回调能力,然后在 `helpers/env.ts` 添加 `mockAgentRuntimeBaseUrl()` 与 `mockAgentRuntimeDid()`。
-- **fixture loader**:Phase D 的 result event canonical bytes 应该可以挂到 `cokret-spec/spec/v1/artifacts/fixtures/ck.agent.protocol_session.result.*.json`,但目前 fixture 目录还没有 agent 相关条目 (本 scenario 落地后可同步追加)。
+- **fixture loader**:Phase D 的 result event canonical bytes 应该可以挂到 `arkret-spec/spec/v1/artifacts/fixtures/ck.agent.protocol_session.result.*.json`,但目前 fixture 目录还没有 agent 相关条目 (本 scenario 落地后可同步追加)。
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession` / `openUserPage`;**不要**新增 `helpers/agents.ts`,session lifecycle 调用直接写在 spec 文件里。Phase B 的 capability grant create 暂时也直接打 HTTP,等真有 3 个以上 scenario 共享时再抽 helper。
 - **why ed25519 signing seed is fine in test**:`soland/src/routing/events/agent_bridge.rs` 头注已经声明 reference seed 是公开的 (production 必须通过 `AppConfig::agent_audit_binding_signing_seed` 注入),所以 e2e 直接用 reference public key 校验签名是符合预期的。
 
