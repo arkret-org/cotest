@@ -2077,11 +2077,17 @@ try {
         # assertJointStackNotRequired), so a green joint run genuinely means those
         # flows executed rather than self-disabled.
         $env:COTEST_REQUIRE_JOINT_STACK = "1"
+        # The joint harness provisions coauth with the dev login/consent hooks
+        # and deterministic registration code required by the real browser OIDC
+        # lifecycle specs. Keep these critical regressions in the default
+        # joint-smoke gate instead of requiring a manual opt-in.
+        $env:COTEST_REAL_OIDC_LOGIN = "1"
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_DID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
     }
     if ($StaridBaseUrl) {
         $env:COTEST_STARID_BASE_URL = $StaridBaseUrl.TrimEnd("/")

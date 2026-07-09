@@ -73,7 +73,12 @@ export default defineConfig({
     },
     {
       name: "joint-inkson",
-      testDir: "./tests/joint",
+      testDir: "./tests",
+      testMatch: [
+        "joint/*.spec.ts",
+        "identity/device-key-lifecycle.spec.ts",
+        "identity/oidc-login-flow.spec.ts",
+      ],
       use: { ...devices["Desktop Chrome"], baseURL },
     },
   ],

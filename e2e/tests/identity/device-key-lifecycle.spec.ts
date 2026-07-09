@@ -11,7 +11,12 @@ import {
   serverLoginViaCoauth,
   type RealOidcAccount,
 } from "../../helpers/real-oidc-login";
-import { openUserPage, uniqueUser, type JointUserPage } from "../../helpers/users";
+import {
+  assertJointStackNotRequired,
+  openUserPage,
+  uniqueUser,
+  type JointUserPage,
+} from "../../helpers/users";
 
 type CapturedGrant = {
   jwt: string;
@@ -20,7 +25,7 @@ type CapturedGrant = {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("holder device key lifecycle separation", () => {
+test.describe("holder device key lifecycle separation @fully-implemented", () => {
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
@@ -30,10 +35,10 @@ test.describe("holder device key lifecycle separation", () => {
   }) => {
     test.setTimeout(420_000);
     test.skip(!coauth, "coauth not started for this run");
-    test.skip(
-      !optIn,
-      "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony",
-    );
+    if (!optIn) {
+      assertJointStackNotRequired("device key lifecycle real OIDC login");
+      test.skip(true, "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony");
+    }
 
     const envHandle = realOidcLoginHandle();
     const envPassword = realOidcLoginPassword();

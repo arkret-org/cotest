@@ -20,15 +20,15 @@
 // "123456" — so no pre-seeded account, mock-email scraping, or external
 // credentials are required.
 //
-// ── Why it is opt-in (skipped unless COTEST_REAL_OIDC_LOGIN is set) ───────────
+// ── CI gate ──────────────────────────────────────────────────────────────────
 // It drives coauth's interactive login + consent pages, which only carry the
 // `data-testid` hooks this test selects (`coauth-login-submit`,
 // `coauth-oauth-approve`) and mint the deterministic dev code when coauth is
-// built from the source that added them (alongside this test). A prebuilt
-// coauth bundle won't have either, so the flow would hang/flake. Gate it on an
-// explicit opt-in until the joint harness rebuilds coauth from source by
-// default; then this flag can be dropped. The server-side invariants are pinned
-// unconditionally in oidc-login-chain.spec.ts, which runs on CI.
+// built from source. The joint harness provisions that stack and sets
+// COTEST_REAL_OIDC_LOGIN=1, so this regression flow is part of the default
+// joint-smoke gate. Ad-hoc runs without that env still skip; if the harness
+// declares the joint stack present, missing prerequisites fail loudly instead
+// of reporting a false green.
 //
 //   COTEST_REAL_OIDC_LOGIN=1 \
 //   COTEST_COAUTH_BASE_URL=…  COTEST_SOLAND_BASE_URL=…  COTEST_INKSON_BASE_URL=… \
@@ -53,10 +53,11 @@ import {
   submitCoauthPasswordCredentials,
   type RealOidcAccount,
 } from "../../helpers/real-oidc-login";
+import { assertJointStackNotRequired } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("real OIDC browser login lifecycle", () => {
+test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
@@ -65,11 +66,14 @@ test.describe("real OIDC browser login lifecycle", () => {
     request,
   }) => {
     test.skip(!coauth, "coauth not started for this run");
-    test.skip(
-      !optIn,
-      "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony " +
-        "(needs coauth built from source: login/consent testids + deterministic dev code)",
-    );
+    if (!optIn) {
+      assertJointStackNotRequired("OIDC browser login lifecycle");
+      test.skip(
+        true,
+        "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony " +
+          "(needs coauth built from source: login/consent testids + deterministic dev code)",
+      );
+    }
 
     // 1. Establish a password account: an explicitly-provided one, else
     //    self-register a fresh new user over coauth's registration API.
@@ -121,7 +125,10 @@ test.describe("real OIDC browser login lifecycle", () => {
     request,
   }) => {
     test.skip(!coauth, "coauth not started for this run");
-    test.skip(!optIn, "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony");
+    if (!optIn) {
+      assertJointStackNotRequired("OIDC wrong-password browser login");
+      test.skip(true, "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony");
+    }
 
     const account = await registerCoauthPasswordAccount(request, coauth!);
     const jointPage = await openUserPage(browser, uniqueUser("oidc-login-bad"));
