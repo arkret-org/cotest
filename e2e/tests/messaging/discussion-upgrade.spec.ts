@@ -14,6 +14,7 @@ import {
   listRealmEventsViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
+import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   canonicalTimestamp,
   resolveDefaultStrandId,
@@ -483,29 +484,21 @@ async function createDiscussionFixture(
   label: string,
 ): Promise<DiscussionFixture> {
   const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice`);
-  const bob = uniqueUser(`${label}-bob`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
-  ]);
-  const realmId = await createSharedRealmViaApi(
-    request,
-    alice,
-    aliceToken,
-    bob,
-    bobToken,
-    {
-      title: `${label} realm ${stamp}`,
+  const fixture = await createTwoUserMessagingRealm(request, {
+    label,
+    title: `${label} realm ${stamp}`,
+    realm: {
       historyVisibility: "shared",
     },
+  });
+  await joinRealmMemberViaApi(
+    request,
+    fixture.aliceToken,
+    fixture.alice,
+    fixture.realmId,
+    fixture.alice.did,
   );
-  await joinRealmMemberViaApi(request, aliceToken, alice, realmId, alice.did);
-  return { alice, bob, aliceToken, bobToken, realmId };
+  return fixture;
 }
 
 async function createStrandViaApi(

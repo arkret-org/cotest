@@ -16,6 +16,7 @@ import {
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
+import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
   canonicalJson,
@@ -990,26 +991,11 @@ function encryptedPayloadDigest(
 
 async function createChatApiFixture(request: APIRequestContext, label: string) {
   const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice`);
-  const bob = uniqueUser(`${label}-bob`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
-  ]);
-  const realmId = await createSharedRealmViaApi(
-    request,
-    alice,
-    aliceToken,
-    bob,
-    bobToken,
-    {
-      title: `${label} ${stamp}`,
+  return await createTwoUserMessagingRealm(request, {
+    label,
+    title: `${label} ${stamp}`,
+    realm: {
       historyVisibility: "shared",
     },
-  );
-  return { alice, bob, aliceToken, bobToken, realmId };
+  });
 }

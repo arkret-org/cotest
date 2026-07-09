@@ -12,6 +12,7 @@ import {
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
+import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   signedEventEnvelope,
   submitSignedEventApi,
@@ -490,36 +491,23 @@ type ReceiptFixture = Awaited<ReturnType<typeof createReceiptFixture>>;
 
 async function createReceiptFixture(request: APIRequestContext, label: string) {
   const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice`);
-  const bob = uniqueUser(`${label}-bob`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
-  ]);
-  const realmId = await createSharedRealmViaApi(
-    request,
-    bob,
-    bobToken,
-    alice,
-    aliceToken,
-    {
-      title: `${label} receipt ${stamp}`,
+  const fixture = await createTwoUserMessagingRealm(request, {
+    label,
+    owner: "bob",
+    title: `${label} receipt ${stamp}`,
+    realm: {
       discoverability: "listed",
       historyVisibility: "shared",
     },
-  );
+  });
   const message = await sendPlaintextMessageViaApi(
     request,
-    bobToken,
-    realmId,
+    fixture.bobToken,
+    fixture.realmId,
     `${label} message ${stamp}`,
-    { actorDid: bob.did },
+    { actorDid: fixture.bob.did },
   );
-  return { alice, bob, aliceToken, bobToken, realmId, message };
+  return { ...fixture, message };
 }
 
 function receiptEnvelope(
