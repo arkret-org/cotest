@@ -31,7 +31,7 @@ test.describe("audited E2EE", () => {
     const token = await issueDevSession(request, alice);
 
     const probe = await request.get(
-      `${solandBaseUrl()}/_soland/self/audit/events?realm_id=ck:realm:01904100-0000-7000-8000-000000000025`,
+      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=ck:realm:01904100-0000-7000-8000-000000000025`,
       { headers: { authorization: `Bearer ${token}` } },
     );
     expect([200, 401, 403, 404]).toContain(probe.status());
@@ -44,7 +44,7 @@ test.describe("audited E2EE", () => {
       const setup = await setupAuditedMessage(request, "s25-frank");
 
       const audit = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -92,7 +92,7 @@ test.describe("audited E2EE", () => {
       const report = await fileModerationReport(request, setup);
 
       const routed = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const routedText = await routed.text();
@@ -102,7 +102,7 @@ test.describe("audited E2EE", () => {
       expect(JSON.stringify(routedEvents)).toContain(String(report.report_id));
 
       const accessed = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.audit.accessed`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.audit.accessed`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const accessedText = await accessed.text();
@@ -117,7 +117,7 @@ test.describe("audited E2EE", () => {
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-tamper");
       const audit = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -152,7 +152,7 @@ test.describe("audited E2EE", () => {
 
       // The historical audit.report routing record is durable.
       const historicalRouted = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const historicalRoutedText = await historicalRouted.text();
@@ -207,7 +207,7 @@ test.describe("audited E2EE", () => {
       // 4. The historical accessed / routed records from before the revoke
       // remain intact (revocation is prospective only).
       const routedAfter = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const routedAfterText = await routedAfter.text();

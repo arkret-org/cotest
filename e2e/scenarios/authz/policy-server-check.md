@@ -96,7 +96,7 @@
 17. **alice** 再次邀请(同 bob 或一个新 user 都行)
 18. soland 收到 deny + obligation,**先**执行 obligation(写一条 `kind = policy.deny` 的 audit log,target_action = `ck.invite.create`),**再**返回 `412`
 19. 断言:
-    - `GET /_soland/self/audit/events?actor=${alice.did}&action=policy.deny` 返回至少一条 entry
+    - `GET /_soland/admin/audit/events?actor=${alice.did}&action=policy.deny` 返回至少一条 entry
     - 该 entry 的 `target.category = "policy_block"`、`target.severity = "info"`、`target.upstream_reason = "external_policy_blocks_user"`
 20. `${MOCK_POLICY_SERVER_PORT}/inspect.checks` 中本次 request 的 `obligations_executed = true`
 

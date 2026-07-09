@@ -332,7 +332,7 @@ test.describe("encrypted attachments", () => {
     // The franking receipt is independently verifiable via the audit surface
     // without disclosing plaintext.
     const audit = await request.get(
-      `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=org.cokret.soland.audit.report`,
+      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=org.cokret.soland.audit.report`,
       { headers: authHeaders(aliceToken) },
     );
     const auditText = await audit.text();

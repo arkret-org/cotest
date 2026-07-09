@@ -293,7 +293,11 @@ test.describe("moderation and ban", () => {
         `[data-testid="member-row"][data-member-did="${mallory.did}"]`,
       );
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
-      await malloryRow.getByTestId("ban-member-button").click();
+      // The "Recovery setup is incomplete" banner can render over the member
+      // row and intercept pointer events; complete/dismiss it before banning.
+      await alicePage.clickWithPassivePromptRetry(
+        malloryRow.getByTestId("ban-member-button"),
+      );
       await expect(alicePage.page.locator("main")).toContainText(/banned/i, {
         timeout: 30_000,
       });

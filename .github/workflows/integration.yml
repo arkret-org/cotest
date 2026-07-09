@@ -77,7 +77,16 @@ jobs:
           set -euo pipefail
           for svc in soland coauth floria; do
             echo "::group::cargo build $svc"
-            (cd "$svc" && cargo build --release --locked)
+            # coauth: password-bootstrap compiles in the password-login
+            # session-grant path (runtime stays triple-gated by config flag +
+            # COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP); without it the
+            # handler is #[cfg]-ed out and always answers
+            # password_login_session_grants_disabled.
+            features=""
+            if [ "$svc" = "coauth" ]; then
+              features="--features cedar,password-bootstrap"
+            fi
+            (cd "$svc" && cargo build --release --locked $features)
             echo "::endgroup::"
           done
       - name: install playwright

@@ -125,7 +125,12 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await expect(inviteCard).toHaveCount(1, { timeout: 30_000 });
       await expect(inviteCard).toContainText("Realm invite");
       await expect(inviteCard).toContainText("You were invited to join");
-      await inviteCard.getByTestId("notification-action").click();
+      // The recovery-key setup dialog can pop asynchronously once the MLS
+      // device state loads and its backdrop swallows every click; complete or
+      // dismiss it before accepting the invite.
+      await bobPage.clickWithPassivePromptRetry(
+        inviteCard.getByTestId("notification-action"),
+      );
 
       await expect(bobPage.page.getByTestId("notifications-status")).toContainText(
         /Joined Realm/,

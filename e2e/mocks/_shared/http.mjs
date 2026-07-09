@@ -99,3 +99,12 @@ function assertCanonicalNumber(value, path) {
     throw new TypeError(`non-canonical number at ${path}: ${value}`);
   }
 }
+
+/// Canonical RFC 3339 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`, seconds only).
+/// soland validates every string `*_at` field inside event content blocks with
+/// cokret-sdk `validate_timestamp_canonical`, which rejects fractional
+/// seconds — never emit a raw `toISOString()` from a mock. Mirrors
+/// `canonicalTimestamp` in e2e/helpers/soland-api.ts.
+export function canonicalTimestamp(date = new Date()) {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}

@@ -19,7 +19,7 @@ import { createServer } from "node:http";
 import { randomUUID, sign as cryptoSign } from "node:crypto";
 import { createEd25519KeyPair, b64url } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
-import { readJson } from "./_shared/http.mjs";
+import { canonicalTimestamp, readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_CHALLENGE_PROVIDER_PORT ?? "0", 10);
 const providerDid =
@@ -78,7 +78,7 @@ const server = createServer(async (req, res) => {
     const offset = Number.isFinite(body.issued_at_offset_seconds)
       ? body.issued_at_offset_seconds
       : 0;
-    const issuedAt = new Date(Date.now() - offset * 1000).toISOString();
+    const issuedAt = canonicalTimestamp(new Date(Date.now() - offset * 1000));
     const proofBody = {
       challenge_id: challengeId,
       issued_by: providerDid,

@@ -38,7 +38,7 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 4. soland Sync Service:
    - 接受 ciphertext + plaintext metadata
    - 同时生成 `ck.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_did, timestamp }`,服务端 service DID 签
-5. 断言:`GET /_soland/self/audit/events?realm_id=<R_audit>&kind=ck.moderation.franking_proof` 返回该 franking 记录
+5. 断言:`GET /_soland/admin/audit/events?realm_id=<R_audit>&kind=ck.moderation.franking_proof` 返回该 franking 记录
 6. 断言:franking record **不含** 明文消息内容,只含 ciphertext_digest
 
 ### Phase C — reporter 举报

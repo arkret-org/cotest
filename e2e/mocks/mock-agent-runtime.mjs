@@ -42,7 +42,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { handleInspect, InspectLog } from "./_shared/inspect.mjs";
-import { canonicalJson, readJson } from "./_shared/http.mjs";
+import { canonicalJson, canonicalTimestamp, readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_AGENT_RUNTIME_PORT ?? "0", 10);
 
@@ -148,7 +148,7 @@ function taskResult(body) {
     ],
     external_transcript_digest: sha256Digest(transcript),
     attribution: agentDid,
-    completed_at: new Date().toISOString().replace(".000Z", "Z"),
+    completed_at: canonicalTimestamp(),
   };
 }
 
