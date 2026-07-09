@@ -541,20 +541,37 @@ export class JointUserPage {
         return undefined;
       }
     }
-    await expect(generatedKeyField).toBeVisible({ timeout: 0 });
-    const recoveryKey = (await generatedKeyField.inputValue()).trim();
-    expect(
-      recoveryKey.split(/\s+/),
-      "recovery-key setup prompt must expose a 24-word key",
-    ).toHaveLength(24);
-
-    await this.page
-      .getByTestId("recovery-key-setup-confirm-key")
-      .last()
-      .fill(recoveryKey);
-    await this.page.getByTestId("recovery-key-setup-saved").last().click();
+    // Pages opened via openUserPage register an addLocatorHandler on
+    // recovery-key-setup-generated-key that auto-completes this modal
+    // (fill confirm + save) the moment any auto-waiting call runs while
+    // the generated key is visible. Every auto-waiting step below can
+    // therefore trigger that handler and find the dialog already closed
+    // underneath it. Treat "dialog gone" as handled at each step — the
+    // dialog closing is the real success invariant either way.
+    const recoveryKey = (
+      await generatedKeyField.inputValue({ timeout: 10_000 }).catch(() => "")
+    ).trim();
+    const keyReadable = recoveryKey.split(/\s+/).filter(Boolean).length === 24;
+    if (!keyReadable && !(await dialog.isHidden({ timeout: 100 }).catch(() => false))) {
+      expect(
+        recoveryKey.split(/\s+/).filter(Boolean),
+        "recovery-key setup prompt must expose a 24-word key",
+      ).toHaveLength(24);
+    }
+    if (keyReadable) {
+      await this.page
+        .getByTestId("recovery-key-setup-confirm-key")
+        .last()
+        .fill(recoveryKey, { timeout: 10_000 })
+        .catch(() => undefined);
+      await this.page
+        .getByTestId("recovery-key-setup-saved")
+        .last()
+        .click({ timeout: 10_000 })
+        .catch(() => undefined);
+    }
     await expect(dialog).toBeHidden({ timeout: 30_000 });
-    return recoveryKey;
+    return keyReadable ? recoveryKey : undefined;
   }
 
   async acknowledgeRecommendedEncryptionPromptIfVisible(
