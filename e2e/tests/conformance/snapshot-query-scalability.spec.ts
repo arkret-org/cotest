@@ -98,7 +98,7 @@ function expectNoResultPayload(body: unknown) {
 }
 
 function decodedCursorText(cursor: string): string {
-  const payload = cursor.replace(/^ck:cursor:/, "");
+  const payload = cursor.replace(/^ak:cursor:/, "");
   return Buffer.from(payload, "base64url").toString("utf8");
 }
 
@@ -225,8 +225,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const page1 = await first.json();
     expect(page1.items.map((row: { id: string }) => row.id)).toEqual(["row-1", "row-2"]);
     expect(page1.has_more).toBe(true);
-    expect(page1.next_cursor).toMatch(/^ck:cursor:/);
-    expect(page1.frontier.barrier_cursor).toMatch(/^ck:cursor:/);
+    expect(page1.next_cursor).toMatch(/^ak:cursor:/);
+    expect(page1.frontier.barrier_cursor).toMatch(/^ak:cursor:/);
     expect(decodedCursorText(page1.next_cursor)).not.toContain("row-");
 
     const page2Req = {

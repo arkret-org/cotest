@@ -638,7 +638,7 @@ function sameActorFreshDevice(user: JointUser, label: string): JointUser {
   return {
     ...user,
     name: `${user.name}-${label}`,
-    deviceId: `ck:device:01904100-0000-7000-8000-${suffix}`,
+    deviceId: `ak:device:01904100-0000-7000-8000-${suffix}`,
   };
 }
 

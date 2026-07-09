@@ -981,7 +981,7 @@ export function uniqueUser(prefix: string): JointUser {
     // conformance vectors (`did:webvh:z6mkfixture:<host>`); did:web is
     // reserved for explicit no-history / negative fixtures only.
     did: `did:webvh:z6mkfixture:${slug}.example`,
-    deviceId: `ck:device:01904100-0000-7000-8000-${deviceSuffix}`,
+    deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
   };

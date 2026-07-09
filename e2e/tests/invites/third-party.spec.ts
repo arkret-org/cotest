@@ -41,7 +41,7 @@ function didKeyUser(prefix: string, identity: DidKeyIdentity): JointUser {
   return {
     name: `${prefix}-${stamp}`.toLowerCase(),
     did: identity.did,
-    deviceId: `ck:device:01904100-0000-7000-8000-${deviceSuffix}`,
+    deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${prefix}-${stamp}`.toLowerCase(),
     displayName: `${prefix} ${stamp}`,
   };

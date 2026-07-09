@@ -162,9 +162,9 @@ test.describe("account onboarding", () => {
         `authorize scope must carry a device-binding token, got: ${requestedScope}`,
       ).toBeTruthy();
       // The bound device id (suffix after the scope prefix) must be a real
-      // `ck:device:` identifier, not empty.
+      // `ak:device:` identifier, not empty.
       expect(deviceScope?.slice("urn:arkret:client:device:".length)).toMatch(
-        /^ck:device:/,
+        /^ak:device:/,
       );
     } finally {
       await page.close();

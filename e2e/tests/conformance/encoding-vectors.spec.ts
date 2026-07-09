@@ -480,7 +480,7 @@ test.describe("conformance encoding vectors", () => {
     expect(bodyB.cursor).toBe(bodyA.cursor);
 
     // Cursor MUST be opaque: decoding the base64url payload (after the
-    // `ck:cursor:` prefix) MUST NOT reveal raw event_id substrings.
+    // `ak:cursor:` prefix) MUST NOT reveal raw event_id substrings.
     expect(bodyA.cursor.startsWith("ak:cursor:")).toBe(true);
     const payload = bodyA.cursor.slice("ak:cursor:".length);
     const decoded = Buffer.from(payload, "base64url").toString("utf8");

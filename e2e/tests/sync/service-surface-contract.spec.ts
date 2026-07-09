@@ -136,7 +136,7 @@ test.describe("describes soland surface @fully-implemented", () => {
 
     // §17 — canonical ServiceDescribe required fields
     expect(body.service_did, "service_did").toBeTruthy();
-    expect(body.trust_domain, "trust_domain").toMatch(/^ck:trust_domain:/);
+    expect(body.trust_domain, "trust_domain").toMatch(/^ak:trust_domain:/);
     expect(body.service_type, "service_type").toBe("principal_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
     expect(Array.isArray(body.supported_profiles), "supported_profiles is array").toBe(true);
@@ -408,7 +408,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
   test(
     "Phase C: list endpoint pagination cursor is opaque, gap-free, and non-overlapping across pages",
     async ({ request }) => {
-      // spec: api-conventions.md §7 (cursor opaque; wire form `ck:cursor:<base64url>`;
+      // spec: api-conventions.md §7 (cursor opaque; wire form `ak:cursor:<base64url>`;
       //         invalid → invalid_param; expired → cursor_expired),
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
@@ -449,7 +449,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       }
       const seededSet = new Set(seededEventIds);
 
-      const cursorRe = /^ck:cursor:[A-Za-z0-9_-]+$/;
+      const cursorRe = /^ak:cursor:[A-Za-z0-9_-]+$/;
       const fetchPage = async (after?: string) => {
         const url = new URL(`${solandBaseUrl()}/_arkret/self/events`);
         url.searchParams.set("realms", realmId);
