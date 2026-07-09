@@ -51,6 +51,10 @@ chrono = {workspace = true}
 arkret = {workspace = true}
 garth = {workspace = true}
 arkret-core = {workspace = true,features = ["client"]}
+# 05-2 — cotest-wire emits SDK-authoritative cross-signing / device-trust
+# canonical signing-input golden vectors (CrossSigningPublishContent /
+# DeviceTrustBinding) so the TS e2e byte-mirror helpers regress against the SDK.
+arkret-crypto = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-signatures = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
@@ -91,6 +95,7 @@ chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
 arkret = {path = "../arkret-rust-sdk/crates/sdk"}
+arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth"}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}

@@ -70,7 +70,12 @@ function signB64url(message: Buffer, key: CrossSigningKey): string {
 /// Canonical signing input for a PSK→subordinate binding
 /// (`ck-cross-signing-bind-v1`, device-lifecycle.md §5.1). Byte-mirrors the SDK
 /// `canonical_cross_signing_binding_input`.
-function crossSigningBindingInput(args: {
+///
+/// 05-2 — exported so the cross-language golden-vector regression
+/// (`cross-signing-golden.spec.ts`) can assert these bytes stay identical to the
+/// SDK-authoritative `CrossSigningPublishContent::{self,user}_signing_binding_input`
+/// emitted by the `cotest-wire` bin.
+export function crossSigningBindingInput(args: {
   principalId: string;
   trustDomain: string;
   subordinateKind: "self_signing" | "user_signing";
@@ -97,7 +102,10 @@ function crossSigningBindingInput(args: {
 /// Canonical signing input for a per-device SSK→device binding
 /// (`ck-device-trust-bind-v1`, device-lifecycle.md §5.2). Byte-mirrors the SDK
 /// `canonical_device_trust_binding_input`.
-function deviceTrustBindingInput(args: {
+///
+/// 05-2 — exported for the cross-language golden-vector regression against the
+/// SDK-authoritative `DeviceTrustBinding::canonical_input`.
+export function deviceTrustBindingInput(args: {
   principalId: string;
   deviceId: string;
   devicePublicKey: string;

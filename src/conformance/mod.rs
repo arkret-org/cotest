@@ -8,6 +8,7 @@ mod call_state_core;
 mod call_state_media_lifecycle;
 mod canonical_cross_lang;
 mod capability;
+mod cross_signing_binding_golden;
 mod coauth_lifecycle;
 mod cursor_vectors;
 mod encoding;
@@ -113,6 +114,7 @@ pub use call_state_media_lifecycle::{
     run_transcribe_lifecycle_vector,
 };
 pub use canonical_cross_lang::run_canonical_cross_lang_suite;
+pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use capability::{
     run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
     run_capability_fixture_suite,

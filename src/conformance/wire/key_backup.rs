@@ -82,6 +82,11 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
         bail!("post-rotation cipher decrypted pre-rotation ciphertext — rotation invariant broken");
     }
 
+    // 05-1 — assert the SDK's authoritative `KeyBackupEncryption` validator is
+    // actually wired and fails closed on malformed `passphrase_kdf` envelopes,
+    // rather than relying only on this harness's structural serde_json checks.
+    assert_sdk_rejects_malformed_passphrase_kdf_envelopes()?;
+
     let mut saw_kdf = false;
     let mut saw_opaque = false;
     let mut saw_restore = false;
@@ -112,6 +117,12 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                 if pp_uploaded {
                     bail!("vector {name} passphrase_uploaded MUST be false (zero-knowledge)");
                 }
+                // 05-1 — converge onto the SDK's authoritative validator: the
+                // `passphrase_kdf` envelope this vector implies must deserialize
+                // into `arkret_core::KeyBackupEncryption` (running its
+                // recipient-method `validate()` shim) and pass.
+                let salt_b64 = required_str(v, "salt_b64")?;
+                assert_passphrase_kdf_envelope_valid_via_sdk(name, kdf, salt_b64)?;
                 saw_kdf = true;
             }
             "server_side_blob_storage_opaque" => {
@@ -142,6 +153,11 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                         "vector {name} restore must assert decryption_succeeded + auth_tag_verified"
                     );
                 }
+                // 05-1 — same SDK-authoritative convergence on the restore path:
+                // the re-derived envelope must remain a legal SDK
+                // `KeyBackupEncryption`.
+                let salt_b64 = required_str(v, "salt_b64")?;
+                assert_passphrase_kdf_envelope_valid_via_sdk(name, kdf, salt_b64)?;
                 saw_restore = true;
             }
             "rotation_mints_new_version_and_reencrypts" => {
@@ -161,6 +177,10 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                 if !new_uploaded {
                     bail!("vector {name} rotation must upload new_version");
                 }
+                // 05-1 — the freshly-minted rotation envelope must also be a
+                // legal SDK `KeyBackupEncryption` under the new KDF + salt.
+                let new_salt_b64 = required_str(v, "new_salt_b64")?;
+                assert_passphrase_kdf_envelope_valid_via_sdk(name, new_kdf, new_salt_b64)?;
                 saw_rotation_vector = true;
             }
             other => bail!("vector unexpected name {other}"),
@@ -244,6 +264,93 @@ pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
         .map_err(|e| anyhow!("XChaCha20-Poly1305 wrong-key init: {e}"))?;
     if wrong_cipher.decrypt(nonce, ct.as_ref()).is_ok() {
         bail!("wrong-key decrypt succeeded — AEAD invariant broken");
+    }
+    Ok(())
+}
+
+/// 05-1 — build the `passphrase_kdf` `encryption` envelope implied by a fixture
+/// vector and deserialize it into the SDK's authoritative
+/// [`arkret_core::KeyBackupEncryption`], which runs its recipient-method
+/// `validate()` shim (`key-backup.schema.json` `encryption.allOf[].if/then`:
+/// passphrase_kdf REQUIRES `kdf` + `aead.nonce` + `aead.nonce_salt` and FORBIDS
+/// `hpke_suite`). Replaces a bespoke `serde_json::Value` re-derivation of those
+/// rules with the SDK's single source of truth.
+fn assert_passphrase_kdf_envelope_valid_via_sdk(
+    name: &str,
+    kdf: &Value,
+    salt_b64: &str,
+) -> Result<()> {
+    let memory_kib = kdf
+        .get("memory_kib")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("vector {name} kdf missing memory_kib"))?;
+    let iterations = kdf
+        .get("iterations")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("vector {name} kdf missing iterations"))?;
+    let parallelism = kdf
+        .get("parallelism")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("vector {name} kdf missing parallelism"))?;
+    let encryption_json = json!({
+        "recipient_method": "passphrase_kdf",
+        "kdf": {
+            "name": "argon2id",
+            "salt": salt_b64,
+            "params": {
+                "memory_kib": memory_kib,
+                "iterations": iterations,
+                "parallelism": parallelism,
+            },
+        },
+        "aead": {
+            "name": "xchacha20_poly1305",
+            "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "nonce_salt": salt_b64,
+        },
+    });
+    let encryption: arkret_core::KeyBackupEncryption = serde_json::from_value(encryption_json)
+        .map_err(|e| {
+            anyhow!(
+                "vector {name} passphrase_kdf envelope must deserialize into SDK \
+                 KeyBackupEncryption (runs authoritative validate()): {e}"
+            )
+        })?;
+    // Re-run the authoritative validator explicitly (idempotent with the
+    // deserialize `try_from` shim) to pin cotest onto the SDK's rules.
+    encryption.validate().map_err(|e| {
+        anyhow!("vector {name} SDK KeyBackupEncryption::validate() rejected a well-formed envelope: {e}")
+    })?;
+    if encryption.recipient_method != arkret_core::KeyBackupRecipientMethod::PassphraseKdf {
+        bail!("vector {name} SDK parsed recipient_method != passphrase_kdf");
+    }
+    Ok(())
+}
+
+/// 05-1 — prove the SDK validator fails closed: two malformed `passphrase_kdf`
+/// envelopes (missing `aead.nonce_salt`; carrying a `recovery_public_key`-only
+/// `hpke_suite`) MUST be rejected by `arkret_core::KeyBackupEncryption`'s
+/// deserialize/validate shim. Guards against the SDK validator silently going
+/// permissive underneath cotest's positive assertions.
+fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
+    let missing_nonce_salt = json!({
+        "recipient_method": "passphrase_kdf",
+        "kdf": {"name": "argon2id", "salt": "AAAA",
+                "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
+        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA"},
+    });
+    if serde_json::from_value::<arkret_core::KeyBackupEncryption>(missing_nonce_salt).is_ok() {
+        bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope missing aead.nonce_salt");
+    }
+    let stray_hpke_suite = json!({
+        "recipient_method": "passphrase_kdf",
+        "kdf": {"name": "argon2id", "salt": "AAAA",
+                "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
+        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA", "nonce_salt": "AAAAAAAAAAAAAAAA"},
+        "hpke_suite": "ck.hpke_x25519_aead_chacha20poly1305.v1",
+    });
+    if serde_json::from_value::<arkret_core::KeyBackupEncryption>(stray_hpke_suite).is_ok() {
+        bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope carrying hpke_suite");
     }
     Ok(())
 }

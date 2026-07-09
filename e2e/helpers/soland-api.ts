@@ -2131,11 +2131,18 @@ type CotestWireCommand =
   | "sha256-canonical-json"
   | "event-proof"
   | "event-envelope-proof"
-  | "principal-control-realm-id";
+  | "principal-control-realm-id"
+  | "cross-signing-binding-input"
+  | "device-trust-binding-input";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
 type CotestWirePrincipalControlRealm = { realm_id: string };
+type CotestWireCrossSigningBindingInput = {
+  self_signing_input_b64: string;
+  user_signing_input_b64: string;
+};
+type CotestWireDeviceTrustBindingInput = { input_b64: string };
 
 const cotestRepoRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -2164,6 +2171,48 @@ function sdkPrincipalControlRealmId(principalId: string): string {
       principal_id: principalId,
     },
   ).realm_id;
+}
+
+/// 05-2 — SDK-authoritative PSK→SSK / PSK→USK `ck-cross-signing-bind-v1`
+/// canonical signing inputs (base64) for a full `ck.cross_signing.publish`
+/// payload, produced by `CrossSigningPublishContent::{self,user}_signing_binding_input`.
+/// The cross-language golden-vector regression asserts the TS byte-mirror in
+/// `cross-signing-harness.ts` reproduces these exact bytes.
+export function sdkCrossSigningBindingInputs(
+  publishPayload: Record<string, unknown>,
+): { selfSigningInputB64: string; userSigningInputB64: string } {
+  assertJsonTransportable(publishPayload, "$");
+  const out = cotestWire<CotestWireCrossSigningBindingInput>(
+    "cross-signing-binding-input",
+    publishPayload,
+  );
+  return {
+    selfSigningInputB64: out.self_signing_input_b64,
+    userSigningInputB64: out.user_signing_input_b64,
+  };
+}
+
+/// 05-2 — SDK-authoritative `ck-device-trust-bind-v1` canonical signing input
+/// (base64) produced by `DeviceTrustBinding::canonical_input`.
+export function sdkDeviceTrustBindingInput(args: {
+  principalId: string;
+  deviceId: string;
+  devicePublicKey: string;
+  hpkeKey: string;
+  algorithms: string[];
+  sskGeneration: number;
+}): string {
+  return cotestWire<CotestWireDeviceTrustBindingInput>(
+    "device-trust-binding-input",
+    {
+      principal_id: args.principalId,
+      device_id: args.deviceId,
+      device_public_key: args.devicePublicKey,
+      hpke_key: args.hpkeKey,
+      algorithms: args.algorithms,
+      ssk_generation: args.sskGeneration,
+    },
+  ).input_b64;
 }
 
 /// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative

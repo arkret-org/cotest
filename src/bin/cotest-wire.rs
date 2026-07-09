@@ -1,9 +1,11 @@
 use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
+use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use arkret::auth::principal_control_realm_id;
-use arkret_core::{Did, Hash, Proof, canonical, proof_kind};
+use arkret_core::{DeviceId, Did, Hash, Proof, canonical, proof_kind};
+use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -27,6 +29,19 @@ struct PrincipalControlRealmInput {
     principal_id: String,
 }
 
+/// 05-2 — flat inputs for the SSK→device `ck-device-trust-bind-v1` canonical
+/// signing input. Mirrors the args the TS `deviceTrustBindingInput` byte-mirror
+/// helper takes, but the bytes are produced by the SDK.
+#[derive(Debug, Deserialize)]
+struct DeviceTrustBindingInputArgs {
+    principal_id: String,
+    device_id: String,
+    device_public_key: String,
+    hpke_key: String,
+    algorithms: Vec<String>,
+    ssk_generation: u64,
+}
+
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;
     let input = read_stdin_json()?;
@@ -37,6 +52,8 @@ fn main() -> Result<()> {
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
+        "cross-signing-binding-input" => cross_signing_binding_input(input)?,
+        "device-trust-binding-input" => device_trust_binding_input(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 
@@ -74,6 +91,50 @@ fn principal_control_realm(input: Value) -> Result<Value> {
     let principal = Did::new(input.principal_id).context("parse principal DID")?;
     Ok(json!({
         "realm_id": principal_control_realm_id(&principal),
+    }))
+}
+
+/// 05-2 — deserialize a full `ck.cross_signing.publish` payload (the shape the
+/// TS `buildCrossSigningPublishPayload` helper emits) into the SDK's
+/// `CrossSigningPublishContent` and return the SDK-authoritative PSK→SSK and
+/// PSK→USK `ck-cross-signing-bind-v1` canonical signing inputs. The TS
+/// `crossSigningBindingInput` byte-mirror is regression-checked against these
+/// bytes so a drift in the prefix / body field-set / canonical-JSON encoding
+/// is caught cross-language.
+fn cross_signing_binding_input(input: Value) -> Result<Value> {
+    let content: CrossSigningPublishContent = serde_json::from_value(input)
+        .context("parse cross_signing.publish content")?;
+    let self_signing = content
+        .self_signing_binding_input()
+        .map_err(|err| anyhow::anyhow!("self_signing binding input: {err}"))?;
+    let user_signing = content
+        .user_signing_binding_input()
+        .map_err(|err| anyhow::anyhow!("user_signing binding input: {err}"))?;
+    Ok(json!({
+        "self_signing_input_b64": base64::engine::general_purpose::STANDARD.encode(&self_signing),
+        "user_signing_input_b64": base64::engine::general_purpose::STANDARD.encode(&user_signing),
+    }))
+}
+
+/// 05-2 — SDK-authoritative `ck-device-trust-bind-v1` canonical signing input
+/// (SSK→device) for the TS `deviceTrustBindingInput` byte-mirror to regress
+/// against.
+fn device_trust_binding_input(input: Value) -> Result<Value> {
+    let args: DeviceTrustBindingInputArgs =
+        serde_json::from_value(input).context("parse device-trust binding input args")?;
+    let principal = Did::new(args.principal_id).context("parse principal DID")?;
+    let device_id = DeviceId::new(args.device_id).context("parse device id")?;
+    let bytes = DeviceTrustBinding::canonical_input(
+        &principal,
+        &device_id,
+        &args.device_public_key,
+        &args.hpke_key,
+        &args.algorithms,
+        args.ssk_generation,
+    )
+    .map_err(|err| anyhow::anyhow!("device-trust binding input: {err}"))?;
+    Ok(json!({
+        "input_b64": base64::engine::general_purpose::STANDARD.encode(&bytes),
     }))
 }
 
