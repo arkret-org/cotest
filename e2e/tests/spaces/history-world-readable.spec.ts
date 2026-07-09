@@ -146,7 +146,7 @@ test.describe("world_readable history @fully-implemented", () => {
 });
 
 function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string, unknown> {
-  const realmId = `ck:realm:${uuidV7()}`;
+  const realmId = `ak:realm:${uuidV7()}`;
   const createdAt = canonicalTimestamp();
   const payload = {
     object: {
@@ -169,7 +169,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
     },
   };
   const event = {
-    event_id: `ck:event:${uuidV7()}`,
+    event_id: `ak:event:${uuidV7()}`,
     kind: "ck.realm.create",
     realm_id: realmId,
     actor_id: actorDid,

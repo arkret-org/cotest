@@ -54,7 +54,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     .await?;
     assert_eq!(push["ok"], true);
     // soland derives the push registration_id as an unlinkable pseudonym —
-    // `ck:pseudonym:push:<base64url(HMAC)>` (push.rs `derive_push_target_id`)
+    // `ak:pseudonym:push:<base64url(HMAC)>` (push.rs `derive_push_target_id`)
     // — rather than the linkable `ck:push:{device_id}`. The HMAC tag is keyed
     // and salt-epoch-bound, so it is not predictable from the request; assert
     // the pseudonym shape instead of an exact value.

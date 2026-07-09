@@ -40,7 +40,7 @@ use crate::harness::{CokretServer, TestActorClient, fixture_webvh_did};
 
 /// Tracks the realms a scenario asked the builder to create as part of the
 /// fixture preamble. Each entry stores the original requested name and the
-/// allocated `ck:realm:...` id so scenarios can route follow-up assertions to
+/// allocated `ak:realm:...` id so scenarios can route follow-up assertions to
 /// the right realm without re-querying the server.
 #[derive(Debug, Clone)]
 pub struct SeededRealm {
@@ -86,7 +86,7 @@ impl TestActor {
         &self.client
     }
 
-    /// Convenience accessor that returns the `ck:realm:...` id of the first
+    /// Convenience accessor that returns the `ak:realm:...` id of the first
     /// realm the builder seeded, if any.
     pub fn first_realm(&self) -> Option<&str> {
         self.realms.first().map(|seeded| seeded.realm_id.as_str())
@@ -156,7 +156,7 @@ impl<'a> TestActorBuilder<'a> {
     /// Pre-seed a realm owned by this actor.
     ///
     /// Realms are created in the order they are declared. The allocated
-    /// `ck:realm:...` ids are returned on the resulting [`TestActor`] via
+    /// `ak:realm:...` ids are returned on the resulting [`TestActor`] via
     /// `actor.realms` or `actor.first_realm()` / `actor.realm_by_name(...)`.
     pub fn with_realm(mut self, name: &str) -> Self {
         self.realms.push(name.to_owned());

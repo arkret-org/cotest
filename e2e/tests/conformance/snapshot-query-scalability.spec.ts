@@ -114,7 +114,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
     const chunkHashes = chunks.map(chunkDigest);
     const manifest = {
-      id: "ak:snapshot:ck:realm:01904100-0000-7000-8000-000000000001:fixture",
+      id: "ak:snapshot:ak:realm:01904100-0000-7000-8000-000000000001:fixture",
       realm_id: "ak:realm:01904100-0000-7000-8000-000000000001",
       reducer_profile: "ck.reducer.v1",
       schema_profile_refs: ["ck.schema.core.v1"],
@@ -154,7 +154,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const signerDid = "did:web:soland.conformance-signer";
     const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
     const manifest = {
-      id: "ak:snapshot:ck:realm:01904100-0000-7000-8000-000000000002:signed",
+      id: "ak:snapshot:ak:realm:01904100-0000-7000-8000-000000000002:signed",
       realm_id: "ak:realm:01904100-0000-7000-8000-000000000002",
       reducer_profile: "ck.reducer.v1",
       schema_profile_refs: ["ck.schema.core.v1"],

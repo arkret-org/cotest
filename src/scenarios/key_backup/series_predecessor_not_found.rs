@@ -20,7 +20,7 @@ pub async fn series_predecessor_not_found_run() -> Result<()> {
         BackupSeriesId::new("ak:backup_series:01999999-0000-7000-8000-00000000bbb1".to_owned())
             .map_err(|e| anyhow!("BackupSeriesId: {e}"))?;
 
-    // TODO(P4-impl): live PUT carries supersedes=ck:backup:<random>
+    // TODO(P4-impl): live PUT carries supersedes=ak:backup:<random>
     // (no envelope by that id exists on server) → expect 409
     // series_predecessor_not_found.
     Ok(())

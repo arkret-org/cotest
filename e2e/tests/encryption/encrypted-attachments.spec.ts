@@ -277,7 +277,7 @@ test.describe("encrypted attachments", () => {
     // commits to the ciphertext / routing metadata — not the plaintext.
     const frankingProof = {
       kind: "ck.moderation.franking_proof",
-      franking_proof_id: `ck:franking_proof:${randomUUID()}`,
+      franking_proof_id: `ak:franking_proof:${randomUUID()}`,
       realm_id: realmId,
       event_id: eventId,
       routing_metadata_digest: sha256HexDigest(`routing-${eventId}`),

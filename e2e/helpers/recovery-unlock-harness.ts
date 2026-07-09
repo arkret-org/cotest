@@ -263,7 +263,7 @@ export async function prepareRecoveryPrincipal(
   //    authorizes it for `recovery_unlock`.
   const recoveryKey = generateRecoverySigningKey();
   const now = new Date();
-  const policyId = `ck:policy:${uuidV7()}`;
+  const policyId = `ak:policy:${uuidV7()}`;
   const entry: RecoveryKeyEntry = {
     verification_method: recoveryKey.verificationMethod,
     alg: "Ed25519",

@@ -658,7 +658,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
-      const eventId = `ck:event:01904100-0000-7000-8000-${Date.now()
+      const eventId = `ak:event:01904100-0000-7000-8000-${Date.now()
         .toString()
         .slice(-12)
         .padStart(12, "0")}`;
@@ -697,7 +697,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e2");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
-      const eventId = `ck:event:01904100-0000-7000-8000-${Date.now()
+      const eventId = `ak:event:01904100-0000-7000-8000-${Date.now()
         .toString()
         .slice(-12)
         .padStart(12, "0")}`;

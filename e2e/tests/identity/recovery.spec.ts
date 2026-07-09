@@ -27,7 +27,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 function uuidv7Like(): string {
-  // The SDK typed-id parser (`ck:backup:<uuidv7>` etc.) strictly requires a
+  // The SDK typed-id parser (`ak:backup:<uuidv7>` etc.) strictly requires a
   // lowercase UUIDv7 (version nibble == 7), so a v4 randomUUID() would be
   // rejected before any schema check. Build a conforming UUIDv7: 48-bit ms
   // timestamp + version 7 + variant 10 + random.
@@ -60,8 +60,8 @@ function secretStorageEnvelope(opts: {
   argon2: { memory_kib: number; iterations: number; parallelism: number };
   backupClass?: "secret_storage" | "did_recovery";
 }): { backupId: string; envelope: Record<string, unknown> } {
-  const backupId = `ck:backup:${uuidv7Like()}`;
-  const seriesId = `ck:backup_series:${uuidv7Like()}`;
+  const backupId = `ak:backup:${uuidv7Like()}`;
+  const seriesId = `ak:backup_series:${uuidv7Like()}`;
   const createdAt = new Date().toISOString();
   const backupClass = opts.backupClass ?? "secret_storage";
   const subdomain = "account_keys";

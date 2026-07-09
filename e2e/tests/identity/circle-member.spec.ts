@@ -72,7 +72,7 @@ test.describe("circle membership (same principal server)", () => {
       title: `S8 circle ${Date.now()}`,
       joinRule: "invite",
     });
-    expect(circle.circle_id).toMatch(/^ck:circle:/);
+    expect(circle.circle_id).toMatch(/^ak:circle:/);
     expect(circle.realm_id).toBe(realmId);
     expect(circle.state).toBe("active");
 

@@ -69,10 +69,10 @@ test.describe("contact graph (same principal server)", () => {
       { requestedScopes: ["invite"], message: greeting },
     );
     expect(reqOutcome.state).toBe("pending_outgoing");
-    expect(reqOutcome.request_event_ref).toMatch(/^ck:event:/);
+    expect(reqOutcome.request_event_ref).toMatch(/^ak:event:/);
     // The requester-side contact-managed grant is event-backed.
     expect(reqOutcome.requester_consent_refs.length).toBeGreaterThan(0);
-    expect(reqOutcome.requester_consent_refs[0]).toMatch(/^ck:event:/);
+    expect(reqOutcome.requester_consent_refs[0]).toMatch(/^ak:event:/);
 
     // Bob sees the incoming request.
     const bobIncoming = await contactRow(request, bobToken, alice.did);
@@ -86,7 +86,7 @@ test.describe("contact graph (same principal server)", () => {
     });
     expect(respondOutcome.state).toBe("accepted");
     expect(respondOutcome.consent_grant_refs.length).toBeGreaterThan(0);
-    expect(respondOutcome.consent_grant_refs[0]).toMatch(/^ck:event:/);
+    expect(respondOutcome.consent_grant_refs[0]).toMatch(/^ak:event:/);
 
     // Both sides now list each other as accepted.
     const aliceRow = await contactRow(request, aliceToken, bob.did);
@@ -100,7 +100,7 @@ test.describe("contact graph (same principal server)", () => {
 
     // Holder (alice) row carries a legal ck:event invite_consent_grant_ref:
     // bob granted alice an active invite consent, so alice's row surfaces it.
-    expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ck:event:/);
+    expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
   });
 
   // S2: add friend -> reject -> state=rejected, no consent written.
@@ -183,8 +183,8 @@ test.describe("contact graph (same principal server)", () => {
       { create: true },
     );
     expect(["created", "found"]).toContain(resolved.state);
-    expect(resolved.realm_id).toMatch(/^ck:realm:/);
-    expect(resolved.main_strand_id).toMatch(/^ck:strand:/);
+    expect(resolved.realm_id).toMatch(/^ak:realm:/);
+    expect(resolved.main_strand_id).toMatch(/^ak:strand:/);
     const realmId = resolved.realm_id!;
 
     // Both sides converge on the same canonical 1:1 binding (same realm_id +
@@ -278,7 +278,7 @@ test.describe("contact graph (same principal server)", () => {
     const aliceRow = await contactRow(request, aliceToken, bob.did);
     const grantRef = aliceRow?.invite_consent_grant_ref;
     expect(grantRef, "alice row invite_consent_grant_ref").toMatch(
-      /^ck:event:/,
+      /^ak:event:/,
     );
 
     // alice creates a NEW realm and pulls bob in using the consent_grant ref.
@@ -401,7 +401,7 @@ test.describe("contact graph (same principal server)", () => {
     });
     const bobRow = await contactRow(request, bobToken, alice.did);
     const grantRef = bobRow?.invite_consent_grant_ref;
-    expect(grantRef).toMatch(/^ck:event:/);
+    expect(grantRef).toMatch(/^ak:event:/);
 
     // alice blocks bob.
     const tomb = await tombstoneContactCokret(request, aliceToken, bob.did, {
@@ -469,7 +469,7 @@ test.describe("contact graph (same principal server)", () => {
     });
     const bobRow = await contactRow(request, bobToken, alice.did);
     const grantRef = bobRow?.invite_consent_grant_ref;
-    expect(grantRef).toMatch(/^ck:event:/);
+    expect(grantRef).toMatch(/^ak:event:/);
 
     // alice revokes the invite consent (tombstone with revoke_scopes=[invite],
     // NO block). This revokes alice->bob invite grant so the consent_grant

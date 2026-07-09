@@ -18,7 +18,7 @@
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
-- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ck:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ak:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
@@ -74,7 +74,7 @@
    - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `ck.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
    - `auth_metadata.account_authority.gate_account_base` 是绝对 URL,且 `auth_metadata.methods[]` 非空(coauth 是 Account Authority)
    - 同样 §3.0 六个 claim-level 字段都存在
-5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `ck:trust_domain:` 前缀
+5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `ak:trust_domain:` 前缀
 
 ### Phase B — Standard error envelope(§5 / §5.2)
 
@@ -99,7 +99,7 @@
 13. `GET ${solandBaseUrl()}/_arkret/self/events?limit=2`(或等价 list endpoint;`limit` 故意小于总数以强制分页)
 14. 断言响应形状(api-conventions §7.1):
     - `items` 是数组,长度 ≤ 2
-    - `next_cursor` 是字符串,匹配 `^ck:cursor:[A-Za-z0-9_-]+$`(opaque base64url,见 §7)
+    - `next_cursor` 是字符串,匹配 `^ak:cursor:[A-Za-z0-9_-]+$`(opaque base64url,见 §7)
     - `has_more === true`(因为播种了 ≥5 条)
 15. 用 `next_cursor` 取第二页:`GET .../events?limit=2&after=${next_cursor_1}`
 16. 用第二页的 `next_cursor` 取第三页
@@ -151,7 +151,7 @@
 
 - Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_type` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
 - Phase B:未知路径 → 404 `unrecognized_endpoint`;错误 method → 405 `method_not_allowed`;两者都符合 §5 错误 envelope,不返回 HTML/栈信息
-- Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ck:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
+- Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ak:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
 - Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op;同 `event_id` 不同 body → `duplicate_conflict` / 409;事件只投影一次
 - Phase D:同键同 body → 与首次等价;同键不同 body → `duplicate_conflict` / 409;副作用只发生一次
 - Phase E:`requirements.features[]` 引用未实现 feature → `unsupported_feature` / 4xx;event 未落库;不被泛 code 替代

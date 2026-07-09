@@ -669,11 +669,11 @@ export class JointUserPage {
       await createButton.click();
     }
 
-    await expect(strand).toContainText(/created ck:realm:/, {
+    await expect(strand).toContainText(/created ak:realm:/, {
       timeout: 30_000,
     });
     const text = await strand.innerText();
-    const match = text.match(/created (ck:realm:[^\s]+)/);
+    const match = text.match(/created (ak:realm:[^\s]+)/);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];
   }

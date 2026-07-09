@@ -210,7 +210,7 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         })?;
     if !cursor.starts_with("ak:cursor:") {
         bail!(
-            "VECT-ROST-2: members_next_cursor MUST be a `ck:cursor:` opaque \
+            "VECT-ROST-2: members_next_cursor MUST be a `ak:cursor:` opaque \
              cursor; got `{cursor}`"
         );
     }

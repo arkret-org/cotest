@@ -62,7 +62,7 @@
    - join_rule = `invite`
    - history_visibility = `joined`
    - seed_members = `[]`(bot 走 admin invite 通道,不走 seed)
-6. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
+6. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 7. **alice** 在 `/realms/${realmId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_id`
    - 断言:`realm-admin-panel` 状态文本含 `invited ${bot_actor_id}`
 8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ realm_id: realmId }`
@@ -116,7 +116,7 @@
 ## Observable assertions (合并清单)
 
 - 步骤 3-4:applet install 返回 201,`bot_actor_id` 形式正确,并写入 `ck.applet.registration` projection
-- 步骤 6:`realmId` 形如 `ck:realm:...`
+- 步骤 6:`realmId` 形如 `ak:realm:...`
 - 步骤 8-9:bot 出现在 Realm members
 - 步骤 11-13:外部事件 30s 内在 alice timeline 出现
 - 步骤 14:UI 上 ghost 消息有 ghost badge,actor_id 是 ghost_actor_id

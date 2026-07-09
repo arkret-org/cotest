@@ -4,8 +4,8 @@
 //! Spec (round 2+3 cleanup, T08):
 //!
 //! `cross-signing-reset.schema.json` now requires two new payload fields:
-//!   * `trust_domain: TypedTrustDomainId` (`ck:trust_domain:<scope>`)
-//!   * `reset_event_id: TypedEventId` (`ck:event:<uuidv7>`)
+//!   * `trust_domain: TypedTrustDomainId` (`ak:trust_domain:<scope>`)
+//!   * `reset_event_id: TypedEventId` (`ak:event:<uuidv7>`)
 //!
 //! The receiver MUST validate in this strict order:
 //!   1. `trust_domain` matches the receiver's deployment trust domain → otherwise
@@ -15,8 +15,8 @@
 //!
 //! This module covers two scenarios:
 //!
-//! * `cross_signing_reset_cross_domain_run` — proof minted against `ck:trust_domain:A` replayed
-//!   against deployment `ck:trust_domain:B`; MUST be rejected with `cross_domain_replay_rejected`.
+//! * `cross_signing_reset_cross_domain_run` — proof minted against `ak:trust_domain:A` replayed
+//!   against deployment `ak:trust_domain:B`; MUST be rejected with `cross_domain_replay_rejected`.
 //!
 //! * `cross_signing_reset_event_id_mismatch_run` — payload carries `reset_event_id != Event.id`;
 //!   MUST be rejected with `reset_event_id_mismatch`.

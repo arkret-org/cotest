@@ -727,7 +727,7 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     if known.contains(&unknown) {
         bail!("participant identity leak: unknown id in known set");
     }
-    // `rtc_participant` id-kind MUST keep the canonical `ck:rtc_participant:` prefix.
+    // `rtc_participant` id-kind MUST keep the canonical `ak:rtc_participant:` prefix.
     for id in known {
         if !id.starts_with("ak:rtc_participant:") {
             bail!("rtcpart id lost canonical prefix: {id}");

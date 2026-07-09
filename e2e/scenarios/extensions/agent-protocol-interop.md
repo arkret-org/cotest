@@ -82,7 +82,7 @@
 17. soland 用 `REFERENCE_AGENT_AUDIT_ED25519_SEED` 给 `audit_binding` 块签 Ed25519,canonical subject 形如 `{session_id, agent_id, result.echo, actor}`,断言响应里 `audit_binding.binding_kind === "ed25519_v1"` 且 `audit_binding.key_id === "soland.reference.agent_echo.ed25519_v1"`;
 18. **alice** 在 inkson `/agents` 的 `agent-incoming-results` 看到一条 `agent-incoming-result-row`,`agent-audit-verify-badge` 文本严格等于 `audit valid` (绿色徽章);
 19. **alice** 在 `/agents` 的对应 protocol session detail 区确认 result artifact;保留 remote_agent attribution,点 `publish-modal-confirm`;
-20. 断言 source space 里出现一条新 Strand,其 `fields.workflow_type` 包含 `synthesis`,且 `relation` 指向 `ck:morph:<uuid>` artifact;Strand 创建事件的 `actor_id` 是 `alice.did`,但 `attribution` 字段保留 `remote_agent.did` (spec §5.4 关于 publish 的语义)。
+20. 断言 source space 里出现一条新 Strand,其 `fields.workflow_type` 包含 `synthesis`,且 `relation` 指向 `ak:morph:<uuid>` artifact;Strand 创建事件的 `actor_id` 是 `alice.did`,但 `attribution` 字段保留 `remote_agent.did` (spec §5.4 关于 publish 的语义)。
 
 ### Phase E — Audit chain verification (§5 + §9 + agent_binding SDK)
 

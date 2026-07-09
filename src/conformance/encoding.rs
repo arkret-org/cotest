@@ -236,7 +236,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
     // Mirrors `models/views.md §3.3 CollectionGrouping`: discriminator field is
     // `mode`, enumerated `none | field | relation_container | time_bucket |
     // matrix`. `relation_container` binds a board Space via `board_space_id`
-    // (`ck:space:` typed-id) plus `container_relation_kind` / `item_relation_kind`.
+    // (`ak:space:` typed-id) plus `container_relation_kind` / `item_relation_kind`.
     let positions = [
         json!({
             "mode": "none",
@@ -305,7 +305,7 @@ pub(crate) fn validate_projection_position(position: &Value) -> Result<()> {
         "relation_container" => {
             let board_space_id = require_position_field(position, "board_space_id")?;
             if !board_space_id.starts_with("ak:space:") {
-                bail!("relation_container grouping board_space_id must be a ck:space: id");
+                bail!("relation_container grouping board_space_id must be a ak:space: id");
             }
             // `container_relation_kind` is optional (defaults to `contains`);
             // `item_relation_kind` is mandatory and MUST NOT be inferred.

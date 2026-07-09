@@ -623,7 +623,7 @@ fn validate_event_envelope(
     // Spec post-2026-05-08: `refs[]` entries MUST be typed-ref objects
     // `{id: "ak:<kind>:<ulid>", role, critical, ...}`. v1 is unreleased,
     // so no dual-pattern accommodation: bare string entries fail loudly.
-    // `prev_refs[]` is a bare-string list of `ck:event:` ids per spec
+    // `prev_refs[]` is a bare-string list of `ak:event:` ids per spec
     // §refs.
     let valid_ref = |s: &str| s.starts_with("ak:");
     let extra_refs_invalid = extra_refs.iter().any(|value| {

@@ -70,7 +70,7 @@
 
 - 事件面 helper:`grantCapabilityEventApi` / `buildCapabilityGrantEnvelope`(负例 raw 提交)/ `revokeCapabilityApi`(`e2e/helpers/soland-api.ts`)
 - soland 的 delegated grant 校验在 reducer(`apply_capability.rs`):issuer 必须是 parent.subject、realm 一致、actions/resources ⊆ parent、expiry 不得晚于 parent、parent 被 revoke → `grant_revoked_upstream`
-- 高层写事件引用授权走信封 `refs[role="authorized_by"]` 指向 grant 的承载事件(`ck:event:` id),既有用法见 `models/morph-schema-migration.spec.ts`
+- 高层写事件引用授权走信封 `refs[role="authorized_by"]` 指向 grant 的承载事件(`ak:event:` id),既有用法见 `models/morph-schema-migration.spec.ts`
 
 ## 总耗时预估
 

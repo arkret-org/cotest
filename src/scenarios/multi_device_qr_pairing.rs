@@ -27,7 +27,7 @@
 //!    this DRY across the three new scenarios; until it lands we use the existing
 //!    `CokretServer::register_client` helper.)
 //!
-//! 2. Generate a fresh `ck:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
+//! 2. Generate a fresh `ak:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
 //!    The QR payload itself is a inkson-side UI concern (`verify-device` strand); cotest
 //!    synthesizes the equivalent API calls without driving the QR code itself — this matches the
 //!    spec note that "QR is the transport, not the trust primitive".

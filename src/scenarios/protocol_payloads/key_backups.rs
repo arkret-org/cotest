@@ -44,7 +44,7 @@ const ACTOR_ID: &str = "did:web:alice.example";
 const DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 const SERIES_ID: &str = "ak:backup_series:01964137-0000-7000-8000-000000000000";
 /// Typed device id carried inside the envelope (`auth_data.device_id` must be
-/// a `ck:device:` typed id; it is not required to equal the session device).
+/// a `ak:device:` typed id; it is not required to equal the session device).
 const ENVELOPE_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000000";
 const CIPHERTEXT_DIGEST: &str =
     "sha256:2108421084217842908421084210842121084210842178429084210842108421";

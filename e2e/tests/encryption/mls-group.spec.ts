@@ -664,11 +664,11 @@ async function createKanbanBoardListAndCard(
   );
   await expect
     .poll(() => page.url(), { timeout: 30_000 })
-    .toContain("/board/ck:space:");
+    .toContain("/board/ak:space:");
   const boardId = decodeURIComponent(
     new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
   );
-  expect(boardId).toMatch(/^ck:space:/);
+  expect(boardId).toMatch(/^ak:space:/);
 
   await page.getByTestId("new-column-input").fill(listTitle);
   await page.getByTestId("add-column-button").click();

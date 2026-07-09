@@ -306,7 +306,7 @@ export async function addRealmMemberApi(
 // carries the candidate join policy inside the active
 // `ck.realm.policy_components` event under `components.join_policy`; the
 // reducer projects it into
-// `ck:cell:ck.component.realm.policy_components.v1:<realm_id>` and reads the
+// `ak:cell:ck.component.realm.policy_components.v1:<realm_id>` and reads the
 // `join_policy` facet from there.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
@@ -452,12 +452,12 @@ export async function grantServiceDelegationApi(
 }
 
 // Mint a realm-scoped `ck.capability.grant` event for an arbitrary action set
-// and return BOTH the materialized grant id (`ck:grant:*`) and the carrying
-// event id (`ck:event:*`). event-and-patch.md §2.2: a high-tier write that
+// and return BOTH the materialized grant id (`ak:grant:*`) and the carrying
+// event id (`ak:event:*`). event-and-patch.md §2.2: a high-tier write that
 // references its authorization via the envelope `refs[]` `authorized_by` role
 // MUST point at the accepted Event that produced the grant, and soland's
-// authorized_by ref resolver requires the `ck:event:` typed id (not the
-// `ck:grant:` form). Callers that need the authorized_by ref use the returned
+// authorized_by ref resolver requires the `ak:event:` typed id (not the
+// `ak:grant:` form). Callers that need the authorized_by ref use the returned
 // `eventId`.
 export type CapabilityGrantEventArgs = {
   ownerDid: string;
@@ -1384,8 +1384,8 @@ export async function submitSignedEventApi(
 }
 
 // COT-06-004: discover a Realm's default discussion Strand via the projection face
-// instead of deriving it from the Realm UUID. `ck:realm:<uuid>` and
-// `ck:strand:<uuid>` are independent id kinds (registry/id-kind-registry.json)
+// instead of deriving it from the Realm UUID. `ak:realm:<uuid>` and
+// `ak:strand:<uuid>` are independent id kinds (registry/id-kind-registry.json)
 // that do not derive from each other; the previous `strandIdFromRealmId` helper
 // hard-coded soland's internal minting rule. The spec-faithful source of truth
 // is the Realm projection's authoritative `default_strand_id` (nullable), with the
@@ -1437,18 +1437,18 @@ export async function resolveDefaultStrandId(
   // ck.realm.set_default_strand, so soland never marks a strand is_default for
   // those realms. inkson itself addresses the default strand by a deterministic
   // convention (default_strand_id_for_realm in inkson/src/local_state): the
-  // realm UUID suffix under the ck:strand: prefix. Derive the same id so events
+  // realm UUID suffix under the ak:strand: prefix. Derive the same id so events
   // submitted here land on the strand inkson renders.
   return deriveDefaultStrandId(realmId);
 }
 
-/// Mirror inkson's `default_strand_id_for_realm` convention: `ck:realm:<uuid>`
-/// maps to `ck:strand:<uuid>`.
+/// Mirror inkson's `default_strand_id_for_realm` convention: `ak:realm:<uuid>`
+/// maps to `ak:strand:<uuid>`.
 export function deriveDefaultStrandId(realmId: string): string {
   const suffix = realmId.startsWith("ak:realm:")
     ? realmId.slice("ak:realm:".length)
     : realmId;
-  return `ck:strand:${suffix}`;
+  return `ak:strand:${suffix}`;
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {

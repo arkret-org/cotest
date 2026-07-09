@@ -50,7 +50,7 @@
    - join_rule = `invite`
    - history_visibility = `joined`
    - `ck.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
-2. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
+2. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
 4. MIMI 互通暴露面走 spec 注册的协议面(SPEC-CR-020:零新增 operation,不存在 `/_arkret/self/realm/:id/federation/mimi/*` 端点):
    - 断言:`GET /_arkret/describe` 宣告 `mimi_interop` extension 支持
@@ -97,7 +97,7 @@
 
 ## Observable assertions (合并清单)
 
-- 步骤 2 之后:`realmId` 形如 `ck:realm:...`,`federation_profile` 字段 = `mimi_interop`
+- 步骤 2 之后:`realmId` 形如 `ak:realm:...`,`federation_profile` 字段 = `mimi_interop`
 - 步骤 4:`/_arkret/describe` 宣告 mimi_interop;`/_arkret/open/mimi/provider-directory` 可达;Realm 与 MIMI room_binding 经 `/_arkret/open/mimi/strands/{strand_id}/update` 绑定
 - 步骤 6-7:facade 投递的 inbound request 在 alice 的 admin panel 中可见,标记 `mimi` 来源
 - 步骤 11-12:approve 之后生成 pairwise DID,事件面出现该 pairwise DID 的 `ck.member.state{membership=join}`,bob_mimi 成为 Realm 成员

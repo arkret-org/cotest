@@ -199,8 +199,8 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const short = stamp.slice(-12);
   const aliceDid = `did:web:alice-int-${label}-${stamp}.example`;
   const bobDid = `did:web:bob-ext-${label}-${stamp}.example.org`;
-  const enclaveRealmId = `ck:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
-  const internalRealmId = `ck:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
+  const enclaveRealmId = `ak:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
+  const internalRealmId = `ak:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
 
   await postJson(request, "alpha", "/_soland/admin/deployment/configure", {
     profile: "sovereign_main",

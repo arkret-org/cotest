@@ -370,7 +370,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
         )),
         carol.get(
-            "/_arkret/self/blob/get?blob_ref=ck:blob:sha256:missing&purpose=message.attachment",
+            "/_arkret/self/blob/get?blob_ref=ak:blob:sha256:missing&purpose=message.attachment",
         ),
         StatusCode::NOT_FOUND,
         "not_found",

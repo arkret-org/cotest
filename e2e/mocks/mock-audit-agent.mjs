@@ -88,7 +88,7 @@ function signAuditBinding({ realm_id, event_id, audience }) {
 
 function makeAccessedEnvelope({ realm_id, source_event_id, reason }) {
   const event = {
-    event_id: `ck:event:audit-accessed:${randomUUID()}`,
+    event_id: `ak:event:audit-accessed:${randomUUID()}`,
     realm_id,
     type: "ck.audit.accessed",
     actor_id: agentDid,

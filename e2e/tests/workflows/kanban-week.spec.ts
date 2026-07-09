@@ -104,8 +104,8 @@ test.describe("workflow: kanban week-in-review", () => {
         .getAttribute("data-strand-id");
       const prStrandIdValue = prStrandId ?? "";
       const specStrandIdValue = specStrandId ?? "";
-      expect(prStrandIdValue).toMatch(/^ck:strand:/);
-      expect(specStrandIdValue).toMatch(/^ck:strand:/);
+      expect(prStrandIdValue).toMatch(/^ak:strand:/);
+      expect(specStrandIdValue).toMatch(/^ak:strand:/);
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
       // Phase C — archive two finished tasks.
@@ -167,7 +167,7 @@ test.describe("workflow: kanban week-in-review", () => {
       const todayListId = await today
         .getByTestId("list-archive-button")
         .getAttribute("data-space-container-id");
-      expect(todayListId ?? "").toMatch(/^ck:space:/);
+      expect(todayListId ?? "").toMatch(/^ak:space:/);
       await expect
         .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue))
         .toBe("active");

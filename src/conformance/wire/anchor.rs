@@ -371,7 +371,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                     let move_id = required_str(op, "move_id")?;
                     if !move_id.starts_with("ak:event:") {
                         bail!(
-                            "vector {name} concurrent op move_id {move_id} must use ck:event:<UUIDv7> form"
+                            "vector {name} concurrent op move_id {move_id} must use ak:event:<UUIDv7> form"
                         );
                     }
                     if !seen_move_ids.insert(move_id.to_owned()) {

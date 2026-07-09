@@ -47,7 +47,7 @@
    - join_rule = `invite`
    - history_visibility = `joined` ← 关键:carol 加入前的消息对她不可见
    - seed_members = `[bob.did]` ← 在 Seed 步骤填,触发 alice 对 bob 的 invite 事件
-2. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
+2. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 3. **bob** 加载 inkson,进入 Realm;隐式接受 invite (现有 helper 的行为是 seed members 已经被 alice 直接加成员,等于 invite + accept 一起);如果未来 inkson 把 invite/accept 拆开,这里要补一个 `bob 接受邀请` 的子步
 4. 断言:bob 的 `/realms/${realmId}/admin` 可访问、`realm-admin-panel` 渲染
 
@@ -89,7 +89,7 @@
 
 ## Observable assertions (合并清单)
 
-- 步骤 2 之后:`realmId` 形如 `ck:realm:...`
+- 步骤 2 之后:`realmId` 形如 `ak:realm:...`
 - 步骤 5-6:alice 写的 `M1` 在 bob 那侧 30s 内出现
 - 步骤 7-9:reaction、reply indicator 双向同步
 - 步骤 10:edit 后 `write-status` 含 `revised`,旧文本不再显示

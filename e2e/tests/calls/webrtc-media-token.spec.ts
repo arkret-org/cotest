@@ -66,9 +66,9 @@ test.describe("media token exchange", () => {
       expect(body.type).toBe("livekit");
       expect(body.connect_url).toBe(LIVEKIT_FOCUS.connect_url);
       expect(typeof body.backend_token).toBe("string");
-      // participant_identity is a fresh `ck:rtc_participant:<uuidv7>` handle.
+      // participant_identity is a fresh `ak:rtc_participant:<uuidv7>` handle.
       expect(body.participant_identity).toMatch(
-        /^ck:rtc_participant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        /^ak:rtc_participant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
 
       // participant_binding pins the spec scheme + the bound tuple, and carries

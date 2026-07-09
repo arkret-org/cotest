@@ -311,7 +311,7 @@ const server = createServer(async (req, res) => {
     const accepted = {
       ...common,
       status: "accepted",
-      arkret_event_hint: `ck:event:mimi:${randomUUID()}`,
+      arkret_event_hint: `ak:event:mimi:${randomUUID()}`,
     };
     inboundLog.record(accepted);
     recordEvent({ direction: "inbound", kind: "message", ...accepted });

@@ -270,8 +270,8 @@ test.describe("agent protocol interop", () => {
     // field (soland AGENT_SESSION_START_REQUIREMENTS); omit it and the
     // submit is rejected before the bridge runs.
     // Session object id pattern per agent.schema.json:
-    // ck:agent_interop_session:<uuidv7> (not a typedId OperationKind).
-    const sessionId = `ck:agent_interop_session:${uuidV7()}`;
+    // ak:agent_interop_session:<uuidv7> (not a typedId OperationKind).
+    const sessionId = `ak:agent_interop_session:${uuidV7()}`;
     const startResp = await submitSignedEventApi(
       request,
       aliceToken,
@@ -508,7 +508,7 @@ test.describe("agent protocol interop", () => {
       { context: "register endpoint for handoff" },
     );
 
-    const sessionId = `ck:agent_interop_session:${uuidV7()}`;
+    const sessionId = `ak:agent_interop_session:${uuidV7()}`;
     // Submit the start first: soland's interop-session writer policy only
     // authorizes status writes from the session's start actor, so the start
     // (authored by alice) MUST precede the injected status transcript.
@@ -599,8 +599,8 @@ test.describe("agent protocol interop", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `agent-publish-${stamp}`,
     });
-    const resultRef = `ck:strand:${uuidV7()}`;
-    const artifactRef = `ck:morph:${uuidV7()}`;
+    const resultRef = `ak:strand:${uuidV7()}`;
+    const artifactRef = `ak:morph:${uuidV7()}`;
 
     const alicePage = await openUserPage(browser, alice, {
       sessionCredential: aliceToken,

@@ -31,7 +31,7 @@ test.describe("audited E2EE", () => {
     const token = await issueDevSession(request, alice);
 
     const probe = await request.get(
-      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=ck:realm:01904100-0000-7000-8000-000000000025`,
+      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=ak:realm:01904100-0000-7000-8000-000000000025`,
       { headers: { authorization: `Bearer ${token}` } },
     );
     expect([200, 401, 403, 404]).toContain(probe.status());

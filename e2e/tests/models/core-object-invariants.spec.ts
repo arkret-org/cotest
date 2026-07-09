@@ -133,14 +133,14 @@ test.describe("core object invariants", () => {
           joinRule: "invite",
           historyVisibility: "joined",
         });
-        expect(realmId).toMatch(/^ck:realm:/);
+        expect(realmId).toMatch(/^ak:realm:/);
         await stepShot(alicePage.page, testInfo, "A-alice-realm-created");
 
         // ── Step 3: read back the Realm via the soland API and verify the
         // spec §3 common-field equivalents on the RealmLifecycleResponse
         // serializer. Current wire shape (soland/src/wire.rs
         // RealmLifecycleResponse): { ok, realm_id, owner, members, deleted }.
-        //   - realm_id  ↔ spec `id`              (typed ck:realm: prefix)
+        //   - realm_id  ↔ spec `id`              (typed ak:realm: prefix)
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
@@ -156,9 +156,9 @@ test.describe("core object invariants", () => {
           members?: string[];
           deleted?: boolean;
         };
-        // Common-field 1: `id` (typed ck:realm: prefix).
+        // Common-field 1: `id` (typed ak:realm: prefix).
         expect(realmBody.realm_id).toBe(realmId);
-        expect(realmBody.realm_id).toMatch(/^ck:realm:/);
+        expect(realmBody.realm_id).toMatch(/^ak:realm:/);
         // Common-field 2: actor reference (`created_by` equivalent → `owner`).
         expect(realmBody.owner).toBe(alice.did);
         // Membership invariant: owner must always appear in members.
@@ -197,7 +197,7 @@ test.describe("core object invariants", () => {
           events.find((event) => event.kind?.startsWith("ck.realm.")) ?? events[0];
         expect(lifecycleEvent).toBeTruthy();
         // Common-field (Event Envelope §2.2): event_id.
-        expect(lifecycleEvent.event_id).toMatch(/^ck:event:/);
+        expect(lifecycleEvent.event_id).toMatch(/^ak:event:/);
         // Common-field (§2.2 / §3): created_at (RFC 3339, MUST end with Z).
         expect(lifecycleEvent.created_at).toMatch(
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
@@ -250,7 +250,7 @@ test.describe("core object invariants", () => {
         `core-invariants strand ${stamp}`,
         { status: "open" },
       );
-      const fieldsCell = `ck:cell:ck.component.strand.fields.v1:${strandId}`;
+      const fieldsCell = `ak:cell:ck.component.strand.fields.v1:${strandId}`;
 
       // A ck.strand.update carrying a STALE `head_eq` precondition (claims
       // status == "closed" when it is actually "open") MUST reject with
@@ -417,9 +417,9 @@ test.describe("core object invariants", () => {
 
       // `has_default_view` is many_to_one on (from_ref, relation_kind). The
       // relation reducer requires a structural from_ref endpoint
-      // (`ck:strand:`/`ck:space:`) to be projected, so anchor the edges on a
+      // (`ak:strand:`/`ak:space:`) to be projected, so anchor the edges on a
       // real Strand created via the proven ck.strand.create path. The
-      // `ck:view:` to_ref does not need a local projection (View objects are
+      // `ak:view:` to_ref does not need a local projection (View objects are
       // not reduced today), so two synthetic view ids are valid targets.
       const sourceRef = await createStrandApi(
         request,
@@ -599,7 +599,7 @@ test.describe("core object invariants", () => {
       const projBody = await proj.json();
       expect(projBody.kind).toBe("collection");
       expect(projBody.renderer).toBe("board");
-      expect(projBody.view_id).toMatch(/^ck:view:/);
+      expect(projBody.view_id).toMatch(/^ak:view:/);
       expect(Array.isArray(projBody.groups)).toBe(true);
 
       // Unknown renderer MUST fail-closed (views.md §2.2).

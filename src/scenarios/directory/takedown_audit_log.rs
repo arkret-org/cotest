@@ -7,7 +7,7 @@
 //!
 //! Normative required fields:
 //!   - `actor_id` — DID of the operator (or `system` for automation),
-//!   - `target_realm_id` — typed `ck:realm:` id of the affected Realm,
+//!   - `target_realm_id` — typed `ak:realm:` id of the affected Realm,
 //!   - `reason` — one of [`TakedownReason`],
 //!   - `created_at` — RFC 3339 UTC timestamp.
 //!
@@ -57,7 +57,7 @@ pub fn validate_audit_row(
     }
     if !target_realm_id.starts_with("ak:realm:") {
         return Err(anyhow!(
-            "takedown audit row target_realm_id MUST be a typed ck:realm: id; got `{target_realm_id}`"
+            "takedown audit row target_realm_id MUST be a typed ak:realm: id; got `{target_realm_id}`"
         ));
     }
     if !ALL_TAKEDOWN_REASONS.contains(&reason) {

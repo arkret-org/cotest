@@ -211,7 +211,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
-    const realmId = `ck:realm:selftest:${Date.now()}`;
+    const realmId = `ak:realm:selftest:${Date.now()}`;
     const invite = await request.post(`${baseUrl}/_arkret/self/audit-agent/invite`, {
       data: { realm_id: realmId, invite: { event_id: "evt-selftest" } },
     });
@@ -415,7 +415,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     // Task invocation mirrors soland's outbound bridge body and returns a
     // completed result carrying §5.4 result_objects / artifacts /
     // external_transcript_digest + remote-agent attribution.
-    const sessionId = `ck:agent_interop_session:selftest-${Date.now()}`;
+    const sessionId = `ak:agent_interop_session:selftest-${Date.now()}`;
     const task = await request.post(`${baseUrl}/v1/a2a/tasks`, {
       data: {
         session_id: sessionId,
@@ -429,8 +429,8 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(result.session_id).toBe(sessionId);
     expect(result.attribution).toBe(healthBody.did);
     expect(result.result_objects[0].object_type).toBe("strand");
-    expect(result.result_objects[0].object_ref).toMatch(/^ck:strand:/);
-    expect(result.artifacts[0].object_ref).toMatch(/^ck:morph:/);
+    expect(result.result_objects[0].object_ref).toMatch(/^ak:strand:/);
+    expect(result.artifacts[0].object_ref).toMatch(/^ak:morph:/);
     expect(result.external_transcript_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     // Rejection path: params.mock_reject → 403 (E1.1 remote_rejected).
@@ -505,7 +505,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(identity.identities.some((entry: { mimi_handle: string }) => entry.mimi_handle === "bob_mimi")).toBe(true);
 
     const stamp = Date.now();
-    const realmId = `ck:realm:mimi-selftest:${stamp}`;
+    const realmId = `ak:realm:mimi-selftest:${stamp}`;
     const roomBindingId = `mimi-room-selftest-${stamp}`;
     const join = await facade.createJoinRequest({
       room_binding_id: roomBindingId,
@@ -556,7 +556,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(accepted.status).toBe(200);
     expect(accepted.body.status).toBe("accepted");
-    expect(String(accepted.body.arkret_event_hint)).toMatch(/^ck:event:mimi:/);
+    expect(String(accepted.body.arkret_event_hint)).toMatch(/^ak:event:mimi:/);
 
     const quarantined = await facade.injectInbound({
       realm_id: realmId,

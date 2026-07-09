@@ -342,7 +342,7 @@ test.describe("consent grant", () => {
     const updateBody = await update.json();
     expect(updateBody.status).toBe("accepted");
     expect(typeof updateBody.updated_at).toBe("string");
-    expect(updateBody.event_ref).toMatch(/^ck:event:/);
+    expect(updateBody.event_ref).toMatch(/^ak:event:/);
   });
 
   test("ck.consent.grant event projects consent cell and contact gate", async ({
@@ -402,7 +402,7 @@ test.describe("consent grant", () => {
       "active",
     );
     expect(granted.cell_id).toBe(
-      `ck:cell:ck.component.consent.grant.v1:${consentId}`,
+      `ak:cell:ck.component.consent.grant.v1:${consentId}`,
     );
     expect(granted.grant_dots).toContain(grantDot);
     const stillPending = await requestContactApi(

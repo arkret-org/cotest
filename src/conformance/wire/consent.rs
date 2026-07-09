@@ -15,7 +15,7 @@ use crate::conformance::{canonical_json, required_str, validate_profile};
 ///
 /// Spec: `identity/consent-model.md` + `authz/event-auth-state-resolution.md`
 /// (Move/Anchor/Lattice). Each grant Move adds a `(peer, scope)` tag to the
-/// holder-keyed or-set cell `ck:cell:ck.component.consent.grant.v1:<holder>`.
+/// holder-keyed or-set cell `ak:cell:ck.component.consent.grant.v1:<holder>`.
 /// Each revoke Move issues a causal `or_set_remove` against the prior grant
 /// Move's id. The cell join (active set) is the lookup surface for
 /// `consent_active` preconditions on downstream invite / message Moves.
@@ -65,7 +65,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
             let move_id = required_str(mv, "move_id")?;
             if !move_id.starts_with("ak:event:") {
                 bail!(
-                    "vector {name} move_id {move_id} must use typed ck:event:<uuidv7> form (C19 wire-break)"
+                    "vector {name} move_id {move_id} must use typed ak:event:<uuidv7> form (C19 wire-break)"
                 );
             }
             let outcome = expected_outcome(mv, name)?;

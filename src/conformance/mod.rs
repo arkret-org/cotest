@@ -657,7 +657,7 @@ pub(crate) fn decode_cursor_shape(encoded: &str) -> Result<CursorShape> {
     use base64::Engine as _;
     let payload = encoded
         .strip_prefix("ak:cursor:")
-        .ok_or_else(|| anyhow!("cursor must start with ck:cursor:"))?;
+        .ok_or_else(|| anyhow!("cursor must start with ak:cursor:"))?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload)?;
     serde_json::from_slice(&bytes).map_err(Into::into)
 }

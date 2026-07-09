@@ -9,7 +9,7 @@
 //!   * `ck.moderation.appeal.close`
 //!
 //! Schema: `ck.schema.moderation_appeal.v1`. Typed ID:
-//! `ck:appeal:<uuidv7>`. Cell state machine:
+//! `ak:appeal:<uuidv7>`. Cell state machine:
 //!
 //!   `none → submitted → under_review → decided → closed`
 //!
@@ -47,7 +47,7 @@ pub const EXPECTED_SELF_REVIEW_FORBIDDEN: &str = "appeal_self_review_forbidden";
 /// Wire-level executable check: the SDK's appeal-related error code
 /// constants agree with the cotest pins and the canonical registry
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
-/// `ck:appeal:<uuidv7>` wire form round-trips through the SDK.
+/// `ak:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
     if REASON_APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
         return Err(anyhow!(

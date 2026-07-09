@@ -149,7 +149,7 @@ test.describe("tsp bootstrap", () => {
     // Phase C — wrap a Arkret `ck.invite.create` as a TSP application payload
     // (nested mode: the outer envelope's VID is pairwise; the inner Arkret
     // operation carries alice's real DID + event signature).
-    const realmId = `ck:realm:${randomUUID()}`;
+    const realmId = `ak:realm:${randomUUID()}`;
     const innerCokret = {
       type: "ck.invite.create",
       content_type: "application/arkret+json",
@@ -232,7 +232,7 @@ test.describe("tsp bootstrap", () => {
     });
     expect(inject.ok()).toBeTruthy();
 
-    const realmId = `ck:realm:${randomUUID()}`;
+    const realmId = `ak:realm:${randomUUID()}`;
     const tspAttempt = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
         from_vid: alice.did,
@@ -304,7 +304,7 @@ test.describe("tsp bootstrap", () => {
         // `tsp_authenticity=ok` (spec §8 trust assessment result).
         payload_b64: b64({
           type: "ck.invite.create",
-          realm_id: `ck:realm:${randomUUID()}`,
+          realm_id: `ak:realm:${randomUUID()}`,
           invitee: bobExternVid,
           actor: alice.did,
           vid_trust: "degraded_no_witness",
@@ -362,7 +362,7 @@ test.describe("tsp bootstrap", () => {
       type: "ck.invite.create",
       operation: "ck.invite.create",
       actor: alice.did, // the real vid_local — MUST stay hidden from a relay
-      realm_id: `ck:realm:${randomUUID()}`,
+      realm_id: `ak:realm:${randomUUID()}`,
       invitee: bobExternVid,
       secret_marker: `nested-secret-${randomUUID()}`,
     };

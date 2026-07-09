@@ -99,7 +99,7 @@ test.describe("single-server triad collaboration", () => {
     );
 
     const revisedBody = `triad revised ${stamp}`;
-    const messageRef = created.event_id.replace(/^ck:event:/, "ak:message:");
+    const messageRef = created.event_id.replace(/^ak:event:/, "ak:message:");
     await submitSignedEventApi(
       request,
       aliceToken,

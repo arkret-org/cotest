@@ -90,7 +90,7 @@ test.describe("moderation appeal", () => {
       `Moderation decision: account restricted pending appeal ${stamp}`,
       { actorDid: reviewer.did },
     );
-    const targetRef = decisionNotice.event_id.replace(/^ck:event:/, "ak:message:");
+    const targetRef = decisionNotice.event_id.replace(/^ak:event:/, "ak:message:");
     const decision = await issueDecision(
       request,
       reviewerToken,
@@ -369,7 +369,7 @@ async function createAppealFixture(
     `appeal target ${label} ${stamp}`,
     { actorDid: appellant.did },
   );
-  const targetRef = message.event_id.replace(/^ck:event:/, "ak:message:");
+  const targetRef = message.event_id.replace(/^ak:event:/, "ak:message:");
   const decision = await issueDecision(
     request,
     moderatorToken,
@@ -440,7 +440,7 @@ async function banMemberViaApi(
 
 function appealPayload(fixture: AppealFixture) {
   return {
-    appeal_id: `ck:appeal:${uuidV7()}`,
+    appeal_id: `ak:appeal:${uuidV7()}`,
     realm_id: fixture.realmId,
     decision_ref: fixture.decisionId,
     target_ref: fixture.targetRef,

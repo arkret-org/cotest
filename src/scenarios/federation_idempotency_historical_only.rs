@@ -8,8 +8,8 @@
 //! services):
 //!
 //! 1. **Server A** constructs a `federation_transaction` request:
-//!    - `Source-Trust-Domain = ck:trust_domain:a`
-//!    - `Destination-Trust-Domain = ck:trust_domain:b`
+//!    - `Source-Trust-Domain = ak:trust_domain:a`
+//!    - `Destination-Trust-Domain = ak:trust_domain:b`
 //!    - `Request-Canonical-Digest = sha256:<hash>`
 //!    - request body `X`, carrying `idempotency_key=idem-c3-001`
 //! 2. **Server B** receives the request, runs the cache key composition (`source_did + dest_did +
@@ -511,8 +511,8 @@ mod tests {
     #[test]
     #[ignore = "TODO(federation-idempotency-e2e-docker): needs live soland + teabay + key rotation harness"]
     fn live_multi_server_federation_historical_only_docker_e2e() {
-        // 1. Boot a 2-service test rig (soland-A + teabay-B) with `ck:trust_domain:a` and
-        //    `ck:trust_domain:b` respectively.
+        // 1. Boot a 2-service test rig (soland-A + teabay-B) with `ak:trust_domain:a` and
+        //    `ak:trust_domain:b` respectively.
         // 2. soland-A signs and POSTs a federation_transaction request to teabay-B carrying
         //    Source-/Destination-Trust-Domain headers + Request-Canonical-Digest + Idempotency-Key.
         // 3. Confirm teabay-B caches the response (200 accepted), side effects fire (directory row

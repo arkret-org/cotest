@@ -197,7 +197,7 @@ test.describe("cross-server federation", () => {
     expect(pushProbe.status()).not.toBe(404);
 
     const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/_arkret/peer/events?realms=ck:realm:probe`,
+      `${solandBaseUrl("beta")}/_arkret/peer/events?realms=ak:realm:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
   });

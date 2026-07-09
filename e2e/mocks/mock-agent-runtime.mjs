@@ -120,8 +120,8 @@ function acpInfo() {
 function taskResult(body) {
   const sessionId = body?.session_id ?? null;
   const params = body?.params ?? null;
-  const strandRef = `ck:strand:${uuidV7Like()}`;
-  const morphRef = `ck:morph:${uuidV7Like()}`;
+  const strandRef = `ak:strand:${uuidV7Like()}`;
+  const morphRef = `ak:morph:${uuidV7Like()}`;
   const transcript = {
     session_id: sessionId,
     params,

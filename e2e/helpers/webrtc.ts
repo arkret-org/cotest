@@ -402,12 +402,12 @@ export async function seedCallState(
   );
 }
 
-/** Mint a fresh `ck:call:<uuidv7>` id. The media token issuer + signaling are
+/** Mint a fresh `ak:call:<uuidv7>` id. The media token issuer + signaling are
  *  decoupled from any prior session (media-service-binding.md settlement ordering).
- *  `ck:call:` is its own id-kind (id-kind-registry.json), independent of the
+ *  `ak:call:` is its own id-kind (id-kind-registry.json), independent of the
  *  generic `OperationKind` set, so we mint a uuidv7 directly. */
 export function newCallId(): string {
-  return `ck:call:${uuidV7()}`;
+  return `ak:call:${uuidV7()}`;
 }
 
 // ── Ephemeral submit + subscribe read-back (canonical wire) ──────────────────

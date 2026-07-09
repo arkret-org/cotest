@@ -35,8 +35,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 | 名字 | 设备 | DID / device_id | 角色 |
 |---|---|---|---|
-| alice | alice-device-1 (laptop) | `did:webvh:z6mkfixture:alice-s11-<uuid>.example` / `ck:device:...-d1` | reader,首次记录 read marker |
-| alice | alice-device-2 (phone)  | 同上 actor,不同 device_id `ck:device:...-d2` | 第二台 device,接收 to-device 同步;最后触发 mark-all-read |
+| alice | alice-device-1 (laptop) | `did:webvh:z6mkfixture:alice-s11-<uuid>.example` / `ak:device:...-d1` | reader,首次记录 read marker |
+| alice | alice-device-2 (phone)  | 同上 actor,不同 device_id `ak:device:...-d2` | 第二台 device,接收 to-device 同步;最后触发 mark-all-read |
 | bob   | bob 默认设备            | `did:webvh:z6mkfixture:bob-s11-<uuid>.example`              | sender,在共享 Realm 里发 M1/M2/M3/M4 |
 
 ## Pre-conditions
@@ -59,7 +59,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
    - title = `"models/private-read-cursor S ${stamp}"`
    - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
    - seed_members = `[bob.did]`
-3. 断言:`realm-lifecycle-strand` 含 `created ck:realm:...`,记录 `realmId`
+3. 断言:`realm-lifecycle-strand` 含 `created ak:realm:...`,记录 `realmId`
 4. bob 通过 `acceptInvite(realmId)` 加入 Realm
 
 ### Phase B — bob 发 M1, M2, M3
@@ -107,7 +107,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Observable assertions(合并清单)
 
-- Phase A 步骤 3:`realmId` 形如 `ck:realm:...`
+- Phase A 步骤 3:`realmId` 形如 `ak:realm:...`
 - Phase B 步骤 6:M1/M2/M3 三条都 persisted
 - Phase C 步骤 10:read cursor 写入成功,`unread_count` 反映 M3 未读
 - Phase D 步骤 12:device-1 settings 上 marker 文本可见

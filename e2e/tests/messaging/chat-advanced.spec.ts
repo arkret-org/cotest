@@ -93,7 +93,7 @@ test.describe("chat advanced", () => {
       `reaction target ${Date.now()}`,
       { actorDid: fixture.alice.did },
     );
-    const messageRef = message.event_id.replace(/^ck:event:/, "ak:message:");
+    const messageRef = message.event_id.replace(/^ak:event:/, "ak:message:");
 
     await submitSignedEventApi(
       request,
@@ -151,7 +151,7 @@ test.describe("chat advanced", () => {
       `root ${Date.now()}`,
       { actorDid: fixture.alice.did },
     );
-    const rootMessageRef = root.event_id.replace(/^ck:event:/, "ak:message:");
+    const rootMessageRef = root.event_id.replace(/^ak:event:/, "ak:message:");
     const strandId = await resolveDefaultStrandId(
       request,
       fixture.aliceToken,
@@ -283,7 +283,7 @@ test.describe("chat advanced", () => {
       context: "root mention",
     });
     const rootEventId = String(root.event_id);
-    const rootMessageRef = rootEventId.replace(/^ck:event:/, "ak:message:");
+    const rootMessageRef = rootEventId.replace(/^ak:event:/, "ak:message:");
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,

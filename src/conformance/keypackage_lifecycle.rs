@@ -851,7 +851,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "expires_at": "2100-01-01T00:00:00Z",
         "created_at": "2026-06-19T00:00:00Z",
         "device_signature": {
-            "kid": "did:web:alice.example#ck:device:0196419b-0000-7000-8000-000000000001",
+            "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
             "alg": "EdDSA",
             "sig": "c2ln"
         }

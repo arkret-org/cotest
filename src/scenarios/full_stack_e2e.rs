@@ -73,7 +73,7 @@ const STABLE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-fullstackevt0";
 const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-srcref0000001";
 
 /// Opaque push pseudonym used by the blind-wakeup mock. Matches the
-/// `ck:pseudonym:push:<token>` shape required by the sanitizer.
+/// `ak:pseudonym:push:<token>` shape required by the sanitizer.
 const PUSH_TARGET_ID: &str = "ak:pseudonym:push:fullstack-e2e-target-001";
 
 // ── Top-level entry-point ──────────────────────────────────────────────────

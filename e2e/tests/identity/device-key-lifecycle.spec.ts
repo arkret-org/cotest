@@ -341,11 +341,11 @@ async function buildEncryptedBoardListCard(
   await expect(page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
     timeout: 45_000,
   });
-  await expect.poll(() => page.url(), { timeout: 30_000 }).toContain("/board/ck:space:");
+  await expect.poll(() => page.url(), { timeout: 30_000 }).toContain("/board/ak:space:");
   const boardId = decodeURIComponent(
     new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
   );
-  expect(boardId, `board id from url ${page.url()}`).toMatch(/^ck:space:/);
+  expect(boardId, `board id from url ${page.url()}`).toMatch(/^ak:space:/);
 
   await page.getByTestId("new-column-input").fill(listTitle);
   await userPage.clickWithPassivePromptRetry(page.getByTestId("add-column-button"));

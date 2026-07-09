@@ -6,7 +6,7 @@ live soland instance.
 ## Recording gating
 
 - `recording_policy=allow`: `POST .../recording/start` succeeds, returns a
-  `recording_blob_ref` of the form `ck:blob:sha256:*` and a `recording_state`.
+  `recording_blob_ref` of the form `ak:blob:sha256:*` and a `recording_state`.
 - `recording_policy=none`: the same call fails with HTTP 412 and wire code
   `recording_policy_violation`.
 

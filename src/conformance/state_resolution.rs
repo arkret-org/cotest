@@ -924,7 +924,7 @@ fn validate_notary_fault_equivocation_quarantine(vector: &Value, vector_name: &s
     let seal_a_id = required_pointer_str(vector, "/fault_pair/seal_a/id", vector_name)?;
     let seal_b_id = required_pointer_str(vector, "/fault_pair/seal_b/id", vector_name)?;
     if !seal_a_id.starts_with("ak:seal:sha256:") || !seal_b_id.starts_with("ak:seal:sha256:") {
-        bail!("vector {vector_name} fault seals must use ck:seal:sha256 typed ids");
+        bail!("vector {vector_name} fault seals must use ak:seal:sha256 typed ids");
     }
     let seal_a_digest = required_pointer_str(
         vector,

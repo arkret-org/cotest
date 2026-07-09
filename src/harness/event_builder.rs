@@ -491,7 +491,7 @@ fn member_payload(
 fn strand_id_for_realm(realm_id: &str) -> Result<StrandId> {
     let suffix = realm_id
         .strip_prefix("ak:realm:")
-        .ok_or_else(|| anyhow!("realm_id must start with ck:realm:"))?;
+        .ok_or_else(|| anyhow!("realm_id must start with ak:realm:"))?;
     StrandId::new(format!("ak:strand:{suffix}"))
         .map_err(|err| anyhow!("invalid derived strand_id: {err}"))
 }

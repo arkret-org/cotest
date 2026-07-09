@@ -20,7 +20,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   // default_discussion_channel) even when soland has not marked any Strand
   // is_default, so the message-list renders without an explicit
   // ck.realm.set_default_strand. The submitted message addresses the same
-  // derived ck:strand:<uuid> the channel selects, so it lands on the rendered
+  // derived ak:strand:<uuid> the channel selects, so it lands on the rendered
   // strand.
   test("creates a public realm and renders a soland message in inkson", async ({
     jointRealm,
@@ -172,7 +172,7 @@ async function submitMessageEvent(
   realmId: string,
   body: string,
 ) {
-  const eventId = `ck:event:${uuidV7()}`;
+  const eventId = `ak:event:${uuidV7()}`;
   const strandId = await resolveDefaultStrandId(request, session, serverUrl, realmId);
   const payload = {
     strand_id: strandId,
@@ -265,12 +265,12 @@ async function resolveDefaultStrandId(
   // The inkson UI realm-create flow does not emit an explicit
   // ck.realm.set_default_strand, so soland never marks a strand is_default for
   // it. inkson addresses the default strand by the deterministic
-  // default_strand_id_for_realm convention (ck:realm:<uuid> -> ck:strand:<uuid>);
+  // default_strand_id_for_realm convention (ak:realm:<uuid> -> ak:strand:<uuid>);
   // derive the same id so the message lands on the strand inkson renders.
   const suffix = realmId.startsWith("ak:realm:")
     ? realmId.slice("ak:realm:".length)
     : realmId;
-  return `ck:strand:${suffix}`;
+  return `ak:strand:${suffix}`;
 }
 
 function uuidV7(): string {

@@ -15,7 +15,7 @@
 //! not built soland do not flake.
 //!
 //! C35.2 fixed the `device_id` fixture to use a wire-canonical
-//! `ck:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
+//! `ak:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
 //! `arkret_identifiers::DeviceId` validator rejects), confirmed the actor
 //! registration + realm-create + message-send round-trip succeeds against
 //! a real soland, and removed the wrapper's `#[ignore]` so default
@@ -81,7 +81,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 2: actor + Realm + message Event on server_a ───────────────
     // C35.2 — `device_id` MUST be a canonical Arkret wire DeviceId
-    // (`ck:device:<uuidv7>`) per `arkret_identifiers::DeviceId`. Mint a
+    // (`ak:device:<uuidv7>`) per `arkret_identifiers::DeviceId`. Mint a
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("ak:device:");

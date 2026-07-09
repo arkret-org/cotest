@@ -60,7 +60,7 @@
 
 ## 关键 testid
 
-- 板选择/深链:`/kanban/{realm}/board/{boardId}`(boardId 从建板后 URL `/board/ck:space:` 抽取)
+- 板选择/深链:`/kanban/{realm}/board/{boardId}`(boardId 从建板后 URL `/board/ak:space:` 抽取)
 - 卡片:`kanban-card`(真卡)vs `kanban-card-redacted`(失败占位)
 - 解密证据:`card-description-panel`(明文正文) + `card-detail-body-locked`(锁态,须 count=0)
 

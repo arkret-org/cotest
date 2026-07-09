@@ -56,7 +56,7 @@
    - Realm title = `"models/core-object-invariants Realm ${stamp}"`
    - Space title = `"models/core-object-invariants Space ${stamp}"`
    - discoverability = `listed`，join_rule = `invite`，history_visibility = `joined`
-2. 断言：`realm-lifecycle-strand` 含 `created ck:realm:...`，记录 `realmId`；`new-space-created-id` 含 `ck:space:...`，记录 `spaceId`
+2. 断言：`realm-lifecycle-strand` 含 `created ak:realm:...`，记录 `realmId`；`new-space-created-id` 含 `ak:space:...`，记录 `spaceId`
 3. **alice** 调 `GET /_soland/self/spaces/${spaceId}`，断言返回 JSON 至少包含以下 wire 字段（spec §3 公共字段在 soland 当前 serializer 上的等价表达）：
    - `space_id` — `id:space` typed prefix，对应 spec `id`
    - `owner` — Space 的 owner DID，对应 spec `created_by` / actor 主体引用
@@ -103,8 +103,8 @@
 21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionView`：
     - `kind = "collection"`
     - `renderer = "board"`
-    - `view_id` 为派生默认（典型实现：`ck:view:default:${spaceId}` 或服务端临时 id；测试侧只断言字段存在 + 是 `ck:view:` typed prefix，不 hardcode 具体 uuid）
-    - `frontier` 至少有一项 `ck:event:...`（这个 Space 至少有 create event）
+    - `view_id` 为派生默认（典型实现：`ak:view:default:${spaceId}` 或服务端临时 id；测试侧只断言字段存在 + 是 `ak:view:` typed prefix，不 hardcode 具体 uuid）
+    - `frontier` 至少有一项 `ak:event:...`（这个 Space 至少有 create event）
     - `groups[]` 是数组（可以为空，因为没有 List Space / Strand placement，但字段必须存在 — spec §2.2 View.kind 是响应族）
 22. 再请求同一 endpoint 但用一个 spec 没注册的 renderer：`?renderer=bogus_renderer_${stamp}`：断言 HTTP 4xx + `error_code = "unknown_renderer"`（或类似），**MUST NOT** 静默回退到 `board`——fallback 只对"未注册 View"生效，不对"未注册 renderer"生效。这是 spec §2.2 "保留 5 个 View.kind 作为 response family" 与 §11 "未声明 renderer MUST fail-closed" 的边界。
 

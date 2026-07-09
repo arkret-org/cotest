@@ -376,7 +376,7 @@ test.describe("kanban end-to-end", () => {
     // SDK validate_structural_relation_same_realm) and rejects a contains
     // edge whose endpoints live in different Realms with
     // cross_realm_structural_relation. A Strand→Strand contains stays a
-    // directly-writable weak relation, so a Strand from_ref (not a ck:space:
+    // directly-writable weak relation, so a Strand from_ref (not a ak:space:
     // from_ref, which is the derived Board/List containment) reaches this
     // check instead of relation_kind_contains_derived.
     const stamp = Date.now();
@@ -590,11 +590,11 @@ test.describe("kanban end-to-end", () => {
       });
       await expect
         .poll(() => alicePage.page.url(), { timeout: 30_000 })
-        .toContain("/board/ck:space:");
+        .toContain("/board/ak:space:");
       const boardId = decodeURIComponent(
         new URL(alicePage.page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
       );
-      expect(boardId).toMatch(/^ck:space:/);
+      expect(boardId).toMatch(/^ak:space:/);
 
       for (const columnName of [first, second, third]) {
         await alicePage.page.getByTestId("new-column-input").fill(columnName);

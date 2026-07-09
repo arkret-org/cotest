@@ -68,7 +68,7 @@ test.describe("moderation and ban", () => {
     const postBan = `S5 after ban ${stamp}`;
 
     const sent = await sendMessageApi(request, malloryToken, realmId, abusive);
-    expect(sent.event_id).toMatch(/^ck:event:/);
+    expect(sent.event_id).toMatch(/^ak:event:/);
 
     const beforeRedaction = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
@@ -86,7 +86,7 @@ test.describe("moderation and ban", () => {
     });
     expect(reportResp.ok()).toBeTruthy();
     const reportBody = await reportResp.json();
-    expect(reportBody.report_id).toMatch(/^ck:report:/);
+    expect(reportBody.report_id).toMatch(/^ak:report:/);
     expect(reportBody.status).toBe("submitted");
 
     const reporterReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {

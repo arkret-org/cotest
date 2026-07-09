@@ -249,7 +249,7 @@ function makeBackupBody(
     backup_class: "secret_storage",
     backup_version: "kb_1",
     // §7.6 series chain — every envelope is a genesis of its own series here.
-    series_id: `ck:backup_series:${uuidV7()}`,
+    series_id: `ak:backup_series:${uuidV7()}`,
     series_seq: 0,
     supersedes: null,
     created_at: createdAt,
@@ -339,7 +339,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function backupIdFor(label: string): string {
   void label;
-  return `ck:backup:${uuidV7()}`;
+  return `ak:backup:${uuidV7()}`;
 }
 
 function sha256Ref(value: string): string {

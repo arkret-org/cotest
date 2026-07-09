@@ -252,7 +252,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         .as_deref()
         .ok_or_else(|| anyhow!("has_more=true MUST carry next_cursor"))?;
     if !cursor.starts_with("ak:cursor:") {
-        bail!("next_cursor MUST be an opaque `ck:cursor:` token; got `{cursor}`");
+        bail!("next_cursor MUST be an opaque `ak:cursor:` token; got `{cursor}`");
     }
 
     // A follow-up request echoes the cursor.

@@ -212,7 +212,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
 
 /// Vector `ck.vector.redaction.space_target_ref_schema.v1` (conformance §3.2.1).
 ///
-/// The redaction object-lifecycle payload schema MUST accept a `ck:space:*`
+/// The redaction object-lifecycle payload schema MUST accept a `ak:space:*`
 /// `target_ref` and MUST reject a malformed space ref, so a Space cleanup is
 /// never downgraded to an implementation-private extension by a schema gap.
 fn assert_space_target_ref_schema() -> Result<()> {

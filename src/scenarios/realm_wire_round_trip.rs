@@ -26,7 +26,7 @@ use arkret_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
 /// Build a minimal SDK-typed [`Event`] for a Realm/Space boundary split wire
-/// vector. `realm_id` is the typed `ck:realm:...` security-boundary
+/// vector. `realm_id` is the typed `ak:realm:...` security-boundary
 /// identifier; `ck.space.*` event kinds now describe containers inside
 /// that Realm.
 fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {

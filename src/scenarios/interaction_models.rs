@@ -97,7 +97,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(removed_reaction["status"], "accepted");
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
-    // thread's root *message* (`ck:message:<uuidv7>`), not an opaque
+    // thread's root *message* (`ak:message:<uuidv7>`), not an opaque
     // `ck:thread:` string. Derive it from the root message's event id.
     let thread_root_ref = sent["event_id"]
         .as_str()

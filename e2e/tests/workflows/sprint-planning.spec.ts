@@ -320,14 +320,14 @@ test.describe("workflow: sprint planning", () => {
             timeout: 45_000,
           },
         )
-        .toMatch(/^ck:space:/);
+        .toMatch(/^ak:space:/);
       const boardId = await boardSpaceIdByTitle(
         request,
         realmId,
         meiFlow.session,
         boardTitle,
       );
-      expect(boardId).toMatch(/^ck:space:/);
+      expect(boardId).toMatch(/^ak:space:/);
       await expect(
         meiPage.page.getByTestId("board-space-select-button"),
       ).toContainText(boardTitle, {

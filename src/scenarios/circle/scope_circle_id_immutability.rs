@@ -31,7 +31,7 @@ fn realm_id() -> Result<RealmId> {
 
 fn strand_id() -> Result<StrandId> {
     // `Strand::new` now takes a typed `StrandId` (was a raw String). The id MUST be
-    // a strict `ck:strand:<uuid7>` literal; all four prev/next states below share
+    // a strict `ak:strand:<uuid7>` literal; all four prev/next states below share
     // the same entity id so the scope-rebind helper compares the same Strand.
     StrandId::new("ak:strand:0196419b-0000-7000-8000-000000000605".to_owned())
         .map_err(|e| anyhow!("strand id: {e}"))

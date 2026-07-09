@@ -54,7 +54,7 @@
 //!    `cannot_self_revoke` invariant). Today we'd need a second authorized device to drive the
 //!    revoke, so the scaffold uses a direct event submission as a stand-in.
 //! 5. Onboard new device-B:
-//!       * generate a fresh `ck:device:<uuidv7>` and Ed25519 keypair.
+//!       * generate a fresh `ak:device:<uuidv7>` and Ed25519 keypair.
 //!       * dev-login (or full recovery via SSK proof — see §7.4) to get a bearer.
 //!       * `GET /_arkret/self/keys/backups` discovers metadata and `POST
 //!         /_arkret/self/keys/backups/{backup_id}/unlock` returns the full envelope after a

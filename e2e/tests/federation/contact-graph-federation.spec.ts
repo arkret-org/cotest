@@ -133,7 +133,7 @@ test.describe("contact graph federation (α/β)", () => {
     const aliceRow = await contactRow(request, aliceToken, bob.did, {
       server: "alpha",
     });
-    expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ck:event:/);
+    expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
   });
 
   // S3-fed: cross-PS direct conversation resolve (binding leg).
@@ -211,8 +211,8 @@ test.describe("contact graph federation (α/β)", () => {
     expect(resolved.ok()).toBeTruthy();
     const body = await resolved.json();
     expect(["created", "found"]).toContain(body.state);
-    expect(body.realm_id).toMatch(/^ck:realm:/);
-    expect(body.main_strand_id).toMatch(/^ck:strand:/);
+    expect(body.realm_id).toMatch(/^ak:realm:/);
+    expect(body.main_strand_id).toMatch(/^ak:strand:/);
     // The cross-PS message round-trip (bob@β reading alice's DM message) is out
     // of scope: the DM Realm lives on α and is not replicated to β. Documented,
     // not asserted.
@@ -278,7 +278,7 @@ test.describe("contact graph federation (α/β)", () => {
     expect(
       grantRef,
       "alice@β row invite_consent_grant_ref (bob -> alice invite grant)",
-    ).toMatch(/^ck:event:/);
+    ).toMatch(/^ak:event:/);
 
     // On α: alice creates the realm she wants to pull bob into.
     const realmId = await createRealmApi(

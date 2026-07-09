@@ -108,7 +108,7 @@ test.describe("applet bridge", () => {
       const externalBody = JSON.parse(externalText);
       const ghostActorDid = String(externalBody.ghost_actor_id);
       expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
-      expect(String(externalBody.message_id)).toMatch(/^ck:message:/);
+      expect(String(externalBody.message_id)).toMatch(/^ak:message:/);
 
       const events = await queryRealmEventsApi(request, aliceToken, realmId);
       expect(JSON.stringify(events)).toContain(text);

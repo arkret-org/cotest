@@ -15,7 +15,7 @@
 ## Spec 锚点
 
 - `arkret-spec/spec/v1/zh/governance/join-policy.md` §2 — Join Policy 设计原则 (gate 是组合的、申请材料对外不可见、审核决策必须上链、密码学绑定到 join、capability 是 allow 唯一来源)
-- `arkret-spec/spec/v1/zh/governance/join-policy.md` §3 — Cell Family `ck:cell:realm.join_policy.v1:<realm_id>`、JoinPolicy schema 字段表
+- `arkret-spec/spec/v1/zh/governance/join-policy.md` §3 — Cell Family `ak:cell:realm.join_policy.v1:<realm_id>`、JoinPolicy schema 字段表
 - `arkret-spec/spec/v1/zh/governance/join-policy.md` §3.1 — Gate 类型表 (`application_form`、`manual_review`、`cooldown`)
 - `arkret-spec/spec/v1/zh/governance/join-policy.md` §3.3 — `application_form.questions[]` schema
 - `arkret-spec/spec/v1/zh/governance/join-policy.md` §4 — `default_join_rule` 与 join policy 的交叉表 (knock 行)
@@ -53,7 +53,7 @@
    - join_rule = `knock`
    - history_visibility = `joined`
    - seed_members = `[eve.did]`
-2. **alice** 写入 `ck:cell:realm.join_policy.v1:<realmId>` cell,value:
+2. **alice** 写入 `ak:cell:realm.join_policy.v1:<realmId>` cell,value:
    ```json
    {
      "gates": [
@@ -172,7 +172,7 @@
 
 ## Implementation notes
 
-- **JoinPolicy cell 写入路径**:soland 当前是否暴露写 `ck:cell:realm.join_policy.v1:<realm_id>` 的 endpoint 需要先查;若没有,测试要么直接调底层 cell write API,要么 inkson 要补 join policy 编辑 UI
+- **JoinPolicy cell 写入路径**:soland 当前是否暴露写 `ak:cell:realm.join_policy.v1:<realm_id>` 的 endpoint 需要先查;若没有,测试要么直接调底层 cell write API,要么 inkson 要补 join policy 编辑 UI
 - **inkson UI 缺口可能很大**:
   - knock 申请的 UI(applicant 端填表)
   - 审核队列 UI(reviewer 端看待审 application)
@@ -183,7 +183,7 @@
 
 ## 风险 / 前置依赖
 
-- spec 明确说当前 v1 core 的 active 机器 contract 仍以 `ck.realm.join_rule`、`ck.realm.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 active registry。也就是说 **`ck:cell:realm.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 candidate profile 里**,soland 实现到没到这一步是开放问题。
+- spec 明确说当前 v1 core 的 active 机器 contract 仍以 `ck.realm.join_rule`、`ck.realm.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 active registry。也就是说 **`ak:cell:realm.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 candidate profile 里**,soland 实现到没到这一步是开放问题。
 - 如果 soland 没实现,这条 scenario 只能停在 spec 文档,等 soland 跟进。**写测试代码之前必须先确认 soland 这边的实现度**。
 
 ## 总耗时预估
