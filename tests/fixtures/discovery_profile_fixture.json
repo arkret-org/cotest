@@ -17,6 +17,7 @@
     ],
     "extension": [
       "account_data",
+      "agent_pairing_handoff",
       "agent_runtime",
       "applet_install",
       "authz_policy",

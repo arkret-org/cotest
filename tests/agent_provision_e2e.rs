@@ -551,6 +551,9 @@ async fn pair_agent_runtime_key(
             }
         }),
     };
+    // `agent_key_pair` drives `ck.gate.account.command.pair_agent_key`, bound to
+    // `POST /_cokret/gate/account/agent-key-pair`: the controller submits the
+    // durable `ck.agent.key.authorize` event that clears `pending_runtime_key`.
     Ok(bearer_sdk_client(server, token)?
         .agent_key_pair(&body)
         .await?)

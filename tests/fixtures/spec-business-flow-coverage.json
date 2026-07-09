@@ -803,7 +803,8 @@
       "title": "Agent provisioning, key pairing, grant lifecycle, sidecar threads, participation, and deactivation",
       "status": "implemented",
       "surfaces": [
-        "agent_runtime"
+        "agent_runtime",
+        "agent_pairing_handoff"
       ],
       "operation_spine": [
         {
