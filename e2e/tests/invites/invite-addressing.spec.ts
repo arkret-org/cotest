@@ -21,7 +21,7 @@ test.describe("invite addressing", () => {
     const inviteEvent = signedEventEnvelope({
       actorDid: "did:web:cotest-inviter.example",
       realmId: typedId("realm"),
-      kind: "ck.invite.create",
+      kind: "ak.invite.create",
       payload: {
         invite_id: typedId("invite"),
         invitee,
@@ -34,7 +34,7 @@ test.describe("invite addressing", () => {
     const outcome = await submitPeerInviteDeliveryApi(
       request,
       {
-        schema: "ck.schema.invite_delivery_request.v1",
+        schema: "ak.schema.invite_delivery_request.v1",
         invite_event: inviteEvent,
         invite_address: {
           subject_id: invitee,
@@ -70,7 +70,7 @@ test.describe("invite addressing", () => {
     );
     expect(ok.status(), await ok.text()).toBe(200);
     const locator = await ok.json();
-    expect(locator.schema).toBe("ck.schema.principal_locator.v1");
+    expect(locator.schema).toBe("ak.schema.principal_locator.v1");
     expect(locator.subject_id).toBe("did:web:locator-subject.example");
     expect(locator.recipient_service_did).toBe(solandServiceDid());
     expect(locator.issued_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);

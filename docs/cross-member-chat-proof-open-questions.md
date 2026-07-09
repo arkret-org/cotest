@@ -5,7 +5,7 @@
 > 逐层深钻(device_id 漂移 → key 不匹配 → reducer 字段 → server 改字段 → **binding
 > 构造**)全部 live/单测证伪到最底,真根因锁定:**inkson `event_signer` 手搓 detached-JWS
 > proof binding 时漏了 SDK `Proof::binding_object` 折入的固定域标记 `context =
-> "ck-event-proof-v1"`(encoding.md §2)。** 发送端签的是 `{event_digest, actor_id,
+> "ak.event-proof-v1"`(encoding.md §2)。** 发送端签的是 `{event_digest, actor_id,
 > verification_method, created_at}`,验证端(SDK `verify_eddsa_detached_jws_proof`,
 > **soland `envelope.rs:2418` 亦然**)重建的是 `{context, …}` → binding 字节不同 →
 > **所有 kind 的 event proof JWS 验签系统性失败**。

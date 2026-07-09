@@ -25,7 +25,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("ck.call.signal seq monotonicity (spec wire)", () => {
+test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
   test("relay preserves each frame's seq verbatim so the receiver can enforce monotonicity", async ({
     request,
   }) => {

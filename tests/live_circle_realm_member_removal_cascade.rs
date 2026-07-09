@@ -65,7 +65,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     }
 
     // ── 1. Bootstrap the live stack ────────────────────────────────────
-    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-member-cascade")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ak.0007-member-cascade")).await?;
     if stack.coauth.is_none() {
         bail!(
             "live cascade scenario requires coauth (membership state writes); coauth \
@@ -164,7 +164,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     let _ = admin
         .post("/_arkret/self/realms")
         .json(&json!({
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Member Cascade Realm",
         }))

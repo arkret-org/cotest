@@ -29,11 +29,11 @@ use arkret_core::{
 };
 use serde_json::Value;
 
-pub const VECTOR_ID_AGENT_PROVISION: &str = "ck.vector.agent.provision.v1";
-pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ck.vector.agent.pairing_expiry.v1";
-pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ck.vector.agent.controller_lifecycle.v1";
-pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "ck.vector.agent.act_on_behalf.v1";
-pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "ck.vector.agent.session_grant.replay.v1";
+pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
+pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ak.vector.agent.pairing_expiry.v1";
+pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ak.vector.agent.controller_lifecycle.v1";
+pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "ak.vector.agent.act_on_behalf.v1";
+pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "ak.vector.agent.session_grant.replay.v1";
 
 pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
@@ -44,7 +44,7 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
 ];
 
 const AGENT_VECTORS_FIXTURE_FILE: &str = "agent-vectors-fixture.json";
-const AGENT_VECTORS_PROFILE: &str = "ck.profile.personal_agent_provisioning.v1";
+const AGENT_VECTORS_PROFILE: &str = "ak.profile.personal_agent_provisioning.v1";
 
 fn validate_agent_vectors_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
@@ -97,10 +97,10 @@ fn admit_agent_session_with_grant(
 }
 
 pub fn run_agent_provision_vector() -> Result<()> {
-    if OP_AGENT_PROVISION != "ck.self.agent.command.provision" {
+    if OP_AGENT_PROVISION != "ak.self.agent.command.provision" {
         bail!("OP_AGENT_PROVISION spelling drifted: {OP_AGENT_PROVISION}");
     }
-    if CAP_ACTION_AGENT_PROVISION != "ck.self.agent.command.provision" {
+    if CAP_ACTION_AGENT_PROVISION != "ak.self.agent.command.provision" {
         bail!("CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}");
     }
     // The provisioning error matrix MUST include `failed_precondition`
@@ -134,7 +134,7 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
     if REASON_PAIRING_REQUEST_EXPIRED != "pairing_request_expired" {
         bail!("REASON_PAIRING_REQUEST_EXPIRED spelling drifted: {REASON_PAIRING_REQUEST_EXPIRED}");
     }
-    if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.command.pair_agent_key" {
+    if OP_ACCOUNT_AGENT_KEY_PAIR != "ak.gate.account.command.pair_agent_key" {
         bail!("OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}");
     }
     // The error-response matrix for the key-pair endpoint MUST
@@ -194,14 +194,14 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         OP_AGENT_GRANT_DETACH,
         OP_AGENT_SIDECAR_THREAD_ENSURE,
     ] {
-        if !op.starts_with("ck.agent.")
-            && !op.starts_with("ck.gate.account.")
-            && !op.starts_with("ck.self.agent.")
+        if !op.starts_with("ak.agent.")
+            && !op.starts_with("ak.gate.account.")
+            && !op.starts_with("ak.self.agent.")
         {
             bail!("agent op id `{op}` lost canonical namespace");
         }
     }
-    if OP_AGENT_DEACTIVATE != "ck.self.agent.command.deactivate" {
+    if OP_AGENT_DEACTIVATE != "ak.self.agent.command.deactivate" {
         bail!("OP_AGENT_DEACTIVATE spelling drifted: {OP_AGENT_DEACTIVATE}");
     }
 
@@ -424,7 +424,7 @@ fn expect_proof_denial(
 }
 
 pub fn run_agent_session_grant_replay_vector() -> Result<()> {
-    if OP_ACCOUNT_ISSUE_SESSION_GRANT != "ck.gate.account.command.issue_session_grant" {
+    if OP_ACCOUNT_ISSUE_SESSION_GRANT != "ak.gate.account.command.issue_session_grant" {
         bail!("OP_ACCOUNT_ISSUE_SESSION_GRANT spelling drifted: {OP_ACCOUNT_ISSUE_SESSION_GRANT}");
     }
     // Agent branch reject codes per §0.8:

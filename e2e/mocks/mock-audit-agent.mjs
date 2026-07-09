@@ -90,7 +90,7 @@ function makeAccessedEnvelope({ realm_id, source_event_id, reason }) {
   const event = {
     event_id: `ak:event:audit-accessed:${randomUUID()}`,
     realm_id,
-    type: "ck.audit.accessed",
+    type: "ak.audit.accessed",
     actor_id: agentDid,
     occurred_at: new Date().toISOString(),
     payload: {

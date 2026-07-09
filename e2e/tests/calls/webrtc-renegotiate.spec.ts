@@ -23,7 +23,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("ck.call.signal renegotiation + ICE restart", () => {
+test.describe("ak.call.signal renegotiation + ICE restart", () => {
   test("signed ICE config carries the ck.media.ice_config.v1 domain label", async ({
     request,
   }) => {
@@ -62,9 +62,9 @@ test.describe("ck.call.signal renegotiation + ICE restart", () => {
     expect(signature.alg).toBe("EdDSA");
     // The signing_input is prefixed by the spec domain label — distinct from
     // ck.media.participant_binding.v1 (media-service-binding.md §3.1).
-    expect(signature.signature_input).toBe("ck.media.ice_config.v1");
+    expect(signature.signature_input).toBe("ak.media.ice_config.v1");
     expect(signature.signature_input).not.toBe(
-      "ck.media.participant_binding.v1",
+      "ak.media.participant_binding.v1",
     );
     expect(signature.payload_digest as string).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(typeof signature.sig).toBe("string");

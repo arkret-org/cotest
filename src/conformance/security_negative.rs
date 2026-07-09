@@ -18,7 +18,7 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
     if required_str(&fixture, "suite")? != SUITE {
         bail!("{FIXTURE} suite must be {SUITE}");
     }
-    validate_profile(&fixture, "ck.vector_group.privacy_security.v1")?;
+    validate_profile(&fixture, "ak.vector_group.privacy_security.v1")?;
 
     let cases = fixture
         .get("cases")
@@ -188,7 +188,7 @@ fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
             return Ok(SecurityDecision::reject("schema_violation"));
         }
     }
-    if required_str(event, "kind")? == "ck.message.create" {
+    if required_str(event, "kind")? == "ak.message.create" {
         let payload = required_field(event, "payload")?;
         let has_body = ["content", "encrypted_content", "blob_refs"]
             .iter()
@@ -360,7 +360,7 @@ mod tests {
     fn sample_event() -> Value {
         json!({
             "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
-            "kind": "ck.message.create",
+            "kind": "ak.message.create",
             "realm_id": "ak:realm:01970e589d21-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
@@ -371,7 +371,7 @@ mod tests {
             "payload": {
                 "strand_id": "ak:strand:01970e589d21-7000-8000-000000000010",
                 "track_name": "discussion",
-                "content": {"kind": "ck.content.text", "body": "signed body"}
+                "content": {"kind": "ak.content.text", "body": "signed body"}
             }
         })
     }

@@ -45,7 +45,7 @@
 
 ### Phase A — 双方 DID Document 声明 TSP 支持
 
-1. **alice** 解析自己的 `did:webvh` 文档 (`GET https://<host>/.well-known/did/webvh/<scid>`),断言 `service` 数组里至少存在一项 `type === "ck.service.tsp"`,且 `serviceEndpoint` 与 `MOCK_TSP_ENDPOINT_PORT` 对应
+1. **alice** 解析自己的 `did:webvh` 文档 (`GET https://<host>/.well-known/did/webvh/<scid>`),断言 `service` 数组里至少存在一项 `type === "ak.service.tsp"`,且 `serviceEndpoint` 与 `MOCK_TSP_ENDPOINT_PORT` 对应
 2. **alice** 解析 `bob_extern` 的 `did:web` 文档 (`GET https://bob-extern-.../did.json`),断言同样存在 `ck.service.tsp` 声明,记录其 `serviceEndpoint`、`supported_vid_schemes`、`supported_modes`、`metadata_privacy.nested_messages === true`
 3. 断言:alice 的 client (inkson) 在 feature discovery view 中将 `bob_extern` 标记为 "TSP-capable" (例如 directory 卡片上出现 `ck.service.tsp` chip / `tsp-capable-badge` testid)
 4. (spec §3 line: DID method adapter SHOULD 暴露 TSP 能力)断言 `GET /_arkret/root/identity/${aliceDid}/transports` 返回数组里包含 `"tsp"`,且 `GET /_arkret/root/identity/${bobExternDid}/transports` 同样含 `"tsp"`
@@ -67,7 +67,7 @@
 
 11. **alice** 在 inkson 中(承接 Phase B 建立的 relationship) 触发 "Invite bob_extern via TSP" 流程,指向一个已存在的 Realm `R_tsp`
 12. 客户端组装内层 Arkret operation:
-    - `operation = "ck.invite.create"`
+    - `operation = "ak.invite.create"`
     - `realm_id = R_tsp`
     - `invitee = bob_extern.did`
     - `actor = alice.did`,带 Arkret event signature(alice 当前 update key)
@@ -85,14 +85,14 @@
 17. mock 验证内层 Arkret event signature(alice 的 webvh key,通过 §4 resolver 拉 DID Doc)→ pass
 18. 断言:mock 把验证结果回成 TSP ACK,`verification.arkret_signature = "ok"`、`verification.tsp_authenticity = "ok"`(spec §5:两者 SHOULD 都验证,且独立)
 19. 断言:alice 侧 inkson `/settings/connections` 该 relationship 的 outbox 标记最后一条 `ck.invite.create` 为 `delivered + acked`
-20. 断言:soland audit log 出现 `tsp.message.send` 记录,包含 `relationship_id`、`payload_digest`、`payload_type: "ck.invite.create"`、`verification_result: "ok"`(spec §8)
+20. 断言:soland audit log 出现 `tsp.message.send` 记录,包含 `relationship_id`、`payload_digest`、`payload_type: "ak.invite.create"`、`verification_result: "ok"`(spec §8)
 
 ### Phase E — 反向通道:bob_extern → alice 的 `ck.member.state{join}`
 
 21. mock(作为 bob_extern)通过 Phase B 的同一 relationship 反向 POST 一个 TSP envelope,内层为 `ck.member.state` operation:`actor = bob_extern.did`、`realm_id = R_tsp`、`state = "join"`
 22. alice 客户端的 TSP listener(由 alice 自己的 `ck.service.tsp` endpoint 承载,= 同一个 mock 实例的另一侧)收到 envelope → 验证外层 → 解出内层 → 验证 Arkret event signature(bob_extern 的 `did:web` key)
 23. 断言:alice 侧 `/realms/${R_tsp}/admin` 显示 bob_extern 状态为 `joined`(或在 `realm-admin-panel` 中匹配 `joined ${bobExternDid}`)
-24. 断言:alice 侧 audit log 含一条 `tsp.message.receive` 记录,`payload_type: "ck.member.state"`,且 `verification_result: "ok"`
+24. 断言:alice 侧 audit log 含一条 `tsp.message.receive` 记录,`payload_type: "ak.member.state"`,且 `verification_result: "ok"`
 
 ## Observable assertions(合并清单)
 

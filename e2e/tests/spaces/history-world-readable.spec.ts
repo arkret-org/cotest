@@ -151,11 +151,11 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
   const payload = {
     object: {
       id: realmId,
-      schema: "ck.schema.realm.v1",
+      schema: "ak.schema.realm.v1",
       title: `incompat ${Date.now()}`,
       created_by: actorDid,
       trust_domain: "ak:trust_domain:soland.local",
-      schema_refs: ["ck.schema.realm.v1"],
+      schema_refs: ["ak.schema.realm.v1"],
       default_discoverability: "listed",
       default_join_rule: "invite",
       history_visibility: "world_readable",
@@ -170,7 +170,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
   };
   const event = {
     event_id: `ak:event:${uuidV7()}`,
-    kind: "ck.realm.create",
+    kind: "ak.realm.create",
     realm_id: realmId,
     actor_id: actorDid,
     actor_seq: 1,
@@ -178,7 +178,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
     prev_refs: [],
     refs: [],
     requirements: {
-      schema: ["ck.schema.realm.v1"],
+      schema: ["ak.schema.realm.v1"],
       features: [],
       critical_extensions: [],
     },
@@ -197,7 +197,7 @@ function expectEventsContainRealmCreate(body: unknown, realmId: string) {
     events.some((event) => {
       if (!isRecord(event)) return false;
       const kind = event.kind ?? event.event_kind;
-      return event.realm_id === realmId && kind === "ck.realm.create";
+      return event.realm_id === realmId && kind === "ak.realm.create";
     }),
     `world_readable history response must include ck.realm.create for ${realmId}: ${JSON.stringify(body)}`,
   ).toBe(true);

@@ -26,9 +26,9 @@ use serde_json::{Value, json};
 use super::{looks_like_sha256_digest, spec_artifacts_root};
 
 pub const VECTOR_ID_HC_SERVICE_HANDLE_REJECTED: &str =
-    "ck.cotest_vector.handle_claim.service_handle_rejected.v1";
+    "ak.cotest_vector.handle_claim.service_handle_rejected.v1";
 pub const VECTOR_ID_HC_SUBJECT_NOT_PRINCIPAL_REJECTED: &str =
-    "ck.cotest_vector.handle_claim.subject_not_principal_did_rejected.v1";
+    "ak.cotest_vector.handle_claim.subject_not_principal_did_rejected.v1";
 
 pub const ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_HC_SERVICE_HANDLE_REJECTED,
@@ -84,7 +84,7 @@ fn compile_handle_claim_schema() -> Result<jsonschema::Validator> {
 /// A schema-valid `ck.schema.handle_claim.v1` instance to mutate per case.
 fn base_claim() -> Value {
     json!({
-        "schema": "ck.schema.handle_claim.v1",
+        "schema": "ak.schema.handle_claim.v1",
         "handle": "alice:acme.example",
         "subject": "did:web:alice.principal.example",
         "issuer": "did:web:coauth.acme.example",

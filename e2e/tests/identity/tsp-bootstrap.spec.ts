@@ -151,9 +151,9 @@ test.describe("tsp bootstrap", () => {
     // operation carries alice's real DID + event signature).
     const realmId = `ak:realm:${randomUUID()}`;
     const innerCokret = {
-      type: "ck.invite.create",
+      type: "ak.invite.create",
       content_type: "application/arkret+json",
-      operation: "ck.invite.create",
+      operation: "ak.invite.create",
       realm_id: realmId,
       invitee: bobExternVid,
       actor: alice.did,
@@ -184,7 +184,7 @@ test.describe("tsp bootstrap", () => {
     expect(inboxResp.ok()).toBeTruthy();
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
     const received = inbox.find(
-      (envelope) => envelope.decoded_preview?.type === "ck.invite.create",
+      (envelope) => envelope.decoded_preview?.type === "ak.invite.create",
     );
     expect(received, "mock must record the inbound Arkret-over-TSP invite").toBeTruthy();
 
@@ -200,8 +200,8 @@ test.describe("tsp bootstrap", () => {
           const outbox = (await outboxResp.json()).envelopes as Array<Record<string, any>>;
           return outbox.some(
             (envelope) =>
-              envelope.decoded_preview?.type === "ck.tsp.ack" &&
-              envelope.decoded_preview?.source_type === "ck.invite.create",
+              envelope.decoded_preview?.type === "ak.tsp.ack" &&
+              envelope.decoded_preview?.source_type === "ak.invite.create",
           );
         },
         { timeout: 30_000 },
@@ -237,7 +237,7 @@ test.describe("tsp bootstrap", () => {
       data: {
         from_vid: alice.did,
         to_vid: bobExternVid,
-        payload_b64: b64({ type: "ck.invite.create", realm_id: realmId, invitee: bobExternVid }),
+        payload_b64: b64({ type: "ak.invite.create", realm_id: realmId, invitee: bobExternVid }),
         signature_b64: randomBytes(64).toString("base64"),
       },
     });
@@ -303,7 +303,7 @@ test.describe("tsp bootstrap", () => {
         // ACK round-trip can carry `vid_trust=degraded_no_witness` alongside
         // `tsp_authenticity=ok` (spec §8 trust assessment result).
         payload_b64: b64({
-          type: "ck.invite.create",
+          type: "ak.invite.create",
           realm_id: `ak:realm:${randomUUID()}`,
           invitee: bobExternVid,
           actor: alice.did,
@@ -334,7 +334,7 @@ test.describe("tsp bootstrap", () => {
     ).toBeTruthy();
     // Authenticity is independent: the message was accepted, so tsp authenticity
     // is ok while the VID trust is degraded.
-    expect(degraded?.decoded_preview?.type).toBe("ck.invite.create");
+    expect(degraded?.decoded_preview?.type).toBe("ak.invite.create");
   });
 
   test("E2.3 metadata privacy via nested message: an intermediary relay sees pairwise VID + payload_digest only — no vid_local, no inner operation, no plaintext payload", async ({
@@ -359,8 +359,8 @@ test.describe("tsp bootstrap", () => {
     // envelope as what a relay would forward: pairwise sender VID + a
     // payload_digest, with the inner Arkret bytes carried as opaque base64.
     const innerCokret = {
-      type: "ck.invite.create",
-      operation: "ck.invite.create",
+      type: "ak.invite.create",
+      operation: "ak.invite.create",
       actor: alice.did, // the real vid_local — MUST stay hidden from a relay
       realm_id: `ak:realm:${randomUUID()}`,
       invitee: bobExternVid,
@@ -406,7 +406,7 @@ test.describe("tsp bootstrap", () => {
     };
     const relaySerialized = JSON.stringify(relayView);
     expect(relaySerialized).not.toContain(alice.did); // no vid_local
-    expect(relaySerialized).not.toContain("ck.invite.create"); // no inner operation
+    expect(relaySerialized).not.toContain("ak.invite.create"); // no inner operation
     expect(relaySerialized).not.toContain(innerCokret.secret_marker); // no plaintext payload
     expect(relayView.sender_vid).toBe(pairwiseVid);
     expect(relayView.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);

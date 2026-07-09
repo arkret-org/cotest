@@ -60,7 +60,7 @@ use serde_json::{Value, json};
 /// as `cotest::scenarios::security_closure_vectors::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE`,
 /// repeated here so a grep on `federation_idempotency_historical_only`
 /// finds the binding directly.
-pub const VECTOR_ID: &str = "ck.vector.federation.idempotency_after_key_revoke.v1";
+pub const VECTOR_ID: &str = "ak.vector.federation.idempotency_after_key_revoke.v1";
 
 /// Canonical `reason_code` carried on a cache-replay-after-key-revoke
 /// response. The SDK constant is the authoritative source — this pin
@@ -218,8 +218,8 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
 
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
-        "operation": "ck.self.events.command.submit",
-        "envelopes": [{"kind": "ck.message.text", "payload": {"body": "federation-c3"}}],
+        "operation": "ak.self.events.command.submit",
+        "envelopes": [{"kind": "ak.message.text", "payload": {"body": "federation-c3"}}],
         "idempotency_key": "idem-c3-001",
     });
     let body_x_bytes = canonical_json_bytes(&body_x)
@@ -304,7 +304,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     let first = server_b.receive(&initial_key, dest_td.as_str(), || {
         json!({
             "ok": true,
-            "operation": "ck.self.events.command.submit",
+            "operation": "ak.self.events.command.submit",
             "accepted": 1,
             "request_canonical_digest": request_canonical_digest.as_str(),
         })

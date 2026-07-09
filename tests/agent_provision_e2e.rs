@@ -61,7 +61,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
             &agent_did,
             &arkret::AgentGrantAttachRequestBody {
                 grant: json!({
-                    "actions": ["ck.event.read"]
+                    "actions": ["ak.event.read"]
                 }),
             },
         )
@@ -195,11 +195,11 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         &token,
         ALICE_DID,
         &realm_id,
-        "ck.strand.create",
+        "ak.strand.create",
         json!({
             "object": {
                 "id": default_strand_id,
-                "schema": "ck.schema.strand.v1",
+                "schema": "ak.schema.strand.v1",
                 "realm_id": realm_id,
                 "tracks": {"discussion": {"enabled": true, "is_primary": true}},
                 "created_by": ALICE_DID,
@@ -223,16 +223,16 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         &token,
         ALICE_DID,
         &realm_id,
-        "ck.capability.grant",
+        "ak.capability.grant",
         json!({
             "grant_id": agent_grant_id,
             "grant": {
                 "id": agent_grant_id,
-                "schema": "ck.schema.capability.v1",
+                "schema": "ak.schema.capability.v1",
                 "realm_id": realm_id,
                 "issuer": ALICE_DID,
                 "subject": agent_did,
-                "actions": ["ck.message.create"],
+                "actions": ["ak.message.create"],
                 "resources": [{"kind": "realm", "realm_id": realm_id}],
                 "constraints": [],
                 "issued_at": "2026-05-02T00:00:00Z",
@@ -254,7 +254,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let agent_message = event_envelope(
         &agent_did,
         &realm_id,
-        "ck.message.create",
+        "ak.message.create",
         json!({
             "body": "agent_key_proof live reply",
             "content": {"body": "agent_key_proof live reply"},
@@ -339,7 +339,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let after_pause = event_envelope(
         &agent_did,
         &realm_id,
-        "ck.message.create",
+        "ak.message.create",
         json!({
             "body": "agent_key_proof after pause",
             "content": {"body": "agent_key_proof after pause"},
@@ -376,7 +376,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let after_deactivate = event_envelope(
         &agent_did,
         &realm_id,
-        "ck.message.create",
+        "ak.message.create",
         json!({
             "body": "agent_key_proof after deactivate",
             "content": {"body": "agent_key_proof after deactivate"},
@@ -400,7 +400,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let after_revoke = event_envelope(
         &agent_did,
         &realm_id,
-        "ck.message.create",
+        "ak.message.create",
         json!({
             "body": "agent_key_proof after revoke",
             "content": {"body": "agent_key_proof after revoke"},
@@ -520,7 +520,7 @@ async fn pair_agent_runtime_key(
         }),
         runtime_attestation: None,
         authorize_event: json!({
-            "kind": "ck.agent.key.authorize",
+            "kind": "ak.agent.key.authorize",
             "actor_id": ALICE_DID,
             "payload": {
                 "agent_principal_id": agent_did,
@@ -530,11 +530,11 @@ async fn pair_agent_runtime_key(
                 "accountable_principal_id": ALICE_DID,
                 "agent_key_scope": {
                     "actions": [
-                        "ck.self.events.stream.subscribe",
-                        "ck.self.events.query.scan",
-                        "ck.self.events.command.submit",
-                        "ck.event.read",
-                        "ck.message.create"
+                        "ak.self.events.stream.subscribe",
+                        "ak.self.events.query.scan",
+                        "ak.self.events.command.submit",
+                        "ak.event.read",
+                        "ak.message.create"
                     ],
                     "resources": [{"kind": "realm", "realm_id": "*"}],
                     "constraints": []
@@ -652,7 +652,7 @@ fn advance_event_sequence(actor: &str, realm_id: &str, count: usize) {
         let _ = event_envelope(
             actor,
             realm_id,
-            "ck.message.create",
+            "ak.message.create",
             json!({"body": "sequence padding"}),
         );
     }
@@ -818,11 +818,11 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 "service_account_id": "agent-live-e2e-account",
                 "audience": service_did,
                 "scopes": [
-                    "ck.self.events.stream.subscribe",
-                    "ck.self.events.query.scan",
-                    "ck.self.events.command.submit",
-                    "ck.event.read",
-                    "ck.message.create"
+                    "ak.self.events.stream.subscribe",
+                    "ak.self.events.query.scan",
+                    "ak.self.events.command.submit",
+                    "ak.event.read",
+                    "ak.message.create"
                 ],
                 "expires_at": "2026-12-31T23:59:59Z",
                 "revocation_ref": "ak:session:agent-live-e2e-grant",

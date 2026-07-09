@@ -24,7 +24,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
     let fixture = load_local_fixture("key_backup_encryption_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.key_backup_encryption_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.key_backup_encryption_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -347,7 +347,7 @@ fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
         "kdf": {"name": "argon2id", "salt": "AAAA",
                 "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
         "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA", "nonce_salt": "AAAAAAAAAAAAAAAA"},
-        "hpke_suite": "ck.hpke_x25519_aead_chacha20poly1305.v1",
+        "hpke_suite": "ak.hpke_x25519_aead_chacha20poly1305.v1",
     });
     if serde_json::from_value::<arkret_core::KeyBackupEncryption>(stray_hpke_suite).is_ok() {
         bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope carrying hpke_suite");
@@ -417,7 +417,7 @@ fn argon2id_kdf_meets_floor(kdf: &Value) -> Result<bool> {
 /// executed (or issued → expired / cancelled).
 pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("recovery_bridge_full_chain_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.recovery_bridge_full_chain_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.recovery_bridge_full_chain_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -613,7 +613,7 @@ pub fn run_recovery_ticket_state_machine_check() -> Result<()> {
 /// F-2 Round 27 — restore approval/executor/artifact full workflows.
 pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("restore_full_workflows_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.restore_full_workflows_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.restore_full_workflows_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

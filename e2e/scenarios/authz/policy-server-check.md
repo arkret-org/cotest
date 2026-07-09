@@ -62,18 +62,18 @@
 5. **alice** 通过 inkson `/realms/${realmId}/admin` 邀请 **bob**(invite-member → send-invite-button)
 6. soland 在执行 `ck.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
    - `actor_id = alice.did`
-   - `action = "ck.invite.create"`
+   - `action = "ak.invite.create"`
    - `resource = { kind: "realm", realm_id, target: bob.did }`
    - `context = { realm_id, request_id, signed: true }`
 7. mock 返回 `{ decision: "allow", reason: "default_allow", obligations: [] }`
 8. 邀请成功;断言 `realm-admin-panel` 状态文本含 `invited ${bob.did}`
-9. 调 `${MOCK_POLICY_SERVER_PORT}/inspect`,断言 `checks` 新增一条,`action = "ck.invite.create"`
+9. 调 `${MOCK_POLICY_SERVER_PORT}/inspect`,断言 `checks` 新增一条,`action = "ak.invite.create"`
 
 ### Phase C — 切换 deny:同样的邀请被拒,UI 显示 reason
 
 10. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入:
     ```json
-    { "match": { "action": "ck.invite.create", "target": "${bob.did}" },
+    { "match": { "action": "ak.invite.create", "target": "${bob.did}" },
       "decision": "deny",
       "reason": "external_policy_blocks_user" }
     ```
@@ -87,7 +87,7 @@
 
 16. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入:
     ```json
-    { "match": { "action": "ck.invite.create" },
+    { "match": { "action": "ak.invite.create" },
       "decision": "deny",
       "reason": "external_policy_blocks_user",
       "obligations": [{ "kind": "log_event", "target": "audit_log",

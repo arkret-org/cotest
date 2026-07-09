@@ -34,17 +34,17 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     crate::conformance::validate_server_profile_claims(&server_describe)?;
 
     for required in [
-        "ck.self.account.stream.subscribe",
-        "ck.find.directory.query.search_realms",
-        "ck.self.authz.query.check",
-        "ck.self.ephemeral.command.send",
-        "ck.edge.push.command.register_device",
-        "ck.self.keys.backups.resource.replace",
-        "ck.self.keys.backups.query.list",
-        "ck.self.call.media.exchange.issue_token",
-        "ck.self.media.query.ice_config",
-        "ck.self.policy.query.check",
-        "ck.self.moderation.command.report",
+        "ak.self.account.stream.subscribe",
+        "ak.find.directory.query.search_realms",
+        "ak.self.authz.query.check",
+        "ak.self.ephemeral.command.send",
+        "ak.edge.push.command.register_device",
+        "ak.self.keys.backups.resource.replace",
+        "ak.self.keys.backups.query.list",
+        "ak.self.call.media.exchange.issue_token",
+        "ak.self.media.query.ice_config",
+        "ak.self.policy.query.check",
+        "ak.self.moderation.command.report",
     ] {
         assert!(
             description

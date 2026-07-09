@@ -1633,7 +1633,7 @@ try {
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
-        # so the joint harness can mint real DPoP-bound ck.session.grants instead
+        # so the joint harness can mint real DPoP-bound ak.session.grants instead
         # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).
         #
         # The generated dev config enables `account.registration_email_delivery_bypass_allowed`

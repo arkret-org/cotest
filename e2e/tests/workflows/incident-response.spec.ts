@@ -175,12 +175,12 @@ test.describe("workflow: incident response", () => {
       signedEventEnvelope({
         actorDid: oncall.did,
         realmId,
-        kind: "ck.strand.create",
+        kind: "ak.strand.create",
         createdAt,
         payload: {
           object: {
             id: incidentStrandId,
-            schema: "ck.schema.strand.v1",
+            schema: "ak.schema.strand.v1",
             realm_id: realmId,
             metadata: {
               title: "SEV-2 checkout outage",
@@ -203,7 +203,7 @@ test.describe("workflow: incident response", () => {
         data: signedEventEnvelope({
           actorDid: oncall.did,
           realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           payload: {
             target_ref: incidentStrandId,
             patch: { metadata: { fields: { status: "resolved" } } },
@@ -222,7 +222,7 @@ test.describe("workflow: incident response", () => {
       signedEventEnvelope({
         actorDid: oncall.did,
         realmId,
-        kind: "ck.strand.update",
+        kind: "ak.strand.update",
         payload: {
           target_ref: incidentStrandId,
           patch: { metadata: { fields: { status: "mitigated" } } },
@@ -236,7 +236,7 @@ test.describe("workflow: incident response", () => {
       signedEventEnvelope({
         actorDid: oncall.did,
         realmId,
-        kind: "ck.strand.update",
+        kind: "ak.strand.update",
         payload: {
           target_ref: incidentStrandId,
           patch: { metadata: { fields: { status: "resolved" } } },
@@ -253,7 +253,7 @@ test.describe("workflow: incident response", () => {
       }
       const record = event as Record<string, unknown>;
       return (
-        record.kind === "ck.strand.update" &&
+        record.kind === "ak.strand.update" &&
         JSON.stringify(record.payload ?? {}).includes(incidentStrandId)
       );
     });
@@ -319,7 +319,7 @@ test.describe("workflow: incident response", () => {
           return false;
         }
         const record = event as Record<string, unknown>;
-        return record.kind === "ck.message.create";
+        return record.kind === "ak.message.create";
       }) as Record<string, unknown>[];
       expect(messageCreates.length).toBe(1);
       const payload = messageCreates[0].payload as Record<string, unknown>;

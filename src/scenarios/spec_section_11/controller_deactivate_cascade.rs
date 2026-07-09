@@ -12,13 +12,13 @@ use arkret_core::events::kinds::AGENT_DEACTIVATE;
 
 /// Canonical fan-out chain for controller deactivate.
 const CASCADE_KINDS: &[&str] = &[
-    "ck.self.agent.deactivate",
-    "ck.agent.key.revoke",
-    "ck.capability.revoke",
+    "ak.self.agent.deactivate",
+    "ak.agent.key.revoke",
+    "ak.capability.revoke",
 ];
 
 pub async fn controller_deactivate_cascade_run() -> Result<()> {
-    if AGENT_DEACTIVATE != "ck.self.agent.deactivate" {
+    if AGENT_DEACTIVATE != "ak.self.agent.deactivate" {
         return Err(anyhow!(
             "AGENT_DEACTIVATE event-kind constant drifted from canonical spelling"
         ));

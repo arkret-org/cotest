@@ -16,7 +16,7 @@ use crate::transcripts::record_vector_event;
 
 pub fn run_capability_fixture_suite() -> Result<()> {
     let value = load_fixture_value("capability-fixture.json")?;
-    validate_profile(&value, "ck.vector_group.capability.v1")?;
+    validate_profile(&value, "ak.vector_group.capability.v1")?;
     let fixtures = value
         .get("fixtures")
         .and_then(Value::as_array)
@@ -87,13 +87,13 @@ fn grant_id_of_event(event_id: &str) -> String {
 }
 
 fn action_implies(granted: &str, requested: &str) -> bool {
-    granted == requested || granted == "ck.realm.admin"
+    granted == requested || granted == "ak.realm.admin"
 }
 
 fn parent_can_delegate(parent_actions: &[String], child_actions: &[String]) -> bool {
     let can_delegate = parent_actions
         .iter()
-        .any(|action| action == "ck.capability.delegate" || action == "ck.realm.admin");
+        .any(|action| action == "ak.capability.delegate" || action == "ck.realm.admin");
     can_delegate
         && child_actions.iter().all(|child| {
             parent_actions
@@ -271,7 +271,7 @@ fn evaluate_grant_request(grants: &[Value], request: &Value) -> (String, Vec<Str
 
 fn deny_reason_for_request(request: &Value) -> &'static str {
     match request.get("action").and_then(Value::as_str) {
-        Some("ck.message.create") => "no_strand_track_message_grant",
+        Some("ak.message.create") => "no_strand_track_message_grant",
         _ => "capability_denied",
     }
 }
@@ -596,12 +596,12 @@ fn message_event_authorized(
             continue;
         }
         match event.get("kind").and_then(Value::as_str) {
-            Some("ck.capability.grant") => {
+            Some("ak.capability.grant") => {
                 if event.pointer("/payload/grant_id").and_then(Value::as_str) == Some(grant_id) {
                     granted = true;
                 }
             }
-            Some("ck.capability.revoke")
+            Some("ak.capability.revoke")
                 if event.pointer("/payload/grant_id").and_then(Value::as_str) == Some(grant_id) =>
             {
                 revoked = true;

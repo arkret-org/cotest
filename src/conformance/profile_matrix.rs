@@ -41,7 +41,7 @@ const MIXED_PROFILE_FIELDS: &[&str] = &[
 ];
 
 const LOCAL_PROFILE_SUITES: &[(&str, &str)] = &[(
-    "ck.vector_group.privacy_security.v1",
+    "ak.vector_group.privacy_security.v1",
     "security_negative_profile",
 )];
 
@@ -86,14 +86,14 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
 
     let mut full_client_closure = BTreeSet::new();
     expand_profile_claim(
-        "ck.profile.full_client.v1",
+        "ak.profile.full_client.v1",
         &matrix,
         &mut full_client_closure,
     )?;
     for inherited in [
-        "ck.profile.chat_mvp.v1",
-        "ck.profile.kanban_mvp.v1",
-        "ck.profile.core_event_store.v1",
+        "ak.profile.chat_mvp.v1",
+        "ak.profile.kanban_mvp.v1",
+        "ak.profile.core_event_store.v1",
     ] {
         if !full_client_closure.contains(inherited) {
             bail!("profile graph inheritance did not expand full_client to {inherited}");
@@ -102,35 +102,35 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
 
     let push_gateway = matrix
         .requirements
-        .get("ck.profile.push_gateway.v1")
+        .get("ak.profile.push_gateway.v1")
         .ok_or_else(|| anyhow!("missing push_gateway requirement block"))?;
     if !push_gateway
         .depends_on_profiles
-        .contains("ck.profile.push_gateway.blind_wakeup.v1")
+        .contains("ak.profile.push_gateway.blind_wakeup.v1")
     {
         bail!("profile graph missing push_gateway -> blind_wakeup dependency");
     }
 
     let relaxed = matrix
         .requirements
-        .get("ck.profile.e2ee_relaxed.v1")
+        .get("ak.profile.e2ee_relaxed.v1")
         .ok_or_else(|| anyhow!("missing e2ee_relaxed requirement block"))?;
     if !relaxed
         .required_features
-        .contains("ck.feature.e2ee_relaxed.v1")
+        .contains("ak.feature.e2ee_relaxed.v1")
     {
         bail!("e2ee_relaxed requirement block missing required feature");
     }
     if !relaxed
         .mutually_exclusive_profiles
-        .contains("ck.profile.mls_governance_binding.full.v1")
+        .contains("ak.profile.mls_governance_binding.full.v1")
     {
         bail!("profile graph missing e2ee_relaxed mutual exclusion");
     }
 
     let mls_binding = matrix
         .requirements
-        .get("ck.profile.mls_governance_binding.full.v1")
+        .get("ak.profile.mls_governance_binding.full.v1")
         .ok_or_else(|| anyhow!("missing mls governance binding requirement block"))?;
     if !mls_binding
         .required_cells
@@ -141,7 +141,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
 
     let circle = matrix
         .requirements
-        .get("ck.profile.circle_conformance.v1")
+        .get("ak.profile.circle_conformance.v1")
         .ok_or_else(|| anyhow!("missing circle conformance requirement block"))?;
     if !circle
         .required_fixtures
@@ -151,7 +151,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
     }
     if !circle
         .required_capability_actions
-        .contains("ck.circle.create")
+        .contains("ak.circle.create")
     {
         bail!("circle conformance requirement block missing capability action");
     }
@@ -209,7 +209,7 @@ fn collect_declared_profiles(profiles: &Value) -> Result<BTreeSet<String>> {
     }
     for field in MIXED_PROFILE_FIELDS {
         for profile in string_array_field(profiles, field)? {
-            if profile.starts_with("ck.profile.") {
+            if profile.starts_with("ak.profile.") {
                 validate_profile_id(profile)?;
                 declared.insert(profile.to_owned());
             }
@@ -368,7 +368,7 @@ fn collect_profile_requirements(
         let cotest_suites = collect_cotest_suites(requirement, profile)?;
 
         for extension in string_array_field(requirement, "optional_extensions")? {
-            if extension.starts_with("ck.profile.") && !declared_profiles.contains(extension) {
+            if extension.starts_with("ak.profile.") && !declared_profiles.contains(extension) {
                 bail!("{profile} references unknown optional profile {extension}");
             }
         }
@@ -864,7 +864,7 @@ fn is_failed_conformance_status(status: &str) -> bool {
 }
 
 fn is_limited_profile(profile: &str) -> bool {
-    profile.starts_with("ck.profile.")
+    profile.starts_with("ak.profile.")
         && profile.ends_with(".v1")
         && (profile.contains(".limited_")
             || profile.contains("_limited_")
@@ -938,7 +938,7 @@ fn optional_string_set_field_any(
 }
 
 fn validate_profile_id(profile: &str) -> Result<()> {
-    if !profile.starts_with("ck.profile.") || !profile.ends_with(".v1") {
+    if !profile.starts_with("ak.profile.") || !profile.ends_with(".v1") {
         bail!("invalid profile id {profile}");
     }
     Ok(())

@@ -1,6 +1,6 @@
 {
   "suite": "live_describe_profile_gate",
-  "profile": "ck.profile.live_describe_profile_gate_vectors.v1",
+  "profile": "ak.profile.live_describe_profile_gate_vectors.v1",
   "cases": [
     {
       "name": "soland_principal_claim_with_scaffold_limitation_is_rejected",
@@ -13,10 +13,10 @@
         "service": "soland",
         "service_type": "principal_server",
         "supported_profiles": [
-          "ck.profile.principal_server.v1"
+          "ak.profile.principal_server.v1"
         ],
         "supported_operations": [
-          "ck.server.query.describe"
+          "ak.server.query.describe"
         ],
         "limits": {
           "profile_status": {
@@ -40,9 +40,9 @@
       },
       "describe": {
         "service": "floria",
-        "operation_id": "ck.edge.push.command.notify",
+        "operation_id": "ak.edge.push.command.notify",
         "supported_profiles": [
-          "ck.profile.push_gateway.v1"
+          "ak.profile.push_gateway.v1"
         ],
         "supported_providers": [
           "webpush",
@@ -72,7 +72,7 @@
         "service": "teabay",
         "service_did": "did:web:teabay.example",
         "discovery_profiles": [
-          "ck.profile.directory_service.v1"
+          "ak.profile.directory_service.v1"
         ],
         "ingest_modes": [
           "announce"
@@ -99,8 +99,8 @@
         "development_mode": false,
         "receipt_signing_key_stable": false,
         "profiles": [
-          "ck.identity.webvh.v1",
-          "ck.identity.registry.v1"
+          "ak.identity.webvh.v1",
+          "ak.identity.registry.v1"
         ]
       }
     },
@@ -115,7 +115,7 @@
         "service": "coauth",
         "service_type": "auth_server",
         "supported_profiles": [
-          "ck.profile.principal_server.v1"
+          "ak.profile.principal_server.v1"
         ],
         "admin_surfaces": [
           {

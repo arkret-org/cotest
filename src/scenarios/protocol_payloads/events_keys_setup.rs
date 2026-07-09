@@ -47,7 +47,7 @@ async fn authorize_keys_device(
     let control_realm = principal_control_realm_id(&principal);
     let mut event = json!({
         "event_id": "ak:event:0196419b-0000-7000-8000-00000000d0a0",
-        "kind": "ck.device.authorize",
+        "kind": "ak.device.authorize",
         "realm_id": control_realm,
         "actor_id": KEYS_ACTOR_DID,
         "actor_seq": 1,
@@ -146,12 +146,12 @@ fn signed_realm_create_event(
     let payload = json!({
         "object": {
             "id": realm_id,
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "title": title,
             "summary": title,
             "trust_domain": "ak:trust_domain:protocol-payloads.cotest.local",
             "created_by": actor_id,
-            "schema_refs": ["ck.schema.realm.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "public",
             "default_join_rule": "public",
             "history_visibility": "world_readable",
@@ -172,7 +172,7 @@ fn signed_realm_create_event(
     });
     let mut event = json!({
         "event_id": event_id,
-        "kind": "ck.realm.create",
+        "kind": "ak.realm.create",
         "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
@@ -215,7 +215,7 @@ fn signed_message_event(
     )?;
     let mut event = json!({
         "event_id": event_id,
-        "kind": "ck.message.create",
+        "kind": "ak.message.create",
         "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,

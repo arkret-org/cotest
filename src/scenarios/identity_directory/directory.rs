@@ -94,7 +94,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let invite_event = alice
         .submit_event(
             &invite_only_realm_id,
-            "ck.invite.create",
+            "ak.invite.create",
             invite_create_payload(
                 "ak:invite:0196419b-0000-7000-8000-000000000202",
                 bob.actor.as_str(),

@@ -132,7 +132,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let member_join = alice
         .submit_event(
             &realm_id,
-            "ck.member.state",
+            "ak.member.state",
             member_join_payload_value(&realm_id, BOB_DID)?,
         )
         .await?;
@@ -221,7 +221,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let member_ban = alice
         .submit_event(
             &realm_id,
-            "ck.member.state",
+            "ak.member.state",
             member_transition_payload(&realm_id, BOB_DID, MembershipPayloadState::Ban, None)?,
         )
         .await?;
@@ -257,9 +257,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
                 .map(ToOwned::to_owned)
         })
         .collect();
-    assert!(event_kinds.contains("ck.realm.create"));
-    assert!(event_kinds.contains("ck.member.state"));
-    assert!(event_kinds.contains("ck.message.create"));
+    assert!(event_kinds.contains("ak.realm.create"));
+    assert!(event_kinds.contains("ak.member.state"));
+    assert!(event_kinds.contains("ak.message.create"));
 
     let logout = expect_json(
         server
@@ -288,16 +288,16 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
     let created = alice
         .submit_event(
             &realm_id,
-            "ck.realm.create",
+            "ak.realm.create",
             json!({
                 "object": {
                     "id": &realm_id,
-                    "schema": "ck.schema.realm.v1",
+                    "schema": "ak.schema.realm.v1",
                     "title": "Collaboration Workflow Space",
                     "summary": "single server collaboration",
                     "trust_domain": "ak:trust_domain:collaboration-workflow.cotest.local",
                     "created_by": &alice.actor,
-                    "schema_refs": ["ck.schema.realm.v1"],
+                    "schema_refs": ["ak.schema.realm.v1"],
                     "default_discoverability": "invite_only",
                     "default_join_rule": "invite",
                     "history_visibility": "shared",

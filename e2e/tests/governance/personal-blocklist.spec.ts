@@ -28,7 +28,7 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
-const BLOCKLIST_DATA_TYPE = "ck.account.blocklist";
+const BLOCKLIST_DATA_TYPE = "ak.account.blocklist";
 
 type BlocklistEntry = {
   target:
@@ -331,7 +331,7 @@ test.describe("personal blocklist", () => {
     const redactEvent = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.message.redact",
+      kind: "ak.message.redact",
       payload: {
         target_event_id: sent.event_id,
         redacts: sent.event_id,
@@ -398,7 +398,7 @@ test.describe("personal blocklist", () => {
       aliceToken,
       alice.did,
       realmId,
-      "ck.push_rules",
+      "ak.push_rules",
       {
         rules: [
           {

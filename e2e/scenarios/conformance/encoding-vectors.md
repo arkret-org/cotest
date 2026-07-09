@@ -51,7 +51,7 @@
 - harness 已加载 spec fixture JSON,数据结构形如:
   ```json
   {
-    "vector_id": "ck.vector.encoding.canonical_json.basic.v1",
+    "vector_id": "ak.vector.encoding.canonical_json.basic.v1",
     "protocol_version": "1.0",
     "input": { "b": 2, "a": 1 },
     "expected_canonical_json": "{\"a\":1,\"b\":2}",
@@ -148,7 +148,7 @@
 ## Edge cases / sub-tests
 
 - **E9.1 vector version skew**:harness 加载一个 `protocol_version = "0.9"` 的旧 vector,POST `.../encode` → soland 端点必须拒绝 (`unsupported_vector_version`),不能用 v1 canonicalizer 默认处理
-- **E9.2 unknown vector_id 优雅降级**:harness POST `{ vector_id: "ck.vector.encoding.bogus.v1", input: {...} }` → soland 端点返回 `unknown_vector_id` (HTTP 4xx),不应静默执行默认 canonicalizer 然后假装 pass
+- **E9.2 unknown vector_id 优雅降级**:harness POST `{ vector_id: "ak.vector.encoding.bogus.v1", input: {...} }` → soland 端点返回 `unknown_vector_id` (HTTP 4xx),不应静默执行默认 canonicalizer 然后假装 pass
 - **E9.3 vector mismatch 时输出 diff**:在 spec §1.6 vector 输入里故意改一个字段值,断言 harness 报告中 `actual.digest !== expected.digest`,并把 `actual_canonical_json` 与 `expected_canonical_json` 同时写到 step screenshot / artifact,便于人工 diff
 - **E9.4 redaction 跨服务器一致**:把 §3 vector 同时 POST 给 soland-alpha 与 soland-beta (若 `hasDualSoland()` 为 true),两边投影必须 byte-equal — 这条只在 dual-soland topology 下跑,否则 skip
 - **E9.5 large vector 流式**:`ck.vector.encoding.event_digest.v1` 的输入 payload 超过 1MB 时,canonicalizer 也必须产出稳定 digest (避免 streaming buffer 边界 bug)

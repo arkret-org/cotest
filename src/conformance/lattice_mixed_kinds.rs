@@ -23,7 +23,7 @@ use serde_json::Value;
 
 use super::{load_local_fixture_value, required_str, validate_profile};
 
-const PROFILE_ID: &str = "ck.profile.lattice_mixed_kinds_vectors.v1";
+const PROFILE_ID: &str = "ak.profile.lattice_mixed_kinds_vectors.v1";
 
 pub fn run_lattice_mixed_kinds_suite() -> Result<()> {
     let fixture = load_local_fixture_value("lattice_mixed_kinds.json")?;

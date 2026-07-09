@@ -170,8 +170,8 @@ test.describe("describes soland surface @fully-implemented", () => {
 
     // §4.2 + service-api-schema.mdx §2.1 — every principal server must surface
     // at least ck.server.query.describe + ck.self.events.command.submit on supported_operations.
-    expect(body.supported_operations, "exposes ck.server.query.describe").toContain("ck.server.query.describe");
-    expect(body.supported_operations, "exposes ck.self.events.command.submit").toContain("ck.self.events.command.submit");
+    expect(body.supported_operations, "exposes ck.server.query.describe").toContain("ak.server.query.describe");
+    expect(body.supported_operations, "exposes ck.self.events.command.submit").toContain("ak.self.events.command.submit");
 
     await testInfo.attach("soland-describe", {
       body: JSON.stringify(body, null, 2),
@@ -213,10 +213,10 @@ test.describe("describes coauth surface @fully-implemented", () => {
     const claimed = (body.claimed_profiles ?? []) as Array<{ profile_id?: string }>;
     const claimedIds = claimed.map((c) => c.profile_id).filter(Boolean);
     expect(claimedIds, "coauth does not self-claim identity_registry").not.toContain(
-      "ck.profile.identity_registry.v1",
+      "ak.profile.identity_registry.v1",
     );
     expect(claimedIds, "coauth does not self-claim principal_server").not.toContain(
-      "ck.profile.principal_server.v1",
+      "ak.profile.principal_server.v1",
     );
 
     // auth_metadata routes account flows through Account Authority; methods only
@@ -350,11 +350,11 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: strandId,
           track_name: "discussion",
-          content: { kind: "ck.content.text", body },
+          content: { kind: "ak.content.text", body },
         },
       });
       const eventId = String(envelope.event_id);
@@ -384,11 +384,11 @@ test.describe("service surface contract — error envelope, pagination, idempote
         actorDid: alice.did,
         realmId,
         eventId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: strandId,
           track_name: "discussion",
-          content: { kind: "ck.content.text", body: `${body} drift` },
+          content: { kind: "ak.content.text", body: `${body} drift` },
         },
       });
       const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -433,11 +433,11 @@ test.describe("service surface contract — error envelope, pagination, idempote
         const envelope = signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.message.create",
+          kind: "ak.message.create",
           payload: {
             strand_id: strandId,
             track_name: "discussion",
-            content: { kind: "ck.content.text", body: `page seed ${i} ${stamp}` },
+            content: { kind: "ak.content.text", body: `page seed ${i} ${stamp}` },
           },
         });
         const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -573,11 +573,11 @@ test.describe("service surface contract — error envelope, pagination, idempote
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.message.create",
+          kind: "ak.message.create",
           payload: {
             strand_id: strandId,
             track_name: "discussion",
-            content: { kind: "ck.content.text", body },
+            content: { kind: "ak.content.text", body },
           },
         });
 
@@ -652,7 +652,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         ...((description.implemented_features ?? []) as string[]),
         ...((description.experimental_features ?? []) as string[]),
       ]);
-      const undeclaredFeature = "ck.feature.mimi_room_passthrough.v1";
+      const undeclaredFeature = "ak.feature.mimi_room_passthrough.v1";
       expect(declared.has(undeclaredFeature), "fixture feature must be undeclared").toBe(false);
 
       const alice = uniqueUser("ssc-phase-e");
@@ -666,11 +666,11 @@ test.describe("service surface contract — error envelope, pagination, idempote
         actorDid: alice.did,
         eventId,
         realmId: "ak:realm:01904100-0000-7000-8000-000000001101",
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: "ak:strand:01904100-0000-7000-8000-000000001101",
           track_name: "discussion",
-          content: { kind: "ck.content.text", body: "must not accept unknown feature" },
+          content: { kind: "ak.content.text", body: "must not accept unknown feature" },
         },
       });
       (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
@@ -693,7 +693,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // spec: api-conventions.md section 5.1 uses unsupported_feature for
       // unknown Event.requirements.critical_extensions[] entries that are
       // declared fail_closed.
-      const criticalExtension = "ck.extension.cotest.unknown_fail_closed.v1";
+      const criticalExtension = "ak.extension.cotest.unknown_fail_closed.v1";
       const alice = uniqueUser("ssc-phase-e2");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
@@ -705,12 +705,12 @@ test.describe("service surface contract — error envelope, pagination, idempote
         actorDid: alice.did,
         eventId,
         realmId: "ak:realm:01904100-0000-7000-8000-000000001102",
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: "ak:strand:01904100-0000-7000-8000-000000001102",
           track_name: "discussion",
           content: {
-            kind: "ck.content.text",
+            kind: "ak.content.text",
             body: "must not accept unknown fail-closed critical extension",
           },
         },

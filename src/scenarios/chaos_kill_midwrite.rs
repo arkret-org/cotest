@@ -146,16 +146,16 @@ fn chaos_realm_event() -> Value {
     event_envelope(
         ACTOR_DID,
         REALM_ID,
-        "ck.realm.create",
+        "ak.realm.create",
         json!({
             "object": {
                 "id": REALM_ID,
-                "schema": "ck.schema.realm.v1",
+                "schema": "ak.schema.realm.v1",
                 "title": "Chaos Midwrite",
                 "summary": "Chaos Midwrite",
                 "trust_domain": "ak:trust_domain:chaos-midwrite.cotest.local",
                 "created_by": ACTOR_DID,
-                "schema_refs": ["ck.schema.realm.v1"],
+                "schema_refs": ["ak.schema.realm.v1"],
                 "default_discoverability": "public",
                 "default_join_rule": "public",
                 "history_visibility": "world_readable",
@@ -182,7 +182,7 @@ fn chaos_message_event() -> Value {
     event_envelope(
         ACTOR_DID,
         REALM_ID,
-        "ck.message.create",
+        "ak.message.create",
         message_create_text_payload(REALM_ID, "doomed").expect("valid chaos message payload"),
     )
 }

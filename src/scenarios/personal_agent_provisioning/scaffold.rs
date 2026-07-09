@@ -45,19 +45,19 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
             "duplicate personal-agent operation ids: {PERSONAL_AGENT_OPERATIONS:?}"
         ));
     }
-    if OP_AGENT_PROVISION != "ck.self.agent.command.provision" {
+    if OP_AGENT_PROVISION != "ak.self.agent.command.provision" {
         return Err(anyhow!(
             "OP_AGENT_PROVISION spelling drifted: {OP_AGENT_PROVISION}"
         ));
     }
-    if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.command.pair_agent_key" {
+    if OP_ACCOUNT_AGENT_KEY_PAIR != "ak.gate.account.command.pair_agent_key" {
         return Err(anyhow!(
             "OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}"
         ));
     }
 
     // (b) Provisioning capability action constant matches the registry.
-    if CAP_ACTION_AGENT_PROVISION != "ck.self.agent.command.provision" {
+    if CAP_ACTION_AGENT_PROVISION != "ak.self.agent.command.provision" {
         return Err(anyhow!(
             "CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}"
         ));

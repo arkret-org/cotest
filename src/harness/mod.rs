@@ -209,12 +209,12 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
 
     let mut object = json!({
         "id": realm_id,
-        "schema": "ck.schema.realm.v1",
+        "schema": "ak.schema.realm.v1",
         "title": title,
         "summary": summary,
         "created_by": actor,
         "trust_domain": "ak:trust_domain:soland.local",
-        "schema_refs": ["ck.schema.realm.v1"],
+        "schema_refs": ["ak.schema.realm.v1"],
         "default_discoverability": discoverability,
         "default_join_rule": join_rule,
         "history_visibility": history_visibility,

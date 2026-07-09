@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.composite_state_key_encoding_vectors.v1",
+  "profile": "ak.profile.composite_state_key_encoding_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. Active vectors use current v1 kinds and UUIDv7 typed ids; removed cx.strand.track.* examples are isolated under deprecated_wire_vectors with historical_only expectations. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
@@ -12,7 +12,7 @@
   "vectors": [
     {
       "name": "device_authorized_alice",
-      "kind": "ck.device.authorize",
+      "kind": "ak.device.authorize",
       "components_array": ["did:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
@@ -20,7 +20,7 @@
     },
     {
       "name": "realm_policy_default",
-      "kind": "ck.realm.policy",
+      "kind": "ak.realm.policy",
       "components_array": ["ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "default"],
       "components_order_source": "[realm_id, policy_name]",
       "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"default\"]",
@@ -28,7 +28,7 @@
     },
     {
       "name": "realm_member_carol",
-      "kind": "ck.realm.member",
+      "kind": "ak.realm.member",
       "components_array": ["ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
       "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",

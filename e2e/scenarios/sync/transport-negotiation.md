@@ -75,7 +75,7 @@
 ### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
 
 6. **soland_a** 通过 `GET ${SOLAND_B_PUBLIC_URL}/_arkret/describe` 读取 server B 的 `supported_bindings`
-   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ck.profile.binding.websocket.v1", upgrade_path: "/_arkret/peer/events stream binding"}`
+   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ak.profile.binding.websocket.v1", upgrade_path: "/_arkret/peer/events stream binding"}`
 7. **soland_a** 发起 WebSocket 升级:
    - URL: `${SOLAND_B_PUBLIC_URL}/_arkret/peer/events stream binding`(`wss://` 在生产、`ws://` 在测试)
    - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ck.federation.v1`
@@ -88,7 +88,7 @@
 
 ### Phase C — TSP binding (optional extension)
 
-12. **soland_a** 在 `GET /_arkret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ck.profile.binding.tsp.v1"`)
+12. **soland_a** 在 `GET /_arkret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ak.profile.binding.tsp.v1"`)
 13. **soland_b** 选择 TSP — 通过 `ck.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
 14. **soland_a** 通过 TSP node 向 soland_b 发送下一批事件
     - TSP envelope: outer wrapper 携带 sender/receiver VID(verifiable identifier),inner payload 是 canonical EventEnvelope

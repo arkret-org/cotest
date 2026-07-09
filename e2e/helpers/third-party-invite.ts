@@ -27,8 +27,8 @@ import { encodeEd25519PubkeyMultibase, rawEd25519PublicKey } from "./encoding";
 
 // Domain separators — must match soland invite_claim_proofs.rs verbatim,
 // trailing "\n" included.
-const BINDING_PROOF_TRANSCRIPT_DOMAIN = "ck.invite.claim.binding_proof.v1\n";
-const SUBJECT_PROOF_TRANSCRIPT_DOMAIN = "ck.invite.claim.subject_proof.v1\n";
+const BINDING_PROOF_TRANSCRIPT_DOMAIN = "ak.invite.claim.binding_proof.v1\n";
+const SUBJECT_PROOF_TRANSCRIPT_DOMAIN = "ak.invite.claim.subject_proof.v1\n";
 const INVITE_AUDIENCE = "arkret.invite.claim";
 
 export type DidKeyIdentity = {
@@ -125,7 +125,7 @@ export function buildThirdPartyInvitePayload(args: {
   const payload = {
     invite: {
       id: args.inviteId,
-      schema: "ck.schema.invite.v1",
+      schema: "ak.schema.invite.v1",
       realm_id: args.realmId,
       inviter: args.inviter,
       third_party_id: thirdPartyId,

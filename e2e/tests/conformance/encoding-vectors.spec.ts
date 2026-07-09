@@ -139,7 +139,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.1 canonical JSON encoding (basic) matches spec vector", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.canonical_json.basic.v1");
+    const vector = vectorById("ak.vector.encoding.canonical_json.basic.v1");
     expect(vector, "encoding-fixture vector basic.v1 missing").toBeTruthy();
     const v = vector!;
 
@@ -158,7 +158,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.1 canonical JSON encoding (nested) matches spec vector", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.canonical_json.nested.v1");
+    const vector = vectorById("ak.vector.encoding.canonical_json.nested.v1");
     expect(vector, "encoding-fixture vector nested.v1 missing").toBeTruthy();
     const v = vector!;
 
@@ -194,7 +194,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }) => {
     const vector = vectorById(
-      "ck.vector.encoding.reject_noncanonical_numbers.v1",
+      "ak.vector.encoding.reject_noncanonical_numbers.v1",
     );
     expect(
       vector,
@@ -229,7 +229,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.1 canonical JSON reject (malformed JSON) returns 4xx", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.reject_malformed_json.v1");
+    const vector = vectorById("ak.vector.encoding.reject_malformed_json.v1");
     expect(
       vector,
       "encoding-fixture vector reject_malformed_json.v1 missing",
@@ -266,7 +266,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.2 event_digest canonical bytes + digest match spec vector", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.event_digest.v1");
+    const vector = vectorById("ak.vector.encoding.event_digest.v1");
     expect(vector, "encoding-fixture vector event_digest.v1 missing").toBeTruthy();
     const v = vector!;
 
@@ -286,7 +286,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }) => {
     const vector = vectorById(
-      "ck.vector.encoding.event_batch_receipt_digest.v1",
+      "ak.vector.encoding.event_batch_receipt_digest.v1",
     );
     expect(
       vector,
@@ -387,7 +387,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.3 HLC ordering converges on expected ascending order", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.hlc_order.v1");
+    const vector = vectorById("ak.vector.encoding.hlc_order.v1");
     expect(vector, "encoding-fixture vector hlc_order.v1 missing").toBeTruthy();
     const v = vector!;
     expect(Array.isArray(v.input)).toBe(true);
@@ -412,7 +412,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.3 HLC logical overflow returns 4xx hlc_logical_overflow", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.hlc_logical_overflow.v1");
+    const vector = vectorById("ak.vector.encoding.hlc_logical_overflow.v1");
     expect(
       vector,
       "encoding-fixture vector hlc_logical_overflow.v1 missing",
@@ -440,7 +440,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.4 sync cursor stable across re-reduce + opaque to clients", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.cursor_opaque.core.v1");
+    const vector = vectorById("ak.vector.encoding.cursor_opaque.core.v1");
     expect(
       vector,
       "encoding-fixture vector cursor_opaque.core.v1 missing",
@@ -505,7 +505,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }) => {
     const vector = vectorById(
-      "ck.vector.encoding.encrypted_envelope_digest.v1",
+      "ak.vector.encoding.encrypted_envelope_digest.v1",
     );
     expect(
       vector,
@@ -566,11 +566,11 @@ test.describe("conformance encoding vectors", () => {
     const guestDid = "did:web:guest.example";
     const event = {
       event_id: "ak:event:019640ed-8000-7000-8000-000000000abc",
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       sender_actor_id: ownerDid,
       payload: {
         strand_id: "ak:strand:019640ed-8000-7000-8000-000000000000",
-        content: { kind: "ck.content.text", body: "private message" },
+        content: { kind: "ak.content.text", body: "private message" },
       },
     };
     const redaction = {
@@ -583,7 +583,7 @@ test.describe("conformance encoding vectors", () => {
       `${conformanceBaseUrl()}/redact`,
       {
         data: {
-          vector_id: "ck.vector.redaction.owner_view.synthetic.v1",
+          vector_id: "ak.vector.redaction.owner_view.synthetic.v1",
           event,
           redaction,
           viewer_did: ownerDid,
@@ -602,7 +602,7 @@ test.describe("conformance encoding vectors", () => {
       `${conformanceBaseUrl()}/redact`,
       {
         data: {
-          vector_id: "ck.vector.redaction.guest_view.synthetic.v1",
+          vector_id: "ak.vector.redaction.guest_view.synthetic.v1",
           event,
           redaction,
           viewer_did: guestDid,
@@ -648,7 +648,7 @@ test.describe("conformance encoding vectors", () => {
       `${conformanceBaseUrl()}/erase-receipt`,
       {
         data: {
-          vector_id: c.vector_id ?? "ck.vector.redaction.hard_erasure_receipt.v1",
+          vector_id: c.vector_id ?? "ak.vector.redaction.hard_erasure_receipt.v1",
           event,
           receipt,
         },
@@ -690,7 +690,7 @@ test.describe("conformance encoding vectors", () => {
       `${conformanceBaseUrl()}/erase-receipt`,
       {
         data: {
-          vector_id: c.vector_id ?? "ck.vector.redaction.hard_erasure_receipt.v1",
+          vector_id: c.vector_id ?? "ak.vector.redaction.hard_erasure_receipt.v1",
           event,
           receipt: blockedReceipt,
         },
@@ -730,7 +730,7 @@ test.describe("conformance encoding vectors", () => {
       `${conformanceBaseUrl()}/redact`,
       {
         data: {
-          vector_id: c.vector_id ?? "ck.vector.redaction.snapshot_pruning_stub.v1",
+          vector_id: c.vector_id ?? "ak.vector.redaction.snapshot_pruning_stub.v1",
           event,
           redaction: {
             target_event_id: event.event_id,
@@ -769,7 +769,7 @@ test.describe("conformance encoding vectors", () => {
       `${conformanceBaseUrl()}/encode`,
       {
         data: {
-          vector_id: "ck.vector.encoding.canonical_json.basic.v1",
+          vector_id: "ak.vector.encoding.canonical_json.basic.v1",
           input: { b: 2, a: 1 },
         },
       },

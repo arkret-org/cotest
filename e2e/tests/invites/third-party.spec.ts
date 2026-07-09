@@ -134,7 +134,7 @@ async function allowlistVerificationService(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ck.realm.policy_components",
+      kind: "ak.realm.policy_components",
       payload: {
         value: {
           third_party_invite_verification_services: [serviceDid],
@@ -158,8 +158,8 @@ async function submitThirdPartyInvite(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId: cell.realmId,
-      kind: "ck.invite.third_party",
-      schemaId: "ck.schema.event.v1",
+      kind: "ak.invite.third_party",
+      schemaId: "ak.schema.event.v1",
       payload,
     }),
   );
@@ -181,8 +181,8 @@ async function submitClaim(
     signedEventEnvelope({
       actorDid: claimant.did,
       realmId: cell.realmId,
-      kind: "ck.invite.claim",
-      schemaId: "ck.schema.event.v1",
+      kind: "ak.invite.claim",
+      schemaId: "ak.schema.event.v1",
       payload: claimPayload,
     }),
   );

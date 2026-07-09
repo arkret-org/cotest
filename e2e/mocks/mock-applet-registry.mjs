@@ -112,10 +112,10 @@ function requestedScopesFromBody(body) {
   const input =
     body.requested_scopes ??
     body.requested_capabilities ??
-    body.capabilities ?? ["ck.message.create", "ck.applet.ghost.provision"];
+    body.capabilities ?? ["ak.message.create", "ck.applet.ghost.provision"];
   const mapped = input.map((scope) => {
-    if (scope === "message:write") return "ck.message.create";
-    if (scope === "actor:provision-ghost") return "ck.applet.ghost.provision";
+    if (scope === "message:write") return "ak.message.create";
+    if (scope === "actor:provision-ghost") return "ak.applet.ghost.provision";
     return String(scope);
   });
   return Array.from(new Set(mapped));
@@ -163,14 +163,14 @@ function signedPackage(body) {
     ],
   };
   const packageBase = {
-    schema: "ck.schema.applet_package.v1",
+    schema: "ak.schema.applet_package.v1",
     package_id: body.package_id ?? `package:${safe}:${uuidV7Like()}`,
     applet_id: appletId,
     service_did: serviceDid,
     controller_did: body.controller_did ?? registryDid,
     base_url: body.base_url ?? serverBaseUrl(),
     bot_actor_id: body.bot_actor_id ?? `did:web:bot-${safe}.joint-e2e.local`,
-    claimed_profiles: ["ck.profile.applet_service.v1"],
+    claimed_profiles: ["ak.profile.applet_service.v1"],
     protocols: body.protocols ?? ["bridge"],
     namespaces: body.namespaces ?? {
       actors: [{ exclusive: true, pattern: `did:web:ghost-${safe}:*` }],

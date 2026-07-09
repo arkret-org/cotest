@@ -113,7 +113,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     }
 
     // ── 1. Bootstrap soland + teabay. Teabay is hard-required.
-    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-dir-tier")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ak.0007-dir-tier")).await?;
     if stack.teabay.is_none() {
         bail!(
             "live directory tiering scenario requires teabay (directory projection); \
@@ -193,7 +193,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     let _ = admin
         .post("/_arkret/self/realms")
         .json(&json!({
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Visibility Tier Realm",
         }))

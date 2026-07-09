@@ -50,19 +50,19 @@ test.describe.fixme("events submit batch Realm bootstrap", () => {
     const createEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.realm.create",
+      kind: "ak.realm.create",
       createdAt,
       payload: {
         // realm_create_payload root is additionalProperties:false; the field
         // lives on the realm object (additionalProperties:true) below.
         object: {
           id: realmId,
-          schema: "ck.schema.realm.v1",
+          schema: "ak.schema.realm.v1",
           title: `Batch bootstrap ${Date.now()}`,
           summary: "cotest batch realm bootstrap fixture",
           created_by: alice.did,
           trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ck.schema.realm.v1"],
+          schema_refs: ["ak.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",
           history_visibility: "shared",

@@ -5,7 +5,7 @@
 //
 // Under ②, the Principal Server (soland) does not mint a second local
 // credential. A client accesses `/_arkret/self/*` by presenting
-// `Authorization: Bearer <ck.session.grant>` plus a per-request DPoP proof
+// `Authorization: Bearer <ak.session.grant>` plus a per-request DPoP proof
 // bound to the request (`htm`/`htu`/`ath`). soland verifies the DPoP against
 // the grant's `cnf.jkt` (RFC 7638 JWK SHA-256 thumbprint) obtained via
 // session-grant introspection at coauth.
@@ -145,7 +145,7 @@ export function jwkThumbprintEd25519(x: string): string {
 }
 
 /// `ath` claim per RFC 9449 §4.3: base64url-encoded SHA-256 of the presented
-/// session credential, unpadded. In Arkret this is the `ck.session.grant` JWT.
+/// session credential, unpadded. In Arkret this is the `ak.session.grant` JWT.
 export function dpopAth(grantJwt: string): string {
   return base64url(createHash("sha256").update(grantJwt).digest());
 }
@@ -268,7 +268,7 @@ export function dpopDeviceKeyFromSeedB64url(seedB64url: string): DpopDeviceKey {
   };
 }
 
-/// Request a DPoP-bound `ck.session.grant` from coauth's cotest debug seam.
+/// Request a DPoP-bound `ak.session.grant` from coauth's cotest debug seam.
 ///
 /// Returns `undefined` when the debug endpoint is not available (404 — the
 /// route is gated on debug builds + `COAUTH_ENABLE_TEST_ENDPOINTS`), so callers

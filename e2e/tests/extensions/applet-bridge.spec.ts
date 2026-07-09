@@ -348,7 +348,7 @@ test.describe("applet bridge", () => {
     // sequence than what is submitted. soland recomputes the digest over the
     // bare body and MUST reject the mismatch.
     const tampered = tamperSignedPackage(signed, (pkg) => {
-      pkg.requested_scopes = [...pkg.requested_scopes, "ck.applet.smuggled.scope"];
+      pkg.requested_scopes = [...pkg.requested_scopes, "ak.applet.smuggled.scope"];
     });
 
     const denied = await rawInstallApplet(
@@ -425,7 +425,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const actorDid = args.actorDid ?? `did:web:bot-applet-${args.stamp}.joint-e2e.local`;
     const event = {
       event_id: typedId("event"),
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       realm_id: realmId,
       actor_id: actorDid,
       actor_seq: 1,
@@ -434,12 +434,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
       prev_refs: [],
       refs: [],
       requirements: {
-        schema: ["ck.schema.message.v1"],
+        schema: ["ak.schema.message.v1"],
       },
       payload: {
         strand_id: args.strandId ?? typedId("strand"),
         track_name: "discussion",
-        content: { kind: "ck.content.text", body: `inbound push ${args.stamp}` },
+        content: { kind: "ak.content.text", body: `inbound push ${args.stamp}` },
       },
       executed_by: sourceServiceDid,
       authorization_ref: args.authorizationRef ?? typedId("grant"),

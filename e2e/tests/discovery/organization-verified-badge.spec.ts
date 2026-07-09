@@ -61,8 +61,8 @@ async function submitOrganizationStatement(
     data: signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.realm.organization",
-      schemaId: "ck.schema.event_payload.v1",
+      kind: "ak.realm.organization",
+      schemaId: "ak.schema.event_payload.v1",
       payload: statement,
     }),
   });
@@ -196,8 +196,8 @@ test.describe("directory verified organization badge", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.realm.organization",
-          schemaId: "ck.schema.event_payload.v1",
+          kind: "ak.realm.organization",
+          schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: activeStatementId,
             realm_id: realmId,

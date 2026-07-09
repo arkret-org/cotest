@@ -25,7 +25,7 @@ use crate::conformance::{required_str, validate_profile};
 /// * E2EE stale-attestation negative declares an attests_to that's NOT in active_tags_at_send_time.
 pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("mls_move_covered_frontier_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.mls_covered_frontier_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.mls_covered_frontier_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -164,9 +164,9 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                     cell_families.insert(family);
                 }
                 for required in [
-                    "ck.component.mls.covered_frontier.v1",
-                    "ck.component.mls.epoch.v1",
-                    "ck.component.mls.group_state.v1",
+                    "ak.component.mls.covered_frontier.v1",
+                    "ak.component.mls.epoch.v1",
+                    "ak.component.mls.group_state.v1",
                 ] {
                     if !cell_families.contains(required) {
                         bail!("vector {name} MLS commit must write cell family {required}");
@@ -300,7 +300,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("event_kind_lattice_dispatch_fixture.json")?;
     validate_profile(
         &fixture,
-        "ck.profile.event_kind_lattice_dispatch_vectors.v1",
+        "ak.profile.event_kind_lattice_dispatch_vectors.v1",
     )?;
 
     const CORE_LATTICES: &[&str] = &[
@@ -337,7 +337,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         let Some(family) = entry.get("cell_family").and_then(Value::as_str) else {
             continue;
         };
-        if !family.starts_with("ck.component.") {
+        if !family.starts_with("ak.component.") {
             bail!(
                 "live event-kind-registry: cell_family {family} does not start with `ck.component.`"
             );
@@ -547,7 +547,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
             }
             ("wrong_namespace", "cell_family_invalid_namespace") => {
                 let cf = required_str(drift, "cell_family")?;
-                if cf.starts_with("ck.component.") {
+                if cf.starts_with("ak.component.") {
                     bail!(
                         "negative vector {name} drift.cell_family {cf} IS in ck.component.* namespace — not a real drift"
                     );
@@ -581,7 +581,7 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("event_kind_payload_coverage_fixture.json")?;
     validate_profile(
         &fixture,
-        "ck.profile.event_kind_payload_coverage_vectors.v1",
+        "ak.profile.event_kind_payload_coverage_vectors.v1",
     )?;
 
     let registry = crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;
@@ -748,7 +748,7 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("state_resolution_quarantine_fixture.json")?;
     validate_profile(
         &fixture,
-        "ck.profile.state_resolution_quarantine_vectors.v1",
+        "ak.profile.state_resolution_quarantine_vectors.v1",
     )?;
 
     let vectors = fixture
@@ -886,7 +886,7 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("membership_fsm_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.membership_fsm_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.membership_fsm_vectors.v1")?;
 
     let valid_states: BTreeSet<&str> = ["invited", "join", "leave", "ban", "kick", "knock"]
         .into_iter()
@@ -1008,7 +1008,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("constraint_family_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.constraint_family_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.constraint_family_vectors.v1")?;
 
     let valid_types: BTreeSet<&str> = [
         "temporal",
@@ -1267,7 +1267,7 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("constraint_evaluation_class_fixture.json")?;
     validate_profile(
         &fixture,
-        "ck.profile.constraint_evaluation_class_vectors.v1",
+        "ak.profile.constraint_evaluation_class_vectors.v1",
     )?;
 
     let mapping = fixture

@@ -9,12 +9,12 @@ use anyhow::{Result, anyhow};
 use arkret_core::{RECOVERY_POLICY_SCHEMA, RECOVERY_RECEIPT_SCHEMA, RecoverySessionId};
 
 pub async fn recovery_schemas_run() -> Result<()> {
-    if RECOVERY_POLICY_SCHEMA != "ck.schema.recovery_policy.v1" {
+    if RECOVERY_POLICY_SCHEMA != "ak.schema.recovery_policy.v1" {
         return Err(anyhow!(
             "RECOVERY_POLICY_SCHEMA spelling drifted: {RECOVERY_POLICY_SCHEMA}"
         ));
     }
-    if RECOVERY_RECEIPT_SCHEMA != "ck.schema.recovery_receipt.v1" {
+    if RECOVERY_RECEIPT_SCHEMA != "ak.schema.recovery_receipt.v1" {
         return Err(anyhow!(
             "RECOVERY_RECEIPT_SCHEMA spelling drifted: {RECOVERY_RECEIPT_SCHEMA}"
         ));

@@ -117,7 +117,7 @@ type ConformanceProfilesDoc = {
   profile_requirements: Record<string, MigrationProfileBlock | Record<string, unknown>>;
 };
 
-const MIGRATION_PROFILE_ID = "ck.profile.morph.schema_migration_transformations.v1";
+const MIGRATION_PROFILE_ID = "ak.profile.morph.schema_migration_transformations.v1";
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -215,7 +215,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     // event kind support, and b) gating it on the ck.morph.schema_migrate
     // capability action. Both invariants are in additional_requirements +
     // required_event_kinds.
-    expect(profileBlock!.required_event_kinds).toContain("ck.morph.schema_migrate");
+    expect(profileBlock!.required_event_kinds).toContain("ak.morph.schema_migrate");
 
     expect(profileBlock!.additional_requirements).toBeDefined();
     expect(profileBlock!.additional_requirements.capability_must).toMatch(
@@ -270,7 +270,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       title: `Morph migrate A ${Date.now()}`,
     });
     const morphId = morphTypedId();
-    const fromRefs = ["ck.schema.morph.customer_risk.v1"];
+    const fromRefs = ["ak.schema.morph.customer_risk.v1"];
     await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, {
       status: "open",
       severity: "high",
@@ -281,9 +281,9 @@ test.describe("morph schema migration @fully-implemented", () => {
       realmId,
       morphId,
       fromRefs,
-      toRefs: ["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
+      toRefs: ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
       compatibilityClass: "transformation",
-      transformationRules: [{ rule: "ck.transform.bogus.unsupported.v1", from: "status", to: "state" }],
+      transformationRules: [{ rule: "ak.transform.bogus.unsupported.v1", from: "status", to: "state" }],
     });
 
     expect(result.status, `migrate body: ${result.text}`).toBeGreaterThanOrEqual(400);
@@ -329,8 +329,8 @@ test.describe("morph schema migration @fully-implemented", () => {
       title: `Morph migrate B ${Date.now()}`,
     });
     const morphId = morphTypedId();
-    const fromRefs = ["ck.schema.morph.customer_risk.v1"];
-    const toRefs = ["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"];
+    const fromRefs = ["ak.schema.morph.customer_risk.v1"];
+    const toRefs = ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"];
     const fields = { status: "open", severity: "high" };
     await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, fields);
 
@@ -373,8 +373,8 @@ test.describe("morph schema migration @fully-implemented", () => {
       title: `Morph migrate C ${Date.now()}`,
     });
     const morphId = morphTypedId();
-    const fromRefs = ["ck.schema.morph.customer_risk.v1"];
-    const toRefs = ["ck.schema.morph.customer_risk.ext.v1"];
+    const fromRefs = ["ak.schema.morph.customer_risk.v1"];
+    const toRefs = ["ak.schema.morph.customer_risk.ext.v1"];
     await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, {
       status: "open",
       severity: "high",
@@ -399,7 +399,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.realm.update",
+        kind: "ak.realm.update",
         payload: {
           target_ref: realmId,
           active_profiles: [MIGRATION_PROFILE_ID],
@@ -442,9 +442,9 @@ test.describe("morph schema migration @fully-implemented", () => {
       realmId,
       morphId,
       fromRefs: toRefs,
-      toRefs: ["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
+      toRefs: ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
       compatibilityClass: "transformation",
-      transformationRules: [{ rule: "ck.transform.identity.v1" }],
+      transformationRules: [{ rule: "ak.transform.identity.v1" }],
     });
     expect([200, 201], `transformation body: ${transformationAccepted.text}`).toContain(
       transformationAccepted.status,
@@ -455,10 +455,10 @@ test.describe("morph schema migration @fully-implemented", () => {
       actorDid: alice.did,
       realmId,
       morphId,
-      fromRefs: ["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
-      toRefs: ["ck.schema.morph.customer_risk.ext.v1"],
+      fromRefs: ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
+      toRefs: ["ak.schema.morph.customer_risk.ext.v1"],
       compatibilityClass: "transformation",
-      transformationRules: [{ rule: "ck.transform.not_in_dialect.v1" }],
+      transformationRules: [{ rule: "ak.transform.not_in_dialect.v1" }],
     });
     expect(transformationRejected.status).toBeGreaterThanOrEqual(400);
     expect(wireErrCode(transformationRejected.body)).toBe("unsupported_transformation_rule");
@@ -488,7 +488,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.realm.update",
+        kind: "ak.realm.update",
         payload: {
           target_ref: realmId,
           active_profiles: [MIGRATION_PROFILE_ID],
@@ -573,11 +573,11 @@ async function createCustomerRiskMorph(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.morph.create",
+      kind: "ak.morph.create",
       payload: {
         object: {
           id: morphId,
-          schema: "ck.schema.morph.v1",
+          schema: "ak.schema.morph.v1",
           realm_id: realmId,
           // views.md §377 / service-http-binding.md §230 — the single-Morph read
           // surface GET /_arkret/self/realms/{realm_id}/morphs/{morph_id} is the
@@ -641,12 +641,12 @@ async function submitSchemaMigrateRaw(
     ownerDid: args.actorDid,
     realmId: args.realmId,
     subjectDid: args.actorDid,
-    actions: ["ck.morph.schema_migrate"],
+    actions: ["ak.morph.schema_migrate"],
   });
   const envelope = signedEventEnvelope({
     actorDid: args.actorDid,
     realmId: args.realmId,
-    kind: "ck.morph.schema_migrate",
+    kind: "ak.morph.schema_migrate",
     requirementsSchema,
     refs: [{ role: "authorized_by", id: authorizationEventId }],
     payload: {
@@ -749,7 +749,7 @@ function loadMorphTransformationVectors(): MorphTransformationVector[] {
       const candidate = vector as Partial<MorphTransformationVector>;
       if (
         typeof candidate.vector_id === "string" &&
-        candidate.vector_id.startsWith("ck.vector.morph.") &&
+        candidate.vector_id.startsWith("ak.vector.morph.") &&
         candidate.input &&
         candidate.expected_output
       ) {

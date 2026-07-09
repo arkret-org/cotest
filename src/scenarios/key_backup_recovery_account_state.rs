@@ -126,7 +126,7 @@ fn unsigned_recovery_policy(
     verification_method: &str,
 ) -> Result<RecoveryPolicy> {
     Ok(RecoveryPolicy {
-        schema: "ck.schema.recovery_policy.v1".to_owned(),
+        schema: "ak.schema.recovery_policy.v1".to_owned(),
         policy_id: PolicyId::new(POLICY_ID.to_owned())?,
         principal_id: Did::new(principal_id.to_owned())?,
         version: 1,
@@ -187,7 +187,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             // the SDK rejects a mismatch at parse time (schema_violation).
             aead: KeyBackupAead {
                 name: "chacha20_poly1305".to_owned(),
-                aead_profile: Some("ck.aead.chacha20_poly1305.v1".to_owned()),
+                aead_profile: Some("ak.aead.chacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
                 nonce: None,
                 enc: Some("Y290ZXN0LWVuYw".to_owned()),
@@ -201,7 +201,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             hkdf_info: "arkret-key-backup/did_recovery/recovery_policy/v1".to_owned(),
             subdomain: "recovery_policy".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
-                schema: "ck.schema.key_backup.v1".to_owned(),
+                schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(principal_id.to_owned())?,
                 device_id: DEVICE_A.to_owned(),
                 backup_class: BackupClass::DidRecovery,

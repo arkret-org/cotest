@@ -3,7 +3,7 @@
 //! §2.5).
 //!
 //! This is the protocol-level conformance vector for the joint client/server
-//! PoP path: a client signs a self request with its `ck.session.grant`
+//! PoP path: a client signs a self request with its `ak.session.grant`
 //! session key; the Principal Server verifies it with the shared SDK verifier.
 //! It exercises the same construction inkson produces and soland accepts, and
 //! pins the negative cases (tampered body, expired window, over-long window,

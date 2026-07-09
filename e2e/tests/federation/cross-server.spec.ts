@@ -339,7 +339,7 @@ test.describe("cross-server federation", () => {
     const realmId = typedId("realm");
     const inviteEvent = makeFederationEvent({
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: bob.did,
@@ -573,13 +573,13 @@ test.describe("cross-server federation", () => {
     const missingBody = `pulled after partition ${stamp}`;
     const missingEvent = makeFederationEvent({
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       actorDid: alice.did,
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body: missingBody,
         },
       },
@@ -661,13 +661,13 @@ test.describe("cross-server federation", () => {
     const realmId = typedId("realm");
     const event = makeFederationEvent({
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       actorDid: "did:web:alice-reducer-mismatch.example",
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body: `reducer profile mismatch probe ${Date.now()}`,
         },
       },
@@ -820,13 +820,13 @@ test.describe("cross-server federation", () => {
     const realmId = typedId("realm");
     const event = makeFederationEvent({
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       actorDid: "did:web:alice-rfc9421.example",
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body: `tampered signature ${Date.now()}`,
         },
       },

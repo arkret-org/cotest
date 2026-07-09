@@ -66,7 +66,7 @@ pub async fn agent_auth_run() -> Result<()> {
         CAP_ACTION_AGENT_ACTION_APPROVE,
         CAP_ACTION_AGENT_ACTION_REJECT,
     ] {
-        if !action.starts_with("ck.agent.") {
+        if !action.starts_with("ak.agent.") {
             return Err(anyhow!(
                 "agent capability action `{action}` MUST be namespaced under ck.agent.*"
             ));

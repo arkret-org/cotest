@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.cross_signing.reset.v1",
+  "profile": "ak.profile.cross_signing.reset.v1",
   "version": "2026-05-19",
   "comment": "S4 — parser-level vectors for the high-risk ck.cross_signing.reset profile. Spec authority: crypto-media/device-lifecycle.md section 14 and artifacts/profiles/conformance-profiles.json profile ck.profile.cross_signing.reset.v1. Reset retires the current SSK/USK generation, requires one valid proof family, MUST increment generation by exactly one, rejects replay of the same (principal_id, previous_generation), bounds issued_at clock skew, and requires a successor ck.cross_signing.publish within the recovery window.",
   "parameters": {
@@ -9,8 +9,8 @@
   "vectors": [
     {
       "name": "principal_signing_reset_accepts_generation_plus_one",
-      "event_kind": "ck.cross_signing.reset",
-      "schema_id": "ck.schema.cross_signing_reset.v1",
+      "event_kind": "ak.cross_signing.reset",
+      "schema_id": "ak.schema.cross_signing_reset.v1",
       "principal_id": "did:web:alice.example",
       "previous_generation": 7,
       "new_generation": 8,
@@ -21,8 +21,8 @@
         "signature_b64": "U0lHX0FMSUNFX1BSSU5DSVBBTF9SRVNFVF8wMDAwMDA"
       },
       "successor_publish": {
-        "event_kind": "ck.cross_signing.publish",
-        "schema_id": "ck.schema.cross_signing_publish.v1",
+        "event_kind": "ak.cross_signing.publish",
+        "schema_id": "ak.schema.cross_signing_publish.v1",
         "generation": 8,
         "observed_within_seconds": 3600
       },
@@ -33,8 +33,8 @@
     },
     {
       "name": "generation_gap_rejects",
-      "event_kind": "ck.cross_signing.reset",
-      "schema_id": "ck.schema.cross_signing_reset.v1",
+      "event_kind": "ak.cross_signing.reset",
+      "schema_id": "ak.schema.cross_signing_reset.v1",
       "principal_id": "did:web:alice.example",
       "previous_generation": 7,
       "new_generation": 10,
@@ -52,8 +52,8 @@
     },
     {
       "name": "clock_skew_exceeded_rejects",
-      "event_kind": "ck.cross_signing.reset",
-      "schema_id": "ck.schema.cross_signing_reset.v1",
+      "event_kind": "ak.cross_signing.reset",
+      "schema_id": "ak.schema.cross_signing_reset.v1",
       "principal_id": "did:web:alice.example",
       "previous_generation": 7,
       "new_generation": 8,
@@ -73,8 +73,8 @@
     },
     {
       "name": "replay_same_previous_generation_rejects",
-      "event_kind": "ck.cross_signing.reset",
-      "schema_id": "ck.schema.cross_signing_reset.v1",
+      "event_kind": "ak.cross_signing.reset",
+      "schema_id": "ak.schema.cross_signing_reset.v1",
       "principal_id": "did:web:alice.example",
       "previous_generation": 7,
       "new_generation": 8,
@@ -104,8 +104,8 @@
     },
     {
       "name": "successor_publish_window_expired_rejects_device_authorization",
-      "event_kind": "ck.cross_signing.reset",
-      "schema_id": "ck.schema.cross_signing_reset.v1",
+      "event_kind": "ak.cross_signing.reset",
+      "schema_id": "ak.schema.cross_signing_reset.v1",
       "principal_id": "did:web:alice.example",
       "previous_generation": 7,
       "new_generation": 8,

@@ -26,8 +26,8 @@ async fn send_application_message(server: &CokretServer, token: &str) -> Result<
                 "messages": {
                     "did:web:alice.example": {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ck.mls.application",
-                            "content": encrypted_envelope("ck.mls.application", "base64url-opaque-ciphertext"),
+                            "kind": "ak.mls.application",
+                            "content": encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
                             "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
@@ -51,8 +51,8 @@ async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Res
                 "messages": {
                     "did:web:alice.example": {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ck.mls.application",
-                            "content": encrypted_envelope("ck.mls.application", "base64url-opaque-ciphertext"),
+                            "kind": "ak.mls.application",
+                            "content": encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
                             "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
@@ -95,9 +95,9 @@ async fn send_verification_message(server: &CokretServer, token: &str) -> Result
                 "messages": {
                     "did:web:alice.example": {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ck.key.verification.request",
+                            "kind": "ak.key.verification.request",
                             "content": encrypted_envelope(
-                                "ck.key.verification.request",
+                                "ak.key.verification.request",
                                 "base64url-opaque-verification-ciphertext"
                             ),
                             "expires_at": "2026-12-31T00:00:00Z"

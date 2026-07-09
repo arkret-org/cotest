@@ -94,7 +94,7 @@ export function crossSigningBindingInput(args: {
     generation: args.generation,
   });
   return Buffer.concat([
-    Buffer.from("ck-cross-signing-bind-v1\n", "utf8"),
+    Buffer.from("ak.cross-signing-bind-v1\n", "utf8"),
     Buffer.from(body, "utf8"),
   ]);
 }
@@ -125,7 +125,7 @@ export function deviceTrustBindingInput(args: {
     ssk_generation: args.sskGeneration,
   });
   return Buffer.concat([
-    Buffer.from("ck-device-trust-bind-v1\n", "utf8"),
+    Buffer.from("ak.device-trust-bind-v1\n", "utf8"),
     Buffer.from(body, "utf8"),
   ]);
 }
@@ -165,7 +165,7 @@ function deviceAuthorizePossessionInput(args: {
     cross_signing_generation: args.crossSigningGeneration ?? null,
   });
   return Buffer.concat([
-    Buffer.from("ck-device-authorize-possession-v1\n", "utf8"),
+    Buffer.from("ak.device-authorize-possession-v1\n", "utf8"),
     Buffer.from(body, "utf8"),
   ]);
 }
@@ -270,8 +270,8 @@ export function buildCrossSigningPublishPayload(
 /// Canonical default algorithm set for test device records; matches the
 /// hpke-suite-registry default-MUST row plus the MLS group algorithm.
 export const TEST_DEVICE_ALGORITHMS = [
-  "ck.hpke_x25519_aead_chacha20poly1305.v1",
-  "ck.mls.v1",
+  "ak.hpke_x25519_aead_chacha20poly1305.v1",
+  "ak.mls.v1",
 ];
 export function buildDeviceCrossSigningBinding(args: {
   identity: CrossSigningIdentity;

@@ -170,7 +170,7 @@ test.describe("audited E2EE", () => {
         data: signedEventEnvelope({
           actorDid: setup.aliceDid,
           realmId: setup.realmId,
-          kind: "ck.realm.update",
+          kind: "ak.realm.update",
           payload: {
             target_ref: setup.realmId,
             patch: {
@@ -278,11 +278,11 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     "base64url",
   );
   const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
-  const encryptedContent = encryptedEnvelope("ck.message.v1", ciphertext, realmId);
+  const encryptedContent = encryptedEnvelope("ak.message.v1", ciphertext, realmId);
   const message = signedEventEnvelope({
     actorDid: bob.did,
     realmId: realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
@@ -326,11 +326,11 @@ async function sendAuditedMessage(
     setup.bobToken,
     setup.realmId,
   );
-  const encryptedContent = encryptedEnvelope("ck.message.v1", ciphertext, setup.realmId);
+  const encryptedContent = encryptedEnvelope("ak.message.v1", ciphertext, setup.realmId);
   const message = signedEventEnvelope({
     actorDid: setup.bobDid,
     realmId: setup.realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
@@ -397,7 +397,7 @@ function encryptedEnvelope(
   realmId: string,
 ): Record<string, unknown> {
   void contentType;
-  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",

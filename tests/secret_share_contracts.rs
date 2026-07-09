@@ -20,10 +20,10 @@ const NEW_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000b";
 const OTHER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000c";
 const REQUEST_ID: &str = "secret-share-request-001";
 const SECRET_ID: &str = "inkson_mls_account_secret";
-const SEND_KIND: &str = "ck.secret.send";
-const REQUEST_KIND: &str = "ck.secret.request";
-const SCHEME: &str = "ck.hpke_x25519_aead_chacha20poly1305.v1";
-const HPKE_INFO: &[u8] = b"ck-secret-share/v1";
+const SEND_KIND: &str = "ak.secret.send";
+const REQUEST_KIND: &str = "ak.secret.request";
+const SCHEME: &str = "ak.hpke_x25519_aead_chacha20poly1305.v1";
+const HPKE_INFO: &[u8] = b"ak.secret-share/v1";
 const EXPIRES_AT: &str = "2026-06-10T00:30:00Z";
 const ACCOUNT_SECRET: &str = "base64url-account-mls-root-secret";
 
@@ -164,7 +164,7 @@ fn d2d_root_secret_share_rejects_unsolicited_or_tampered_sends() -> Result<()> {
     let mut content = wrong_scheme.content.as_object().unwrap().clone();
     content.insert(
         "scheme".to_owned(),
-        json!("ck.hpke_x25519_aead_aesgcm128.v1"),
+        json!("ak.hpke_x25519_aead_aesgcm128.v1"),
     );
     wrong_scheme.content = Value::Object(content);
     let err = open_secret_send(&request, &wrong_scheme).unwrap_err();
@@ -245,7 +245,7 @@ fn open_secret_send(
         bail!("unsupported ck.secret.send secret_id");
     }
     if content.from_device != envelope.sender_device_id {
-        bail!("ck.secret.send from_device does not match envelope sender");
+        bail!("ak.secret.send from_device does not match envelope sender");
     }
     if content.scheme != SCHEME {
         bail!("unsupported ck.secret.send scheme");

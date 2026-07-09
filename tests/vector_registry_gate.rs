@@ -21,7 +21,7 @@ fn active_vector_with_missing_artifact_evidence_fails() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.other.v1",
+                    "vector_id": "ak.vector.other.v1",
                     "expected_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
                 }
             ]
@@ -36,7 +36,7 @@ fn active_vector_with_missing_artifact_evidence_fails() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.missing.v1",
+                    "vector_id": "ak.vector.missing.v1",
                     "status": "active",
                     "domain": "gate",
                     "source_refs": ["spec/v1/artifacts/fixtures/gate-fixture.json"]
@@ -55,7 +55,7 @@ fn active_vector_with_missing_artifact_evidence_fails() -> Result<()> {
     let error = validate_vector_registry_gate_report(&report)
         .expect_err("missing active vector evidence must fail")
         .to_string();
-    assert!(error.contains("ck.vector.missing.v1"));
+    assert!(error.contains("ak.vector.missing.v1"));
     Ok(())
 }
 
@@ -70,7 +70,7 @@ fn active_doc_only_vector_is_lenient_only() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.doc_only.v1",
+                    "vector_id": "ak.vector.doc_only.v1",
                     "status": "active",
                     "domain": "gate",
                     "source_refs": ["spec/v1/zh/conformance/conformance-vectors.md"]
@@ -93,7 +93,7 @@ fn active_doc_only_vector_is_lenient_only() -> Result<()> {
         validate_vector_registry_gate_report_with_mode(&report, VectorRegistryGateMode::Strict)
             .expect_err("strict mode must fail active doc-only vectors")
             .to_string();
-    assert!(error.contains("ck.vector.doc_only.v1"));
+    assert!(error.contains("ak.vector.doc_only.v1"));
     assert!(error.contains("active doc-only"));
     Ok(())
 }
@@ -110,7 +110,7 @@ fn fixture_backed_active_vector_is_certification_gate() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "name": "ck.vector.fixture_backed.v1",
+                    "name": "ak.vector.fixture_backed.v1",
                     "expected_state_digest": expected_digest
                 }
             ]
@@ -125,7 +125,7 @@ fn fixture_backed_active_vector_is_certification_gate() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.fixture_backed.v1",
+                    "vector_id": "ak.vector.fixture_backed.v1",
                     "status": "active",
                     "domain": "gate",
                     "source_refs": ["spec/v1/artifacts/fixtures/gate-fixture.json"]
@@ -164,7 +164,7 @@ fn fixture_backed_active_vector_with_digest_drift_fails() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.fixture_backed.v1",
+                    "vector_id": "ak.vector.fixture_backed.v1",
                     "expected_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
                 }
             ]
@@ -187,7 +187,7 @@ fn fixture_backed_active_vector_with_digest_drift_fails() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.fixture_backed.v1",
+                    "vector_id": "ak.vector.fixture_backed.v1",
                     "status": "active",
                     "domain": "gate",
                     "source_refs": ["spec/v1/artifacts/fixtures/gate-fixture.json"]
@@ -220,7 +220,7 @@ fn reserved_vector_is_not_a_certification_gate() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.reserved.v1",
+                    "vector_id": "ak.vector.reserved.v1",
                     "status": "reserved",
                     "domain": "gate",
                     "description": "Reserved until a machine fixture is published.",
@@ -252,7 +252,7 @@ fn unsupported_vector_with_reason_is_not_a_certification_gate() -> Result<()> {
         &json!({
             "vectors": [
                 {
-                    "vector_id": "ck.vector.unsupported.v1",
+                    "vector_id": "ak.vector.unsupported.v1",
                     "status": "unsupported",
                     "domain": "gate",
                     "description": "Unsupported until the corresponding feature profile exists.",
@@ -303,15 +303,15 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
     );
     for (vector_id, expected_fixture_ref) in [
         (
-            "ck.vector.capability.approval_constraint.v1",
+            "ak.vector.capability.approval_constraint.v1",
             "spec/v1/artifacts/fixtures/capability-fixture.json",
         ),
         (
-            "ck.vector.redaction.preserve_fields.v1",
+            "ak.vector.redaction.preserve_fields.v1",
             "spec/v1/artifacts/fixtures/redaction-fixture.json",
         ),
         (
-            "ck.vector.redaction.snapshot_pruning_stub.v1",
+            "ak.vector.redaction.snapshot_pruning_stub.v1",
             "spec/v1/artifacts/fixtures/redaction-fixture.json",
         ),
     ] {

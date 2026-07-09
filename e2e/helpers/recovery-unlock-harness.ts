@@ -98,7 +98,7 @@ export type RecoveryKeyEntry = {
 };
 
 const TRUST_DOMAIN = "ak:trust_domain:soland.local";
-const POLICY_SIGNATURE_TYPE = "ck.identity.recovery_policy.signature.v1";
+const POLICY_SIGNATURE_TYPE = "ak.identity.recovery_policy.signature.v1";
 // soland's verify_recovery_policy auth path allows exactly these signed_fields
 // and requires all of them (POLICY_REQUIRED_SIGNED_FIELDS == ALLOWED in wire.rs).
 const POLICY_SIGNED_FIELDS = [
@@ -175,7 +175,7 @@ export async function prepareRecoveryPrincipal(
     data: signedEventEnvelope({
       actorDid: user.did,
       realmId,
-      kind: "ck.cross_signing.publish",
+      kind: "ak.cross_signing.publish",
       payload: buildCrossSigningPublishPayload(identity),
     }),
   });
@@ -215,7 +215,7 @@ export async function prepareRecoveryPrincipal(
       data: signedEventEnvelope({
         actorDid: user.did,
         realmId,
-        kind: "ck.device.authorize",
+        kind: "ak.device.authorize",
         payload: {
           principal_id: user.did,
           device_id: user.deviceId,
@@ -273,7 +273,7 @@ export async function prepareRecoveryPrincipal(
   };
   const policyVersion = 1;
   const policyCore = {
-    schema: "ck.schema.recovery_policy.v1",
+    schema: "ak.schema.recovery_policy.v1",
     policy_id: policyId,
     principal_id: user.did,
     version: policyVersion,
@@ -352,7 +352,7 @@ function genericRecoveryTranscriptBytes(
 ): Buffer {
   return Buffer.from(
     canonicalJson({
-      type: "ck.identity.recovery_proof.v1",
+      type: "ak.identity.recovery_proof.v1",
       kind: "recovery_unlock",
       principal_id: session.principal_id,
       requesting_device_id: session.requesting_device_id,
@@ -437,7 +437,7 @@ export async function restoreViaRecoveryUnlock(
     principal.recoveryKey.privateKey,
   );
   const commitmentHash = createHash("sha256");
-  commitmentHash.update(Buffer.from("ck-recovery-session-unlock-binding-v1\n", "utf8"));
+  commitmentHash.update(Buffer.from("ak.recovery-session-unlock-binding-v1\n", "utf8"));
   commitmentHash.update(Buffer.from(principal.recoveryKey.verificationMethod, "utf8"));
   commitmentHash.update(transcriptBytes);
   const unlockCommitment = `sha256:${commitmentHash.digest("hex")}`;
@@ -493,7 +493,7 @@ export async function restoreViaRecoveryUnlock(
       data: signedEventEnvelope({
         actorDid: principal.user.did,
         realmId: principal.realmId,
-        kind: "ck.device.authorize",
+        kind: "ak.device.authorize",
         eventId: authorizeEventId,
         payload: {
           principal_id: principal.user.did,
@@ -524,7 +524,7 @@ export async function restoreViaRecoveryUnlock(
       data: signedEventEnvelope({
         actorDid: principal.user.did,
         realmId: principal.realmId,
-        kind: "ck.device.list_update",
+        kind: "ak.device.list_update",
         eventId: listUpdateEventId,
         payload: {
           principal_id: principal.user.did,
@@ -579,7 +579,7 @@ export async function revokeDevice(
     data: signedEventEnvelope({
       actorDid: principal.user.did,
       realmId: principal.realmId,
-      kind: "ck.device.revoke",
+      kind: "ak.device.revoke",
       payload: {
         principal_id: principal.user.did,
         device_id: deviceId,

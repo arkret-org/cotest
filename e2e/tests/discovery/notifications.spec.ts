@@ -397,7 +397,7 @@ test.describe("notifications", () => {
       bobToken,
       bob.did,
       realmId,
-      "ck.push_rules",
+      "ak.push_rules",
       {
         rules: [
           {
@@ -419,13 +419,13 @@ test.describe("notifications", () => {
     const encrypted = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
         mention_sidecar_hash: [sidecarHash],
         encrypted_content: encryptedEnvelope(
-          "ck.message.v1",
+          "ak.message.v1",
           "opaque-ciphertext-for-sealed-keyword",
           realmId,
         ),
@@ -591,7 +591,7 @@ function encryptedEnvelope(
   realmId: string,
 ): Record<string, unknown> {
   void contentType;
-  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",

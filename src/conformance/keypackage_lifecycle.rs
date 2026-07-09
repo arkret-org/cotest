@@ -17,14 +17,14 @@ use serde_json::{Value, json};
 use super::schema_validation_fixture::SchemaEnv;
 
 pub const VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS: &str =
-    "ck.vector.keypackage.exhaustion_claim_limits.v1";
+    "ak.vector.keypackage.exhaustion_claim_limits.v1";
 pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_CLAIM_AND_REUSE: &str =
-    "ck.vector.keypackage.last_resort_claim_and_reuse.v1";
+    "ak.vector.keypackage.last_resort_claim_and_reuse.v1";
 pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION: &str =
-    "ck.vector.keypackage.last_resort_forced_rotation.v1";
+    "ak.vector.keypackage.last_resort_forced_rotation.v1";
 pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY: &str =
-    "ck.vector.keypackage.last_resort_affinity_and_optionality.v1";
-pub const VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH: &str = "ck.vector.mls.welcome_keypackage_hash.v1";
+    "ak.vector.keypackage.last_resort_affinity_and_optionality.v1";
+pub const VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH: &str = "ak.vector.mls.welcome_keypackage_hash.v1";
 
 pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS,
@@ -35,7 +35,7 @@ pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
 ];
 
 const KEYPACKAGE_LIFECYCLE_FIXTURE_FILE: &str = "keypackage-lifecycle-fixture.json";
-const KEYPACKAGE_LIFECYCLE_PROFILE: &str = "ck.profile.mls_governance_binding.full.v1";
+const KEYPACKAGE_LIFECYCLE_PROFILE: &str = "ak.profile.mls_governance_binding.full.v1";
 const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/key_packages_upload_outcome";
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
@@ -48,7 +48,7 @@ const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_welcome_payload";
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
-const LAST_RESORT_FEATURE: &str = "ck.feature.mls_last_resort_keypackage.v1";
+const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
 const REASON_LAST_RESORT_NOT_SUPPORTED: &str = "last_resort_not_supported";
 const REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION: &str = "last_resort_realm_affinity_violation";
 const REASON_LAST_RESORT_ROTATION_REQUIRED: &str = "last_resort_rotation_required";
@@ -98,7 +98,7 @@ fn validate_keypackage_lifecycle_fixture_metadata(fixture: &Value) -> Result<()>
         OP_KEYS_KEYPACKAGES_CONSUME,
         OP_KEYS_KEYPACKAGES_REVOKE,
     ] {
-        if !op.starts_with("ck.self.keys.keypackages.") {
+        if !op.starts_with("ak.self.keys.keypackages.") {
             bail!("keypackage operation id namespace drifted: {op}");
         }
     }
@@ -192,7 +192,7 @@ fn claim_record_value(
         "principal_id": principal_id.as_str(),
         "device_id": device_id.as_str(),
         "key_package": "AQID",
-        "capabilities": ["ck.mls.profile.full"],
+        "capabilities": ["ak.mls.profile.full"],
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "ssk_generation": 7,
         "expires_at": expires_at.to_rfc3339(),
@@ -846,7 +846,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_digest,
         "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-        "capabilities": ["ck.mls.profile.full"],
+        "capabilities": ["ak.mls.profile.full"],
         "state": "published",
         "expires_at": "2100-01-01T00:00:00Z",
         "created_at": "2026-06-19T00:00:00Z",

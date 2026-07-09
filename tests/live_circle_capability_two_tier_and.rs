@@ -47,13 +47,13 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     // ── 0. SDK-level invariants: the cap actions we exercise live in
     //       the canonical CKP-0007 allow-list. A spelling drift here
     //       would mask the live wire assertion.
-    if CAP_ACTION_CIRCLE_MANAGE != "ck.circle.manage" {
+    if CAP_ACTION_CIRCLE_MANAGE != "ak.circle.manage" {
         bail!(
             "CAP_ACTION_CIRCLE_MANAGE drifted: `{CAP_ACTION_CIRCLE_MANAGE}`; \
              coauth's grant surface keys on this string"
         );
     }
-    if CAP_ACTION_CIRCLE_AUDIT != "ck.circle.audit" {
+    if CAP_ACTION_CIRCLE_AUDIT != "ak.circle.audit" {
         bail!(
             "CAP_ACTION_CIRCLE_AUDIT drifted: `{CAP_ACTION_CIRCLE_AUDIT}`; \
              coauth's grant surface keys on this string"
@@ -61,7 +61,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     }
 
     // ── 1. Bootstrap soland + coauth (coauth is hard-required for cap grants).
-    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-cap-and")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ak.0007-cap-and")).await?;
     if stack.coauth.is_none() {
         bail!(
             "live capability AND scenario requires coauth (session-grant issuer); \
@@ -141,7 +141,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     let _ = admin
         .post("/_arkret/self/realms")
         .json(&json!({
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Cap AND Realm",
         }))

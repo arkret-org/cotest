@@ -269,18 +269,18 @@ fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
     let timeline = json!([
         {
             "event_id": message_id,
-            "kind": "ck.message.create",
-            "content": {"kind": "ck.content.text", "body": "bad link: spam.example/phish"},
+            "kind": "ak.message.create",
+            "content": {"kind": "ak.content.text", "body": "bad link: spam.example/phish"},
         },
         {
             "event_id": policy_id,
-            "kind": "ck.policy.action",
+            "kind": "ak.policy.action",
             "actor_id": "did:web:policy-bot.example.com",
             "payload": {"target_id": message_id, "policy_scope": "public", "decision": "quarantine"},
         },
         {
             "event_id": redaction_id,
-            "kind": "ck.redaction",
+            "kind": "ak.redaction",
             "actor_id": "did:web:policy-admin.example",
             "payload": {"redacts": message_id, "reason_code": "policy_recall"},
         },
@@ -342,7 +342,7 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
 
     let mut redactions: HashMap<String, String> = HashMap::new();
     for entry in entries {
-        if entry["kind"] == json!("ck.redaction") {
+        if entry["kind"] == json!("ak.redaction") {
             let target = entry["payload"]["redacts"]
                 .as_str()
                 .ok_or_else(|| anyhow!("redaction event missing payload.redacts"))?;
@@ -359,7 +359,7 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
             .as_str()
             .ok_or_else(|| anyhow!("timeline event missing event_id"))?;
         match redactions.get(event_id) {
-            Some(redaction_event_id) if entry["kind"] != json!("ck.redaction") => {
+            Some(redaction_event_id) if entry["kind"] != json!("ak.redaction") => {
                 projected.push(json!({
                     "event_id": event_id,
                     "kind": entry["kind"].clone(),
@@ -393,7 +393,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let event_digest = format!("sha256:{DIGEST64}");
 
     let stub = json!({
-        "stub_schema": "ck.schema.erasure_verification_stub.v1",
+        "stub_schema": "ak.schema.erasure_verification_stub.v1",
         "subject": {"kind": "event", "ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
@@ -421,7 +421,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     }
 
     let receipt = json!({
-        "schema": "ck.schema.erasure_receipt.v1",
+        "schema": "ak.schema.erasure_receipt.v1",
         "receipt_id": receipt_id,
         "issuer": "did:web:erasure.example.com",
         "subject": {"kind": "event", "ref": original_event_id},
@@ -448,7 +448,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     verify_erasure_receipt_stub_digest(&receipt, &stub)?;
 
     let tampered_stub = json!({
-        "stub_schema": "ck.schema.erasure_verification_stub.v1",
+        "stub_schema": "ak.schema.erasure_verification_stub.v1",
         "subject": {"kind": "event", "ref": "ak:event:01970e58-0004-7000-8000-0000000000ff"},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
@@ -517,8 +517,8 @@ fn sample_event_with_id(event_id: &str) -> Value {
         "event_id": event_id,
         "created_at": "2026-04-29T00:00:00Z",
         "actor_id": "did:web:alice.example",
-        "kind": "ck.message.create",
-        "content": {"kind": "ck.content.text", "body": "secret"},
+        "kind": "ak.message.create",
+        "content": {"kind": "ak.content.text", "body": "secret"},
         "proofs": [{"alg": "none"}]
     })
 }

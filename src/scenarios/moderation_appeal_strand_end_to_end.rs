@@ -30,14 +30,14 @@ use arkret_core::{
     REASON_APPEAL_OVERTURN_MISSING_LIFT, REASON_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
 };
 
-pub const APPEAL_KIND_SUBMIT: &str = "ck.moderation.appeal.submit";
-pub const APPEAL_KIND_REVIEW: &str = "ck.moderation.appeal.review";
-pub const APPEAL_KIND_DECISION: &str = "ck.moderation.appeal.decision";
-pub const APPEAL_KIND_CLOSE: &str = "ck.moderation.appeal.close";
+pub const APPEAL_KIND_SUBMIT: &str = "ak.moderation.appeal.submit";
+pub const APPEAL_KIND_REVIEW: &str = "ak.moderation.appeal.review";
+pub const APPEAL_KIND_DECISION: &str = "ak.moderation.appeal.decision";
+pub const APPEAL_KIND_CLOSE: &str = "ak.moderation.appeal.close";
 
-pub const DECISION_LIFT_KIND: &str = "ck.moderation.decision.lift";
+pub const DECISION_LIFT_KIND: &str = "ak.moderation.decision.lift";
 
-pub const APPEAL_SCHEMA: &str = "ck.schema.moderation_appeal.v1";
+pub const APPEAL_SCHEMA: &str = "ak.schema.moderation_appeal.v1";
 pub const APPEAL_ID_PREFIX: &str = "ak:appeal:";
 
 /// Error codes the reducer SHOULD surface on the negative branches.
@@ -109,7 +109,7 @@ mod tests {
             APPEAL_KIND_CLOSE,
         ] {
             assert!(
-                k.starts_with("ck.moderation.appeal."),
+                k.starts_with("ak.moderation.appeal."),
                 "kind {k} must be in appeal namespace"
             );
         }
@@ -120,7 +120,7 @@ mod tests {
         moderation_appeal_strand_end_to_end_run()
             .await
             .expect("appeal error codes + TypedAppealId must stay registered");
-        assert_eq!(DECISION_LIFT_KIND, "ck.moderation.decision.lift");
+        assert_eq!(DECISION_LIFT_KIND, "ak.moderation.decision.lift");
         assert_ne!(APPEAL_KIND_DECISION, DECISION_LIFT_KIND);
     }
 }

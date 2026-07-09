@@ -120,7 +120,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   alice.post("/_arkret/self/events").json(&event_envelope(
     //       &alice.actor,
     //       <principal_control_realm_id>,
-    //       "ck.cross_signing.publish",
+    //       "ak.cross_signing.publish",
     //       json!({
     //           "principal_signing_key": { "kid": <PSK kid>, "alg": "EdDSA",
     //                                       "public_key": <PSK pub> },
@@ -140,7 +140,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //
     //   // 3b + 3c. account gate pairing with cross_signing_binding:
     //   let canonical = format!(
-    //       "ck-device-trust-bind-v1\n{}",
+    //       "ak.device-trust-bind-v1\n{}",
     //       canonical_json(json!({
     //           "principal_id": alice.actor,
     //           "device_id": device_b,
@@ -216,7 +216,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //       alice.post("/_arkret/self/events").json(&event_envelope(
     //           &alice.actor,
     //           <principal_control_realm_id>,
-    //           "ck.device.revoke",
+    //           "ak.device.revoke",
     //           json!({
     //               "principal_id": alice.actor,
     //               "device_id": device_b,
@@ -224,7 +224,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //       )),
     //       StatusCode::OK,
     //   ).await?;
-    //   assert_eq!(revoke["accepted"][0]["kind"], "ck.device.revoke");
+    //   assert_eq!(revoke["accepted"][0]["kind"], "ak.device.revoke");
     //
     //   // 6b. device-A still works:
     //   expect_status(alice.get("/_arkret/self/account/viewer"), StatusCode::OK).await?;
@@ -250,7 +250,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //           .as_array()
     //           .unwrap_or(&vec![])
     //           .iter()
-    //           .filter(|e| e["kind"] == "ck.mls.commit")
+    //           .filter(|e| e["kind"] == "ak.mls.commit")
     //           .collect::<Vec<_>>();
     //       assert!(commits.iter().any(|c| c["content"]["proposals"]
     //                  .as_array()
@@ -264,7 +264,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //           .as_array()
     //           .unwrap_or(&vec![])
     //           .iter()
-    //           .filter(|e| e["kind"] == "ck.device.list_update")
+    //           .filter(|e| e["kind"] == "ak.device.list_update")
     //           .collect::<Vec<_>>();
     //       assert!(list_updates.iter().any(|u| u["payload"]["left"]
     //                  .as_array()

@@ -1,7 +1,7 @@
 {
   "profiles": [
     {
-      "profile_id": "ck.profile.core_event_store.v1",
+      "profile_id": "ak.profile.core_event_store.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -17,7 +17,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.chat_mvp.v1",
+      "profile_id": "ak.profile.chat_mvp.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -33,7 +33,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.kanban_mvp.v1",
+      "profile_id": "ak.profile.kanban_mvp.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -46,7 +46,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.principal_server_events_api.v1",
+      "profile_id": "ak.profile.principal_server_events_api.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -60,7 +60,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.principal_server.v1",
+      "profile_id": "ak.profile.principal_server.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -76,7 +76,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.directory_service.v1",
+      "profile_id": "ak.profile.directory_service.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -90,7 +90,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.identity_registry.v1",
+      "profile_id": "ak.profile.identity_registry.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -103,7 +103,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.blob_node.v1",
+      "profile_id": "ak.profile.blob_node.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -117,7 +117,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.push_gateway.v1",
+      "profile_id": "ak.profile.push_gateway.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -131,7 +131,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.federation_minimal.v1",
+      "profile_id": "ak.profile.federation_minimal.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -143,7 +143,7 @@
       ]
     },
     {
-      "profile_id": "ck.profile.e2ee_client.v1",
+      "profile_id": "ak.profile.e2ee_client.v1",
       "spec_ref": "E:\\Works\\arkret\\arkret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [

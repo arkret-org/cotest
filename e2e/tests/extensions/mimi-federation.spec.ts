@@ -118,7 +118,7 @@ test.describe("mimi federation", () => {
         governance_binding: governanceBinding,
         covered_seals_cell: coveredSealsCell,
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body: `silent plaintext leak ${stamp}`,
         },
         sender_did: "did:web:mimi.example",
@@ -137,7 +137,7 @@ test.describe("mimi federation", () => {
         governance_binding: governanceBinding,
         covered_seals_cell: coveredSealsCell,
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body: downgradeText,
         },
         sender_did: "did:web:mimi.example",
@@ -162,7 +162,7 @@ test.describe("mimi federation", () => {
           transcript_hash: transcriptHash,
         },
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body: transcriptText,
         },
         sender_did: "did:web:mimi.example",
@@ -177,7 +177,7 @@ test.describe("mimi federation", () => {
     const events = await queryRealmEventsApi(request, token, realmId);
     const downgradeEvent = eventById(events, String(downgradeBody.event_ref));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
-    expect(nested(downgradeEvent, "payload", "content", "ck.morph.e2ee_downgrade")).toBe(
+    expect(nested(downgradeEvent, "payload", "content", "ak.morph.e2ee_downgrade")).toBe(
       "mimi_bridge",
     );
     expect(nested(downgradeEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
@@ -225,9 +225,9 @@ test.describe("mimi federation", () => {
 
     const events = await queryRealmEventsApi(request, token, realmId);
     const event = eventById(events, String(body.event_ref));
-    expect(nested(event, "payload", "content", "kind")).toBe("ck.content.unsupported");
+    expect(nested(event, "payload", "content", "kind")).toBe("ak.content.unsupported");
     expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
-    expect(nested(event, "payload", "content", "ck.morph.unknown_content_kind")).toBe(
+    expect(nested(event, "payload", "content", "ak.morph.unknown_content_kind")).toBe(
       "m.location.share.live",
     );
     expect(nested(event, "payload", "quarantine", "unknown_content_kind")).toBe(
@@ -255,9 +255,9 @@ async function createBoundMimiRoom(
   const roomId = `MIMI-${suffix}-${stamp}`;
   const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/strands/${roomId}/update`;
   const roomBinding = {
-    kind: "ck.mimi.room_binding",
+    kind: "ak.mimi.room_binding",
     payload: {
-        profile: "ck.profile.mimi_interop.v1",
+        profile: "ak.profile.mimi_interop.v1",
         mimi_room_uri: localMimiRoomUri(roomId),
         binding_scope: {
           realm_id: realmId,
@@ -273,7 +273,7 @@ async function createBoundMimiRoom(
   const updateBody = {
     mls_group_id: `mls:${roomId}`,
     update: {
-      kind: "ck.mimi.room_binding",
+      kind: "ak.mimi.room_binding",
       payload: opaquePayload(roomBinding, "application/vnd.arkret.mimi.room-binding+json"),
     },
     epoch: 1,
@@ -310,8 +310,8 @@ function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, 
     next_epoch: 1,
     membership_frontier: [`ak:event:${"1".repeat(8)}-${"1".repeat(4)}-7${"1".repeat(3)}-8${"1".repeat(3)}-${"1".repeat(12)}`],
     policy_root: policyRoot,
-    binding_profile: "ck.profile.mls_governance_binding.full.v1",
-    reducer_profile: "ck.reducer.v1",
+    binding_profile: "ak.profile.mls_governance_binding.full.v1",
+    reducer_profile: "ak.reducer.v1",
   };
 }
 
@@ -319,7 +319,7 @@ function mimiCoveredSealsCell(
   governanceBinding: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    profile: "ck.covered_seals_cell.v1",
+    profile: "ak.covered_seals_cell.v1",
     governance_binding_digest: `sha256:${createHash("sha256")
       .update(canonicalJson(governanceBinding))
       .digest("hex")}`,

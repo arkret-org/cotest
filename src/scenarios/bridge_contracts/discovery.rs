@@ -25,7 +25,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         // spec-normative surface. soland declares the introspection dependency
         // with the protocol-native contract id `ck.gate.account.session_grant.introspect`
         // (cf. spec operation `ck.gate.account.command.introspect_session_grant`).
-        "ck.gate.account.session_grant.introspect"
+        "ak.gate.account.session_grant.introspect"
     );
     assert_eq!(
         integration["surfaces"][0]["path"],
@@ -66,7 +66,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert_eq!(
         auth_bridge["auth"]["session_grant_presentation"],
-        "Authorization: Bearer <ck.session.grant> with a DPoP proof on /_arkret/self/*"
+        "Authorization: Bearer <ak.session.grant> with a DPoP proof on /_arkret/self/*"
     );
     assert_eq!(
         auth_bridge["push"]["register_device_path"],

@@ -450,7 +450,7 @@ function presenceEnvelope(
   const sentAt = new Date();
   const expiresAt = new Date(sentAt.getTime() + 30_000);
   const envelope: Record<string, unknown> = {
-    kind: "ck.presence",
+    kind: "ak.presence",
     realm_id: realmId,
     actor_id: actorDid,
     device_id: deviceId,

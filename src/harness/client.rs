@@ -76,7 +76,7 @@ impl TestActorClient {
             .unwrap_or_else(|| next_typed_id("realm"));
         let payload = realm_create_payload(&self.actor, &self.service_did, &realm_id, &body);
         let event_response = self
-            .submit_event(&realm_id, "ck.realm.create", payload)
+            .submit_event(&realm_id, "ak.realm.create", payload)
             .await?;
         Ok(json!({
             "realm_id": realm_id,
@@ -87,7 +87,7 @@ impl TestActorClient {
     pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
         self.submit_event(
             realm_id,
-            "ck.member.state",
+            "ak.member.state",
             member_join_payload(realm_id, &member.actor),
         )
         .await
@@ -101,7 +101,7 @@ impl TestActorClient {
     ) -> Result<Value> {
         self.submit_event(
             realm_id,
-            "ck.message.create",
+            "ak.message.create",
             message_create_text_payload(realm_id, body)?,
         )
         .await

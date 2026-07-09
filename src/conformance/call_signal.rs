@@ -25,9 +25,9 @@ use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 
-pub const VECTOR_ID_SIGNAL_TYPE_ENUM: &str = "ck.vector.call_signal.signal_type_enum.v1";
-pub const VECTOR_ID_SEQ_MONOTONIC: &str = "ck.vector.call_signal.seq_monotonic.v1";
-pub const VECTOR_ID_PROOF_DETACHED_JWS: &str = "ck.vector.call_signal.proof_detached_jws.v1";
+pub const VECTOR_ID_SIGNAL_TYPE_ENUM: &str = "ak.vector.call_signal.signal_type_enum.v1";
+pub const VECTOR_ID_SEQ_MONOTONIC: &str = "ak.vector.call_signal.seq_monotonic.v1";
+pub const VECTOR_ID_PROOF_DETACHED_JWS: &str = "ak.vector.call_signal.proof_detached_jws.v1";
 
 pub const ALL_CALL_SIGNAL_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIGNAL_TYPE_ENUM,
@@ -155,7 +155,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     let created_at = Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 0).unwrap();
     let created_at_str = created_at.to_rfc3339_opts(SecondsFormat::Secs, true);
     let mut envelope = json!({
-        "kind": "ck.call.signal",
+        "kind": "ak.call.signal",
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": actor_id,
         "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
@@ -188,10 +188,10 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
             .map_err(|err| anyhow!("header JCS failed: {err}"))?,
     );
     // encoding.md §2: the Event proof binding carries the fixed context tag
-    // "ck-event-proof-v1" (domain separation); the SDK verifier reconstructs it
+    // "ak.event-proof-v1" (domain separation); the SDK verifier reconstructs it
     // and the signature must cover it.
     let binding = json!({
-        "context": "ck-event-proof-v1",
+        "context": "ak.event-proof-v1",
         "event_digest": event_digest,
         "actor_id": actor_id,
         "verification_method": verification_method,
@@ -254,7 +254,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 
 fn call_signal_envelope_value(signal_type: &str, seq: u64) -> Value {
     json!({
-        "kind": "ck.call.signal",
+        "kind": "ak.call.signal",
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": "did:web:alice.example.com",
         "device_id": "ak:device:01964137-0000-7000-8000-000000000000",

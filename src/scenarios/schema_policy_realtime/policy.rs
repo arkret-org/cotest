@@ -32,9 +32,9 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         alice.post("/_soland/self/policies").json(&json!({
             "scope": realm_id,
             "subject_ref": bob.actor,
-            "policy_type": "ck.message.create",
+            "policy_type": "ak.message.create",
             "effect": "hard_deny",
-            "actions": ["ck.message.create"],
+            "actions": ["ak.message.create"],
             // Realm-scoped resource: soland matches resource.kind against the
             // request source.service_type, so constrain on realm_id only.
             "resource": {"realm_id": realm_id},
@@ -53,9 +53,9 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         alice.post("/_soland/self/policies").json(&json!({
             "scope": realm_id,
             "subject_ref": bob.actor,
-            "policy_type": "ck.message.create",
+            "policy_type": "ak.message.create",
             "effect": "deny",
-            "actions": ["ck.message.create"],
+            "actions": ["ak.message.create"],
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::BAD_REQUEST,
@@ -89,7 +89,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         bob.post("/_arkret/self/policy/check").json(&json!({
             "request_id": "ak:request:policy-deny",
             "request_canonical_digest": REQUEST_HASH,
-            "action": "ck.message.create",
+            "action": "ak.message.create",
             "actor_id": bob.actor,
             "realm_id": realm_id,
             "source": {
@@ -122,9 +122,9 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "policy_id": policy_id,
             "scope": realm_id,
             "subject_ref": bob.actor,
-            "policy_type": "ck.message.create",
+            "policy_type": "ak.message.create",
             "effect": "hard_deny",
-            "actions": ["ck.message.create"],
+            "actions": ["ak.message.create"],
             "resource": {"kind": "realm", "realm_id": realm_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}],
             "active": false
@@ -138,7 +138,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         bob.post("/_arkret/self/policy/check").json(&json!({
             "request_id": "ak:request:policy-allow",
             "request_canonical_digest": REQUEST_HASH,
-            "action": "ck.message.create",
+            "action": "ak.message.create",
             "actor_id": bob.actor,
             "realm_id": realm_id,
             "source": {

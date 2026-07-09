@@ -5,7 +5,7 @@
 // describe:
 //   * coauth mints a `did:webvh:<scid>:<host>:webvh:<ulid>` principal DID via
 //     soland's embedded webvh registration (services/soland_webvh.rs), and
-//   * issues a device-bound `ck.session.grant` (cnf.jkt == device DPoP key
+//   * issues a device-bound `ak.session.grant` (cnf.jkt == device DPoP key
 //     thumbprint), and
 //   * registers the principal account on soland.
 //
@@ -37,7 +37,7 @@ export type OnboardedPrincipal = {
   deviceId: string;
   /// The device DPoP key (`cnf.jkt` == its thumbprint).
   deviceKey: DpopDeviceKey;
-  /// The issued `ck.session.grant` JWT.
+  /// The issued `ak.session.grant` JWT.
   grantJwt: string;
   /// coauth grant id (DB row id).
   grantId: string;

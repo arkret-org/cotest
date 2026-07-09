@@ -8,17 +8,17 @@ use serde_json::{Map, Value, json};
 use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY: &str =
-    "ck.vector.e2ee.late_key_recovery.t0_deterministic_visibility.v1";
+    "ak.vector.e2ee.late_key_recovery.t0_deterministic_visibility.v1";
 pub const VECTOR_ID_DISAPPEARING_READ_TRIGGER_ANONYMOUS_AGGREGATE: &str =
-    "ck.vector.disappearing.read_trigger_anonymous_aggregate.v1";
+    "ak.vector.disappearing.read_trigger_anonymous_aggregate.v1";
 pub const VECTOR_ID_DISAPPEARING_READ_TRIGGER_IDEMPOTENT_REPLAY: &str =
-    "ck.vector.disappearing.read_trigger_idempotent_replay.v1";
+    "ak.vector.disappearing.read_trigger_idempotent_replay.v1";
 pub const VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW: &str =
-    "ck.vector.disappearing.on_last_read_offline_window.v1";
+    "ak.vector.disappearing.on_last_read_offline_window.v1";
 pub const VECTOR_ID_PREVIEW_TOKEN_SCOPED_STRIPPED_STATE: &str =
-    "ck.vector.preview.token_scoped_stripped_state.v1";
+    "ak.vector.preview.token_scoped_stripped_state.v1";
 pub const VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY: &str =
-    "ck.vector.history_sharing.e2ee_prejoin_key_share_policy.v1";
+    "ak.vector.history_sharing.e2ee_prejoin_key_share_policy.v1";
 
 pub const ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY,
@@ -30,7 +30,7 @@ pub const ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS: &[&str] = &[
 ];
 
 const HISTORY_CRYPTO_CLOSURE_FIXTURE_FILE: &str = "history-crypto-closure-fixture.json";
-const HISTORY_CRYPTO_CLOSURE_PROFILE: &str = "ck.profile.e2ee_client.v1";
+const HISTORY_CRYPTO_CLOSURE_PROFILE: &str = "ak.profile.e2ee_client.v1";
 
 pub fn run_history_crypto_closure_fixture_suite() -> Result<()> {
     let fixture = history_crypto_closure_fixture()?;

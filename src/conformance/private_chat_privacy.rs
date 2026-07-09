@@ -15,7 +15,7 @@ use super::{load_artifact_json, load_local_fixture_value};
 use crate::transcripts::record_vector_event;
 
 const FIXTURE_FILE: &str = "private_chat_privacy_contracts.json";
-const REALM_REMARK_KEY_PREFIX: &str = "ck.contacts.realm.";
+const REALM_REMARK_KEY_PREFIX: &str = "ak.contacts.realm.";
 
 #[derive(Debug, Deserialize)]
 struct PrivateChatPrivacyFixture {
@@ -124,34 +124,34 @@ fn validate_realm_remark_registry() -> Result<()> {
         .into_iter()
         .flatten()
         .find(|entry| {
-            entry.get("key_pattern").and_then(Value::as_str) == Some("ck.contacts.realm.<realm_id>")
+            entry.get("key_pattern").and_then(Value::as_str) == Some("ak.contacts.realm.<realm_id>")
         })
         .ok_or_else(|| anyhow!("account-data registry missing ck.contacts.realm.<realm_id>"))?;
 
     if entry.get("storage").and_then(Value::as_str) != Some("encrypted_account_data") {
-        bail!("ck.contacts.realm.<realm_id> must stay encrypted account data");
+        bail!("ak.contacts.realm.<realm_id> must stay encrypted account data");
     }
     if entry.get("scope").and_then(Value::as_str) != Some("realm_private_preference") {
-        bail!("ck.contacts.realm.<realm_id> scope drifted from realm_private_preference");
+        bail!("ak.contacts.realm.<realm_id> scope drifted from realm_private_preference");
     }
     let writers = entry
         .get("write_event_kinds")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("ck.contacts.realm.<realm_id> missing write_event_kinds"))?;
+        .ok_or_else(|| anyhow!("ak.contacts.realm.<realm_id> missing write_event_kinds"))?;
     if !writers
         .iter()
-        .any(|writer| writer.as_str() == Some("ck.account_data.set"))
+        .any(|writer| writer.as_str() == Some("ak.account_data.set"))
     {
-        bail!("ck.contacts.realm.<realm_id> must be written by ck.account_data.set");
+        bail!("ak.contacts.realm.<realm_id> must be written by ck.account_data.set");
     }
 
     record_vector_event(
         "private_chat_privacy.realm_remark_registry",
-        &json!({"key_pattern": "ck.contacts.realm.<realm_id>"}),
+        &json!({"key_pattern": "ak.contacts.realm.<realm_id>"}),
         &json!({
             "storage": "encrypted_account_data",
             "scope": "realm_private_preference",
-            "writer": "ck.account_data.set",
+            "writer": "ak.account_data.set",
         }),
         &json!({
             "storage": entry.get("storage").cloned(),
@@ -171,7 +171,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         .flatten()
         .find(|operation| {
             operation.get("operation_id").and_then(Value::as_str)
-                == Some("ck.self.direct_conversation.command.resolve")
+                == Some("ak.self.direct_conversation.command.resolve")
         })
         .ok_or_else(|| {
             anyhow!("operation registry missing ck.self.direct_conversation.command.resolve")
@@ -257,7 +257,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_artifacts",
-        &json!({"operation_id": "ck.self.direct_conversation.command.resolve"}),
+        &json!({"operation_id": "ak.self.direct_conversation.command.resolve"}),
         &json!({
             "http": "POST /_arkret/self/direct-conversations/resolve",
             "request_field": "peer",

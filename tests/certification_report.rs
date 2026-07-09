@@ -20,7 +20,7 @@ fn offline_live_stack_report_marks_unconfigured_services_explicitly() -> Result<
 
     let json =
         cotest::scenarios::certification_report::render_stack_certification_report_json(&report)?;
-    assert!(json.contains("ck.cotest.live_stack_certification_report.v1"));
+    assert!(json.contains("ak.cotest.live_stack_certification_report.v1"));
     let markdown =
         cotest::scenarios::certification_report::render_stack_certification_report_markdown(
             &report,

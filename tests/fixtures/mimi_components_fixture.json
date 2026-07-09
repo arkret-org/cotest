@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.mimi_components_vectors.v1",
+  "profile": "ak.profile.mimi_components_vectors.v1",
   "version": "2026-05-07",
   "comment": "MIMI <-> Arkret policy-component round-trip vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 (component_type translation) + §9.2 (criticality translation). Each vector either declares a bidirectional mapping or marks a Arkret-only component that the facade must emit as application/vnd.arkret.component+json with appropriate MIMI unknown-handling. Round-trip means: (a) a Arkret component_type emitted to MIMI must round-trip back to the same component_type when ingested; (b) criticality preserved on both legs.",
   "criticality_mapping": {
@@ -13,20 +13,20 @@
   "component_mapping": {
     "comment": "Selected entries from §9.1. `direction` values: bidirectional (round-trip-safe), arkret_only (facade emits private extension, no inverse), mimi_only (Arkret has no native form, MIMI ingestion only).",
     "vectors": [
-      { "arkret_component_type": "ck.component.realm.join_rule.v1",            "arkret_kind": "ck.realm.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
-      { "arkret_component_type": "ck.component.realm.history_visibility.v1",   "arkret_kind": "ck.realm.history_visibility",   "mimi_path": "history_sharing.visibility",                "direction": "bidirectional" },
-      { "arkret_component_type": "ck.component.realm.discovery.v1",            "arkret_kind": "ck.realm.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
-      { "arkret_component_type": "ck.component.realm.history_sharing_policy.v1","arkret_kind": "ck.realm.history_sharing_policy","mimi_path": "history_sharing",                          "direction": "bidirectional" },
-      { "arkret_component_type": "ck.component.realm.asset_privacy_policy.v1", "arkret_kind": "ck.realm.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
-      { "arkret_component_type": "ck.component.realm.moderation_policy.v1",    "arkret_kind": "ck.realm.moderation_policy",    "mimi_path": "logging.abuse_report",                      "direction": "bidirectional", "mimi_extension": "moderation" },
-      { "arkret_component_type": "ck.component.realm.policy_components.v1",    "arkret_kind": "ck.realm.policy_components",    "mimi_path": "policy_components",                          "direction": "bidirectional" },
-      { "arkret_component_type": "ck.component.realm.policy.v1",               "arkret_kind": "ck.realm.policy",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ck.component.realm.policy_server.v1",        "arkret_kind": "ck.realm.policy_server",        "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ck.component.realm.plaintext_visible_services.v1", "arkret_kind": "ck.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ck.component.realm.media_service.v1",        "arkret_kind": "ck.realm.media_service",        "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ck.component.realm.schema.v1",               "arkret_kind": "ck.realm.schema",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ck.component.realm.inheritance_policy.v1",   "arkret_kind": "ck.realm.inheritance_policy",   "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ck.component.consent.grant.v1",              "arkret_kind": "ck.consent.grant",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json", "comment": "Holder-private consent cell (or-set lattice). MIMI consent operations map to grant/revoke Moves on this cell; cross-protocol semantics is the cell join, not a discrete component." }
+      { "arkret_component_type": "ak.component.realm.join_rule.v1",            "arkret_kind": "ck.realm.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.history_visibility.v1",   "arkret_kind": "ck.realm.history_visibility",   "mimi_path": "history_sharing.visibility",                "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.discovery.v1",            "arkret_kind": "ck.realm.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.history_sharing_policy.v1","arkret_kind": "ck.realm.history_sharing_policy","mimi_path": "history_sharing",                          "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.asset_privacy_policy.v1", "arkret_kind": "ck.realm.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.moderation_policy.v1",    "arkret_kind": "ck.realm.moderation_policy",    "mimi_path": "logging.abuse_report",                      "direction": "bidirectional", "mimi_extension": "moderation" },
+      { "arkret_component_type": "ak.component.realm.policy_components.v1",    "arkret_kind": "ck.realm.policy_components",    "mimi_path": "policy_components",                          "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.policy.v1",               "arkret_kind": "ck.realm.policy",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_component_type": "ak.component.realm.policy_server.v1",        "arkret_kind": "ck.realm.policy_server",        "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_component_type": "ak.component.realm.plaintext_visible_services.v1", "arkret_kind": "ck.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_component_type": "ak.component.realm.media_service.v1",        "arkret_kind": "ck.realm.media_service",        "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_component_type": "ak.component.realm.schema.v1",               "arkret_kind": "ck.realm.schema",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_component_type": "ak.component.realm.inheritance_policy.v1",   "arkret_kind": "ck.realm.inheritance_policy",   "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_component_type": "ak.component.consent.grant.v1",              "arkret_kind": "ck.consent.grant",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json", "comment": "Holder-private consent cell (or-set lattice). MIMI consent operations map to grant/revoke Moves on this cell; cross-protocol semantics is the cell join, not a discrete component." }
     ]
   }
 }

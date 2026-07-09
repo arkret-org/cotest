@@ -61,12 +61,12 @@ async function createStrandApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.strand.create",
+      kind: "ak.strand.create",
       createdAt,
       payload: {
         object: {
           id: strandId,
-          schema: "ck.schema.strand.v1",
+          schema: "ak.schema.strand.v1",
           realm_id: realmId,
           metadata: { title, fields },
           stage: "planned",
@@ -91,7 +91,7 @@ function relationObject(args: {
 }): Record<string, unknown> {
   return {
     id: args.id,
-    schema: "ck.schema.relation.v1",
+    schema: "ak.schema.relation.v1",
     realm_id: args.realmId,
     relation_kind: args.relationKind,
     from_ref: args.fromRef,
@@ -194,7 +194,7 @@ test.describe("core object invariants", () => {
         // ck.realm.* family. We accept any ck.realm.* kind to stay
         // resilient to soland's exact lifecycle op naming.
         const lifecycleEvent =
-          events.find((event) => event.kind?.startsWith("ck.realm.")) ?? events[0];
+          events.find((event) => event.kind?.startsWith("ak.realm.")) ?? events[0];
         expect(lifecycleEvent).toBeTruthy();
         // Common-field (Event Envelope §2.2): event_id.
         expect(lifecycleEvent.event_id).toMatch(/^ak:event:/);
@@ -260,7 +260,7 @@ test.describe("core object invariants", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           preconditions: [
             {
               cell: fieldsCell,
@@ -291,7 +291,7 @@ test.describe("core object invariants", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           preconditions: [
             {
               cell: fieldsCell,
@@ -348,12 +348,12 @@ test.describe("core object invariants", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.space.create",
+          kind: "ak.space.create",
           createdAt,
           payload: {
             object: {
               id: parentSpaceId,
-              schema: "ck.schema.space.v1",
+              schema: "ak.schema.space.v1",
               realm_id: realmId,
               kind: "board",
               metadata: { title: `core-invariants parent ${stamp}` },
@@ -372,7 +372,7 @@ test.describe("core object invariants", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.space.archive",
+          kind: "ak.space.archive",
           payload: { space_id: parentSpaceId },
         }),
       });
@@ -385,7 +385,7 @@ test.describe("core object invariants", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.space.tombstone",
+          kind: "ak.space.tombstone",
           payload: { space_id: parentSpaceId },
         }),
       });
@@ -438,7 +438,7 @@ test.describe("core object invariants", () => {
           signedEventEnvelope({
             actorDid: alice.did,
             realmId,
-            kind: "ck.relation.create",
+            kind: "ak.relation.create",
             payload: {
               relation: relationObject({
                 id: relationId,
@@ -484,7 +484,7 @@ test.describe("core object invariants", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.relation.create",
+          kind: "ak.relation.create",
           payload: {
             relation: relationObject({
               id: dupRelationId,
@@ -524,7 +524,7 @@ test.describe("core object invariants", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.relation.create",
+          kind: "ak.relation.create",
           payload: {
             relation: relationObject({
               id: typedId("relation"),
@@ -571,12 +571,12 @@ test.describe("core object invariants", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.space.create",
+          kind: "ak.space.create",
           createdAt,
           payload: {
             object: {
               id: spaceId,
-              schema: "ck.schema.space.v1",
+              schema: "ak.schema.space.v1",
               realm_id: realmId,
               kind: "board",
               metadata: { title: `core-invariants E ${stamp}` },

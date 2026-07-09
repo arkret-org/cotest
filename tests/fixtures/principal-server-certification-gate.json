@@ -1,6 +1,6 @@
 {
   "suite": "principal_server_certification_gate",
-  "profile": "ck.profile.principal_server_certification_gate.v1",
+  "profile": "ak.profile.principal_server_certification_gate.v1",
   "cases": [
     {
       "name": "soland_reports_principal_server_not_certified_with_signed_retry_boundary",
@@ -9,7 +9,7 @@
         "service": "soland",
         "service_type": "principal_server",
         "supported_profiles": [
-          "ck.profile.principal_server_events_api.v1"
+          "ak.profile.principal_server_events_api.v1"
         ],
         "certification": {
           "principal_server": {
@@ -39,7 +39,7 @@
       "describe": {
         "service": "candidate",
         "supported_profiles": [
-          "ck.profile.principal_server.v1"
+          "ak.profile.principal_server.v1"
         ],
         "certification": {
           "principal_server": {
@@ -47,27 +47,27 @@
           }
         },
         "supported_operations": [
-          "ck.server.query.describe",
-          "ck.self.account.query.describe",
-          "ck.self.account.stream.subscribe",
-          "ck.self.events.stream.subscribe",
-          "ck.self.events.query.scan",
-          "ck.self.snapshot.query.manifest_head",
-          "ck.self.authz.query.check"
+          "ak.server.query.describe",
+          "ak.self.account.query.describe",
+          "ak.self.account.stream.subscribe",
+          "ak.self.events.stream.subscribe",
+          "ak.self.events.query.scan",
+          "ak.self.snapshot.query.manifest_head",
+          "ak.self.authz.query.check"
         ],
         "supported_event_kinds": [
-          "ck.space.create",
-          "ck.member.state",
-          "ck.strand.create",
-          "ck.message.create",
-          "ck.capability.grant",
-          "ck.capability.revoke"
+          "ak.space.create",
+          "ak.member.state",
+          "ak.strand.create",
+          "ak.message.create",
+          "ak.capability.grant",
+          "ak.capability.revoke"
         ],
         "supported_schemas": [
-          "ck.schema.account_subscribe_frame.v1",
-          "ck.schema.snapshot.v1",
-          "ck.schema.capability.v1",
-          "ck.schema.grant_constraint.v1"
+          "ak.schema.account_subscribe_frame.v1",
+          "ak.schema.snapshot.v1",
+          "ak.schema.capability.v1",
+          "ak.schema.grant_constraint.v1"
         ],
         "federation": {
           "outbound": {
@@ -91,7 +91,7 @@
       "describe": {
         "service": "certified-reference",
         "supported_profiles": [
-          "ck.profile.principal_server.v1"
+          "ak.profile.principal_server.v1"
         ],
         "certification": {
           "principal_server": {
@@ -99,31 +99,31 @@
           }
         },
         "supported_operations": [
-          "ck.server.query.describe",
-          "ck.self.account.query.describe",
-          "ck.self.account.stream.subscribe",
-          "ck.self.events.stream.subscribe",
-          "ck.self.events.query.scan",
-          "ck.self.snapshot.query.manifest_head",
-          "ck.self.authz.query.check",
-          "ck.self.blob.upload.create",
-          "ck.self.agent.command.provision",
-          "ck.self.applet.command.install",
-          "ck.self.media.query.ice_config"
+          "ak.server.query.describe",
+          "ak.self.account.query.describe",
+          "ak.self.account.stream.subscribe",
+          "ak.self.events.stream.subscribe",
+          "ak.self.events.query.scan",
+          "ak.self.snapshot.query.manifest_head",
+          "ak.self.authz.query.check",
+          "ak.self.blob.upload.create",
+          "ak.self.agent.command.provision",
+          "ak.self.applet.command.install",
+          "ak.self.media.query.ice_config"
         ],
         "supported_event_kinds": [
-          "ck.space.create",
-          "ck.member.state",
-          "ck.strand.create",
-          "ck.message.create",
-          "ck.capability.grant",
-          "ck.capability.revoke"
+          "ak.space.create",
+          "ak.member.state",
+          "ak.strand.create",
+          "ak.message.create",
+          "ak.capability.grant",
+          "ak.capability.revoke"
         ],
         "supported_schemas": [
-          "ck.schema.account_subscribe_frame.v1",
-          "ck.schema.snapshot.v1",
-          "ck.schema.capability.v1",
-          "ck.schema.grant_constraint.v1"
+          "ak.schema.account_subscribe_frame.v1",
+          "ak.schema.snapshot.v1",
+          "ak.schema.capability.v1",
+          "ak.schema.grant_constraint.v1"
         ],
         "federation": {
           "outbound": {

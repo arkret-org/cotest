@@ -54,7 +54,7 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
     }
 
     // ── 1. Bootstrap the live stack (soft-skip when prereqs absent) ─────
-    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-tombstone")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ak.0007-tombstone")).await?;
     if stack.coauth.is_none() {
         bail!(
             "live tombstone cascade scenario requires coauth (membership state writes); \
@@ -140,7 +140,7 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
     let _ = admin
         .post("/_arkret/self/realms")
         .json(&json!({
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Tombstone Cascade Realm",
         }))

@@ -16,17 +16,17 @@ use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
 
-pub const VECTOR_ID_AGENT_MENTION_SELECTOR: &str = "ck.vector.agent.mention_selector.v1";
+pub const VECTOR_ID_AGENT_MENTION_SELECTOR: &str = "ak.vector.agent.mention_selector.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN: &str =
-    "ck.vector.agent.participation.ceiling_tighten.v1";
+    "ak.vector.agent.participation.ceiling_tighten.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION: &str =
-    "ck.vector.agent.participation.effective_intersection.v1";
+    "ak.vector.agent.participation.effective_intersection.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_SELECTION_WITHIN_CEILING: &str =
-    "ck.vector.agent.participation.selection_within_ceiling.v1";
+    "ak.vector.agent.participation.selection_within_ceiling.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY: &str =
-    "ck.vector.agent.participation.session_overlay.v1";
+    "ak.vector.agent.participation.session_overlay.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE: &str =
-    "ck.vector.agent.participation.third_party_mention_gate.v1";
+    "ak.vector.agent.participation.third_party_mention_gate.v1";
 
 pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_MENTION_SELECTOR,
@@ -38,12 +38,12 @@ pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
 ];
 
 const AGENT_PARTICIPATION_FIXTURE_FILE: &str = "agent-participation-fixture.json";
-const AGENT_PARTICIPATION_PROFILE: &str = "ck.profile.agent_participation_policy.v1";
+const AGENT_PARTICIPATION_PROFILE: &str = "ak.profile.agent_participation_policy.v1";
 const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
     "schemas/agent-operations.schema.json#/$defs/agent_participation_entry";
-const GRANT_MESSAGE_CREATE: &str = "ck.message.create";
-const GRANT_REACTION_ADD: &str = "ck.reaction.add";
-const GRANT_ACT_ON_BEHALF: &str = "ck.agent.act_on_behalf";
+const GRANT_MESSAGE_CREATE: &str = "ak.message.create";
+const GRANT_REACTION_ADD: &str = "ak.reaction.add";
+const GRANT_ACT_ON_BEHALF: &str = "ak.agent.act_on_behalf";
 
 fn participation_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE)?;

@@ -54,10 +54,10 @@ function sha256Digest(value: Buffer): string {
 const BASE58BTC_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const WEBVH_SCID_PLACEHOLDER = "{SCID}";
-const CROSS_SIGNING_BINDING_LABEL = "ck-cross-signing-bind-v1\n";
+const CROSS_SIGNING_BINDING_LABEL = "ak.cross-signing-bind-v1\n";
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
-  "ck.profile.mls_governance_binding.full.v1";
-const MLS_REDUCER_PROFILE_V1 = "ck.reducer.v1";
+  "ak.profile.mls_governance_binding.full.v1";
+const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
 
 type Ed25519FixtureKey = {
   privateKey: KeyObject;
@@ -344,7 +344,7 @@ async function publishCrossSigning(
     signedEventEnvelope({
       actorDid: fixture.did,
       realmId,
-      kind: "ck.cross_signing.publish",
+      kind: "ak.cross_signing.publish",
       payload: {
         principal_id: fixture.did,
         trust_domain: trustDomain,
@@ -414,16 +414,16 @@ async function createEncryptedRealm(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ck.realm.create",
+      kind: "ak.realm.create",
       createdAt,
       payload: {
         object: {
           id: realmId,
-          schema: "ck.schema.realm.v1",
+          schema: "ak.schema.realm.v1",
           title,
           created_by: ownerDid,
           trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ck.schema.realm.v1"],
+          schema_refs: ["ak.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",
           history_visibility: "joined",
@@ -497,7 +497,7 @@ async function submitMlsGenesis(
     signedEventEnvelope({
       actorDid: owner.did,
       realmId,
-      kind: "ck.mls.genesis",
+      kind: "ak.mls.genesis",
       eventId: genesisEventId,
       payload: {
         mls_group_id: groupId,
@@ -559,7 +559,7 @@ async function submitMlsCommit(
   const envelope = signedEventEnvelope({
     actorDid: committer.did,
     realmId,
-    kind: "ck.mls.commit",
+    kind: "ak.mls.commit",
     eventId: args.eventId ?? typedId("event"),
     payload,
   });
@@ -598,7 +598,7 @@ async function sendEncryptedTimelineMessage(
       return (
         request.method() === "POST" &&
         response.url().includes("/_arkret/self/events") &&
-        postData.includes("ck.message.create") &&
+        postData.includes("ak.message.create") &&
         [200, 201].includes(response.status())
       );
     },
@@ -816,16 +816,16 @@ test.describe("MLS group encryption", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: incompatibleRealmId,
-          kind: "ck.realm.create",
+          kind: "ak.realm.create",
           createdAt: incompatibleCreatedAt,
           payload: {
             object: {
               id: incompatibleRealmId,
-              schema: "ck.schema.realm.v1",
+              schema: "ak.schema.realm.v1",
               title: `S11 MLS incompatible ${stamp}`,
               created_by: alice.did,
               trust_domain: "ak:trust_domain:soland.local",
-              schema_refs: ["ck.schema.realm.v1"],
+              schema_refs: ["ak.schema.realm.v1"],
               default_discoverability: "listed",
               default_join_rule: "invite",
               history_visibility: "world_readable",
@@ -884,7 +884,7 @@ test.describe("MLS group encryption", () => {
     const keyPackage = b64url(`opaque-keypackage-${stamp}`);
     const keypackageDigest = sha256Digest(Buffer.from(keyPackage, "base64url"));
     const keypackageRef = keypackageDigest;
-    const keypackageCapabilities = ["ck.mls.profile.full"];
+    const keypackageCapabilities = ["ak.mls.profile.full"];
     const groupId = typedId("mls_group");
     const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
     const createdAt = canonicalTimestamp();
@@ -1023,7 +1023,7 @@ test.describe("MLS group encryption", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.mls.genesis",
+        kind: "ak.mls.genesis",
         eventId: genesisEventId,
         payload: {
           mls_group_id: groupId,
@@ -1066,7 +1066,7 @@ test.describe("MLS group encryption", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.mls.welcome",
+        kind: "ak.mls.welcome",
         eventId: welcomeEventId,
         payload: {
           welcome_id: welcomeId,
@@ -1131,7 +1131,7 @@ test.describe("MLS group encryption", () => {
     const commitEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.mls.commit",
+      kind: "ak.mls.commit",
       eventId: commitEventId,
       payload: commitPayload(`opaque-commit-${stamp}`),
     });
@@ -1176,7 +1176,7 @@ test.describe("MLS group encryption", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.mls.commit",
+        kind: "ak.mls.commit",
         payload: commitPayload(`opaque-stale-commit-${stamp}`),
       }),
     });
@@ -1660,7 +1660,7 @@ test.describe("MLS group encryption", () => {
   // but no soland unit test or cotest case exercises it. This pins the wire
   // rejection so a regression that lets the profile be patched after creation
   // — silently downgrading an Encrypted Realm to plaintext — is caught.
-  test("ck.realm.update that patches encryption_profile is rejected (create-locked)", async ({
+  test("ak.realm.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -1680,7 +1680,7 @@ test.describe("MLS group encryption", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.realm.update",
+        kind: "ak.realm.update",
         payload: {
           target_ref: realmId,
           patch: { encryption_profile: { $op: "set", value: "none" } },
@@ -1699,7 +1699,7 @@ test.describe("MLS group encryption", () => {
   // operation validation, so create-lock enforcement only happened later during
   // projection. soland now registers circle operation schemas; this test pins
   // the synchronous rejection.
-  test("ck.circle.update that patches encryption_profile is rejected (create-locked)", async ({
+  test("ak.circle.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -1721,11 +1721,11 @@ test.describe("MLS group encryption", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.circle.create",
+        kind: "ak.circle.create",
         payload: {
           object: {
             id: circleId,
-            schema: "ck.schema.circle.v1",
+            schema: "ak.schema.circle.v1",
             realm_id: realmId,
             title: `lock circle ${stamp}`,
             display: {
@@ -1751,7 +1751,7 @@ test.describe("MLS group encryption", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.circle.update",
+        kind: "ak.circle.update",
         payload: {
           target_ref: circleId,
           patch: { encryption_profile: { $op: "set", value: "none" } },
@@ -1837,7 +1837,7 @@ test.describe("MLS group encryption", () => {
         }
         const postData = req.postData() ?? "";
         if (
-          postData.includes("ck.strand.update") &&
+          postData.includes("ak.strand.update") &&
           postData.includes(privateDescription)
         ) {
           plaintextPrivateWrites.push(postData);

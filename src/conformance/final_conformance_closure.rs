@@ -8,21 +8,21 @@ use serde_json::{Map, Value, json};
 use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR: &str =
-    "ck.vector.applet.transaction_source_signature_anchor.v1";
+    "ak.vector.applet.transaction_source_signature_anchor.v1";
 pub const VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY: &str =
-    "ck.vector.calendar.rsvp_occurrence_key.v1";
-pub const VECTOR_ID_FEDERATION_TIMING_BUCKET: &str = "ck.vector.federation.timing_bucket.v1";
+    "ak.vector.calendar.rsvp_occurrence_key.v1";
+pub const VECTOR_ID_FEDERATION_TIMING_BUCKET: &str = "ak.vector.federation.timing_bucket.v1";
 pub const VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING: &str =
-    "ck.vector.mls.governance_epoch_binding.v1";
+    "ak.vector.mls.governance_epoch_binding.v1";
 pub const VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP: &str =
-    "ck.vector.moderation.franking_roundtrip.v1";
+    "ak.vector.moderation.franking_roundtrip.v1";
 pub const VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE: &str =
-    "ck.vector.moderation.evidence_package_minimal_disclosure.v1";
-pub const VECTOR_ID_MODERATION_APPEAL_ATOMICITY: &str = "ck.vector.moderation.appeal_atomicity.v1";
+    "ak.vector.moderation.evidence_package_minimal_disclosure.v1";
+pub const VECTOR_ID_MODERATION_APPEAL_ATOMICITY: &str = "ak.vector.moderation.appeal_atomicity.v1";
 pub const VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE: &str =
-    "ck.vector.relation.reference_projection_indistinguishable.v1";
+    "ak.vector.relation.reference_projection_indistinguishable.v1";
 pub const VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY: &str =
-    "ck.vector.sync.range_completeness_client_query.v1";
+    "ak.vector.sync.range_completeness_client_query.v1";
 
 pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR,
@@ -37,8 +37,8 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
 ];
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
-const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ck.vector_group.privacy_security.v1";
-const APPLET_TRANSACTION_OPERATION_ID: &str = "ck.edge.applet.command.transaction";
+const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ak.vector_group.privacy_security.v1";
+const APPLET_TRANSACTION_OPERATION_ID: &str = "ak.edge.applet.command.transaction";
 const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_arkret_inbound";
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]

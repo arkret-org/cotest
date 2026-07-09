@@ -23,7 +23,7 @@ pub fn run_state_resolution_fixture_suite() -> Result<()> {
 
 pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let value = load_fixture_value("cba-lattice-fixture.json")?;
-    validate_profile(&value, "ck.vector_group.cba_lattice.v1")?;
+    validate_profile(&value, "ak.vector_group.cba_lattice.v1")?;
 
     let vectors = value
         .get("vectors")
@@ -953,7 +953,7 @@ fn validate_notary_fault_equivocation_quarantine(vector: &Value, vector_name: &s
     require_str_eq(
         vector,
         "/fault_move/event_kind",
-        "ck.notary.fault.equivocation",
+        "ak.notary.fault.equivocation",
         vector_name,
     )?;
     let capability_refs =
@@ -980,7 +980,7 @@ fn validate_notary_fault_equivocation_quarantine(vector: &Value, vector_name: &s
     require_str_eq(
         vector,
         "/expected/fault_cell",
-        "ck.component.notary_fault.v1",
+        "ak.component.notary_fault.v1",
         vector_name,
     )?;
     require_str_eq(

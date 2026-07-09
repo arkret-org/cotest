@@ -46,8 +46,8 @@ import {
 test.describe.configure({ mode: "serial" });
 
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
-  "ck.profile.mls_governance_binding.full.v1";
-const MLS_REDUCER_PROFILE_V1 = "ck.reducer.v1";
+  "ak.profile.mls_governance_binding.full.v1";
+const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
 const MLS_CIPHER_SUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 
 // Content scheme that makes per-epoch history_secret shareable (§2.10). RRK
@@ -105,11 +105,11 @@ function realmCreateEnvelope(args: {
   const createdAt = canonicalTimestamp();
   const object: Record<string, unknown> = {
     id: args.realmId,
-    schema: "ck.schema.realm.v1",
+    schema: "ak.schema.realm.v1",
     title: args.title,
     created_by: args.ownerDid,
     trust_domain: "ak:trust_domain:soland.local",
-    schema_refs: ["ck.schema.realm.v1"],
+    schema_refs: ["ak.schema.realm.v1"],
     default_discoverability: "listed",
     default_join_rule: "invite",
     // §2.10.4: later-joiner history sharing presupposes "shared" visibility;
@@ -132,7 +132,7 @@ function realmCreateEnvelope(args: {
   return signedEventEnvelope({
     actorDid: args.ownerDid,
     realmId: args.realmId,
-    kind: "ck.realm.create",
+    kind: "ak.realm.create",
     createdAt,
     payload: { object },
   });
@@ -202,7 +202,7 @@ function rrkRealmKeyShareEnvelope(args: {
   return signedEventEnvelope({
     actorDid: args.senderDid,
     realmId: args.group.realmId,
-    kind: "ck.realm_key.share",
+    kind: "ak.realm_key.share",
     payload: {
       recipient_principal_id: args.recipientPrincipalId,
       recipient_device_id: args.recipientDeviceId,
@@ -258,7 +258,7 @@ async function submitExporterAeadGenesis(
     signedEventEnvelope({
       actorDid: owner.did,
       realmId,
-      kind: "ck.mls.genesis",
+      kind: "ak.mls.genesis",
       eventId: genesisEventId,
       payload: {
         mls_group_id: groupId,
@@ -296,7 +296,7 @@ async function submitCommit(
     signedEventEnvelope({
       actorDid: committer.did,
       realmId: group.realmId,
-      kind: "ck.mls.commit",
+      kind: "ak.mls.commit",
       eventId,
       payload: {
         mls_group_id: group.groupId,
@@ -329,7 +329,7 @@ async function submitExporterAeadMessage(
   const envelope = signedEventEnvelope({
     actorDid: author.did,
     realmId: group.realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     eventId,
     payload: {
       encrypted_content: {
@@ -343,7 +343,7 @@ async function submitExporterAeadMessage(
           aad_visibility_event_id: "routing_digest",
           aad: {
             realm_id: group.realmId,
-            event_kind: "ck.message.create",
+            event_kind: "ak.message.create",
             event_ref_digest: sha256Hash(`${eventId}:${group.realmId}`),
           },
           key_ref: {
@@ -484,7 +484,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           signedEventEnvelope({
             actorDid: user.did,
             realmId,
-            kind: "ck.member.state",
+            kind: "ak.member.state",
             payload: { realm_id: realmId, actor_id: user.did, membership: "leave" },
           }),
           { context: `member loss leave ${user.did}` },
@@ -624,7 +624,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.member.state",
+          kind: "ak.member.state",
           payload: { realm_id: realmId, actor_id: alice.did, membership: "leave" },
         }),
         { context: "alice leaves (no live re-sharer)" },
@@ -637,7 +637,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.member.state",
+          kind: "ak.member.state",
           payload: { realm_id: realmId, actor_id: dave.did, membership: "join" },
         }),
         { context: "dave joins after total live-member loss" },
@@ -720,7 +720,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.realm.policy_components",
+          kind: "ak.realm.policy_components",
           payload: {
             realm_id: realmId,
             value: {
@@ -784,7 +784,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.realm.policy_components",
+          kind: "ak.realm.policy_components",
           payload: {
             realm_id: realmId,
             value: {

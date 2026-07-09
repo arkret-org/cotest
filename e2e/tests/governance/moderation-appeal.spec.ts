@@ -41,7 +41,7 @@ test.describe("moderation appeal", () => {
     expect(appeal.state).toBe("submitted");
     const history = await getAppealHistory(request, fixture.reviewerToken, appeal.appeal_id);
     expect(history.map((event) => event.event_kind)).toEqual([
-      "ck.moderation.appeal.submit",
+      "ak.moderation.appeal.submit",
     ]);
     expect(history[0]).toMatchObject({
       appeal_id: appeal.appeal_id,
@@ -154,10 +154,10 @@ test.describe("moderation appeal", () => {
       "closed",
     ]);
     expect(history.map((event) => event.event_kind)).toEqual([
-      "ck.moderation.appeal.submit",
-      "ck.moderation.appeal.review",
-      "ck.moderation.appeal.decision",
-      "ck.moderation.appeal.close",
+      "ak.moderation.appeal.submit",
+      "ak.moderation.appeal.review",
+      "ak.moderation.appeal.decision",
+      "ak.moderation.appeal.close",
     ]);
   });
 
@@ -170,7 +170,7 @@ test.describe("moderation appeal", () => {
       fixture.moderatorToken,
       fixture.moderator.did,
       fixture.realmId,
-      "ck.moderation.appeal.review",
+      "ak.moderation.appeal.review",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
@@ -192,7 +192,7 @@ test.describe("moderation appeal", () => {
       fixture.appellantToken,
       fixture.appellant.did,
       fixture.realmId,
-      "ck.moderation.appeal.submit",
+      "ak.moderation.appeal.submit",
       appealPayload(fixture),
     );
     expect(duplicate.status()).toBe(412);
@@ -208,7 +208,7 @@ test.describe("moderation appeal", () => {
       fixture.reviewerToken,
       fixture.reviewer.did,
       fixture.realmId,
-      "ck.moderation.appeal.decision",
+      "ak.moderation.appeal.decision",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
@@ -232,7 +232,7 @@ test.describe("moderation appeal", () => {
       fixture.reviewerToken,
       fixture.reviewer.did,
       fixture.realmId,
-      "ck.moderation.appeal.close",
+      "ak.moderation.appeal.close",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
@@ -256,7 +256,7 @@ test.describe("moderation appeal", () => {
       fixture.reviewerToken,
       fixture.reviewer.did,
       fixture.realmId,
-      "ck.moderation.appeal.decision",
+      "ak.moderation.appeal.decision",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
@@ -336,7 +336,7 @@ async function createAppealFixture(
     signedEventEnvelope({
       actorDid: moderator.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: reviewer.did,
@@ -352,7 +352,7 @@ async function createAppealFixture(
     moderator.did,
     realmId,
     reviewer.did,
-    "ck.moderation.appeal.review",
+    "ak.moderation.appeal.review",
   );
   await grantCallCapability(
     request,
@@ -360,7 +360,7 @@ async function createAppealFixture(
     moderator.did,
     realmId,
     reviewer.did,
-    "ck.moderation.decision.lift",
+    "ak.moderation.decision.lift",
   );
   const message = await sendPlaintextMessageViaApi(
     request,
@@ -397,7 +397,7 @@ async function issueDecision(
   targetRef: string,
   actorDid: string,
 ) {
-  const envelope = signedModerationEvent(actorDid, realmId, "ck.moderation.decision", {
+  const envelope = signedModerationEvent(actorDid, realmId, "ak.moderation.decision", {
     target_ref: targetRef,
     decision: "quarantine",
     action: "quarantine_message",
@@ -426,7 +426,7 @@ async function banMemberViaApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: memberDid,
@@ -457,7 +457,7 @@ async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) 
   const envelope = signedModerationEvent(
     fixture.appellant.did,
     fixture.realmId,
-    "ck.moderation.appeal.submit",
+    "ak.moderation.appeal.submit",
     payload,
   );
   await submitSignedEventApi(request, fixture.appellantToken, envelope, {
@@ -480,7 +480,7 @@ async function reviewAppeal(
     fixture.reviewerToken,
     fixture.reviewer.did,
     fixture.realmId,
-    "ck.moderation.appeal.review",
+    "ak.moderation.appeal.review",
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
@@ -502,7 +502,7 @@ async function decideAppeal(
     fixture.reviewerToken,
     fixture.reviewer.did,
     fixture.realmId,
-    "ck.moderation.appeal.decision",
+    "ak.moderation.appeal.decision",
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
@@ -523,7 +523,7 @@ async function closeAppeal(
     fixture.reviewerToken,
     fixture.reviewer.did,
     fixture.realmId,
-    "ck.moderation.appeal.close",
+    "ak.moderation.appeal.close",
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
@@ -543,7 +543,7 @@ async function liftDecision(
   const envelope = signedModerationEvent(
     fixture.reviewer.did,
     fixture.realmId,
-    "ck.moderation.decision.lift",
+    "ak.moderation.decision.lift",
     {
       target_ref: fixture.targetRef,
       decision_ref: fixture.decisionId,
@@ -590,9 +590,9 @@ function signedModerationEvent(
     actorDid,
     realmId,
     kind,
-    schemaId: kind.startsWith("ck.moderation.appeal.")
-      ? "ck.schema.moderation_appeal.v1"
-      : "ck.schema.event_payload.v1",
+    schemaId: kind.startsWith("ak.moderation.appeal.")
+      ? "ak.schema.moderation_appeal.v1"
+      : "ak.schema.event_payload.v1",
     payload,
   });
 }

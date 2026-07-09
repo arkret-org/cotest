@@ -270,12 +270,12 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
     json!({
         "object": {
             "id": realm_id,
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "title": "Federation Contract Realm",
             "summary": "federation contract fixture",
             "trust_domain": trust_domain_from_service_did(creator),
             "created_by": creator,
-            "schema_refs": ["ck.schema.realm.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
             "default_join_rule": "invite",
             "history_visibility": "shared",
@@ -371,7 +371,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let realm_create = signed_federation_event(
         realm_create_event_id,
-        "ck.realm.create",
+        "ak.realm.create",
         realm_id,
         remote_service_did,
         1,
@@ -387,7 +387,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     // the delivery-binding policy admitting the binding, then bind the member.
     let delivery_policy = signed_federation_event(
         policy_event_id,
-        "ck.realm.delivery_binding_policy",
+        "ak.realm.delivery_binding_policy",
         realm_id,
         remote_service_did,
         2,
@@ -399,7 +399,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     )?;
     let member_binding = signed_federation_event(
         member_event_id,
-        "ck.member.state",
+        "ak.member.state",
         realm_id,
         remote_service_did,
         3,
@@ -419,7 +419,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     )?;
     let event = signed_federation_event(
         replay_event_id,
-        "ck.message.create",
+        "ak.message.create",
         realm_id,
         remote_service_did,
         4,
@@ -534,7 +534,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let invalid_event = signed_federation_event(
         invalid_event_id,
-        "ck.message.create",
+        "ak.message.create",
         realm_id,
         remote_service_did,
         5,
@@ -577,7 +577,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let redaction = signed_federation_event(
         redaction_event_id,
-        "ck.message.redact",
+        "ak.message.redact",
         realm_id,
         remote_service_did,
         6,
@@ -645,7 +645,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         &alice,
         "did:web:alice.example",
         realm_id,
-        "ck.realm.create",
+        "ak.realm.create",
         federation_realm_payload(realm_id, "did:web:alice.example", &[server.service_did()]),
         StatusCode::OK,
     )
@@ -662,7 +662,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         &alice,
         "did:web:alice.example",
         realm_id,
-        "ck.realm.delivery_binding_policy",
+        "ak.realm.delivery_binding_policy",
         json!({
             "realm_id": realm_id,
             "allow_binding_sources": ["explicit"],
@@ -685,7 +685,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         &alice,
         "did:web:alice.example",
         realm_id,
-        "ck.member.state",
+        "ak.member.state",
         member_join_payload_with_delivery_binding(
             realm_id,
             "did:web:alice.example",
@@ -711,7 +711,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     let event_id = "ak:event:0196419b-0000-7000-8000-00000000fe22";
     let event = signed_federation_event(
         event_id,
-        "ck.message.create",
+        "ak.message.create",
         realm_id,
         "did:web:alice.example",
         100,
@@ -719,7 +719,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
             "strand_id": realm_id.replacen("ak:realm:", "ak:strand:", 1),
             "track_name": "discussion",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "searchable federated payload",
                 "format": "plain"
             }

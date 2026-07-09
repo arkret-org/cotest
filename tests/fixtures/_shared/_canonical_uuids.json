@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.canonical_uuids.v1",
+  "profile": "ak.profile.canonical_uuids.v1",
   "version": "2026-05-10",
   "comment": "Round 28 Q2 — shared canonical typed-UUID baseline. Several fixtures reference the same demo Space / event / Move / Anchor IDs to keep cross-fixture audit trails coherent. Fixtures that use these UUIDs SHOULD declare `inherits: [\"_shared/_canonical_uuids.json\"]` for discoverability. The UUIDs are valid UUIDv7 layouts (timestamp prefix + random tail) that match the spec's `ck:<kind>:<uuidv7>` typed wire format.",
   "demo_space": {

@@ -22,19 +22,19 @@ use arkret_core::models::{Handle, HandleBindingState, HandleClaim, Mention};
 use serde_json::json;
 
 pub const VECTOR_ID_MENTION_NEW_ACCEPTED: &str =
-    "ck.cotest_vector.mention_rendering.new_shape_accepted.v1";
+    "ak.cotest_vector.mention_rendering.new_shape_accepted.v1";
 pub const VECTOR_ID_MENTION_STEP1_UNIQUE: &str =
-    "ck.cotest_vector.mention_rendering.render_step1_unique_success.v1";
+    "ak.cotest_vector.mention_rendering.render_step1_unique_success.v1";
 pub const VECTOR_ID_MENTION_STEP1_MULTI_TO_STEP2: &str =
-    "ck.cotest_vector.mention_rendering.render_step1_multi_to_step2_live.v1";
+    "ak.cotest_vector.mention_rendering.render_step1_multi_to_step2_live.v1";
 pub const VECTOR_ID_MENTION_FALLBACK_CACHED: &str =
-    "ck.cotest_vector.mention_rendering.render_fallback_cached.v1";
+    "ak.cotest_vector.mention_rendering.render_fallback_cached.v1";
 pub const VECTOR_ID_MENTION_FALLBACK_NAME_ONLY: &str =
-    "ck.cotest_vector.mention_rendering.render_fallback_name_only.v1";
+    "ak.cotest_vector.mention_rendering.render_fallback_name_only.v1";
 pub const VECTOR_ID_MENTION_FALLBACK_UNRESOLVED: &str =
-    "ck.cotest_vector.mention_rendering.render_fallback_unresolved.v1";
+    "ak.cotest_vector.mention_rendering.render_fallback_unresolved.v1";
 pub const VECTOR_ID_MENTION_ACTOR_ATTRIBUTION_INDEPENDENT: &str =
-    "ck.cotest_vector.mention_rendering.actor_attribution_independent_of_handle_at_time.v1";
+    "ak.cotest_vector.mention_rendering.actor_attribution_independent_of_handle_at_time.v1";
 
 pub const ALL_MENTION_RENDERING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_MENTION_NEW_ACCEPTED,

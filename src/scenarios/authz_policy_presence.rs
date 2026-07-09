@@ -30,7 +30,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_before_grant = expect_json(
         alice.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "ck.realm.admin",
+            "action": "ak.realm.admin",
             "resource": {
                 "kind": "realm",
                 "id": realm_id,
@@ -59,16 +59,16 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         &alice.token,
         &alice.actor,
         &realm_id,
-        "ck.capability.grant",
+        "ak.capability.grant",
         json!({
             "grant_id": manage_grant_id,
             "grant": {
                 "id": manage_grant_id,
-                "schema": "ck.schema.capability.v1",
+                "schema": "ak.schema.capability.v1",
                 "realm_id": realm_id,
                 "issuer": alice.actor,
                 "subject": bob.actor,
-                "actions": ["ck.realm.admin"],
+                "actions": ["ak.realm.admin"],
                 "resources": [{
                     "kind": "realm",
                     "realm_id": realm_id
@@ -112,7 +112,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let allowed_after_grant = expect_json(
         alice.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "ck.realm.admin",
+            "action": "ak.realm.admin",
             "resource": {
                 "kind": "realm",
                 "id": realm_id,
@@ -141,7 +141,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let morph_id = format!("ak:morph:{id_suffix}");
     let negative_checks = [
         (
-            "ck.message.create",
+            "ak.message.create",
             json!({
                 "kind": "strand",
                 "id": strand_id,
@@ -151,7 +151,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "no_strand_track_message_grant",
         ),
         (
-            "ck.pin.add",
+            "ak.pin.add",
             json!({
                 "kind": "strand",
                 "id": strand_id,
@@ -161,7 +161,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "capability_denied",
         ),
         (
-            "ck.rsvp.set",
+            "ak.rsvp.set",
             json!({
                 "kind": "strand",
                 "id": strand_id,
@@ -171,7 +171,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "capability_denied",
         ),
         (
-            "ck.policy.manage",
+            "ak.policy.manage",
             json!({
                 "kind": "realm",
                 "id": realm_id,
@@ -180,7 +180,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "capability_denied",
         ),
         (
-            "ck.relation.create",
+            "ak.relation.create",
             json!({
                 "kind": "relation",
                 "id": relation_id,
@@ -190,7 +190,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "capability_denied",
         ),
         (
-            "ck.morph.create",
+            "ak.morph.create",
             json!({
                 "kind": "morph",
                 "id": morph_id,
@@ -209,7 +209,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         &alice.token,
         &alice.actor,
         &realm_id,
-        "ck.capability.revoke",
+        "ak.capability.revoke",
         json!({ "grant_id": manage_grant_id }),
         StatusCode::OK,
     )
@@ -219,7 +219,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_after_revoke = expect_json(
         alice.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "ck.realm.admin",
+            "action": "ak.realm.admin",
             "resource": {
                 "kind": "realm",
                 "id": realm_id,
@@ -381,7 +381,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     )
     .await?;
     assert_eq!(presence_accepted["accepted"], true);
-    assert_eq!(presence_accepted["kind"], "ck.presence");
+    assert_eq!(presence_accepted["kind"], "ak.presence");
 
     let presence_sync = expect_account_subscribe_delta(
         alice.get("/_arkret/self/account/subscribe?catchup=true"),
@@ -475,14 +475,14 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             "policy_id": "ak:policy:presence-policy-allow",
             "scope": policy_realm_id,
             "subject_ref": alice.actor,
-            "policy_type": "ck.message.create",
+            "policy_type": "ak.message.create",
             // Realm-scoped resource constraint: soland matches `resource.kind`
             // against the request's `source.service_type`, so leave `kind` unset
             // (the policy applies to the realm regardless of calling service) and
             // constrain only on realm_id.
             "resource": {"realm_id": policy_realm_id},
             "effect": "allow",
-            "actions": ["ck.message.create"],
+            "actions": ["ak.message.create"],
             "obligations": []
         })),
         StatusCode::OK,
@@ -497,7 +497,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_id": "req-allow",
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "ck.message.create",
+                "action": "ak.message.create",
                 "actor_id": "did:web:alice.example",
                 "source": {
                     "service_did": "did:web:soland.cotest.local",
@@ -526,7 +526,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_id": "req-review",
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "ck.realm.destroy",
+                "action": "ak.realm.destroy",
                 "actor_id": "did:web:alice.example",
                 "source": {
                     "service_did": "did:web:soland.cotest.local",
@@ -548,7 +548,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_id": "req-invalid",
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "ck.message.create",
+                "action": "ak.message.create",
                 // `actor_id` is a typed Did; a bare "alice" parses as JSON but
                 // violates the declared schema, so it is rejected as
                 // `schema_violation` (422) before any semantic policy validation.
@@ -608,7 +608,7 @@ fn presence_envelope(
         }
     }
     let mut envelope = arkret_core::EphemeralEnvelope::new(
-        "ck.presence",
+        "ak.presence",
         arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
         arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
         Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),

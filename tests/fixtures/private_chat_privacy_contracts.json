@@ -11,7 +11,7 @@
   "account_data_cases": {
     "positive": {
       "name": "realm_private_pin_pinned_true",
-      "key": "ck.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
+      "key": "ak.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
       "expect_valid": true,
       "payload": {
         "version": 1,
@@ -33,7 +33,7 @@
     },
     "negative": {
       "name": "realm_private_pin_subject_id_mismatch",
-      "key": "ck.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
+      "key": "ak.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
       "expect_valid": false,
       "expected_error": "realm_remark_subject_mismatch",
       "payload": {
@@ -60,7 +60,7 @@
       "name": "realm_remark_not_in_directory_projection",
       "surface": "directory_projection",
       "payload": {
-        "operation_id": "ck.find.directory.query.search_realms",
+        "operation_id": "ak.find.directory.query.search_realms",
         "result": {
           "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000101",
           "title": "Engineering",
@@ -81,7 +81,7 @@
         "account_data_key"
       ],
       "forbidden_literals": [
-        "ck.contacts.realm",
+        "ak.contacts.realm",
         "Pinned Engineering",
         "Alice private note"
       ]
@@ -90,7 +90,7 @@
       "name": "realm_remark_not_in_bridge_payload",
       "surface": "bridge_payload",
       "payload": {
-        "operation_id": "ck.open.mimi.command.notify",
+        "operation_id": "ak.open.mimi.command.notify",
         "bridge": "mimi_interop",
         "payload": {
           "room_id": "mimi-room-7d9e",
@@ -106,7 +106,7 @@
         "account_data_key"
       ],
       "forbidden_literals": [
-        "ck.contacts.realm",
+        "ak.contacts.realm",
         "Pinned Engineering",
         "Alice private note"
       ]
@@ -115,7 +115,7 @@
       "name": "realm_remark_not_in_push_payload",
       "surface": "push_payload",
       "payload": {
-        "operation_id": "ck.edge.push.command.notify",
+        "operation_id": "ak.edge.push.command.notify",
         "notification": {
           "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
@@ -133,7 +133,7 @@
         "account_data_key"
       ],
       "forbidden_literals": [
-        "ck.contacts.realm",
+        "ak.contacts.realm",
         "Pinned Engineering",
         "Alice private note"
       ]

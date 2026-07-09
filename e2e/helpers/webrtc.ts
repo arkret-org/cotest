@@ -216,7 +216,7 @@ export function buildCallSignalEnvelope(args: {
   const createdAt = canonicalTimestamp(sentAt);
 
   const envelope: Record<string, unknown> = {
-    kind: "ck.call.signal",
+    kind: "ak.call.signal",
     realm_id: args.realmId,
     actor_id: args.actorDid,
     device_id: args.deviceId,
@@ -278,9 +278,9 @@ export function buildCallSignalEnvelope(args: {
 // explicitly. Grants are owner-issued (`capabilities.md` §3 — the issuer MUST
 // hold the action; the owner does).
 
-export const CAP_CALL_SIGNAL_SEND = "ck.call.signal.send";
-export const CAP_CALL_JOIN = "ck.call.join";
-export const CAP_CALL_MODERATE = "ck.call.moderate";
+export const CAP_CALL_SIGNAL_SEND = "ak.call.signal.send";
+export const CAP_CALL_JOIN = "ak.call.join";
+export const CAP_CALL_MODERATE = "ak.call.moderate";
 
 export async function grantCallCapability(
   request: APIRequestContext,
@@ -300,16 +300,16 @@ export async function grantCallCapability(
   };
   if (
     [
-      "ck.moderation.decision",
-      "ck.moderation.decision.lift",
-      "ck.realm.moderation_policy",
+      "ak.moderation.decision",
+      "ak.moderation.decision.lift",
+      "ak.realm.moderation_policy",
     ].includes(action)
   ) {
     delegationConstraint.depends_on_moderation_state = true;
   }
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
-    schema: "ck.schema.capability.v1",
+    schema: "ak.schema.capability.v1",
     realm_id: realmId,
     issuer: ownerDid,
     subject: subjectDid,
@@ -334,7 +334,7 @@ export async function grantCallCapability(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ck.capability.grant",
+      kind: "ak.capability.grant",
       payload: {
         grant_id: grantId,
         grant,
@@ -395,7 +395,7 @@ export async function seedCallState(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ck.call.state",
+      kind: "ak.call.state",
       payload,
     }),
     { context: `seed ck.call.state ${callId}` },
@@ -447,7 +447,7 @@ export async function postCallSignal(
   ).toBe(200);
   const body = JSON.parse(text) as Record<string, unknown>;
   expect(body.accepted, "relay accepted the signal").toBe(true);
-  expect(body.kind).toBe("ck.call.signal");
+  expect(body.kind).toBe("ak.call.signal");
   return body;
 }
 
@@ -468,7 +468,7 @@ export async function relayedCallSignals(
   const ephemeral = frame?.realms?.[realmId]?.ephemeral ?? [];
   const out: Array<Record<string, unknown>> = [];
   for (const item of ephemeral) {
-    if (item.type !== "ck.call.signal") {
+    if (item.type !== "ak.call.signal") {
       continue;
     }
     const signals = Array.isArray(item.call_signals)
@@ -499,7 +499,7 @@ export { authHeaders };
 // the issued LiveKit token is a standard 3-segment JWT so the harness can
 // decode the LiveKit `video` grant claims without a live SFU.
 
-export const PARTICIPANT_BINDING_SCHEME = "ck.media.participant_binding.v1";
+export const PARTICIPANT_BINDING_SCHEME = "ak.media.participant_binding.v1";
 export const MEDIA_TOKEN_TTL_MAX_SECS = 600;
 
 export interface MediaFocusConfig {
@@ -530,7 +530,7 @@ export async function configureMediaService(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ck.realm.media_service",
+      kind: "ak.realm.media_service",
       payload: {
         media_service: {
           service_id: serviceDid,

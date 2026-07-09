@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.frontier_conflict_resolution_vectors.v1",
+  "profile": "ak.profile.frontier_conflict_resolution_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "E4 Round 27 — federation frontier conflict resolution. Spec authority: federation/move-anchor-replication.md + authz/event-auth-state-resolution.md (lattice join). Two federation peers each issue a concurrent Move on the same cell. Pulling the peer's Anchor must resolve the conflict via lattice join — not last-write-wins, not duplicate apply. CasRegister conflicts go to Bottom; OrSet additions union; Counter PN sums.",

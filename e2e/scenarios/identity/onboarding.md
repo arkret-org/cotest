@@ -51,7 +51,7 @@
    - 创建 principal control Realm (`purpose="principal_control"`)
    - 写入 `ck.device.authorize` 把第一台设备授权
    - 发布 `ck.cross_signing.publish.v1` (PSK / SSK / USK)
-   - coauth 颁发首个 `ck.session.grant` (短期)
+   - coauth 颁发首个 `ak.session.grant` (短期)
 5. inkson 收到 `{ did, session_credential, principal_control_realm_id }`,写入 localStorage
 
 ### Phase B — alice 验证 onboarding 落地

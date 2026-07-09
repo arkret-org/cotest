@@ -1,14 +1,14 @@
 {
   "suite": "recovery_policy",
-  "profile": "ck.profile.recovery_policy_vectors.v1",
-  "schema_ref": "ck.schema.recovery_policy.v1",
+  "profile": "ak.profile.recovery_policy_vectors.v1",
+  "schema_ref": "ak.schema.recovery_policy.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/recovery-policy.schema.json",
   "cases": [
     {
       "name": "active_passphrase_policy_minimal",
       "expect": "pass",
       "policy": {
-        "schema": "ck.schema.recovery_policy.v1",
+        "schema": "ak.schema.recovery_policy.v1",
         "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a1",
         "lifecycle": "active",
         "epoch": 1,
@@ -23,7 +23,7 @@
       "name": "device_quorum_three_of_five",
       "expect": "pass",
       "policy": {
-        "schema": "ck.schema.recovery_policy.v1",
+        "schema": "ak.schema.recovery_policy.v1",
         "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a2",
         "lifecycle": "active",
         "epoch": 2,
@@ -38,7 +38,7 @@
       "name": "trusted_recovery_service_oidc",
       "expect": "pass",
       "policy": {
-        "schema": "ck.schema.recovery_policy.v1",
+        "schema": "ak.schema.recovery_policy.v1",
         "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a3",
         "lifecycle": "active",
         "epoch": 3,
@@ -54,7 +54,7 @@
       "name": "principal_signing_sovereign",
       "expect": "pass",
       "policy": {
-        "schema": "ck.schema.recovery_policy.v1",
+        "schema": "ak.schema.recovery_policy.v1",
         "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a4",
         "lifecycle": "active",
         "epoch": 4,
@@ -69,7 +69,7 @@
       "expect": "fail",
       "reason": "lifecycle=retired blocks new recovery sessions",
       "policy": {
-        "schema": "ck.schema.recovery_policy.v1",
+        "schema": "ak.schema.recovery_policy.v1",
         "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a5",
         "lifecycle": "retired",
         "epoch": 5,
@@ -86,7 +86,7 @@
       "reason": "epoch rollback rejected with recovery_policy_mismatch",
       "prior_epoch": 7,
       "policy": {
-        "schema": "ck.schema.recovery_policy.v1",
+        "schema": "ak.schema.recovery_policy.v1",
         "policy_id": "ak:recovery_policy:01999999-0000-7000-8000-0000000000a6",
         "lifecycle": "active",
         "epoch": 6,

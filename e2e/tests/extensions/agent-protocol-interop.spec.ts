@@ -83,7 +83,7 @@ test.describe("agent protocol interop", () => {
     expect(
       claimedIds,
       "soland describe must claim the agent_runtime extension profile",
-    ).toContain("ck.profile.agent_runtime.v1");
+    ).toContain("ak.profile.agent_runtime.v1");
     await testInfo.attach("server-describe", {
       body: JSON.stringify(describeBody, null, 2),
       contentType: "application/json",
@@ -167,8 +167,8 @@ test.describe("agent protocol interop", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.agent.endpoint",
-        schemaId: "ck.schema.agent.v1",
+        kind: "ak.agent.endpoint",
+        schemaId: "ak.schema.agent.v1",
         payload: endpointPayload,
       }),
       { context: "register ck.agent.endpoint" },
@@ -256,8 +256,8 @@ test.describe("agent protocol interop", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.agent.endpoint",
-        schemaId: "ck.schema.agent.v1",
+        kind: "ak.agent.endpoint",
+        schemaId: "ak.schema.agent.v1",
         payload: {
           agent_id: remoteAgent.did,
           endpoints: [{ protocol: "a2a" }],
@@ -278,8 +278,8 @@ test.describe("agent protocol interop", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.agent.interop_session.start",
-        schemaId: "ck.schema.agent.v1",
+        kind: "ak.agent.interop_session.start",
+        schemaId: "ak.schema.agent.v1",
         payload: {
           session_id: sessionId,
           counterparty_agent: remoteAgent.did,
@@ -310,7 +310,7 @@ test.describe("agent protocol interop", () => {
           sessionId,
       );
       const hasResult = sessionEvents.some(
-        (event) => eventKind(event) === "ck.agent.interop_session.result",
+        (event) => eventKind(event) === "ak.agent.interop_session.result",
       );
       if (hasResult) break;
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -322,9 +322,9 @@ test.describe("agent protocol interop", () => {
 
     // 1. Ordering: start precedes status(working) precedes result(completed).
     const kinds = sessionEvents.map(eventKind);
-    const startIdx = kinds.indexOf("ck.agent.interop_session.start");
-    const statusIdx = kinds.indexOf("ck.agent.interop_session.status");
-    const resultIdx = kinds.indexOf("ck.agent.interop_session.result");
+    const startIdx = kinds.indexOf("ak.agent.interop_session.start");
+    const statusIdx = kinds.indexOf("ak.agent.interop_session.status");
+    const resultIdx = kinds.indexOf("ak.agent.interop_session.result");
     expect(startIdx, "start event present").toBeGreaterThanOrEqual(0);
     expect(statusIdx, "status event present").toBeGreaterThan(startIdx);
     expect(resultIdx, "result event present").toBeGreaterThan(statusIdx);
@@ -332,7 +332,7 @@ test.describe("agent protocol interop", () => {
     expect(
       kinds.slice(resultIdx + 1),
       "no status event may follow the terminal result",
-    ).not.toContain("ck.agent.interop_session.status");
+    ).not.toContain("ak.agent.interop_session.status");
 
     const statusEvent = sessionEvents[statusIdx];
     expect((statusEvent.payload as Record<string, unknown>).status).toBe(
@@ -446,18 +446,18 @@ test.describe("agent protocol interop", () => {
       const body = await events.json();
       const list: Array<Record<string, unknown>> = body.events ?? [];
       const grantEvent = list.find((event) => {
-        if (eventKind(event) !== "ck.capability.grant") {
+        if (eventKind(event) !== "ak.capability.grant") {
           return false;
         }
         const payload = event.payload as Record<string, unknown> | undefined;
         const grant = payload?.grant as Record<string, unknown> | undefined;
         return grant?.id === grantId;
       });
-      expect(grantEvent, "ck.capability.grant for the authored grant").toBeTruthy();
+      expect(grantEvent, "ak.capability.grant for the authored grant").toBeTruthy();
       const grant = (grantEvent!.payload as Record<string, unknown>)
         .grant as Record<string, unknown>;
       expect(grant.actions).toEqual(
-        expect.arrayContaining(["ck.agent.interop_session.start"]),
+        expect.arrayContaining(["ak.agent.interop_session.start"]),
       );
       expect(grant.subject).toBe(remoteAgent.did);
       const constraints = grant.constraints as Record<string, unknown>;
@@ -498,8 +498,8 @@ test.describe("agent protocol interop", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.agent.endpoint",
-        schemaId: "ck.schema.agent.v1",
+        kind: "ak.agent.endpoint",
+        schemaId: "ak.schema.agent.v1",
         payload: {
           agent_id: remoteAgent.did,
           endpoints: [{ protocol: "a2a" }],
@@ -518,8 +518,8 @@ test.describe("agent protocol interop", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.agent.interop_session.start",
-        schemaId: "ck.schema.agent.v1",
+        kind: "ak.agent.interop_session.start",
+        schemaId: "ak.schema.agent.v1",
         payload: {
           session_id: sessionId,
           counterparty_agent: remoteAgent.did,
@@ -541,8 +541,8 @@ test.describe("agent protocol interop", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.agent.interop_session.status",
-          schemaId: "ck.schema.agent.v1",
+          kind: "ak.agent.interop_session.status",
+          schemaId: "ak.schema.agent.v1",
           payload: { session_id: sessionId, status },
         }),
         { context: `inject status ${status}` },
@@ -654,14 +654,14 @@ test.describe("agent protocol interop", () => {
       const body = await events.json();
       const list: Array<Record<string, unknown>> = body.events ?? [];
       const strandEvent = list.find((event) => {
-        if (eventKind(event) !== "ck.strand.create") {
+        if (eventKind(event) !== "ak.strand.create") {
           return false;
         }
         const payload = event.payload as Record<string, unknown> | undefined;
         const object = payload?.object as Record<string, unknown> | undefined;
         return object?.id === strandId;
       });
-      expect(strandEvent, "ck.strand.create for the published strand").toBeTruthy();
+      expect(strandEvent, "ak.strand.create for the published strand").toBeTruthy();
       expect(strandEvent!.actor_id).toBe(alice.did);
       const object = (strandEvent!.payload as Record<string, unknown>)
         .object as Record<string, unknown>;

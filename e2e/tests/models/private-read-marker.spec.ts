@@ -36,7 +36,7 @@ test.describe.configure({ mode: "serial" });
 // `account/subscribe` and observes the update as a `ck.read_cursor.update`
 // to-device envelope. Bounded sync window per scenarios/models §E10.1 (30s);
 // the local harness converges far faster, so a single catchup poll suffices.
-const READ_MARKER_UPDATE_KIND = "ck.read_cursor.update";
+const READ_MARKER_UPDATE_KIND = "ak.read_cursor.update";
 
 test.describe("private read marker", () => {
   // Non-fixme baseline: on a single device, writing the actor-private read
@@ -541,7 +541,7 @@ async function sendEncryptedMentionMessage(
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
@@ -563,7 +563,7 @@ function encryptedEnvelope(
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls-exporter-aead-v1",
     version: "1.0",

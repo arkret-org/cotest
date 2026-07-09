@@ -10,7 +10,7 @@ use crate::conformance::{required_str, validate_profile};
 /// cross-Realm rejection.
 pub fn run_multi_realm_federation_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("multi_realm_federation_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.multi_realm_federation_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.multi_realm_federation_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

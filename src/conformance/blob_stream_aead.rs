@@ -12,13 +12,13 @@ use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
 
-pub const VECTOR_ID_STREAM_AEAD_ROUNDTRIP: &str = "ck.vector.blob.stream_aead_roundtrip.v1";
+pub const VECTOR_ID_STREAM_AEAD_ROUNDTRIP: &str = "ak.vector.blob.stream_aead_roundtrip.v1";
 pub const VECTOR_ID_STREAM_AEAD_TRUNCATION_REJECTED: &str =
-    "ck.vector.blob.stream_aead_truncation_rejected.v1";
+    "ak.vector.blob.stream_aead_truncation_rejected.v1";
 pub const VECTOR_ID_STREAM_AEAD_REORDER_REJECTED: &str =
-    "ck.vector.blob.stream_aead_reorder_rejected.v1";
+    "ak.vector.blob.stream_aead_reorder_rejected.v1";
 pub const VECTOR_ID_STREAM_AEAD_SCHEME_CLOSURE: &str =
-    "ck.vector.blob.stream_aead_scheme_closure.v1";
+    "ak.vector.blob.stream_aead_scheme_closure.v1";
 
 pub const ALL_BLOB_STREAM_AEAD_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_STREAM_AEAD_ROUNDTRIP,
@@ -28,7 +28,7 @@ pub const ALL_BLOB_STREAM_AEAD_VECTOR_IDS: &[&str] = &[
 ];
 
 const BLOB_STREAM_AEAD_FIXTURE_FILE: &str = "blob-stream-aead-fixture.json";
-const BLOB_STREAM_AEAD_PROFILE: &str = "ck.profile.blob_node.v1";
+const BLOB_STREAM_AEAD_PROFILE: &str = "ak.profile.blob_node.v1";
 const BLOB_ENCRYPTED_ATTACHMENT_SCHEMA: &str =
     "schemas/blob.schema.json#/$defs/encrypted_attachment";
 const SEGMENT_TAG_LEN: usize = 16;
@@ -246,7 +246,7 @@ pub fn run_stream_aead_scheme_closure_vector() -> Result<()> {
     let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
 
     let mut unknown_scheme = env.clone();
-    unknown_scheme.scheme = "ck.blob.stream_aead.v2".to_owned();
+    unknown_scheme.scheme = "ak.blob.stream_aead.v2".to_owned();
     expect_reason(
         decrypt_stream(&ciphertext, &unknown_scheme, &key).unwrap_err(),
         "unsupported_attachment_scheme",

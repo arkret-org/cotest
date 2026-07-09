@@ -178,8 +178,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
                 "messages": {
                     "did:web:alice.example": {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ck.mls.application",
-                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device"),
+                            "kind": "ak.mls.application",
+                            "content": encrypted_envelope("ak.mls.application", "opaque-to-device"),
                             "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
@@ -203,8 +203,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
                 "messages": {
                     "did:web:alice.example": {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ck.mls.application",
-                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device"),
+                            "kind": "ak.mls.application",
+                            "content": encrypted_envelope("ak.mls.application", "opaque-to-device"),
                             "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
@@ -428,12 +428,12 @@ fn signed_realm_create_event(
     let payload = json!({
         "object": {
             "id": realm_id,
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "title": title,
             "summary": title,
             "trust_domain": "ak:trust_domain:delivery-media.cotest.local",
             "created_by": actor_id,
-            "schema_refs": ["ck.schema.realm.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "public",
             "default_join_rule": "public",
             "history_visibility": "world_readable",
@@ -458,7 +458,7 @@ fn signed_realm_create_event(
         actor_seq,
         realm_id,
         actor_id,
-        "ck.realm.create",
+        "ak.realm.create",
         payload,
     )
 }
@@ -480,7 +480,7 @@ fn signed_membership_event(
         actor_seq,
         realm_id,
         actor_id,
-        "ck.member.state",
+        "ak.member.state",
         payload,
     )
 }

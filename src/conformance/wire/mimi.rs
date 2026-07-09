@@ -9,20 +9,20 @@ use super::{emit_vector, load_local_fixture};
 use crate::conformance::{load_fixture_value, required_str, validate_profile};
 
 const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
-    "ck.vector.mimi.provider_directory_draft_pinning.v1",
-    "ck.vector.mimi.room_binding_projection.v1",
-    "ck.vector.mimi.keypackage_claim_lifecycle.v1",
-    "ck.vector.mimi.content_roundtrip.v1",
-    "ck.vector.mimi.identifier_query_privacy.v1",
-    "ck.vector.mimi.consent_isolation.v1",
-    "ck.vector.mimi.proxy_download_policy.v1",
-    "ck.vector.mimi.unsupported_draft_fail_closed.v1",
+    "ak.vector.mimi.provider_directory_draft_pinning.v1",
+    "ak.vector.mimi.room_binding_projection.v1",
+    "ak.vector.mimi.keypackage_claim_lifecycle.v1",
+    "ak.vector.mimi.content_roundtrip.v1",
+    "ak.vector.mimi.identifier_query_privacy.v1",
+    "ak.vector.mimi.consent_isolation.v1",
+    "ak.vector.mimi.proxy_download_policy.v1",
+    "ak.vector.mimi.unsupported_draft_fail_closed.v1",
 ];
 
 /// MIMI Provider Facade artifact vectors.
 pub fn run_mimi_interop_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value("mimi-interop-fixture.json")?;
-    validate_profile(&fixture, "ck.profile.mimi_interop.v1")?;
+    validate_profile(&fixture, "ak.profile.mimi_interop.v1")?;
     if required_str(&fixture, "suite")? != "mimi_interop" {
         bail!("mimi interop fixture suite drifted");
     }
@@ -48,16 +48,16 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
         let name = required_str(case, "name")?;
         seen.insert(vector_id.to_owned());
         match vector_id {
-            "ck.vector.mimi.provider_directory_draft_pinning.v1" => {
+            "ak.vector.mimi.provider_directory_draft_pinning.v1" => {
                 validate_provider_directory_case(case, drafts)?
             }
-            "ck.vector.mimi.room_binding_projection.v1" => validate_room_binding_case(case)?,
-            "ck.vector.mimi.keypackage_claim_lifecycle.v1" => validate_keypackage_claim_case(case)?,
-            "ck.vector.mimi.content_roundtrip.v1" => validate_content_roundtrip_case(case)?,
-            "ck.vector.mimi.identifier_query_privacy.v1" => validate_identifier_query_case(case)?,
-            "ck.vector.mimi.consent_isolation.v1" => validate_consent_isolation_case(case)?,
-            "ck.vector.mimi.proxy_download_policy.v1" => validate_proxy_download_case(case)?,
-            "ck.vector.mimi.unsupported_draft_fail_closed.v1" => {
+            "ak.vector.mimi.room_binding_projection.v1" => validate_room_binding_case(case)?,
+            "ak.vector.mimi.keypackage_claim_lifecycle.v1" => validate_keypackage_claim_case(case)?,
+            "ak.vector.mimi.content_roundtrip.v1" => validate_content_roundtrip_case(case)?,
+            "ak.vector.mimi.identifier_query_privacy.v1" => validate_identifier_query_case(case)?,
+            "ak.vector.mimi.consent_isolation.v1" => validate_consent_isolation_case(case)?,
+            "ak.vector.mimi.proxy_download_policy.v1" => validate_proxy_download_case(case)?,
+            "ak.vector.mimi.unsupported_draft_fail_closed.v1" => {
                 validate_unsupported_draft_case(case, drafts)?
             }
             other => bail!("unexpected MIMI interop vector id {other}"),
@@ -82,7 +82,7 @@ fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> 
         bail!("provider directory must advertise mimi_provider_facade service_type");
     }
     let supported = string_set(input, "supported_profiles")?;
-    if !supported.contains("ck.profile.mimi_interop.v1") {
+    if !supported.contains("ak.profile.mimi_interop.v1") {
         bail!("provider directory must advertise ck.profile.mimi_interop.v1");
     }
     let mimi = required_field(input, "mimi")?;
@@ -115,11 +115,11 @@ fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> 
 
 fn validate_room_binding_case(case: &Value) -> Result<()> {
     let input = required_field(case, "input")?;
-    if required_str(input, "kind")? != "ck.mimi.room_binding" {
+    if required_str(input, "kind")? != "ak.mimi.room_binding" {
         bail!("room binding case must use ck.mimi.room_binding");
     }
     let payload = required_field(input, "payload")?;
-    if required_str(payload, "profile")? != "ck.profile.mimi_interop.v1" {
+    if required_str(payload, "profile")? != "ak.profile.mimi_interop.v1" {
         bail!("room binding profile drifted");
     }
     if required_str(payload, "status")? != "accepted" {
@@ -137,7 +137,7 @@ fn validate_room_binding_case(case: &Value) -> Result<()> {
 
 fn validate_keypackage_claim_case(case: &Value) -> Result<()> {
     let input = required_field(case, "input")?;
-    if required_str(input, "operation_id")? != "ck.open.mimi.exchange.request_key_material" {
+    if required_str(input, "operation_id")? != "ak.open.mimi.exchange.request_key_material" {
         bail!("keypackage vector operation id drifted");
     }
     let response = required_field(input, "response")?;
@@ -165,7 +165,7 @@ fn validate_keypackage_claim_case(case: &Value) -> Result<()> {
 
 fn validate_content_roundtrip_case(case: &Value) -> Result<()> {
     let input = required_field(case, "input")?;
-    if required_str(input, "target_format")? != "ck.message.create" {
+    if required_str(input, "target_format")? != "ak.message.create" {
         bail!("content roundtrip target format drifted");
     }
     if !required_str(input, "source_format")?.contains("GFM-MIMI") {
@@ -262,7 +262,7 @@ fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
 /// the facade cannot silently impersonate a standard MIMI component.
 pub fn run_mimi_components_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("mimi_components_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.mimi_components_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.mimi_components_vectors.v1")?;
 
     // §9.2 criticality round-trip
     let crit_section = fixture
@@ -387,7 +387,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
 /// fields match.
 pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("read_receipt_policy_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.read_receipt_policy_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.read_receipt_policy_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

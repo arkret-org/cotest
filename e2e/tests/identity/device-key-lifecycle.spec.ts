@@ -384,7 +384,7 @@ async function addEncryptedDescription(
     (response) =>
       response.url().includes("/_arkret/self/events") &&
       response.request().method() === "POST" &&
-      (response.request().postData() ?? "").includes("ck.strand.update"),
+      (response.request().postData() ?? "").includes("ak.strand.update"),
     { timeout: 60_000 },
   );
   await page.getByTestId("card-detail-save-button").click();

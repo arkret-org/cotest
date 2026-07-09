@@ -50,7 +50,7 @@ export type UserSession = {
   serverUrl: string;
   keepDeviceAuthorizationModal: boolean;
   /// The credential presented on `/_arkret/self/*`. Under the ②(A+②) model this
-  /// is the `ck.session.grant` JWT; a request to a self-path also requires the
+  /// is the `ak.session.grant` JWT; a request to a self-path also requires the
   /// DPoP + holder-proof material in `grant` below.
   sessionCredential: string;
   /// Real grant + DPoP material for direct (non-browser) self-path API calls.
@@ -75,7 +75,7 @@ export type OpenUserOpts = {
   /// This keeps diagnostics/page helpers but avoids seeding a fixture
   /// account/device into inkson.config.v1 before the product login flow runs.
   neutralLoginConfig?: boolean;
-  /// Real `ck.session.grant` JWT to inject as inkson's session credential.
+  /// Real `ak.session.grant` JWT to inject as inkson's session credential.
   /// When set together with `dpopSeedB64url`, inkson's dev-only boot injection
   /// rehydrates the grant + DPoP device key instead of relying on dev-login.
   grantJwt?: string;
@@ -705,7 +705,7 @@ export class JointUserPage {
 
   // Build the Authorization + DPoP headers for a direct (non-browser)
   // `/_arkret/self/*` call. Under the ②(A+②) model the credential is the
-  // ck.session.grant and soland requires a per-request DPoP proof.
+  // ak.session.grant and soland requires a per-request DPoP proof.
   private selfPathHeaders(method: string, url: string): Record<string, string> {
     const grant = this.session.grant;
     if (grant) {
@@ -776,7 +776,7 @@ export class JointUserPage {
     const envelope = signedEventEnvelope({
       actorDid: this.user.did,
       realmId,
-      kind: "ck.invite.accept",
+      kind: "ak.invite.accept",
       payload: {
         invite_id: inviteId,
       },
@@ -1301,7 +1301,7 @@ export async function openUser(
         "1",
       );
       // ②(A+②) real-grant injection: hand inkson's dev-only boot path the real
-      // ck.session.grant + the DPoP device seed it is bound to, so the wasm
+      // ak.session.grant + the DPoP device seed it is bound to, so the wasm
       // client rehydrates a genuine grant (coauth introspection passes, device
       // enrollment runs) instead of a soland-only dev-login credential. inkson reads
       // this key only when allow_localstorage_secrets is on. See inkson

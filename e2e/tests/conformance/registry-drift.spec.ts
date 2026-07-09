@@ -464,7 +464,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId: "ak:realm:01904100-0000-7000-8000-000000000997",
-        kind: "ck.read_cursor.advance",
+        kind: "ak.read_cursor.advance",
         payload: {},
       }),
     });
@@ -550,12 +550,12 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const messageEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.message.create",
-      schemaId: "ck.schema.message.v1",
+      kind: "ak.message.create",
+      schemaId: "ak.schema.message.v1",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        content: { kind: "ck.content.text", body: "forbidden-wire-fields probe" },
+        content: { kind: "ak.content.text", body: "forbidden-wire-fields probe" },
       },
     });
     const messageReceipt = await submitSignedEventApi(request, token, messageEnvelope, {
@@ -565,7 +565,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const cursorEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.read_cursor.advance",
+      kind: "ak.read_cursor.advance",
       payload: {},
     });
 

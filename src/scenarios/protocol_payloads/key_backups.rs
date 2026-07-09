@@ -104,7 +104,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             kdf: None,
             aead: KeyBackupAead {
                 name: "xchacha20_poly1305".to_owned(),
-                aead_profile: Some("ck.aead.xchacha20_poly1305.v1".to_owned()),
+                aead_profile: Some("ak.aead.xchacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
                 nonce: Some("nonce".to_owned()),
                 enc: None,
@@ -118,7 +118,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
             subdomain: "test".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
-                schema: "ck.schema.key_backup.v1".to_owned(),
+                schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: did(ACTOR_ID)?,
                 device_id: ENVELOPE_DEVICE_ID.to_owned(),
                 backup_class: BackupClass::MlsHistory,
@@ -201,10 +201,10 @@ async fn describe_backup_operations(server: &CokretServer) -> Result<()> {
         .as_array()
         .expect("supported operation list");
     for operation_id in [
-        "ck.self.keys.backups.resource.replace",
-        "ck.self.keys.backups.query.list",
-        "ck.self.keys.backups.command.unlock",
-        "ck.self.keys.backups.resource.delete",
+        "ak.self.keys.backups.resource.replace",
+        "ak.self.keys.backups.query.list",
+        "ak.self.keys.backups.command.unlock",
+        "ak.self.keys.backups.resource.delete",
     ] {
         assert!(
             operations
@@ -263,7 +263,7 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
     let mut proof = KeyBackupUnlockProof {
-        schema: "ck.schema.key_backup_unlock_proof.v1".to_owned(),
+        schema: "ak.schema.key_backup_unlock_proof.v1".to_owned(),
         recovery_session_id: RecoverySessionId::new(
             "ak:recovery_session:01964137-0000-7000-8000-0000000000aa",
         )?,

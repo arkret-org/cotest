@@ -206,7 +206,7 @@ export async function createRealmApi(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ck.realm.create",
+      kind: "ak.realm.create",
       createdAt,
       payload: {
         // `plaintext_visible_services` lives on the realm object only — the
@@ -214,12 +214,12 @@ export async function createRealmApi(
         // it (it stays inside `object` below, which is additionalProperties:true).
         object: {
           id: realmId,
-          schema: "ck.schema.realm.v1",
+          schema: "ak.schema.realm.v1",
           title: data.title,
           summary: data.summary,
           created_by: ownerDid,
           trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ck.schema.realm.v1"],
+          schema_refs: ["ak.schema.realm.v1"],
           default_discoverability:
             data.discoverability ?? (data.public ? "public" : "listed"),
           default_join_rule: data.default_join_rule ?? "invite",
@@ -257,7 +257,7 @@ export async function createRealmApi(
       signedEventEnvelope({
         actorDid: ownerDid,
         realmId,
-        kind: "ck.member.state",
+        kind: "ak.member.state",
         payload: {
           realm_id: realmId,
           actor_id: invitee,
@@ -285,7 +285,7 @@ export async function addRealmMemberApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         // `realm_id` inside the payload is a spec-defined membership_payload
         // property (event-payload.schema.json#/$defs/membership_payload) and is
@@ -323,7 +323,7 @@ export async function writeJoinPolicyApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.realm.policy_components",
+      kind: "ak.realm.policy_components",
       payload: {
         realm_id: realmId,
         value: {
@@ -355,11 +355,11 @@ export async function grantRealmReviewCapabilityApi(
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     grant_id: grantId,
-    schema: "ck.schema.capability.v1",
+    schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectDid,
-    actions: ["ck.realm.join.review"],
+    actions: ["ak.realm.join.review"],
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
   };
@@ -369,7 +369,7 @@ export async function grantRealmReviewCapabilityApi(
     signedEventEnvelope({
       actorDid: args.ownerDid,
       realmId: args.realmId,
-      kind: "ck.capability.grant",
+      kind: "ak.capability.grant",
       createdAt: issuedAt,
       payload: {
         grant_id: grantId,
@@ -409,11 +409,11 @@ export async function grantServiceDelegationApi(
 ): Promise<string> {
   const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
-  const action = args.action ?? "ck.realm.delivery_binding_policy";
+  const action = args.action ?? "ak.realm.delivery_binding_policy";
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     grant_id: grantId,
-    schema: "ck.schema.capability.v1",
+    schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectServiceDid,
@@ -427,7 +427,7 @@ export async function grantServiceDelegationApi(
     signedEventEnvelope({
       actorDid: args.ownerDid,
       realmId: args.realmId,
-      kind: "ck.capability.grant",
+      kind: "ak.capability.grant",
       createdAt: issuedAt,
       payload: {
         grant_id: grantId,
@@ -489,7 +489,7 @@ export function buildCapabilityGrantEnvelope(
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     grant_id: grantId,
-    schema: "ck.schema.capability.v1",
+    schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectDid,
@@ -502,7 +502,7 @@ export function buildCapabilityGrantEnvelope(
   const envelope = signedEventEnvelope({
     actorDid: args.ownerDid,
     realmId: args.realmId,
-    kind: "ck.capability.grant",
+    kind: "ak.capability.grant",
     eventId,
     createdAt: issuedAt,
     // capability_grant_payload (event-payload.schema.json) is closed —
@@ -554,7 +554,7 @@ export async function revokeCapabilityApi(
     signedEventEnvelope({
       actorDid: args.ownerDid,
       realmId: args.realmId,
-      kind: "ck.capability.revoke",
+      kind: "ak.capability.revoke",
       payload: {
         grant_id: args.grantId,
         realm_id: args.realmId,
@@ -580,7 +580,7 @@ export async function submitKnockApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       createdAt: opts.createdAt,
       payload: {
         realm_id: realmId,
@@ -615,7 +615,7 @@ export async function submitApplicationApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       createdAt: opts.createdAt,
       payload: {
         realm_id: realmId,
@@ -666,7 +666,7 @@ export async function submitApplicationReviewApi(
     signedEventEnvelope({
       actorDid: reviewerDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       createdAt: opts.createdAt,
       payload: {
         realm_id: realmId,
@@ -710,7 +710,7 @@ export async function submitApplicationCancelApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: actorDid,
@@ -743,7 +743,7 @@ export async function submitJoinWithProofsApi(
       data: signedEventEnvelope({
         actorDid,
         realmId,
-        kind: "ck.member.state",
+        kind: "ak.member.state",
         createdAt: opts.createdAt,
         payload: {
           realm_id: realmId,
@@ -771,7 +771,7 @@ export async function submitLeaveApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       createdAt: opts.createdAt,
       payload: {
         realm_id: realmId,
@@ -803,7 +803,7 @@ export async function submitInviteCreateApi(
       data: signedEventEnvelope({
         actorDid: inviterDid,
         realmId,
-        kind: "ck.invite.create",
+        kind: "ak.invite.create",
         refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
         // Directed invite-create payload shape per event-payload.schema.json
         // `invite_payload` (variant: invitee + invite_delivery_target +
@@ -862,7 +862,7 @@ export async function acceptInviteApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.invite.accept",
+      kind: "ak.invite.accept",
       payload: {
         invite_id: inviteId,
       },
@@ -919,14 +919,14 @@ export async function sendMessageApi(
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     actorSeq: opts.actorSeq,
     createdAt: opts.createdAt,
     payload: {
       strand_id: strandId,
       track_name: "discussion",
       content: {
-        kind: "ck.content.text",
+        kind: "ak.content.text",
         body,
         ...(opts.mentions ? { mentions: opts.mentions } : {}),
       },
@@ -967,7 +967,7 @@ export async function setStrandWatchLevelApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.strand.watch.set",
+      kind: "ak.strand.watch.set",
       payload,
     }),
     {
@@ -1147,7 +1147,7 @@ export async function putAccountDataViaEventApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.account_data.set",
+      kind: "ak.account_data.set",
       payload: {
         key,
         owner: actorDid,
@@ -1163,9 +1163,9 @@ export async function putAccountDataViaEventApi(
 }
 
 const privateAccountDataKeys = new Set([
-  "ck.account.blocklist",
-  "ck.dnd_schedule",
-  "ck.push_rules",
+  "ak.account.blocklist",
+  "ak.dnd_schedule",
+  "ak.push_rules",
 ]);
 
 function encryptedAccountDataMarker(
@@ -1179,7 +1179,7 @@ function encryptedAccountDataMarker(
   return {
     client_side_conformance: {
       encrypted_account_data: true,
-      profile_id: "ck.profile.e2ee_client.v1",
+      profile_id: "ak.profile.e2ee_client.v1",
       payload_digest: payloadDigest,
     },
     content_type: "application/vnd.arkret.account-data+json",
@@ -1576,7 +1576,7 @@ export async function rawPushFederationEvents(
 }
 
 export type InviteDeliveryRequestBody = {
-  schema: "ck.schema.invite_delivery_request.v1";
+  schema: "ak.schema.invite_delivery_request.v1";
   invite_event: Record<string, unknown>;
   invite_address: {
     subject_id: string;
@@ -1689,19 +1689,19 @@ export async function peerEventFrontierApi(
 }
 
 function schemaIdForEventKind(kind: string): string {
-  if (kind === "ck.message.create") {
-    return "ck.schema.message.v1";
+  if (kind === "ak.message.create") {
+    return "ak.schema.message.v1";
   }
-  if (kind === "ck.message.redact") {
-    return "ck.schema.message.v1";
+  if (kind === "ak.message.redact") {
+    return "ak.schema.message.v1";
   }
-  if (kind === "ck.member.state") {
-    return "ck.schema.event_payload.v1";
+  if (kind === "ak.member.state") {
+    return "ak.schema.event_payload.v1";
   }
-  if (kind.startsWith("ck.space.")) {
-    return "ck.schema.space.v1";
+  if (kind.startsWith("ak.space.")) {
+    return "ak.schema.space.v1";
   }
-  return "ck.schema.event.v1";
+  return "ak.schema.event.v1";
 }
 
 // ── Federation reducer profile digest ───────────────────────────────────────
@@ -1733,7 +1733,7 @@ const E2E_FIXTURES_ROOT = resolve(
 
 // The reducer profile soland declares for its federation surface
 // (ck.peer.events.query.describe → supported_profiles), also the vector's profile.
-export const FEDERATION_REDUCER_PROFILE_ID = "ck.profile.federation_minimal.v1";
+export const FEDERATION_REDUCER_PROFILE_ID = "ak.profile.federation_minimal.v1";
 
 const reducerProfileDigestCache = new Map<string, string>();
 

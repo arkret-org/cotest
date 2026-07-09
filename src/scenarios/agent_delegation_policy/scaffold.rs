@@ -46,7 +46,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     // account-scoped `ck.self.agent.*` trust segment (lifecycle actions such as
     // provision/pause/resume/deactivate and sidecar_thread.ensure).
     for action in AGENT_CAPABILITY_ACTIONS {
-        if !(action.starts_with("ck.agent.") || action.starts_with("ck.self.agent.")) {
+        if !(action.starts_with("ak.agent.") || action.starts_with("ck.self.agent.")) {
             return Err(anyhow!(
                 "capability action `{action}` MUST start with ck.agent. or ck.self.agent."
             ));
@@ -86,7 +86,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     //     `ck.identity.accountability_grant` event itself; downstream
     //     `accountability_grant_ref` / `authorization_ref` fields carry the
     //     grant event's `EventId`.
-    if IDENTITY_ACCOUNTABILITY_GRANT != "ck.identity.accountability_grant" {
+    if IDENTITY_ACCOUNTABILITY_GRANT != "ak.identity.accountability_grant" {
         return Err(anyhow!(
             "IDENTITY_ACCOUNTABILITY_GRANT spelling drifted: {IDENTITY_ACCOUNTABILITY_GRANT}"
         ));

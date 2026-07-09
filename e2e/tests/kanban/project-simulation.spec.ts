@@ -121,12 +121,12 @@ async function createBoardWithCard(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.space.create",
+      kind: "ak.space.create",
       createdAt,
       payload: {
         object: {
           id: boardId,
-          schema: "ck.schema.space.v1",
+          schema: "ak.schema.space.v1",
           realm_id: realmId,
           kind: "board",
           title: opts.boardTitle,
@@ -144,12 +144,12 @@ async function createBoardWithCard(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.space.create",
+      kind: "ak.space.create",
       createdAt,
       payload: {
         object: {
           id: listId,
-          schema: "ck.schema.space.v1",
+          schema: "ak.schema.space.v1",
           realm_id: realmId,
           kind: "list",
           title: opts.listTitle,
@@ -169,12 +169,12 @@ async function createBoardWithCard(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.strand.create",
+      kind: "ak.strand.create",
       createdAt,
       payload: {
         object: {
           id: cardId,
-          schema: "ck.schema.strand.v1",
+          schema: "ak.schema.strand.v1",
           realm_id: realmId,
           metadata: {
             title: opts.cardTitle,
@@ -227,7 +227,7 @@ async function registerSingleAssigneeProfile(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.realm.policy_components",
+      kind: "ak.realm.policy_components",
       payload: {
         realm_id: realmId,
         value: {
@@ -320,7 +320,7 @@ test.describe("project simulation", () => {
       signedEventEnvelope({
         actorDid: bob.did,
         realmId,
-        kind: "ck.member.state",
+        kind: "ak.member.state",
         payload: {
           realm_id: realmId,
           actor_id: bob.did,
@@ -345,7 +345,7 @@ test.describe("project simulation", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.relation.create",
+        kind: "ak.relation.create",
         payload: {
           relation_id: relationId,
           relation_kind: "assigned_to",
@@ -389,12 +389,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.strand.create",
+          kind: "ak.strand.create",
           createdAt: taskCreatedAt,
           payload: {
             object: {
               id: taskStrandId,
-              schema: "ck.schema.strand.v1",
+              schema: "ak.schema.strand.v1",
               realm_id: realmId,
               metadata: {
                 title: "Implement login",
@@ -415,7 +415,7 @@ test.describe("project simulation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           payload: {
             target_ref: taskStrandId,
             patch: { metadata: { fields: { status: "done" } } },
@@ -431,7 +431,7 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           payload: {
             target_ref: taskStrandId,
             patch: { metadata: { fields: { status: "in_progress" } } },
@@ -446,7 +446,7 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           payload: {
             target_ref: taskStrandId,
             patch: { metadata: { fields: { status: "done" } } },
@@ -462,12 +462,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.strand.create",
+          kind: "ak.strand.create",
           createdAt: incidentCreatedAt,
           payload: {
             object: {
               id: incidentStrandId,
-              schema: "ck.schema.strand.v1",
+              schema: "ak.schema.strand.v1",
               realm_id: realmId,
               metadata: {
                 title: "SEV-2 checkout outage",
@@ -488,7 +488,7 @@ test.describe("project simulation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           payload: {
             target_ref: incidentStrandId,
             patch: { metadata: { fields: { status: "resolved" } } },
@@ -543,12 +543,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.strand.create",
+          kind: "ak.strand.create",
           createdAt,
           payload: {
             object: {
               id: onTrackId,
-              schema: "ck.schema.strand.v1",
+              schema: "ak.schema.strand.v1",
               realm_id: realmId,
               metadata: {
                 title: onTrackTitle,
@@ -636,7 +636,7 @@ test.describe("project simulation", () => {
     const assignToAlice = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.relation.create",
+      kind: "ak.relation.create",
       payload: {
         relation_id: typedId("relation"),
         relation_kind: "assigned_to",
@@ -647,7 +647,7 @@ test.describe("project simulation", () => {
     const assignToBob = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.relation.create",
+      kind: "ak.relation.create",
       payload: {
         relation_id: typedId("relation"),
         relation_kind: "assigned_to",
@@ -707,7 +707,7 @@ test.describe("project simulation", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.relation.create",
+        kind: "ak.relation.create",
         payload: {
           relation_id: relationId,
           relation_kind: "assigned_to",
@@ -728,7 +728,7 @@ test.describe("project simulation", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.relation.tombstone",
+        kind: "ak.relation.tombstone",
         payload: {
           relation_id: relationId,
           relation_kind: "assigned_to",
@@ -787,7 +787,7 @@ test.describe("project simulation", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.space.archive",
+        kind: "ak.space.archive",
         payload: { space_id: boardId, sender: alice.did },
       }),
       { context: "archive board" },
@@ -814,7 +814,7 @@ test.describe("project simulation", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.strand.update",
+        kind: "ak.strand.update",
         payload: {
           target_ref: cardId,
           patch: { metadata: { title: `renamed ${stamp}` } },

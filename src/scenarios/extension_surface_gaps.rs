@@ -70,16 +70,16 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         .filter_map(|operation| operation.as_str())
         .collect::<Vec<_>>();
     for required in [
-        "ck.self.agent.command.provision",
-        "ck.self.agent.query.list",
-        "ck.self.agent.resource.get",
-        "ck.self.agent.command.pause",
-        "ck.self.agent.command.resume",
-        "ck.self.agent.command.deactivate",
-        "ck.self.agent.command.rotate_key",
-        "ck.self.agent.grant.command.attach",
-        "ck.self.agent.grant.resource.delete",
-        "ck.self.agent.sidecar_thread.command.ensure",
+        "ak.self.agent.command.provision",
+        "ak.self.agent.query.list",
+        "ak.self.agent.resource.get",
+        "ak.self.agent.command.pause",
+        "ak.self.agent.command.resume",
+        "ak.self.agent.command.deactivate",
+        "ak.self.agent.command.rotate_key",
+        "ak.self.agent.grant.command.attach",
+        "ak.self.agent.grant.resource.delete",
+        "ak.self.agent.sidecar_thread.command.ensure",
     ] {
         assert!(
             advertised.contains(&required),

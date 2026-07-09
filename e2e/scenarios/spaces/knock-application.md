@@ -74,7 +74,7 @@
        }
      ],
      "combinator": "all",
-     "review_capability": "ck.realm.join.review",
+     "review_capability": "ak.realm.join.review",
      "reviewer_quorum": "any",
      "application_ttl": "168h",
      "cooldown_after_reject": "72h",

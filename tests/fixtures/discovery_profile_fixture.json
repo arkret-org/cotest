@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.discovery_vectors.v1",
+  "profile": "ak.profile.discovery_vectors.v1",
   "version": "2026-05-09",
   "comment": "Discovery profile (ck.profile.discovery.v1) black-box vectors covering: (a) advertise vs core/extension tier filtering — `core` surfaces are implied by claiming v1 protocol support, `extension` surfaces require explicit advertisement; (b) `interop_bridge` tier handling when an external protocol (MIMI / Applet) is supported vs NOT supported — bridge operations are NEVER implied and are not part of any core/extension profile; (c) post-C16 (spec 2026-05-08) surface naming: `blob_storage` (split out from a previous combined media surface), `realtime_media` (renamed from media), `moderation_reports` (renamed from moderation). The validator walks each vector, checks the advertised `surfaces[]` against the core/extension/interop_bridge tier rules, and asserts the SUT capability response matches the spec-mandated discovery semantics.",
   "tier_rules": {
@@ -47,7 +47,7 @@
   "vectors": [
     {
       "name": "core_only_sut_advertises_core_implies_no_extension_or_bridge",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -58,22 +58,22 @@
         "extension_present": false,
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.events.command.submit",
-          "ck.self.events.query.frontier",
-          "ck.self.account.stream.subscribe"
+          "ak.self.events.command.submit",
+          "ak.self.events.query.frontier",
+          "ak.self.account.stream.subscribe"
         ],
         "client_must_not_call": [
-          "ck.self.blob.upload.create",
-          "ck.self.media.query.ice_config",
-          "ck.self.moderation.command.report",
-          "ck.edge.applet.query.ping",
-          "ck.open.mimi.command.submit_message"
+          "ak.self.blob.upload.create",
+          "ak.self.media.query.ice_config",
+          "ak.self.moderation.command.report",
+          "ak.edge.applet.query.ping",
+          "ak.open.mimi.command.submit_message"
         ]
       }
     },
     {
       "name": "extension_advertised_blob_storage_post_c16_split",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -86,20 +86,20 @@
         "extension_surfaces": ["blob_storage"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.blob.upload.create",
-          "ck.self.blob.resource.head",
-          "ck.self.blob.resource.get"
+          "ak.self.blob.upload.create",
+          "ak.self.blob.resource.head",
+          "ak.self.blob.resource.get"
         ],
         "client_must_not_call": [
-          "ck.self.media.query.ice_config",
-          "ck.self.moderation.command.report"
+          "ak.self.media.query.ice_config",
+          "ak.self.moderation.command.report"
         ],
         "comment_c16": "Post-C16 (spec 2026-05-08) blob_storage was split out as its own surface from a previous combined media-like surface. A SUT advertising blob_storage gets blob ops only — NOT realtime_media, NOT moderation_reports."
       }
     },
     {
       "name": "extension_advertised_realtime_media_alone_does_not_imply_blob",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -112,19 +112,19 @@
         "extension_surfaces": ["realtime_media"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.media.query.ice_config"
+          "ak.self.media.query.ice_config"
         ],
         "client_must_not_call": [
-          "ck.self.blob.upload.create",
-          "ck.self.blob.resource.get",
-          "ck.self.moderation.command.report"
+          "ak.self.blob.upload.create",
+          "ak.self.blob.resource.get",
+          "ak.self.moderation.command.report"
         ],
         "comment_c16": "realtime_media (the WebRTC ICE config surface) does NOT imply blob_storage; the spec split is enforced at discovery."
       }
     },
     {
       "name": "extension_advertised_moderation_reports_post_c16_split",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -137,20 +137,20 @@
         "extension_surfaces": ["moderation_reports"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.moderation.command.report"
+          "ak.self.moderation.command.report"
         ],
         "client_must_not_call": [
-          "ck.self.blob.upload.create",
-          "ck.self.media.query.ice_config",
-          "ck.edge.applet.query.ping",
-          "ck.open.mimi.command.report_abuse"
+          "ak.self.blob.upload.create",
+          "ak.self.media.query.ice_config",
+          "ak.edge.applet.query.ping",
+          "ak.open.mimi.command.report_abuse"
         ],
         "comment_c16": "moderation_reports is the post-C16 canonical surface name. Pre-C16 fixtures used `moderation`; this is now drift and would fail validator surface-name lookup."
       }
     },
     {
       "name": "interop_bridge_mimi_advertised_when_supported",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -164,19 +164,19 @@
         "interop_bridge_present": true,
         "interop_bridge_surfaces": ["mimi_interop"],
         "client_can_call": [
-          "ck.open.mimi.command.submit_message",
-          "ck.open.mimi.command.update_room",
-          "ck.open.mimi.command.request_consent"
+          "ak.open.mimi.command.submit_message",
+          "ak.open.mimi.command.update_room",
+          "ak.open.mimi.command.request_consent"
         ],
         "client_must_not_call": [
-          "ck.edge.applet.query.ping"
+          "ak.edge.applet.query.ping"
         ],
         "comment": "interop_bridge tier surfaces MUST be explicitly advertised, and only when the external protocol is actually supported. Advertising mimi_interop does NOT imply applet or any extension surface."
       }
     },
     {
       "name": "interop_bridge_applet_advertised_when_third_party_host_supported",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -190,12 +190,12 @@
         "interop_bridge_present": true,
         "interop_bridge_surfaces": ["applet"],
         "client_can_call": [
-          "ck.edge.applet.query.ping",
-          "ck.edge.applet.query.describe",
-          "ck.edge.applet.command.transaction"
+          "ak.edge.applet.query.ping",
+          "ak.edge.applet.query.describe",
+          "ak.edge.applet.command.transaction"
         ],
         "client_must_not_call": [
-          "ck.open.mimi.command.submit_message"
+          "ak.open.mimi.command.submit_message"
         ]
       }
     }
@@ -203,7 +203,7 @@
   "negative_vectors": [
     {
       "name": "interop_bridge_mimi_not_advertised_when_external_protocol_unsupported",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -213,13 +213,13 @@
       "expected": {
         "outcome": "reject_call",
         "rejection_reason": "interop_bridge_surface_not_advertised",
-        "client_attempted_call": "ck.open.mimi.command.submit_message",
+        "client_attempted_call": "ak.open.mimi.command.submit_message",
         "comment": "Discovery client tries to invoke a MIMI bridge op against an SUT that did NOT advertise mimi_interop and does NOT support MIMI. The SUT MUST reject (or 404) and the discovery client MUST gate the call on the advertised set, not on naive heuristics."
       }
     },
     {
       "name": "extension_call_blocked_when_surface_not_advertised",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -228,13 +228,13 @@
       "expected": {
         "outcome": "reject_call",
         "rejection_reason": "extension_surface_not_advertised",
-        "client_attempted_call": "ck.self.blob.upload.create",
+        "client_attempted_call": "ak.self.blob.upload.create",
         "comment": "Calling an extension op (blob.upload) on a core-only SUT MUST be rejected. Extension surfaces are NEVER implied by core."
       }
     },
     {
       "name": "interop_bridge_advertised_does_not_imply_in_spec_bridges_to",
-      "advertised_profile": "ck.profile.arkret_v1.core",
+      "advertised_profile": "ak.profile.arkret_v1.core",
       "advertised_surfaces": [
         "service_discovery",
         "identity_registry",
@@ -244,7 +244,7 @@
       "expected": {
         "outcome": "reject_call",
         "rejection_reason": "extension_surface_not_advertised",
-        "client_attempted_call": "ck.self.events.command.submit",
+        "client_attempted_call": "ak.self.events.command.submit",
         "comment": "Even though mimi_interop's bridge ops have a `bridges_to` link to in-spec ops (e.g. ck.open.mimi.command.submit_message bridges_to ck.self.events.command.submit), advertising mimi_interop is NOT advertising events_sync. The events_sync surface IS advertised here so the call would actually succeed — the negative is the reverse direction: a discovery client must NOT advertise mimi_interop and assume that gives it events_sync access. The SUT here did advertise events_sync, so this vector is structural: the client must call ops via the actual advertised surface, not via a bridge implication."
       }
     }

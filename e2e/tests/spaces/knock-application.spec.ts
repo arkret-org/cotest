@@ -67,7 +67,7 @@ const APPLICATION_FORM_POLICY = {
     },
   ],
   combinator: "all",
-  review_capability: "ck.realm.join.review",
+  review_capability: "ak.realm.join.review",
   reviewer_quorum: "any",
   application_ttl: "PT168H",
   cooldown_after_reject: "PT72H",

@@ -59,7 +59,7 @@ fn call_state_media_lifecycle_vector_suite_runs_clean() {
     // All 5 ids are registered in vector-registry.json (canonical namespace).
     for id in ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS {
         assert!(
-            id.starts_with("ck.vector.call_state."),
+            id.starts_with("ak.vector.call_state."),
             "registered call_state vector id drifted: {id}"
         );
     }
@@ -195,7 +195,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
         );
         for id in ids {
             assert!(
-                id.starts_with("ck.cotest_vector."),
+                id.starts_with("ak.cotest_vector."),
                 "{label} id must use cotest-local vector namespace unless it is registered in vector-registry.json: {id}"
             );
             assert!(seen.insert(*id), "duplicate conformance vector id: {id}");
@@ -308,7 +308,7 @@ fn recovery_policy_fixture_loads_and_has_canonical_shape() {
     let value = load_local_fixture_value("recovery-policy.json").expect("recovery-policy.json");
     assert_eq!(
         value.get("schema_ref").and_then(Value::as_str),
-        Some("ck.schema.recovery_policy.v1")
+        Some("ak.schema.recovery_policy.v1")
     );
     let cases = value
         .get("cases")
@@ -322,7 +322,7 @@ fn recovery_receipt_fixture_loads_and_has_canonical_shape() {
     let value = load_local_fixture_value("recovery-receipt.json").expect("recovery-receipt.json");
     assert_eq!(
         value.get("schema_ref").and_then(Value::as_str),
-        Some("ck.schema.recovery_receipt.v1")
+        Some("ak.schema.recovery_receipt.v1")
     );
     let cases = value
         .get("cases")
@@ -347,13 +347,13 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
         .filter_map(|c| c.get("event_kind").and_then(Value::as_str))
         .collect();
     for required in [
-        "ck.self.agent.pause",
-        "ck.self.agent.resume",
-        "ck.self.agent.deactivate",
-        "ck.agent.draft.propose",
-        "ck.agent.action_request",
-        "ck.agent.action_approve",
-        "ck.agent.action_reject",
+        "ak.self.agent.pause",
+        "ak.self.agent.resume",
+        "ak.self.agent.deactivate",
+        "ak.agent.draft.propose",
+        "ak.agent.action_request",
+        "ak.agent.action_approve",
+        "ak.agent.action_reject",
     ] {
         assert!(
             kinds.contains(&required),
@@ -564,7 +564,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // moved to `ck.schema.handle_claim.v1`.
     let make_identity = |name: &str| -> Result<MemberIdentity> {
         Ok(MemberIdentity {
-            schema: "ck.schema.member_identity.v1".to_owned(),
+            schema: "ak.schema.member_identity.v1".to_owned(),
             realm_id: realm.clone(),
             actor_id: alice.clone(),
             subject_id: subject.clone(),

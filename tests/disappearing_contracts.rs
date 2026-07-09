@@ -115,7 +115,7 @@ fn disappearing_message_payloads_keep_expiry_for_all_triggers() {
         assert!(payload.get("expiry").is_some());
         arkret_core::schema::event_payload_validator_catalog()
             .unwrap()
-            .validate_payload("ck.message.create", &payload)
+            .validate_payload("ak.message.create", &payload)
             .unwrap();
 
         assert_eq!(

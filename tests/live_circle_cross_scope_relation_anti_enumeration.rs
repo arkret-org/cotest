@@ -60,7 +60,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
 
     // ── 1. Bootstrap soland + teabay (teabay is required for the
     //       directory projection assertion).
-    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-rel-antienum")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ak.0007-rel-antienum")).await?;
     if stack.teabay.is_none() {
         bail!(
             "live anti-enumeration scenario requires teabay (directory projection); \
@@ -154,7 +154,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     let _ = admin
         .post("/_arkret/self/realms")
         .json(&json!({
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Anti-Enum Realm",
         }))

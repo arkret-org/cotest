@@ -4,10 +4,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 const PUSH_RULE_CORE_FIXTURE_FILE: &str = "push-rule-core-fixture.json";
-const PUSH_RULE_CORE_PROFILE: &str = "ck.profile.push_gateway.blind_wakeup.v1";
+const PUSH_RULE_CORE_PROFILE: &str = "ak.profile.push_gateway.blind_wakeup.v1";
 const PUSH_RULE_CORE_VECTOR_IDS: &[&str] = &[
-    "ck.vector.push.broadcast_mention_controls.v1",
-    "ck.vector.push.strand_engaged_mention.v1",
+    "ak.vector.push.broadcast_mention_controls.v1",
+    "ak.vector.push.strand_engaged_mention.v1",
 ];
 
 #[derive(Debug, Deserialize)]

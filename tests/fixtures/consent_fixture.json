@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.consent_vectors.v1",
+  "profile": "ak.profile.consent_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `ck:cell:ck.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `require_consent` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `ck:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
@@ -10,7 +10,7 @@
       "moves": [
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000001",
-          "kind": "ck.consent.grant",
+          "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -23,7 +23,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000002",
-          "kind": "ck.invite.send",
+          "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
             {
@@ -44,7 +44,7 @@
       "moves": [
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000010",
-          "kind": "ck.consent.grant",
+          "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -57,7 +57,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000011",
-          "kind": "ck.consent.revoke",
+          "kind": "ak.consent.revoke",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -70,7 +70,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000012",
-          "kind": "ck.invite.send",
+          "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
             {
@@ -91,7 +91,7 @@
       "moves": [
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000020",
-          "kind": "ck.consent.grant",
+          "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -104,7 +104,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000021",
-          "kind": "ck.call.invite",
+          "kind": "ak.call.invite",
           "actor_id": "did:web:bob.example",
           "preconditions": [
             {
@@ -125,7 +125,7 @@
       "moves": [
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000030",
-          "kind": "ck.consent.grant",
+          "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -141,7 +141,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000031",
-          "kind": "ck.message.create",
+          "kind": "ak.message.create",
           "actor_id": "did:ck:psd-z9z9z9z9z9z9z9z9z9z9z9",
           "preconditions": [
             {
@@ -162,7 +162,7 @@
       "moves": [
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000040",
-          "kind": "ck.invite.send",
+          "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
             {
@@ -183,7 +183,7 @@
       "moves": [
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000050",
-          "kind": "ck.consent.grant",
+          "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -196,7 +196,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000051",
-          "kind": "ck.consent.revoke",
+          "kind": "ak.consent.revoke",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -209,7 +209,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000052",
-          "kind": "ck.consent.grant",
+          "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
@@ -222,7 +222,7 @@
         },
         {
           "move_id": "ak:event:01970e58-0000-7000-8000-000000000053",
-          "kind": "ck.invite.send",
+          "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
             {

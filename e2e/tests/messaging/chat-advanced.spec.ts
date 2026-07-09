@@ -101,7 +101,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.realmId,
-        kind: "ck.reaction.add",
+        kind: "ak.reaction.add",
         payload: {
           target_ref: messageRef,
           key: "+1",
@@ -115,7 +115,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.realmId,
-        kind: "ck.reaction.remove",
+        kind: "ak.reaction.remove",
         payload: {
           target_ref: messageRef,
           key: "+1",
@@ -130,10 +130,10 @@ test.describe("chat advanced", () => {
       fixture.realmId,
     );
     expect(events.map((event) => event.kind)).toEqual(
-      expect.arrayContaining(["ck.reaction.add", "ck.reaction.remove"]),
+      expect.arrayContaining(["ak.reaction.add", "ck.reaction.remove"]),
     );
     expect(
-      events.find((event) => event.kind === "ck.reaction.add")?.payload,
+      events.find((event) => event.kind === "ak.reaction.add")?.payload,
     ).toMatchObject({
       target_ref: messageRef,
       key: "+1",
@@ -161,12 +161,12 @@ test.describe("chat advanced", () => {
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
         reply_to: rootMessageRef,
-        content: { kind: "ck.content.text", body: replyBody },
+        content: { kind: "ak.content.text", body: replyBody },
       },
     });
     await submitSignedEventApi(request, fixture.bobToken, reply, {
@@ -179,7 +179,7 @@ test.describe("chat advanced", () => {
       fixture.realmId,
     );
     const messageEvents = events.filter(
-      (event) => event.kind === "ck.message.create",
+      (event) => event.kind === "ak.message.create",
     );
     expect(messageEvents.map((event) => event.event_id)).toEqual([
       root.event_id,
@@ -207,12 +207,12 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.realmId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: strandId,
           track_name: "discussion",
           content: {
-            kind: "ck.content.text",
+            kind: "ak.content.text",
             body,
             mentions: [
               {
@@ -237,7 +237,7 @@ test.describe("chat advanced", () => {
     );
     const mention = events.find(
       (event) =>
-        event.kind === "ck.message.create" &&
+        event.kind === "ak.message.create" &&
         JSON.stringify(event.payload).includes(fixture.bob.did),
     );
     expect(mention?.payload).toMatchObject({
@@ -263,12 +263,12 @@ test.describe("chat advanced", () => {
     const root = signedEventEnvelope({
       actorDid: fixture.alice.did,
       realmId: fixture.realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body,
           mentions: [
             { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
@@ -287,12 +287,12 @@ test.describe("chat advanced", () => {
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
         reply_to: rootMessageRef,
-        content: { kind: "ck.content.text", body: `reply ${Date.now()}` },
+        content: { kind: "ak.content.text", body: `reply ${Date.now()}` },
       },
     });
     await submitSignedEventApi(request, fixture.bobToken, reply, {
@@ -305,7 +305,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.realmId,
-        kind: "ck.reaction.add",
+        kind: "ak.reaction.add",
         payload: { target_ref: rootMessageRef, key: "+1" },
       }),
       { context: "alice add reaction" },
@@ -316,7 +316,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.realmId,
-        kind: "ck.reaction.add",
+        kind: "ak.reaction.add",
         payload: { target_ref: rootMessageRef, key: "+1" },
       }),
       { context: "bob add reaction" },
@@ -327,7 +327,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.realmId,
-        kind: "ck.reaction.remove",
+        kind: "ak.reaction.remove",
         payload: { target_ref: rootMessageRef, key: "+1" },
       }),
       { context: "bob remove reaction" },
@@ -388,7 +388,7 @@ test.describe("chat advanced", () => {
       {
         headers: authHeaders(fixture.aliceToken),
         data: withBroadcastEphemeralProof({
-          kind: "ck.typing",
+          kind: "ak.typing",
           realm_id: fixture.realmId,
           actor_id: fixture.alice.did,
           device_id: fixture.alice.deviceId,
@@ -911,13 +911,13 @@ test.describe("chat advanced", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
         mention_sidecar_hash: [sidecarHash],
         encrypted_content: encryptedEnvelope(
-          "ck.message.v1",
+          "ak.message.v1",
           "opaque-e2ee-mention",
           realmId,
         ),
@@ -952,7 +952,7 @@ function encryptedEnvelope(
   realmId: string,
 ): Record<string, unknown> {
   void contentType;
-  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",

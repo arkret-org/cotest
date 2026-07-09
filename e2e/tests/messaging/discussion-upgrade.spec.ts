@@ -50,11 +50,11 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.realmId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: defaultStrandId,
           track_name: "discussion",
-          content: { kind: "ck.content.text", body },
+          content: { kind: "ak.content.text", body },
         },
       }),
       { context: "inline discussion message" },
@@ -226,7 +226,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       {
         headers: authHeaders(fixture.bobToken),
         data: withBroadcastEphemeralProof({
-          kind: "ck.receipt.read",
+          kind: "ak.receipt.read",
           realm_id: fixture.realmId,
           actor_id: fixture.bob.did,
           device_id: fixture.bob.deviceId,
@@ -234,7 +234,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
           expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
           payload: {
             receipt_type: "read",
-            schema: "ck.schema.read_receipt.v1",
+            schema: "ak.schema.read_receipt.v1",
             realm_id: fixture.realmId,
             actor_id: fixture.bob.did,
             read_scope: {
@@ -324,15 +324,15 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     );
     expect(events.map((event) => event.kind)).toEqual(
       expect.arrayContaining([
-        "ck.circle.create",
-        "ck.strand.create",
-        "ck.relation.create",
+        "ak.circle.create",
+        "ak.strand.create",
+        "ak.relation.create",
       ]),
     );
     expect(
       events.some(
         (event) =>
-          event.kind === "ck.strand.update" &&
+          event.kind === "ak.strand.update" &&
           JSON.stringify(eventPayload(event)).includes("scope_circle_id"),
       ),
     ).toBe(false);
@@ -413,7 +413,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         data: signedEventEnvelope({
           actorDid: fixture.alice.did,
           realmId: fixture.realmId,
-          kind: "ck.strand.create",
+          kind: "ak.strand.create",
           createdAt,
           payload: {
             object: strandObject(
@@ -457,7 +457,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         data: signedEventEnvelope({
           actorDid: fixture.alice.did,
           realmId: fixture.realmId,
-          kind: "ck.strand.update",
+          kind: "ak.strand.update",
           payload: {
             target_ref: strandId,
             patch: { scope_circle_id: { $op: "set", value: circleId } },
@@ -517,7 +517,7 @@ async function createStrandViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.strand.create",
+      kind: "ak.strand.create",
       createdAt,
       payload: {
         object: strandObject(realmId, strandId, actor, title, createdAt, opts),
@@ -538,7 +538,7 @@ function strandObject(
 ) {
   return {
     id: strandId,
-    schema: "ck.schema.strand.v1",
+    schema: "ak.schema.strand.v1",
     realm_id: realmId,
     metadata: {
       title: `${title} ${Date.now()}`,
@@ -603,12 +603,12 @@ async function createDiscussionCircleViaApi(
     signedEventEnvelope({
       actorDid: fixture.alice.did,
       realmId: fixture.realmId,
-      kind: "ck.circle.create",
+      kind: "ak.circle.create",
       createdAt,
       payload: {
         object: {
           id: circleId,
-          schema: "ck.schema.circle.v1",
+          schema: "ak.schema.circle.v1",
           realm_id: fixture.realmId,
           title: `private discussion ${Date.now()}`,
           display: {
@@ -668,7 +668,7 @@ async function joinRealmMemberViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: memberDid,
@@ -695,13 +695,13 @@ async function submitCircleMemberStateViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.circle.member.state",
+      kind: "ak.circle.member.state",
       payload: {
         circle_id: circleId,
         actor_id: memberDid,
         membership,
         actor_capability: {
-          action: "ck.circle.member.manage",
+          action: "ak.circle.member.manage",
           circle_id: circleId,
           allowed: true,
         },
@@ -727,7 +727,7 @@ async function createConfidentialDiscussionRelationViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.relation.create",
+      kind: "ak.relation.create",
       payload: {
         relation: {
           id: relationId,
@@ -755,11 +755,11 @@ async function createDiscussionMessageViaApi(
   const envelope = signedEventEnvelope({
     actorDid: actor.did,
     realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      content: { kind: "ck.content.text", body: `${body} ${Date.now()}` },
+      content: { kind: "ak.content.text", body: `${body} ${Date.now()}` },
     },
   });
   await submitSignedEventApi(request, token, envelope, {
@@ -781,21 +781,21 @@ function findCircleCreate(
   events: Array<Record<string, unknown>>,
   circleId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ck.circle.create", circleId);
+  return findEventByPayload(events, "ak.circle.create", circleId);
 }
 
 function findStrandCreate(
   events: Array<Record<string, unknown>>,
   strandId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ck.strand.create", strandId);
+  return findEventByPayload(events, "ak.strand.create", strandId);
 }
 
 function findRelationCreate(
   events: Array<Record<string, unknown>>,
   relationId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ck.relation.create", relationId);
+  return findEventByPayload(events, "ak.relation.create", relationId);
 }
 
 function findEventByPayload(

@@ -329,8 +329,8 @@ fn service_attested_device_authorize_event(
         device_public_key: device_public_key.to_owned(),
         hpke_key: "z6LSCotestEnrollHpkeKey".to_owned(),
         algorithms: vec![
-            "ck.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
-            "ck.mls.v1".to_owned(),
+            "ak.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
+            "ak.mls.v1".to_owned(),
         ],
         device_key_algorithm: None,
         authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority.clone()),
@@ -353,7 +353,7 @@ fn service_attested_device_authorize_event(
     let payload = serde_json::to_value(&payload)?;
     let mut event = json!({
         "event_id": event_id,
-        "kind": "ck.device.authorize",
+        "kind": "ak.device.authorize",
         "realm_id": realm_id,
         "actor_id": principal_id,
         "actor_seq": actor_seq,

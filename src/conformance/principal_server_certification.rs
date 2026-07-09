@@ -7,33 +7,33 @@ use super::{load_local_fixture_value, required_str, validate_profile, value_arra
 use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "principal-server-certification-gate.json";
-const FIXTURE_PROFILE: &str = "ck.profile.principal_server_certification_gate.v1";
-const PRINCIPAL_SERVER_PROFILE: &str = "ck.profile.principal_server.v1";
+const FIXTURE_PROFILE: &str = "ak.profile.principal_server_certification_gate.v1";
+const PRINCIPAL_SERVER_PROFILE: &str = "ak.profile.principal_server.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
-    "ck.server.query.describe",
-    "ck.self.account.query.describe",
-    "ck.self.account.stream.subscribe",
-    "ck.self.events.stream.subscribe",
-    "ck.self.events.query.scan",
-    "ck.self.snapshot.query.manifest_head",
-    "ck.self.authz.query.check",
+    "ak.server.query.describe",
+    "ak.self.account.query.describe",
+    "ak.self.account.stream.subscribe",
+    "ak.self.events.stream.subscribe",
+    "ak.self.events.query.scan",
+    "ak.self.snapshot.query.manifest_head",
+    "ak.self.authz.query.check",
 ];
 
 const REQUIRED_EVENT_KINDS: &[&str] = &[
-    "ck.space.create",
-    "ck.member.state",
-    "ck.strand.create",
-    "ck.message.create",
-    "ck.capability.grant",
-    "ck.capability.revoke",
+    "ak.space.create",
+    "ak.member.state",
+    "ak.strand.create",
+    "ak.message.create",
+    "ak.capability.grant",
+    "ak.capability.revoke",
 ];
 
 const REQUIRED_SCHEMAS: &[&str] = &[
-    "ck.schema.account_subscribe_frame.v1",
-    "ck.schema.snapshot.v1",
-    "ck.schema.capability.v1",
-    "ck.schema.grant_constraint.v1",
+    "ak.schema.account_subscribe_frame.v1",
+    "ak.schema.snapshot.v1",
+    "ak.schema.capability.v1",
+    "ak.schema.grant_constraint.v1",
 ];
 
 const REQUIRED_MINIMUM_SURFACES: &[&str] = &["admin", "agent", "applet", "media"];

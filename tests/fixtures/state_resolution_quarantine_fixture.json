@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.state_resolution_quarantine_vectors.v1",
+  "profile": "ak.profile.state_resolution_quarantine_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
   "comment": "B1 Round 23 — quarantine-on-fork algorithm vectors. Spec authz/event-auth-state-resolution.md §6 + §7: when concurrent forks land on the same (kind, state_key) cell, the reducer MUST NOT pick a winner automatically (no LWW timestamp tiebreak). Instead all non-winners (or all heads, depending on lattice bottom mode) are quarantined and require admin escalation. cas-register cells with bottom=reject yield Bottom Conflict; or-set cells expose the union (no conflict); ordered-log appends both branches. The vectors below cover concurrent forks across the cas-register lattice (admin escalation REQUIRED) and confirm that the reducer never auto-resolves.",
@@ -10,7 +10,7 @@
   "vectors": [
     {
       "name": "cas_register_concurrent_fork_join_rule_quarantine_all_heads",
-      "cell_family": "ck.component.realm.join_rule.v1",
+      "cell_family": "ak.component.realm.join_rule.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
@@ -27,7 +27,7 @@
     },
     {
       "name": "cas_register_concurrent_fork_history_visibility_quarantine_all_heads",
-      "cell_family": "ck.component.realm.history_visibility.v1",
+      "cell_family": "ak.component.realm.history_visibility.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
@@ -49,7 +49,7 @@
     },
     {
       "name": "cas_register_admin_escalation_anchorer_endorse_one_head_unquarantines",
-      "cell_family": "ck.component.realm.policy.v1",
+      "cell_family": "ak.component.realm.policy.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
@@ -75,13 +75,13 @@
     },
     {
       "name": "cas_register_three_way_fork_quarantine_then_partial_repair",
-      "cell_family": "ck.component.realm.upgrade.v1",
+      "cell_family": "ak.component.realm.upgrade.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
-        { "op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "ck.profile.chat_mvp.v1", "head_in": ["ak:anchor:sha256:jkl000"] },
-        { "op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "ck.profile.kanban_mvp.v1", "head_in": ["ak:anchor:sha256:jkl000"] },
-        { "op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "ck.profile.applet.v1", "head_in": ["ak:anchor:sha256:jkl000"] }
+        { "op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "ak.profile.chat_mvp.v1", "head_in": ["ak:anchor:sha256:jkl000"] },
+        { "op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "ak.profile.kanban_mvp.v1", "head_in": ["ak:anchor:sha256:jkl000"] },
+        { "op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "ak.profile.applet.v1", "head_in": ["ak:anchor:sha256:jkl000"] }
       ],
       "expected": {
         "outcome": "all_heads_quarantined",
@@ -97,7 +97,7 @@
     },
     {
       "name": "fsm_member_state_concurrent_join_invite_quarantine",
-      "cell_family": "ck.component.member.state.v1",
+      "cell_family": "ak.component.member.state.v1",
       "lattice": "fsm",
       "bottom": "reject",
       "ops": [
@@ -117,7 +117,7 @@
     },
     {
       "name": "or_set_concurrent_grant_does_not_quarantine_merges_union",
-      "cell_family": "ck.component.consent.grant.v1",
+      "cell_family": "ak.component.consent.grant.v1",
       "lattice": "or_set",
       "bottom": "expose",
       "ops": [

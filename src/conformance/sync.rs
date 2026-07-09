@@ -11,7 +11,7 @@ use crate::transcripts::record_vector_event;
 
 pub fn run_sync_fixture_suite() -> Result<()> {
     let value = load_fixture_value("sync-fixture.json")?;
-    validate_profile(&value, "ck.vector_group.sync.v1")?;
+    validate_profile(&value, "ak.vector_group.sync.v1")?;
     validate_collection_projection(&value)?;
     validate_strand_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;
@@ -102,7 +102,7 @@ fn validate_snapshot_frontier_recovery(value: &Value) -> Result<()> {
 fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
     let vector = required_field(value, "snapshot_inclusion_challenge")?;
     let vector_id = value_field_str(vector, "vector_id")?;
-    if vector_id != "ck.vector.snapshot.inclusion_challenge.v1" {
+    if vector_id != "ak.vector.snapshot.inclusion_challenge.v1" {
         bail!("sync artifact snapshot inclusion challenge vector id drifted");
     }
 

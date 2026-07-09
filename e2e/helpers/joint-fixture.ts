@@ -10,7 +10,7 @@ import {
 export type JointRealmFixture = {
   alice: JointUser;
   bob: JointUser;
-  /// Real `ck.session.grant` JWT (the bearer presented on `/_arkret/self/*`).
+  /// Real `ak.session.grant` JWT (the bearer presented on `/_arkret/self/*`).
   aliceToken: string;
   bobToken: string;
   aliceSession: DpopUserSession;
@@ -34,7 +34,7 @@ export const test = base.extend<{ jointRealm: JointRealmFixture }>({
 
 export { expect } from "@playwright/test";
 
-// The joint browser fixture uses real coauth-minted ck.session.grant material
+// The joint browser fixture uses real coauth-minted ak.session.grant material
 // and registers the same principal/device at soland before opening inkson.
 async function createJointTwoUserRealm(
   browser: Browser,

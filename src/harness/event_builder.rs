@@ -103,7 +103,7 @@ pub async fn create_realm(
         token,
         actor,
         &realm_id,
-        "ck.realm.create",
+        "ak.realm.create",
         payload,
         StatusCode::OK,
     )
@@ -123,7 +123,7 @@ pub async fn add_member(
         token,
         actor,
         realm_id,
-        "ck.member.state",
+        "ak.member.state",
         member_join_payload(realm_id, member),
         StatusCode::OK,
     )
@@ -145,7 +145,7 @@ pub async fn send_message(
         token,
         actor,
         realm_id,
-        "ck.message.create",
+        "ak.message.create",
         payload,
         StatusCode::OK,
     )
@@ -216,7 +216,7 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
     };
 
     match kind {
-        "ck.message.create" => {
+        "ak.message.create" => {
             let strand_id = realm_id
                 .strip_prefix("ak:realm:")
                 .map(|suffix| format!("ak:strand:{suffix}"))
@@ -230,7 +230,7 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
             object.remove("thread_id");
             normalize_message_content(object);
         }
-        "ck.message.revise" => {
+        "ak.message.revise" => {
             if let Some(target_event_id) = object.remove("target_event_id")
                 && !object.contains_key("target_ref")
                 && !object.contains_key("message_id")
@@ -244,7 +244,7 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
             object.remove("thread_id");
             normalize_message_content(object);
         }
-        "ck.message.redact" => {
+        "ak.message.redact" => {
             if !object.contains_key("target_event_id") {
                 if let Some(event_id) = object.get("event_id").cloned() {
                     object.insert("target_event_id".to_owned(), event_id);
@@ -300,7 +300,7 @@ fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
         object.insert(
             "content".to_owned(),
             json!({
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": body,
             }),
         );
@@ -311,7 +311,7 @@ fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
     {
         content.insert(
             "kind".to_owned(),
-            Value::String("ck.content.text".to_owned()),
+            Value::String("ak.content.text".to_owned()),
         );
     }
 }

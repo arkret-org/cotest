@@ -372,7 +372,7 @@
         "notification": {
           "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "account_data_key": "ck.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101"
+          "account_data_key": "ak.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101"
         }
       }
     },

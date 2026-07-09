@@ -345,7 +345,7 @@ test.describe("consent grant", () => {
     expect(updateBody.event_ref).toMatch(/^ak:event:/);
   });
 
-  test("ck.consent.grant event projects consent cell and contact gate", async ({
+  test("ak.consent.grant event projects consent cell and contact gate", async ({
     request,
   }) => {
     const alice = uniqueUser("p1-020-consent-event-alice");
@@ -378,7 +378,7 @@ test.describe("consent grant", () => {
     const grantEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.consent.grant",
+      kind: "ak.consent.grant",
       payload: {
         consent_id: consentId,
         peer: bob.did,
@@ -416,7 +416,7 @@ test.describe("consent grant", () => {
     const revokeEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.consent.revoke",
+      kind: "ak.consent.revoke",
       payload: {
         consent_id: consentId,
         observed_dots: [grantDot],

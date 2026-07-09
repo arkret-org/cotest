@@ -58,7 +58,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let invite_event = alice
         .submit_event(
             &invite_realm_id,
-            "ck.invite.create",
+            "ak.invite.create",
             invite_create_payload(
                 "ak:invite:0196419b-0000-7000-8000-000000000201",
                 bob.actor.as_str(),
@@ -168,7 +168,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(exported["schema"], "ck.export.realm.v1");
+    assert_eq!(exported["schema"], "ak.export.realm.v1");
     let sent_operation_id =
         sent["event_id"]
             .as_str()

@@ -75,7 +75,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let reaction = bob
         .submit_event(
             &realm_id,
-            "ck.reaction.add",
+            "ak.reaction.add",
             json!({
                 "target_ref": sent["event_id"],
                 "key": "like"
@@ -87,7 +87,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let removed_reaction = carol
         .submit_event(
             &realm_id,
-            "ck.reaction.remove",
+            "ak.reaction.remove",
             json!({
                 "target_ref": sent["event_id"],
                 "key": "like"
@@ -106,13 +106,13 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let marker = dave
         .submit_event(
             &realm_id,
-            "ck.read_cursor.advance",
+            "ak.read_cursor.advance",
             json!({
                 "id": sent["event_id"]
                     .as_str()
                     .expect("sent event id")
                     .replacen("ak:event:", "ak:read_cursor:", 1),
-                "schema": "ck.schema.read_cursor.v1",
+                "schema": "ak.schema.read_cursor.v1",
                 "actor_id": dave.actor,
                 "device_id": dave.device_id,
                 "realm_id": realm_id,
@@ -143,8 +143,8 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .expect("events query response includes events")
         .iter()
         .filter(|event| {
-            event["kind"] == "ck.read_cursor.advance"
-                || event["event_kind"] == "ck.read_cursor.advance"
+            event["kind"] == "ak.read_cursor.advance"
+                || event["event_kind"] == "ak.read_cursor.advance"
         })
         .collect::<Vec<_>>();
     assert!(
@@ -163,7 +163,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let revised = alice
         .submit_event(
             &realm_id,
-            "ck.message.revise",
+            "ak.message.revise",
             message_revise_text_payload(sent_event_id, "edited interaction")?,
         )
         .await?;
@@ -172,7 +172,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let redacted = alice
         .submit_event(
             &realm_id,
-            "ck.message.redact",
+            "ak.message.redact",
             message_redact_payload(sent_event_id, None)?,
         )
         .await?;

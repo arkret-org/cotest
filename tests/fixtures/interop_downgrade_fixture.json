@@ -1,6 +1,6 @@
 {
   "suite": "interop_downgrade_fixture",
-  "profile": "ck.profile.mimi_interop_vectors.v1",
+  "profile": "ak.profile.mimi_interop_vectors.v1",
   "version": 1,
   "source_refs": [
     "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#10-identifiers-and-consent",
@@ -18,7 +18,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ck.open.mimi.command.submit_message",
+        "operation_id": "ak.open.mimi.command.submit_message",
         "external_user_identifier": "mimi://remote.example/users/alice",
         "claimed_principal_did": "did:web:alice.example",
         "target_side_consent_proof_refs": [],
@@ -41,7 +41,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ck.open.mimi.command.request_consent",
+        "operation_id": "ak.open.mimi.command.request_consent",
         "consent_id": "ak:consent:0196419b-0000-7000-8000-00000000d001",
         "consent_state": {
           "holder_did": "did:web:alice.example",
@@ -75,7 +75,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ck.open.mimi.query.identifiers",
+        "operation_id": "ak.open.mimi.query.identifiers",
         "privacy_profile": "psi_blinded_batch",
         "connection_identifier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
@@ -119,7 +119,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ck.agent.interop_session.start",
+        "operation_id": "ak.agent.interop_session.start",
         "external_marker": {
           "kind": "external_interop",
           "protocol": "a2a",
@@ -145,7 +145,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ck.agent.interop_session.start",
+        "operation_id": "ak.agent.interop_session.start",
         "transport": "a2a",
         "realm_policy": {
           "external_agent_handoff": false,
@@ -170,7 +170,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ck.agent.interop_session.start",
+        "operation_id": "ak.agent.interop_session.start",
         "transport": "acp",
         "realm_policy": {
           "external_agent_handoff": false,

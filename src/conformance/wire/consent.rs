@@ -30,7 +30,7 @@ use crate::conformance::{canonical_json, required_str, validate_profile};
 ///   * `reject` Moves carry `reason_code=consent_required` and always have no matching active tag
 pub fn run_consent_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("consent_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.consent_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.consent_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -70,7 +70,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
             }
             let outcome = expected_outcome(mv, name)?;
             match kind {
-                "ck.consent.grant" => {
+                "ak.consent.grant" => {
                     if outcome != "accept" {
                         bail!("vector {name} ck.consent.grant must accept");
                     }
@@ -110,7 +110,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                         }
                     }
                 }
-                "ck.consent.revoke" => {
+                "ak.consent.revoke" => {
                     if outcome != "accept" {
                         bail!("vector {name} ck.consent.revoke must accept");
                     }
@@ -269,13 +269,13 @@ pub fn run_consent_fixture_suite() -> Result<()> {
 /// encoder change is caught loudly.
 pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_subject_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.composite_state_subject_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.composite_state_subject_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("composite_state_subject fixture missing vectors"))?;
 
-    let kinds = ["ck.device.authorize", "ck.device.revoke"];
+    let kinds = ["ak.device.authorize", "ck.device.revoke"];
     let mut covered: std::collections::BTreeSet<String> = Default::default();
 
     for vector in vectors {
@@ -337,7 +337,7 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_key_encoding_fixture.json")?;
     validate_profile(
         &fixture,
-        "ck.profile.composite_state_key_encoding_vectors.v1",
+        "ak.profile.composite_state_key_encoding_vectors.v1",
     )?;
 
     let vectors = fixture

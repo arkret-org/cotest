@@ -3,13 +3,13 @@
   "cases": [
     {
       "id": "server_describe",
-      "operation_id": "ck.server.query.describe",
+      "operation_id": "ak.server.query.describe",
       "method": "GET",
       "path": "/_arkret/describe"
     },
     {
       "id": "events_submit",
-      "operation_id": "ck.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit",
       "method": "POST",
       "path": "/_arkret/self/events",
       "auth": "alice",
@@ -18,21 +18,21 @@
     },
     {
       "id": "events_list",
-      "operation_id": "ck.self.events.query.scan",
+      "operation_id": "ak.self.events.query.scan",
       "method": "GET",
       "path": "/_arkret/self/events?realms=${realm_id}&limit=20",
       "auth": "alice"
     },
     {
       "id": "account_profile",
-      "operation_id": "ck.self.account.query.viewer",
+      "operation_id": "ak.self.account.query.viewer",
       "method": "GET",
       "path": "/_arkret/self/account/viewer",
       "auth": "alice"
     },
     {
       "id": "device_pair",
-      "operation_id": "ck.gate.account.command.pair_device",
+      "operation_id": "ak.gate.account.command.pair_device",
       "method": "POST",
       "path": "/_arkret/gate/account/device-pair",
       "auth": "alice",
@@ -54,7 +54,7 @@
     },
     {
       "id": "realm_create",
-      "operation_id": "ck.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit",
       "method": "POST",
       "path": "/_arkret/self/events",
       "auth": "alice",
@@ -62,7 +62,7 @@
     },
     {
       "id": "space_create",
-      "operation_id": "ck.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit",
       "method": "POST",
       "path": "/_arkret/self/events",
       "auth": "alice",
@@ -70,41 +70,41 @@
     },
     {
       "id": "directory_describe",
-      "operation_id": "ck.find.directory.query.describe",
+      "operation_id": "ak.find.directory.query.describe",
       "method": "GET",
       "path": "/_arkret/find/directory/describe"
     },
     {
       "id": "directory_search_realms",
-      "operation_id": "ck.find.directory.query.search_realms",
+      "operation_id": "ak.find.directory.query.search_realms",
       "method": "POST",
       "path": "/_arkret/find/directory/search-realms",
       "body": { "query": "Mock Parity", "limit": 20 }
     },
     {
       "id": "keys_backups",
-      "operation_id": "ck.self.keys.backups.query.list",
+      "operation_id": "ak.self.keys.backups.query.list",
       "method": "GET",
       "path": "/_arkret/self/keys/backups",
       "auth": "alice"
     },
     {
       "id": "keys_backups_did_recovery_filter",
-      "operation_id": "ck.self.keys.backups.query.list",
+      "operation_id": "ak.self.keys.backups.query.list",
       "method": "GET",
       "path": "/_arkret/self/keys/backups?backup_class=did_recovery",
       "auth": "alice"
     },
     {
       "id": "recovery_policy",
-      "operation_id": "ck.root.identity.recovery_policy.resource.get",
+      "operation_id": "ak.root.identity.recovery_policy.resource.get",
       "method": "GET",
       "path": "/_arkret/root/identity/recovery-policy",
       "auth": "alice"
     },
     {
       "id": "ephemeral",
-      "operation_id": "ck.self.ephemeral.command.send",
+      "operation_id": "ak.self.ephemeral.command.send",
       "method": "POST",
       "path": "/_arkret/self/ephemeral",
       "auth": "alice",

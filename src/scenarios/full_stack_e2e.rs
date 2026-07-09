@@ -246,7 +246,7 @@ fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Resul
 fn step_5_inkson_mock_send_message() -> Result<Value> {
     let envelope = json!({
         "event_id": STABLE_EVENT_ID,
-        "kind": "ck.message.create",
+        "kind": "ak.message.create",
         "actor_id": BOB_DID,
         "actor_seq": 1,
         "realm_id": TARGET_REALM_ID,
@@ -587,7 +587,7 @@ async fn live_stack_probe() -> Result<()> {
     {
         let placeholder_envelope = json!({
             "event_id": STABLE_EVENT_ID,
-            "kind": "ck.message.create",
+            "kind": "ak.message.create",
             "actor_id": ALICE_DID,
             "actor_seq": 1,
             "realm_id": TARGET_REALM_ID,

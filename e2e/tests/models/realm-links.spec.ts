@@ -56,7 +56,7 @@ test.describe("realm links", () => {
       const govPolicyEnvelope = signedEventEnvelope({
         actorDid: alice.did,
         realmId: govRealmId,
-        kind: "ck.realm.inheritance_policy",
+        kind: "ak.realm.inheritance_policy",
         payload: {
           source_realm_id: govRealmId,
           inherits: { policy_rules: [inheritedPolicyId] },
@@ -92,7 +92,7 @@ test.describe("realm links", () => {
       const teamPolicyEnvelope = signedEventEnvelope({
         actorDid: alice.did,
         realmId: teamRealmId,
-        kind: "ck.realm.inheritance_policy",
+        kind: "ak.realm.inheritance_policy",
         payload: {
           source_realm_id: govRealmId,
           inherits: { policy_rules: [] },
@@ -247,7 +247,7 @@ test.describe("realm links", () => {
           signedEventEnvelope({
             actorDid: alice.did,
             realmId: id,
-            kind: "ck.realm.inheritance_policy",
+            kind: "ak.realm.inheritance_policy",
             payload: {
               source_realm_id: id,
               inherits: { policy_rules: policies },
@@ -280,7 +280,7 @@ test.describe("realm links", () => {
           signedEventEnvelope({
             actorDid: alice.did,
             realmId: T,
-            kind: "ck.realm.inheritance_policy",
+            kind: "ak.realm.inheritance_policy",
             payload: {
               source_realm_id: G,
               inherits: { policy_rules: [] },
@@ -370,7 +370,7 @@ test.describe("realm links", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: T,
-          kind: "ck.member.state",
+          kind: "ak.member.state",
           payload: {
             realm_id: T,
             actor_id: bob.did,

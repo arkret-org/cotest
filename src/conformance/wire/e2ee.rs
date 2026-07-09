@@ -13,7 +13,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("mls_e2ee_basic_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.mls_e2ee_basic_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.mls_e2ee_basic_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -37,7 +37,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
         let name = required_str(v, "name")?;
         match name {
             "genesis_move_creates_epoch_zero" => {
-                if required_str(v, "kind")? != "ck.mls.genesis" {
+                if required_str(v, "kind")? != "ak.mls.genesis" {
                     bail!("vector {name} kind must be ck.mls.genesis");
                 }
                 let epoch_after = v
@@ -59,7 +59,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
                 saw_genesis = true;
             }
             "epoch_advance_via_commit_zero_to_one" => {
-                if required_str(v, "kind")? != "ck.mls.commit" {
+                if required_str(v, "kind")? != "ak.mls.commit" {
                     bail!("vector {name} kind must be ck.mls.commit");
                 }
                 let prior = v
@@ -259,7 +259,7 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
     use sha2::Sha256 as KdfSha256;
 
     let fixture = load_local_fixture("megolm_ratcheting_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.megolm_ratcheting_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.megolm_ratcheting_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -325,7 +325,7 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
                 // Re-derive: key_(N+1) = HKDF(key_N, info=...). Use a pseudo
                 // 32-byte zero seed since the fixture only carries indices.
                 let seed = [0u8; 32];
-                let info = b"ck.megolm.ratchet.v1";
+                let info = b"ak.megolm.ratchet.v1";
                 let kdf = Hkdf::<KdfSha256>::new(None, &seed);
                 let mut next = [0u8; 32];
                 kdf.expand(info, &mut next)
@@ -477,7 +477,7 @@ pub fn run_megolm_ratchet_kdf_chain_check() -> Result<()> {
     fn step(prev: &[u8; 32]) -> Result<[u8; 32]> {
         let kdf = Hkdf::<KdfSha256>::new(None, prev);
         let mut next = [0u8; 32];
-        kdf.expand(b"ck.megolm.ratchet.v1", &mut next)
+        kdf.expand(b"ak.megolm.ratchet.v1", &mut next)
             .map_err(|e| anyhow!("HKDF expand: {e}"))?;
         Ok(next)
     }
@@ -503,7 +503,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("device_message_negative_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.device_message_negative_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.device_message_negative_vectors.v1")?;
 
     let negatives = fixture
         .get("negative_vectors")

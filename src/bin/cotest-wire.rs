@@ -202,7 +202,7 @@ mod tests {
     fn event_digest_uses_producer_envelope_canonical_bytes() {
         let event = json!({
             "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
-            "kind": "ck.member.state",
+            "kind": "ak.member.state",
             "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
@@ -211,7 +211,7 @@ mod tests {
             "prev_refs": [],
             "refs": [],
             "requirements": {
-                "schema": ["ck.schema.event_payload.v1"],
+                "schema": ["ak.schema.event_payload.v1"],
                 "features": [],
                 "critical_extensions": []
             },

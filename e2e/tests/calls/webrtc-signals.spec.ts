@@ -23,7 +23,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("ck.call.signal canonical signal catalog", () => {
+test.describe("ak.call.signal canonical signal catalog", () => {
   // The 14-value spec enum — `offer` / `ice` / `device_change` are NOT spec
   // signal types and MUST NOT appear here.
   test("CALL_SIGNAL_TYPES is exactly the spec 14-value enum", () => {
@@ -80,7 +80,7 @@ test.describe("ck.call.signal canonical signal catalog", () => {
       );
       expect(mine.length, `bob receives the ${signalType} signal`).toBe(1);
       const env = mine[0];
-      expect(env.kind).toBe("ck.call.signal");
+      expect(env.kind).toBe("ak.call.signal");
       expect(env.actor_id).toBe(alice.did);
       const payload = env.payload as Record<string, unknown>;
       // Canonical signal_type + monotonic seq survive the relay verbatim.

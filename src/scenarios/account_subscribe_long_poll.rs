@@ -571,7 +571,7 @@ async fn send_message_now(
     submit_event_now(
         actor,
         realm_id,
-        "ck.message.create",
+        "ak.message.create",
         message_create_text_payload(realm_id, body)?,
     )
     .await
@@ -587,7 +587,7 @@ async fn create_invite_now(
     submit_event_now(
         inviter,
         realm_id,
-        "ck.invite.create",
+        "ak.invite.create",
         invite_create_payload(
             &invite_id,
             invitee.actor.as_str(),
@@ -608,7 +608,7 @@ async fn accept_invite_join_now(
     submit_event_now(
         invitee,
         realm_id,
-        "ck.member.state",
+        "ak.member.state",
         member_join_payload_with_invite_ref(realm_id, invitee.actor.as_str(), invite_id)?,
     )
     .await
@@ -622,7 +622,7 @@ async fn cancel_invite_now(
     submit_event_now(
         inviter,
         realm_id,
-        "ck.invite.cancel",
+        "ak.invite.cancel",
         serde_json::json!({
             "invite_id": invite_id,
             "reason": "admin_cancel",

@@ -12,8 +12,8 @@ use serde_json::{Value, json};
 
 use crate::transcripts::record_vector_event;
 
-pub const VECTOR_ID_STATE_ROOT_INCREMENTAL: &str = "ck.vector.state_root.incremental.v1";
-pub const VECTOR_ID_STRAND_TRACKS_UPDATE_ATOMIC: &str = "ck.vector.strand_tracks_update.atomic.v1";
+pub const VECTOR_ID_STATE_ROOT_INCREMENTAL: &str = "ak.vector.state_root.incremental.v1";
+pub const VECTOR_ID_STRAND_TRACKS_UPDATE_ATOMIC: &str = "ak.vector.strand_tracks_update.atomic.v1";
 
 pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_STATE_ROOT_INCREMENTAL,
@@ -21,9 +21,9 @@ pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
-const STATE_REDUCER_HARDENING_PROFILE: &str = "ck.vector_group.cba_lattice.v1";
-const EVENT_KIND_STRAND_TRACKS_UPDATE: &str = "ck.strand.tracks.update";
-const STRAND_TRACKS_CELL_FAMILY: &str = "ck.component.strand.tracks.v1";
+const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
+const EVENT_KIND_STRAND_TRACKS_UPDATE: &str = "ak.strand.tracks.update";
+const STRAND_TRACKS_CELL_FAMILY: &str = "ak.component.strand.tracks.v1";
 
 pub fn run_state_reducer_hardening_fixture_suite() -> Result<()> {
     let fixture = state_reducer_hardening_fixture()?;

@@ -46,35 +46,35 @@ pub async fn live_describe_profile_claim_gate_from_env() -> Result<()> {
 
 pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let unknown = serde_json::json!({
-        "supported_profiles": ["ck.profile.not_registered.v1"],
+        "supported_profiles": ["ak.profile.not_registered.v1"],
         "supported_operations": [],
     });
     expect_profile_rejected(&unknown, "unknown claimed profile")?;
 
     let failed = serde_json::json!({
-        "supported_profiles": ["ck.profile.core_event_store.v1"],
+        "supported_profiles": ["ak.profile.core_event_store.v1"],
         "supported_operations": [
-            "ck.server.query.describe",
-            "ck.self.events.query.describe",
-            "ck.self.events.command.submit",
-            "ck.self.events.resource.get",
-            "ck.self.events.query.resolve",
-            "ck.self.events.query.scan",
-            "ck.self.events.query.frontier"
+            "ak.server.query.describe",
+            "ak.self.events.query.describe",
+            "ak.self.events.command.submit",
+            "ak.self.events.resource.get",
+            "ak.self.events.query.resolve",
+            "ak.self.events.query.scan",
+            "ak.self.events.query.frontier"
         ],
         "supported_event_kinds": [
-            "ck.space.create",
-            "ck.member.state"
+            "ak.space.create",
+            "ak.member.state"
         ],
         "supported_event_schemas": [
-            "ck.schema.event.v1",
-            "ck.schema.event_payload.v1",
-            "ck.schema.event_batch_receipt.v1",
-            "ck.schema.cursor.v1",
-            "ck.schema.anchor.v1"
+            "ak.schema.event.v1",
+            "ak.schema.event_payload.v1",
+            "ak.schema.event_batch_receipt.v1",
+            "ak.schema.cursor.v1",
+            "ak.schema.anchor.v1"
         ],
         "conformance_results": {
-            "ck.profile.core_event_store.v1": {
+            "ak.profile.core_event_store.v1": {
                 "status": "failed",
                 "failed_suites": ["event_envelope_fixture"]
             }
@@ -83,41 +83,41 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     expect_profile_rejected(&failed, "failed conformance results")?;
 
     let limited = serde_json::json!({
-        "supported_profiles": ["ck.profile.soland_limited_server.v1"],
+        "supported_profiles": ["ak.profile.soland_limited_server.v1"],
         "supported_operations": [],
     });
     expect_profile_rejected(&limited, "limited profile")?;
 
     let missing_dependency = serde_json::json!({
-        "supported_profiles": ["ck.profile.push_gateway.v1"],
+        "supported_profiles": ["ak.profile.push_gateway.v1"],
         "supported_operations": [],
     });
     expect_profile_rejected(&missing_dependency, "missing profile dependency")?;
 
     let mutually_exclusive = serde_json::json!({
         "supported_profiles": [
-            "ck.profile.e2ee_relaxed.v1",
-            "ck.profile.e2ee_client.v1",
-            "ck.profile.mls_governance_binding.full.v1",
+            "ak.profile.e2ee_relaxed.v1",
+            "ak.profile.e2ee_client.v1",
+            "ak.profile.mls_governance_binding.full.v1",
         ],
         "supported_operations": [],
     });
     expect_profile_rejected(&mutually_exclusive, "mutually exclusive profiles")?;
 
     let missing_required_cells = serde_json::json!({
-        "supported_profiles": ["ck.profile.mls_governance_binding.full.v1"],
+        "supported_profiles": ["ak.profile.mls_governance_binding.full.v1"],
         "supported_operations": [
-            "ck.self.keys.keypackages.command.claim",
-            "ck.self.keys.keypackages.command.consume",
-            "ck.self.events.query.scan",
+            "ak.self.keys.keypackages.command.claim",
+            "ak.self.keys.keypackages.command.consume",
+            "ak.self.events.query.scan",
         ],
         "supported_cells": [],
     });
     expect_profile_rejected(&missing_required_cells, "missing required cells")?;
 
     let missing_required_fixture = serde_json::json!({
-        "supported_profiles": ["ck.vector_group.capability.v1"],
-        "supported_operations": ["ck.self.authz.query.check"],
+        "supported_profiles": ["ak.vector_group.capability.v1"],
+        "supported_operations": ["ak.self.authz.query.check"],
         "verified_fixtures": [],
     });
     expect_profile_rejected(&missing_required_fixture, "missing required fixture")?;

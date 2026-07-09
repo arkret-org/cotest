@@ -71,7 +71,7 @@ test.describe("account onboarding", () => {
           name: "session_grants",
           method: "POST",
           path: "/_arkret/gate/account/session-grants",
-          contract: "ck.gate.account.command.issue_session_grant",
+          contract: "ak.gate.account.command.issue_session_grant",
         }),
         expect.objectContaining({
           name: "passkey_auth",
@@ -84,7 +84,7 @@ test.describe("account onboarding", () => {
     const serviceDescribe = await request.get(`${coauth}/_arkret/describe`);
     expect(serviceDescribe.status()).toBe(200);
     const service = await serviceDescribe.json();
-    expect(service.supported_operations).toContain("ck.gate.account.command.issue_session_grant");
+    expect(service.supported_operations).toContain("ak.gate.account.command.issue_session_grant");
     expect(service.auth_metadata?.issuer_did).toBe(coauthServiceDid());
     expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth!).origin);
     expect(service.auth_metadata?.account_authority?.gate_account_base).toBe(
@@ -171,7 +171,7 @@ test.describe("account onboarding", () => {
     }
   });
 
-  test("alice onboards for real (no dev-login); coauth binds a did:webvh principal and issues a device-bound ck.session.grant that works on /_arkret/self/*", async ({
+  test("alice onboards for real (no dev-login); coauth binds a did:webvh principal and issues a device-bound ak.session.grant that works on /_arkret/self/*", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1, key-management.md §5.0/§6, device-lifecycle.md §3.2
@@ -181,7 +181,7 @@ test.describe("account onboarding", () => {
     // coauth's real onboarding chain (password factor + DPoP device key ->
     // coauth mints `did:webvh:<scid>:<host>:webvh:<ulid>` via soland's embedded
     // webvh registration, registers the principal account on soland, and issues
-    // a device-bound `ck.session.grant` with `cnf.jkt` == the device key). The
+    // a device-bound `ak.session.grant` with `cnf.jkt` == the device key). The
     // WebAuthn ceremony is one of several login factors over the SAME bridge;
     // exercising it specifically needs a CDP virtual authenticator + a coauth
     // passkey UI surface (coauth owns account creation, not inkson), tracked

@@ -63,7 +63,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .and_then(|expected| expected.get("same_http_status"))
                     .and_then(Value::as_u64)
                     == Some(404);
-                let op_ok = matches!(op_id, Some("ck.find.directory.query.resolve_realm"));
+                let op_ok = matches!(op_id, Some("ak.find.directory.query.resolve_realm"));
                 if !op_ok || !same_http_ok {
                     bail!(
                         "privacy fixture {} no longer proves indistinguishable resolve errors",
@@ -74,7 +74,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     "privacy.hidden_realm_resolve_indistinguishable",
                     &json!({"operation_id": case.operation_id.clone()}),
                     &json!({
-                        "operation_id": "ck.find.directory.query.resolve_realm",
+                        "operation_id": "ak.find.directory.query.resolve_realm",
                         "same_http_status": 404,
                     }),
                     &json!({
@@ -93,12 +93,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             // body shape / timing class — and MUST NOT leak the listed
             // binding fields.
             "resolve_handle_failure_blinding" => {
-                validate_resolve_failure_blinding(&case, "ck.find.directory.query.resolve_handle")?;
+                validate_resolve_failure_blinding(&case, "ak.find.directory.query.resolve_handle")?;
             }
             "resolve_agent_selector_failure_blinding" => {
                 validate_resolve_failure_blinding(
                     &case,
-                    "ck.find.directory.query.resolve_agent_selector",
+                    "ak.find.directory.query.resolve_agent_selector",
                 )?;
             }
             "private_contact_discovery_padding_and_cardinality" => {
@@ -139,12 +139,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     anyhow!("privacy fixture {} missing operation_ids", case.name)
                 })?;
                 for required in [
-                    "ck.find.directory.query.search_realms",
-                    "ck.find.directory.query.resolve_realm",
-                    "ck.find.directory.query.resolve_target",
-                    "ck.find.directory.command.announce",
-                    "ck.find.directory.command.withdraw",
-                    "ck.find.directory.query.private_contact_discovery",
+                    "ak.find.directory.query.search_realms",
+                    "ak.find.directory.query.resolve_realm",
+                    "ak.find.directory.query.resolve_target",
+                    "ak.find.directory.command.announce",
+                    "ak.find.directory.command.withdraw",
+                    "ak.find.directory.query.private_contact_discovery",
                 ] {
                     if !operation_ids.iter().any(|operation| operation == required) {
                         bail!(
@@ -659,11 +659,11 @@ fn validate_search_surface_contract(
 ) -> Result<()> {
     match surface {
         "directory_search" => {
-            if profile != "ck.profile.directory_service.v1" {
+            if profile != "ak.profile.directory_service.v1" {
                 bail!("directory_search must use directory_service profile");
             }
             if required_value_str(surface_case, "operation_id")?
-                != "ck.find.directory.query.search_realms"
+                != "ak.find.directory.query.search_realms"
             {
                 bail!("directory_search operation_id drifted");
             }
@@ -674,7 +674,7 @@ fn validate_search_surface_contract(
             }
         }
         "privacy_preserving_search" => {
-            if profile != "ck.profile.search.blind_index.v1" {
+            if profile != "ak.profile.search.blind_index.v1" {
                 bail!("privacy_preserving_search must use blind_index profile");
             }
             if payload.get("title").is_some()
@@ -710,10 +710,10 @@ fn validate_search_surface_contract(
             }
         }
         "bridge_interop" => {
-            if profile != "ck.profile.mimi_interop.v1" {
+            if profile != "ak.profile.mimi_interop.v1" {
                 bail!("bridge_interop must use mimi_interop profile");
             }
-            if required_value_str(surface_case, "operation_id")? != "ck.open.mimi.command.notify" {
+            if required_value_str(surface_case, "operation_id")? != "ak.open.mimi.command.notify" {
                 bail!("bridge_interop operation_id drifted");
             }
             for forbidden in ["query_tokens", "candidate_digest", "title", "summary"] {
@@ -771,7 +771,7 @@ fn resolve_private_did(proof: Option<&str>) -> Result<&'static str> {
 fn forwarded_encrypted_payload() -> Value {
     json!({
         "ciphertext": "opaque-ciphertext",
-        "content_type": "ck.mls.application"
+        "content_type": "ak.mls.application"
     })
 }
 

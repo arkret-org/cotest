@@ -178,7 +178,7 @@ async function submitMessageEvent(
     strand_id: strandId,
     track_name: "discussion",
     content: {
-      kind: "ck.content.text",
+      kind: "ak.content.text",
       body,
     },
   };
@@ -186,7 +186,7 @@ async function submitMessageEvent(
     actorDid,
     realmId,
     eventId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     actorSeq: 9_000_000_000_000_000,
     payload,
   });

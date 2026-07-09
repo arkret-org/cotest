@@ -46,7 +46,7 @@
    - `applet_id = "ak:applet:<uuidv7>"`
    - `namespace = "bridge.demo"`
    - `display_name = "Demo Bridge Applet"`
-   - `requested_scopes = ["ck.message.create", "ck.applet.ghost.provision"]`
+   - `requested_scopes = ["ak.message.create", "ck.applet.ghost.provision"]`
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
 3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`,再用返回的 `plan_digest` 调 `POST /_arkret/self/applets/install`

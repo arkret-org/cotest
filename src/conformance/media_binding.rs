@@ -41,24 +41,24 @@ use sha2::Sha256;
 /// Vector id pins. Hard-fails any future rename of the canonical
 /// `ck.vector.media_binding.*.v1` registry entries.
 pub const VECTOR_ID_FOCUS_SELECTION_OLDEST_MEMBERSHIP: &str =
-    "ck.vector.media_binding.focus_selection_oldest_membership.v1";
+    "ak.vector.media_binding.focus_selection_oldest_membership.v1";
 pub const VECTOR_ID_SESSION_FOCUS_NO_SPLIT_BRAIN: &str =
-    "ck.vector.media_binding.session_focus_no_split_brain.v1";
+    "ak.vector.media_binding.session_focus_no_split_brain.v1";
 pub const VECTOR_ID_TOKEN_EXCHANGE_MINIMAL: &str =
-    "ck.vector.media_binding.token_exchange_minimal.v1";
+    "ak.vector.media_binding.token_exchange_minimal.v1";
 pub const VECTOR_ID_TOKEN_ISSUER_UNAUTHORISED: &str =
-    "ck.vector.media_binding.token_issuer_unauthorised.v1";
+    "ak.vector.media_binding.token_issuer_unauthorised.v1";
 pub const VECTOR_ID_PARTICIPANT_BINDING_REQUIRED: &str =
-    "ck.vector.media_binding.participant_binding_required.v1";
+    "ak.vector.media_binding.participant_binding_required.v1";
 pub const VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED: &str =
-    "ck.vector.media_binding.unknown_type_fail_closed.v1";
-pub const VECTOR_ID_E2EE_KEY_SOURCE: &str = "ck.vector.media_binding.e2ee_key_source.v1";
+    "ak.vector.media_binding.unknown_type_fail_closed.v1";
+pub const VECTOR_ID_E2EE_KEY_SOURCE: &str = "ak.vector.media_binding.e2ee_key_source.v1";
 pub const VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED: &str =
-    "ck.vector.media_binding.participant_identity_unrecognised.v1";
+    "ak.vector.media_binding.participant_identity_unrecognised.v1";
 pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB: &str =
-    "ck.vector.media_binding.recording_artifact_via_arkret_blob.v1";
+    "ak.vector.media_binding.recording_artifact_via_arkret_blob.v1";
 pub const VECTOR_ID_RECORDING_EXPORTER_LABEL: &str =
-    "ck.vector.media_binding.recording_exporter_label.v1";
+    "ak.vector.media_binding.recording_exporter_label.v1";
 
 /// Canonical list of all 10 vector ids. Used by the registry / discovery
 /// gate to spot missing entries.
@@ -76,7 +76,7 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
 ];
 
 const MEDIA_BINDING_FIXTURE_FILE: &str = "media-binding-fixture.json";
-const MEDIA_BINDING_PROFILE: &str = "ck.profile.media_service_binding.v1";
+const MEDIA_BINDING_PROFILE: &str = "ak.profile.media_service_binding.v1";
 
 fn validate_media_binding_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(MEDIA_BINDING_FIXTURE_FILE)?;
@@ -127,9 +127,9 @@ fn known_backend_type(label: &str) -> bool {
     KNOWN_MEDIA_BACKEND_TYPES.contains(&label)
 }
 
-const LABEL_RTC_FRAME_KEY: &str = "ck-rtc-frame-key/v1";
-const LABEL_RTC_RECORDING_KEY: &str = "ck-rtc-recording-key/v1";
-const LABEL_RTC_TRANSCRIPT_KEY: &str = "ck-rtc-transcript-key/v1";
+const LABEL_RTC_FRAME_KEY: &str = "ak.rtc-frame-key/v1";
+const LABEL_RTC_RECORDING_KEY: &str = "ak.rtc-recording-key/v1";
+const LABEL_RTC_TRANSCRIPT_KEY: &str = "ak.rtc-transcript-key/v1";
 
 // ─── VECT-MB-1 — focus_selection_oldest_membership ─────────────────────────
 
@@ -244,10 +244,10 @@ fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
 }
 
 pub fn run_token_exchange_minimal_vector() -> Result<()> {
-    if OP_CALL_MEDIA_TOKEN_EXCHANGE != "ck.self.call.media.exchange.issue_token" {
+    if OP_CALL_MEDIA_TOKEN_EXCHANGE != "ak.self.call.media.exchange.issue_token" {
         bail!("OP_CALL_MEDIA_TOKEN_EXCHANGE spelling drifted: {OP_CALL_MEDIA_TOKEN_EXCHANGE}");
     }
-    if PARTICIPANT_BINDING_SCHEMA != "ck.media.participant_binding.v1" {
+    if PARTICIPANT_BINDING_SCHEMA != "ak.media.participant_binding.v1" {
         bail!("PARTICIPANT_BINDING_SCHEMA drifted: {PARTICIPANT_BINDING_SCHEMA}");
     }
     if MEDIA_TOKEN_TTL_MAX_SECS != 600 {
@@ -317,9 +317,9 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     let valid_scheme = PARTICIPANT_BINDING_SCHEMA;
     for bogus in [
         "",
-        "ck.media.participant_binding",
-        "ck.media.participant_binding.v0",
-        "ck.media.participant_binding.v2",
+        "ak.media.participant_binding",
+        "ak.media.participant_binding.v0",
+        "ak.media.participant_binding.v2",
     ] {
         if bogus == valid_scheme {
             bail!("participant_binding scheme leak: {bogus}");
@@ -353,7 +353,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
 /// (media-service-binding.md §3 / §3.1, byte-locked):
 ///
 /// ```text
-/// signing_input = "ck.media.participant_binding.v1" || 0x00 ||
+/// signing_input = "ak.media.participant_binding.v1" || 0x00 ||
 ///   canonical_json({ actor_id, call_id, device_id, expires_at,
 ///                    focus_id, participant_identity, realm_id })
 /// ```
@@ -482,7 +482,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
 
     // 3. Domain-label separation: the same sig under the ICE-config label MUST NOT verify
     //    (cross-purpose confusion is rejected).
-    const ICE_CONFIG_LABEL: &str = "ck.media.ice_config.v1";
+    const ICE_CONFIG_LABEL: &str = "ak.media.ice_config.v1";
     let mut cross_input = Vec::new();
     cross_input.extend_from_slice(ICE_CONFIG_LABEL.as_bytes());
     cross_input.push(0x00);
@@ -585,7 +585,7 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// (media-service-binding.md §8.1, byte-locked label + canonical Context).
 ///
 /// The spec derives the 32-byte SFrame frame key as
-/// `MLS-Exporter(label="ck-rtc-frame-key/v1", Context, 32)` where
+/// `MLS-Exporter(label="ak.rtc-frame-key/v1", Context, 32)` where
 /// `Context = canonical_json({realm_id, call_id, focus_id, epoch_id,
 /// participant_identity, device_id})`. A live MLS group / RFC 9420 exporter is
 /// NOT available under cotest's pure-vector slice, so this vector pins the two
@@ -797,7 +797,7 @@ fn recording_exporter_key_source_ok(
 }
 
 pub fn run_recording_exporter_label_vector() -> Result<()> {
-    if LABEL_RTC_RECORDING_KEY != "ck-rtc-recording-key/v1" {
+    if LABEL_RTC_RECORDING_KEY != "ak.rtc-recording-key/v1" {
         bail!("recording exporter label drifted: {LABEL_RTC_RECORDING_KEY}");
     }
 

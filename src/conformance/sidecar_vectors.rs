@@ -21,10 +21,10 @@ use arkret_core::{
 };
 use serde_json::Value;
 
-pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ck.vector.sidecar.ensure_idempotent.v1";
-pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "ck.vector.sidecar.eligibility_states.v1";
-pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "ck.vector.sidecar.existence_privacy.v1";
-pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "ck.vector.sidecar.multi_agent_publish.v1";
+pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ak.vector.sidecar.ensure_idempotent.v1";
+pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "ak.vector.sidecar.eligibility_states.v1";
+pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "ak.vector.sidecar.existence_privacy.v1";
+pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "ak.vector.sidecar.multi_agent_publish.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT,
@@ -34,7 +34,7 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
 ];
 
 const SIDECAR_VECTORS_FIXTURE_FILE: &str = "agent-sidecar-fixture.json";
-const SIDECAR_VECTORS_PROFILE: &str = "ck.profile.agent_sidecar_thread.v1";
+const SIDECAR_VECTORS_PROFILE: &str = "ak.profile.agent_sidecar_thread.v1";
 
 fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(SIDECAR_VECTORS_FIXTURE_FILE)?;
@@ -72,15 +72,15 @@ fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
-    if OP_AGENT_SIDECAR_THREAD_ENSURE != "ck.self.agent.sidecar_thread.command.ensure" {
+    if OP_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
         bail!("OP_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {OP_AGENT_SIDECAR_THREAD_ENSURE}");
     }
-    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ck.self.agent.sidecar_thread.command.ensure" {
+    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
         bail!(
             "CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE}"
         );
     }
-    if PROFILE_AGENT_SIDECAR_THREAD != "ck.profile.agent_sidecar_thread.v1" {
+    if PROFILE_AGENT_SIDECAR_THREAD != "ak.profile.agent_sidecar_thread.v1" {
         bail!("PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}");
     }
     // Idempotency invariant: same (controller, agent_principal) MUST

@@ -82,9 +82,9 @@ pub struct ProfileGateReport {
 /// is caught — but the suite list itself is loaded from the artifact at
 /// runtime, never hardcoded.
 const NEW_VECTOR_PROFILES: &[&str] = &[
-    "ck.profile.discovery_vectors.v1",
-    "ck.profile.event_kind_lattice_dispatch_vectors.v1",
-    "ck.profile.event_kind_payload_coverage_vectors.v1",
+    "ak.profile.discovery_vectors.v1",
+    "ak.profile.event_kind_lattice_dispatch_vectors.v1",
+    "ak.profile.event_kind_payload_coverage_vectors.v1",
 ];
 
 /// New implementation profiles that cotest emits explicit manifest entries
@@ -92,13 +92,13 @@ const NEW_VECTOR_PROFILES: &[&str] = &[
 /// event_kind through a live server, so they default to `unsupported` per
 /// spec's `default_unsupported_behavior` — never silently skipped.
 const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
-    "ck.profile.e2ee_relaxed.v1",
-    "ck.profile.directory_service.v1",
+    "ak.profile.e2ee_relaxed.v1",
+    "ak.profile.directory_service.v1",
     // Round C45 (2026-05-18 main; spec 5ed365c) — federation high-assurance
     // peer profile and morph.schema_migrate transformation profile. Both
     // default to `unsupported` here pending fixture vectors.
-    "ck.profile.federation.high_assurance.v1",
-    "ck.profile.morph.schema_migration_transformations.v1",
+    "ak.profile.federation.high_assurance.v1",
+    "ak.profile.morph.schema_migration_transformations.v1",
 ];
 
 /// Wired cotest suites. Each entry is `(suite_id, fixture_file)`. The fixture
@@ -240,7 +240,7 @@ pub fn build_profile_gate_report() -> Result<ProfileGateReport> {
     )?;
 
     let report = ProfileGateReport {
-        schema: "ck.cotest.profile_gate_report.v1".to_owned(),
+        schema: "ak.cotest.profile_gate_report.v1".to_owned(),
         entries,
         deprecated_profile_count,
         removed_operation_count,
@@ -300,7 +300,7 @@ fn collect_declared_implementation_profiles(profiles: &Value) -> Result<BTreeSet
         if let Some(array) = profiles.get(field).and_then(Value::as_array) {
             for entry in array {
                 if let Some(profile) = entry.as_str()
-                    && profile.starts_with("ck.profile.")
+                    && profile.starts_with("ak.profile.")
                 {
                     declared.insert(profile.to_owned());
                 }

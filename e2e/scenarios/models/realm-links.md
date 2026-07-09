@@ -53,7 +53,7 @@
 5. **alice** 在 T 中发送 `ck.realm.link` Move：
    ```json
    {
-     "kind": "ck.realm.link",
+     "kind": "ak.realm.link",
      "payload": {
        "target_realm_id": "<govRealmId>",
        "link_kind": "governed_by",

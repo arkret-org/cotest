@@ -27,7 +27,7 @@ const REDUCER_PROFILE_REGISTRY: &str = "registry/reducer-profile-registry.json";
 /// The reducer profile soland declares for its federation surface
 /// (`ck.peer.events.query.describe` → `supported_profiles`), and the profile pinned
 /// by the registered conformance vector.
-pub const FEDERATION_MINIMAL_PROFILE_ID: &str = "ck.profile.federation_minimal.v1";
+pub const FEDERATION_MINIMAL_PROFILE_ID: &str = "ak.profile.federation_minimal.v1";
 
 /// Compute the §4.1.1 `reducer_profile_digest` for `profile_id` from the
 /// published registry row. Fails closed when the registry row is missing, the
@@ -119,7 +119,7 @@ mod tests {
     /// Missing registry rows MUST fail closed instead of inventing a digest.
     #[test]
     fn unknown_profile_fails_closed() {
-        let error = reducer_profile_digest("ck.profile.does_not_exist.v1")
+        let error = reducer_profile_digest("ak.profile.does_not_exist.v1")
             .expect_err("unknown profile must fail closed");
         assert!(error.to_string().contains("fail closed"));
     }

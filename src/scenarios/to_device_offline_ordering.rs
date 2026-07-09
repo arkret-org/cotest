@@ -185,8 +185,8 @@ async fn send_to_device(
         "messages": {
             recipient: {
                 device_id: {
-                    "kind": "ck.mls.application",
-                    "content": encrypted_envelope("ck.mls.application", ciphertext),
+                    "kind": "ak.mls.application",
+                    "content": encrypted_envelope("ak.mls.application", ciphertext),
                     "expires_at": "2026-12-31T00:00:00Z",
                 }
             }

@@ -218,7 +218,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(invite.status()).toBe(200);
     const inviteBody = await invite.json();
     expect(inviteBody.agent_id).toBe(identity.did);
-    expect(inviteBody.emitted.type).toBe("ck.audit.accessed");
+    expect(inviteBody.emitted.type).toBe("ak.audit.accessed");
     expect(inviteBody.emitted.realm_id).toBe(realmId);
     expect(typeof inviteBody.emitted.binding_proof).toBe("string");
 
@@ -249,7 +249,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect((await resetResp.json()).default).toBe("deny");
 
     const defaultDenyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
+      data: { action: "ak.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
     });
     expect(defaultDenyResp.status()).toBe(200);
     expect((await defaultDenyResp.json()).decision).toBe("deny");
@@ -260,7 +260,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     // Explicit permissive baseline when no rules match.
     const allowResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
+      data: { action: "ak.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
     });
     expect(allowResp.status()).toBe(200);
     expect((await allowResp.json()).decision).toBe("allow");
@@ -270,7 +270,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       data: {
         rules: [
           {
-            action: "ck.member.invite",
+            action: "ak.member.invite",
             actor: "did:web:alice",
             target: "did:web:bob",
             decision: "deny",
@@ -282,7 +282,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
 
     const denyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:bob" },
+      data: { action: "ak.member.invite", actor_id: "did:web:alice", target: "did:web:bob" },
     });
     expect(denyResp.status()).toBe(200);
     const denyBody = await denyResp.json();
@@ -365,15 +365,15 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const signed = await request.post(`${baseUrl}/sign-package`, {
       data: {
         namespace,
-        requested_scopes: ["ck.message.create", "ck.applet.ghost.provision"],
+        requested_scopes: ["ak.message.create", "ck.applet.ghost.provision"],
       },
     });
     expect(signed.status()).toBe(200);
     const body = await signed.json();
     expect(body.package_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(body.applet_package.schema).toBe("ck.schema.applet_package.v1");
+    expect(body.applet_package.schema).toBe("ak.schema.applet_package.v1");
     expect(body.applet_package.bot_actor_id.startsWith(`did:web:bot-${namespace}`)).toBe(true);
-    expect(body.applet_package.requested_scopes).toContain("ck.message.create");
+    expect(body.applet_package.requested_scopes).toContain("ak.message.create");
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
     expect(body.applet_package.endpoint_set).toBeUndefined();
     expect(body.applet_package.webhook_auth.accepted_algs).toContain("EdDSA");
@@ -466,7 +466,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       data: {
         from_vid: unestablishedRemote,
         to_vid: bsBody.endpoint_vid,
-        payload_b64: Buffer.from(JSON.stringify({ type: "ck.invite.create" })).toString("base64url"),
+        payload_b64: Buffer.from(JSON.stringify({ type: "ak.invite.create" })).toString("base64url"),
         signature_b64: "test-sig",
       },
     });
@@ -478,7 +478,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
         from_vid: remoteVid,
         to_vid: bsBody.endpoint_vid,
         payload_b64: Buffer.from(
-          JSON.stringify({ type: "ck.invite.create", target: bsBody.endpoint_vid }),
+          JSON.stringify({ type: "ak.invite.create", target: bsBody.endpoint_vid }),
         ).toString("base64url"),
         signature_b64: "test-sig",
       },

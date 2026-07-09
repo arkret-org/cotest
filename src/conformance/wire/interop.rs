@@ -10,7 +10,7 @@ use crate::conformance::{required_field, required_str, validate_profile};
 
 pub fn run_interop_downgrade_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("interop_downgrade_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.mimi_interop_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.mimi_interop_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

@@ -57,13 +57,13 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     assert_array_contains(
         &describe,
         "discovery_profiles",
-        "ck.profile.directory_service.v1",
+        "ak.profile.directory_service.v1",
     );
     if directory.is_spawned() {
         assert_array_contains(
             &describe,
             "discovery_profiles",
-            "ck.private_contact_discovery.v1",
+            "ak.private_contact_discovery.v1",
         );
     }
     assert_array_contains(&describe, "accepted_resource_kinds", "space");

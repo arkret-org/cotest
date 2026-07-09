@@ -15,7 +15,7 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
     let event_kinds = event_kind_metadata(&event_kind_registry)?;
 
     let crypto_fixture = load_fixture_value("crypto-signature-fixture.json")?;
-    validate_profile(&crypto_fixture, "ck.vector_group.crypto_signature.v1")?;
+    validate_profile(&crypto_fixture, "ak.vector_group.crypto_signature.v1")?;
     for vector in crypto_fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -315,14 +315,14 @@ fn validate_synthetic_event_envelope_negatives(
     event_kinds: &HashMap<String, EventKindInfo>,
 ) -> Result<()> {
     let base = sample_envelope_event(
-        "ck.message.create",
+        "ak.message.create",
         1,
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "hello"
             },
             "noncritical_future_field": {"preserve": true}
@@ -342,27 +342,27 @@ fn validate_synthetic_event_envelope_negatives(
     }
 
     let duplicate_a = sample_envelope_event(
-        "ck.message.create",
+        "ak.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "a"
             }
         }),
     );
     let duplicate_b = sample_envelope_event(
-        "ck.message.create",
+        "ak.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "b"
             }
         }),
@@ -377,14 +377,14 @@ fn validate_synthetic_event_envelope_negatives(
     let mut future_context = EventEnvelopeContext::default_for_durable_history();
     future_context.now_hlc_ms = Some(0x01970e589d21);
     let future = sample_envelope_event(
-        "ck.message.create",
+        "ak.message.create",
         3,
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "future"
             }
         }),
@@ -403,14 +403,14 @@ fn validate_synthetic_event_envelope_negatives(
         "2026-05-02T00:05:00Z".to_owned(),
     );
     let backdated = sample_envelope_event(
-        "ck.message.create",
+        "ak.message.create",
         4,
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "backdated"
             }
         }),
@@ -427,14 +427,14 @@ fn validate_synthetic_event_envelope_negatives(
     // `additionalProperties:false`). Inject a forbidden legacy field
     // (`space_id`) onto an otherwise-valid event and assert hard rejection.
     let mut unknown_field_event = sample_envelope_event(
-        "ck.message.create",
+        "ak.message.create",
         5,
         "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "ck.content.text",
+                "kind": "ak.content.text",
                 "body": "legacy field"
             }
         }),
@@ -514,7 +514,7 @@ fn validate_event_envelope(
     }
 
     let kind = match event.get("kind").and_then(Value::as_str) {
-        Some(kind) if kind.starts_with("ck.") => kind,
+        Some(kind) if kind.starts_with("ak.") => kind,
         Some(_) | None => {
             return Ok(EventEnvelopeDecision::reject(
                 "schema_violation",
@@ -769,7 +769,7 @@ fn validate_event_envelope(
 
 fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
     match kind {
-        "ck.message.create" => {
+        "ak.message.create" => {
             if content.get("strand_id").and_then(Value::as_str).is_none() {
                 return Some("message create content missing strand_id".to_owned());
             }
@@ -792,16 +792,16 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
             }
             None
         }
-        "ck.strand.move" => {
+        "ak.strand.move" => {
             missing_payload_fields(content, &["board_id", "strand_id", "to_list_id", "rank"])
         }
-        "ck.strand.reorder" => {
+        "ak.strand.reorder" => {
             missing_payload_fields(content, &["board_id", "strand_id", "list_id", "rank"])
         }
-        "ck.container.rebalance" => {
+        "ak.container.rebalance" => {
             missing_payload_fields(content, &["board_id", "list_id", "rank"])
         }
-        "ck.member.state" => {
+        "ak.member.state" => {
             if let Some(err) = missing_payload_fields(content, &["membership"]) {
                 return Some(err);
             }

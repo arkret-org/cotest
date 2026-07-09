@@ -60,14 +60,14 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     )
     .await?;
     assert_eq!(typing["accepted"], true);
-    assert_eq!(typing["kind"], "ck.typing");
+    assert_eq!(typing["kind"], "ak.typing");
 
     let sync_with_typing = alice.sync().await?;
     let ephemeral = sync_with_typing["realms"][&realm_id]["ephemeral"]
         .as_array()
         .unwrap();
     assert_eq!(ephemeral.len(), 1);
-    assert_eq!(ephemeral[0]["type"], "ck.typing");
+    assert_eq!(ephemeral[0]["type"], "ak.typing");
     assert_eq!(ephemeral[0]["strand_id"], strand_id);
     assert!(
         ephemeral[0]["actors"]
@@ -100,7 +100,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let initial_sync = bob.sync().await?;
     assert!(
-        account_data_entry(&initial_sync, "ck.push_rules").is_none(),
+        account_data_entry(&initial_sync, "ak.push_rules").is_none(),
         "initial account subscribe must not include ck.push_rules: {initial_sync}"
     );
 
@@ -121,9 +121,9 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let rules_written = bob
         .submit_event(
             &realm_id,
-            "ck.account_data.set",
+            "ak.account_data.set",
             json!({
-                "key": "ck.push_rules",
+                "key": "ak.push_rules",
                 "owner": bob.actor.as_str(),
                 "body": push_rules_carrier,
                 "updated_at": "2026-05-02T00:00:00Z"
@@ -134,7 +134,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let listed_sync = bob.sync().await?;
     let listed_rules =
-        account_data_entry(&listed_sync, "ck.push_rules").expect("ck.push_rules account_data row");
+        account_data_entry(&listed_sync, "ak.push_rules").expect("ck.push_rules account_data row");
     assert_eq!(
         listed_rules["content"]["client_side_conformance"]["encrypted_account_data"], true,
         "push_rules must round-trip as an encrypted-account-data conformance marker: {listed_rules}"
@@ -143,9 +143,9 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let deleted_rules = bob
         .submit_event(
             &realm_id,
-            "ck.account_data.set",
+            "ak.account_data.set",
             json!({
-                "key": "ck.push_rules",
+                "key": "ak.push_rules",
                 "owner": bob.actor.as_str(),
                 "tombstone": true,
                 "updated_at": "2026-05-02T00:00:01Z"
@@ -156,7 +156,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let final_sync = bob.sync().await?;
     assert!(
-        account_data_entry(&final_sync, "ck.push_rules").is_none(),
+        account_data_entry(&final_sync, "ak.push_rules").is_none(),
         "tombstoned ck.push_rules must not appear in account subscribe: {final_sync}"
     );
 
@@ -179,11 +179,11 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
     let created = client
         .submit_event(
             realm_id,
-            "ck.strand.create",
+            "ak.strand.create",
             json!({
                 "object": {
                     "id": strand_id,
-                    "schema": "ck.schema.strand.v1",
+                    "schema": "ak.schema.strand.v1",
                     "realm_id": realm_id,
                     "tracks": {"discussion": {"enabled": true, "is_primary": true}},
                     "created_by": client.actor,
@@ -252,7 +252,7 @@ fn typing_envelope(
         .expect("zeroing nanos is valid");
     let expires_at = sent_at + ChronoDuration::seconds(30);
     let mut envelope = arkret_core::EphemeralEnvelope::new(
-        "ck.typing",
+        "ak.typing",
         arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
         arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
         Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),

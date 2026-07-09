@@ -99,7 +99,7 @@ function secretStorageEnvelope(opts: {
       },
       aead: {
         name: "xchacha20_poly1305",
-        aead_profile: "ck.aead.xchacha20_poly1305.v1",
+        aead_profile: "ak.aead.xchacha20_poly1305.v1",
         nonce_salt: randomBytes(16).toString("base64url"),
         nonce: randomBytes(24).toString("base64url"),
       },
@@ -109,7 +109,7 @@ function secretStorageEnvelope(opts: {
       hkdf_info: `arkret-key-backup/${backupClass}/${subdomain}/v1`,
       subdomain,
       aead_aad: {
-        schema: "ck.schema.key_backup.v1",
+        schema: "ak.schema.key_backup.v1",
         actor_id: opts.actorId,
         device_id: opts.deviceId,
         backup_class: backupClass,

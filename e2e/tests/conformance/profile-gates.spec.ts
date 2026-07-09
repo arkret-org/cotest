@@ -251,7 +251,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: "ak:realm:01904100-0000-7000-8000-000000000999",
-      kind: "ck.edge.applet.command.transaction",
+      kind: "ak.edge.applet.command.transaction",
       payload: { transaction_id: "ak:txn:profile-gate", params: {} },
     });
 
@@ -280,16 +280,16 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: "ak:realm:01904100-0000-7000-8000-000000001000",
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: "ak:strand:01904100-0000-7000-8000-000000001000",
         track_name: "discussion",
-        content: { kind: "ck.content.text", body: "must not accept unknown critical extension" },
+        content: { kind: "ak.content.text", body: "must not accept unknown critical extension" },
       },
     });
     (envelope.requirements as { critical_extensions: unknown[] }).critical_extensions = [
       {
-        id: "ck.ext.audit_attestation.unimplemented.v1",
+        id: "ak.ext.audit_attestation.unimplemented.v1",
         fail_closed: true,
         extension_scope: "payload",
       },
@@ -318,9 +318,9 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const body = (await resp.json()) as DescribeResponse;
     const claimed = body.claimed_profiles ?? [];
     const claimedIds = new Set(claimed.map((entry) => entry.profile_id).filter(Boolean));
-    expect(claimedIds.has("ck.profile.auth_server.v1")).toBe(true);
-    expect(claimedIds.has("ck.profile.identity_registry.v1")).toBe(false);
-    expect(claimedIds.has("ck.profile.principal_server.v1")).toBe(false);
+    expect(claimedIds.has("ak.profile.auth_server.v1")).toBe(true);
+    expect(claimedIds.has("ak.profile.identity_registry.v1")).toBe(false);
+    expect(claimedIds.has("ak.profile.principal_server.v1")).toBe(false);
     for (const entry of claimed) {
       expect(entry.claim_kind).toBe("self_claimed");
     }

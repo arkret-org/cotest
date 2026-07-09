@@ -42,12 +42,12 @@ use serde_json::{Value, json};
 // ── Canonical vector ids (registered in vector-registry.json) ───────────────
 
 pub const VECTOR_ID_RECORDING_RETENTION_LOCK: &str =
-    "ck.vector.call_state.recording_retention_lock.v1";
+    "ak.vector.call_state.recording_retention_lock.v1";
 pub const VECTOR_ID_RECORDING_RESULT_ARTIFACT_SHAPE: &str =
-    "ck.vector.call_state.recording_result_artifact_shape.v1";
-pub const VECTOR_ID_TRANSCRIBE_LIFECYCLE: &str = "ck.vector.call_state.transcribe_lifecycle.v1";
-pub const VECTOR_ID_MODERATOR_KICK_BAN: &str = "ck.vector.call_state.moderator_kick_ban.v1";
-pub const VECTOR_ID_P2P_TO_SFU_UPGRADE: &str = "ck.vector.call_state.p2p_to_sfu_upgrade.v1";
+    "ak.vector.call_state.recording_result_artifact_shape.v1";
+pub const VECTOR_ID_TRANSCRIBE_LIFECYCLE: &str = "ak.vector.call_state.transcribe_lifecycle.v1";
+pub const VECTOR_ID_MODERATOR_KICK_BAN: &str = "ak.vector.call_state.moderator_kick_ban.v1";
+pub const VECTOR_ID_P2P_TO_SFU_UPGRADE: &str = "ak.vector.call_state.p2p_to_sfu_upgrade.v1";
 
 /// Canonical list of the 5 call-state media-lifecycle vector ids.
 pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
@@ -59,7 +59,7 @@ pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
 ];
 
 const CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE: &str = "call-state-media-lifecycle-fixture.json";
-const CALL_STATE_MEDIA_LIFECYCLE_PROFILE: &str = "ck.profile.media_service_binding.v1";
+const CALL_STATE_MEDIA_LIFECYCLE_PROFILE: &str = "ak.profile.media_service_binding.v1";
 
 fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE)?;
@@ -110,9 +110,9 @@ const REASON_CALL_SUMMARY_INVALID: &str = "call_summary_invalid";
 
 // ── Exporter-label pins (exporter-label-registry.json) ──────────────────────
 
-const LABEL_RTC_FRAME_KEY: &str = "ck-rtc-frame-key/v1";
-const LABEL_RTC_RECORDING_KEY: &str = "ck-rtc-recording-key/v1";
-const LABEL_RTC_TRANSCRIPT_KEY: &str = "ck-rtc-transcript-key/v1";
+const LABEL_RTC_FRAME_KEY: &str = "ak.rtc-frame-key/v1";
+const LABEL_RTC_RECORDING_KEY: &str = "ak.rtc-recording-key/v1";
+const LABEL_RTC_TRANSCRIPT_KEY: &str = "ak.rtc-transcript-key/v1";
 
 /// Terminal call states (`call-state.md` §4.2). `ck.call.summary` is gated on
 /// the call head being one of these.
@@ -366,7 +366,7 @@ fn evaluate_recording_result_artifact_shape(
 }
 
 pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
-    if CallRecordingArtifact::SCHEMA != "ck.schema.call_recording_artifact.v1" {
+    if CallRecordingArtifact::SCHEMA != "ak.schema.call_recording_artifact.v1" {
         bail!(
             "CallRecordingArtifact schema spelling drifted: {}",
             CallRecordingArtifact::SCHEMA

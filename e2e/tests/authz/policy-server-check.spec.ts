@@ -93,11 +93,11 @@ async function submitGatedMessage(
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      content: { kind: "ck.content.text", body },
+      content: { kind: "ak.content.text", body },
     },
   });
   const response = await request.post(
@@ -156,10 +156,10 @@ test.describe("policy server check", () => {
     );
     expect(describe.supported_operations).toEqual(
       expect.arrayContaining([
-        "ck.self.authz.query.check",
-        "ck.self.authz.grants.query.effective",
-        "ck.self.authz.invites.query.list",
-        "ck.self.policy.query.check",
+        "ak.self.authz.query.check",
+        "ak.self.authz.grants.query.effective",
+        "ak.self.authz.invites.query.list",
+        "ak.self.policy.query.check",
       ]),
     );
     const limits = describe.limits as Record<string, unknown>;
@@ -232,7 +232,7 @@ test.describe("policy server check", () => {
       headers: authHeaders(aliceToken),
       data: {
         actor_id: bob.did,
-        action: "ck.message.create",
+        action: "ak.message.create",
         resource: {
           kind: "realm",
           id: realmId,

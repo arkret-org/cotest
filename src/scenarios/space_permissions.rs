@@ -44,16 +44,16 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
             .json(&event_envelope(
                 "did:web:alice.example",
                 unauth_realm_id,
-                "ck.realm.create",
+                "ak.realm.create",
                 json!({
                     "object": {
                         "id": unauth_realm_id,
-                        "schema": "ck.schema.realm.v1",
+                        "schema": "ak.schema.realm.v1",
                         "title": "No Auth",
                         "summary": "No Auth",
                         "created_by": "did:web:alice.example",
                         "trust_domain": "ak:trust_domain:soland.local",
-                        "schema_refs": ["ck.schema.realm.v1"],
+                        "schema_refs": ["ak.schema.realm.v1"],
                         "default_discoverability": "invite_only",
                         "default_join_rule": "invite",
                         "history_visibility": "shared",
@@ -91,7 +91,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
             .json(&event_envelope(
                 "did:web:bob-space.example",
                 &realm_id,
-                "ck.member.state",
+                "ak.member.state",
                 member_join_payload_value(&realm_id, "did:web:bob-space.example")?,
             )),
         StatusCode::FORBIDDEN,
@@ -162,7 +162,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .json(&event_envelope(
                 "did:web:bob-visible.example",
                 &realm_id,
-                "ck.message.create",
+                "ak.message.create",
                 message_create_text_payload(&realm_id, "not a member")?,
             )),
         StatusCode::FORBIDDEN,
@@ -193,7 +193,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &alice.token,
         "did:web:alice.example",
         &realm_id,
-        "ck.realm.destroy",
+        "ak.realm.destroy",
         json!({"reason": "owner_requested"}),
         StatusCode::OK,
     )
@@ -206,7 +206,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .json(&event_envelope(
                 "did:web:alice.example",
                 &realm_id,
-                "ck.message.create",
+                "ak.message.create",
                 message_create_text_payload(&realm_id, "after delete")?,
             )),
         StatusCode::CONFLICT,

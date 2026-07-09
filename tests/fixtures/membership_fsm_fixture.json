@@ -1,9 +1,9 @@
 {
-  "profile": "ck.profile.membership_fsm_vectors.v1",
+  "profile": "ak.profile.membership_fsm_vectors.v1",
   "version": "2026-05-09",
   "comment": "B5 Round 23 — membership transition FSM vectors per ck.component.member.state.v1 (lattice=fsm, bottom=reject). Spec authz/event-auth-state-resolution.md §6 + space-membership.md §3 defines legal transitions: invited→{join, leave, ban (admin)}; join→{leave, ban (admin), kick (admin)}; leave→{invited, ban (admin)}; ban→{leave (admin)}; kick→{invited, knock}; knock→{invited, leave}. Illegal transitions MUST fail closed at the FSM bottom mode (reject) — they DO NOT silently no-op. Vectors below cover ≥8 legal + ≥7 illegal transitions.",
   "encoder": {
-    "cell_family": "ck.component.member.state.v1",
+    "cell_family": "ak.component.member.state.v1",
     "lattice": "fsm",
     "bottom": "reject",
     "states": ["invited", "join", "leave", "ban", "kick", "knock"]

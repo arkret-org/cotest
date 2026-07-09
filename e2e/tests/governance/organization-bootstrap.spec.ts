@@ -85,7 +85,7 @@ test.describe("organization principal bootstrap / delegation", () => {
         {
           headers: authHeaders(token),
           data: {
-            purpose: "ck.realm.organization",
+            purpose: "ak.realm.organization",
             covered_relationships: ["owner"],
             covered_control_scopes: ["official_badge", "realm_admin"],
           },
@@ -107,8 +107,8 @@ test.describe("organization principal bootstrap / delegation", () => {
         data: signedEventEnvelope({
           actorDid: admin.did,
           realmId,
-          kind: "ck.realm.organization",
-          schemaId: "ck.schema.event_payload.v1",
+          kind: "ak.realm.organization",
+          schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: `org-stmt-${uuidV7()}`,
             realm_id: realmId,
@@ -153,7 +153,7 @@ test.describe("organization principal bootstrap / delegation", () => {
         {
           headers: authHeaders(token),
           data: {
-            purpose: "ck.realm.organization",
+            purpose: "ak.realm.organization",
             covered_relationships: ["owner"],
             covered_control_scopes: ["official_badge"],
           },
@@ -181,8 +181,8 @@ test.describe("organization principal bootstrap / delegation", () => {
         data: signedEventEnvelope({
           actorDid: admin.did,
           realmId,
-          kind: "ck.realm.organization",
-          schemaId: "ck.schema.event_payload.v1",
+          kind: "ak.realm.organization",
+          schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: `org-stmt-${uuidV7()}`,
             realm_id: realmId,

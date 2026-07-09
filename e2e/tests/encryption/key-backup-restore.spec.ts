@@ -160,7 +160,7 @@ test.describe("key backup restore live path", () => {
         headers: authHeaders(aliceToken),
         data: {
           proof: {
-            kind: "ck.key_backup.delete.development.v1",
+            kind: "ak.key_backup.delete.development.v1",
             value: deleteProof(alice.did, backupId),
           },
           reason: "user_requested",
@@ -268,7 +268,7 @@ function makeBackupBody(
       // deterministic-nonce `nonce_salt` alongside the AEAD profile.
       aead: {
         name: "xchacha20_poly1305",
-        aead_profile: "ck.aead.xchacha20_poly1305.v1",
+        aead_profile: "ak.aead.xchacha20_poly1305.v1",
         nonce: "bW9jay14Y2hhY2hhLW5vbmNlLTEyMzQ1Ng",
         nonce_salt: "bW9jay1ub25jZS1zYWx0LTE2Ynl0ZXM",
       },
@@ -278,7 +278,7 @@ function makeBackupBody(
       hkdf_info: "arkret-key-backup/secret_storage/aead/v1",
       subdomain: "aead",
       aead_aad: {
-        schema: "ck.schema.key_backup.v1",
+        schema: "ak.schema.key_backup.v1",
         actor_id: actor.did,
         device_id: actor.deviceId,
         backup_class: "secret_storage",

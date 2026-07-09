@@ -30,9 +30,9 @@ const facadeDid =
 const supportedContentKinds = new Set([
   "m.text",
   "text/plain",
-  "ck.message.text",
-  "ck.message.revise",
-  "ck.message.redact",
+  "ak.message.text",
+  "ak.message.revise",
+  "ak.message.redact",
 ]);
 
 const identities = new Map([

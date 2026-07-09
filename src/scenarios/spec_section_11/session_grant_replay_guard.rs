@@ -1,6 +1,6 @@
 //! §11.3 — session grant replay guard.
 //!
-//! Re-submitting a `ck.session.grant` envelope with an already-consumed
+//! Re-submitting a `ak.session.grant` envelope with an already-consumed
 //! `nonce` MUST be rejected. The replay guard MUST NOT silently treat
 //! the duplicate as a no-op.
 

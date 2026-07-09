@@ -46,7 +46,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("media token exchange", () => {
   test(
-    "ck.realm.media_service foci -> exchangeMediaToken issues a LiveKit JWT backend_token + participant_binding",
+    "ak.realm.media_service foci -> exchangeMediaToken issues a LiveKit JWT backend_token + participant_binding",
     async ({ request }) => {
       const { alice, aliceToken, realmId, callId } = await setupMediaCall(request);
       const response = await exchangeMediaToken(request, aliceToken, {

@@ -564,7 +564,7 @@ fn extract_supported_operation_literals(source: &str) -> Vec<(usize, String)> {
         }
         if in_supported_operations {
             for literal in extract_string_literals(line) {
-                if literal.starts_with("ck.") {
+                if literal.starts_with("ak.") {
                     out.push((line_index + 1, literal));
                 }
             }
@@ -717,7 +717,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
             // carries `device_id` and a detached-JWS `proof` bound to
             // `{actor_id}#{device_id}` over the canonical envelope bytes.
             let mut envelope = json!({
-                "kind": "ck.typing",
+                "kind": "ak.typing",
                 "realm_id": ctx.realm_id,
                 "actor_id": ctx.alice_did,
                 "device_id": MOCK_PARITY_ALICE_DEVICE_ID,
@@ -775,11 +775,11 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
     let payload = json!({
         "object": {
             "id": realm_id,
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "title": title,
             "trust_domain": "ak:trust_domain:mock-parity.cotest.local",
             "created_by": ctx.alice_did,
-            "schema_refs": ["ck.schema.realm.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "summary": "created by T-P0-04 parity baseline",
             "default_discoverability": "public",
             "default_join_rule": "public",
@@ -807,7 +807,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
     );
     let mut event = json!({
         "event_id": event_id,
-        "kind": "ck.realm.create",
+        "kind": "ak.realm.create",
         "realm_id": realm_id,
         "actor_id": ctx.alice_did,
         "actor_seq": actor_seq,
@@ -816,7 +816,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "prev_refs": [],
         "refs": [],
         "requirements": {
-            "schema": ["ck.schema.realm.v1"]
+            "schema": ["ak.schema.realm.v1"]
         },
         "payload": payload,
         "preconditions": [{
@@ -1097,7 +1097,7 @@ fn normalize_server_describe(body: Value) -> Value {
             operations
                 .iter()
                 .filter_map(Value::as_str)
-                .any(|operation| operation == "ck.self.events.command.submit")
+                .any(|operation| operation == "ak.self.events.command.submit")
         })
         .unwrap_or(false);
     json!({
@@ -1122,7 +1122,7 @@ fn normalize_directory_describe(body: Value) -> Value {
             operations
                 .iter()
                 .filter_map(Value::as_str)
-                .any(|operation| operation == "ck.find.directory.query.describe")
+                .any(|operation| operation == "ak.find.directory.query.describe")
         })
         .unwrap_or(false);
     let accepts_did_web = body

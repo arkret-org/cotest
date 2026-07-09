@@ -34,7 +34,7 @@ struct CanonicalVector {
 fn vectors() -> Vec<CanonicalVector> {
     vec![
         CanonicalVector {
-            vector_id: "ck.cotest_vector.canonical_hash.coauth_handle_claim.v1",
+            vector_id: "ak.cotest_vector.canonical_hash.coauth_handle_claim.v1",
             label: "coauth handle_claim digest input",
             // Mirrors coauth's `HandleClaimDigestInput` shape from
             // `crates/backend/src/handlers/arkret.rs`. RFC 3339 UTC strings
@@ -46,7 +46,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // irrelevant in canonical JSON (keys are sorted), but the digest
             // changes because both the field name and the value bytes change.
             payload: json!({
-                "type": "ck.handle.claim",
+                "type": "ak.handle.claim",
                 "subject_id": "did:web:alice.example",
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
@@ -72,7 +72,7 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:39f8e55b16f14d90dc38928b872d161b85a0f3ae1a6c123faf3107d51799f8b0",
         },
         CanonicalVector {
-            vector_id: "ck.cotest_vector.canonical_hash.soland_event_envelope.v1",
+            vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
             label: "soland event envelope payload",
             // The shape soland hashes inside `validate_event_proofs` after
             // stripping `proofs` / `unsigned` from the on-wire envelope.
@@ -80,11 +80,11 @@ fn vectors() -> Vec<CanonicalVector> {
                 "actor_id": "did:web:alice.example",
                 "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
                 "realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",
-                "kind": "ck.message.create",
+                "kind": "ak.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
                     "content": {
-                        "kind": "ck.content.text",
+                        "kind": "ak.content.text",
                         "body": "hello"
                     },
                     "strand_id": "ak:strand:01904100-0000-7000-8000-6c663fa0205f",
@@ -95,7 +95,7 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:08a01dcc754098f5c64e4ce9bdbf17cdc58e8d6b59f3cc4e139a88d9213d510a",
         },
         CanonicalVector {
-            vector_id: "ck.cotest_vector.canonical_hash.starid_webvh_update.v1",
+            vector_id: "ak.cotest_vector.canonical_hash.starid_webvh_update.v1",
             label: "starid did:webvh update entry (proofless)",
             // The shape starid feeds into `proof::canonical_bytes` after
             // stripping `proof[]` from a webvh log entry.
@@ -116,7 +116,7 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:0f144fa1df6408114a253823b0814b6059b1656737e6e957bca6c89fa215b59b",
         },
         CanonicalVector {
-            vector_id: "ck.cotest_vector.canonical_hash.webvh_default_handle_claim.v1",
+            vector_id: "ak.cotest_vector.canonical_hash.webvh_default_handle_claim.v1",
             label: "coauth handle_claim digest input (did:webvh default subjects)",
             // identity-did.md §3: v1 core defaults BOTH principal and service
             // DIDs to `did:webvh`; `did:web` is reserved for explicit no-history
@@ -127,7 +127,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // default method drifts the digest here first. The SCID below is a
             // fixed deterministic test constant (NOT a live anchored value).
             payload: json!({
-                "type": "ck.handle.claim",
+                "type": "ak.handle.claim",
                 "subject_id": "did:webvh:zcotesthandleclaimscid000000000000:alice.example",
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
@@ -150,7 +150,7 @@ fn vectors() -> Vec<CanonicalVector> {
 }
 
 fn canonical_fixture_suite() -> CanonicalFixtureSuite {
-    let mut builder = CanonicalFixtureBuilder::new("ck.profile.cotest.canonical_hash.v1")
+    let mut builder = CanonicalFixtureBuilder::new("ak.profile.cotest.canonical_hash.v1")
         .version("2026-06-19")
         .description("Canonical hash convergence vectors shared through the SDK fixture builder.");
     for vector in vectors() {

@@ -1,13 +1,13 @@
 {
   "suite": "scaffold_profile_gate",
-  "profile": "ck.vector_group.privacy_security.v1",
+  "profile": "ak.vector_group.privacy_security.v1",
   "cases": [
     {
       "name": "coauth_admin_full_claim_with_501_is_rejected",
       "expect": "reject",
       "describe": {
         "service": "coauth",
-        "supported_profiles": ["ck.profile.principal_server.v1"],
+        "supported_profiles": ["ak.profile.principal_server.v1"],
         "admin_surfaces": [
           {
             "path": "/api/admin/v1/devices",
@@ -23,8 +23,8 @@
       "describe": {
         "service": "inkson",
         "supported_profiles": [
-          "ck.profile.full_client.v1",
-          "ck.profile.e2ee_client.v1"
+          "ak.profile.full_client.v1",
+          "ak.profile.e2ee_client.v1"
         ],
         "client_status": {
           "production_fallbacks": [
@@ -39,7 +39,7 @@
       "expect": "reject",
       "describe": {
         "service": "soland",
-        "supported_profiles": ["ck.profile.principal_server.v1"],
+        "supported_profiles": ["ak.profile.principal_server.v1"],
         "limits": {
           "profile_status": {
             "limitations": [
@@ -58,10 +58,10 @@
       "expect": "pass",
       "describe": {
         "service": "soland",
-        "supported_profiles": ["ck.profile.mimi_interop.v1"],
+        "supported_profiles": ["ak.profile.mimi_interop.v1"],
         "unsupported_profiles": [
           {
-            "profile": "ck.profile.principal_server.v1",
+            "profile": "ak.profile.principal_server.v1",
             "status": "unsupported",
             "reason": "durable outbound fanout is not claimed"
           }

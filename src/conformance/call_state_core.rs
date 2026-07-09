@@ -22,14 +22,14 @@ use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_PARTICIPANT_BINDING_INVALID: &str =
-    "ck.vector.call_state.participant_binding_invalid.v1";
+    "ak.vector.call_state.participant_binding_invalid.v1";
 pub const VECTOR_ID_INITIAL_STATE_ACCEPTS_ALLOWED: &str =
-    "ck.vector.call_state.initial_state_accepts_allowed.v1";
-pub const VECTOR_ID_TRANSITION_MATRIX: &str = "ck.vector.call_state.transition_matrix.v1";
-pub const VECTOR_ID_TERMINAL_ABSORBING: &str = "ck.vector.call_state.terminal_absorbing.v1";
-pub const VECTOR_ID_REPLAY_SAME_STATE_NOOP: &str = "ck.vector.call_state.replay_same_state_noop.v1";
+    "ak.vector.call_state.initial_state_accepts_allowed.v1";
+pub const VECTOR_ID_TRANSITION_MATRIX: &str = "ak.vector.call_state.transition_matrix.v1";
+pub const VECTOR_ID_TERMINAL_ABSORBING: &str = "ak.vector.call_state.terminal_absorbing.v1";
+pub const VECTOR_ID_REPLAY_SAME_STATE_NOOP: &str = "ak.vector.call_state.replay_same_state_noop.v1";
 pub const VECTOR_ID_CONCURRENT_SIBLING_BOTTOM: &str =
-    "ck.vector.call_state.concurrent_sibling_bottom.v1";
+    "ak.vector.call_state.concurrent_sibling_bottom.v1";
 
 pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PARTICIPANT_BINDING_INVALID,
@@ -41,7 +41,7 @@ pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
 ];
 
 const CALL_STATE_CORE_FIXTURE_FILE: &str = "call-state-core-fixture.json";
-const CALL_STATE_CORE_PROFILE: &str = "ck.profile.media_service_binding.v1";
+const CALL_STATE_CORE_PROFILE: &str = "ak.profile.media_service_binding.v1";
 
 const REASON_CALL_STATE_TRANSITION_INVALID: &str = "call_state_transition_invalid";
 const REASON_CALL_STATE_TERMINAL: &str = "call_state_terminal";

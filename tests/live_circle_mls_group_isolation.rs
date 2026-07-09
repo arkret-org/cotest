@@ -80,7 +80,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     }
 
     // ── 1. Bootstrap soland (coauth optional for this scenario) ─────────
-    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-mls-iso")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ak.0007-mls-iso")).await?;
     stack
         .assert_healthy()
         .await
@@ -140,7 +140,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     let _ = admin
         .post("/_arkret/self/realms")
         .json(&json!({
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "MLS Iso Realm",
             "encryption_profile": "mls_rfc9420",

@@ -36,7 +36,7 @@ use arkret_core::schema::{
 };
 use serde_json::Value;
 
-const ORG_EVENT_KIND: &str = "ck.realm.organization";
+const ORG_EVENT_KIND: &str = "ak.realm.organization";
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -57,7 +57,7 @@ fn strong_catalog() -> EventPayloadValidatorCatalog {
         catalog.rules[ORG_EVENT_KIND]
             .payload_schema_id
             .ends_with("#/$defs/realm_organization_payload"),
-        "ck.realm.organization must dispatch to the realm_organization_payload def, got {}",
+        "ak.realm.organization must dispatch to the realm_organization_payload def, got {}",
         catalog.rules[ORG_EVENT_KIND].payload_schema_id
     );
     catalog

@@ -93,7 +93,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     let event_id = "ak:event:0196419b-0000-7000-8000-pp1pp1pp1pp1";
     let envelope = json!({
         "event_id": event_id,
-        "kind": "ck.message.create",
+        "kind": "ak.message.create",
         "actor_id": actor,
         "actor_seq": 1,
         "realm_id": realm_id,

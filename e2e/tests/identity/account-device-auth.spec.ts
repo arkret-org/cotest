@@ -34,7 +34,7 @@ test.describe("account auth + device strand", () => {
     expect([401, 403]).toContain(meResp.status());
   });
 
-  test("alice authenticates over the real account-authority bridge; coauth issues a short-term, device-bound ck.session.grant that authorizes /_arkret/self/*", async ({
+  test("alice authenticates over the real account-authority bridge; coauth issues a short-term, device-bound ak.session.grant that authorizes /_arkret/self/*", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1, key-management.md §6
@@ -42,7 +42,7 @@ test.describe("account auth + device strand", () => {
     // The promise is "a real authentication result becomes a short-term session
     // grant" — exactly what the canonical session-grant bridge does. We drive
     // the LocalCoauth issuer path (password factor + DPoP), which mints a
-    // did:webvh principal and a `ck.session.grant`. (Driving the same bridge via
+    // did:webvh principal and a `ak.session.grant`. (Driving the same bridge via
     // the EXTERNAL mock IdP additionally requires a seeded upstream-OAuth link;
     // see the retained fixme below. The grant semantics asserted here are
     // identical across factors.)
@@ -236,7 +236,7 @@ test.describe("account auth + device strand", () => {
   });
 });
 
-/// Parse the `expires_at` (RFC3339) claim of a ck.session.grant JWT into epoch
+/// Parse the `expires_at` (RFC3339) claim of a ak.session.grant JWT into epoch
 /// millis. The grant payload carries `expires_at` as an ISO-8601 string.
 function grantExpiryMs(grantJwt: string): number {
   const parts = grantJwt.split(".");

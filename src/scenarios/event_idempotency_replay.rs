@@ -26,7 +26,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let event = event_envelope(
         &alice.actor,
         &realm_id,
-        "ck.message.create",
+        "ak.message.create",
         message_create_text_payload_for_strand(
             parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
             "idempotent replay body",
@@ -90,7 +90,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let create_event = event_envelope(
         &alice.actor,
         &realm_id,
-        "ck.message.create",
+        "ak.message.create",
         message_create_text_payload_for_strand(
             parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
             "message before edit/redact replay",
@@ -100,24 +100,24 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let created = submit_and_duplicate(&alice, &create_event).await?;
     let create_event_id = submitted_event_id(&created)
         .ok_or_else(|| anyhow!("create response missing event id: {created}"))?;
-    assert_projected_kind_count(&alice, &realm_id, "ck.message.create", 1).await?;
+    assert_projected_kind_count(&alice, &realm_id, "ak.message.create", 1).await?;
 
     let revise_event = event_envelope(
         &alice.actor,
         &realm_id,
-        "ck.message.revise",
+        "ak.message.revise",
         message_revise_text_payload(create_event_id, "message after idempotent edit replay")?,
     );
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
     let revise_event_id = submitted_event_id(&revised)
         .ok_or_else(|| anyhow!("revise response missing event id: {revised}"))?;
     assert_projected_event_count(&alice, &realm_id, revise_event_id, 1).await?;
-    assert_projected_kind_count(&alice, &realm_id, "ck.message.revise", 1).await?;
+    assert_projected_kind_count(&alice, &realm_id, "ak.message.revise", 1).await?;
 
     let redact_event = event_envelope(
         &alice.actor,
         &realm_id,
-        "ck.message.redact",
+        "ak.message.redact",
         message_redact_payload(create_event_id, Some("idempotent_redaction_replay"))?,
     );
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
@@ -150,7 +150,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         "message after idempotent edit replay",
     )?;
     assert_eq!(
-        event_kind_count(&visible_after_redaction, "ck.message.revise")?,
+        event_kind_count(&visible_after_redaction, "ak.message.revise")?,
         1,
         "edit-chain projection should remain single after redaction replay: {visible_after_redaction}"
     );
@@ -162,16 +162,16 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
     let event = event_envelope(
         &alice.actor,
         realm_id,
-        "ck.realm.create",
+        "ak.realm.create",
         json!({
             "object": {
                 "id": realm_id,
-                "schema": "ck.schema.realm.v1",
+                "schema": "ak.schema.realm.v1",
                 "title": title,
                 "summary": title,
                 "trust_domain": "ak:trust_domain:event-idempotency.cotest.local",
                 "created_by": &alice.actor,
-                "schema_refs": ["ck.schema.realm.v1"],
+                "schema_refs": ["ak.schema.realm.v1"],
                 "default_discoverability": "public",
                 "default_join_rule": "public",
                 "history_visibility": "world_readable",

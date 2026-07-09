@@ -2,7 +2,7 @@
 
 ## 目标
 
-把 identity/onboarding(账户 onboarding)+ identity/multi-device(多设备)+ session grant 串起来:用户通过 OIDC 完成账户认证;coauth 颁 `ck.session.grant`(短期);新设备加入需要现有设备签发 `ck.device.authorize`;session 过期后通过 refresh 拿新 grant。
+把 identity/onboarding(账户 onboarding)+ identity/multi-device(多设备)+ session grant 串起来:用户通过 OIDC 完成账户认证;coauth 颁 `ak.session.grant`(短期);新设备加入需要现有设备签发 `ck.device.authorize`;session 过期后通过 refresh 拿新 grant。
 
 ## Spec 锚点
 
@@ -28,7 +28,7 @@
 
 1. alice 在 device-1 `/onboarding`,选 "Sign in with OIDC"
 2. 重定向 mock IdP → 自动返回 ID token
-3. coauth OIDC bridge 校验 → 创建/绑定 DID → 颁 `ck.session.grant`(TTL 30 分钟)
+3. coauth OIDC bridge 校验 → 创建/绑定 DID → 颁 `ak.session.grant`(TTL 30 分钟)
 4. inkson 拿 `{ did, session_credential, control_realm_id }`
 5. 断言:`/_soland/self/account/me` 返回 alice.did
 

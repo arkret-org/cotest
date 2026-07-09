@@ -70,7 +70,7 @@ test.describe("calls — canonical wire", () => {
     expect(iceAuth.status(), await iceAuth.text()).toBe(200);
     const body = await iceAuth.json();
     expect(Array.isArray(body.ice_servers)).toBe(true);
-    expect(body.signature.signature_input).toBe("ck.media.ice_config.v1");
+    expect(body.signature.signature_input).toBe("ak.media.ice_config.v1");
   });
 
   test("1:1 invite -> answer -> candidate -> hangup relays verbatim with proof + monotonic per-sender seq", async ({

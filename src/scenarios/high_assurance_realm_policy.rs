@@ -40,7 +40,7 @@ fn build_realm(
     let trust_domain = TypedTrustDomainId::new("ak:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Realm {
-        schema: "ck.profile.realm.v1".to_owned(),
+        schema: "ak.profile.realm.v1".to_owned(),
         id,
         title: "Compliance Vault".to_owned(),
         trust_domain,
@@ -48,7 +48,7 @@ fn build_realm(
         security_class,
         created_by: principal.clone(),
         owning_organizations: Vec::new(),
-        schema_refs: vec!["ck.profile.realm.v1".to_owned()],
+        schema_refs: vec!["ak.profile.realm.v1".to_owned()],
         policy_id: None,
         preview_policy_id: None,
         default_discoverability: Discoverability::InviteOnly,

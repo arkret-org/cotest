@@ -61,21 +61,21 @@ import { canonicalJson } from '../mocks/_shared/http.mjs';
 const PROFILE_SUITE_MAP = {
   'cotest/e2e/tests/sync/service-surface-contract.spec.ts': [
     {
-      profile_id: 'ck.profile.auth_server.v1',
+      profile_id: 'ak.profile.auth_server.v1',
       service_role: 'auth_server',
     },
   ],
   'cotest/e2e/tests/conformance/profile-gates.spec.ts': [
     {
-      profile_id: 'ck.profile.principal_server.v1',
+      profile_id: 'ak.profile.principal_server.v1',
       service_role: 'principal_server',
     },
     {
-      profile_id: 'ck.profile.principal_server_events_api.v1',
+      profile_id: 'ak.profile.principal_server_events_api.v1',
       service_role: 'principal_server',
     },
     {
-      profile_id: 'ck.profile.core_event_store.v1',
+      profile_id: 'ak.profile.core_event_store.v1',
       service_role: 'principal_server',
     },
   ],
@@ -107,7 +107,7 @@ function printUsage() {
       '    "run_id": "<basename(artifacts_dir)>",',
       '    "verified": [',
       '      {',
-      '        "profile_id": "ck.profile.principal_server.v1",',
+      '        "profile_id": "ak.profile.principal_server.v1",',
       '        "service_role": "principal_server",',
       '        "test_count": 3,',
       '        "spec_file": "cotest/e2e/tests/conformance/profile-gates.spec.ts",',

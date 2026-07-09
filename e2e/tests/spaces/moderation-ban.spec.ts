@@ -118,7 +118,7 @@ test.describe("moderation and ban", () => {
       data: signedEventEnvelope({
         actorDid: bob.did,
         realmId: realmId,
-        kind: "ck.member.state",
+        kind: "ak.member.state",
         payload: {
           realm_id: realmId,
           actor_id: mallory.did,
@@ -139,7 +139,7 @@ test.describe("moderation and ban", () => {
     const banEvent = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: mallory.did,
@@ -165,12 +165,12 @@ test.describe("moderation and ban", () => {
       data: signedEventEnvelope({
         actorDid: mallory.did,
         realmId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         payload: {
           strand_id: defaultStrandId,
           track_name: "discussion",
           content: {
-            kind: "ck.content.text",
+            kind: "ak.content.text",
             body: postBan,
           },
         },
@@ -181,7 +181,7 @@ test.describe("moderation and ban", () => {
     const redactEvent = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.message.redact",
+      kind: "ak.message.redact",
       payload: {
         target_event_id: sent.event_id,
         redacts: sent.event_id,
@@ -207,7 +207,7 @@ test.describe("moderation and ban", () => {
     expect(exportResp.ok()).toBeTruthy();
     const exportText = JSON.stringify(await exportResp.json());
     expect(exportText).toContain('"membership":"ban"');
-    expect(exportText).toContain('"event_kind":"ck.message.redact"');
+    expect(exportText).toContain('"event_kind":"ak.message.redact"');
     expect(exportText).toContain(sent.event_id);
   });
 
@@ -235,13 +235,13 @@ test.describe("moderation and ban", () => {
     const firstBan = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: { realm_id: realmId, actor_id: mallory.did, membership: "ban" },
     });
     const secondBan = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: { realm_id: realmId, actor_id: mallory.did, membership: "ban" },
     });
 

@@ -79,7 +79,7 @@ function relationObject(args: {
 }): Record<string, unknown> {
   return {
     id: args.id,
-    schema: "ck.schema.relation.v1",
+    schema: "ak.schema.relation.v1",
     realm_id: args.realmId,
     relation_kind: args.relationKind,
     from_ref: args.fromRef,
@@ -167,12 +167,12 @@ async function createCardStrandApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.strand.create",
+      kind: "ak.strand.create",
       createdAt,
       payload: {
         object: {
           id: strandId,
-          schema: "ck.schema.strand.v1",
+          schema: "ak.schema.strand.v1",
           realm_id: realmId,
           metadata: {
             title,
@@ -331,7 +331,7 @@ test.describe("kanban end-to-end", () => {
     const winnerMove = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.strand.move",
+      kind: "ak.strand.move",
       actorSeq: winnerSeq,
       payload: {
         strand_id: cardId,
@@ -350,7 +350,7 @@ test.describe("kanban end-to-end", () => {
     const loserMove = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.strand.move",
+      kind: "ak.strand.move",
       actorSeq: loserSeq,
       payload: {
         strand_id: cardId,
@@ -411,7 +411,7 @@ test.describe("kanban end-to-end", () => {
     const crossRealm = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmA,
-      kind: "ck.relation.create",
+      kind: "ak.relation.create",
       payload: {
         relation: relationObject({
           id: typedId("relation"),
@@ -467,7 +467,7 @@ test.describe("kanban end-to-end", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.strand.archive",
+        kind: "ak.strand.archive",
         payload: { target_ref: cardId },
       }),
       { context: "archive card strand" },
@@ -477,7 +477,7 @@ test.describe("kanban end-to-end", () => {
     const trackWrite = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.strand.tracks.update",
+      kind: "ak.strand.tracks.update",
       payload: {
         strand_id: cardId,
         patch: { discussion: { enabled: true } },
@@ -770,7 +770,7 @@ test.describe("kanban end-to-end", () => {
         (response) =>
           response.url().includes("/_arkret/self/events") &&
           response.request().method() === "POST" &&
-          (response.request().postData() ?? "").includes("ck.strand.update"),
+          (response.request().postData() ?? "").includes("ak.strand.update"),
         { timeout: 60_000 },
       );
       await alicePage.page.getByTestId("card-detail-save-button").click();
@@ -852,7 +852,7 @@ test.describe("kanban end-to-end", () => {
         (response) =>
           response.url().includes("/_arkret/self/events") &&
           response.request().method() === "POST" &&
-          (response.request().postData() ?? "").includes("ck.strand.update"),
+          (response.request().postData() ?? "").includes("ak.strand.update"),
         { timeout: 60_000 },
       );
       await alicePage.page.getByTestId("card-detail-save-button").click();
@@ -927,7 +927,7 @@ test.describe("kanban end-to-end", () => {
         (response) =>
           response.url().includes("/_arkret/self/events") &&
           response.request().method() === "POST" &&
-          (response.request().postData() ?? "").includes("ck.message.create"),
+          (response.request().postData() ?? "").includes("ak.message.create"),
         { timeout: 60_000 },
       );
       await alicePage.page.getByTestId("chat-input").fill(comment);

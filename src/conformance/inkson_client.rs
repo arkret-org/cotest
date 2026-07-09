@@ -7,10 +7,10 @@ use super::{load_local_fixture_value, required_str, validate_profile};
 use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "inkson-client-profile-conformance.json";
-const FIXTURE_PROFILE: &str = "ck.profile.inkson_client_blackbox_manifest.v1";
+const FIXTURE_PROFILE: &str = "ak.profile.inkson_client_blackbox_manifest.v1";
 
 const REQUIRED_TARGET_PROFILES: &[&str] =
-    &["ck.profile.full_client.v1", "ck.profile.e2ee_client.v1"];
+    &["ak.profile.full_client.v1", "ck.profile.e2ee_client.v1"];
 
 const REQUIRED_STRANDS: &[&str] = &[
     "oidc_session_grant",
@@ -183,7 +183,7 @@ fn validate_case_shape(
 ) -> Result<()> {
     match strand {
         "oidc_session_grant" => {
-            require_profile(profile, "ck.profile.full_client.v1", name)?;
+            require_profile(profile, "ak.profile.full_client.v1", name)?;
             require_expect(expect, "pass", name)?;
             require_operation(case, "oidc_callback")?;
             require_operation(case, "issue_session_grant")?;
@@ -215,7 +215,7 @@ fn validate_case_shape(
             }
         }
         "device_verification" => {
-            require_profile(profile, "ck.profile.e2ee_client.v1", name)?;
+            require_profile(profile, "ak.profile.e2ee_client.v1", name)?;
             require_expect(expect, "pass", name)?;
             require_operation(case, "device_verification_start")?;
             require_operation(case, "device_verification_complete")?;
@@ -238,7 +238,7 @@ fn validate_case_shape(
             }
         }
         "e2ee_fail_closed" => {
-            require_profile(profile, "ck.profile.e2ee_client.v1", name)?;
+            require_profile(profile, "ak.profile.e2ee_client.v1", name)?;
             require_expect(expect, "fail", name)?;
             if case
                 .pointer("/expected/failure_mode")

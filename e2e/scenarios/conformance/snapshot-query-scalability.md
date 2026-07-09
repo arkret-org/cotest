@@ -65,7 +65,7 @@
 1. **harness** 加载 `ck.vector.snapshot.manifest_integrity.v1` (若存在);vector 形如:
    ```json
    {
-     "vector_id": "ck.vector.snapshot.manifest_integrity.v1",
+     "vector_id": "ak.vector.snapshot.manifest_integrity.v1",
      "protocol_version": "1.0",
      "input": { "manifest": { ... }, "chunks": [ { "chunk_ref": ..., "payload": { ... } } ] },
      "expected_manifest_digest": "sha256:...",
@@ -98,7 +98,7 @@
 10. **harness** 加载 `ck.vector.query.filter_sort_paginate.v1`;vector 形如:
     ```json
     {
-      "vector_id": "ck.vector.query.filter_sort_paginate.v1",
+      "vector_id": "ak.vector.query.filter_sort_paginate.v1",
       "input": {
         "query": {
           "realm_ids": ["ak:realm:..."],
@@ -161,7 +161,7 @@
 36. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
 37. 断言响应是 JSON,且内部一致:
     - **不应** 同时存在 "claim 了 `ck.profile.conformance_harness.v1` profile" 与 "`/_arkret/_conformance/snapshot` 端点返回 404/501" 这对矛盾状态
-    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "ck.profile.conformance_harness.v1"`,则对 `/_arkret/_conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
+    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "ak.profile.conformance_harness.v1"`,则对 `/_arkret/_conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
     - 若 `claimed_profiles` 不含该 profile,则任何状态码(包括 404)都可以接受 — 这是 "surface 内部一致" 而非 "端点已实现" 的断言
 
 ## Observable assertions (合并清单)

@@ -47,8 +47,8 @@ import {
 test.describe.configure({ mode: "serial" });
 
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
-  "ck.profile.mls_governance_binding.full.v1";
-const MLS_REDUCER_PROFILE_V1 = "ck.reducer.v1";
+  "ak.profile.mls_governance_binding.full.v1";
+const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
 
 type SelfPathHeadersSource =
   | string
@@ -170,7 +170,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.cross_signing.publish",
+          kind: "ak.cross_signing.publish",
           payload: buildCrossSigningPublishPayload(identity),
         }),
       },
@@ -200,7 +200,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.device.authorize",
+          kind: "ak.device.authorize",
           payload: {
             principal_id: alice.did,
             device_id: device2Id,
@@ -278,7 +278,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.device.authorize",
+          kind: "ak.device.authorize",
           payload: {
             principal_id: alice.did,
             device_id: staleDeviceId,
@@ -330,7 +330,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.device.authorize",
+          kind: "ak.device.authorize",
           payload: {
             principal_id: alice.did,
             device_id: forgedDeviceId,
@@ -464,7 +464,7 @@ test.describe("multi-device pairing + revocation", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ck.device.revoke",
+        kind: "ak.device.revoke",
         payload: {
           principal_id: alice.did,
           device_id: device2Id,
@@ -490,7 +490,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.device.list_update",
+          kind: "ak.device.list_update",
           payload: {
             principal_id: alice.did,
             changed: [device2Id],
@@ -595,7 +595,7 @@ test.describe("multi-device pairing + revocation", () => {
     );
 
     const expiresAt = canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000));
-    const keypackageCapabilities = ["ck.mls.profile.full"];
+    const keypackageCapabilities = ["ak.mls.profile.full"];
     const keyPackages = [
       buildKeyPackageUploadEntry({
         label: `ordinary-${stamp}`,
@@ -700,7 +700,7 @@ test.describe("multi-device pairing + revocation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.mls.genesis",
+          kind: "ak.mls.genesis",
           eventId: genesisEventId,
           payload: {
             mls_group_id: groupId,
@@ -728,7 +728,7 @@ test.describe("multi-device pairing + revocation", () => {
       const expiresAt = canonicalTimestamp(
         new Date(Date.now() + 60 * 60 * 1000),
       );
-      const keypackageCapabilities = ["ck.mls.profile.full"];
+      const keypackageCapabilities = ["ak.mls.profile.full"];
       const device2KeyPackage = buildKeyPackageUploadEntry({
         label: `join-device2-${stamp}`,
         capabilities: keypackageCapabilities,
@@ -794,7 +794,7 @@ test.describe("multi-device pairing + revocation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.mls.commit",
+          kind: "ak.mls.commit",
           eventId: addCommitEventId,
           payload: {
             mls_group_id: groupId,
@@ -846,7 +846,7 @@ test.describe("multi-device pairing + revocation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.mls.proposal",
+          kind: "ak.mls.proposal",
           eventId: removeProposalEventId,
           payload: {
             mls_group_id: groupId,
@@ -870,7 +870,7 @@ test.describe("multi-device pairing + revocation", () => {
           data: signedEventEnvelope({
             actorDid: alice.did,
             realmId,
-            kind: "ck.mls.commit",
+            kind: "ak.mls.commit",
             payload: {
               mls_group_id: groupId,
               base_epoch: 1,
@@ -902,7 +902,7 @@ test.describe("multi-device pairing + revocation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.mls.commit",
+          kind: "ak.mls.commit",
           eventId: removeCommitEventId,
           payload: {
             mls_group_id: groupId,
@@ -1000,7 +1000,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: principalControlRealmForDid(alice.did),
-          kind: "ck.device.revoke",
+          kind: "ak.device.revoke",
           payload: {
             principal_id: alice.did,
             device_id: alice.deviceId,
@@ -1052,7 +1052,7 @@ test.describe("multi-device pairing + revocation", () => {
           messages: {
             [alice.did]: {
               [device2Id]: {
-                kind: "ck.key.verification.request",
+                kind: "ak.key.verification.request",
                 expires_at: new Date(Date.now() + 10 * 60_000)
                   .toISOString()
                   .replace(/\.\d{3}Z$/, "Z"),
@@ -1083,7 +1083,7 @@ test.describe("multi-device pairing + revocation", () => {
     };
     expect(
       (beforeBody.messages ?? []).some(
-        (message) => message.kind === "ck.key.verification.request",
+        (message) => message.kind === "ak.key.verification.request",
       ),
       `Device 2 should see the queued request before revoke: ${JSON.stringify(beforeBody)}`,
     ).toBeTruthy();
@@ -1094,7 +1094,7 @@ test.describe("multi-device pairing + revocation", () => {
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId: principalControlRealmForDid(alice.did),
-        kind: "ck.device.revoke",
+        kind: "ak.device.revoke",
         payload: {
           principal_id: alice.did,
           device_id: device2Id,
@@ -1444,7 +1444,7 @@ async function promoteDeviceToVerified(
     data: signedEventEnvelope({
       actorDid: user.did,
       realmId,
-      kind: "ck.cross_signing.publish",
+      kind: "ak.cross_signing.publish",
       payload: buildCrossSigningPublishPayload(identity),
     }),
   });
@@ -1467,7 +1467,7 @@ async function promoteDeviceToVerified(
       data: signedEventEnvelope({
         actorDid: user.did,
         realmId,
-        kind: "ck.device.authorize",
+        kind: "ak.device.authorize",
         payload: {
           principal_id: user.did,
           device_id: deviceId,
@@ -1545,7 +1545,7 @@ async function deliverPairingRequest(
         messages: {
           [user.did]: {
             [user.deviceId]: {
-              kind: "ck.key.verification.request",
+              kind: "ak.key.verification.request",
               expires_at: expiresAt,
               content: {
                 transaction_id: transactionId,
@@ -1610,7 +1610,7 @@ async function publishCrossSigningForUser(
     data: signedEventEnvelope({
       actorDid: user.did,
       realmId,
-      kind: "ck.cross_signing.publish",
+      kind: "ak.cross_signing.publish",
       payload: buildCrossSigningPublishPayload(identity),
     }),
   });
@@ -1645,7 +1645,7 @@ async function authorizeDeviceWithCrossSigning(
       data: signedEventEnvelope({
         actorDid: user.did,
         realmId,
-        kind: "ck.device.authorize",
+        kind: "ak.device.authorize",
         payload: {
           principal_id: user.did,
           device_id: deviceId,
@@ -1687,7 +1687,7 @@ async function revokeDeviceApi(
     data: signedEventEnvelope({
       actorDid: user.did,
       realmId: principalControlRealmForDid(user.did),
-      kind: "ck.device.revoke",
+      kind: "ak.device.revoke",
       eventId,
       payload: {
         principal_id: user.did,
@@ -1819,7 +1819,7 @@ function buildMlsWelcomeEnvelope(args: {
     envelope: signedEventEnvelope({
       actorDid: args.actorDid,
       realmId: args.realmId,
-      kind: "ck.mls.welcome",
+      kind: "ak.mls.welcome",
       eventId,
       payload: {
         welcome_id: welcomeId,

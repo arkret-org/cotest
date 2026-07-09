@@ -92,8 +92,8 @@ async function submitOrganizationStatement(
     data: signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.realm.organization",
-      schemaId: "ck.schema.event_payload.v1",
+      kind: "ak.realm.organization",
+      schemaId: "ak.schema.event_payload.v1",
       payload,
     }),
   });

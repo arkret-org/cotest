@@ -18,7 +18,7 @@ use arkret_core::{
 
 pub async fn agent_sidecar_thread_run() -> Result<()> {
     // (1) Profile id pinned to the registry spelling.
-    if PROFILE_AGENT_SIDECAR_THREAD != "ck.profile.agent_sidecar_thread.v1" {
+    if PROFILE_AGENT_SIDECAR_THREAD != "ak.profile.agent_sidecar_thread.v1" {
         return Err(anyhow!(
             "PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}"
         ));

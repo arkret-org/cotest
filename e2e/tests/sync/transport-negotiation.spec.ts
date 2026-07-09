@@ -258,13 +258,13 @@ test.describe("transport negotiation", () => {
     const buildEvent = (tag: string) =>
       makeFederationEvent({
         realmId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         actorDid: "did:web:alice-e81.example",
         payload: {
           strand_id: typedId("strand"),
           track_name: "discussion",
           content: {
-            kind: "ck.content.text",
+            kind: "ak.content.text",
             body: `E8.1 ${tag} ${Date.now()}`,
           },
         },

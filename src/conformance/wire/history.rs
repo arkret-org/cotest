@@ -22,7 +22,7 @@ use crate::conformance::{required_str, validate_profile};
 /// Negative vectors check the rejection reason_code.
 pub fn run_history_visibility_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("history_visibility_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.history_visibility_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.history_visibility_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -55,7 +55,7 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
         // Admin override path: validate capability gate.
         if let Some(admin) = v.get("admin_override") {
             if let Some(cap) = admin.get("capability").and_then(Value::as_str) {
-                if cap != "ck.recovery.read.history.v1" {
+                if cap != "ak.recovery.read.history.v1" {
                     bail!(
                         "vector {name} admin_override.capability must be ck.recovery.read.history.v1"
                     );
@@ -282,7 +282,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("redaction_history_visibility_fixture.json")?;
     validate_profile(
         &fixture,
-        "ck.profile.redaction_history_visibility_vectors.v1",
+        "ak.profile.redaction_history_visibility_vectors.v1",
     )?;
 
     let vectors = fixture
@@ -316,14 +316,14 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
             .get("original_event")
             .ok_or_else(|| anyhow!("vector {name} missing original_event"))?;
         let _ = required_str(original, "event_id")?;
-        if required_str(original, "kind")? != "ck.message.create" {
+        if required_str(original, "kind")? != "ak.message.create" {
             bail!("vector {name} original_event kind must be ck.message.create");
         }
 
         let redaction = v
             .get("redaction_event")
             .ok_or_else(|| anyhow!("vector {name} missing redaction_event"))?;
-        if required_str(redaction, "kind")? != "ck.message.redact" {
+        if required_str(redaction, "kind")? != "ak.message.redact" {
             bail!("vector {name} redaction_event kind must be ck.message.redact");
         }
         let redacts = required_str(redaction, "redacts")?;
@@ -371,7 +371,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
                         );
                     }
                     let mv = v.get("unredaction_move").unwrap();
-                    if required_str(mv, "kind")? != "ck.message.unredact" {
+                    if required_str(mv, "kind")? != "ak.message.unredact" {
                         bail!("vector {name} unredaction_move kind must be ck.message.unredact");
                     }
                     let removes = mv
@@ -417,7 +417,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
 /// E6 Round 27 — redacted Move cross-server projection (round-25 MAL-14).
 pub fn run_redacted_cross_server_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("redacted_cross_server_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.redacted_cross_server_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.redacted_cross_server_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

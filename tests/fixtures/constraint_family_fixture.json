@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.constraint_family_vectors.v1",
+  "profile": "ak.profile.constraint_family_vectors.v1",
   "version": "2026-05-09",
   "comment": "C1 Round 23 — grant-constraint family × subtype coverage. Spec schemas/grant-constraint.schema.json declares 8 constraint_type families (temporal, field_access, type_restriction, scope_limitation, delegation_control, quota, claim_based, confidentiality) with optional subtype values. Each constraint_type carries a canonical evaluation_class (stateless / grant_local / space_state / external) which the validator uses to gate fast-path caching. Fixture covers all 8 families with at least one positive vector + one evaluation_class fast-path test per family.",
   "encoder": {
@@ -33,7 +33,7 @@
         "effect": "allow",
         "evaluation_class": "stateless",
         "message_edit_window": "PT5M",
-        "applies_to_actions": ["ck.message.revise"]
+        "applies_to_actions": ["ak.message.revise"]
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "stateless", "fast_path_eligible": true }
     },

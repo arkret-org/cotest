@@ -30,7 +30,7 @@
 //   POST /tsp/message  { from_vid, to_vid, payload_b64, signature_b64 }
 //     Verifies `from_vid` has a bootstrapped relationship, records the
 //     envelope into the inbox, and — if the decoded payload parses as a
-//     JSON object with a `type: "ck.*"` field — fabricates a reply
+//     JSON object with a `type: "ak.*"` field — fabricates a reply
 //     envelope into the outbox so callers can poll /tsp/outbox to assert
 //     the round trip. Returns { ok, message_id, accepted }.
 //   POST /scenarios  { unreachable?, vid_invalid?, force_signature_failure? }
@@ -112,7 +112,7 @@ function makeReplyEnvelope({ from_vid, to_vid, source_message_id, source_payload
   // opaque base64 blob plus a deterministic-shape signature so consumers
   // can assert "a reply was queued" without engaging crypto.
   const replyPayload = {
-    type: "ck.tsp.ack",
+    type: "ak.tsp.ack",
     in_reply_to: source_message_id,
     source_type: source_payload?.type ?? null,
     occurred_at: new Date().toISOString(),
@@ -263,7 +263,7 @@ const server = createServer(async (req, res) => {
     // a reply envelope so callers can poll /tsp/outbox to assert the
     // round trip across the trust boundary.
     let reply = null;
-    if (decoded && typeof decoded.type === "string" && decoded.type.startsWith("ck.")) {
+    if (decoded && typeof decoded.type === "string" && decoded.type.startsWith("ak.")) {
       reply = makeReplyEnvelope({
         from_vid: endpointVid,
         to_vid: body.from_vid,

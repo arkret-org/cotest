@@ -153,7 +153,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             kdf: None,
             aead: KeyBackupAead {
                 name: "xchacha20_poly1305".to_owned(),
-                aead_profile: Some("ck.aead.xchacha20_poly1305.v1".to_owned()),
+                aead_profile: Some("ak.aead.xchacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
                 nonce: Some("cotest-d3-nonce".to_owned()),
                 enc: None,
@@ -167,7 +167,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
             subdomain: "test".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
-                schema: "ck.schema.key_backup.v1".to_owned(),
+                schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(actor.to_owned())?,
                 device_id: device_id.to_owned(),
                 backup_class: BackupClass::MlsHistory,

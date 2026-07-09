@@ -11,7 +11,7 @@ use crate::conformance::{required_str, validate_profile};
 /// emoji code.
 pub fn run_device_verification_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("device_verification_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.device_verification_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.device_verification_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -173,7 +173,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
 /// user-signing requires re-anchor.
 pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("device_cross_signing_trust_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.device_cross_signing_trust_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.device_cross_signing_trust_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -334,7 +334,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
 /// successor publish recovery window.
 pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("cross_signing_reset_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.cross_signing.reset.v1")?;
+    validate_profile(&fixture, "ak.profile.cross_signing.reset.v1")?;
     let parameters = fixture
         .get("parameters")
         .ok_or_else(|| anyhow!("cross_signing_reset fixture missing parameters"))?;
@@ -374,10 +374,10 @@ pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {
     for v in vectors {
         let name = required_str(v, "name")?;
         let outcome = expected_outcome(v, name)?;
-        if required_str(v, "event_kind")? != "ck.cross_signing.reset" {
+        if required_str(v, "event_kind")? != "ak.cross_signing.reset" {
             bail!("vector {name} event_kind must be ck.cross_signing.reset");
         }
-        if required_str(v, "schema_id")? != "ck.schema.cross_signing_reset.v1" {
+        if required_str(v, "schema_id")? != "ak.schema.cross_signing_reset.v1" {
             bail!("vector {name} schema_id must be ck.schema.cross_signing_reset.v1");
         }
         let previous = v
@@ -414,7 +414,7 @@ pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {
                     .pointer("/successor_publish/event_kind")
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("vector {name} missing successor publish"))?;
-                if successor_kind != "ck.cross_signing.publish" {
+                if successor_kind != "ak.cross_signing.publish" {
                     bail!("vector {name} successor publish must be ck.cross_signing.publish");
                 }
                 saw_accept = true;

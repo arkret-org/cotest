@@ -38,24 +38,24 @@ use super::{fixture_path, validate_profile};
 pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-vectors.json";
 
 /// Canonical conformance profile for the security closure fixture suite.
-pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ck.vector_group.privacy_security.v1";
+pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 
 /// The 13 vector ids the round-4 spec promotes from prose to fixture. The
 /// list is pinned here so any drift on either side is loud.
 pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
-    "ck.vector.federation.idempotency_after_key_revoke.v1",
-    "ck.vector.webrtc.media_plaintext_downgrade.v1",
-    "ck.vector.identity_link.eager_invalidation.v1",
-    "ck.vector.identity_link.policy_tightening_invalidation.v1",
-    "ck.vector.late_key_recovery.removed_actor.v1",
-    "ck.vector.invite.oob_code_entropy.v1",
-    "ck.vector.invite.failure_indistinguishable.v1",
-    "ck.vector.invite.claim_reducer_state_machine.v1",
-    "ck.vector.consent.scope_cascade.v1",
-    "ck.vector.consent.cache_invalidation.v1",
-    "ck.vector.sync.soft_fail_reconcile.v1",
-    "ck.vector.lattice.lww_open_set.v1",
-    "ck.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
+    "ak.vector.federation.idempotency_after_key_revoke.v1",
+    "ak.vector.webrtc.media_plaintext_downgrade.v1",
+    "ak.vector.identity_link.eager_invalidation.v1",
+    "ak.vector.identity_link.policy_tightening_invalidation.v1",
+    "ak.vector.late_key_recovery.removed_actor.v1",
+    "ak.vector.invite.oob_code_entropy.v1",
+    "ak.vector.invite.failure_indistinguishable.v1",
+    "ak.vector.invite.claim_reducer_state_machine.v1",
+    "ak.vector.consent.scope_cascade.v1",
+    "ak.vector.consent.cache_invalidation.v1",
+    "ak.vector.sync.soft_fail_reconcile.v1",
+    "ak.vector.lattice.lww_open_set.v1",
+    "ak.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
 ];
 
 /// Top-level fixture shape.

@@ -11,8 +11,8 @@ use serde_json::Value;
 use super::schema_validation_fixture::SchemaEnv;
 
 pub const VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED: &str =
-    "ck.vector.key_backup.kdf_floor_rejected.v1";
-pub const VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF: &str = "ck.vector.key_backup.unlock_proof.v1";
+    "ak.vector.key_backup.kdf_floor_rejected.v1";
+pub const VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF: &str = "ak.vector.key_backup.unlock_proof.v1";
 
 pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED,
@@ -20,7 +20,7 @@ pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const KEY_BACKUP_HARDENING_FIXTURE_FILE: &str = "key-backup-hardening-fixture.json";
-const KEY_BACKUP_HARDENING_PROFILE: &str = "ck.profile.e2ee_client.v1";
+const KEY_BACKUP_HARDENING_PROFILE: &str = "ak.profile.e2ee_client.v1";
 const KEY_BACKUP_ENCRYPTION_SCHEMA: &str = "schemas/key-backup.schema.json#/properties/encryption";
 const KEY_BACKUP_UNLOCK_REQUEST_SCHEMA: &str =
     "schemas/keys-operations.schema.json#/$defs/keys_backups_unlock_request_body";

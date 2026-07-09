@@ -73,7 +73,7 @@ test.describe("read receipts + privacy", () => {
       {
         headers: authHeaders(aliceToken),
         data: withBroadcastEphemeralProof({
-          kind: "ck.receipt.read",
+          kind: "ak.receipt.read",
           realm_id: realmId,
           actor_id: alice.did,
           device_id: alice.deviceId,
@@ -81,7 +81,7 @@ test.describe("read receipts + privacy", () => {
           expires_at: expiresAt.toISOString(),
           payload: {
             receipt_type: "read",
-            schema: "ck.schema.read_receipt.v1",
+            schema: "ak.schema.read_receipt.v1",
             realm_id: realmId,
             actor_id: alice.did,
             event_id: message.event_id,
@@ -96,7 +96,7 @@ test.describe("read receipts + privacy", () => {
     expect(receipt.status()).toBe(200);
     const receiptBody = await receipt.json();
     expect(receiptBody.accepted).toBe(true);
-    expect(receiptBody.kind).toBe("ck.receipt.read");
+    expect(receiptBody.kind).toBe("ak.receipt.read");
     expect(receiptBody.realm_id).toBe(realmId);
 
     const [aliceMarkers, bobMarkers] = await Promise.all([
@@ -107,7 +107,7 @@ test.describe("read receipts + privacy", () => {
     expect(bobMarkers).toHaveLength(0);
   });
 
-  test("ck.receipt.read rejects TTL above the 5 minute hard ceiling", async ({
+  test("ak.receipt.read rejects TTL above the 5 minute hard ceiling", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "ttl-too-long");
@@ -119,7 +119,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("hard TTL");
   });
 
-  test("ck.receipt.read rejects already expired envelopes", async ({
+  test("ak.receipt.read rejects already expired envelopes", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "expired");
@@ -132,7 +132,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("already expired");
   });
 
-  test("ck.receipt.read rejects actor_id that does not match the bearer session", async ({
+  test("ak.receipt.read rejects actor_id that does not match the bearer session", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "actor-mismatch");
@@ -146,7 +146,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("actor_id must match");
   });
 
-  test("ck.receipt.read rejects non-members", async ({ request }) => {
+  test("ak.receipt.read rejects non-members", async ({ request }) => {
     const fixture = await createReceiptFixture(request, "non-member");
     const outsider = uniqueUser("receipt-outsider");
     await ensureRegistered(request, outsider);
@@ -252,7 +252,7 @@ test.describe("read receipts + privacy", () => {
     expect(response.status()).toBe(200);
     const responseBody = await response.json();
     expect(responseBody.accepted).toBe(true);
-    expect(responseBody.kind).toBe("ck.receipt.read");
+    expect(responseBody.kind).toBe("ak.receipt.read");
     expect(
       JSON.stringify(
         await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
@@ -272,7 +272,7 @@ test.describe("read receipts + privacy", () => {
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.accepted).toBe(true);
-    expect(body.kind).toBe("ck.receipt.read");
+    expect(body.kind).toBe("ak.receipt.read");
     expect(body.realm_id).toBe(fixture.realmId);
     expect(
       await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
@@ -516,7 +516,7 @@ function receiptEnvelope(
   sentAt = new Date(),
 ) {
   return {
-    kind: "ck.receipt.read",
+    kind: "ak.receipt.read",
     realm_id: fixture.realmId,
     actor_id: fixture.alice.did,
     device_id: fixture.alice.deviceId,
@@ -524,7 +524,7 @@ function receiptEnvelope(
     expires_at: new Date(sentAt.getTime() + ttlMs).toISOString(),
     payload: {
       receipt_type: "read",
-      schema: "ck.schema.read_receipt.v1",
+      schema: "ak.schema.read_receipt.v1",
       realm_id: fixture.realmId,
       actor_id: fixture.alice.did,
       event_id: fixture.message.event_id,
@@ -548,8 +548,8 @@ async function setReadReceiptPolicy(
     signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
-      kind: "ck.realm.read_receipt_policy",
-      schemaId: "ck.schema.event_payload.v1",
+      kind: "ak.realm.read_receipt_policy",
+      schemaId: "ak.schema.event_payload.v1",
       payload,
     }),
     { context: `read receipt policy ${fixture.realmId}` },

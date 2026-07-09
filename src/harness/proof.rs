@@ -57,7 +57,7 @@ mod tests {
     fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
         let event = json!({
             "event_id": "ak:event:019f3b1c-76c8-7000-8000-000000000001",
-            "kind": "ck.message.create",
+            "kind": "ak.message.create",
             "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
@@ -70,7 +70,7 @@ mod tests {
                 "critical_extensions": []
             },
             "payload": {
-                "content": {"kind": "ck.content.text", "body": "hello"},
+                "content": {"kind": "ak.content.text", "body": "hello"},
                 "message_id": "ak:message:019f3b1c-76c8-7000-8000-000000000001",
                 "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001"
             },

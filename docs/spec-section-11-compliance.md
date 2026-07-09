@@ -35,7 +35,7 @@ cargo test --workspace --test spec_section_11_scenarios
 | V    | Invariant                                                                                                | Observable that closes the gate                                            |
 |------|----------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
 | V-1  | `ck.self.agent.command.provision` → `ck.agent.pairing.create` → `ck.capability.grant` MUST land in order.             | Out-of-order replay is rejected with `precondition_failed`.                |
-| V-2  | After `expires_at` elapses, the agent session is auto-revoked.                                            | A `ck.session.grant_revoke{reason="pairing_expired"}` event is produced.   |
+| V-2  | After `expires_at` elapses, the agent session is auto-revoked.                                            | A `ak.session.grant_revoke{reason="pairing_expired"}` event is produced.   |
 | V-3  | Replaying a session_grant with the same nonce MUST be rejected.                                           | Reducer returns `already_exists` (idempotent close), not double-grant.     |
 | V-4  | Controller deactivate fans out: `ck.self.agent.deactivate` → `ck.agent.key.revoke` → `ck.capability.revoke`.   | Per-agent fan-out is deterministic and ordered.                            |
 | V-5  | Every act-on-behalf event carries `(executed_by, authorization_ref, actor_kind)`.                         | Validator rejects events missing any of the three fields.                  |

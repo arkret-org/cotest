@@ -55,19 +55,19 @@ fn productivity_registry_entries_are_present_and_exact() {
         .filter_map(|entry| entry["action"].as_str())
         .collect();
     for expected in [
-        "ck.rsvp.set",
-        "ck.pin.add",
-        "ck.pin.remove",
-        "ck.pin.reorder",
-        "ck.realm.disappearing_policy",
-        "ck.realm.search_policy",
+        "ak.rsvp.set",
+        "ak.pin.add",
+        "ak.pin.remove",
+        "ak.pin.reorder",
+        "ak.realm.disappearing_policy",
+        "ak.realm.search_policy",
     ] {
         assert!(
             actions.contains(expected),
             "missing capability action {expected}"
         );
     }
-    assert!(!actions.contains("ck.pin.*"));
+    assert!(!actions.contains("ak.pin.*"));
 
     let account_registry = load_registry("account-data-type-registry.json");
     let key_patterns: BTreeSet<_> = account_registry["account_data_types"]
@@ -77,12 +77,12 @@ fn productivity_registry_entries_are_present_and_exact() {
         .filter_map(|entry| entry["key_pattern"].as_str())
         .collect();
     for expected in [
-        "ck.reminders.v1:<id>",
-        "ck.scheduled_send.v1:<planned_message_id>",
-        "ck.snooze.v1:<target_key>",
-        "ck.saved.v1:<collection_key>:<target_key>",
-        "ck.draft.v1:<kind>:<target_key>:<slot_key>",
-        "ck.search.index_manifest.v1:<realm_key>",
+        "ak.reminders.v1:<id>",
+        "ak.scheduled_send.v1:<planned_message_id>",
+        "ak.snooze.v1:<target_key>",
+        "ak.saved.v1:<collection_key>:<target_key>",
+        "ak.draft.v1:<kind>:<target_key>:<slot_key>",
+        "ak.search.index_manifest.v1:<realm_key>",
     ] {
         assert!(
             key_patterns.contains(expected),
@@ -172,7 +172,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
         .validate_payload(
             kinds::REALM_SEARCH_POLICY,
             &json!({
-                "enabled_profile_refs": ["ck.profile.search.blind_index.v1"],
+                "enabled_profile_refs": ["ak.profile.search.blind_index.v1"],
                 "allowed_service_dids": ["did:web:search.example"],
                 "data_classes": ["encrypted_index", "blind_tokens"],
                 "index_retention_ms": 86400000,
@@ -185,7 +185,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             .validate_payload(
                 kinds::REALM_SEARCH_POLICY,
                 &json!({
-                    "profile_refs": ["ck.profile.search.blind_index.v1"],
+                    "profile_refs": ["ak.profile.search.blind_index.v1"],
                     "service_dids": ["did:web:search.example"],
                     "data_classes": ["encrypted_index"],
                     "shard_id": "old-field"
@@ -207,7 +207,7 @@ fn private_account_data_keys_do_not_leak_raw_refs() {
     validate_private_account_data_key(&scheduled_send_key).unwrap();
     assert_eq!(
         scheduled_send_key,
-        format!("ck.scheduled_send.v1:{}", message_id.as_str()),
+        format!("ak.scheduled_send.v1:{}", message_id.as_str()),
         "scheduled-send key must use the spec-defined planned_message_id idempotency anchor"
     );
 
@@ -228,7 +228,7 @@ fn private_account_data_keys_do_not_leak_raw_refs() {
 
     assert!(
         validate_private_account_data_key(
-            "ck.draft.v1:message:ck:message:01904100-0000-7000-8000-000000000001:main"
+            "ak.draft.v1:message:ck:message:01904100-0000-7000-8000-000000000001:main"
         )
         .is_err(),
         "raw typed refs in private account-data keys must be rejected"

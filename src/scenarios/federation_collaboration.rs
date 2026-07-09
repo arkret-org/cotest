@@ -99,7 +99,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &alice,
         ALICE_DID,
         &realm_id,
-        "ck.realm.delivery_binding_policy",
+        "ak.realm.delivery_binding_policy",
         json!({
             "realm_id": realm_id,
             "allow_binding_sources": ["explicit"],
@@ -113,7 +113,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &alice,
         ALICE_DID,
         &realm_id,
-        "ck.member.state",
+        "ak.member.state",
         member_join_payload_with_delivery_binding(
             &realm_id,
             ALICE_DID,
@@ -136,7 +136,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         .to_owned();
     let realm_create = signed_federation_event(
         REALM_CREATE_EVENT_ID,
-        "ck.realm.create",
+        "ak.realm.create",
         &realm_id,
         ALICE_DID,
         1,
@@ -144,7 +144,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let alice_delivery_binding = signed_federation_event(
         ALICE_DELIVERY_BINDING_EVENT_ID,
-        "ck.member.state",
+        "ak.member.state",
         &realm_id,
         ALICE_DID,
         2,
@@ -152,7 +152,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let alice_message = signed_federation_event(
         ALICE_MESSAGE_EVENT_ID,
-        "ck.message.create",
+        "ak.message.create",
         &realm_id,
         ALICE_DID,
         3,
@@ -160,7 +160,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let bob_join = signed_federation_event(
         BOB_JOIN_EVENT_ID,
-        "ck.member.state",
+        "ak.member.state",
         &realm_id,
         ALICE_DID,
         4,
@@ -244,7 +244,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
 
     let bob_reply = signed_federation_event(
         BOB_MESSAGE_EVENT_ID,
-        "ck.message.create",
+        "ak.message.create",
         &realm_id,
         BOB_DID,
         1,
@@ -301,7 +301,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         principal_control_realm_id(&Did::new(ALICE_DID.to_owned()).context("invalid alice did")?);
     let alice_device_authorize = signed_federation_event(
         ALICE_DEVICE_AUTHORIZE_EVENT_ID,
-        "ck.device.authorize",
+        "ak.device.authorize",
         &alice_principal_realm,
         ALICE_DID,
         5,
@@ -336,7 +336,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
 
     let e2ee_realm_create = signed_federation_event(
         E2EE_REALM_CREATE_EVENT_ID,
-        "ck.realm.create",
+        "ak.realm.create",
         E2EE_REALM_ID,
         ALICE_DID,
         6,
@@ -344,7 +344,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let e2ee_bob_join = signed_federation_event(
         E2EE_BOB_JOIN_EVENT_ID,
-        "ck.member.state",
+        "ak.member.state",
         E2EE_REALM_ID,
         ALICE_DID,
         7,
@@ -352,7 +352,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let e2ee_genesis = signed_federation_event(
         E2EE_MLS_GENESIS_EVENT_ID,
-        "ck.mls.genesis",
+        "ak.mls.genesis",
         E2EE_REALM_ID,
         ALICE_DID,
         8,
@@ -360,7 +360,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let e2ee_welcome = signed_federation_event(
         E2EE_MLS_WELCOME_EVENT_ID,
-        "ck.mls.welcome",
+        "ak.mls.welcome",
         E2EE_REALM_ID,
         ALICE_DID,
         9,
@@ -373,7 +373,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let e2ee_commit = signed_federation_event(
         E2EE_MLS_COMMIT_EVENT_ID,
-        "ck.mls.commit",
+        "ak.mls.commit",
         E2EE_REALM_ID,
         ALICE_DID,
         10,
@@ -381,7 +381,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let e2ee_message = signed_federation_event(
         E2EE_MESSAGE_EVENT_ID,
-        "ck.message.create",
+        "ak.message.create",
         E2EE_REALM_ID,
         ALICE_DID,
         11,
@@ -501,8 +501,8 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                 "messages": {
                     BOB_DID: {
                         "ak:device:01904100-0000-7000-8000-0000000000bb": {
-                            "kind": "ck.mls.welcome",
-                            "content": encrypted_envelope("ck.mls.welcome", "opaque-cross-server-welcome"),
+                            "kind": "ak.mls.welcome",
+                            "content": encrypted_envelope("ak.mls.welcome", "opaque-cross-server-welcome"),
                             "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
@@ -598,7 +598,7 @@ async fn create_federated_realm(
         alice,
         ALICE_DID,
         &realm_id,
-        "ck.realm.create",
+        "ak.realm.create",
         federated_realm_payload(&realm_id, visible_services),
         StatusCode::OK,
     )
@@ -629,12 +629,12 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
     json!({
         "object": {
             "id": realm_id,
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "title": "Federated Collaboration Space",
             "summary": "cross server collaboration",
             "trust_domain": "ak:trust_domain:federation-collaboration.cotest.local",
             "created_by": ALICE_DID,
-            "schema_refs": ["ck.schema.realm.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
             "default_join_rule": "invite",
             "history_visibility": "shared",
@@ -677,12 +677,12 @@ fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
     json!({
         "object": {
             "id": realm_id,
-            "schema": "ck.schema.realm.v1",
+            "schema": "ak.schema.realm.v1",
             "title": "Federated E2EE DM Realm",
             "summary": "cross personal server E2EE DM replication",
             "trust_domain": "ak:trust_domain:federation-collaboration.e2ee.cotest.local",
             "created_by": ALICE_DID,
-            "schema_refs": ["ck.schema.realm.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
             "default_join_rule": "invite",
             "history_visibility": "shared",
@@ -721,8 +721,8 @@ fn mls_governance_binding(realm_id: &str, previous_epoch: u64, next_epoch: u64) 
         "next_epoch": next_epoch,
         "membership_frontier": [E2EE_BOB_JOIN_EVENT_ID],
         "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-        "binding_profile": "ck.profile.mls_governance_binding.full.v1",
-        "reducer_profile": "ck.reducer.v1"
+        "binding_profile": "ak.profile.mls_governance_binding.full.v1",
+        "reducer_profile": "ak.reducer.v1"
     })
 }
 
@@ -853,7 +853,7 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
             "aad_visibility_event_id": "hidden",
             "aad": {
                 "realm_id": realm_id,
-                "event_kind": "ck.message.create"
+                "event_kind": "ak.message.create"
             },
             "key_ref": {
                 "algorithm": "MLS",
@@ -881,8 +881,8 @@ pub(crate) fn bootstrap_device_authorize_payload(
         device_public_key,
         hpke_key: "z6LSCotestDeviceHpkeKey".to_owned(),
         algorithms: vec![
-            "ck.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
-            "ck.mls.v1".to_owned(),
+            "ak.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
+            "ak.mls.v1".to_owned(),
         ],
         device_key_algorithm: Some("EdDSA".to_owned()),
         authorized_by: arkret_core::DeviceOrPrincipalRef::Did(
@@ -937,7 +937,7 @@ pub(crate) async fn authorize_device_public_key(
         token,
         actor,
         &principal_realm,
-        "ck.device.authorize",
+        "ak.device.authorize",
         bootstrap_device_authorize_payload(actor, device_id, device_signing_key)?,
         StatusCode::OK,
     )
@@ -987,7 +987,7 @@ pub(crate) fn keys_upload_signing_input(
         "fallback_keys": fallback_keys,
     });
     let canonical = canonical_json_bytes(&body)?;
-    let mut input = b"ck-keys-upload-v1\n".to_vec();
+    let mut input = b"ak.keys-upload-v1\n".to_vec();
     input.extend_from_slice(&canonical);
     Ok(input)
 }

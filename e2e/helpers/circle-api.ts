@@ -71,11 +71,11 @@ export async function grantCircleMemberManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     grant_id: grantId,
-    schema: "ck.schema.capability.v1",
+    schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectDid,
-    actions: ["ck.circle.member.manage"],
+    actions: ["ak.circle.member.manage"],
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
     ],
@@ -94,7 +94,7 @@ export async function grantCircleMemberManageCapability(
     signedEventEnvelope({
       actorDid: args.ownerDid,
       realmId: args.realmId,
-      kind: "ck.capability.grant",
+      kind: "ak.capability.grant",
       payload: {
         grant_id: grantId,
         grant: {
@@ -134,11 +134,11 @@ export async function grantCircleManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     grant_id: grantId,
-    schema: "ck.schema.capability.v1",
+    schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectDid,
-    actions: ["ck.circle.manage"],
+    actions: ["ak.circle.manage"],
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
     ],
@@ -157,7 +157,7 @@ export async function grantCircleManageCapability(
     signedEventEnvelope({
       actorDid: args.ownerDid,
       realmId: args.realmId,
-      kind: "ck.capability.grant",
+      kind: "ak.capability.grant",
       payload: {
         grant_id: grantId,
         grant: {

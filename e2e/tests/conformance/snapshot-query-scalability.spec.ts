@@ -63,9 +63,9 @@ const FIXTURES_DIR = resolve(
 // (encoding-vectors, redaction-vectors, etc.) own their own namespaces; we
 // must not accidentally count them.
 const VECTOR_PREFIXES = [
-  "ck.vector.snapshot.",
-  "ck.vector.query.",
-  "ck.vector.scalability.",
+  "ak.vector.snapshot.",
+  "ak.vector.query.",
+  "ak.vector.scalability.",
 ] as const;
 
 function listVectorFixtures(): { dir: string; exists: boolean; matches: string[] } {
@@ -116,8 +116,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const manifest = {
       id: "ak:snapshot:ak:realm:01904100-0000-7000-8000-000000000001:fixture",
       realm_id: "ak:realm:01904100-0000-7000-8000-000000000001",
-      reducer_profile: "ck.reducer.v1",
-      schema_profile_refs: ["ck.schema.core.v1"],
+      reducer_profile: "ak.reducer.v1",
+      schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunkHashes,
       created_by: "did:web:soland.conformance",
       created_at: "2026-05-31T00:00:00Z",
@@ -125,7 +125,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       data: {
-        vector_id: "ck.vector.snapshot.manifest_integrity.v1",
+        vector_id: "ak.vector.snapshot.manifest_integrity.v1",
         manifest,
         chunks,
       },
@@ -139,7 +139,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
     const tampered = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       data: {
-        vector_id: "ck.vector.snapshot.tampered_chunk.v1",
+        vector_id: "ak.vector.snapshot.tampered_chunk.v1",
         manifest,
         chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
       },
@@ -156,8 +156,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const manifest = {
       id: "ak:snapshot:ak:realm:01904100-0000-7000-8000-000000000002:signed",
       realm_id: "ak:realm:01904100-0000-7000-8000-000000000002",
-      reducer_profile: "ck.reducer.v1",
-      schema_profile_refs: ["ck.schema.core.v1"],
+      reducer_profile: "ak.reducer.v1",
+      schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),
       created_by: signerDid,
       created_at: "2026-05-31T00:00:00Z",
@@ -169,7 +169,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     };
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       data: {
-        vector_id: "ck.vector.snapshot.signature_binding.v1",
+        vector_id: "ak.vector.snapshot.signature_binding.v1",
         manifest,
         chunks,
       },
@@ -194,7 +194,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
     const revoked = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       data: {
-        vector_id: "ck.vector.snapshot.signature_binding.revoked.v1",
+        vector_id: "ak.vector.snapshot.signature_binding.revoked.v1",
         manifest,
         chunks,
         revoked_signer_dids: [signerDid],
@@ -219,7 +219,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       limit: 2,
     };
     const first = await request.post(`${conformanceBaseUrl()}/query`, {
-      data: { vector_id: "ck.vector.query.page_order.v1", rows, query },
+      data: { vector_id: "ak.vector.query.page_order.v1", rows, query },
     });
     expect(first.status()).toBe(200);
     const page1 = await first.json();
@@ -230,7 +230,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(decodedCursorText(page1.next_cursor)).not.toContain("row-");
 
     const page2Req = {
-      vector_id: "ck.vector.query.page_order.v1",
+      vector_id: "ak.vector.query.page_order.v1",
       rows,
       query: { ...query, cursor: page1.next_cursor },
     };
@@ -253,11 +253,11 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   }) => {
     const rejectVectors = [
       {
-        vector_id: "ck.vector.query.unknown_filter_key.v1",
+        vector_id: "ak.vector.query.unknown_filter_key.v1",
         query: { filters: [{ field: "kind", op: "outside_registry", value: "task" }] },
       },
       {
-        vector_id: "ck.vector.query.conflicting_sort.v1",
+        vector_id: "ak.vector.query.conflicting_sort.v1",
         query: {
           order_by: [
             { field: "rank", direction: "asc" },
@@ -266,7 +266,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         },
       },
       {
-        vector_id: "ck.vector.query.unauthorized_field.v1",
+        vector_id: "ak.vector.query.unauthorized_field.v1",
         query: { projection: ["id", "secret_notes"] },
       },
     ];
@@ -285,20 +285,20 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   }) => {
     const rejectVectors = [
       {
-        vector_id: "ck.vector.scalability.page_size_over_max.v1",
+        vector_id: "ak.vector.scalability.page_size_over_max.v1",
         query: { limit: 1001 },
       },
       {
-        vector_id: "ck.vector.scalability.batch_size_over_max.v1",
+        vector_id: "ak.vector.scalability.batch_size_over_max.v1",
         rows: Array.from({ length: 1001 }, (_, index) => ({ id: `row-${index}` })),
         query: { limit: 10 },
       },
       {
-        vector_id: "ck.vector.scalability.relation_depth_over_max.v1",
+        vector_id: "ak.vector.scalability.relation_depth_over_max.v1",
         query: { relation: { depth: 33 } },
       },
       {
-        vector_id: "ck.vector.scalability.envelope_over_1mib.v1",
+        vector_id: "ak.vector.scalability.envelope_over_1mib.v1",
         query: { limit: 1 },
       },
     ];
@@ -384,7 +384,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       ? describe.claimed_profiles
       : [];
     const claimsConformanceHarness = claimedProfiles.some(
-      (entry) => entry?.profile_id === "ck.profile.conformance_harness.v1",
+      (entry) => entry?.profile_id === "ak.profile.conformance_harness.v1",
     );
 
     await testInfo.attach("describe-claims-conformance-harness", {
@@ -403,7 +403,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // / rejecting / requiring auth" (anything else).
     const probe = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       data: {
-        vector_id: "ck.vector.snapshot.surface_probe.v1",
+        vector_id: "ak.vector.snapshot.surface_probe.v1",
         manifest: {},
         chunks: [],
       },

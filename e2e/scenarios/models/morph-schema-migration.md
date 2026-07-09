@@ -51,17 +51,17 @@
 ### Phase A — Unsupported transformation 类型 fail-closed
 
 1. **harness** 加载 `ck.profile.morph.schema_migration_transformations.v1` 块,抽出 `feature_discovery.required` 列表(`supported_compatibility_classes`、`transformation_rules_dialect`、`schema_migrate_capability_action`)
-2. **harness** 通过 `GET /_arkret/describe` 读取 soland 自称的 supported transformation set(如 describe 暴露了该 profile 的 feature discovery hint,例如 `describe.implemented_features.profile_features["ck.profile.morph.schema_migration_transformations.v1"].supported_compatibility_classes[]`)
-3. **alice** 在 `R` 中先发一条 `ck.morph.create`,得到 `morphId`,该 Morph 的初始 `schema_refs = ["ck.schema.morph.customer_risk.v1"]`
+2. **harness** 通过 `GET /_arkret/describe` 读取 soland 自称的 supported transformation set(如 describe 暴露了该 profile 的 feature discovery hint,例如 `describe.implemented_features.profile_features["ak.profile.morph.schema_migration_transformations.v1"].supported_compatibility_classes[]`)
+3. **alice** 在 `R` 中先发一条 `ck.morph.create`,得到 `morphId`,该 Morph 的初始 `schema_refs = ["ak.schema.morph.customer_risk.v1"]`
 4. **alice** 发一条 `ck.morph.schema_migrate`,`payload` 形如:
    ```json
    {
      "morph_id": "<morphId>",
-     "from_schema_refs": ["ck.schema.morph.customer_risk.v1"],
-     "to_schema_refs": ["ck.schema.morph.customer_risk.v2"],
+     "from_schema_refs": ["ak.schema.morph.customer_risk.v1"],
+     "to_schema_refs": ["ak.schema.morph.customer_risk.v2"],
      "compatibility_class": "transformation",
      "transformation_rules": [
-       { "rule": "ck.transform.bogus.unsupported.v1", "field": "fields.status" }
+       { "rule": "ak.transform.bogus.unsupported.v1", "field": "fields.status" }
      ]
    }
    ```
@@ -74,8 +74,8 @@
 
 ### Phase B — Compatible (additive) migration 接受 + 历史 event 兼容
 
-6. **alice** 重置一个新 Morph `morphId_B` (同 `R`),`schema_refs = ["ck.schema.morph.customer_risk.v1"]`,写入若干 v1 字段
-7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
+6. **alice** 重置一个新 Morph `morphId_B` (同 `R`),`schema_refs = ["ak.schema.morph.customer_risk.v1"]`,写入若干 v1 字段
+7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
 8. 断言:
    - HTTP 2xx,Morph 当前 `schema_refs[]` = new set
    - 后续 `GET /_arkret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
@@ -93,7 +93,7 @@
 14. **alice** 重发 step 11 的 breaking migrate
 15. 断言:
    - HTTP 2xx
-   - audit log 出现一条 `schema_migration_breaking` 类型记录,字段含 `issuer = alice.did`、`from_schema_refs[]`、`to_schema_refs[]`、`compatibility_class = "breaking"`、`capability_used = "ck.morph.schema.migrate"`、`profile_ref = "ck.profile.morph.schema_migration_transformations.v1"`(确切 audit kind 名以 soland 实现为准,test 用宽 regex `/schema_migration|morph_schema_migrate|breaking/` 匹配)
+   - audit log 出现一条 `schema_migration_breaking` 类型记录,字段含 `issuer = alice.did`、`from_schema_refs[]`、`to_schema_refs[]`、`compatibility_class = "breaking"`、`capability_used = "ak.morph.schema.migrate"`、`profile_ref = "ck.profile.morph.schema_migration_transformations.v1"`(确切 audit kind 名以 soland 实现为准,test 用宽 regex `/schema_migration|morph_schema_migrate|breaking/` 匹配)
    - 再发 `compatibility_class = "transformation"` + 合法 `transformation_rules[]`(每条 rule id 在 profile `transformation_rules_dialect` 内)→ HTTP 2xx
 16. 反向:撤销 capability(`ck.realm.policy.update` 删除 grant),再发 transformation → HTTP 4xx,`error.code = capability_denied`(spec §4.1 S3 capability 缺失分支)
 
@@ -134,7 +134,7 @@
 ## Implementation notes
 
 - **artifact loader**:复用 G1.T4 (`tests/conformance/registry-drift.spec.ts`) 的 `import.meta.url` + `dirname` + `resolve` 模式;artifacts 落在 `<repo_root>/arkret-spec/spec/v1/artifacts/`,相对 `cotest/e2e/tests/models/*.spec.ts` 是 `../../../../arkret-spec/spec/v1/artifacts`。Playwright 配置 `"type": "module"`(见 `e2e/package.json`),原生支持 ESM `import.meta.url`
-- **profile loader**:`conformance-profiles.json` 是单个大对象,profile-id → requirements 映射在 `profile_requirements.<profile_id>`,全局 v1 catalog 列表在 `implementation_profiles[]`;harness 解析后直接索引 `parsed.profile_requirements["ck.profile.morph.schema_migration_transformations.v1"]`,不要 deep-walk(profile id 是稳定 wire key,不存在 fallback)
+- **profile loader**:`conformance-profiles.json` 是单个大对象,profile-id → requirements 映射在 `profile_requirements.<profile_id>`,全局 v1 catalog 列表在 `implementation_profiles[]`;harness 解析后直接索引 `parsed.profile_requirements["ak.profile.morph.schema_migration_transformations.v1"]`,不要 deep-walk(profile id 是稳定 wire key,不存在 fallback)
 - **describe key 名 fallback**:Phase A step 2 / Phase E step 23 — soland 暴露的 profile feature discovery 字段路径未敲定,harness 按顺序尝试:`describe.implemented_features.profile_features[<profile_id>]` → `describe.profile_features[<profile_id>]` → `describe.feature_discovery[<profile_id>]`,第一个非空对象即视为有效 hint;全部 missing 时该子断言 `test.skip()`
 - **audit log scope**:Phase C 的 `schema_migration_breaking` 检查需要一个 audit query 端点;若 soland 仅暴露 per-event 检索而无 audit kind 过滤,harness 改为拉 `/_arkret/self/realms/${realmId}/events?kinds=ck.audit.*` 后 filter `audit_kind` field
 - **error code 集合宽松匹配**:registry `error-code-registry.json` 已显式列出 `morph_schema_refs_evolution_unauthorized` / `morph_schema_refs_transformation_unsupported` / `morph_schema_version_binding_missing`;但 reducer 早期实现可能用通用 `schema_violation` / `failed_precondition` + reason 字段。Phase A/B/C 用 `{ code, reason }` 双轨匹配,任一命中即视为通过

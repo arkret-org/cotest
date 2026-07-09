@@ -19,13 +19,13 @@ use serde_json::{Value, json};
 use super::schema_validation_fixture::SchemaEnv;
 
 pub const VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING: &str =
-    "ck.vector.auth.session_grant_audience_binding.v1";
-pub const VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF: &str = "ck.vector.auth.soft_logout_did_proof.v1";
+    "ak.vector.auth.session_grant_audience_binding.v1";
+pub const VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF: &str = "ak.vector.auth.soft_logout_did_proof.v1";
 pub const VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW: &str =
-    "ck.vector.identity.did_proof_replay_window.v1";
-pub const VECTOR_ID_SESSION_POP_PRESENTATION: &str = "ck.vector.session.pop_presentation.v1";
+    "ak.vector.identity.did_proof_replay_window.v1";
+pub const VECTOR_ID_SESSION_POP_PRESENTATION: &str = "ak.vector.session.pop_presentation.v1";
 pub const VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED: &str =
-    "ck.vector.session.bare_bearer_rejected_protected.v1";
+    "ak.vector.session.bare_bearer_rejected_protected.v1";
 
 pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING,
@@ -36,7 +36,7 @@ pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
 ];
 
 const AUTH_SESSION_PROOF_FIXTURE_FILE: &str = "auth-session-proof-fixture.json";
-const AUTH_SESSION_PROOF_PROFILE: &str = "ck.profile.auth_server.v1";
+const AUTH_SESSION_PROOF_PROFILE: &str = "ak.profile.auth_server.v1";
 const SESSION_GRANT_REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody";
 const SESSION_GRANT_OUTCOME_SCHEMA: &str =
@@ -240,7 +240,7 @@ fn issue_session_grant(
             .clone()
             .expect("fixture uses a human DID-bound grant"),
         device_id: request.device_id.clone(),
-        session_grant: "ck.session.grant.test".to_owned(),
+        session_grant: "ak.session.grant.test".to_owned(),
         expires_at,
         grant_id: None,
         session_public_key: None,

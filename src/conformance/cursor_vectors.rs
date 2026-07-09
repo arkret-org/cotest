@@ -6,7 +6,7 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
 
-pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "ck.vector.encoding.cursor_opaque.core.v1";
+pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "ak.vector.encoding.cursor_opaque.core.v1";
 
 pub const ALL_CURSOR_VECTOR_IDS: &[&str] = &[VECTOR_ID_CURSOR_OPAQUE_CORE];
 

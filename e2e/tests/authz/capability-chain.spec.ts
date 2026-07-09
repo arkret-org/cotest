@@ -123,7 +123,7 @@ test.describe("capability chain (event wire)", () => {
 
     const before = await authzCheck(request, aliceToken, {
       actorDid: bob.did,
-      action: "ck.message.create",
+      action: "ak.message.create",
       realmId,
     });
     expect(before.decision).toBe("hard_deny");
@@ -132,13 +132,13 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: alice.did,
       realmId,
       subjectDid: bob.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
     });
 
     const after = await authzCheck(request, aliceToken, {
       actorDid: bob.did,
-      action: "ck.message.create",
+      action: "ak.message.create",
       realmId,
     });
     expect(after.decision).toBe("allow");
@@ -167,7 +167,7 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: alice.did,
       realmId,
       subjectDid: bob.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
     });
 
@@ -176,14 +176,14 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
       parentGrantId: parent.grantId,
     });
 
     const carolCheck = await authzCheck(request, aliceToken, {
       actorDid: carol.did,
-      action: "ck.message.create",
+      action: "ak.message.create",
       realmId,
     });
     expect(carolCheck.decision).toBe("allow");
@@ -201,7 +201,7 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: alice.did,
       realmId,
       subjectDid: bob.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
     });
 
@@ -212,7 +212,7 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
-      actions: ["ck.moderation.decision"],
+      actions: ["ak.moderation.decision"],
       expiresAt: plusSeconds(1800),
       parentGrantId: parent.grantId,
     });
@@ -220,7 +220,7 @@ test.describe("capability chain (event wire)", () => {
 
     const carolCheck = await authzCheck(request, aliceToken, {
       actorDid: carol.did,
-      action: "ck.moderation.decision",
+      action: "ak.moderation.decision",
       realmId,
     });
     expect(carolCheck.decision).toBe("hard_deny");
@@ -238,7 +238,7 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: alice.did,
       realmId,
       subjectDid: bob.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
     });
 
@@ -248,7 +248,7 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(7200),
       parentGrantId: parent.grantId,
     });
@@ -259,7 +259,7 @@ test.describe("capability chain (event wire)", () => {
 
     const carolCheck = await authzCheck(request, aliceToken, {
       actorDid: carol.did,
-      action: "ck.message.create",
+      action: "ak.message.create",
       realmId,
     });
     expect(carolCheck.decision).toBe("hard_deny");
@@ -277,14 +277,14 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: alice.did,
       realmId,
       subjectDid: bob.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
     });
     await grantCapabilityEventApi(request, bobToken, {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
       parentGrantId: parent.grantId,
     });
@@ -294,7 +294,7 @@ test.describe("capability chain (event wire)", () => {
       (
         await authzCheck(request, aliceToken, {
           actorDid: bob.did,
-          action: "ck.message.create",
+          action: "ak.message.create",
           realmId,
         })
       ).decision,
@@ -312,13 +312,13 @@ test.describe("capability chain (event wire)", () => {
     // future — both checks fail closed.
     const bobAfter = await authzCheck(request, aliceToken, {
       actorDid: bob.did,
-      action: "ck.message.create",
+      action: "ak.message.create",
       realmId,
     });
     expect(bobAfter.decision).toBe("hard_deny");
     const carolAfter = await authzCheck(request, aliceToken, {
       actorDid: carol.did,
-      action: "ck.message.create",
+      action: "ak.message.create",
       realmId,
     });
     expect(carolAfter.decision).toBe("hard_deny");
@@ -329,7 +329,7 @@ test.describe("capability chain (event wire)", () => {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
-      actions: ["ck.message.create"],
+      actions: ["ak.message.create"],
       expiresAt: plusSeconds(600),
       parentGrantId: parent.grantId,
     });

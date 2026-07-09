@@ -19,18 +19,18 @@ use arkret_core::{
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_CONTENT_FLOOR_DOWNGRADE_REJECTED: &str =
-    "ck.vector.e2ee.content_floor_downgrade_rejected.v1";
+    "ak.vector.e2ee.content_floor_downgrade_rejected.v1";
 pub const VECTOR_ID_METADATA_FLOOR_DOWNGRADE_REJECTED: &str =
-    "ck.vector.e2ee.metadata_floor_downgrade_rejected.v1";
-pub const VECTOR_ID_IN_PLACE_E2EE_ENABLE: &str = "ck.vector.e2ee.in_place_enable.v1";
+    "ak.vector.e2ee.metadata_floor_downgrade_rejected.v1";
+pub const VECTOR_ID_IN_PLACE_E2EE_ENABLE: &str = "ak.vector.e2ee.in_place_enable.v1";
 pub const VECTOR_ID_CIRCLE_CONTENT_FLOOR_BELOW_REALM_REJECTED: &str =
-    "ck.vector.circle.content_floor_below_realm_rejected.v1";
+    "ak.vector.circle.content_floor_below_realm_rejected.v1";
 pub const VECTOR_ID_DIRECTORY_VISIBILITY_MEMBERS_INDISTINGUISHABLE: &str =
-    "ck.vector.circle.directory_visibility_members_indistinguishable.v1";
+    "ak.vector.circle.directory_visibility_members_indistinguishable.v1";
 pub const VECTOR_ID_DIRECTORY_VISIBILITY_REALM_MEMBERS_INDISTINGUISHABLE: &str =
-    "ck.vector.circle.directory_visibility_realm_members_indistinguishable.v1";
+    "ak.vector.circle.directory_visibility_realm_members_indistinguishable.v1";
 pub const VECTOR_ID_HISTORY_VISIBILITY_JOINED_PREJOIN_DENIED: &str =
-    "ck.vector.history_visibility.joined_prejoin_denied.v1";
+    "ak.vector.history_visibility.joined_prejoin_denied.v1";
 
 pub const ALL_VISIBILITY_POLICY_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_CONTENT_FLOOR_DOWNGRADE_REJECTED,
@@ -43,7 +43,7 @@ pub const ALL_VISIBILITY_POLICY_VECTOR_IDS: &[&str] = &[
 ];
 
 const VISIBILITY_POLICY_FIXTURE_FILE: &str = "visibility-policy-fixture.json";
-const VISIBILITY_POLICY_PROFILE: &str = "ck.profile.circle_conformance.v1";
+const VISIBILITY_POLICY_PROFILE: &str = "ak.profile.circle_conformance.v1";
 const LOCKED_TIMING_BUCKET: &str = "circle_locked_v1";
 const LOCKED_OPAQUE_COMMITMENT: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";

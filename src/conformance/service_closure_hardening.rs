@@ -8,17 +8,17 @@ use serde_json::{Map, Value, json};
 use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED: &str =
-    "ck.vector.invite.consumed_token_resubject_rejected.v1";
-pub const VECTOR_ID_EPHEMERAL_CAPABILITY_TTL: &str = "ck.vector.ephemeral.capability_ttl.v1";
-pub const VECTOR_ID_PROJECTION_PAGINATION_SHAPE: &str = "ck.vector.projection.pagination_shape.v1";
+    "ak.vector.invite.consumed_token_resubject_rejected.v1";
+pub const VECTOR_ID_EPHEMERAL_CAPABILITY_TTL: &str = "ak.vector.ephemeral.capability_ttl.v1";
+pub const VECTOR_ID_PROJECTION_PAGINATION_SHAPE: &str = "ak.vector.projection.pagination_shape.v1";
 pub const VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT: &str =
-    "ck.vector.range_completeness.witness_disagreement.v1";
+    "ak.vector.range_completeness.witness_disagreement.v1";
 pub const VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE: &str =
-    "ck.vector.cursor.revoke_high_assurance.v1";
-pub const VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE: &str = "ck.vector.device_recovery.lifecycle.v1";
+    "ak.vector.cursor.revoke_high_assurance.v1";
+pub const VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE: &str = "ak.vector.device_recovery.lifecycle.v1";
 pub const VECTOR_ID_DEVICE_REVOCATION_SEAL_BINDING: &str =
-    "ck.vector.device.revocation_seal_binding.v1";
-pub const VECTOR_ID_PUSH_WAKEUP_POLICY: &str = "ck.vector.push.wakeup_policy.v1";
+    "ak.vector.device.revocation_seal_binding.v1";
+pub const VECTOR_ID_PUSH_WAKEUP_POLICY: &str = "ak.vector.push.wakeup_policy.v1";
 
 pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED,
@@ -32,7 +32,7 @@ pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const SERVICE_CLOSURE_HARDENING_FIXTURE_FILE: &str = "service-closure-hardening-fixture.json";
-const SERVICE_CLOSURE_HARDENING_PROFILE: &str = "ck.vector_group.privacy_security.v1";
+const SERVICE_CLOSURE_HARDENING_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 
 pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;

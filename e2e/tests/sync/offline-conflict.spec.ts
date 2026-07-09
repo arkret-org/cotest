@@ -238,13 +238,13 @@ test.describe("offline sync + conflict repair", () => {
       const missingBody = `offline backfill ${stamp}`;
       const missingEvent = makeFederationEvent({
         realmId,
-        kind: "ck.message.create",
+        kind: "ak.message.create",
         actorDid: alice.did,
         payload: {
           strand_id: typedId("strand"),
           track_name: "discussion",
           content: {
-            kind: "ck.content.text",
+            kind: "ak.content.text",
             body: missingBody,
           },
         },
@@ -448,7 +448,7 @@ async function submitRealmTitleUpdate(
     signedEventEnvelope({
       actorDid,
       realmId: realmId,
-      kind: "ck.realm.update",
+      kind: "ak.realm.update",
       anchorRef,
       payload: {
         target_ref: realmId,

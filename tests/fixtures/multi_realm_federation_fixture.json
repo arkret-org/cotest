@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.multi_realm_federation_vectors.v1",
+  "profile": "ak.profile.multi_realm_federation_vectors.v1",
   "version": "2026-05-10",
   "comment": "E3 Round 27 — Multi-Realm federation between two nodes. Spec authority: federation/move-anchor-replication.md. Builds on E2 (round 26) two-node real-spawn, but extends to N realms under one federation pair. Per-Realm anchor isolation is the core invariant: each Realm has its own anchor frontier; replaying Move from server_a → server_b for Realm X must not affect Realm Y's frontier on either side.",
   "encoder": {
@@ -12,9 +12,9 @@
       "comment": "server_a hosts 3 realms (R1, R2, R3). Each ingests one Move. server_b federates pull on each Realm individually. Each replay updates only the target Realm's frontier on server_b; the other two stay empty.",
       "realms": ["realm_R1", "realm_R2", "realm_R3"],
       "moves_on_server_a": [
-        {"realm_id": "realm_R1", "kind": "ck.message.create", "seq": 1},
-        {"realm_id": "realm_R2", "kind": "ck.message.create", "seq": 1},
-        {"realm_id": "realm_R3", "kind": "ck.message.create", "seq": 1}
+        {"realm_id": "realm_R1", "kind": "ak.message.create", "seq": 1},
+        {"realm_id": "realm_R2", "kind": "ak.message.create", "seq": 1},
+        {"realm_id": "realm_R3", "kind": "ak.message.create", "seq": 1}
       ],
       "expected": {
         "outcome": "accept",
@@ -30,12 +30,12 @@
       "comment": "Both server_a and server_b host two realms each (R1 + R2). Both ingest Moves into R1 and R2 simultaneously. Bidirectional federation pull/push converges each Realm independently. After convergence, both nodes show the same frontier per Realm, but R1 and R2 frontiers stay distinct.",
       "realms": ["realm_R1", "realm_R2"],
       "moves_on_server_a": [
-        {"realm_id": "realm_R1", "kind": "ck.message.create", "seq": 1},
-        {"realm_id": "realm_R2", "kind": "ck.message.create", "seq": 1}
+        {"realm_id": "realm_R1", "kind": "ak.message.create", "seq": 1},
+        {"realm_id": "realm_R2", "kind": "ak.message.create", "seq": 1}
       ],
       "moves_on_server_b": [
-        {"realm_id": "realm_R1", "kind": "ck.message.create", "seq": 2},
-        {"realm_id": "realm_R2", "kind": "ck.message.create", "seq": 2}
+        {"realm_id": "realm_R1", "kind": "ak.message.create", "seq": 2},
+        {"realm_id": "realm_R2", "kind": "ak.message.create", "seq": 2}
       ],
       "expected": {
         "outcome": "accept",

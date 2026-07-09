@@ -101,7 +101,7 @@ export async function acceptInviteViaApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ck.invite.accept",
+      kind: "ak.invite.accept",
       payload: {
         invite_id: invite!.id,
       },
@@ -128,7 +128,7 @@ export async function createSharedRealmViaApi(
     signedEventEnvelope({
       actorDid: owner.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       payload: {
         realm_id: realmId,
         actor_id: member.did,
@@ -166,12 +166,12 @@ export async function sendPlaintextMessageViaApi(
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
     realmId,
-    kind: "ck.message.create",
+    kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
       content: {
-        kind: "ck.content.text",
+        kind: "ak.content.text",
         body,
       },
     },
@@ -217,7 +217,7 @@ export async function listReadMarkersViaApi(
   });
   return events
     .filter((event) => {
-      return event.kind === "ck.read_cursor.advance" || event.event_kind === "ck.read_cursor.advance";
+      return event.kind === "ak.read_cursor.advance" || event.event_kind === "ck.read_cursor.advance";
     })
     .map((event) => (event.payload ?? event) as ReadMarker);
 }

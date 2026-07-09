@@ -111,7 +111,7 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
     let mut restarted_agent_group = CokretMlsGroup::restore_from_state_record(&restored_state)?;
 
     let agent_payload = restarted_agent_group
-        .encrypt_payload("ck.message.create", b"agent encrypted hello after restart")?;
+        .encrypt_payload("ak.message.create", b"agent encrypted hello after restart")?;
     assert_eq!(
         owner_group.decrypt_payload(&agent_payload)?,
         b"agent encrypted hello after restart"
@@ -146,7 +146,7 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
     restarted_agent_group.persist_state(&mut restarted_store)?;
 
     let owner_payload = owner_group
-        .encrypt_payload("ck.message.create", b"owner next epoch after agent restart")?;
+        .encrypt_payload("ak.message.create", b"owner next epoch after agent restart")?;
     assert_eq!(
         restarted_agent_group.decrypt_payload(&owner_payload)?,
         b"owner next epoch after agent restart"

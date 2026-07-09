@@ -24,7 +24,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("discovery_profile_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.discovery_vectors.v1")?;
+    validate_profile(&fixture, "ak.profile.discovery_vectors.v1")?;
 
     // Cross-check the fixture's surface_catalog against the LIVE operation
     // registry's surface_groups so any spec-side rename is caught here
@@ -368,7 +368,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
     emit_vector(
         "facet_renderer_query.schema",
         &json!({
-            "schema": "ck.schema.view.v1",
+            "schema": "ak.schema.view.v1",
             "required_query": "query",
             "facet_field": "facets"
         }),

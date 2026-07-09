@@ -32,7 +32,7 @@ pub async fn provisioning_pairing_grant_order_run() -> Result<()> {
             "duplicate steps in provisioning sequence: {SPEC_ORDER:?}"
         ));
     }
-    if AGENT_PAUSE != "ck.self.agent.pause" {
+    if AGENT_PAUSE != "ak.self.agent.pause" {
         return Err(anyhow!(
             "AGENT_PAUSE event kind drifted; reducer pause invariant cannot anchor"
         ));

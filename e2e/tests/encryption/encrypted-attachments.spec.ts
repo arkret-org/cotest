@@ -103,7 +103,7 @@ test.describe("encrypted attachments", () => {
     const ciphertextDigest = sha256Digest(ciphertext);
     const envelope = {
       encrypted: true,
-      scheme: "ck.blob.whole_file_aead.v1",
+      scheme: "ak.blob.whole_file_aead.v1",
       alg: "mls_exporter_aead_xchacha20poly1305",
       nonce: "test-nonce",
       key_ref: {
@@ -261,7 +261,7 @@ test.describe("encrypted attachments", () => {
     const message = signedEventEnvelope({
       actorDid: bob.did,
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: strandId,
         track_name: "discussion",
@@ -276,7 +276,7 @@ test.describe("encrypted attachments", () => {
     // The reporter files a report carrying a franking_proof receipt that
     // commits to the ciphertext / routing metadata — not the plaintext.
     const frankingProof = {
-      kind: "ck.moderation.franking_proof",
+      kind: "ak.moderation.franking_proof",
       franking_proof_id: `ak:franking_proof:${randomUUID()}`,
       realm_id: realmId,
       event_id: eventId,
@@ -351,7 +351,7 @@ function encryptedAttachmentEnvelope(
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",

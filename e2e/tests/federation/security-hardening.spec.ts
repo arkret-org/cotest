@@ -46,11 +46,11 @@ test.describe("federation security hardening", () => {
     const realmId = typedId("realm");
     const op = makeFederationEvent({
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",
-        content: { kind: "ck.content.text", body: "denylisted inbound" },
+        content: { kind: "ak.content.text", body: "denylisted inbound" },
       },
     });
     const response = await rawPushFederationEvents(request, [op], {

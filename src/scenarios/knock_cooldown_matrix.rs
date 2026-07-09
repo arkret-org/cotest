@@ -75,7 +75,7 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     //
     //   // 2. Knock
     //   submit_event(&server, &bob, "did:web:bob.example", &realm_id,
-    //                "ck.member.state",
+    //                "ak.member.state",
     //                json!({"membership":"knock"}), StatusCode::OK).await?;
     //   // 3. Application
     //   let app = submit_event(&server, &bob, "did:web:bob.example", &realm_id,

@@ -41,7 +41,7 @@ import {
 import type { JointUser } from "./users";
 import { encodeEd25519PubkeyMultibase } from "./encoding";
 
-const CROSS_SIGNING_BINDING_LABEL = "ck-cross-signing-bind-v1\n";
+const CROSS_SIGNING_BINDING_LABEL = "ak.cross-signing-bind-v1\n";
 
 type Ed25519FixtureKey = {
   privateKey: KeyObject;
@@ -310,7 +310,7 @@ export async function seedDirectConversationIdentityCokret(
     signedEventEnvelope({
       actorDid: user.did,
       realmId: principalControlRealmForDid(user.did),
-      kind: "ck.cross_signing.publish",
+      kind: "ak.cross_signing.publish",
       payload: {
         principal_id: user.did,
         trust_domain: trustDomain,
@@ -501,7 +501,7 @@ async function uploadDirectConversationKeyPackage(
             key_package: keyPackage,
             keypackage_digest: keypackageDigest,
             cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-            capabilities: ["ck.mls.rfc9420", "ck.mls.profile.full"],
+            capabilities: ["ak.mls.rfc9420", "ck.mls.profile.full"],
             device_signature: deviceSignature,
             created_at: canonicalTimestamp(),
             expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
@@ -602,8 +602,8 @@ export function buildInviteCreateEvent(args: {
   const event = signedEventEnvelope({
     actorDid: args.inviterDid,
     realmId: args.realmId,
-    kind: "ck.invite.create",
-    schemaId: "ck.schema.invite.v1",
+    kind: "ak.invite.create",
+    schemaId: "ak.schema.invite.v1",
     payload: {
       invite_id: inviteId,
       invitee: args.inviteeDid,
@@ -646,7 +646,7 @@ export async function deliverInviteWithConsentGrant(
     evidence,
   });
   const body: InviteDeliveryRequestBody = {
-    schema: "ck.schema.invite_delivery_request.v1",
+    schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
     invite_address: {
       subject_id: args.inviteeDid,
@@ -688,7 +688,7 @@ export async function deliverInviteExplicitAddress(
     evidence,
   });
   const body: InviteDeliveryRequestBody = {
-    schema: "ck.schema.invite_delivery_request.v1",
+    schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
     invite_address: {
       subject_id: args.inviteeDid,
@@ -748,7 +748,7 @@ export async function acceptInviteCokret(
     signedEventEnvelope({
       actorDid: args.accepterDid,
       realmId: args.realmId,
-      kind: "ck.invite.accept",
+      kind: "ak.invite.accept",
       payload: {
         invitee: args.accepterDid,
         invite_id: args.inviteId,

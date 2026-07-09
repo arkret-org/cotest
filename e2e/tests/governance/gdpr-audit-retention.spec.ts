@@ -95,7 +95,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(erase.status()).toBe(200);
     const eraseBody = await erase.json();
     expect(eraseBody.state).toBe("erasure_pending");
-    expect(eraseBody.erasure_receipt?.schema).toBe("ck.schema.erasure_receipt.v1");
+    expect(eraseBody.erasure_receipt?.schema).toBe("ak.schema.erasure_receipt.v1");
     expect(eraseBody.erasure_receipt?.outcome).toBe("completed");
 
     // Subsequent /account/me with the same bearer returns 401 account_erased.
@@ -192,11 +192,11 @@ test.describe("GDPR / audit / retention", () => {
     const actions = auditEvents.map((e) => e.action);
     expect(actions).toContain("org.arkret.soland.audit.exported");
     expect(actions).toContain("org.arkret.soland.audit.erasure_initiated");
-    expect(actions).toContain("ck.audit.erasure_receipt");
-    const receiptEvent = auditEvents.find((e) => e.action === "ck.audit.erasure_receipt") as
+    expect(actions).toContain("ak.audit.erasure_receipt");
+    const receiptEvent = auditEvents.find((e) => e.action === "ak.audit.erasure_receipt") as
       | { payload?: { schema?: string; outcome?: string; proofs?: unknown[] } }
       | undefined;
-    expect(receiptEvent?.payload?.schema).toBe("ck.schema.erasure_receipt.v1");
+    expect(receiptEvent?.payload?.schema).toBe("ak.schema.erasure_receipt.v1");
     expect(receiptEvent?.payload?.outcome).toBe("completed");
     expect(Array.isArray(receiptEvent?.payload?.proofs)).toBe(true);
   });
@@ -371,7 +371,7 @@ test.describe("GDPR / audit / retention", () => {
       });
       expect(erase.status()).toBe(200);
       const eraseBody = await erase.json();
-      expect(eraseBody.erasure_receipt?.schema).toBe("ck.schema.erasure_receipt.v1");
+      expect(eraseBody.erasure_receipt?.schema).toBe("ak.schema.erasure_receipt.v1");
 
       await expect
         .poll(

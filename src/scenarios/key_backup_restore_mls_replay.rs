@@ -136,7 +136,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       let ciphertext = xchacha20_seal(&epoch_key, body.as_bytes(),
     //                                       /*aad=*/ b"ct11-e2ee-history");
     //       alice.post("/_arkret/self/events").json(&event_envelope(
-    //           &alice.actor, &realm_id, "ck.mls.commit",
+    //           &alice.actor, &realm_id, "ak.mls.commit",
     //           json!({
     //               "epoch": i,
     //               "ciphertext": base64url(ciphertext),
@@ -182,7 +182,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       "device_id": device_a,
     //       "backup_class": "secret_storage", // and "mls_history" for the other
     //       "backup_version": "kb_1",
-    //       "schema_id": "ck.schema.key_backup.v1",
+    //       "schema_id": "ak.schema.key_backup.v1",
     //   }));
     //   let (nonce_ss, ct_ss) = xchacha20_seal_with_aad(
     //       &secret_storage_key, &ssk_plaintext, aad.as_bytes());
@@ -241,7 +241,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //             .json(&event_envelope(
     //                 &alice.actor,
     //                 <principal_control_realm_id>,
-    //                 "ck.device.revoke",
+    //                 "ak.device.revoke",
     //                 json!({
     //                     "principal_id": alice.actor,
     //                     "device_id": device_a,
@@ -303,7 +303,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   ).await?;
     //   let commits = timeline["events"].as_array().unwrap()
     //       .iter()
-    //       .filter(|e| e["kind"] == "ck.mls.commit")
+    //       .filter(|e| e["kind"] == "ak.mls.commit")
     //       .collect::<Vec<_>>();
     //   assert_eq!(commits.len(), 3);
     //

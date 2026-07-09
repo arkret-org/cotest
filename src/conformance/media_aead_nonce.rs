@@ -17,11 +17,11 @@ use arkret_core::error::{
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_AEAD_NONCE_SENDER_DOMAIN_COLLISION: &str =
-    "ck.vector.media.aead_nonce_sender_domain_collision.v1";
+    "ak.vector.media.aead_nonce_sender_domain_collision.v1";
 pub const VECTOR_ID_AEAD_NONCE_COUNTER_REPLAY: &str =
-    "ck.vector.media.aead_nonce_counter_replay.v1";
+    "ak.vector.media.aead_nonce_counter_replay.v1";
 pub const VECTOR_ID_AEAD_NONCE_RANDOM_REJECTED: &str =
-    "ck.vector.media.aead_nonce_random_rejected.v1";
+    "ak.vector.media.aead_nonce_random_rejected.v1";
 
 pub const ALL_MEDIA_AEAD_NONCE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AEAD_NONCE_SENDER_DOMAIN_COLLISION,
@@ -30,10 +30,10 @@ pub const ALL_MEDIA_AEAD_NONCE_VECTOR_IDS: &[&str] = &[
 ];
 
 const MEDIA_AEAD_NONCE_FIXTURE_FILE: &str = "media-aead-nonce-fixture.json";
-const MEDIA_AEAD_NONCE_PROFILE: &str = "ck.profile.e2ee_client.v1";
+const MEDIA_AEAD_NONCE_PROFILE: &str = "ak.profile.e2ee_client.v1";
 const DEVICE_ONE: &str = "ak:device:01964137-0000-7000-8000-000000000001";
 const DEVICE_TWO: &str = "ak:device:01964137-0000-7000-8000-000000000002";
-const PURPOSE_MESSAGE_PAYLOAD: &str = "ck.message.encrypted_payload";
+const PURPOSE_MESSAGE_PAYLOAD: &str = "ak.message.encrypted_payload";
 const EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX: &str = "3625435ed962752ae133dd014413a855";
 const EXPORTER_SECRET: [u8; 32] = [0x24u8; 32];
 

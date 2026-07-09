@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.history_visibility_vectors.v1",
+  "profile": "ak.profile.history_visibility_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "B4 Round 25 — history-visibility scope vectors. Spec authority: data-structures/history-visibility.md + authz/event-auth-state-resolution.md. The history_visibility cell (cas-register, ck:cell:ck.component.realm.history_visibility.v1:<realm_id>) holds one of {joined, invited, world_readable, shared}. The reducer projects the timeline differently per viewer based on their (membership_state, history_visibility, event_origin_ts vs viewer_join_ts). 'joined' (default): only events at-or-after the viewer's last join_ts are visible. 'invited': events at-or-after the viewer's invite_ts are visible (allows pre-accept preview). 'world_readable': all events visible to anyone who can reach the cell, even non-members. 'shared': events from the moment the visibility setting first turned 'shared' onward are visible to non-members; events prior remain joined-scoped. Redacted events compose with visibility (see redaction_history_visibility_fixture for the cross-product); admin override uses the recovery_capability surface to expose audit-view of any single event_id regardless of viewer scope.",
@@ -9,7 +9,7 @@
     "history_visibility_values": ["world_readable", "shared", "joined", "invited"],
     "default_value": "joined",
     "membership_states": ["join", "invite", "leave", "ban", "knock"],
-    "admin_override_capability": "ck.recovery.read.history.v1"
+    "admin_override_capability": "ak.recovery.read.history.v1"
   },
   "vectors": [
     {
@@ -23,8 +23,8 @@
         "invite_ts": 80
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0001-7a01-8a01-000000000050", "origin_ts": 50, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-0001-7a01-8a01-000000000150", "origin_ts": 150, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-0001-7a01-8a01-000000000050", "origin_ts": 50, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0001-7a01-8a01-000000000150", "origin_ts": 150, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -44,8 +44,8 @@
         "invite_ts": 120
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0002-7a02-8a02-000000000110", "origin_ts": 110, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-0002-7a02-8a02-000000000130", "origin_ts": 130, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-0002-7a02-8a02-000000000110", "origin_ts": 110, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0002-7a02-8a02-000000000130", "origin_ts": 130, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -65,9 +65,9 @@
         "invite_ts": null
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000010", "origin_ts": 10, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000020", "origin_ts": 20, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000030", "origin_ts": 30, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000010", "origin_ts": 10, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000020", "origin_ts": 20, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000030", "origin_ts": 30, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -92,8 +92,8 @@
         "invite_ts": null
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0004-7a04-8a04-000000000180", "origin_ts": 180, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-0004-7a04-8a04-000000000210", "origin_ts": 210, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-0004-7a04-8a04-000000000180", "origin_ts": 180, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0004-7a04-8a04-000000000210", "origin_ts": 210, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -139,7 +139,7 @@
       "history_visibility": "joined",
       "admin_override": {
         "admin_did": "did:web:admin.example",
-        "capability": "ck.recovery.read.history.v1",
+        "capability": "ak.recovery.read.history.v1",
         "event_id": "ak:event:01970f01-0006-7a06-8a06-000000000400",
         "audit_log_required": true
       },
@@ -150,7 +150,7 @@
         "invite_ts": 480
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0006-7a06-8a06-000000000400", "origin_ts": 400, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-0006-7a06-8a06-000000000400", "origin_ts": 400, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -177,8 +177,8 @@
         "invite_ts": 90
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0009-7a09-8a09-000000000150", "origin_ts": 150, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-0009-7a09-8a09-000000000250", "origin_ts": 250, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-0009-7a09-8a09-000000000150", "origin_ts": 150, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0009-7a09-8a09-000000000250", "origin_ts": 250, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -207,8 +207,8 @@
         "invite_ts": 90
       },
       "events": [
-        {"event_id": "ak:event:01970f01-000a-7a0a-8a0a-000000000150", "origin_ts": 150, "kind": "ck.message.create"},
-        {"event_id": "ak:event:01970f01-000a-7a0a-8a0a-000000000250", "origin_ts": 250, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-000a-7a0a-8a0a-000000000150", "origin_ts": 150, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-000a-7a0a-8a0a-000000000250", "origin_ts": 250, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
@@ -226,12 +226,12 @@
       "history_visibility": "joined",
       "admin_override": {
         "admin_did": "did:web:admin2.example",
-        "capability": "ck.recovery.read.history.v1",
+        "capability": "ak.recovery.read.history.v1",
         "event_id": "ak:event:01970f01-000b-7a0b-8a0b-000000000600",
         "subject_id": "did:web:eve.example",
         "subject_membership_state": "ban",
         "audit_log_required": true,
-        "audit_log_kind": "ck.audit.recovery.history_read.v1"
+        "audit_log_kind": "ak.audit.recovery.history_read.v1"
       },
       "viewer": {
         "did": "did:web:admin2.example",
@@ -240,7 +240,7 @@
         "invite_ts": 990
       },
       "events": [
-        {"event_id": "ak:event:01970f01-000b-7a0b-8a0b-000000000600", "origin_ts": 600, "kind": "ck.message.create"}
+        {"event_id": "ak:event:01970f01-000b-7a0b-8a0b-000000000600", "origin_ts": 600, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",

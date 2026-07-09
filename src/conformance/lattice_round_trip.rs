@@ -33,11 +33,11 @@ use arkret_core::{CellRef, Did, LatticeOp, LatticeOpType, MoveId};
 use serde_json::{Value, json};
 
 const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 5] = [
-    "ck.vector.lattice.mv_register_join.v1",
-    "ck.vector.lattice.counter_join.v1",
-    "ck.vector.lattice.ordered_log_join.v1",
-    "ck.vector.lattice.ordered_log_gap.v1",
-    "ck.vector.lattice.fsm_join.v1",
+    "ak.vector.lattice.mv_register_join.v1",
+    "ak.vector.lattice.counter_join.v1",
+    "ak.vector.lattice.ordered_log_join.v1",
+    "ak.vector.lattice.ordered_log_gap.v1",
+    "ak.vector.lattice.fsm_join.v1",
 ];
 
 /// Public entry point matching the cotest fixture-suite naming convention.
@@ -75,7 +75,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
 
 fn validate_lattice_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value("cba-lattice-fixture.json")?;
-    super::validate_profile(&fixture, "ck.vector_group.cba_lattice.v1")?;
+    super::validate_profile(&fixture, "ak.vector_group.cba_lattice.v1")?;
     let metadata = fixture
         .get("lattice_round_trip")
         .ok_or_else(|| anyhow!("cba-lattice fixture missing lattice_round_trip metadata"))?;
@@ -208,8 +208,8 @@ fn base_op() -> LatticeOp {
 fn or_set_basic_add_remove_commute() -> Result<()> {
     let lattice = OrSet;
     let cref = cell(
-        "ck.component.consent.v1",
-        "ck.consent.01js0cc0000000000000000000",
+        "ak.component.consent.v1",
+        "ak.consent.01js0cc0000000000000000000",
     );
     let m1 = move_id("aa");
     let m2 = move_id("bb");
@@ -254,8 +254,8 @@ fn or_set_basic_add_remove_commute() -> Result<()> {
 fn or_set_idempotent_re_add_after_remove() -> Result<()> {
     let lattice = OrSet;
     let cref = cell(
-        "ck.component.consent.v1",
-        "ck.consent.01js0cc0000000000000000000",
+        "ak.component.consent.v1",
+        "ak.consent.01js0cc0000000000000000000",
     );
     let ops = vec![
         SealedOp::new(move_id("aa"), op_add("red")),
@@ -274,8 +274,8 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
 fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ck.component.realm.policy.v1",
-        "ck.realm.01js0sp0000000000000000000",
+        "ak.component.realm.policy.v1",
+        "ak.realm.01js0sp0000000000000000000",
     );
     // Two sealed Moves concurrently set the cell to distinct values.
     let ops = vec![
@@ -309,8 +309,8 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
 fn cas_register_single_set_returns_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ck.component.realm.policy.v1",
-        "ck.realm.01js0sp0000000000000000001",
+        "ak.component.realm.policy.v1",
+        "ak.realm.01js0sp0000000000000000001",
     );
     let ops = vec![SealedOp::new(
         move_id("dd"),
@@ -327,7 +327,7 @@ fn cas_register_single_set_returns_value() -> Result<()> {
 
 fn counter_pn_sums_increments_and_decrements() -> Result<()> {
     let lattice = Counter;
-    let cref = cell("ck.component.counter.v1", "metrics.events.received");
+    let cref = cell("ak.component.counter.v1", "metrics.events.received");
     let ops = vec![
         SealedOp::new(move_id("ee"), op_inc(5)),
         SealedOp::new(move_id("ff"), op_inc(3)),
@@ -375,7 +375,7 @@ fn membership_fsm() -> Fsm {
 
 fn fsm_legal_transition_advances_state() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
+    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     // Single legal transition: invited → joined.
     let ops = vec![SealedOp::new(
         move_id("22"),
@@ -390,7 +390,7 @@ fn fsm_legal_transition_advances_state() -> Result<()> {
 
 fn fsm_duplicate_transition_is_idempotent() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
+    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     let ops = vec![
         SealedOp::new(
             move_id("23"),
@@ -410,7 +410,7 @@ fn fsm_duplicate_transition_is_idempotent() -> Result<()> {
 
 fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
+    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     let ops = vec![
         SealedOp::new(
             move_id("25"),
@@ -434,7 +434,7 @@ fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
 
 fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
+    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     // Two concurrent transitions claiming distinct `from` states for the
     // same cell — a join of these MUST surface a Bottom because the
     // pre-state can only be one value at a time.
@@ -464,8 +464,8 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
 fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
     let lattice = MvRegister;
     let cref = cell(
-        "ck.component.strand.title.v1",
-        "ck.strand.01js0fl0000000000000000000",
+        "ak.component.strand.title.v1",
+        "ak.strand.01js0fl0000000000000000000",
     );
     // MvRegister surfaces multiple concurrent values. The SDK's reference
     // implementation defaults to a Bottom-shaped result with both heads in
@@ -507,8 +507,8 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
 fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let lattice = OrderedLog;
     let cref = cell(
-        "ck.component.audit_log.v1",
-        "ck.realm.01js0sp0000000000000000000",
+        "ak.component.audit_log.v1",
+        "ak.realm.01js0sp0000000000000000000",
     );
     // Two issuers, both with monotonic issuer_seq. Join must produce a
     // deterministic linearization that includes all distinct (issuer, seq)
@@ -566,8 +566,8 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
     let lattice = OrderedLog;
     let cref = cell(
-        "ck.component.audit_log.v1",
-        "ck.realm.01js0sp0000000000000000000",
+        "ak.component.audit_log.v1",
+        "ak.realm.01js0sp0000000000000000000",
     );
     let gap_ops = vec![
         issued_op(
@@ -719,8 +719,8 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
 
 fn notary_cell(realm_suffix: &str) -> CellRef {
     cell(
-        "ck.component.notary.v1",
-        &format!("ck.realm.01js{realm_suffix}000000000000000000"),
+        "ak.component.notary.v1",
+        &format!("ak.realm.01js{realm_suffix}000000000000000000"),
     )
 }
 
@@ -851,8 +851,8 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
 fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ck.component.realm.policy.v1",
-        "ck.realm.01js0sp0000000000000000000",
+        "ak.component.realm.policy.v1",
+        "ak.realm.01js0sp0000000000000000000",
     );
     // Seal view AFTER recovery: only the repair Move's sealed op is in
     // scope (the earlier conflict pair was rolled back / superseded by the
@@ -877,8 +877,8 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
 fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ck.component.realm.policy.v1",
-        "ck.realm.01js0sp0000000000000000001",
+        "ak.component.realm.policy.v1",
+        "ak.realm.01js0sp0000000000000000001",
     );
     // Two concurrent set-Moves where one self-references its own "winner"
     // capability remain a Bottom at the lattice layer — the cas_register
@@ -916,8 +916,8 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 fn covered_frontier_cell(realm_suffix: &str) -> CellRef {
     cell(
-        "ck.component.mls.covered_frontier.v1",
-        &format!("ck.realm.01js{realm_suffix}000000000000000000"),
+        "ak.component.mls.covered_frontier.v1",
+        &format!("ak.realm.01js{realm_suffix}000000000000000000"),
     )
 }
 

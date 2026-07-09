@@ -106,10 +106,10 @@ test.describe("single-server triad collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId: realmId,
-        kind: "ck.message.revise",
+        kind: "ak.message.revise",
         payload: {
           target_ref: messageRef,
-          content: { kind: "ck.content.text", body: revisedBody },
+          content: { kind: "ak.content.text", body: revisedBody },
         },
       }),
       { context: "revise message" },
@@ -117,9 +117,9 @@ test.describe("single-server triad collaboration", () => {
 
     const beforeRedact = await listRealmEventsViaApi(request, bobToken, realmId);
     expect(beforeRedact.map(eventKind)).toEqual(
-      expect.arrayContaining(["ck.message.create", "ck.message.revise"]),
+      expect.arrayContaining(["ak.message.create", "ck.message.revise"]),
     );
-    expect(eventPayload(beforeRedact.find((event) => eventKind(event) === "ck.message.revise")))
+    expect(eventPayload(beforeRedact.find((event) => eventKind(event) === "ak.message.revise")))
       .toMatchObject({ target_ref: messageRef });
 
     await submitSignedEventApi(
@@ -128,7 +128,7 @@ test.describe("single-server triad collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId: realmId,
-        kind: "ck.message.redact",
+        kind: "ak.message.redact",
         payload: {
           target_event_id: created.event_id,
           target_ref: messageRef,
@@ -140,15 +140,15 @@ test.describe("single-server triad collaboration", () => {
 
     const events = await listRealmEventsViaApi(request, bobToken, realmId);
     const eventKinds = events.map(eventKind);
-    expect(eventKinds).toContain("ck.message.revise");
-    expect(eventKinds).toContain("ck.message.create");
-    expect(eventKinds).not.toContain("ck.message.redact");
+    expect(eventKinds).toContain("ak.message.revise");
+    expect(eventKinds).toContain("ak.message.create");
+    expect(eventKinds).not.toContain("ak.message.redact");
     expectRedactedPayload(
-      events.find((event) => eventKind(event) === "ck.message.create"),
+      events.find((event) => eventKind(event) === "ak.message.create"),
       createBody,
     );
     expectRedactedPayload(
-      events.find((event) => eventKind(event) === "ck.message.revise"),
+      events.find((event) => eventKind(event) === "ak.message.revise"),
       revisedBody,
     );
   });
@@ -179,12 +179,12 @@ test.describe("single-server triad collaboration", () => {
     const pre = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
         strand_id: defaultStrandId,
         track_name: "discussion",
-        content: { kind: "ck.content.text", body: `triad pre ${stamp}` },
+        content: { kind: "ak.content.text", body: `triad pre ${stamp}` },
       },
     });
     await submitSignedEventApi(request, aliceToken, pre, {
@@ -196,7 +196,7 @@ test.describe("single-server triad collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId: realmId,
-        kind: "ck.member.state",
+        kind: "ak.member.state",
         createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
         payload: {
           realm_id: realmId,
@@ -210,12 +210,12 @@ test.describe("single-server triad collaboration", () => {
     const post = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
         strand_id: defaultStrandId,
         track_name: "discussion",
-        content: { kind: "ck.content.text", body: `triad post ${stamp}` },
+        content: { kind: "ak.content.text", body: `triad post ${stamp}` },
       },
     });
     await submitSignedEventApi(request, aliceToken, post, {
@@ -458,7 +458,7 @@ test.describe("single-server triad collaboration", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.member.state",
+          kind: "ak.member.state",
           payload: {
             realm_id: realmId,
             actor_id: carol.did,
@@ -504,7 +504,7 @@ test.describe("single-server triad collaboration", () => {
         signedEventEnvelope({
           actorDid: bob.did,
           realmId,
-          kind: "ck.member.state",
+          kind: "ak.member.state",
           payload: {
             realm_id: realmId,
             actor_id: bob.did,
@@ -528,11 +528,11 @@ test.describe("single-server triad collaboration", () => {
         data: signedEventEnvelope({
           actorDid: bob.did,
           realmId,
-          kind: "ck.message.create",
+          kind: "ak.message.create",
           payload: {
             strand_id: strandId,
             track_name: "discussion",
-            content: { kind: "ck.content.text", body: afterLeaveBody },
+            content: { kind: "ak.content.text", body: afterLeaveBody },
           },
         }),
       });
@@ -544,7 +544,7 @@ test.describe("single-server triad collaboration", () => {
       const eventsAfterLeave = await listRealmEventsViaApi(request, aliceToken, realmId);
       const bobMemberEvents = eventsAfterLeave.filter(
         (event) =>
-          eventKind(event) === "ck.member.state" &&
+          eventKind(event) === "ak.member.state" &&
           eventPayload(event).actor_id === bob.did,
       );
       expect(eventPayload(bobMemberEvents[bobMemberEvents.length - 1])).toMatchObject({
@@ -558,7 +558,7 @@ test.describe("single-server triad collaboration", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId,
-          kind: "ck.member.state",
+          kind: "ak.member.state",
           payload: {
             realm_id: realmId,
             actor_id: bob.did,

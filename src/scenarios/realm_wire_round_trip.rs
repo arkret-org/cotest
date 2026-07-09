@@ -53,19 +53,19 @@ struct WireVector {
 fn positive_vectors() -> Vec<WireVector> {
     vec![
         WireVector {
-            label: "ck.realm.create",
+            label: "ak.realm.create",
             kind: REALM_CREATE,
             payload: json!({"action": "create", "title": "Engineering Realm"}),
             expected_class: EventClass::Realm,
         },
         WireVector {
-            label: "ck.space.create (container)",
+            label: "ak.space.create (container)",
             kind: SPACE_CREATE,
             payload: json!({"title": "Launch Board", "kind": "board"}),
             expected_class: EventClass::Space,
         },
         WireVector {
-            label: "ck.realm.delivery_binding_policy",
+            label: "ak.realm.delivery_binding_policy",
             kind: REALM_DELIVERY_BINDING_POLICY,
             payload: json!({
                 "allowed_recipient_services": ["did:web:soland.example"],
@@ -74,7 +74,7 @@ fn positive_vectors() -> Vec<WireVector> {
             expected_class: EventClass::Realm,
         },
         WireVector {
-            label: "ck.realm.link",
+            label: "ak.realm.link",
             kind: REALM_LINK,
             payload: json!({
                 "link_kind": "parent",

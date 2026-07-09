@@ -215,7 +215,7 @@ test.describe("contact graph (same principal server)", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       payload: {
         strand_id: resolved.main_strand_id!,
         track_name: "discussion",
@@ -536,7 +536,7 @@ function encryptedEnvelope(
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",

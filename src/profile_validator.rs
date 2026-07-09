@@ -22,8 +22,8 @@
 //!
 //! let describe = json!({
 //!     "supported_profiles": [
-//!         "ck.profile.chat_mvp.v1",
-//!         "ck.profile.kanban_mvp.v1",
+//!         "ak.profile.chat_mvp.v1",
+//!         "ak.profile.kanban_mvp.v1",
 //!     ],
 //! });
 //! let outcome = validate_describe_profile_claims(

@@ -1,5 +1,5 @@
 {
-  "profile": "ck.profile.composite_state_subject_vectors.v1",
+  "profile": "ak.profile.composite_state_subject_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). Active vectors only use current v1 kinds; removed cx.strand.track.* examples are isolated under deprecated_wire_vectors with historical_only expectations.",
@@ -11,7 +11,7 @@
   "vectors": [
     {
       "name": "device_authorized_alice",
-      "kind": "ck.device.authorize",
+      "kind": "ak.device.authorize",
       "components_array": ["did:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
@@ -19,7 +19,7 @@
     },
     {
       "name": "device_revoked_same_subject_as_authorized_supersede",
-      "kind": "ck.device.revoke",
+      "kind": "ak.device.revoke",
       "components_array": ["did:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",

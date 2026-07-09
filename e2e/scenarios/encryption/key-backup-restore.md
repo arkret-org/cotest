@@ -25,4 +25,4 @@
 5. `mixed_secret_storage=true` 必须使用更高 KDF floor。
 6. session-token-only DELETE 被拒;带 ownership proof 后删除成功。
 7. inkson 真实 crypto:Argon2id + XChaCha20-Poly1305 seal/open round trip、wrong-Recovery-Key commitment reject、24 词 BIP-39 输入校验、late recovery banner 从 `late_recovery_original_event_id` 构造。
-8. A3 real OIDC: 用真实 coauth 密码/OIDC 登录获取 `ck.session.grant`,Device-A 上传 MLS account-secret backup,Device-B fresh browser 用同一账号登录后输入 24 词 Recovery Key 恢复 MLS;所有 `/_arkret/self/*` / `/_arkret/root/*` grant 请求必须带 DPoP holder proof,unlock 必须带 body `proof`,并明确拒绝 bearer-only unlock。
+8. A3 real OIDC: 用真实 coauth 密码/OIDC 登录获取 `ak.session.grant`,Device-A 上传 MLS account-secret backup,Device-B fresh browser 用同一账号登录后输入 24 词 Recovery Key 恢复 MLS;所有 `/_arkret/self/*` / `/_arkret/root/*` grant 请求必须带 DPoP holder proof,unlock 必须带 body `proof`,并明确拒绝 bearer-only unlock。

@@ -72,7 +72,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let recovered_message_ids = collected
         .iter()
-        .filter(|event| event_kind(event) == Some("ck.message.create"))
+        .filter(|event| event_kind(event) == Some("ak.message.create"))
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();
     assert_eq!(

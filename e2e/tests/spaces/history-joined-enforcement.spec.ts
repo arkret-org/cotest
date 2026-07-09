@@ -219,19 +219,19 @@ async function createRealm(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.realm.create",
+      kind: "ak.realm.create",
       createdAt: createdAtValue,
       payload: {
         // realm_create_payload root is additionalProperties:false; the field
         // lives on the realm object (additionalProperties:true) below.
         object: {
           id: realmId,
-          schema: "ck.schema.realm.v1",
+          schema: "ak.schema.realm.v1",
           title: `history ${historyVisibility} ${Date.now()}`,
           summary: "cotest joined-history enforcement fixture",
           created_by: actor.did,
           trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ck.schema.realm.v1"],
+          schema_refs: ["ak.schema.realm.v1"],
           default_discoverability: "public",
           default_join_rule: "invite",
           history_visibility: historyVisibility,
@@ -265,13 +265,13 @@ async function createMessage(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.message.create",
+      kind: "ak.message.create",
       createdAt: createdAtValue,
       payload: {
         strand_id: strandId,
         track_name: "discussion",
         content: {
-          kind: "ck.content.text",
+          kind: "ak.content.text",
           body,
         },
       },
@@ -294,7 +294,7 @@ async function joinMember(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.member.state",
+      kind: "ak.member.state",
       createdAt: createdAtValue,
       payload: {
         // membership_payload requires realm_id (event-payload.schema.json);
@@ -368,8 +368,8 @@ async function eventsSubscribeBodies(
 
 function isMessageEvent(event: Record<string, unknown>): boolean {
   return (
-    event.event_kind === "ck.message.create" ||
-    event.kind === "ck.message.create"
+    event.event_kind === "ak.message.create" ||
+    event.kind === "ak.message.create"
   );
 }
 

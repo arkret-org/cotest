@@ -1,7 +1,7 @@
 //! §11.2 — pairing expiry auto-revoke.
 //!
 //! When an `AgentSession` carries `expires_at < now()`, the reducer
-//! MUST emit `ck.session.grant_revoke` carrying
+//! MUST emit `ak.session.grant_revoke` carrying
 //! `reason = "pairing_expired"`. The capability cache MUST be
 //! invalidated within one tick.
 
@@ -27,7 +27,7 @@ pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
     }
     // TODO(P4-impl): once soland persists agent_session rows, drive
     // a session with expires_at = now-1h and assert the reducer emits
-    // exactly one `ck.session.grant_revoke{reason=pairing_expired}` and
+    // exactly one `ak.session.grant_revoke{reason=pairing_expired}` and
     // that floria's capability cache for the session is purged.
     Ok(())
 }

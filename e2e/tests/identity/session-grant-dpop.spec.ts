@@ -5,7 +5,7 @@
 //
 // Under ②, soland does not mint a second local credential. A client reaches
 // `/_arkret/self/*` by presenting
-//   Authorization: Bearer <ck.session.grant>
+//   Authorization: Bearer <ak.session.grant>
 //   DPoP: <RFC 9449 proof bound to htm/htu/ath(=hash(grant))>
 // and soland verifies the DPoP against the grant's `cnf.jkt` (obtained via
 // session-grant introspection at coauth), plus audience / scope / principal /
@@ -46,7 +46,7 @@ const VIEWER_PATH = "/_arkret/self/account/viewer";
 
 function grantLikeJwtWithoutDpop(): string {
   const header = Buffer.from(JSON.stringify({ alg: "EdDSA", typ: "JWT" })).toString("base64url");
-  const payload = Buffer.from(JSON.stringify({ type: "ck.session.grant" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ type: "ak.session.grant" })).toString("base64url");
   return `${header}.${payload}.signature`;
 }
 
