@@ -192,7 +192,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
         let name = required_str(v, "name")?;
         let outcome = expected_outcome(v, name)?;
         let trust_anchor_actor = required_str(v, "trust_anchor_actor_id")?;
-        if !trust_anchor_actor.starts_with("did:web:") && !trust_anchor_actor.starts_with("did:ck:")
+        if !trust_anchor_actor.starts_with("did:web:") && !trust_anchor_actor.starts_with("did:ak:")
         {
             bail!("vector {name} trust_anchor_actor_id must be a did: form");
         }
@@ -206,7 +206,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
             }
         }
         if let Some(aus) = v.get("alice_user_signing")
-            && required_str(aus, "signed_by")? != "did:ck:user:alice#master"
+            && required_str(aus, "signed_by")? != "did:ak:user:alice#master"
         {
             bail!("vector {name} alice_user_signing.signed_by must be alice#master");
         }
@@ -216,19 +216,19 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                 let bm = v
                     .get("bob_master")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_master"))?;
-                if required_str(bm, "signed_by")? != "did:ck:user:alice#user-signing" {
+                if required_str(bm, "signed_by")? != "did:ak:user:alice#user-signing" {
                     bail!("vector {name} bob_master must be signed by alice#user-signing");
                 }
                 let bss = v
                     .get("bob_self_signing")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_self_signing"))?;
-                if required_str(bss, "signed_by")? != "did:ck:user:bob#master" {
+                if required_str(bss, "signed_by")? != "did:ak:user:bob#master" {
                     bail!("vector {name} bob_self_signing must be signed by bob#master");
                 }
                 let bdl = v
                     .get("bob_device_leaf")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_device_leaf"))?;
-                if required_str(bdl, "signed_by")? != "did:ck:user:bob#self-signing" {
+                if required_str(bdl, "signed_by")? != "did:ak:user:bob#self-signing" {
                     bail!("vector {name} bob_device_leaf must be signed by bob#self-signing");
                 }
                 let path: Vec<&str> = v
@@ -251,7 +251,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                 let bdl = v
                     .get("bob_device_leaf")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_device_leaf"))?;
-                if required_str(bdl, "signed_by")? != "did:ck:user:bob#self-signing" {
+                if required_str(bdl, "signed_by")? != "did:ak:user:bob#self-signing" {
                     bail!("vector {name} new device must be signed by bob#self-signing");
                 }
                 let trans = v

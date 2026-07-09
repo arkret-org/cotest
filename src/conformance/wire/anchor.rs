@@ -23,7 +23,7 @@ use crate::conformance::{required_str, validate_profile};
 ///   `signed_compaction.bottom_diagnostics` MUST be a superset of
 ///   `expected_effective_anchor_view.bottom_diagnostics` (compaction is information-preserving for
 ///   ⊥ cells; dropping one is a structural error).
-/// * **compaction Anchor id is content-addressed** — id starts with `ck:anchor:sha256:` and the
+/// * **compaction Anchor id is content-addressed** — id starts with `ak:anchor:sha256:` and the
 ///   digest is 64 lowercase hex chars.
 ///
 /// Negative vectors carry a `drift_compaction` with `expected_rejection_reason`
@@ -871,7 +871,7 @@ pub fn run_late_arriving_anchor_idempotency_check() -> Result<()> {
 }
 fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
     let Some(rest) = id.strip_prefix("ak:anchor:sha256:") else {
-        bail!("{ctx} anchor id {id} must use ck:anchor:sha256:<hex> special form");
+        bail!("{ctx} anchor id {id} must use ak:anchor:sha256:<hex> special form");
     };
     if rest.len() != 64
         || !rest

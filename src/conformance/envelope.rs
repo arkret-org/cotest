@@ -640,7 +640,7 @@ fn validate_event_envelope(
     if extra_refs_invalid || prev_refs_invalid {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "prev_refs / refs must contain typed ck: refs",
+            "prev_refs / refs must contain typed ak: refs",
         ));
     }
     if prev_refs

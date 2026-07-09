@@ -65,7 +65,7 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
 
     // (c) The principal DID and auxiliary ids that a provisioning round
     //     materializes are well-formed under the SDK validators. The
-    //     `ck:agent_key:` / `ck:accountability_grant:` typed-id families
+    //     `ak:agent_key:` / `ak:accountability_grant:` typed-id families
     //     are retired: `key_id` is a plain string (preferring the DID URL
     //     verification-method form) and the accountability grant is
     //     referenced via its `ck.identity.accountability_grant` event id.
@@ -89,7 +89,7 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
     let bad_principal = Did::new("ak:agent:not-a-uuidv7".to_owned());
     if bad_principal.is_ok() {
         return Err(anyhow!(
-            "Did accepted ill-formed agent principal value `ck:agent:not-a-uuidv7`"
+            "Did accepted ill-formed agent principal value `ak:agent:not-a-uuidv7`"
         ));
     }
 

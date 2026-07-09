@@ -536,7 +536,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} missing envelope"))?;
         let envelope_id = required_str(envelope, "envelope_id")?;
         if !envelope_id.starts_with("ak:envelope:") {
-            bail!("vector {name} envelope_id {envelope_id} must use ck:envelope:<uuidv7> form");
+            bail!("vector {name} envelope_id {envelope_id} must use ak:envelope:<uuidv7> form");
         }
         let sender = required_str(envelope, "sender_device_id")?;
         let key_ref = required_str(envelope, "key_ref")?;

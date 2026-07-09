@@ -21,7 +21,7 @@ fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<S
     // Render okm as a canonical RFC 9562 UUIDv7
     // (`xxxxxxxx-xxxx-7xxx-Nxxx-xxxxxxxxxxxx`, N ∈ {8,9,a,b}) so the
     // typed-id validator accepts the resulting `ak:circle:` id (a sidecar
-    // circle is an ordinary Circle; the dedicated `ck:sidecar_circle:`
+    // circle is an ordinary Circle; the dedicated `ak:sidecar_circle:`
     // typed-id family is retired).
     // The version nibble at position 12 is forced to '7', and the
     // variant nibble at position 16 is forced to '8'.

@@ -192,7 +192,7 @@ function forbiddenTermMatcher(term: string): RegExp {
 // field NAMES (`branch`, `title`, `sender`), but the `id` also encodes nested
 // key paths (`metadata.fields.stage`), patch op paths (`patch:stage`), enum
 // `key=value` forms (`kind=room`, `actor_kind=ghost`), typed-id value prefixes
-// (`ck:rtcpart:`), and removed event-kind / schema-id VALUES
+// (`ak:rtcpart:`), and removed event-kind / schema-id VALUES
 // (`cx.device.authorized`, `cx.schema.read_marker.v1`). The scanner classifies
 // each hard_reject entry and applies the matching probe against a real wire
 // document (submitted Event Envelope + soland's receipt + queried events).
@@ -208,7 +208,7 @@ type WireFieldRule =
 function classifyWireField(entry: DriftEntry): WireFieldRule {
   const id = entry.id;
   const context = entry.context ?? "";
-  if (context === "typed_id_prefix" || /^ck:[a-z_0-9]+:$/.test(id)) {
+  if (context === "typed_id_prefix" || /^ak:[a-z_0-9]+:$/.test(id)) {
     return { kind: "id_prefix", id, prefix: id };
   }
   if (id.startsWith("patch:")) {

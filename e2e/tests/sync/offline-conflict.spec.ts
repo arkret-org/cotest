@@ -425,7 +425,7 @@ async function createBottomConflictFixture(
       historyVisibility: "shared",
     },
   );
-  const basis = `ck:anchor:sha256:${"0".repeat(64)}`;
+  const basis = `ak:anchor:sha256:${"0".repeat(64)}`;
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
   await submitRealmTitleUpdate(request, aliceToken, alice.did, realmId, aliceTitle, basis);

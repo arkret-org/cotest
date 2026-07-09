@@ -10,7 +10,7 @@
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
 //!   4. an accountability grant is referenced through its `ck.identity.accountability_grant` event
 //!      — the `accountability_grant_ref` is an `EventId` that round-trips through the SDK validator
-//!      (the dedicated `ck:accountability_grant:` typed-id family is retired).
+//!      (the dedicated `ak:accountability_grant:` typed-id family is retired).
 
 use anyhow::{Result, anyhow};
 use arkret_core::events::IDENTITY_ACCOUNTABILITY_GRANT;

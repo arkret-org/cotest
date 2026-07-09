@@ -182,7 +182,7 @@ test.describe("sovereign deployment", () => {
       `${solandBaseUrl("beta")}/_soland/self/account/accept-external-invite`,
       {
         data: {
-          invite_token: `ck:external_invite:${fixture.short}-rogue`,
+          invite_token: `ak:external_invite:${fixture.short}-rogue`,
           actor_id: `did:web:rogue-${fixture.stamp}.evil`,
           target_realm: fixture.enclaveRealmId,
           target_host: solandBaseUrl("beta"),

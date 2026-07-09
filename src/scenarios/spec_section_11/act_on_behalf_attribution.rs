@@ -4,7 +4,7 @@
 //! carry the triple (`executed_by`, `authorization_ref`, `actor_kind`).
 //!   - `executed_by` is the agent's DID.
 //!   - `authorization_ref` is the `EventId` of the controller's `ck.identity.accountability_grant`
-//!     event (the dedicated `ck:accountability_grant:` typed-id family is retired).
+//!     event (the dedicated `ak:accountability_grant:` typed-id family is retired).
 //!   - `actor_kind` is the reducer-stamped `EnvelopeActorKind::Agent`.
 //!
 //! Client-supplied `actor_kind` MUST be rejected with

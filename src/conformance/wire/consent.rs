@@ -102,7 +102,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                             .entry(cell.to_owned())
                             .or_default()
                             .insert(move_id.to_owned(), (peer.to_owned(), scope.to_owned()));
-                        if peer.starts_with("did:ck:psd-") {
+                        if peer.starts_with("did:ak:psd-") {
                             covered_pseudonym = true;
                         }
                         if scope == "any" {

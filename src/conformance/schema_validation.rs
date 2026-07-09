@@ -154,7 +154,7 @@ pub fn run_schema_validation_suite() -> Result<()> {
                 }
 
                 if let Some(pattern) = prop.get("pattern").and_then(Value::as_str)
-                    && pattern.starts_with("^ck:")
+                    && pattern.starts_with("^ak:")
                 {
                     for bogus in [json!("ak:invalid:!!!"), json!("not-a-typed-id"), json!("")] {
                         if prop_validator.is_valid(&bogus) {

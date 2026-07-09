@@ -41,7 +41,7 @@ pub async fn agent_auth_run() -> Result<()> {
     //     here protects against the smuggle-controller-DID exploit.
     let agent_principal_id = Did::new("did:web:agent.example".to_owned())
         .map_err(|e| anyhow!("agent_principal_id: {e}"))?;
-    // Spec head: the typed `ck:agent_key:` id family is retired. `key_id`
+    // Spec head: the typed `ak:agent_key:` id family is retired. `key_id`
     // is a plain string, preferring the DID URL verification-method form
     // (`<agent_principal_did>#<fragment>`).
     let key_id = "did:web:agent.example#key-1".to_owned();

@@ -294,7 +294,7 @@ fn step_6_floria_blind_payload(_inbound: &Value) -> Result<Value> {
     // Build the outbound blind payload floria emits to its `custom`
     // pushkin / OS push provider. The sanitizer treats this object as
     // both wrapper and notification — both layers MUST be free of `did:` /
-    // `ck:` literals and any forbidden correlation key. The push wrapper's
+    // `ak:` literals and any forbidden correlation key. The push wrapper's
     // routing metadata (`destination_service_did`, `operation_id`) is
     // attached at the soland→floria hop and stripped before egress; what
     // reaches the provider is the wakeup-only object below.

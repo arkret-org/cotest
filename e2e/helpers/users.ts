@@ -1362,6 +1362,33 @@ export async function openUser(
     },
   );
   const page = await context.newPage();
+  // With real-grant injection enabled, device enrollment triggers inkson's
+  // mandatory "Set up your 24-word Recovery Key" modal ("required before
+  // encryption"). It can pop asynchronously mid-flow and covers the page, so a
+  // one-shot dismiss in the nav helpers races it. Register a Playwright locator
+  // handler that auto-completes it whenever it blocks an action: read the
+  // generated key, mirror it into the confirm field, and save. Idempotent and a
+  // no-op when the modal is absent.
+  await page.addLocatorHandler(
+    page.getByTestId("recovery-key-setup-generated-key"),
+    async (generated) => {
+      const recoveryKey = (await generated.inputValue().catch(() => "")).trim();
+      if (recoveryKey.split(/\s+/).filter(Boolean).length !== 24) {
+        return;
+      }
+      await page
+        .getByTestId("recovery-key-setup-confirm-key")
+        .last()
+        .fill(recoveryKey)
+        .catch(() => undefined);
+      await page
+        .getByTestId("recovery-key-setup-saved")
+        .last()
+        .click({ timeout: 10_000 })
+        .catch(() => undefined);
+    },
+    { noWaitAfter: true },
+  );
   const consoleLines: string[] = [];
   const networkLines: string[] = [];
   page.on("console", (message) => {

@@ -6,7 +6,7 @@
 //! R3.2 wire-breaking cleanup:
 //!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
 //!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
-//!   * `subject` MUST be a holder/principal DID. A `ck:actor:` / `ck:account:` typed id or a
+//!   * `subject` MUST be a holder/principal DID. A `ak:actor:` / `ak:account:` typed id or a
 //!     non-DID resource id MUST reject (VECT-COT-7), enforced by
 //!     [`arkret_core::models::validate_handle_claim_subject`] and by the schema `subject` pattern.
 //!
@@ -186,7 +186,7 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         .map_err(|e| anyhow!("VECT-COT-7: a principal DID MUST pass the subject validator: {e}"))?;
 
     // Schema layer: the `subject` pattern requires `did:<method>:...`. A
-    // typed `ck:actor:` / `ck:account:` id or a bare resource id MUST
+    // typed `ak:actor:` / `ak:account:` id or a bare resource id MUST
     // schema-reject.
     for bad_subject in [
         "ak:actor:01904100-0000-7000-8000-000000000001",

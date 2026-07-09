@@ -364,7 +364,7 @@ test.describe("discovery", () => {
     request,
   }) => {
     // spec: discovery/discovery-directory.md §2 — directory exposes the
-    // organization axis; the demo deployment seeds a `ck:org:demo`
+    // organization axis; the demo deployment seeds a `ak:org:demo`
     // organization that MUST surface in `tab-organizations` results with
     // stable display metadata and freshness fields.
     const stamp = Date.now();

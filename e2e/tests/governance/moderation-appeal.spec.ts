@@ -446,7 +446,7 @@ function appealPayload(fixture: AppealFixture) {
     target_ref: fixture.targetRef,
     appellant: fixture.appellant.did,
     reason_text_ref: "appeal narrative",
-    evidence_refs: [`ck:evidence:${fixture.decisionId}`],
+    evidence_refs: [`ak:evidence:${fixture.decisionId}`],
     evidence_visibility: "reviewers_only",
     created_at: canonicalTimestamp(),
   };

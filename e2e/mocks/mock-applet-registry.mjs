@@ -97,7 +97,7 @@ function uuidV7Like() {
 }
 
 function typedId(kind) {
-  return `ck:${kind}:${uuidV7Like()}`;
+  return `ak:${kind}:${uuidV7Like()}`;
 }
 
 function safeToken(value) {

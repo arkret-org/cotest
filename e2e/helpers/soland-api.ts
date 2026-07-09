@@ -45,7 +45,7 @@ export function authHeaders(token: string): Record<string, string> {
 }
 
 export function typedId(kind: string): string {
-  return `ck:${kind}:${uuidV7()}`;
+  return `ak:${kind}:${uuidV7()}`;
 }
 
 export function principalControlRealmForDid(did: string): string {

@@ -5,7 +5,7 @@
 //!      (`ck.profile.agent_sidecar_thread.v1`).
 //!   2. The home-policy constant carries the canonical value `context_realm_preferred` (B-F).
 //!   3. A sidecar circle is an ordinary Circle — its id round-trips through the SDK `CircleId`
-//!      validator (the dedicated `ck:sidecar_circle:` typed-id family is retired).
+//!      validator (the dedicated `ak:sidecar_circle:` typed-id family is retired).
 //!   4. The 3 sidecar capability actions are all present and form a cohesive ensure / write /
 //!      publish fan-out group.
 

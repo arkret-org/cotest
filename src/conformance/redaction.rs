@@ -231,7 +231,7 @@ fn assert_space_target_ref_schema() -> Result<()> {
             .map(|error| format!("{error}"))
             .unwrap_or_else(|| "<no error reported>".to_string());
         bail!(
-            "space_target_ref_schema: object_lifecycle_payload rejected a ck:space target_ref: {detail}"
+            "space_target_ref_schema: object_lifecycle_payload rejected a ak:space target_ref: {detail}"
         );
     }
 
@@ -241,7 +241,7 @@ fn assert_space_target_ref_schema() -> Result<()> {
     });
     if validator.is_valid(&malformed) {
         bail!(
-            "space_target_ref_schema: object_lifecycle_payload accepted a malformed ck:space target_ref"
+            "space_target_ref_schema: object_lifecycle_payload accepted a malformed ak:space target_ref"
         );
     }
 

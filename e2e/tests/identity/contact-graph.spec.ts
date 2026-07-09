@@ -46,7 +46,7 @@ import {
 test.describe("contact graph (same principal server)", () => {
   // S1: add friend with greeting + invite scope -> accept -> both accepted,
   // message passthrough, bidirectional scope, holder row carries a legal
-  // ck:event invite_consent_grant_ref.
+  // ak:event invite_consent_grant_ref.
   test("S1 add friend with greeting + invite scope, accept -> bidirectional + invite_consent_grant_ref", async ({
     request,
   }) => {
@@ -98,7 +98,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(aliceRow?.bidirectional_scopes).toContain("invite");
     expect(bobRow?.bidirectional_scopes).toContain("invite");
 
-    // Holder (alice) row carries a legal ck:event invite_consent_grant_ref:
+    // Holder (alice) row carries a legal ak:event invite_consent_grant_ref:
     // bob granted alice an active invite consent, so alice's row surfaces it.
     expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
   });

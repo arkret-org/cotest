@@ -324,7 +324,7 @@ test.describe("consent grant", () => {
     expect(open.status()).toBe(200);
     const openBody = await open.json();
     expect(openBody.status).toBe("requested");
-    expect(openBody.consent_id).toMatch(/^ck:consent:/);
+    expect(openBody.consent_id).toMatch(/^ak:consent:/);
 
     const update = await request.post(
       `${solandBaseUrl()}/_arkret/open/mimi/consent/update`,

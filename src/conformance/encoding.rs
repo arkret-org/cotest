@@ -99,7 +99,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
         let encoded = encode_cursor_shape(&case.shape)?;
         if !encoded.starts_with("ak:cursor:") {
             bail!(
-                "encoding fixture {} did not produce ck:cursor prefix",
+                "encoding fixture {} did not produce ak:cursor prefix",
                 case.name
             );
         }

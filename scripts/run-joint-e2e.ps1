@@ -1963,7 +1963,7 @@ try {
     $generatedInksonBetaCommand = $false
     if (-not $SkipInkson -and -not $InksonCommand -and $inksonPort) {
         $InksonCommand = Add-DioxusNoDownloadsEnvironment `
-            -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonPort --open false --hot-reload false --watch false --features experimental-agents" `
+            -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonPort --open false --hot-reload false --watch false --features experimental-agents,wasm-localstorage-secrets-test" `
             -ProjectRoot $InksonRoot
         $generatedInksonCommand = $true
     }
@@ -1982,7 +1982,7 @@ try {
     if (-not $SkipInkson -and $DualSoland -and $inksonBetaBaseUrl -and $inksonBetaBaseUrl -ne $InksonBaseUrl) {
         if (-not $InksonBetaCommand -and $inksonBetaPort) {
             $InksonBetaCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonBetaPort --open false --hot-reload false --watch false --features experimental-agents" `
+                -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonBetaPort --open false --hot-reload false --watch false --features experimental-agents,wasm-localstorage-secrets-test" `
                 -ProjectRoot $InksonRoot
             $generatedInksonBetaCommand = $true
         }

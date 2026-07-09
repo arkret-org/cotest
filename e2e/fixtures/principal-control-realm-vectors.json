@@ -4,15 +4,15 @@
   "vectors": [
     {
       "principal_id": "did:web:alice.example",
-      "principal_control_realm_id": "ak:realm:bdf8bbc6-95eb-7211-89d0-01e93fd56616"
+      "principal_control_realm_id": "ak:realm:5649918c-15dc-7036-990f-d8a591ccb1ec"
     },
     {
       "principal_id": "did:web:bob.example",
-      "principal_control_realm_id": "ak:realm:c80fa9f8-f99a-7190-a121-d82ed8e0196c"
+      "principal_control_realm_id": "ak:realm:65cbd961-00a5-72d3-9ec6-35a5c5c152b9"
     },
     {
       "principal_id": "did:web:acme.example:users:alice",
-      "principal_control_realm_id": "ak:realm:61682363-2fea-7d3d-a8e9-ccc24234480b"
+      "principal_control_realm_id": "ak:realm:19d854cb-ba58-7a70-8b5d-d2be0a515a4c"
     }
   ]
 }

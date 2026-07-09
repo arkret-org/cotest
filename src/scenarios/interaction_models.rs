@@ -98,7 +98,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
     // thread's root *message* (`ak:message:<uuidv7>`), not an opaque
-    // `ck:thread:` string. Derive it from the root message's event id.
+    // `ak:thread:` string. Derive it from the root message's event id.
     let thread_root_ref = sent["event_id"]
         .as_str()
         .map(|event_id| event_id.replacen("ak:event:", "ak:message:", 1))

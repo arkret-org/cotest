@@ -62,7 +62,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
     error: { code: "unrecognized_endpoint" },
   });
   expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
-  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^ck:[a-z_]+:/);
+  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^ak:[a-z_]+:/);
 
   const wrongMethod = await request.post(`${solandBaseUrl()}/_arkret/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
@@ -76,7 +76,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
     error: { code: "method_not_allowed" },
   });
   expect(wrongMethodBody.error?.message, "wrong method error message").toBeTruthy();
-  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^ck:[a-z_]+:/);
+  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^ak:[a-z_]+:/);
 }
 
 function submittedEventId(body: unknown): string | undefined {
@@ -481,7 +481,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           .filter((id): id is string => typeof id === "string");
         pageSeededIds.push(ids.filter((id) => seededSet.has(id)));
         if (page.next_cursor !== undefined) {
-          // §7 — opaque ck:cursor token; decoding it MUST NOT reveal any seeded id.
+          // §7 — opaque ak:cursor token; decoding it MUST NOT reveal any seeded id.
           expect(page.next_cursor, "next_cursor wire form").toMatch(cursorRe);
           const decoded = Buffer.from(
             page.next_cursor.slice("ak:cursor:".length),
