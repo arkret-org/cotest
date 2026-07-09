@@ -249,10 +249,9 @@ test.describe("account onboarding", () => {
     expect(log.length).toBeGreaterThan(0);
     for (const entry of log) {
       const parameters = isRecord(entry.parameters) ? entry.parameters : undefined;
+      expect(parameters, `did.jsonl entry missing parameters: ${JSON.stringify(entry)}`).toBeTruthy();
       const entryScid = parameters?.scid;
-      if (entryScid) {
-        expect(entryScid).toBe(scid);
-      }
+      expect(entryScid, `did.jsonl entry missing parameters.scid: ${JSON.stringify(entry)}`).toBe(scid);
     }
   });
 
@@ -298,10 +297,20 @@ test.describe("account onboarding", () => {
       const inbox = await request.get(
         `${mockEmail}/mock/email/verification/inbox?to=${encodeURIComponent(email)}`,
       );
-      if (inbox.ok()) {
-        const messages = await inbox.json();
-        expect(Array.isArray(messages)).toBeTruthy();
-      }
+      const inboxText = await inbox.text();
+      expect(inbox.status(), inboxText).toBe(200);
+      const inboxBody = JSON.parse(inboxText) as {
+        messages?: Array<Record<string, unknown>>;
+      };
+      const messages = inboxBody.messages ?? [];
+      expect(messages.length, `mock inbox for ${email}: ${JSON.stringify(inboxBody)}`).toBeGreaterThan(0);
+      const serializedMessages = JSON.stringify(messages);
+      expect(
+        [sentBody.dev_code, started.registration_id].some((needle) =>
+          serializedMessages.includes(String(needle)),
+        ),
+        `mock inbox message should reference the verification code or registration id: ${serializedMessages}`,
+      ).toBeTruthy();
     }
 
     const verify = await request.post(

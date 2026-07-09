@@ -17,6 +17,11 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 
 - 1 × soland + 1 × coauth + 1 × mock email/verification service
 
+若 mock email/verification service 未由当前 run profile 启动,只允许跳过
+`mock verification service receives invite token via email and atomically consumes it on claim`
+这一条 harness-mock 专项测试。其余 reducer 级第三方邀请测试仍必须运行,不得因为 mock
+缺失而整组跳过。
+
 ## Actors
 
 | 名字 | 注册状态 | 角色 |

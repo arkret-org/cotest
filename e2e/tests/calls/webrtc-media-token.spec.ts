@@ -48,9 +48,9 @@ test.describe("media token exchange", () => {
   test(
     "ck.realm.media_service foci -> exchangeMediaToken issues a LiveKit JWT backend_token + participant_binding",
     async ({ request }) => {
-      const { alice, aliceToken, callId } = await setupMediaCall(request);
+      const { alice, aliceToken, realmId, callId } = await setupMediaCall(request);
       const response = await exchangeMediaToken(request, aliceToken, {
-        realm_id: callRealm.id,
+        realm_id: realmId,
         call_id: callId,
         actor_id: alice.did,
         device_id: alice.deviceId,
@@ -76,7 +76,7 @@ test.describe("media token exchange", () => {
       const binding = body.participant_binding as Record<string, unknown>;
       expect(binding.scheme).toBe(PARTICIPANT_BINDING_SCHEME);
       expect(binding.issuer_kid).toBe(ISSUER_KID);
-      expect(binding.realm_id).toBe(callRealm.id);
+      expect(binding.realm_id).toBe(realmId);
       expect(binding.call_id).toBe(callId);
       expect(binding.focus_id).toBe(LIVEKIT_FOCUS.focus_id);
       expect(binding.actor_id).toBe(alice.did);
@@ -112,14 +112,14 @@ test.describe("media token exchange", () => {
       ).toBeLessThanOrEqual(600);
       const video = claims.video as Record<string, unknown>;
       const expectedRoom = expectedLiveKitRoom(
-        callRealm.id,
+        realmId,
         callId,
         LIVEKIT_FOCUS.focus_id,
       );
       expect(video.room).toBe(expectedRoom);
       // LiveKit room name MUST NOT leak raw protocol identifiers.
       expect(video.room).not.toContain(callId);
-      expect(video.room).not.toContain(callRealm.id);
+      expect(video.room).not.toContain(realmId);
       expect(video.room).not.toContain(LIVEKIT_FOCUS.focus_id);
       expect(video.roomJoin).toBe(true);
       expect(video.canPublish).toBe(true);
@@ -135,9 +135,9 @@ test.describe("media token exchange", () => {
   test(
     "unknown focus token request fails closed with focus_mismatch",
     async ({ request }) => {
-      const { alice, aliceToken, callId } = await setupMediaCall(request);
+      const { alice, aliceToken, realmId, callId } = await setupMediaCall(request);
       const denied = await exchangeMediaToken(request, aliceToken, {
-        realm_id: callRealm.id,
+        realm_id: realmId,
         call_id: callId,
         actor_id: alice.did,
         device_id: alice.deviceId,
@@ -157,15 +157,15 @@ test.describe("media token exchange", () => {
       // membership + the `ck.call.join` capability + the durable ban set — NOT
       // a prior participant row. So a member WITHOUT ck.call.join is refused
       // (capability_denied), and granting it admits them.
-      const { alice, aliceToken, callId } = await setupMediaCall(request);
+      const { alice, aliceToken, realmId, callId } = await setupMediaCall(request);
       const member = uniqueUser(`media-member-${Date.now()}`);
       await ensureRegistered(request, member);
       const memberToken = await issueDevSession(request, member);
-      await addRealmMemberApi(request, aliceToken, callRealm.id, member.did);
+      await addRealmMemberApi(request, aliceToken, realmId, member.did);
 
       // Member, but no ck.call.join → refused.
       const denied = await exchangeMediaToken(request, memberToken, {
-        realm_id: callRealm.id,
+        realm_id: realmId,
         call_id: callId,
         actor_id: member.did,
         device_id: member.deviceId,
@@ -179,12 +179,12 @@ test.describe("media token exchange", () => {
         request,
         aliceToken,
         alice.did,
-        callRealm.id,
+        realmId,
         member.did,
         CAP_CALL_JOIN,
       );
       const admitted = await exchangeMediaToken(request, memberToken, {
-        realm_id: callRealm.id,
+        realm_id: realmId,
         call_id: callId,
         actor_id: member.did,
         device_id: member.deviceId,
@@ -197,11 +197,9 @@ test.describe("media token exchange", () => {
   );
 });
 
-const callRealm: { id: string } = { id: "" };
-
 async function setupMediaCall(
   request: APIRequestContext,
-): Promise<{ alice: JointUser; aliceToken: string; callId: string }> {
+): Promise<{ alice: JointUser; aliceToken: string; realmId: string; callId: string }> {
   const stamp = Date.now();
   const alice = uniqueUser(`media-alice-${stamp}`);
   await ensureRegistered(request, alice);
@@ -210,7 +208,6 @@ async function setupMediaCall(
     title: `media-service ${stamp}`,
     public: true,
   });
-  callRealm.id = realmId;
   await configureMediaService(
     request,
     aliceToken,
@@ -225,5 +222,5 @@ async function setupMediaCall(
   // cell yet, and authorization is realm membership + ck.call.join. alice owns
   // the realm (holds all caps), so no explicit grant is needed for her.
   const callId = newCallId();
-  return { alice, aliceToken, callId };
+  return { alice, aliceToken, realmId, callId };
 }

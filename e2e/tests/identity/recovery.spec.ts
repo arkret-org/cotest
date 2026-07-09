@@ -202,18 +202,16 @@ test.describe("account recovery", () => {
       // Drive the recovery settings page: generate a 24-word Recovery Key.
       // The account-secret envelope uploads automatically (recovery_public_key,
       // no user passphrase).
-      const backupPuts: Array<{ status: number; postData: string }> = [];
-      page.page.on("response", (response) => {
+      const recoveryBackupPut = page.page.waitForResponse((response) => {
         if (
-          response.request().method() === "PUT" &&
-          /\/_cokret\/self\/keys\/backups\//.test(response.url())
+          response.request().method() !== "PUT" ||
+          !/\/_cokret\/self\/keys\/backups\//.test(response.url())
         ) {
-          backupPuts.push({
-            status: response.status(),
-            postData: response.request().postData() ?? "",
-          });
+          return false;
         }
-      });
+        const postData = response.request().postData() ?? "";
+        return /"recipient_method"\s*:\s*"recovery_public_key"/.test(postData);
+      }, { timeout: 120_000 });
       await page.page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
       await expect(page.page.getByTestId("recovery-key-section")).toBeVisible({
         timeout: 120_000,
@@ -231,6 +229,9 @@ test.describe("account recovery", () => {
         .toBe(24);
       // §7.7: the recovery UI MUST NOT request a separate vault passphrase.
       await expect(page.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
+
+      const backupPut = await recoveryBackupPut;
+      expect(backupPut.status(), await backupPut.text()).toBe(200);
 
       // Phase A invariant (recovery.md step 6): an active policy AND a
       // did_recovery backup both exist. Read them back over the API.
@@ -274,15 +275,6 @@ test.describe("account recovery", () => {
       const listResp = await request.get(backupsUrl, { headers: grantHeaders("GET", backupsUrl) });
       const serialized = JSON.stringify(await listResp.json());
       expect(serialized).not.toMatch(/plaintext|passphrase|private_key|mnemonic/i);
-      if (backupPuts.length > 0) {
-        expect(
-          backupPuts.some(
-            (hit) =>
-              hit.status === 200 &&
-              /"recipient_method"\s*:\s*"recovery_public_key"/.test(hit.postData),
-          ),
-        ).toBe(true);
-      }
     } finally {
       await page.close();
     }
