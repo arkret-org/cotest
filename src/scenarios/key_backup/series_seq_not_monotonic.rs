@@ -5,7 +5,7 @@
 //! `series_seq_not_monotonic`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::error::REASON_SERIES_SEQ_NOT_MONOTONIC;
+use arkret_core::error::REASON_SERIES_SEQ_NOT_MONOTONIC;
 
 fn is_monotonic_advance(tip: u64, candidate: u64) -> bool {
     candidate > tip

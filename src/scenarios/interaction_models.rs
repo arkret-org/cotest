@@ -52,7 +52,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     expect_status(
         server.http().get(server.url(&format!(
-            "/_cokret/self/events/subscribe?realms={realm_id}&limit=1"
+            "/_arkret/self/events/subscribe?realms={realm_id}&limit=1"
         ))),
         StatusCode::NOT_FOUND,
     )
@@ -60,7 +60,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let subscribe_response = expect_response(
         alice.get(&format!(
-            "/_cokret/self/events/subscribe?realms={realm_id}&limit=10"
+            "/_arkret/self/events/subscribe?realms={realm_id}&limit=10"
         )),
         StatusCode::OK,
     )
@@ -134,7 +134,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .ok_or_else(|| anyhow!("read cursor submit response missing event_id: {marker}"))?;
 
     let markers = expect_json(
-        dave.get(&format!("/_cokret/self/events?realms={realm_id}&limit=50")),
+        dave.get(&format!("/_arkret/self/events?realms={realm_id}&limit=50")),
         StatusCode::OK,
     )
     .await?;

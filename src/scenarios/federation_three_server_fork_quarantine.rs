@@ -2,11 +2,11 @@
 //!
 //! Spec references:
 //! - `arkret-spec/spec/v1/zh/sync/federation.md` section 4.1: federation Event exchange uses `POST
-//!   /_cokret/peer/events`.
+//!   /_arkret/peer/events`.
 //! - `arkret-spec/spec/v1/zh/sync/federation.md` section 4.2: federation backfill uses `GET
-//!   /_cokret/peer/events?realms=...`.
+//!   /_arkret/peer/events?realms=...`.
 //! - `arkret-spec/spec/v1/zh/sync/federation.md` section 4.5: federation peers exchange signed
-//!   Realm frontier evidence via `GET /_cokret/peer/events/frontier?realm_id=...`; if two peers
+//!   Realm frontier evidence via `GET /_arkret/peer/events/frontier?realm_id=...`; if two peers
 //!   expose incompatible evidence for the same `(realm_id, actor_id, actor_seq)` or the same
 //!   `event_id`, receivers MUST quarantine and report `duplicate_conflict` or
 //!   `witness_disagreement` as appropriate.
@@ -15,15 +15,15 @@
 //!
 //! 1. Spawn alpha, beta and gamma soland instances, each with a distinct service DID.
 //! 2. Configure pairwise federation peer policy out of band so each service DID can call the other
-//!    services' `/_cokret/peer/*` surface.
+//!    services' `/_arkret/peer/*` surface.
 //! 3. Alice creates Realm `R` on alpha. Alpha seeds beta and gamma by pushing the bootstrap Event
-//!    Envelopes through `POST /_cokret/peer/events`.
+//!    Envelopes through `POST /_arkret/peer/events`.
 //! 4. Alpha, beta and gamma accept conflicting local Event observations for the same Realm causal
 //!    slot.
-//! 5. Each node pushes its candidate Event to the other two through `POST /_cokret/peer/events`. A
+//! 5. Each node pushes its candidate Event to the other two through `POST /_arkret/peer/events`. A
 //!    duplicate event id with different canonical bytes MUST be rejected or quarantined as
 //!    `duplicate_conflict`.
-//! 6. Each node probes the others with `GET /_cokret/peer/events/frontier?realm_id={realm_id}` and
+//! 6. Each node probes the others with `GET /_arkret/peer/events/frontier?realm_id={realm_id}` and
 //!    compares `(heads, frontier_root, actor_seq_upper_bounds, witness_receipts)`.
 //! 7. Divergent frontier evidence MUST not advance the local accepted Realm frontier. The peer's
 //!    delta remains quarantined until raw replay, quorum witness evidence, or operator-approved
@@ -62,6 +62,6 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
         "CT-1 three-server fork quarantine is blocked on soland outbound \
          peer Events push, frontier probe scheduling, and observable \
          duplicate_conflict / witness_disagreement quarantine reporting over \
-         /_cokret/peer/events and /_cokret/peer/events/frontier."
+         /_arkret/peer/events and /_arkret/peer/events/frontier."
     )
 }

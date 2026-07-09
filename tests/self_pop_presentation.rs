@@ -1,5 +1,5 @@
 //! SPEC-CR-001 — RFC 9421 sender-constrained (PoP) presentation on the
-//! `/_cokret/self/*` surface (api-conventions.md §3.2 / service-http-binding.md
+//! `/_arkret/self/*` surface (api-conventions.md §3.2 / service-http-binding.md
 //! §2.5).
 //!
 //! This is the protocol-level conformance vector for the joint client/server
@@ -9,7 +9,7 @@
 //! pins the negative cases (tampered body, expired window, over-long window,
 //! wrong key) that MUST be rejected.
 
-use cokret_signatures::http_signature::{
+use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
     SignatureVerificationPolicy, SignedRequestParts, canonical_message, public_key_from_bytes,
     sign_message, verify_signed_http_message,
@@ -96,7 +96,7 @@ fn sign_self_request(
 /// upper bound.
 fn verify_self_pop(
     req: &SignedRequest,
-    public_key: &cokret_signatures::http_signature::Ed25519PublicKey,
+    public_key: &arkret_signatures::http_signature::Ed25519PublicKey,
     now: i64,
 ) -> Result<(), String> {
     let policy = if req.body.is_empty() {
@@ -130,12 +130,12 @@ fn verify_self_pop(
 }
 
 fn test_key(seed: u8) -> Ed25519SigningKey {
-    cokret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
+    arkret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
 }
 
-const URI: &str = "https://soland.example.com/_cokret/self/events";
+const URI: &str = "https://soland.example.com/_arkret/self/events";
 const AUTHORITY: &str = "soland.example.com";
-const PATH: &str = "/_cokret/self/events";
+const PATH: &str = "/_arkret/self/events";
 
 #[test]
 fn signed_self_write_is_accepted() {

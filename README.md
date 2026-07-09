@@ -80,7 +80,7 @@ Recommended entrypoints:
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson `
-  -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
+  -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
 ```
 
 - `process` mode is the fast local path and spawns the SUT with `cargo run`.

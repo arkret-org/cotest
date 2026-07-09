@@ -1,4 +1,4 @@
-//! Phase 2 — `/_cokret/self/device_messages` send / duplicate / list / describe
+//! Phase 2 — `/_arkret/self/device_messages` send / duplicate / list / describe
 //! plus the `ck.key.verification.request` side channel.
 
 use anyhow::Result;
@@ -19,7 +19,7 @@ async fn send_application_message(server: &CokretServer, token: &str) -> Result<
     let send = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
@@ -44,7 +44,7 @@ async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Res
     let duplicate_send = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
@@ -73,7 +73,7 @@ async fn list_delivered_keeps_ciphertext_only(server: &CokretServer, token: &str
     let delivered = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/device_messages"))
+            .get(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -88,7 +88,7 @@ async fn send_verification_message(server: &CokretServer, token: &str) -> Result
     let verification_send = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-verification-txn")
             .json(&json!({

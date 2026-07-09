@@ -516,14 +516,14 @@ test.describe("single-server triad collaboration", () => {
       );
 
       const realmAfterLeave = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(aliceToken) },
       );
       expect(realmAfterLeave.status()).toBe(200);
       expect(visibleMemberDids(await realmAfterLeave.json())).not.toContain(bob.did);
 
       const afterLeaveBody = `after leave rejected ${stamp}`;
-      const rejected = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const rejected = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(bobToken),
         data: signedEventEnvelope({
           actorDid: bob.did,

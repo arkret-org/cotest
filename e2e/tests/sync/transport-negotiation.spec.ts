@@ -8,7 +8,7 @@
 //   - sync/federation.md §3.2 (RFC 9421 request signature) + §4.1 (push)
 //
 // soland status (2026-06 re-audit against arkret-spec v1):
-//   ✓ POST /_cokret/peer/events handler routed (canonical single rail)
+//   ✓ POST /_arkret/peer/events handler routed (canonical single rail)
 //   ✓ Envelope validation + idempotency on signed Event IDs
 //   ✓ RFC 9421 INBOUND: full — Content-Digest, Request-Canonical-Digest,
 //     created/expires freshness window (±30s skew, ≤300s window,
@@ -20,7 +20,7 @@
 //     stays audit-log only (tracing::warn! detail), because surfacing it in
 //     the response would violate the minimal-disclosure MUST. E8.1 below
 //     asserts that uniform-failure contract.
-//   ✓ RFC 9421 INBOUND relay hop: the canonical /_cokret/peer/* rail
+//   ✓ RFC 9421 INBOUND relay hop: the canonical /_arkret/peer/* rail
 //     (verify_inbound_peer_http_signature) authenticates purely on the
 //     federation trust headers — origin IS the source-service-did header, so
 //     there is NO relay-inner signature hop. Two-layer relay verification
@@ -97,9 +97,9 @@ test.describe("transport negotiation", () => {
 
     // /server/describe MUST exist on both sides and SHOULD return at least
     // an http_json binding entry (transport-bindings.md §7).
-    const alphaDescribe = await request.get(`${solandBaseUrl("alpha")}/_cokret/describe`);
+    const alphaDescribe = await request.get(`${solandBaseUrl("alpha")}/_arkret/describe`);
     expect(alphaDescribe.status()).not.toBe(404);
-    const betaDescribe = await request.get(`${solandBaseUrl("beta")}/_cokret/describe`);
+    const betaDescribe = await request.get(`${solandBaseUrl("beta")}/_arkret/describe`);
     expect(betaDescribe.status()).not.toBe(404);
 
     if (alphaDescribe.ok()) {
@@ -120,7 +120,7 @@ test.describe("transport negotiation", () => {
     // without any RFC 9421 signature MUST NOT 404 (route exists) and
     // MUST NOT 200 (signature required). Expected: 400 / 401 / 403.
     const probe = await request.post(
-      `${solandBaseUrl("beta")}/_cokret/peer/events`,
+      `${solandBaseUrl("beta")}/_arkret/peer/events`,
       { data: { events: [] } },
     );
     expect(probe.status()).not.toBe(404);
@@ -144,7 +144,7 @@ test.describe("transport negotiation", () => {
     //   `federation_outbound_enabled=true`, but the enqueued body
     //   (outbound.rs::enqueue_outbound_for) is a `{resource_kind,resource_id}`
     //   *reference* placeholder, not the sealed Event Envelope `events[]` batch
-    //   that POST /_cokret/peer/events requires — so β would reject it. Wiring a
+    //   that POST /_arkret/peer/events requires — so β would reject it. Wiring a
     //   real envelope batch touches event-log/reducer/realm-policy resolution
     //   (which peer gets which event), outside this binding-negotiation surface.
     // @user-promise: e2e/scenarios/sync/transport-negotiation.md
@@ -160,7 +160,7 @@ test.describe("transport negotiation", () => {
       //
       // Phase A — HTTP baseline (RFC 9421 signed POST):
       //   1. alice@α issues ck.invite.create targeting bob's DID on β
-      //   2. soland_a constructs POST ${SOLAND_B}/_cokret/peer/events with:
+      //   2. soland_a constructs POST ${SOLAND_B}/_arkret/peer/events with:
       //        - Source-Service-DID / Destination-Service-DID headers
       //        - Signature-Input covering (@method @target-uri content-digest
       //          source-service-did destination-service-did)
@@ -172,7 +172,7 @@ test.describe("transport negotiation", () => {
       //   4. bob@β sees invite via account subscribe notifications within 30s
       //
       // Phase B — WebSocket upgrade:
-      //   5. soland_a reads β's /_cokret/describe → finds websocket_frame
+      //   5. soland_a reads β's /_arkret/describe → finds websocket_frame
       //      entry with a peer Events streaming binding declared by spec
       //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: ck.federation.v1
       //      and RFC 9421 Signature on the upgrade request
@@ -338,7 +338,7 @@ test.describe("transport negotiation", () => {
 
   test.fixme(
     // @blocking-on: spec single-track convergence — the canonical interop rail
-    //   POST /_cokret/peer/events (verify_inbound_peer_http_signature) does NOT
+    //   POST /_arkret/peer/events (verify_inbound_peer_http_signature) does NOT
     //   carry a relay-inner hop: per federation.md §4.0 the origin IS the
     //   `source-service-did` header and relay delegation is expressed via
     //   service_binding_ref / service delegation, not a nested HTTP signature.
@@ -350,14 +350,14 @@ test.describe("transport negotiation", () => {
     //   That rail also takes a different body shape (FederationPushOperations
     //   with origin/destination + operations[], not the events[] envelope batch
     //   the cotest helpers build). To promote on the canonical rail, the spec
-    //   would first need to define a relay/delegation hop for /_cokret/peer/*;
+    //   would first need to define a relay/delegation hop for /_arkret/peer/*;
     //   to promote against the private rail would mean testing a deployment-
     //   local debug surface the spec forbids as an interop target, and would
     //   require new helpers (relay-inner-signature / -input header + operations
     //   body). Neither is a low-risk transport-negotiation change.
     // @user-promise: e2e/scenarios/sync/transport-negotiation.md
     // @expected-live-by: unscheduled (needs a spec-defined relay/delegation hop
-    //   on the canonical /_cokret/peer/* rail)
+    //   on the canonical /_arkret/peer/* rail)
     "E8.2 multi-hop relay: α → relay → β; β verifies BOTH the relay's outer RFC 9421 signature AND the inner EventEnvelope actor signature; either failure rejects the batch",
     async ({ request }) => {
       // spec: federation.md §3.2 + capabilities.md (service delegation)

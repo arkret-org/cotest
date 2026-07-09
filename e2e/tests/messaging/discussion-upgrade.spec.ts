@@ -222,7 +222,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const sentAt = new Date();
     const sentAtIso = sentAt.toISOString();
     const receipt = await request.post(
-      `${solandBaseUrl()}/_cokret/self/ephemeral`,
+      `${solandBaseUrl()}/_arkret/self/ephemeral`,
       {
         headers: authHeaders(fixture.bobToken),
         data: withBroadcastEphemeralProof({
@@ -407,7 +407,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const orphanCircleId = typedId("circle");
     const createdAt = canonicalTimestamp();
     const response = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(fixture.aliceToken),
         data: signedEventEnvelope({
@@ -451,7 +451,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     });
 
     const response = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(fixture.aliceToken),
         data: signedEventEnvelope({

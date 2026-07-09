@@ -10,8 +10,8 @@
 // `call_state`, `recording/start`, `ice-config/refresh`) is gone. The UI / live
 // recording flows that drove it were inkson-UI coverage, not protocol wire, and
 // are out of scope for the cotest wire surface — this file now exercises only
-// the canonical surfaces: `POST /_cokret/self/ephemeral` (ck.call.signal),
-// `POST /_cokret/self/rtc/ice-config`. Recording lifecycle is a durable
+// the canonical surfaces: `POST /_arkret/self/ephemeral` (ck.call.signal),
+// `POST /_arkret/self/rtc/ice-config`. Recording lifecycle is a durable
 // `ck.call.state` projection pinned by the Rust call-state conformance vectors;
 // mid-call TURN refresh is simply a re-call of the ICE config endpoint (§4.2).
 
@@ -46,7 +46,7 @@ test.describe("calls — canonical wire", () => {
     const callId = newCallId();
 
     const iceProbe = await request.post(
-      `${solandBaseUrl()}/_cokret/self/rtc/ice-config`,
+      `${solandBaseUrl()}/_arkret/self/rtc/ice-config`,
       {
         data: {
           realm_id: realmId,

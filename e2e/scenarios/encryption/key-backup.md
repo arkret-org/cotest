@@ -17,7 +17,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - `identity/key-management.md` §7.5.1/§7.5.2 — `passphrase_kdf`(独立 vault passphrase 凭证层 deprecated,仍是合法 wire method)/ `recovery_public_key`(新写入 SHOULD)
 - `identity/key-management.md` §7.7 — Recovery UI:备份解密凭证 MUST 是 Recovery Key
 - `identity/key-management.md` §7.10 — 自动持续备份
-- `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + API(`PUT/GET/DELETE /_cokret/self/keys/backups`)
+- `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + API(`PUT/GET/DELETE /_arkret/self/keys/backups`)
 - `crypto-media/encryption-and-audit.md` §2.4 — MLS epoch backfill
 - `crypto-media/encryption-and-audit.md` §6 — Offline support, epoch key retention
 
@@ -48,12 +48,12 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 1. alice 进 `/settings/recovery`(RecoveryPanel)点 "Generate"(`recovery-key-regenerate`);或首次创建 encrypted Realm 时自动弹出 `MlsBackupPrompt`(`mls-backup-modal`),点 `mls-backup-submit` 自动生成 — **无用户口令输入**(spec §7.7/§7.10)
 2. UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写(`mls-backup-generated-key` / `recovery-key-current`);本地只保存 SHA-256 指纹,词串不上传
 3. 客户端用 Recovery Key 建立 `recovery_public_key` 恢复根,发布 `backup_class="did_recovery"` envelope 并保存本地 recovery public key metadata。若此时本地已经存在 account MLS secret,客户端同时上传 HPKE `recovery_public_key` 的 `mls_account_secret` envelope;若 account MLS secret 尚未生成,则在首次加密写入后由 §7.10 自动补传。
-4. 首次 encrypted write 生成/轮换 account MLS secret 后,客户端自动上传 `PUT /_cokret/self/keys/backups/<backup_id>`:
+4. 首次 encrypted write 生成/轮换 account MLS secret 后,客户端自动上传 `PUT /_arkret/self/keys/backups/<backup_id>`:
    - `backup_class: "secret_storage"`
    - `encryption.recipient_method: "recovery_public_key"`
    - `contents[].item_type: "mls_account_secret"`
    - `ciphertext` / `ciphertext_digest` 等 envelope metadata
-5. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
+5. 断言:`GET /_arkret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
 6. UI 显示 recovery root 已配置;`mls_account_secret` 与自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
 > **§7.10 持续备份时序(inkson 实现语义)**:RK 已配置的账号上,任一加密写引发的
 > `ck.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
@@ -132,7 +132,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - **E13.4 mixed-domain backup**:`mixed_secret_storage=true` 只在 `personal_node` profile 接受;`high_assurance` 部署 MUST 拒(§7.1)
 - **E13.5 epoch gap**:bob 在 device-A 离线期间发了 commits + 消息,backup 的 `mls_history_backup_key` 不含某些 epoch → 那些消息标 `decryption_pending`(spec §2.4)
 - **E13.6 backup 在 recovery policy 变更后**:alice 在 Phase A 之后改了 recovery policy → device-B 恢复时,reducer 校验新 policy,若新 policy 拒绝 → 恢复失败
-- **E13.7 删除 backup**:`DELETE /_cokret/self/keys/backups/<id>` 应需要 ownership proof(SSK 签名),无法仅凭 session token 删
+- **E13.7 删除 backup**:`DELETE /_arkret/self/keys/backups/<id>` 应需要 ownership proof(SSK 签名),无法仅凭 session token 删
 
 ## Implementation notes
 

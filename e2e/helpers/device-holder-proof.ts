@@ -13,9 +13,9 @@
 // key into soland's directory, then sign the holder proof with the SAME key.
 //
 // This module drives:
-//   1. enrolment — `POST {coauth}/_cokret/gate/account/device-enroll` returns a
+//   1. enrolment — `POST {coauth}/_arkret/gate/account/device-enroll` returns a
 //      signed `service_attested` `ck.device.authorize`; submit it verbatim to
-//      `POST {soland}/_cokret/self/events`. The onboarded principal's did:webvh
+//      `POST {soland}/_arkret/self/events`. The onboarded principal's did:webvh
 //      document already designates coauth's enrollment authority (coauth mints it
 //      via `prepare_inception(enrollment_authority_did=...)`), so the binding is
 //      accepted and projected, marking the device verified-with-key.
@@ -70,7 +70,7 @@ export async function enrollOnboardedDeviceSigningKey(
   onboarded: OnboardedPrincipal,
   opts: { server?: SolandKey } = {},
 ): Promise<string | undefined> {
-  const enrollUrl = `${coauthBase}/_cokret/gate/account/device-enroll`;
+  const enrollUrl = `${coauthBase}/_arkret/gate/account/device-enroll`;
   const enrollResp = await request.post(enrollUrl, {
     headers: {
       authorization: `Bearer ${onboarded.grantJwt}`,
@@ -110,8 +110,8 @@ export async function enrollOnboardedDeviceSigningKey(
   }
 
   // Submit the signed ck.device.authorize verbatim to the Principal Server via
-  // the onboarded grant + per-request DPoP (the /_cokret/self/* edge).
-  const eventsUrl = `${solandBaseUrl(opts.server)}/_cokret/self/events`;
+  // the onboarded grant + per-request DPoP (the /_arkret/self/* edge).
+  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const submitResp = await request.post(eventsUrl, {
     headers: selfPathGrantHeaders({
       deviceKey: onboarded.deviceKey,
@@ -235,7 +235,7 @@ export async function postSessionGrantRefresh(
   deviceKey: DpopDeviceKey,
   body: HolderProofBody,
 ): Promise<{ status: number; json: Record<string, unknown>; text: string }> {
-  const refreshUrl = `${coauthBase}/_cokret/gate/account/session-grants/refresh`;
+  const refreshUrl = `${coauthBase}/_arkret/gate/account/session-grants/refresh`;
   const resp = await request.post(refreshUrl, {
     headers: {
       dpop: mintDpopProof({

@@ -44,7 +44,7 @@
 
 1. alice 进 `/onboarding`,选择"Register with passkey"
 2. inkson 调用 navigator.credentials.create(),生成 device key + WebAuthn credential
-3. inkson `POST /_cokret/self/account/create` 提交 `{ method: "passkey", credential, handle: "@alice-s7" }`
+3. inkson `POST /_arkret/self/account/create` 提交 `{ method: "passkey", credential, handle: "@alice-s7" }`
 4. soland → coauth 链路:
    - 生成 inception key
    - 写入 `did:webvh` entry 0 (SCID + updateKeys)

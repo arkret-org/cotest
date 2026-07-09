@@ -117,7 +117,7 @@ pub struct SpawnedCoauth {
 }
 
 impl SpawnedCoauth {
-    /// Public REST base — what callers should use for `/_cokret/self/...`.
+    /// Public REST base — what callers should use for `/_arkret/self/...`.
     pub fn base_url(&self) -> &str {
         &self.server.base_url
     }

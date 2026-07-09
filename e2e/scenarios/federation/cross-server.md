@@ -11,7 +11,7 @@
 - `arkret-spec/spec/v1/zh/sync/federation.md` §2.1 — Event Chain 是信任锚点
 - `arkret-spec/spec/v1/zh/sync/federation.md` §2.2 — Principal Server 是受控同步边界,不是全局权威
 - `arkret-spec/spec/v1/zh/sync/federation.md` §3.1-§3.2 — 基于 DID 的服务器身份 + RFC 9421 请求签名
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_cokret/peer/peer/events` 请求字段
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_arkret/peer/peer/events` 请求字段
 - `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.0 — Push 时序图(信任根说明)
 - `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.1 — 批量推送幂等 (`(origin, destination, event_id)` 去重)
 - `arkret-spec/spec/v1/zh/sync/federation.md` §4.2 — Pull / Backfill (`peer events query`)
@@ -75,7 +75,7 @@
 ### Phase B — 联邦 push 把 invite 送到 β
 
 5. α 检测到 bob 不在本地,通过服务发现拿到 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Principal Server
-6. α `POST http://<port_β>/_cokret/peer/events`,body 含:
+6. α `POST http://<port_β>/_arkret/peer/events`,body 含:
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `realm_id = realmId`
@@ -111,14 +111,14 @@
 
 ### Phase E — Frontier 一致性
 
-20. 测试 harness 分别查询 α 和 β 的 `GET /_cokret/peer/events/frontier?realm_id=${realmId}` (或等价 endpoint),拿到两端的 anchor frontier 集合
+20. 测试 harness 分别查询 α 和 β 的 `GET /_arkret/peer/events/frontier?realm_id=${realmId}` (或等价 endpoint),拿到两端的 anchor frontier 集合
 21. 断言:两端 frontier 覆盖相同的 event 集合;event_id 相同,顺序可能不同但因果一致
 
 ### Phase F — Pull / Backfill (sub-test E2.1)
 
 22. 把 β 临时离线(harness 用 `route.block` 拦掉 α→β 的 push,模拟网络分区)
 23. **alice** 发 `M_offline = "during partition ${stamp}"`,α 多次重试 push 失败
-24. 恢复 β,**bob** 进 timeline → β 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /_cokret/peer/events?realms=...&after=...`
+24. 恢复 β,**bob** 进 timeline → β 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /_arkret/peer/events?realms=...&after=...`
 25. α 返回缺口 event 数组,β 落库,bob 现在能看到 `M_offline`
 
 ### Phase G — Capability revoke fanout (sub-test E2.2)

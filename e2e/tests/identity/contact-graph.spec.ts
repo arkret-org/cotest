@@ -1,9 +1,9 @@
 // Contact graph (same principal server): add-friend / direct conversation /
 // realm-pull via consent_grant evidence / graded disclosure / block.
 //
-// Protocol face: `/_cokret/self/contacts/*`,
-// `/_cokret/self/direct-conversations/resolve`,
-// `/_cokret/self/invite-receive-policy`, `/_cokret/peer/invites`.
+// Protocol face: `/_arkret/self/contacts/*`,
+// `/_arkret/self/direct-conversations/resolve`,
+// `/_arkret/self/invite-receive-policy`, `/_arkret/peer/invites`.
 // Spec refs: contact-and-direct-conversation.md §3-§4, invite-addressing.md
 // §2/§5/§5.1, consent-model.md §2-§3.
 //
@@ -318,7 +318,7 @@ test.describe("contact graph (same principal server)", () => {
       .poll(
         async () => {
           const resp = await request.get(
-            `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+            `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
             { headers: authHeaders(bobToken) },
           );
           if (!resp.ok()) return false;
@@ -521,7 +521,7 @@ test.describe("contact graph (same principal server)", () => {
 
   // S8: realm member pulled into a Circle without consent. Now implemented and
   // run for real in `identity/circle-member.spec.ts` (soland ships the
-  // `/_cokret/self/circles/*` admin surface — CKP-0007). Kept here as a
+  // `/_arkret/self/circles/*` admin surface — CKP-0007). Kept here as a
   // pointer so the contact-graph table stays self-documenting.
   test("S8 circle member manage without consent", async ({ request }) => {
     test.skip(

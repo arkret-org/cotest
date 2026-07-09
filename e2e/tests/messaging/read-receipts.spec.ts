@@ -69,7 +69,7 @@ test.describe("read receipts + privacy", () => {
     const sentAt = new Date();
     const expiresAt = new Date(sentAt.getTime() + 5 * 60 * 1000);
     const receipt = await request.post(
-      `${solandBaseUrl()}/_cokret/self/ephemeral`,
+      `${solandBaseUrl()}/_arkret/self/ephemeral`,
       {
         headers: authHeaders(aliceToken),
         data: withBroadcastEphemeralProof({
@@ -300,7 +300,7 @@ test.describe("read receipts + privacy", () => {
     request,
   }) => {
     // spec: read-receipts.md §3.1-§3.2 / §6.6 — ck.read_cursor.advance is an
-    // actor-private durable cursor (POST /_cokret/self/read-cursors). The
+    // actor-private durable cursor (POST /_arkret/self/read-cursors). The
     // Principal/Sync Service returns it only to the same principal's authorized
     // devices (account-private projection read-back), never to other Realm
     // members. We model alice's two devices as two dev sessions over the same
@@ -561,7 +561,7 @@ async function postReceipt(
   token: string,
   data: Record<string, unknown>,
 ) {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/ephemeral`, {
     headers: authHeaders(token),
     data: withBroadcastEphemeralProof(data),
   });
@@ -582,7 +582,7 @@ type ReadCursorMarker = {
   updated_at: string;
 };
 
-// POST /_cokret/self/read-cursors — durable actor-private ck.read_cursor.advance
+// POST /_arkret/self/read-cursors — durable actor-private ck.read_cursor.advance
 // (spec read-receipts.md §6.6). The body is exactly {realm_id, read_scope,
 // position}; the actor/device are bound from the bearer session.
 async function advanceReadCursor(
@@ -590,13 +590,13 @@ async function advanceReadCursor(
   token: string,
   body: ReadCursorAdvanceBody,
 ) {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/read-cursors`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
     headers: authHeaders(token),
     data: body,
   });
 }
 
-// GET /_cokret/self/read-cursors — account-private read-back, scoped to the
+// GET /_arkret/self/read-cursors — account-private read-back, scoped to the
 // bearer session's principal. Other principals never see these markers.
 async function listReadCursors(
   request: APIRequestContext,
@@ -604,7 +604,7 @@ async function listReadCursors(
   realmId: string,
 ): Promise<ReadCursorMarker[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+    `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);
@@ -620,7 +620,7 @@ function withDevice(user: JointUser, deviceId: string): JointUser {
 
 function secondDeviceId(user: JointUser): string {
   // A second authorized device id for the same principal. It MUST stay a valid
-  // lowercase UUIDv7 (cokret_identifiers is_lowercase_uuidv7: version nibble 7,
+  // lowercase UUIDv7 (arkret_identifiers is_lowercase_uuidv7: version nibble 7,
   // variant nibble 8/9/a/b), so we only rewrite the node (last) group, keeping
   // the version/variant groups intact. A fixed node value guarantees the two
   // device ids differ and sort deterministically for the §6.5 tiebreak.

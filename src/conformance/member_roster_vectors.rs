@@ -22,11 +22,11 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
-use cokret_core::models::{
+use arkret_core::models::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
     MemberRosterEntry, MembershipState, RosterHandleClaimDigestEntry, member_display_state_digest,
 };
-use cokret_core::{Did, EventId, Hash, RealmId};
+use arkret_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_ROSTER_SHAPE: &str = "ck.cotest_vector.sync.member_roster_shape.v1";

@@ -382,7 +382,7 @@ async function addEncryptedDescription(
 
   const strandUpdate = page.waitForResponse(
     (response) =>
-      response.url().includes("/_cokret/self/events") &&
+      response.url().includes("/_arkret/self/events") &&
       response.request().method() === "POST" &&
       (response.request().postData() ?? "").includes("ck.strand.update"),
     { timeout: 60_000 },

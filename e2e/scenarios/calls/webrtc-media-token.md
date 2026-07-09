@@ -11,12 +11,12 @@ live soland instance.
    `e2ee_key_source = mls-exporter`).
 3. Commit the first durable `ck.call.state` for the call, including the
    selected `session_focus`, and exchange signaling through
-   `POST /_cokret/self/ephemeral` with `kind = "ck.call.signal"`; no
+   `POST /_arkret/self/ephemeral` with `kind = "ck.call.signal"`; no
    legacy soland-private WebRTC session surface is used.
 
 ## Steps & Expectations
 
-- `POST /_cokret/self/rtc/token` for the committed `session_focus` returns a
+- `POST /_arkret/self/rtc/token` for the committed `session_focus` returns a
   `CallMediaTokenExchangeOutcome`:
   - `backend_type = livekit`, `connect_url` echoes the focus config.
   - `participant_binding.scheme = ck.media.participant_binding.v1` with the full

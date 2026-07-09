@@ -10,16 +10,16 @@
 //! phase).
 //!
 //! Submodules — each is a single async helper representing one protocol phase:
-//! - [`events_keys_setup`] — `/_cokret/self/events` plus `/_cokret/self/keys/{upload,query,claim}`
+//! - [`events_keys_setup`] — `/_arkret/self/events` plus `/_arkret/self/keys/{upload,query,claim}`
 //!   strand.
-//! - [`device_messages`] — `/_cokret/self/device_messages` send / duplicate / list / describe + the
+//! - [`device_messages`] — `/_arkret/self/device_messages` send / duplicate / list / describe + the
 //!   verification-event side path.
-//! - [`key_backups`] — `/_cokret/self/keys/backups/*` PUT / list / unlock plus `/_cokret/describe`
+//! - [`key_backups`] — `/_arkret/self/keys/backups/*` PUT / list / unlock plus `/_arkret/describe`
 //!   operation advertisement.
-//! - [`backup_delete`] — terminal `DELETE /_cokret/self/keys/backups/{id}`.
-//! - [`blob`] — `/_cokret/self/blob/{upload,get}` (sha mismatch + happy-path range).
-//! - [`push`] — `/_cokret/edge/push/{register-device,notify}` happy + missing-device rejection.
-//! - [`moderation`] — `/_cokret/self/moderation/report` queueing.
+//! - [`backup_delete`] — terminal `DELETE /_arkret/self/keys/backups/{id}`.
+//! - [`blob`] — `/_arkret/self/blob/{upload,get}` (sha mismatch + happy-path range).
+//! - [`push`] — `/_arkret/edge/push/{register-device,notify}` happy + missing-device rejection.
+//! - [`moderation`] — `/_arkret/self/moderation/report` queueing.
 //!
 //! No private cross-phase helpers exist — every phase function takes only
 //! `(&CokretServer, &str)` (or just `&CokretServer` when no auth is

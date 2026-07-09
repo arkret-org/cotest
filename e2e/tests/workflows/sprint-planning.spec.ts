@@ -617,7 +617,7 @@ async function boardSpaceIdByTitle(
   session: DpopUserSession,
   title: string,
 ): Promise<string> {
-  const url = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/spaces`;
+  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });
@@ -643,7 +643,7 @@ async function strandTitlesForBoard(
   session: DpopUserSession,
   boardId: string,
 ): Promise<string[]> {
-  const url = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

@@ -5,7 +5,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
-use cokret_core::{
+use arkret_core::{
     AGENT_SELECTOR_CLAIM_SCHEMA, AgentParticipation, AgentParticipationEntry,
     AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope,
     AgentSelectorClaim, Did, DirectoryAgentSelectorResolutionOutcome, Handle, HandleBindingState,

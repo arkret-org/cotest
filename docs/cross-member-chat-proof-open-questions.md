@@ -55,7 +55,7 @@
 
 ## 已确认的事实
 
-1. **soland 确实投递了消息。** 以 bob 身份查 `/_cokret/self/events?realms=` 含
+1. **soland 确实投递了消息。** 以 bob 身份查 `/_arkret/self/events?realms=` 含
    alice 的 `ck.message.create`（`hasAliceMsg=true`）。非投递问题、非
    history_visibility 裁剪（消息是 bob 加入后发的）。
 

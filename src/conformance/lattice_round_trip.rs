@@ -1,6 +1,6 @@
 //! C10.C lattice round-trip vectors.
 //!
-//! Exercises the SDK's [`cokret_core::lattice`] module directly against the
+//! Exercises the SDK's [`arkret_core::lattice`] module directly against the
 //! normative scenarios from `cba-lattice-fixture.json`.
 //! The fixture itself is symbolic (it describes protocol-level semantics,
 //! eliding wire-required `space_id` / `hlc` / `sig`) — this suite reifies
@@ -24,12 +24,12 @@
 //! spec's normative join semantics.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::canonical::canonical_json_bytes;
-use cokret_core::lattice::ordered_log::IssuedOp;
-use cokret_core::lattice::{
+use arkret_core::canonical::canonical_json_bytes;
+use arkret_core::lattice::ordered_log::IssuedOp;
+use arkret_core::lattice::{
     CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
 };
-use cokret_core::{CellRef, Did, LatticeOp, LatticeOpType, MoveId};
+use arkret_core::{CellRef, Did, LatticeOp, LatticeOpType, MoveId};
 use serde_json::{Value, json};
 
 const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 5] = [
@@ -291,7 +291,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
             )
         }
     };
-    if !matches!(bottom.kind, cokret_core::BottomKind::Conflict) {
+    if !matches!(bottom.kind, arkret_core::BottomKind::Conflict) {
         bail!(
             "CasRegister Bottom kind expected Conflict, got {:?}",
             bottom.kind
@@ -423,7 +423,7 @@ fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
     ];
     let resolved = lattice.join(&cref, &ops);
     match resolved {
-        CellState::Bottom(bottom) if matches!(bottom.kind, cokret_core::BottomKind::Conflict) => {
+        CellState::Bottom(bottom) if matches!(bottom.kind, arkret_core::BottomKind::Conflict) => {
             Ok(())
         }
         other => {
@@ -826,7 +826,7 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
             bail!("Notary concurrent reconfig MUST Bottom (notary split is a Realm-wide pause)")
         }
     };
-    if !matches!(bottom.kind, cokret_core::BottomKind::Conflict) {
+    if !matches!(bottom.kind, arkret_core::BottomKind::Conflict) {
         bail!(
             "Notary split Bottom kind expected Conflict, got {:?}",
             bottom.kind

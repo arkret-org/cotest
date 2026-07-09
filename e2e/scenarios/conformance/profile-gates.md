@@ -43,7 +43,7 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
 
 ## 拓扑
 
-- 1 × soland (principal server) — `COTEST_SOLAND_BASE_URL`,暴露 `/_cokret/describe`
+- 1 × soland (principal server) — `COTEST_SOLAND_BASE_URL`,暴露 `/_arkret/describe`
 - 1 × coauth (auth server,可选) — `COTEST_COAUTH_BASE_URL`,缺省时 coauth-specific 子
   测试 skip
 - 1 × profile-gates harness (Playwright `request` fixture) — 纯 HTTP,无 browser context;
@@ -60,7 +60,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ## Pre-conditions
 
-- soland `/_cokret/describe` 已暴露 T6.1 claim-level partition
+- soland `/_arkret/describe` 已暴露 T6.1 claim-level partition
   (`implemented_features` / `claimed_profiles` / `verified_profiles` /
   `experimental_features` / `compat_surfaces`)
 - soland 启动时 `development_mode=true`(cotest harness 默认配置)
@@ -72,7 +72,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ### Phase A — claim_kind 分区(`claimed_profiles` ∩ `verified_profiles` = ∅)
 
-1. **harness** `GET ${solandBaseUrl}/_cokret/describe`
+1. **harness** `GET ${solandBaseUrl}/_arkret/describe`
 2. 断言 `claimed_profiles` 是数组,每条 entry MUST 有 `profile_id` + `claim_kind`
 3. 断言 `claimed_profiles[].claim_kind` 全部等于 `self_claimed`(`verified` 只能由
    cotest verifier 写入 `verified_profiles`)
@@ -88,7 +88,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
    claimed profile 不覆盖的 kind(候选 `ck.applet.transaction.v1` ↔
    `ck.profile.applet_service.v1`,后者不在 soland claimed 列表)
 7. alice 注册 + dev-login
-8. `POST /_cokret/self/events` with a minimal Event envelope whose `kind` is `<unsupported_kind>`
+8. `POST /_arkret/self/events` with a minimal Event envelope whose `kind` is `<unsupported_kind>`
    + Bearer token
 9. 断言:
    - HTTP 4xx
@@ -116,7 +116,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 15. 断言顶层 `development_mode === true`(cotest harness 默认)
 16. 断言顶层 `verified_profiles` 严格等于 `[]`(Array.isArray + length === 0,**不接受**
     `null` / `undefined` / 占位 stub)
-17. coauth 在线时,对 `coauthBaseUrl()/_cokret/describe` 重复 15-16
+17. coauth 在线时,对 `coauthBaseUrl()/_arkret/describe` 重复 15-16
 
 ### Phase E — profile catalog integrity
 

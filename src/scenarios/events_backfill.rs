@@ -54,9 +54,9 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     for _ in 0..12 {
         let path = match cursor.as_deref() {
             Some(cursor) => {
-                format!("/_cokret/self/events?realms={realm_id}&limit=1&after={cursor}")
+                format!("/_arkret/self/events?realms={realm_id}&limit=1&after={cursor}")
             }
-            None => format!("/_cokret/self/events?realms={realm_id}&limit=1"),
+            None => format!("/_arkret/self/events?realms={realm_id}&limit=1"),
         };
         let page = expect_json(alice.get(&path), StatusCode::OK).await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());

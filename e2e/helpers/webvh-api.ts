@@ -21,7 +21,7 @@
 //
 // Canonical JSON is the project's JCS profile (sorted keys, integer-only
 // numbers, NFC) — the same `canonicalJson` soland's
-// `cokret_sdk::canonical::canonical_json_bytes` implements.
+// `arkret_sdk::canonical::canonical_json_bytes` implements.
 
 import {
   createHash,
@@ -477,7 +477,7 @@ export async function rawResolveDid(
   did: string,
 ): Promise<APIResponse> {
   return await request.post(
-    `${baseUrl.replace(/\/$/, "")}/_cokret/root/identity/resolve`,
+    `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/resolve`,
     { data: { did } },
   );
 }
@@ -502,7 +502,7 @@ export async function fetchDidLog(
   did: string,
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
-    `${baseUrl.replace(/\/$/, "")}/_cokret/root/identity/log?did=${encodeURIComponent(did)}`,
+    `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/log?did=${encodeURIComponent(did)}`,
   );
   const body = await expectJsonOk<{ events?: Array<Record<string, unknown>> }>(
     response,

@@ -68,7 +68,7 @@
 
 20. device-2 继续保持登录状态,尝试发 `M_d2_post_revoke`
 21. soland reducer 校验:device_id 已 revoke
-22. 断言:`POST /_cokret/self/events`(或 sendMessage)返回 4xx,reason_code 含 `device_revoked` / `unauthorized`
+22. 断言:`POST /_arkret/self/events`(或 sendMessage)返回 4xx,reason_code 含 `device_revoked` / `unauthorized`
 23. device-2 inkson UI 显示 `write-status` 内含上述错误
 
 ### Phase E — To-device 队列过期
@@ -90,7 +90,7 @@
 - Phase B 步骤 11/13:双向消息可见
 - Phase B 步骤 14:消息携带 device_id 信息
 - Phase C 步骤 19:device-2 从 device-1 视图中消失
-- Phase C:撤销后 `/_cokret/self/keys/query` 不再暴露 device-2 的 `device_signing_key`,并标记 `device_status=revoked`
+- Phase C:撤销后 `/_arkret/self/keys/query` 不再暴露 device-2 的 `device_signing_key`,并标记 `device_status=revoked`
 - Phase C:撤销后 device-2 的未消费 ordinary / last-resort KeyPackage 不再可 claim
 - Phase D 步骤 22:device-2 提交被拒,错误码 device_revoked
 - Phase E 步骤 26:to-device 队列 drop

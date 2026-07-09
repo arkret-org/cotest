@@ -3,7 +3,7 @@ use std::io::{self, Read};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use arkret::auth::principal_control_realm_id;
-use cokret_core::{Did, Hash, Proof, canonical, proof_kind};
+use arkret_core::{Did, Hash, Proof, canonical, proof_kind};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -106,7 +106,7 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let binding_bytes = proof
         .canonical_binding_bytes(&actor)
         .context("encode event proof binding")?;
-    proof.jws = cokret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding_bytes)
+    proof.jws = arkret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding_bytes)
         .map_err(|err| anyhow::anyhow!("sign event proof: {err}"))?;
 
     serde_json::to_value(proof).context("serialize event proof")

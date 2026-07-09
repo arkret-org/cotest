@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{Did, Proof, canonical};
-use cokret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use arkret_core::{Did, Proof, canonical};
+use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use serde_json::{Value, json};
 use url::Url;
 
@@ -351,8 +351,8 @@ impl SecurityCoverage {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use cokret_core::{Hash, base64url_encode, proof_kind};
-    use cokret_signatures::proof::sign_eddsa_detached_jws;
+    use arkret_core::{Hash, base64url_encode, proof_kind};
+    use arkret_signatures::proof::sign_eddsa_detached_jws;
     use ed25519_dalek::SigningKey;
 
     use super::*;

@@ -28,7 +28,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
     let denied_before_grant = expect_json(
-        alice.post("/_cokret/self/authz/check").json(&json!({
+        alice.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.realm.admin",
             "resource": {
@@ -91,7 +91,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(manage_grant["status"], "accepted");
 
     let effective_grants = expect_json(
-        alice.get("/_cokret/self/authz/effective-grants").query(&[
+        alice.get("/_arkret/self/authz/effective-grants").query(&[
             ("subject", bob.actor.as_str()),
             ("realm_id", realm_id.as_str()),
         ]),
@@ -110,7 +110,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     let allowed_after_grant = expect_json(
-        alice.post("/_cokret/self/authz/check").json(&json!({
+        alice.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.realm.admin",
             "resource": {
@@ -217,7 +217,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(revoked_manage["status"], "accepted");
 
     let denied_after_revoke = expect_json(
-        alice.post("/_cokret/self/authz/check").json(&json!({
+        alice.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.realm.admin",
             "resource": {
@@ -243,7 +243,7 @@ async fn expect_authz_check_hard_deny(
     reason_code: &str,
 ) -> Result<()> {
     let denied = expect_json(
-        client.post("/_cokret/self/authz/check").json(&json!({
+        client.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": actor_id,
             "action": action,
             "resource": resource
@@ -275,11 +275,11 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // client-sync.md: the account subscribe surface is read-only —
     // `set_presence` is not a subscribe parameter (the server ignores the
     // stray query value). Presence intent goes through
-    // `POST /_cokret/self/ephemeral` as a proof-bound `ck.presence`.
+    // `POST /_arkret/self/ephemeral` as a proof-bound `ck.presence`.
     expect_status(
         server
             .http()
-            .get(server.url("/_cokret/self/account/subscribe?catchup=true&set_presence=online")),
+            .get(server.url("/_arkret/self/account/subscribe?catchup=true&set_presence=online")),
         StatusCode::UNAUTHORIZED,
     )
     .await?;
@@ -291,7 +291,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // nearby state.
     expect_api_error(
         alice
-            .post("/_cokret/self/ephemeral")
+            .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
                 &alice.actor,
                 alice.device_id.as_str(),
@@ -307,7 +307,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // aligned to its duration on the Unix-epoch UTC grid is malformed.
     expect_api_error(
         alice
-            .post("/_cokret/self/ephemeral")
+            .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
                 &alice.actor,
                 alice.device_id.as_str(),
@@ -322,7 +322,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // A bucket duration below the PT60S protocol floor is malformed too.
     expect_api_error(
         alice
-            .post("/_cokret/self/ephemeral")
+            .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
                 &alice.actor,
                 alice.device_id.as_str(),
@@ -338,7 +338,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // an explicit disclosure policy → policy_violation, not accepted.
     expect_api_error(
         alice
-            .post("/_cokret/self/ephemeral")
+            .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
                 &alice.actor,
                 alice.device_id.as_str(),
@@ -353,7 +353,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // status_message over 256 Unicode code points fails closed (§3.3).
     expect_api_error(
         alice
-            .post("/_cokret/self/ephemeral")
+            .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
                 &alice.actor,
                 alice.device_id.as_str(),
@@ -370,7 +370,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // authorized observer (self sees full activity detail).
     let presence_accepted = expect_json(
         alice
-            .post("/_cokret/self/ephemeral")
+            .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
                 &alice.actor,
                 alice.device_id.as_str(),
@@ -384,7 +384,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(presence_accepted["kind"], "ck.presence");
 
     let presence_sync = expect_account_subscribe_delta(
-        alice.get("/_cokret/self/account/subscribe?catchup=true"),
+        alice.get("/_arkret/self/account/subscribe?catchup=true"),
         StatusCode::OK,
     )
     .await?;
@@ -418,7 +418,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         .await?;
     alice.add_member(&presence_realm_id, &observer).await?;
     let observer_sync = expect_account_subscribe_delta(
-        observer.get("/_cokret/self/account/subscribe?catchup=true"),
+        observer.get("/_arkret/self/account/subscribe?catchup=true"),
         StatusCode::OK,
     )
     .await?;
@@ -443,7 +443,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let push_registration = expect_json(
         alice
-            .post("/_cokret/edge/push/register-device")
+            .post("/_arkret/edge/push/register-device")
             .json(&json!({
                 "device_id": alice.device_id.as_str(),
                 "push_gateway": "https://push.example",
@@ -458,7 +458,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let push_unregister = expect_json(
         alice
-            .post("/_cokret/edge/push/unregister-device")
+            .post("/_arkret/edge/push/unregister-device")
             .json(&json!({
                 "device_id": alice.device_id.as_str(),
                 "push_key": "opaque",
@@ -492,7 +492,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let allow_policy = expect_json(
         alice
-            .post("/_cokret/self/policy/check")
+            .post("/_arkret/self/policy/check")
             .json(&json!({
                 "request_id": "req-allow",
                 "realm_id": policy_realm_id,
@@ -521,7 +521,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let review_policy = expect_json(
         alice
-            .post("/_cokret/self/policy/check")
+            .post("/_arkret/self/policy/check")
             .json(&json!({
                 "request_id": "req-review",
                 "realm_id": policy_realm_id,
@@ -543,7 +543,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     expect_api_error(
         alice
-            .post("/_cokret/self/policy/check")
+            .post("/_arkret/self/policy/check")
             .json(&json!({
                 "request_id": "req-invalid",
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
@@ -565,7 +565,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
 
     let ice = expect_json(
-        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
             "realm_id": policy_realm_id,
             "call_id": "ak:call:01964137-0000-7000-8000-000000000001",
             "actor_id": alice.actor.as_str(),
@@ -592,7 +592,7 @@ fn presence_envelope(
     device_id: &str,
     realm_id: &str,
     payload_fields: Value,
-) -> cokret_core::EphemeralEnvelope {
+) -> arkret_core::EphemeralEnvelope {
     let sent_at = Utc::now()
         .with_nanosecond(0)
         .expect("zeroing nanos is valid");
@@ -607,11 +607,11 @@ fn presence_envelope(
             base.insert(key.clone(), value.clone());
         }
     }
-    let mut envelope = cokret_core::EphemeralEnvelope::new(
+    let mut envelope = arkret_core::EphemeralEnvelope::new(
         "ck.presence",
-        cokret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
-        cokret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-        Some(cokret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
+        arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
+        arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
+        Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
         sent_at,
         expires_at,
         payload,

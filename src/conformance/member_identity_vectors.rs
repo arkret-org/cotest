@@ -20,26 +20,26 @@
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
 //! SDK-pure — they exercise the canonical-bytes helpers
 //! ([`IdentityPayloadCarrier::carrier_sha256`],
-//! [`cokret_core::models::effective_identity_events`],
-//! [`cokret_core::models::member_identity_effective_set_digest`],
+//! [`arkret_core::models::effective_identity_events`],
+//! [`arkret_core::models::member_identity_effective_set_digest`],
 //! [`MemberIdentity::canonical_payload_sha256`]) plus the
 //! `member_identity_*` error-code constants exported from
-//! [`cokret_core::error`]. Live integration is layered on top in
+//! [`arkret_core::error`]. Live integration is layered on top in
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use cokret_core::error::{
+use arkret_core::error::{
     REASON_MEMBER_IDENTITY_PROOF_INVALID, REASON_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
     REASON_MEMBER_IDENTITY_STATE_MISMATCH, REASON_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
 };
-use cokret_core::models::{
+use arkret_core::models::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
     MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,
     member_identity_effective_set_digest,
 };
-use cokret_core::{Did, EventId, Hash, RealmId};
+use arkret_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_MID_UPDATE_INITIAL: &str = "ck.cotest_vector.member_identity.update_initial.v1";

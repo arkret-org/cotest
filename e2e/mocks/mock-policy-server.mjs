@@ -2,7 +2,7 @@
 // (spec: arkret-spec/spec/v1/zh/authz/policy-server.md).
 //
 // The mock evaluates authorization decisions for the joint-e2e harness:
-// callers POST {action, actor_id, target, context} to /_cokret/self/policy/check
+// callers POST {action, actor_id, target, context} to /_arkret/self/policy/check
 // and the mock looks up a matching rule (configured via /scenarios) and
 // returns {decision, reason?, obligations?, signed_transcript}. The
 // transcript is a JWT-shaped Ed25519 signature so consumers can verify
@@ -17,7 +17,7 @@
 //   6. defaultDecision (initially "deny" — fail-closed)
 //
 // Endpoints:
-//   POST /_cokret/self/policy/check  { action, actor_id, target, context }
+//   POST /_arkret/self/policy/check  { action, actor_id, target, context }
 //     Evaluate the rule table; record into InspectLog "checks".
 //   POST /scenarios  { rules: [{action, actor, target, decision, reason,
 //                                obligations, delay_ms}], default, delay_ms }
@@ -27,7 +27,7 @@
 //     timeout / fail-closed deadline against a configured-but-slow upstream.
 //   DELETE /scenarios → clear rules, defaultDecision = "deny"
 //   GET    /scenarios → dump current rules + default
-//   GET    /_cokret/self/policy/health → { status: "ok" }
+//   GET    /_arkret/self/policy/health → { status: "ok" }
 //   GET    /jwks → policy-server public key
 //   GET    /inspect, DELETE /inspect → InspectLog middleware
 //
@@ -150,12 +150,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/self/policy/health" && req.method === "GET") {
+  if (url.pathname === "/_arkret/self/policy/health" && req.method === "GET") {
     res.end(JSON.stringify({ status: "ok" }));
     return;
   }
 
-  if (url.pathname === "/_cokret/self/policy/check" && req.method === "POST") {
+  if (url.pathname === "/_arkret/self/policy/check" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.action) {
       res.statusCode = 400;

@@ -29,7 +29,7 @@
 //! `bail!` when the stack cannot be bootstrapped.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{
+use arkret_core::{
     CAP_ACTION_CIRCLE_AUDIT, CAP_ACTION_CIRCLE_MANAGE, Circle, CircleColorToken, CircleDisplay,
     CircleGlyph, CircleId, CircleSymbol, Did, RealmId,
 };
@@ -118,15 +118,15 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST  /_cokret/self/realms                              (admin)
-    //         POST  /_cokret/self/realms/<rid>/circles                (admin)
-    //         POST  /_cokret/self/realms/<rid>/members                add Y (Realm member)
-    //         POST  /coauth/_cokret/gate/account/session-grants               grant Y
-    // ck.circle.manage         POST  /_cokret/self/circles/<cid>                       (Y;
-    // expect 403)         POST  /_cokret/self/circles/<cid>/members               add Y to
-    // Circle (admin)         POST  /_cokret/self/circles/<cid>                       (Y; expect
-    // 200)         DELETE /coauth/_cokret/gate/account/session-grants/<grant>      revoke
-    // (admin/system)         POST  /_cokret/self/circles/<cid>                       (Y; expect
+    //         POST  /_arkret/self/realms                              (admin)
+    //         POST  /_arkret/self/realms/<rid>/circles                (admin)
+    //         POST  /_arkret/self/realms/<rid>/members                add Y (Realm member)
+    //         POST  /coauth/_arkret/gate/account/session-grants               grant Y
+    // ck.circle.manage         POST  /_arkret/self/circles/<cid>                       (Y;
+    // expect 403)         POST  /_arkret/self/circles/<cid>/members               add Y to
+    // Circle (admin)         POST  /_arkret/self/circles/<cid>                       (Y; expect
+    // 200)         DELETE /coauth/_arkret/gate/account/session-grants/<grant>      revoke
+    // (admin/system)         POST  /_arkret/self/circles/<cid>                       (Y; expect
     // 403)
     //
     //       Assertions:
@@ -139,7 +139,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     //               Circle member) MUST be rejected; Y with cap but
     //               removed from Circle MUST be rejected.
     let _ = admin
-        .post("/_cokret/self/realms")
+        .post("/_arkret/self/realms")
         .json(&json!({
             "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),

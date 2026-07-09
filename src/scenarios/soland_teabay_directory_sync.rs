@@ -18,7 +18,7 @@
 //!   3. Soland persists the update and emits the announce event; teabay's ingest worker picks it
 //!      up.
 //!   4. Within 30s (use `eventually` from the harness with a 30s timeout + 500ms poll), `POST
-//!      /_cokret/find/directory/search-actors` on the *teabay* base URL with `{"query": "<new
+//!      /_arkret/find/directory/search-actors` on the *teabay* base URL with `{"query": "<new
 //!      display_name>"}` returns alice with the new display_name and bio fields.
 //!   5. Repeat for a profile update to a different field (avatar_url) — asserts that re-indexing
 //!      handles partial updates, not just first-write.
@@ -52,7 +52,7 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("CT-8: teabay handle missing after bootstrap_required succeeded"))?;
     let teabay_base = teabay.base_url.trim_end_matches('/').to_owned();
-    let teabay_search_url = format!("{teabay_base}/_cokret/find/directory/search-actors");
+    let teabay_search_url = format!("{teabay_base}/_arkret/find/directory/search-actors");
 
     // Register alice on soland — gives us a bearer token for the profile
     // update call below.

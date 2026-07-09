@@ -49,7 +49,7 @@ export type UserSession = {
   networkLines: string[];
   serverUrl: string;
   keepDeviceAuthorizationModal: boolean;
-  /// The credential presented on `/_cokret/self/*`. Under the ②(A+②) model this
+  /// The credential presented on `/_arkret/self/*`. Under the ②(A+②) model this
   /// is the `ck.session.grant` JWT; a request to a self-path also requires the
   /// DPoP + holder-proof material in `grant` below.
   sessionCredential: string;
@@ -127,7 +127,7 @@ function buildInviteLocatorUrl(serverUrl: string, subjectDid: string): string {
     }),
   ).toString("base64url");
   const base = serverUrl.replace(/\/$/, "");
-  return `${base}/_cokret/open/invite-locators/resolve#token=${locatorToken}`;
+  return `${base}/_arkret/open/invite-locators/resolve#token=${locatorToken}`;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -704,7 +704,7 @@ export class JointUserPage {
   }
 
   // Build the Authorization + DPoP headers for a direct (non-browser)
-  // `/_cokret/self/*` call. Under the ②(A+②) model the credential is the
+  // `/_arkret/self/*` call. Under the ②(A+②) model the credential is the
   // ck.session.grant and soland requires a per-request DPoP proof.
   private selfPathHeaders(method: string, url: string): Record<string, string> {
     const grant = this.session.grant;
@@ -730,7 +730,7 @@ export class JointUserPage {
   // then cascades the accepted invite into Realm membership.
   async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
-    const list = new URL("/_cokret/self/authz/invites", serverUrl);
+    const list = new URL("/_arkret/self/authz/invites", serverUrl);
     list.searchParams.set("subject", this.user.did);
     list.searchParams.set("realm_id", realmId);
     const listUrl = list.toString();
@@ -781,7 +781,7 @@ export class JointUserPage {
         invite_id: inviteId,
       },
     });
-    const eventsUrl = `${serverUrl}/_cokret/self/events`;
+    const eventsUrl = `${serverUrl}/_arkret/self/events`;
     const acceptResp = await this.page.request.post(eventsUrl, {
       headers: this.selfPathHeaders("POST", eventsUrl),
       data: envelope,
@@ -993,12 +993,12 @@ export async function ensureRegistered(
   opts: { server?: SolandKey } = {},
 ) {
   // Spec-canonical registration binding (`ck.gate.account.command.register`):
-  // `POST /_cokret/gate/account/register` with `AccountRegisterRequestBody
+  // `POST /_arkret/gate/account/register` with `AccountRegisterRequestBody
   // {principal_id, display_name?, device_id?}`. The bare `handle` field is no
   // longer accepted (the first handle arrives via a signed handle claim,
   // identity-handles.md); the account gets a synthetic localpart derived from
   // the DID. Success is 200 (200|409 here for idempotent setup).
-  const url = `${solandBaseUrl(opts.server)}/_cokret/gate/account/register`;
+  const url = `${solandBaseUrl(opts.server)}/_arkret/gate/account/register`;
   const data = {
     principal_id: user.did,
     display_name: user.displayName,

@@ -1,174 +1,174 @@
 {
   "schema": "cotest.operation-product-private-paths.v1",
-  "comment": "Explicit product-private classifications for discovered /_cokret/* paths that are not registered protocol operations. The operation registry gate fails any unregistered discovered path unless it is listed here with classification=product-private and a reason.",
+  "comment": "Explicit product-private classifications for discovered /_arkret/* paths that are not registered protocol operations. The operation registry gate fails any unregistered discovered path unless it is listed here with classification=product-private and a reason.",
   "allowed": [
     {
       "source": "soland",
       "method": "*",
-      "path": "/_cokret/_conformance/{**rest}",
+      "path": "/_arkret/_conformance/{**rest}",
       "classification": "product-private",
       "reason": "Test-only conformance harness namespace; mounted only when ck.profile.conformance_harness.v1 is active and not advertised as a protocol operation."
     },
     {
       "source": "soland",
       "method": "*",
-      "path": "/_cokret/self/blob/resumable",
+      "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
       "reason": "Local tus companion transport for ck.self.blob.upload.create; kept out of the operation registry until resumable-upload bindings are modeled as first-class operations."
     },
     {
       "source": "soland",
       "method": "*",
-      "path": "/_cokret/self/blob/resumable/{**rest}",
+      "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
       "reason": "Local tus companion transport for ck.self.blob.upload.create; upload resources and finalize are node-local staging affordances, not independent protocol operations."
     },
     {
       "source": "sdk",
       "method": "*",
-      "path": "/_cokret/self/blob/resumable",
+      "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
       "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "sdk",
       "method": "*",
-      "path": "/_cokret/self/blob/resumable/{**rest}",
+      "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
       "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "inkson",
       "method": "*",
-      "path": "/_cokret/self/blob/resumable",
+      "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
       "reason": "Client-side support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "inkson",
       "method": "*",
-      "path": "/_cokret/self/blob/resumable/{**rest}",
+      "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
       "reason": "Client-side support for soland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "cotest",
       "method": "*",
-      "path": "/_cokret/self/schemas",
+      "path": "/_arkret/self/schemas",
       "classification": "product-private",
       "reason": "Negative-surface probe: schema_policy_realtime/schema.rs asserts these schema-registry endpoints respond 404 unrecognized_endpoint, i.e. it confirms the absence of a schema-registry operation rather than calling one."
     },
     {
       "source": "cotest",
       "method": "*",
-      "path": "/_cokret/self/schemas/{schema_id}",
+      "path": "/_arkret/self/schemas/{schema_id}",
       "classification": "product-private",
       "reason": "Negative-surface probe: schema_policy_realtime/schema.rs asserts GET/DELETE on a schema resource respond 404 unrecognized_endpoint; confirms the schema-registry operation does not exist, so there is no operation to register."
     },
     {
       "source": "cotest",
       "method": "GET",
-      "path": "/_cokret/self/__definitely_does_not_exist__/probe",
+      "path": "/_arkret/self/__definitely_does_not_exist__/probe",
       "classification": "product-private",
       "reason": "Synthetic unknown path used by service-surface-contract.spec.ts to assert soland's canonical 404 unrecognized_endpoint envelope; deliberately not a protocol operation."
     },
     {
       "source": "cotest",
       "method": "GET",
-      "path": "/_cokret/self/missing",
+      "path": "/_arkret/self/missing",
       "classification": "product-private",
       "reason": "Synthetic unknown path used by api_contracts_auth.rs to assert the canonical 404 unrecognized_endpoint envelope; deliberately not a protocol operation."
     },
     {
       "source": "cotest",
       "method": "*",
-      "path": "/_cokret/self/audit-agent/{**rest}",
+      "path": "/_arkret/self/audit-agent/{**rest}",
       "classification": "product-private",
       "reason": "Mock audit-agent harness surface (identity, inbox, accessed, invite) served by the cotest mock-audit-agent process via mockAuditAgentBaseUrl()/setup.agentBaseUrl, not soland; no corresponding protocol operation exists."
     },
     {
       "source": "cotest",
       "method": "GET",
-      "path": "/_cokret/self/keys/backups/{wildcard}",
+      "path": "/_arkret/self/keys/backups/{wildcard}",
       "classification": "product-private",
       "reason": "Negative method probe: key-backup-restore.spec.ts legacyGetBackup issues GET on a backup resource that the registry/soland expose only via PUT/DELETE, asserting 404/405; the GET method binding is intentionally absent, not a protocol operation."
     },
     {
       "source": "cotest",
       "method": "GET",
-      "path": "/_cokret/self/notifications",
+      "path": "/_arkret/self/notifications",
       "classification": "product-private",
-      "reason": "registry-drift.spec.ts scans this as a may-4xx surface; soland does not route /_cokret/self/notifications and the registry defines no notifications operation, so it is a tolerated probe rather than a protocol operation."
+      "reason": "registry-drift.spec.ts scans this as a may-4xx surface; soland does not route /_arkret/self/notifications and the registry defines no notifications operation, so it is a tolerated probe rather than a protocol operation."
     },
     {
       "source": "cotest",
       "method": "POST",
-      "path": "/_cokret/describe",
+      "path": "/_arkret/describe",
       "classification": "product-private",
-      "reason": "Negative method probe: service-surface-contract.spec.ts, api_contracts_auth.rs and service_surface.rs POST the GET-only /_cokret/describe endpoint to assert a 405 method_not_allowed; the POST binding is intentionally absent, not a protocol operation."
+      "reason": "Negative method probe: service-surface-contract.spec.ts, api_contracts_auth.rs and service_surface.rs POST the GET-only /_arkret/describe endpoint to assert a 405 method_not_allowed; the POST binding is intentionally absent, not a protocol operation."
     },
     {
       "source": "cotest",
       "method": "POST",
-      "path": "/_cokret/self/realms/{realm_id}/agents",
+      "path": "/_arkret/self/realms/{realm_id}/agents",
       "classification": "product-private",
-      "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped agent path responds 404 unrecognized_endpoint (agents are provisioned via /_cokret/self/agents, not a realm sub-resource); confirms absence, not a protocol operation."
+      "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped agent path responds 404 unrecognized_endpoint (agents are provisioned via /_arkret/self/agents, not a realm sub-resource); confirms absence, not a protocol operation."
     },
     {
       "source": "cotest",
       "method": "POST",
-      "path": "/_cokret/self/realms/{realm_id}/applets",
+      "path": "/_arkret/self/realms/{realm_id}/applets",
       "classification": "product-private",
-      "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped applet path responds 404 unrecognized_endpoint (applets install via /_cokret/self/applets/install); confirms absence, not a protocol operation."
+      "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped applet path responds 404 unrecognized_endpoint (applets install via /_arkret/self/applets/install); confirms absence, not a protocol operation."
     },
     {
       "source": "cotest",
       "method": "PUT",
-      "path": "/_cokret/self/policy/check",
+      "path": "/_arkret/self/policy/check",
       "classification": "product-private",
-      "reason": "policy-server-check.spec.ts builds a mockPolicyServerBaseUrl()/_cokret/self/policy/check URL string for its mock policy server; the canonical soland operation is POST /_cokret/self/policy/check, so this PUT-flavoured mock URL is not a protocol operation."
+      "reason": "policy-server-check.spec.ts builds a mockPolicyServerBaseUrl()/_arkret/self/policy/check URL string for its mock policy server; the canonical soland operation is POST /_arkret/self/policy/check, so this PUT-flavoured mock URL is not a protocol operation."
     },
     {
       "source": "sdk",
       "method": "GET",
-      "path": "/_cokret/edge/applet",
+      "path": "/_arkret/edge/applet",
       "classification": "product-private",
-      "reason": "Router prefix container in applet_server.rs (Router::with_path(\"_cokret/edge/applet\")) that mounts the real ping/describe/transactions/actors/realms/protocols operations; the bare prefix is not itself an operation."
+      "reason": "Router prefix container in applet_server.rs (Router::with_path(\"_arkret/edge/applet\")) that mounts the real ping/describe/transactions/actors/realms/protocols operations; the bare prefix is not itself an operation."
     },
     {
       "source": "sdk",
       "method": "PUT",
-      "path": "/_cokret/self/events",
+      "path": "/_arkret/self/events",
       "classification": "product-private",
-      "reason": "Placeholder method/path in an http-client unit test that only exercises request-option header application (Method::PUT chosen arbitrarily); /_cokret/self/events is registered under GET/POST, not PUT."
+      "reason": "Placeholder method/path in an http-client unit test that only exercises request-option header application (Method::PUT chosen arbitrarily); /_arkret/self/events is registered under GET/POST, not PUT."
     },
     {
       "source": "starid",
       "method": "GET",
-      "path": "/_cokret/root",
+      "path": "/_arkret/root",
       "classification": "product-private",
-      "reason": "Router prefix container in starid server lib.rs (Router::with_path(\"_cokret/root\")) that mounts the real root/identity/* operations; the bare prefix is not itself an operation."
+      "reason": "Router prefix container in starid server lib.rs (Router::with_path(\"_arkret/root\")) that mounts the real root/identity/* operations; the bare prefix is not itself an operation."
     },
     {
       "source": "teabay",
       "method": "POST",
-      "path": "/_cokret/find/directory",
+      "path": "/_arkret/find/directory",
       "classification": "product-private",
-      "reason": "Router prefix container in teabay routing.rs (Router::with_path(\"_cokret/find/directory\")) that mounts the real announce/withdraw/takedown/push operations; the bare prefix is not itself an operation."
+      "reason": "Router prefix container in teabay routing.rs (Router::with_path(\"_arkret/find/directory\")) that mounts the real announce/withdraw/takedown/push operations; the bare prefix is not itself an operation."
     },
     {
       "source": "inkson",
       "method": "GET",
-      "path": "/_cokret/self/realms",
+      "path": "/_arkret/self/realms",
       "classification": "product-private",
-      "reason": "mockCokretApi.ts uses the literal \"/_cokret/self/realms/\" only as a startsWith() prefix to dispatch to the real /_cokret/self/realms/{realm_id}/spaces and /strands handlers; the bare prefix string is a router predicate, not an operation."
+      "reason": "mockCokretApi.ts uses the literal \"/_arkret/self/realms/\" only as a startsWith() prefix to dispatch to the real /_arkret/self/realms/{realm_id}/spaces and /strands handlers; the bare prefix string is a router predicate, not an operation."
     },
     {
       "source": "inkson",
       "method": "POST",
-      "path": "/_cokret/self/circles/({wildcard}",
+      "path": "/_arkret/self/circles/({wildcard}",
       "classification": "product-private",
-      "reason": "Malformed path template recovered from the mockCokretApi.ts regex /^\\/_cokret\\/self\\/circles\\/([^/]+)\\/(archive|restore|tombstone)$/ (the capture-group '(' leaks into the extracted template); the mock actually dispatches the registered circle archive/restore/tombstone operations."
+      "reason": "Malformed path template recovered from the mockCokretApi.ts regex /^\\/_arkret\\/self\\/circles\\/([^/]+)\\/(archive|restore|tombstone)$/ (the capture-group '(' leaks into the extracted template); the mock actually dispatches the registered circle archive/restore/tombstone operations."
     }
   ]
 }

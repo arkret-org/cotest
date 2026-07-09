@@ -17,7 +17,7 @@
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.3 — 举报留痕但不公开
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5.0 — Capability / Moderation / Personal Blocklist 三层判定 (流程图)
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5 — Moderation 决策 MUST Anchored
-- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.1 — `POST /_cokret/self/moderation/report` 字段
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.1 — `POST /_arkret/self/moderation/report` 字段
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.2 — 举报原因枚举
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.3 — 举报的处理 (只有 moderator 可见、被举报人不通知)
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §4.1-§4.3 — 个人屏蔽是 Actor-Private,不进 cell
@@ -62,7 +62,7 @@
 ### Phase C — bob 举报 (Reporter 路径,§3.1)
 
 6. **bob** UI 上对 `M_bad` 触发"举报" (inkson 需要有 report 入口;如缺,scenario 注明需要补 UI 或直接 API 调用)
-7. 测试以 bob 的 token 调用 `POST /_cokret/self/moderation/report`,body:
+7. 测试以 bob 的 token 调用 `POST /_arkret/self/moderation/report`,body:
    ```json
    {
      "realm_id": "<realmId>",
@@ -136,12 +136,12 @@
 
 ## Implementation notes
 
-- **soland report privacy**:`POST /_cokret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_cokret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试投影,只向 realm owner、配置的 admin principal 或持有 moderation review/decision 权限的 actor 返回 report;避免 reporter、被举报人或普通成员枚举 report。
+- **soland report privacy**:`POST /_arkret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_arkret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试投影,只向 realm owner、配置的 admin principal 或持有 moderation review/decision 权限的 actor 返回 report;避免 reporter、被举报人或普通成员枚举 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `ck.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
 - **inkson owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `ck.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
 - **remaining inkson UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 inkson 任务中补。
-- 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_cokret/self/events?realms=${realmId}&kinds=ck.moderation.decision` 或等价 projection endpoint
+- 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_arkret/self/events?realms=${realmId}&kinds=ck.moderation.decision` 或等价 projection endpoint
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 
 ## 总耗时预估

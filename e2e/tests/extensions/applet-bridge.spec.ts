@@ -127,7 +127,7 @@ test.describe("applet bridge", () => {
       );
 
       const revoke = await request.post(
-        `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
+        `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(
           registration.applet_id,
         )}/revoke`,
         {
@@ -227,7 +227,7 @@ test.describe("applet bridge", () => {
     await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_id);
 
     const revoke = await request.post(
-      `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
+      `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(
         registration.applet_id,
       )}/revoke`,
       {
@@ -405,11 +405,11 @@ test.describe("applet bridge", () => {
 });
 
 // Spec: extensions/applet-integration.md §7.3.1. The inbound direction
-// app/bridge → arkret edge (`POST /_cokret/edge/applet/transactions`) MUST
+// app/bridge → arkret edge (`POST /_arkret/edge/applet/transactions`) MUST
 // verify an RFC 9421 HTTP Message Signature per delivery before processing any
 // event or side effect.
 test.describe("applet inbound transaction push — per-delivery source signature", () => {
-  const TRANSACTIONS_PATH = "/_cokret/edge/applet/transactions";
+  const TRANSACTIONS_PATH = "/_arkret/edge/applet/transactions";
 
   function transactionPushBody(args: {
     stamp: number;
@@ -735,7 +735,7 @@ async function rawInstallApplet(
   await publishAppletServiceDidDocument(request, signed);
   const effectiveScope = { kind: "realm", realm_id: realmId };
   const preview = await request.post(
-    `${solandBaseUrl()}/_cokret/self/applets/install/preview`,
+    `${solandBaseUrl()}/_arkret/self/applets/install/preview`,
     {
       headers: authHeaders(token),
       data: {
@@ -755,7 +755,7 @@ async function rawInstallApplet(
     return preview;
   }
   const plan = await preview.json();
-  return await request.post(`${solandBaseUrl()}/_cokret/self/applets/install`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/applets/install`, {
     headers: {
       ...authHeaders(token),
       "Idempotency-Key": idempotencyKey,
@@ -783,7 +783,7 @@ async function publishAppletServiceDidDocument(
     return;
   }
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/root/identity/submit-did-operation`,
+    `${solandBaseUrl()}/_arkret/root/identity/submit-did-operation`,
     {
       data: {
         did: signed.applet_package.service_did,
@@ -858,7 +858,7 @@ async function didDocument(
   did: string,
 ): Promise<Record<string, unknown>> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/root/identity/document?did=${encodeURIComponent(did)}`,
+    `${solandBaseUrl()}/_arkret/root/identity/document?did=${encodeURIComponent(did)}`,
     { headers: authHeaders(token) },
   );
   const responseText = await response.text();

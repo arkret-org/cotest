@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::Result;
-use cokret_core::MembershipPayloadState;
+use arkret_core::MembershipPayloadState;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -34,7 +34,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let bob_second_device = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({
                 "principal_id": BOB_DID,
                 "display_name": BOB_HANDLE.trim_start_matches('@'),
@@ -53,7 +53,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let hidden_bob = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-users"))
+            .post(server.url("/_arkret/find/directory/search-users"))
             .json(&json!({"query": BOB_HANDLE.trim_start_matches('@')})),
         StatusCode::OK,
     )
@@ -70,7 +70,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let me = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/account/viewer"))
+            .get(server.url("/_arkret/self/account/viewer"))
             .bearer_auth(&bob.token),
         StatusCode::OK,
     )
@@ -79,7 +79,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let requested = expect_json(
         alice
-            .post("/_cokret/self/contacts/request")
+            .post("/_arkret/self/contacts/request")
             .json(&json!({"target": BOB_DID})),
         StatusCode::CREATED,
     )
@@ -87,7 +87,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert_eq!(requested["state"], "pending_outgoing");
 
     let accepted = expect_json(
-        bob.post("/_cokret/self/contacts/respond").json(&json!({
+        bob.post("/_arkret/self/contacts/respond").json(&json!({
             "request_id": requested["request_event_ref"],
             "requester": ALICE_DID,
             "action": "accept"
@@ -99,7 +99,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let visible_bob = expect_json(
         alice
-            .post("/_cokret/find/directory/search-users")
+            .post("/_arkret/find/directory/search-users")
             .json(&json!({"query": BOB_HANDLE.trim_start_matches('@')})),
         StatusCode::OK,
     )
@@ -114,7 +114,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let realm_id = create_collaboration_realm(&alice).await?;
     let created_space = expect_json(
-        alice.get(&format!("/_cokret/self/realms/{realm_id}")),
+        alice.get(&format!("/_arkret/self/realms/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -123,7 +123,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({"realm_id": realm_id})),
         StatusCode::NOT_FOUND,
     )
@@ -138,7 +138,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_join["status"], "accepted");
     let with_bob = expect_json(
-        alice.get(&format!("/_cokret/self/realms/{realm_id}")),
+        alice.get(&format!("/_arkret/self/realms/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -201,7 +201,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let snapshot = expect_json(
         alice
-            .get("/_cokret/self/snapshot/head")
+            .get("/_arkret/self/snapshot/head")
             .query(&[("realm_id", realm_id.as_str())]),
         StatusCode::OK,
     )
@@ -227,7 +227,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_ban["status"], "accepted");
     let removed = expect_json(
-        alice.get(&format!("/_cokret/self/realms/{realm_id}")),
+        alice.get(&format!("/_arkret/self/realms/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -241,7 +241,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let lifecycle = expect_json(
         alice
-            .get("/_cokret/self/events")
+            .get("/_arkret/self/events")
             .query(&[("realms", realm_id.as_str()), ("limit", "100")]),
         StatusCode::OK,
     )
@@ -264,7 +264,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let logout = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/session-grants/revoke"))
+            .post(server.url("/_arkret/gate/account/session-grants/revoke"))
             .bearer_auth(&bob.token),
         StatusCode::OK,
     )
@@ -274,7 +274,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     expect_status(
         server
             .http()
-            .get(server.url("/_cokret/self/account/viewer"))
+            .get(server.url("/_arkret/self/account/viewer"))
             .bearer_auth(&bob.token),
         StatusCode::UNAUTHORIZED,
     )

@@ -42,7 +42,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
-    let url = proc.url("/_cokret/find/directory/announce");
+    let url = proc.url("/_arkret/find/directory/announce");
 
     // Construct a body that *would* be shape-valid if the transport were
     // signed. We aren't testing the verify chain here — we're testing that

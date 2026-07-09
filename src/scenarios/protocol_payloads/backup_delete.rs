@@ -1,7 +1,7 @@
-//! Terminal `DELETE /_cokret/self/keys/backups/{id}`.
+//! Terminal `DELETE /_arkret/self/keys/backups/{id}`.
 
 use anyhow::Result;
-use cokret_core::{
+use arkret_core::{
     KeyBackupDeleteDevelopmentProof, KeyBackupDeleteProof, KeysBackupsDeleteRequestBody,
 };
 use reqwest::StatusCode;
@@ -19,7 +19,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     let backup_delete = expect_json(
         server
             .http()
-            .delete(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
+            .delete(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .json(&body),
         StatusCode::OK,

@@ -55,7 +55,7 @@
 
 14. bob 进 `/settings/profile`,改 display_name、bio、avatar
 15. inkson 提交 `ck.profile.update`
-16. alice 拉 `GET /_cokret/self/actors/<bob.did>/profile` → 看到新 profile
+16. alice 拉 `GET /_arkret/self/actors/<bob.did>/profile` → 看到新 profile
 17. 断言:在 directory 搜结果中显示 bob 的新 display_name
 
 ### Phase F — Presence

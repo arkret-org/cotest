@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow};
-use cokret_core::canonical::canonical_json_bytes;
-use cokret_core::{
+use arkret_core::canonical::canonical_json_bytes;
+use arkret_core::{
     ed25519_pubkey_to_did_key_multibase, encode_base58btc, encode_multibase_base58btc,
 };
 use cotest::harness::{
@@ -52,7 +52,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     let accepted = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
             .json(&event),
         StatusCode::OK,
@@ -63,7 +63,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     let query = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/query"))
+            .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(&token)
             .json(&json!({
                 "device_keys": {
@@ -95,7 +95,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
             .json(&rejected_event),
         StatusCode::FORBIDDEN,
@@ -248,7 +248,7 @@ fn webvh_document_value(
             },
             {
                 "id": format!("{did}#enrollment-authority"),
-                "type": cokret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
+                "type": arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
                 "serviceEndpoint": authority_did,
             },
         ],
@@ -320,10 +320,10 @@ fn service_attested_device_authorize_event(
     // Typed wire payload: device-lifecycle.md §5.4 — the enrollment authority
     // attests the device verify key, HPKE sealing key AND the canonical
     // algorithm set. Built on the SDK counterpart so schema drift fails here.
-    let authority = cokret_core::Did::new(authority_did.to_owned())
+    let authority = arkret_core::Did::new(authority_did.to_owned())
         .map_err(|error| anyhow!("invalid authority DID: {error}"))?;
-    let payload = cokret_core::DeviceAuthorizePayload {
-        principal_id: cokret_core::Did::new(principal_id.to_owned())
+    let payload = arkret_core::DeviceAuthorizePayload {
+        principal_id: arkret_core::Did::new(principal_id.to_owned())
             .map_err(|error| anyhow!("invalid principal DID: {error}"))?,
         device_id: device_id.to_owned(),
         device_public_key: device_public_key.to_owned(),
@@ -333,7 +333,7 @@ fn service_attested_device_authorize_event(
             "ck.mls.v1".to_owned(),
         ],
         device_key_algorithm: None,
-        authorized_by: cokret_core::DeviceOrPrincipalRef::Did(authority.clone()),
+        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority.clone()),
         scopes: None,
         not_before: "2026-06-17T00:00:00Z"
             .parse()
@@ -343,8 +343,8 @@ fn service_attested_device_authorize_event(
         proof: None,
         cross_signing_binding: None,
         bootstrap_binding: None,
-        enrollment_authority_binding: Some(cokret_core::DeviceEnrollmentAuthorityBinding {
-            kind: cokret_core::DeviceEnrollmentAuthorityBinding::KIND_SERVICE_ATTESTED.to_owned(),
+        enrollment_authority_binding: Some(arkret_core::DeviceEnrollmentAuthorityBinding {
+            kind: arkret_core::DeviceEnrollmentAuthorityBinding::KIND_SERVICE_ATTESTED.to_owned(),
             authority_did: authority,
             authorization_ref: authorization_ref.to_owned(),
         }),
@@ -400,7 +400,7 @@ fn assert_enrollment_authority_service(
         .iter()
         .find(|service| {
             service.get("type").and_then(Value::as_str)
-                == Some(cokret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
+                == Some(arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
         })
         .context("CokretDeviceEnrollmentAuthority service")?;
     assert_eq!(

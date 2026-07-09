@@ -20,7 +20,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("account auth + device strand", () => {
   test("session-grant refresh endpoint surface probe", async ({ request }) => {
-    const probe = await request.post(`${solandBaseUrl()}/_cokret/gate/account/session-grants/refresh`, {
+    const probe = await request.post(`${solandBaseUrl()}/_arkret/gate/account/session-grants/refresh`, {
       data: { grant_jwt: "probe-grant", audience: "cotest" },
     });
     // 4xx for bad token / not implemented; 5xx is a bug.
@@ -34,7 +34,7 @@ test.describe("account auth + device strand", () => {
     expect([401, 403]).toContain(meResp.status());
   });
 
-  test("alice authenticates over the real account-authority bridge; coauth issues a short-term, device-bound ck.session.grant that authorizes /_cokret/self/*", async ({
+  test("alice authenticates over the real account-authority bridge; coauth issues a short-term, device-bound ck.session.grant that authorizes /_arkret/self/*", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1, key-management.md §6
@@ -56,7 +56,7 @@ test.describe("account auth + device strand", () => {
     expect(grantTtlMs).toBeGreaterThan(0);
     expect(grantTtlMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
 
-    const meUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
     const meResp = await request.get(meUrl, {
       headers: selfPathGrantHeaders({
         deviceKey: onboarded.deviceKey,
@@ -103,7 +103,7 @@ test.describe("account auth + device strand", () => {
     );
 
     // Device-2's grant authorizes the self-path with device-2's own key.
-    const meUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
     const meResp = await request.get(meUrl, {
       headers: selfPathGrantHeaders({
         deviceKey: device2.deviceKey,
@@ -121,7 +121,7 @@ test.describe("account auth + device strand", () => {
     expect(deviceIds).toContain(device2.deviceId);
   });
 
-  test("expired session grant triggers /_cokret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC", async ({
+  test("expired session grant triggers /_arkret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §4.1 (DPoP-bound session-grant rotation)
@@ -187,7 +187,7 @@ test.describe("account auth + device strand", () => {
     // verified against the Principal Server device signing-key directory, lets an
     // authorized device resume its grant chain without re-authentication. We
     // enrol the device signing key, then drive the holder-proof refresh and
-    // assert the rotated grant once again authorizes `/_cokret/self/*`.
+    // assert the rotated grant once again authorizes `/_arkret/self/*`.
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
@@ -221,7 +221,7 @@ test.describe("account auth + device strand", () => {
     expect(restoredGrant).not.toBe(onboarded.grantJwt);
 
     // The restored grant authorizes the self-path with the same device key.
-    const meUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
     const meResp = await request.get(meUrl, {
       headers: selfPathGrantHeaders({
         deviceKey: onboarded.deviceKey,

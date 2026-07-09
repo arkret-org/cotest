@@ -9,7 +9,7 @@
 ## Spec 锚点
 
 - `arkret-spec/spec/v1/zh/authz/policy-server.md` §2 — Realm `ck.realm.policy_server` Move 形状与 endpoint 字段
-- `arkret-spec/spec/v1/zh/authz/policy-server.md` §3 — `POST /_cokret/self/policy/check` request / response 契约,`{decision, reason, obligations[]}`
+- `arkret-spec/spec/v1/zh/authz/policy-server.md` §3 — `POST /_arkret/self/policy/check` request / response 契约,`{decision, reason, obligations[]}`
 - `arkret-spec/spec/v1/zh/authz/policy-server.md` §4 — obligation kinds (`log_event`、`require_step_up`、`mask_field`...) 与 fail-closed 默认
 - (附属) `arkret-spec/spec/v1/zh/authz/capabilities.md` §3 — 一次 cap-gated 操作的入口点(grant + policy_server 串行检查)
 
@@ -18,7 +18,7 @@
 - 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 1 × mock-policy-server (out-of-tree node mjs) — 通过 `process.env.MOCK_POLICY_SERVER_PORT` 暴露
-  - `POST /_cokret/self/policy/check` — 决策入口
+  - `POST /_arkret/self/policy/check` — 决策入口
   - `POST /scenarios` — 注入规则(切 decision / obligations / 注入 delay)
   - `GET /inspect` — 返回 `{kinds, checks[], signed_transcript}`,测试侧用于断言
 
@@ -43,17 +43,17 @@
 
 ### Phase A — Realm 声明 policy server endpoint
 
-1. **alice** 通过 `PUT /_cokret/self/realms/{realm_id}/policy-server` 配置 Realm policy server:
+1. **alice** 通过 `PUT /_arkret/self/realms/{realm_id}/policy-server` 配置 Realm policy server:
    ```json
    {
      "policy_server_did": "did:web:policy.example.com",
-     "policy_server_url": "http://127.0.0.1:${MOCK_POLICY_SERVER_PORT}/_cokret/self/policy/check",
+     "policy_server_url": "http://127.0.0.1:${MOCK_POLICY_SERVER_PORT}/_arkret/self/policy/check",
      "cache_ttl_seconds": 5,
      "timeout_ms": 1500,
      "on_timeout": "fail_closed"
    }
    ```
-2. 断言:`GET /_cokret/self/realms/{realm_id}/policy-server` 返回的 `policy_server_url` 等于 mock URL
+2. 断言:`GET /_arkret/self/realms/{realm_id}/policy-server` 返回的 `policy_server_url` 等于 mock URL
 3. 调 `GET ${MOCK_POLICY_SERVER_PORT}/inspect`,记录此时 `checks.length`(后续比较增量)
 
 ### Phase B — 默认 allow:invite 触发 /policy/check
@@ -117,14 +117,14 @@
 ## Edge cases / sub-tests
 
 - **E3.1 policy server 超时 fail-closed**:通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入 `{ delay_ms: 9000 }`(超过 soland 的 policy check timeout,假设默认 2s);soland 应 fail-closed(`decision = deny`,reason `policy_timeout`),邀请被拒;`/inspect.checks` 可能为空(请求未到 mock)或带 partial 标记
-- **E3.2 多个 policy_source 优先级**:在 Realm policy server 之上,再给 alice 当 owner 的 org 配置一条组织级 policy server binding(指向同一 mock 的不同 path,如 `/_cokret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)。组织级 HTTP binding 需等 operation registry 注册后再 live 化。
+- **E3.2 多个 policy_source 优先级**:在 Realm policy server 之上,再给 alice 当 owner 的 org 配置一条组织级 policy server binding(指向同一 mock 的不同 path,如 `/_arkret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)。组织级 HTTP binding 需等 operation registry 注册后再 live 化。
 - **E3.3 cache_ttl 幂等**:`cache_ttl_seconds = 5` 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
 
 (E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)
 
 ## 实现状态(2026-06,与 `tests/authz/policy-server-check.spec.ts` 对齐)
 
-后端集成已落地:`PUT/GET /_cokret/self/realms/{realm_id}/policy-server` 投影、cap-gated 路径上的 outbound `POST /_cokret/self/policy/check`(`soland/crates/server/src/routing/policy_gate.rs` → `authz::check_with_policy_server`)、per-realm `cache_ttl` 决策缓存、`on_timeout=fail_closed` 兜底、以及对 `PolicyCheckOutcome` 的签名 + frontier 校验(`authz/policy_client.rs`)。
+后端集成已落地:`PUT/GET /_arkret/self/realms/{realm_id}/policy-server` 投影、cap-gated 路径上的 outbound `POST /_arkret/self/policy/check`(`soland/crates/server/src/routing/policy_gate.rs` → `authz::check_with_policy_server`)、per-realm `cache_ttl` 决策缓存、`on_timeout=fail_closed` 兜底、以及对 `PolicyCheckOutcome` 的签名 + frontier 校验(`authz/policy_client.rs`)。
 
 但 soland 对**真实 allow 路径**有强约束:上游必须返回 spec §3 完整 `PolicyCheckOutcome`(回签 `bound_to`、三个 frontier digest 与 soland 运行时计算值逐字段一致、`signature.kid` 在声明的 `policy_server_did` 下可由 soland 的 DID resolver 验证)。harness 的 `mock-policy-server.mjs` 返回的是简化未签 body,且其 DID 不在 soland 信任集内,因此 soland 对任何 gated 操作一律 fail-closed(deny)。据此当前 e2e 覆盖的是 spec §4 的 **fail-closed 安全属性**(可确定性断言),而非 allow→deny→obligation 生命周期。
 
@@ -134,7 +134,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`PUT /_cokret/self/realms/{realm_id}/policy-server` 已覆盖配置投影;`POST /_cokret/self/policy/check` outbound call 在 cap-gated 路径上未挂;obligation executor (写 audit log + step-up + mask field 三个 kind);cache_ttl 缓存层;on_timeout=fail_closed 兜底分支。
+- **soland 缺口**:`PUT /_arkret/self/realms/{realm_id}/policy-server` 已覆盖配置投影;`POST /_arkret/self/policy/check` outbound call 在 cap-gated 路径上未挂;obligation executor (写 audit log + step-up + mask field 三个 kind);cache_ttl 缓存层;on_timeout=fail_closed 兜底分支。
 - **coauth 缺口**:无;policy server 走 soland → external HTTP,coauth 不参与。
 - **inkson 缺口**:邀请失败时的 error 渲染 testid (`invite-error`) 可能需要补;policy reason 文本展示。
 - **mock 缺口**:并行任务的 `mock-policy-server.mjs` 必须支持 `POST /scenarios`(规则注入)、`GET /inspect`(checks + signed_transcript)、ed25519 签名 transcript;这是本测试的硬依赖,本 spec 不重复指定,但任何字段不一致都会让本测试 fail。

@@ -78,7 +78,7 @@ param(
     # expiry -> unresolvable edge without a real 24h wait. soland clamps any value
     # back to the 24h ceiling, so this can only tighten the window.
     [int]$WebvhDegradedNoWitnessMaxSecs = 30,
-    # OAuth `client_id` soland advertises in `/_cokret/describe.auth_metadata.methods[].client_id`
+    # OAuth `client_id` soland advertises in `/_arkret/describe.auth_metadata.methods[].client_id`
     # (soland config `oidc_client_id`). MUST match a client registered at coauth; the joint
     # coauth config (coauth/config.dev.yaml) seeds the "Inkson Dev" client under this ULID.
     # Without it soland advertises no client_id and the browser OIDC bridge gets
@@ -1532,7 +1532,7 @@ try {
         }
         $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/_cokret/self/audit-agent/identity" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/_arkret/self/audit-agent/identity" -TimeoutSeconds 30
     }
     if ($StartMockPolicyServer) {
         $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
@@ -1541,7 +1541,7 @@ try {
         }
         $mockPolicyServerCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-policy-server.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-policy-server" -Command $mockPolicyServerCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockPolicyServerBaseUrl/_cokret/self/policy/health" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockPolicyServerBaseUrl/_arkret/self/policy/health" -TimeoutSeconds 30
     }
     if ($StartMockPushGateway) {
         $envExpr = "`$env:MOCK_PUSH_GATEWAY_PORT='$mockPushGatewayPort'"
@@ -1720,7 +1720,7 @@ try {
             "`$env:SOLAND_OAUTH_CLIENT_ID={4}; "
         ) -f `
             (Quote-PsLiteral $coauthTrimmed),
-            (Quote-PsLiteral "$coauthTrimmed/_cokret/gate/account/session-grants/introspect"),
+            (Quote-PsLiteral "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"),
             (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
             (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer),
             (Quote-PsLiteral $CoauthOAuthClientId)
@@ -1741,7 +1741,7 @@ try {
         $teabayTrimmed = $TeabayBaseUrl.TrimEnd("/")
         $solandTeabayEnv = (
             "`$env:SOLAND_DIRECTORY_ANNOUNCE_URL={0}; "
-        ) -f (Quote-PsLiteral "$teabayTrimmed/_cokret/find/directory/announce")
+        ) -f (Quote-PsLiteral "$teabayTrimmed/_arkret/find/directory/announce")
     }
 
     function Build-SolandDockerEnvironment {
@@ -1780,7 +1780,7 @@ try {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
-            $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_cokret/gate/account/session-grants/introspect"
+            $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $map.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
@@ -1791,7 +1791,7 @@ try {
         }
         if ($TeabayBaseUrl) {
             $teabayContainer = (Convert-ToContainerReachableUrl $TeabayBaseUrl).TrimEnd("/")
-            $map.SOLAND_DIRECTORY_ANNOUNCE_URL = "$teabayContainer/_cokret/find/directory/announce"
+            $map.SOLAND_DIRECTORY_ANNOUNCE_URL = "$teabayContainer/_arkret/find/directory/announce"
         }
         if ($FederationPeers) {
             $parts = $FederationPeers -split "\|", 2
@@ -2068,7 +2068,7 @@ try {
         $env:COTEST_COAUTH_SERVICE_DID = $CoauthServiceDid
         # The OAuth client_id soland is configured to advertise (see
         # $solandCoauthEnv / SOLAND_OAUTH_CLIENT_ID). Surfaced to e2e so
-        # oidc-login-chain.spec.ts can assert /_cokret/describe advertises it.
+        # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
         $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
         # Anti-false-green: coauth is up, so the crown-jewel cross-member paths
         # (MLS decrypt, cross-member kanban, multi-profile) MUST run. This flag
@@ -2717,7 +2717,7 @@ $summary = [pscustomobject]@{
     teabay_service_did = if ($TeabayBaseUrl) { $TeabayServiceDid } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
     coauth_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
-    coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_cokret/gate/account/session-grants/introspect" } else { $null }
+    coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_arkret/gate/account/session-grants/introspect" } else { $null }
     screenshots = $screenshotDir
     visual_baselines = $visualBaselineDir
     diagnostics = Join-Path $jointDir "diagnostics"

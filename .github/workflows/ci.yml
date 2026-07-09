@@ -291,4 +291,4 @@ jobs:
           -SkipBrowserInstall
           -RunProfile joint-smoke
           -PlaywrightProject ${{ matrix.project }}
-          -Grep "soland /_cokret/describe"
+          -Grep "soland /_arkret/describe"

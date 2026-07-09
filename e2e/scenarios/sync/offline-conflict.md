@@ -59,7 +59,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ### Phase F — Backfill via pull
 
-20. (sub-test)假设 bob 离线很久,本地缺很多 events;重连后先用 `GET /_cokret/self/account/subscribe?after=<old>&catchup=true`,缺口再用 `GET /_cokret/self/events?after=<old>`
+20. (sub-test)假设 bob 离线很久,本地缺很多 events;重连后先用 `GET /_arkret/self/account/subscribe?after=<old>&catchup=true`,缺口再用 `GET /_arkret/self/events?after=<old>`
 21. 断言:bob timeline 自动补齐离线期间的所有消息
 
 ## Edge cases

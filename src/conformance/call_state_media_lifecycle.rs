@@ -20,17 +20,17 @@
 //! integration target (see the `#[ignore]` live legs under `tests/`).
 //!
 //! `legal_hold_active` is the one reason code already minted in
-//! `cokret_core::error`; the rest are pinned as local consts until the SDK
+//! `arkret_core::error`; the rest are pinned as local consts until the SDK
 //! error enum grows them.
 
 use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_SCHEMA_VIOLATION, REASON_LEGAL_HOLD_ACTIVE,
     REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED, REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED,
     REASON_TRANSCRIPTION_DENIED,
 };
-use cokret_core::{
+use arkret_core::{
     BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
     CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingRetention,
@@ -103,7 +103,7 @@ fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
 
 const REASON_RECORDING_CONSENT_REQUIRED: &str = "recording_consent_required";
 // `REASON_TRANSCRIPTION_DENIED` / `REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED`
-// now come from `cokret_core::error` (imported above) instead of local pins.
+// now come from `arkret_core::error` (imported above) instead of local pins.
 const REASON_CALL_MODERATION_UNAUTHORISED: &str = "call_moderation_unauthorised";
 const REASON_CALL_PARTICIPANT_REMOVED: &str = "call_participant_removed";
 const REASON_CALL_SUMMARY_INVALID: &str = "call_summary_invalid";

@@ -13,8 +13,8 @@
 //!      (the dedicated `ck:accountability_grant:` typed-id family is retired).
 
 use anyhow::{Result, anyhow};
-use cokret_core::events::IDENTITY_ACCOUNTABILITY_GRANT;
-use cokret_core::{
+use arkret_core::events::IDENTITY_ACCOUNTABILITY_GRANT;
+use arkret_core::{
     AGENT_CAPABILITY_ACTIONS, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, EventId,
 };

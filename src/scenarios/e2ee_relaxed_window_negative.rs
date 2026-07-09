@@ -16,8 +16,8 @@
 //! This module covers the two negative branches.
 
 use anyhow::{Result, anyhow};
-use cokret_core::schema::embedded_error_code_identifiers;
-use cokret_core::{
+use arkret_core::schema::embedded_error_code_identifiers;
+use arkret_core::{
     REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE, REASON_RELAXED_WINDOW_EXCEEDS_CEILING,
 };
 

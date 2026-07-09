@@ -43,14 +43,14 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 
 ### Phase C — reporter 举报
 
-7. reporter 举报 `M1`,`POST /_cokret/self/moderation/report { realm_id, target_ref: M1.event_id, report_reason_code: "harassment" }`
+7. reporter 举报 `M1`,`POST /_arkret/self/moderation/report { realm_id, target_ref: M1.event_id, report_reason_code: "harassment" }`
    - reporter 响应只断言 `{report_id,status:"submitted"}`;不得向普通 reporter 暴露 `routed_to` 的具体 audit-agent / moderator DID。
 8. Report 触发 `audit_disclosure_policy.trigger = report_filed`
-9. soland 通知 audit-agent service:`POST <agent_url>/_cokret/self/audit-agent/invite` 与 `POST <agent_url>/_cokret/self/audit-agent/events`
+9. soland 通知 audit-agent service:`POST <agent_url>/_arkret/self/audit-agent/invite` 与 `POST <agent_url>/_arkret/self/audit-agent/events`
 
 ### Phase D — audit-agent 进入 + 解密
 
-10. audit-agent 收到 request → 调 `GET /_cokret/self/events/<M1.event_id>/audit-access?realm_id=<R_audit>`
+10. audit-agent 收到 request → 调 `GET /_arkret/self/events/<M1.event_id>/audit-access?realm_id=<R_audit>`
 11. soland 校验 audit-agent 是 audit_disclosure_policy.agent_id → 允许
 12. audit-agent 调 MLS KeyPackage / out-of-band 拿到 epoch key(spec 留 mechanism;可能需要群组重新加 audit-agent 进 MLS)
 13. audit-agent 解密 `M1` 得到 plaintext
@@ -73,7 +73,7 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 ## Implementation notes
 
 - **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `ck.message.create` 后自动追加 `ck.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/_soland/self/audit/franking/verify` 做 tamper 校验。
-- **2026-05-25 P2-045 local close**:soland `POST /_cokret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ck.audit.accessed` 记录写入 audit log。
+- **2026-05-25 P2-045 local close**:soland `POST /_arkret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ck.audit.accessed` 记录写入 audit log。
 - **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`ck.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
 - **仍待后续**:policy revoke 后的 `ck.audit.rejected_access` 细化测试保留为 E25.3 fixme;inkson realm-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
 

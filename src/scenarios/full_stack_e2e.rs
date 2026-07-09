@@ -46,7 +46,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use cokret_core::{
+use arkret_core::{
     Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
     DeliveryMode, Did, Handle, HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate,
     PayloadProof, RecipientServiceType, sanitize_blind_payload, sanitize_blind_payload_strict,
@@ -469,8 +469,8 @@ fn negative_stable_push_id_leak_rejected() -> Result<()> {
             Err(e)
                 if matches!(
                     e.reason_code,
-                    cokret_core::BlindPayloadReasonCode::ForbiddenField
-                        | cokret_core::BlindPayloadReasonCode::SensitiveLiteral
+                    arkret_core::BlindPayloadReasonCode::ForbiddenField
+                        | arkret_core::BlindPayloadReasonCode::SensitiveLiteral
                 ) =>
             {
                 // Expected — the sanitizer correctly refused the leak.
@@ -550,7 +550,7 @@ async fn live_stack_probe() -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("T8.1 live probe: teabay handle missing after bootstrap"))?;
     let resolve_url = format!(
-        "{}/_cokret/find/directory/resolve-handle",
+        "{}/_arkret/find/directory/resolve-handle",
         teabay.base_url.trim_end_matches('/')
     );
     let client = reqwest::Client::builder()
@@ -567,7 +567,7 @@ async fn live_stack_probe() -> Result<()> {
         }))
         .send()
         .await
-        .context("POST /_cokret/find/directory/resolve-handle on live teabay")?;
+        .context("POST /_arkret/find/directory/resolve-handle on live teabay")?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if !(status.is_success() || status.as_u16() == 404) {
@@ -607,7 +607,7 @@ async fn live_stack_probe() -> Result<()> {
             }]
         });
         let prod_resp = client
-            .post(prod_soland.url("/_cokret/self/events"))
+            .post(prod_soland.url("/_arkret/self/events"))
             .bearer_auth("cotest-bogus-token-not-a-real-session")
             .json(&placeholder_envelope)
             .send()

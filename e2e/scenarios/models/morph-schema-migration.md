@@ -26,7 +26,7 @@
 
 ## 拓扑
 
-- 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_cokret/describe`、`/_cokret/self/realms`、`/_cokret/self/realms/:id/events`
+- 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_arkret/describe`、`/_arkret/self/realms`、`/_arkret/self/realms/:id/events`
 - 1 × coauth (auth) — 给 alice 颁 dev session;`ck.morph.schema.migrate` capability action 通过 dev token 默认 grant 或在 Realm policy 中显式声明
 - 1 × cotest harness (Playwright `request` fixture) — 加载 `morph-type-decision-table.json` + `conformance-profiles.json` 中的 profile 块,把 capability 点清单直接作为 negative input source
 
@@ -41,7 +41,7 @@
 
 ## Pre-conditions
 
-- soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
+- soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_arkret/describe` 返回 200 + JSON
 - harness 能 ESM resolve `arkret-spec/spec/v1/artifacts/{registry,profiles}/*.json`(相对 `tests/models/*.spec.ts` 向上 4 级到 repo root)
 - alice 通过 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 拿到 bearer token
 - alice 已创建一个 test Realm `R`,记录 `realmId`,作为 Morph 容器
@@ -51,7 +51,7 @@
 ### Phase A — Unsupported transformation 类型 fail-closed
 
 1. **harness** 加载 `ck.profile.morph.schema_migration_transformations.v1` 块,抽出 `feature_discovery.required` 列表(`supported_compatibility_classes`、`transformation_rules_dialect`、`schema_migrate_capability_action`)
-2. **harness** 通过 `GET /_cokret/describe` 读取 soland 自称的 supported transformation set(如 describe 暴露了该 profile 的 feature discovery hint,例如 `describe.implemented_features.profile_features["ck.profile.morph.schema_migration_transformations.v1"].supported_compatibility_classes[]`)
+2. **harness** 通过 `GET /_arkret/describe` 读取 soland 自称的 supported transformation set(如 describe 暴露了该 profile 的 feature discovery hint,例如 `describe.implemented_features.profile_features["ck.profile.morph.schema_migration_transformations.v1"].supported_compatibility_classes[]`)
 3. **alice** 在 `R` 中先发一条 `ck.morph.create`,得到 `morphId`,该 Morph 的初始 `schema_refs = ["ck.schema.morph.customer_risk.v1"]`
 4. **alice** 发一条 `ck.morph.schema_migrate`,`payload` 形如:
    ```json
@@ -78,12 +78,12 @@
 7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
 8. 断言:
    - HTTP 2xx,Morph 当前 `schema_refs[]` = new set
-   - 后续 `GET /_cokret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
+   - 后续 `GET /_arkret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
    - audit log(`GET /_soland/self/audit/recent` 或等价)含一条 `schema_evolution` entry,记录 issuer + old/new schema_refs + authorization_ref
 9. **alice** 再发一条 `ck.morph.schema_migrate`,`compatibility_class = "additive"`:
    - to_schema_refs 在 v2 的 optional 扩展位上再叠一层
    - 不需要 profile opt-in,reducer MUST 接受(spec §4.1 S3 additive 段)
-10. 断言:HTTP 2xx;并且 spec §4.1 S1 — reader 重放历史 v1 event 时仍按 v1 schema 验证(harness 通过 `GET /_cokret/self/realms/${realmId}/events?morph_id=...` 拉历史,断言 event-level `requirements.schema[]` 与写入时绑定一致,未被静默改写)
+10. 断言:HTTP 2xx;并且 spec §4.1 S1 — reader 重放历史 v1 event 时仍按 v1 schema 验证(harness 通过 `GET /_arkret/self/realms/${realmId}/events?morph_id=...` 拉历史,断言 event-level `requirements.schema[]` 与写入时绑定一致,未被静默改写)
 
 ### Phase C — Breaking / transformation migration 需 profile + capability
 
@@ -111,7 +111,7 @@
     - `required_event_kinds` 含 `ck.morph.schema_migrate`
     - `additional_requirements` 含 `capability_must`、`from_set_check_must`、`deterministic_transformation_must`
     - `feature_discovery.required` 列出 3 个 discovery key (含 `schema_migrate_capability_action`)
-23. **harness** 通过 `GET /_cokret/describe` 读取 soland 自称支持的 Morph 行为(若 describe 暴露 `implemented_features.morph_decision_sources[]` 或等价 hint):每个 claim 都必须能映射到 precedence 表中的某个 `source`;若 describe 自称支持一个表外 source(典型:`facets` 作为 reducer 决策来源)→ fail
+23. **harness** 通过 `GET /_arkret/describe` 读取 soland 自称支持的 Morph 行为(若 describe 暴露 `implemented_features.morph_decision_sources[]` 或等价 hint):每个 claim 都必须能映射到 precedence 表中的某个 `source`;若 describe 自称支持一个表外 source(典型:`facets` 作为 reducer 决策来源)→ fail
 24. 当前 soland describe 未必暴露此 hint;若字段缺失,Phase E 的 describe 维度 `test.skip("describe 未暴露 morph_decision_sources hint — 无法验证 type registry alignment, only artifact load asserted")`
 25. 不变量:`precedence.length >= 4`(spec §4 顺序 1-4),且任何一条 `precedence[*]` 的 `consumed_by[*]` 与 `MUST_NOT_consume_by[*]` 集合 disjoint(防 spec 自身 drift)
 
@@ -136,7 +136,7 @@
 - **artifact loader**:复用 G1.T4 (`tests/conformance/registry-drift.spec.ts`) 的 `import.meta.url` + `dirname` + `resolve` 模式;artifacts 落在 `<repo_root>/arkret-spec/spec/v1/artifacts/`,相对 `cotest/e2e/tests/models/*.spec.ts` 是 `../../../../arkret-spec/spec/v1/artifacts`。Playwright 配置 `"type": "module"`(见 `e2e/package.json`),原生支持 ESM `import.meta.url`
 - **profile loader**:`conformance-profiles.json` 是单个大对象,profile-id → requirements 映射在 `profile_requirements.<profile_id>`,全局 v1 catalog 列表在 `implementation_profiles[]`;harness 解析后直接索引 `parsed.profile_requirements["ck.profile.morph.schema_migration_transformations.v1"]`,不要 deep-walk(profile id 是稳定 wire key,不存在 fallback)
 - **describe key 名 fallback**:Phase A step 2 / Phase E step 23 — soland 暴露的 profile feature discovery 字段路径未敲定,harness 按顺序尝试:`describe.implemented_features.profile_features[<profile_id>]` → `describe.profile_features[<profile_id>]` → `describe.feature_discovery[<profile_id>]`,第一个非空对象即视为有效 hint;全部 missing 时该子断言 `test.skip()`
-- **audit log scope**:Phase C 的 `schema_migration_breaking` 检查需要一个 audit query 端点;若 soland 仅暴露 per-event 检索而无 audit kind 过滤,harness 改为拉 `/_cokret/self/realms/${realmId}/events?kinds=ck.audit.*` 后 filter `audit_kind` field
+- **audit log scope**:Phase C 的 `schema_migration_breaking` 检查需要一个 audit query 端点;若 soland 仅暴露 per-event 检索而无 audit kind 过滤,harness 改为拉 `/_arkret/self/realms/${realmId}/events?kinds=ck.audit.*` 后 filter `audit_kind` field
 - **error code 集合宽松匹配**:registry `error-code-registry.json` 已显式列出 `morph_schema_refs_evolution_unauthorized` / `morph_schema_refs_transformation_unsupported` / `morph_schema_version_binding_missing`;但 reducer 早期实现可能用通用 `schema_violation` / `failed_precondition` + reason 字段。Phase A/B/C 用 `{ code, reason }` 双轨匹配,任一命中即视为通过
 - **fixme 范围**:Phase A / B / C / D 全部 `test.fixme`(Morph reducer 在 soland 当前是 partial,gap report §1.2/1.3 列为 schema 演进 implementation 缺口);Phase E 是纯 artifact + 可选 describe probe,LIVE
 - **no new helper**:全部逻辑放在 spec 文件内,只依赖 `helpers/env.ts` 的 `solandBaseUrl()` 与 `helpers/users.ts` 的 `ensureRegistered` / `issueDevSession` / `uniqueUser`

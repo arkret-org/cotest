@@ -114,7 +114,7 @@ test.describe("moderation appeal", () => {
         appellant.did,
       );
       const realmAfterBan = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(reviewerToken) },
       );
       expect(realmAfterBan.ok()).toBeTruthy();
@@ -620,7 +620,7 @@ async function postModerationEvent(
   kind: string,
   payload: Record<string, unknown>,
 ) {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedModerationEvent(actorDid, realmId, kind, payload),
   });

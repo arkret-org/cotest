@@ -130,7 +130,7 @@ test.describe("GDPR / audit / retention", () => {
     });
 
     // Pre-erasure: bob's directory search returns alice.
-    const before = await request.post(`${solandBaseUrl()}/_cokret/find/directory/search-actors`, {
+    const before = await request.post(`${solandBaseUrl()}/_arkret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { query: alice.did },
     });
@@ -150,7 +150,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(erase.status()).toBe(200);
 
     // Post-erasure: bob's directory search no longer returns alice.
-    const after = await request.post(`${solandBaseUrl()}/_cokret/find/directory/search-actors`, {
+    const after = await request.post(`${solandBaseUrl()}/_arkret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { query: alice.did },
     });
@@ -267,7 +267,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(retainedJson).not.toContain(oldBody);
 
     const direct = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events/${encodeURIComponent(sent.event_id)}`,
+      `${solandBaseUrl()}/_arkret/self/events/${encodeURIComponent(sent.event_id)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(direct.status()).toBe(200);

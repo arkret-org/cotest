@@ -73,7 +73,7 @@ test.describe("moderation and ban", () => {
     const beforeRedaction = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
-    const reportResp = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
+    const reportResp = await request.post(`${solandBaseUrl()}/_arkret/self/moderation/report`, {
       headers: authHeaders(bobToken),
       data: {
         realm_id: realmId,
@@ -113,7 +113,7 @@ test.describe("moderation and ban", () => {
     expect(ownerReports.ok()).toBeTruthy();
     expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
 
-    const unauthorizedBan = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const unauthorizedBan = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(bobToken),
       data: signedEventEnvelope({
         actorDid: bob.did,
@@ -152,7 +152,7 @@ test.describe("moderation and ban", () => {
     });
 
     const realmAfterBan = await request.get(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(realmAfterBan.ok()).toBeTruthy();
@@ -160,7 +160,7 @@ test.describe("moderation and ban", () => {
     expect(realmAfterBanBody.members ?? []).not.toContain(mallory.did);
 
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
-    const bannedWrite = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const bannedWrite = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(malloryToken),
       data: signedEventEnvelope({
         actorDid: mallory.did,
@@ -201,7 +201,7 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(afterRedactionCarol)).not.toContain(abusive);
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/export`,
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
@@ -252,7 +252,7 @@ test.describe("moderation and ban", () => {
       context: `second ban ${mallory.did}`,
     });
 
-    const realm = await request.get(`${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`, {
+    const realm = await request.get(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`, {
       headers: authHeaders(aliceToken),
     });
     expect(realm.ok()).toBeTruthy();
@@ -303,7 +303,7 @@ test.describe("moderation and ban", () => {
       });
 
       const realm = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(aliceToken) },
       );
       expect(realm.ok()).toBeTruthy();

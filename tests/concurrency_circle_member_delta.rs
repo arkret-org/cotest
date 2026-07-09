@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Result;
-use cokret_core::Did;
+use arkret_core::Did;
 use serial_test::serial;
 use tokio::sync::Mutex;
 
@@ -88,7 +88,7 @@ async fn concurrent_circle_member_delta_preserves_canonical_order() -> Result<()
     // ── Live-leg gate: opt in when the stack is up. Today this just
     //    documents the wire assertion we'd run; once soland exposes the
     //    member-list projection on the chosen Circle, swap to a real
-    //    `GET /_cokret/self/circles/<id>/members` and compare bytes.
+    //    `GET /_arkret/self/circles/<id>/members` and compare bytes.
     if std::env::var_os("COTEST_LIVE_STACK").is_some() {
         eprintln!(
             "TODO(C.8): COTEST_LIVE_STACK=1 was set but the live concurrent \

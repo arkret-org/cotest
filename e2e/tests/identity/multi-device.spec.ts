@@ -115,7 +115,7 @@ test.describe("multi-device pairing + revocation", () => {
     const newDeviceId = typedId("device");
 
     const pairResp = await request.post(
-      `${solandBaseUrl()}/_cokret/gate/account/device-pair`,
+      `${solandBaseUrl()}/_arkret/gate/account/device-pair`,
       {
         headers: authHeaders(token),
         data: {
@@ -164,7 +164,7 @@ test.describe("multi-device pairing + revocation", () => {
     //    anchors the PSK (did:key), verifies both §5.1 bindings, and runs the
     //    CAS check (expected_previous_generation=0 → generation=1).
     const publish = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(device1Token),
         data: signedEventEnvelope({
@@ -194,7 +194,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
     const authorizeNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const authorize = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(device1Token),
         data: signedEventEnvelope({
@@ -234,7 +234,7 @@ test.describe("multi-device pairing + revocation", () => {
     let ids: string[] = [];
     for (;;) {
       const viewer = await request.get(
-        `${solandBaseUrl()}/_cokret/self/account/viewer`,
+        `${solandBaseUrl()}/_arkret/self/account/viewer`,
         { headers: authHeaders(device1Token) },
       );
       if (viewer.ok()) {
@@ -272,7 +272,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
     const staleNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const staleAuthorize = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(device1Token),
         data: signedEventEnvelope({
@@ -324,7 +324,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
     const forgedNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const forgedAuthorize = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(device1Token),
         data: signedEventEnvelope({
@@ -365,7 +365,7 @@ test.describe("multi-device pairing + revocation", () => {
   }) => {
     // spec: device-lifecycle.md §6 (device list sync) + §8.2 (device-set
     // projection). After Device 1 authorizes Device 2, the principal's device
-    // list projection (GET /_cokret/self/account/viewer) MUST surface both
+    // list projection (GET /_arkret/self/account/viewer) MUST surface both
     // devices. The 30s budget is the spec's device-list convergence window.
     const alice = uniqueUser(`s10-device-list-${Date.now()}`);
     await ensureRegistered(request, alice);
@@ -379,7 +379,7 @@ test.describe("multi-device pairing + revocation", () => {
     let ids: string[] = [];
     for (;;) {
       const viewer = await request.get(
-        `${solandBaseUrl()}/_cokret/self/account/viewer`,
+        `${solandBaseUrl()}/_arkret/self/account/viewer`,
         { headers: authHeaders(device1Token) },
       );
       if (viewer.ok()) {
@@ -440,7 +440,7 @@ test.describe("multi-device pairing + revocation", () => {
     ).toBeTruthy();
   });
 
-  test("Device 1 revokes Device 2 via ck.device.revoke; Device 2's subsequent /_cokret/self/events POST is rejected and Device 2 shows revoked", async ({
+  test("Device 1 revokes Device 2 via ck.device.revoke; Device 2's subsequent /_arkret/self/events POST is rejected and Device 2 shows revoked", async ({
     request,
   }) => {
     // spec: device-lifecycle.md §2.2 + key-management.md §5.2. After a peer
@@ -459,7 +459,7 @@ test.describe("multi-device pairing + revocation", () => {
     const realmId = principalControlRealmForDid(alice.did);
 
     // Device 1 (a peer device) revokes Device 2 on the principal control stream.
-    const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(device1Token),
       data: signedEventEnvelope({
         actorDid: alice.did,
@@ -484,7 +484,7 @@ test.describe("multi-device pairing + revocation", () => {
     // gate (the spec stops accepting the device's new signed writes; the wire
     // shape is the generic auth rejection, not a 200).
     const afterRevoke = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(device2Token),
         data: signedEventEnvelope({
@@ -506,7 +506,7 @@ test.describe("multi-device pairing + revocation", () => {
 
     // Device 2 is reported revoked in Device 1's device-set projection.
     const viewer = await request.get(
-      `${solandBaseUrl()}/_cokret/self/account/viewer`,
+      `${solandBaseUrl()}/_arkret/self/account/viewer`,
       { headers: authHeaders(device1Token) },
     );
     const body = (await viewer.json()) as {
@@ -519,7 +519,7 @@ test.describe("multi-device pairing + revocation", () => {
     expect(device2Row!.status).toBe("revoked");
   });
 
-  test("revoking Device 2 removes its device_signing_key from /_cokret/self/keys/query and reports device_status=revoked", async ({
+  test("revoking Device 2 removes its device_signing_key from /_arkret/self/keys/query and reports device_status=revoked", async ({
     request,
   }) => {
     // spec: device-lifecycle.md §8.2. A revoked or unverified device MUST NOT
@@ -615,7 +615,7 @@ test.describe("multi-device pairing + revocation", () => {
     await revokeDeviceApi(request, alice, device1Token, device2Id);
 
     const claim = await request.post(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
+      `${solandBaseUrl()}/_arkret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(device1Token),
         data: {
@@ -740,7 +740,7 @@ test.describe("multi-device pairing + revocation", () => {
       ]);
 
       const claim = await request.post(
-        `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
+        `${solandBaseUrl()}/_arkret/self/keys/keypackages/claim`,
         {
           headers: authHeaders(device1Token),
           data: {
@@ -864,7 +864,7 @@ test.describe("multi-device pairing + revocation", () => {
       expect(proposalBody.accepted ?? []).toContain(removeProposalEventId);
 
       const staleRemoveCommit = await request.post(
-        `${solandBaseUrl()}/_cokret/self/events`,
+        `${solandBaseUrl()}/_arkret/self/events`,
         {
           headers: authHeaders(device1Token),
           data: signedEventEnvelope({
@@ -954,7 +954,7 @@ test.describe("multi-device pairing + revocation", () => {
         governanceBinding: mlsGovernanceBinding(group, 2, 2, [revokeEventId]),
       });
       const postRemoveWelcomeResp = await request.post(
-        `${solandBaseUrl()}/_cokret/self/events`,
+        `${solandBaseUrl()}/_arkret/self/events`,
         {
           headers: authHeaders(device1Token),
           data: postRemoveWelcome.envelope,
@@ -994,7 +994,7 @@ test.describe("multi-device pairing + revocation", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const selfRevoke = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
@@ -1042,7 +1042,7 @@ test.describe("multi-device pairing + revocation", () => {
 
     // Device 1 (verified, first device) queues a to-device message for Device 2.
     const sendResp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/device_messages`,
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
       {
         headers: {
           ...authHeaders(device1Token),
@@ -1074,7 +1074,7 @@ test.describe("multi-device pairing + revocation", () => {
 
     // Before revocation Device 2 can drain the queued message.
     const beforeDrop = await request.get(
-      `${solandBaseUrl()}/_cokret/self/device_messages`,
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
       { headers: authHeaders(device2Token) },
     );
     expect(beforeDrop.ok()).toBeTruthy();
@@ -1089,7 +1089,7 @@ test.describe("multi-device pairing + revocation", () => {
     ).toBeTruthy();
 
     // Device 1 revokes Device 2 — this drops the queued to-device message.
-    const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(device1Token),
       data: signedEventEnvelope({
         actorDid: alice.did,
@@ -1112,7 +1112,7 @@ test.describe("multi-device pairing + revocation", () => {
     // After revocation Device 2's session is fail-closed at the auth gate, so
     // the previously-queued message can never be drained by the revoked device.
     const afterDrop = await request.get(
-      `${solandBaseUrl()}/_cokret/self/device_messages`,
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
       { headers: authHeaders(device2Token) },
     );
     expect(
@@ -1234,7 +1234,7 @@ test.describe("multi-device pairing + revocation", () => {
 
       await device1.page.getByTestId("device-pair-approval-approve").click();
 
-      // Approval finalizes through POST /_cokret/gate/account/device-pair, which
+      // Approval finalizes through POST /_arkret/gate/account/device-pair, which
       // writes the new device `verified`; it then surfaces in alice's device-set
       // projection (status=active) within the convergence window.
       await expect
@@ -1335,7 +1335,7 @@ test.describe("multi-device pairing + revocation", () => {
     // spec: device-lifecycle.md §7.
     // The /settings/devices/pair pending-pairing-requests-card renders the
     // to-device inbox via parse_pending_pairing_requests and approves through
-    // POST /_cokret/gate/account/device-pair; pending-pairing-refresh-button
+    // POST /_arkret/gate/account/device-pair; pending-pairing-refresh-button
     // re-reads the inbox after the background sync has drained the request.
     const device1Session = await createDpopUserSession(
       request,
@@ -1438,7 +1438,7 @@ async function promoteDeviceToVerified(
 ) {
   const realmId = principalControlRealmForDid(user.did);
   const identity = generateCrossSigningIdentity({ principalId: user.did });
-  const eventsUrl = `${solandBaseUrl()}/_cokret/self/events`;
+  const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
   const publish = await request.post(eventsUrl, {
     headers: selfPathHeaders(headersSource, "POST", eventsUrl),
     data: signedEventEnvelope({
@@ -1531,13 +1531,13 @@ async function deliverPairingRequest(
     .toISOString()
     .replace(/\.\d{3}Z$/, "Z");
   const sendResp = await request.post(
-    `${solandBaseUrl()}/_cokret/self/device_messages`,
+    `${solandBaseUrl()}/_arkret/self/device_messages`,
     {
       headers: {
         ...selfPathHeaders(
           senderHeadersSource,
           "POST",
-          `${solandBaseUrl()}/_cokret/self/device_messages`,
+          `${solandBaseUrl()}/_arkret/self/device_messages`,
         ),
         "Idempotency-Key": `pair-${requestingDeviceId}`,
       },
@@ -1575,14 +1575,14 @@ async function deliverPairingRequest(
 }
 
 /// Read a single device's `status` out of alice's device-set projection
-/// (`GET /_cokret/self/account/viewer`). Returns `undefined` when the device is
+/// (`GET /_arkret/self/account/viewer`). Returns `undefined` when the device is
 /// absent or the read fails.
 async function pollDeviceStatus(
   request: APIRequestContext,
   headersSource: SelfPathHeadersSource,
   deviceId: string,
 ): Promise<string | undefined> {
-  const viewerUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+  const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
   const viewer = await request.get(viewerUrl, {
     headers: selfPathHeaders(headersSource, "GET", viewerUrl),
   });
@@ -1605,7 +1605,7 @@ async function publishCrossSigningForUser(
 ): Promise<CrossSigningIdentity> {
   const realmId = principalControlRealmForDid(user.did);
   const identity = generateCrossSigningIdentity({ principalId: user.did });
-  const publish = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  const publish = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
       actorDid: user.did,
@@ -1639,7 +1639,7 @@ async function authorizeDeviceWithCrossSigning(
   });
   const authorizeNotBefore = canonicalTimestamp();
   const authorize = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
+    `${solandBaseUrl()}/_arkret/self/events`,
     {
       headers: authHeaders(token),
       data: signedEventEnvelope({
@@ -1682,7 +1682,7 @@ async function revokeDeviceApi(
   deviceId: string,
 ): Promise<string> {
   const eventId = typedId("event");
-  const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
       actorDid: user.did,
@@ -1711,7 +1711,7 @@ async function queryDeviceKeyRecord(
   principalId: string,
   deviceId: string,
 ): Promise<Record<string, unknown>> {
-  const queryUrl = `${solandBaseUrl()}/_cokret/self/keys/query`;
+  const queryUrl = `${solandBaseUrl()}/_arkret/self/keys/query`;
   const response = await request.post(queryUrl, {
     headers: selfPathHeaders(headersSource, "POST", queryUrl),
     data: {
@@ -1913,7 +1913,7 @@ async function uploadDeviceKeyPackages(
     sig: b64url(`device-signature-${deviceId}-${Date.now()}`),
   };
   const publish = await request.post(
-    `${solandBaseUrl()}/_cokret/self/keys/keypackages/upload`,
+    `${solandBaseUrl()}/_arkret/self/keys/keypackages/upload`,
     {
       headers: authHeaders(token),
       data: {

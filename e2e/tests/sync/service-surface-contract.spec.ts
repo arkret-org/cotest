@@ -9,11 +9,11 @@
 //
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/arkret.rs::server_describe`) already serve
-// `GET /_cokret/describe` with the claim-level partition layer in place, so the two
+// `GET /_arkret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
 // list-pagination cursor on `ck.self.events.query.scan`) and Phase D (generic
-// `Idempotency-Key` header path on POST /_cokret/self/events) are all live on
+// `Idempotency-Key` header path on POST /_arkret/self/events) are all live on
 // soland.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
@@ -50,7 +50,7 @@ type ErrorEnvelope = {
 
 async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   const unknown = await request.get(
-    `${solandBaseUrl()}/_cokret/self/__definitely_does_not_exist__/probe`,
+    `${solandBaseUrl()}/_arkret/self/__definitely_does_not_exist__/probe`,
   );
   expect(unknown.status(), "unknown API path status").toBe(404);
   expect(unknown.headers()["content-type"] ?? "", "unknown path content-type").toContain(
@@ -64,7 +64,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
   expect(unknownBody.request_id, "unknown path request_id").toMatch(/^ck:[a-z_]+:/);
 
-  const wrongMethod = await request.post(`${solandBaseUrl()}/_cokret/describe`);
+  const wrongMethod = await request.post(`${solandBaseUrl()}/_arkret/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
   expect(wrongMethod.headers()["content-type"] ?? "", "wrong method content-type").toContain(
     "application/json",
@@ -119,7 +119,7 @@ function submittedEventOutcome(
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
 
 test.describe("describes soland surface @fully-implemented", () => {
-  test("soland /_cokret/describe returns canonical ServiceDescribe shape", async ({
+  test("soland /_arkret/describe returns canonical ServiceDescribe shape", async ({
     request,
   }, testInfo) => {
     // spec: service-surface.md §3 (canonical shape), §3.0 (claim-level partition),
@@ -129,7 +129,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     // fields (implemented_features / claimed_profiles / verified_profiles /
     // experimental_features / compat_surfaces + development_mode) are partitioned
     // correctly, and that dev-mode posture forces verified_profiles == [].
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
     const body = await resp.json();
@@ -181,7 +181,7 @@ test.describe("describes soland surface @fully-implemented", () => {
 });
 
 test.describe("describes coauth surface @fully-implemented", () => {
-  test("coauth /_cokret/describe returns auth_server shape and does not claim identity_registry", async ({
+  test("coauth /_arkret/describe returns auth_server shape and does not claim identity_registry", async ({
     request,
   }, testInfo) => {
     // spec: service-surface.md §3 (service_type naming — auth_server),
@@ -192,7 +192,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
     const baseUrl = coauthBaseUrl();
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
 
-    const resp = await request.get(`${baseUrl}/_cokret/describe`);
+    const resp = await request.get(`${baseUrl}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
     const body = await resp.json();
@@ -259,7 +259,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         signature?: unknown;
         timestamp?: unknown;
       };
-      const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+      const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
       expect(resp.status()).toBe(200);
       const body = await resp.json();
       const claimed = (body.claimed_profiles ?? []) as ProfileClaim[];
@@ -359,7 +359,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       });
       const eventId = String(envelope.event_id);
 
-      const first = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const first = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: envelope,
       });
@@ -368,7 +368,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(submittedEventId(firstBody)).toBe(eventId);
       expect(submittedEventOutcome(firstBody, eventId)).toBe("accepted");
 
-      const duplicate = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const duplicate = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: envelope,
       });
@@ -391,7 +391,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ck.content.text", body: `${body} drift` },
         },
       });
-      const conflict = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: drift,
       });
@@ -413,7 +413,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
       //
-      // The `ck.self.events.query.scan` list surface at GET /_cokret/self/events
+      // The `ck.self.events.query.scan` list surface at GET /_arkret/self/events
       // is the first list endpoint to reach the §7.1 wire shape exactly:
       // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
       const stamp = Date.now();
@@ -440,7 +440,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
             content: { kind: "ck.content.text", body: `page seed ${i} ${stamp}` },
           },
         });
-        const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
           headers: authHeaders(token),
           data: envelope,
         });
@@ -451,7 +451,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       const cursorRe = /^ck:cursor:[A-Za-z0-9_-]+$/;
       const fetchPage = async (after?: string) => {
-        const url = new URL(`${solandBaseUrl()}/_cokret/self/events`);
+        const url = new URL(`${solandBaseUrl()}/_arkret/self/events`);
         url.searchParams.set("realms", realmId);
         url.searchParams.set("limit", "2");
         if (after) {
@@ -526,7 +526,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(validCursor, "first page must carry a next_cursor to tamper").toMatch(cursorRe);
       const flippedChar = validCursor![validCursor!.length - 1] === "A" ? "B" : "A";
       const tampered = validCursor!.slice(0, -1) + flippedChar;
-      const tamperUrl = new URL(`${solandBaseUrl()}/_cokret/self/events`);
+      const tamperUrl = new URL(`${solandBaseUrl()}/_arkret/self/events`);
       tamperUrl.searchParams.set("realms", realmId);
       tamperUrl.searchParams.set("limit", "2");
       tamperUrl.searchParams.set("after", tampered);
@@ -552,7 +552,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //         related Event is fully synced or expired).
       //
       // soland honours the generic `Idempotency-Key` header on POST
-      // /_cokret/self/events, scoped to the authenticated principal: first
+      // /_arkret/self/events, scoped to the authenticated principal: first
       // request executes + caches its response; same key + same canonical body
       // replays the cached first response; same key + a different canonical body
       // is `duplicate_conflict`. This is independent of Event-ID idempotency, so
@@ -595,7 +595,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R1 — first request under the key executes and is cached.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
-      const r1 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
         data: b1,
       });
@@ -607,7 +607,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(submittedEventOutcome(r1Body, String(b1.event_id))).toBe("accepted");
 
       // R2 — same key + SAME canonical body replays the cached first response.
-      const r2 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const r2 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
         data: b1,
       });
@@ -622,7 +622,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R3 — same key + DIFFERENT canonical body (fresh event_id) → duplicate_conflict.
       const b2 = messageEnvelope(`idem body ${stamp} v2-divergent`);
-      const r3 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const r3 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
         data: b2,
       });
@@ -644,7 +644,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //         Event.requirements.features[] / requirements.critical_extensions[]
       //         pointing at a feature this implementation has NOT advertised),
       //       service-surface.md §2.4 (services must publish supported_features).
-      const describe = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+      const describe = await request.get(`${solandBaseUrl()}/_arkret/describe`);
       expect(describe.status()).toBe(200);
       const description = await describe.json();
       const declared = new Set<string>([
@@ -675,7 +675,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       });
       (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
 
-      const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { authorization: `Bearer ${token}` },
         data: envelope,
       });
@@ -732,7 +732,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       ];
       refreshEventEnvelopeProof(envelope);
 
-      const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { authorization: `Bearer ${token}` },
         data: envelope,
       });

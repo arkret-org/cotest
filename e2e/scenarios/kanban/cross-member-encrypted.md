@@ -43,13 +43,13 @@
 2. alice 邀请 bob;断言邀请状态含 `MLS Welcome queued`(KeyPackage 被 claim)。
 3. bob accept **加入**(此后内容才是 bob 可合法见+可解密的加入后内容)。
 4. alice **加入后**建 board + list + card(title 明文)+ 给 card 加**加密 description**(私有 `body`);断言 `ck.strand.update` 被接受且 description **不以明文出现在 wire**。
-5. **跨成员投递闸门**:以 bob 身份查 `/_cokret/self/events?realms=` 必含 board space id(隔离 soland 投递 vs inkson 投影)。
+5. **跨成员投递闸门**:以 bob 身份查 `/_arkret/self/events?realms=` 必含 board space id(隔离 soland 投递 vs inkson 投影)。
 6. bob 深链进 `/kanban/{realm}/board/{boardId}`;bootstrap **backfill realm 事件并 ingest 进 raw_operations**→board Space 投影进 switcher→路由/auto-select 选中→列表卡片渲染。
 7. **核心断言**:bob 打开卡片,`card-description-panel` 含 alice 的明文 description,且 `card-detail-body-locked` 计数为 0(真解密,非锁态)。
 8. **假绿护栏**:目标卡不得渲染成 `kanban-card-redacted`(解密/水化失败占位)。
 9. **reload 存活**:bob 刷新后卡片与解密正文仍在(防"闪现即消失"= live refresh 覆盖 bootstrap backfill)。
 10. **反向投影**:bob 建自己的卡,alice 刷新后能看到(admission fork 历史上双向都断)。
-11. **原始 wire**:alice 拉 `/_cokret/self/events` 原始事件,description 永不以明文出现。
+11. **原始 wire**:alice 拉 `/_arkret/self/events` 原始事件,description 永不以明文出现。
 
 ## 关键前置(harness/产品修复,均为让本场景真正跑通)
 

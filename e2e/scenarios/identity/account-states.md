@@ -40,7 +40,7 @@
 4. 客户端:revoke session grant(coauth)、清 localStorage 的 session_credential
 5. 断言:`/_soland/self/account/me` with old session credential → 401
 6. 断言:account state 仍 `active`(soft_logged_out 是客户端语义;spec 可能也建模为 server state,要查)
-7. alice 用旧 grant + DPoP holder proof 走 `/_cokret/gate/account/session-grants/refresh` → 拿新 session grant,回到正常
+7. alice 用旧 grant + DPoP holder proof 走 `/_arkret/gate/account/session-grants/refresh` → 拿新 session grant,回到正常
 
 ### Phase C — Lock(安全风险)
 

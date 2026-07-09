@@ -52,7 +52,7 @@ function recordFloorViolations(page: Page): string[] {
   const hits: string[] = [];
   page.on("response", (response) => {
     if (
-      !response.url().includes("/_cokret/self/events") ||
+      !response.url().includes("/_arkret/self/events") ||
       response.request().method() !== "POST"
     ) {
       return;
@@ -360,7 +360,7 @@ test.describe("kanban end-to-end", () => {
       },
     });
     const loserResponse = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: loserMove },
     );
     expect(loserResponse.status()).toBe(409);
@@ -424,7 +424,7 @@ test.describe("kanban end-to-end", () => {
       },
     });
     const response = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: crossRealm },
     );
     expect(response.status()).toBe(412);
@@ -484,7 +484,7 @@ test.describe("kanban end-to-end", () => {
       },
     });
     const response = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: trackWrite },
     );
     expect(response.status()).toBe(412);
@@ -689,7 +689,7 @@ test.describe("kanban end-to-end", () => {
     const floorViolations: string[] = [];
     alicePage.page.on("response", (response) => {
       if (
-        !response.url().includes("/_cokret/self/events") ||
+        !response.url().includes("/_arkret/self/events") ||
         response.request().method() !== "POST"
       ) {
         return;
@@ -768,7 +768,7 @@ test.describe("kanban end-to-end", () => {
       // not bounced by the content-encryption floor.
       const strandUpdate = alicePage.page.waitForResponse(
         (response) =>
-          response.url().includes("/_cokret/self/events") &&
+          response.url().includes("/_arkret/self/events") &&
           response.request().method() === "POST" &&
           (response.request().postData() ?? "").includes("ck.strand.update"),
         { timeout: 60_000 },
@@ -850,7 +850,7 @@ test.describe("kanban end-to-end", () => {
 
       const strandUpdate = alicePage.page.waitForResponse(
         (response) =>
-          response.url().includes("/_cokret/self/events") &&
+          response.url().includes("/_arkret/self/events") &&
           response.request().method() === "POST" &&
           (response.request().postData() ?? "").includes("ck.strand.update"),
         { timeout: 60_000 },
@@ -925,7 +925,7 @@ test.describe("kanban end-to-end", () => {
 
       const messageCreate = alicePage.page.waitForResponse(
         (response) =>
-          response.url().includes("/_cokret/self/events") &&
+          response.url().includes("/_arkret/self/events") &&
           response.request().method() === "POST" &&
           (response.request().postData() ?? "").includes("ck.message.create"),
         { timeout: 60_000 },

@@ -35,7 +35,7 @@ import {
 
 // ── Spec signal-type enum (webrtc-signaling.md §5.1) ─────────────────────────
 //
-// The canonical `payload.signal_type` enum from `cokret_sdk::CALL_SIGNAL_TYPES`
+// The canonical `payload.signal_type` enum from `arkret_sdk::CALL_SIGNAL_TYPES`
 // (14 values). The retired soland stack accepted `offer` / `ice` /
 // `device_change`; those are NOT spec signal types and a spec-faithful receiver
 // (`validate_call_signal_envelope`) rejects them with `schema_violation`. The
@@ -413,7 +413,7 @@ export function newCallId(): string {
 // ── Ephemeral submit + subscribe read-back (canonical wire) ──────────────────
 
 /**
- * Submit a `ck.call.signal` envelope to `POST /_cokret/self/ephemeral`. Returns
+ * Submit a `ck.call.signal` envelope to `POST /_arkret/self/ephemeral`. Returns
  * the raw response so callers can assert both success and negative (e.g.
  * `capability_denied`) paths.
  */
@@ -422,7 +422,7 @@ export async function postCallSignalRaw(
   token: string,
   envelope: Record<string, unknown>,
 ): Promise<APIResponse> {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/ephemeral`, {
     headers: authHeaders(token),
     data: envelope,
   });
@@ -453,7 +453,7 @@ export async function postCallSignal(
 
 /**
  * Read the verbatim relayed `ck.call.signal` envelopes a Realm member receives
- * via `GET /_cokret/self/account/subscribe`. Returns them oldest-first across
+ * via `GET /_arkret/self/account/subscribe`. Returns them oldest-first across
  * all matching realms.
  */
 export async function relayedCallSignals(
@@ -494,7 +494,7 @@ export { authHeaders };
 // ── Media-service binding (CKP-0010) — token exchange helpers ────────────────
 //
 // These back the `ck.realm.media_service` foci configuration and the
-// `POST /_cokret/self/rtc/token` media token exchange. The foci selection
+// `POST /_arkret/self/rtc/token` media token exchange. The foci selection
 // follows the spec oldest-membership-wins rule (media-service-binding.md §5);
 // the issued LiveKit token is a standard 3-segment JWT so the harness can
 // decode the LiveKit `video` grant claims without a live SFU.
@@ -585,7 +585,7 @@ export async function exchangeMediaToken(
     capability_refs?: string[];
   },
 ): Promise<APIResponse> {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/rtc/token`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/rtc/token`, {
     headers: authHeaders(token),
     data: body,
   });
@@ -639,7 +639,7 @@ export async function fetchIceConfig(
     mode?: string;
   },
 ): Promise<APIResponse> {
-  return await request.post(`${solandBaseUrl()}/_cokret/self/rtc/ice-config`, {
+  return await request.post(`${solandBaseUrl()}/_arkret/self/rtc/ice-config`, {
     headers: authHeaders(token),
     data: { mode: "p2p", ...body },
   });

@@ -6,12 +6,12 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_HISTORY_NOT_VISIBLE, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
     REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE, REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
     REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
 };
-use cokret_core::{
+use arkret_core::{
     CircleScopeError, EncryptionFloor, EncryptionProfile, validate_circle_encryption_floor,
     validate_content_encryption_floor, validate_content_encryption_floor_ratchet,
     validate_metadata_encryption_floor_ratchet,

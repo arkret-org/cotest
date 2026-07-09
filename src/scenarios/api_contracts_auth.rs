@@ -5,13 +5,13 @@ use serde_json::json;
 use crate::fixtures::TestScaffold;
 use crate::harness::{CokretServer, expect_api_error, expect_json, expect_status};
 
-pub async fn framework_errors_and_invalid_json_use_cokret_envelopes() -> Result<()> {
+pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
     // CT-12: scaffold-driven, parallel-safe.
     let scaffold = TestScaffold::fresh("api-errors").await?;
     let server = scaffold.server();
 
     let missing = expect_api_error(
-        server.http().get(server.url("/_cokret/self/missing")),
+        server.http().get(server.url("/_arkret/self/missing")),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
@@ -19,7 +19,7 @@ pub async fn framework_errors_and_invalid_json_use_cokret_envelopes() -> Result<
     assert!(missing["request_id"].as_str().is_some());
 
     expect_api_error(
-        server.http().post(server.url("/_cokret/describe")),
+        server.http().post(server.url("/_arkret/describe")),
         StatusCode::METHOD_NOT_ALLOWED,
         "method_not_allowed",
     )
@@ -27,7 +27,7 @@ pub async fn framework_errors_and_invalid_json_use_cokret_envelopes() -> Result<
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -44,7 +44,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({"principal_id": "bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"})),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -54,7 +54,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let registered = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({
                 "principal_id": "did:web:alice-auth.example",
                 "display_name": "alice-auth",
@@ -68,7 +68,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let second_device = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({
                 "principal_id": "did:web:alice-auth.example",
                 "display_name": "alice-auth",
@@ -99,7 +99,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let me = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/account/viewer"))
+            .get(server.url("/_arkret/self/account/viewer"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -109,7 +109,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/_cokret/self/account/viewer")),
+            .get(server.url("/_arkret/self/account/viewer")),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -118,7 +118,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let logout = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/session-grants/revoke"))
+            .post(server.url("/_arkret/gate/account/session-grants/revoke"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -128,7 +128,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     expect_status(
         server
             .http()
-            .get(server.url("/_cokret/self/account/viewer"))
+            .get(server.url("/_arkret/self/account/viewer"))
             .bearer_auth(token),
         StatusCode::UNAUTHORIZED,
     )
@@ -142,7 +142,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let alice = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({
                 "principal_id": "did:web:alice-contact.example",
                 "display_name": "Alice",
@@ -170,7 +170,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let bob = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({
                 "principal_id": "did:web:bob-contact.example",
                 "display_name": "Bob",
@@ -184,7 +184,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/contacts/request"))
+            .post(server.url("/_arkret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:alice-contact.example"})),
         StatusCode::BAD_REQUEST,
@@ -194,7 +194,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/contacts/request"))
+            .post(server.url("/_arkret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:missing-contact.example"})),
         StatusCode::NOT_FOUND,
@@ -205,7 +205,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let requested = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/contacts/request"))
+            .post(server.url("/_arkret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:bob-contact.example"})),
         StatusCode::CREATED,
@@ -216,7 +216,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let duplicate = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/contacts/request"))
+            .post(server.url("/_arkret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:bob-contact.example"})),
         StatusCode::OK,

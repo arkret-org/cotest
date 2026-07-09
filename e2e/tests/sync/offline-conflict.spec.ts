@@ -183,7 +183,7 @@ test.describe("offline sync + conflict repair", () => {
       // spec: sync/federation.md §4.2 (pull / backfill uses the same peer events
       // query endpoint). Mirrors the federation "peer query recovery" active
       // test: while bob is offline alice writes, and on reconnect the missing
-      // event is pulled via GET /_cokret/peer/events and bob's timeline catches
+      // event is pulled via GET /_arkret/peer/events and bob's timeline catches
       // up to head.
       test.skip(
         !hasDualSoland(),
@@ -355,7 +355,7 @@ async function waitForMember(
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {

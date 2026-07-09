@@ -53,7 +53,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase D — bob 视角验证 erasure
 
 13. bob 同步 `S` → timeline 中 alice 的消息显示 `[user erased]` tombstone
-14. bob `GET /_cokret/self/actors/<alice.did>/profile` → 返回 anonymized / 404
+14. bob `GET /_arkret/self/actors/<alice.did>/profile` → 返回 anonymized / 404
 15. bob 在 directory 搜 alice handle → 不再找到
 
 ### Phase E — Audit log entries

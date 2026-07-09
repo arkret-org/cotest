@@ -76,7 +76,7 @@ async function expectConsentCell(
   expectedState: "active" | "revoked" | "expired" | "pending",
 ) {
   const cell = await request.get(
-    `${solandBaseUrl()}/_cokret/self/consent/cells/${encodeURIComponent(holderDid)}` +
+    `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(holderDid)}` +
       `?peer=${encodeURIComponent(peerDid)}&scope=${encodeURIComponent(scope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
@@ -110,7 +110,7 @@ async function requestContactApi(
         ? "voice_call"
         : scope;
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/contacts/request`,
+    `${solandBaseUrl()}/_arkret/self/contacts/request`,
     {
       headers: authHeaders(token),
       data: { target: targetDid, requested_scopes: [wireScope] },
@@ -311,7 +311,7 @@ test.describe("consent grant", () => {
     ]);
 
     const open = await request.post(
-      `${solandBaseUrl()}/_cokret/open/mimi/consent/request`,
+      `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
       {
         headers: authHeaders(bobToken),
         data: {
@@ -327,7 +327,7 @@ test.describe("consent grant", () => {
     expect(openBody.consent_id).toMatch(/^ck:consent:/);
 
     const update = await request.post(
-      `${solandBaseUrl()}/_cokret/open/mimi/consent/update`,
+      `${solandBaseUrl()}/_arkret/open/mimi/consent/update`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -685,7 +685,7 @@ test.describe("consent grant", () => {
         .poll(
           async () => {
             const cell = await request.get(
-              `${solandBaseUrl()}/_cokret/self/consent/cells/${encodeURIComponent(alice.did)}` +
+              `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(alice.did)}` +
                 `?peer=${encodeURIComponent(bob.did)}&scope=invite`,
               { headers: { authorization: `Bearer ${aliceToken}` } },
             );

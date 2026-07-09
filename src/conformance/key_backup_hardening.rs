@@ -1,11 +1,11 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED,
     REASON_RECOVERY_EVIDENCE_UNBOUND,
 };
-use cokret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
+use arkret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;

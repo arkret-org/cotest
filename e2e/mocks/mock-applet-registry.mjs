@@ -182,17 +182,17 @@ function signedPackage(body) {
       endpoints: [
         {
           method: "POST",
-          path: "/_cokret/edge/applet/transactions",
+          path: "/_arkret/edge/applet/transactions",
           auth: "webhook_signature",
         },
         {
           method: "GET",
-          path: "/_cokret/edge/applet/actors/{actor_id}",
+          path: "/_arkret/edge/applet/actors/{actor_id}",
           auth: "bearer",
         },
         {
           method: "GET",
-          path: "/_cokret/edge/applet/realms/{realm_id_or_alias}",
+          path: "/_arkret/edge/applet/realms/{realm_id_or_alias}",
           auth: "bearer",
         },
       ],

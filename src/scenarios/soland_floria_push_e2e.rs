@@ -8,7 +8,7 @@
 //!      the standard `ck.edge.push.command.register_device` operation. soland forwards the
 //!      registration to floria (the push gateway) per the principal/push bridge contract.
 //!   2. A message-creation event in a Space alice is in triggers soland's notify rule.
-//!   3. Soland calls floria's `POST /_cokret/edge/push/notify` with a blind-wakeup envelope (no
+//!   3. Soland calls floria's `POST /_arkret/edge/push/notify` with a blind-wakeup envelope (no
 //!      sender DID, no message body, no Space id — only `push_target_id`, `wakeup_kind`, and
 //!      `devices[]`).
 //!   4. Floria's `custom` pushkin dispatches to a mock HTTPS receiver we stand up in-process; the
@@ -174,7 +174,7 @@ async fn push_sink(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         .expect("push mock state injected")
         .notifications
         .clone();
-    if let Ok(body) = req.parse_json::<cokret_core::PushNotifyRequestBody>().await {
+    if let Ok(body) = req.parse_json::<arkret_core::PushNotifyRequestBody>().await {
         let body = serde_json::to_value(body).unwrap_or(Value::Null);
         notifications.lock().unwrap().push(body);
     }

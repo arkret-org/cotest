@@ -3,9 +3,9 @@
 //
 // This is the real-run replacement for the old `S8 circle member manage`
 // placeholder that was `test.skip`'d in contact-graph.spec.ts (soland now ships
-// the `/_cokret/self/circles/*` admin surface — CKP-0007).
+// the `/_arkret/self/circles/*` admin surface — CKP-0007).
 //
-// HTTP face: `/_cokret/self/circles` (now a normative Arkret surface — the
+// HTTP face: `/_arkret/self/circles` (now a normative Arkret surface — the
 // `ck.self.circle.*` operations are published in the arkret-spec OpenAPI
 // artifact, operation registry, and contract catalog; see helpers/circle-api.ts
 // header for the full reasoning. The legacy `/_soland` mirror was retired).

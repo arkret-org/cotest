@@ -26,7 +26,7 @@ messaging/triad-collaboration 主流程的小变种:验证 `world_readable` 这�
 
 1. alice createRealm `S_open`,`discoverability=public`,`join_rule=public`,`history_visibility=world_readable`
 2. alice 邀请 bob 后 bob acceptInvite;两人交换若干消息 `M1..M5`
-3. **outsider**(已登录,非成员)访问 `/timeline/<R_open>` 或 API `GET /_cokret/self/events?realms=<R_open>`
+3. **outsider**(已登录,非成员)访问 `/timeline/<R_open>` 或 API `GET /_arkret/self/events?realms=<R_open>`
 4. 断言:outsider 看得到 `M1..M5`(world_readable 允许)
 5. **anonymous**(没有 session token)访问 same endpoint
 6. 断言:也能看到(spec §3.7 world_readable 允许非加密 spaces 的匿名读)

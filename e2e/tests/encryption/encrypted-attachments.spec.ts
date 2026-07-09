@@ -45,7 +45,7 @@ test.describe("encrypted attachments", () => {
   test("blob upload endpoint exists and rejects unauthenticated downloads with opaque error", async ({
     request,
   }) => {
-    const uploadResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
+    const uploadResp = await request.post(`${solandBaseUrl()}/_arkret/self/blob/upload`, {
       headers: {
         "x-arkret-realm-id": "ak:realm:0196419b-0000-7000-8000-00000000prob",
         "x-arkret-content-digest":
@@ -65,7 +65,7 @@ test.describe("encrypted attachments", () => {
 
     const probeBlobRef = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     const getResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(probeBlobRef)}&purpose=download`,
+      `${solandBaseUrl()}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(probeBlobRef)}&purpose=download`,
       {},
     );
     // Spec §5: non-existent and unauthorized must look the same — opaque 403/404.
@@ -116,7 +116,7 @@ test.describe("encrypted attachments", () => {
       media_type: "application/octet-stream",
     };
 
-    const upload = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
+    const upload = await request.post(`${solandBaseUrl()}/_arkret/self/blob/upload`, {
       headers: {
         ...authHeaders(aliceToken),
         "x-arkret-filename": "cat.png",
@@ -150,7 +150,7 @@ test.describe("encrypted attachments", () => {
     expect(JSON.stringify(body.upload_receipt)).not.toContain("ciphertext_digest");
 
     const bobDownload = await request.get(
-      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
+      `${solandBaseUrl()}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
       { headers: authHeaders(bobToken) },
     );
     if (!bobDownload.ok()) {
@@ -166,7 +166,7 @@ test.describe("encrypted attachments", () => {
     expect(Buffer.compare(bobBytes, ciphertext)).toBe(0);
     expect(sha256Digest(bobBytes)).toBe(ciphertextDigest);
 
-    const presign = await request.post(`${solandBaseUrl()}/_cokret/self/blob/presign`, {
+    const presign = await request.post(`${solandBaseUrl()}/_arkret/self/blob/presign`, {
       headers: authHeaders(aliceToken),
       data: { blob_ref: body.blob_ref, purpose: "message_attachment" },
     });
@@ -174,7 +174,7 @@ test.describe("encrypted attachments", () => {
     expect(wireErrCode(await presign.json())).toBe("capability_denied");
 
     const malloryDownload = await request.get(
-      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
+      `${solandBaseUrl()}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
       { headers: authHeaders(malloryToken) },
     );
     expect(malloryDownload.status()).toBe(404);
@@ -186,7 +186,7 @@ test.describe("encrypted attachments", () => {
     expect(deniedText).not.toContain(body.blob_ref);
 
     const missing = await request.get(
-      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(
+      `${solandBaseUrl()}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(
         "ak:blob:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       )}&purpose=message_attachment`,
       { headers: authHeaders(malloryToken) },
@@ -210,7 +210,7 @@ test.describe("encrypted attachments", () => {
     test.skip(!agentBaseUrl, "mock-audit-agent not started for audited E2EE");
     await request.delete(`${agentBaseUrl}/inspect`);
     const identity = await (
-      await request.get(`${agentBaseUrl}/_cokret/self/audit-agent/identity`)
+      await request.get(`${agentBaseUrl}/_arkret/self/audit-agent/identity`)
     ).json();
     const agentDid = String(identity.did);
 
@@ -295,7 +295,7 @@ test.describe("encrypted attachments", () => {
     };
 
     const report = await request.post(
-      `${solandBaseUrl()}/_cokret/self/moderation/report`,
+      `${solandBaseUrl()}/_arkret/self/moderation/report`,
       {
         headers: authHeaders(reporterToken),
         data: {
@@ -316,7 +316,7 @@ test.describe("encrypted attachments", () => {
     // The bound audit agent receives the report (and its franking_proof)
     // in its inbox.
     const inbox = await (
-      await request.get(`${agentBaseUrl}/_cokret/self/audit-agent/inbox`)
+      await request.get(`${agentBaseUrl}/_arkret/self/audit-agent/inbox`)
     ).json();
     const inboxText = JSON.stringify(inbox);
     expect(inboxText).toContain(reportId);

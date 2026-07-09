@@ -62,7 +62,7 @@ conformance_test!(
 
 conformance_test!(
     /// Cross-language canonical-JSON parity: the SDK canonicaliser
-    /// (cokret_core::canonical) must reproduce every golden vector in
+    /// (arkret_core::canonical) must reproduce every golden vector in
     /// e2e/fixtures/canonical-cross-check.json byte-for-byte. The TS port
     /// (e2e/tests/conformance/canonical-cross-lang.spec.ts) asserts the same
     /// golden, so the two implementations are pinned to one shared truth.

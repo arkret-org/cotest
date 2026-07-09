@@ -44,7 +44,7 @@ pub async fn teabay_resolve_realm_three_lookups_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
-    let url = proc.url("/_cokret/find/directory/resolve-realm");
+    let url = proc.url("/_arkret/find/directory/resolve-realm");
 
     // --- by realm_id ------------------------------------------------------
     let probe = json!({ "realm_id": "cotest-tb2-realm-id" });

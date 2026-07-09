@@ -315,7 +315,7 @@ async function listMessageBodies(
   realmId: string,
 ): Promise<string[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
+    `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();
@@ -353,7 +353,7 @@ async function eventsSubscribeBodies(
   realmId: string,
 ): Promise<string[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/events/subscribe?realms=${encodeURIComponent(
+    `${solandBaseUrl()}/_arkret/self/events/subscribe?realms=${encodeURIComponent(
       realmId,
     )}&limit=100&max_duration_ms=100&heartbeat_ms=100`,
     { headers: authHeaders(token) },

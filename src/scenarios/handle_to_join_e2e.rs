@@ -23,7 +23,7 @@
 //! the full four-service stack and silently skips otherwise), this scenario:
 //!
 //!  - **Happy path** — boots `four_service_bootstrap` when COAUTH_BIN / SOLAND_BIN / TEABAY_BIN are
-//!    all available and exercises the live `/_cokret/find/directory/resolve-handle` surface. When
+//!    all available and exercises the live `/_arkret/find/directory/resolve-handle` surface. When
 //!    the stack is partial (the default cargo-test posture), the scenario falls back to the SDK
 //!    candidate builder, exercising the same `audience` / `expires_at` / `subject_id` /
 //!    `binding_source` invariants that the live teabay row in T3.4 enforces.
@@ -37,7 +37,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use cokret_core::{
+use arkret_core::{
     Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
     DeliveryMode, Did, Handle, HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate,
     PayloadProof, RecipientServiceType,
@@ -416,7 +416,7 @@ async fn live_stack_probe() -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("T3.5 live probe: teabay handle missing after bootstrap"))?;
     let url = format!(
-        "{}/_cokret/find/directory/resolve-handle",
+        "{}/_arkret/find/directory/resolve-handle",
         teabay.base_url.trim_end_matches('/')
     );
     let client = reqwest::Client::builder()
@@ -433,7 +433,7 @@ async fn live_stack_probe() -> Result<()> {
         }))
         .send()
         .await
-        .context("POST /_cokret/find/directory/resolve-handle to live teabay")?;
+        .context("POST /_arkret/find/directory/resolve-handle to live teabay")?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
 

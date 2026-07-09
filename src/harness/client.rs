@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use cokret_http_client::Client as SdkClient;
+use arkret_http_client::Client as SdkClient;
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
@@ -110,7 +110,7 @@ impl TestActorClient {
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
         let event = event_envelope(&self.actor, realm_id, kind, payload);
         let mut body = expect_json(
-            self.post("/_cokret/self/events").json(&event),
+            self.post("/_arkret/self/events").json(&event),
             StatusCode::OK,
         )
         .await?;
@@ -120,7 +120,7 @@ impl TestActorClient {
 
     pub async fn sync(&self) -> Result<Value> {
         let response = expect_response(
-            self.get("/_cokret/self/account/subscribe?catchup=true")
+            self.get("/_arkret/self/account/subscribe?catchup=true")
                 .header("accept", "application/x-ndjson"),
             StatusCode::OK,
         )

@@ -144,7 +144,7 @@ test.describe("core object invariants", () => {
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
-        const realmUrl = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`;
+        const realmUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
         const realmRes = await request.get(realmUrl, {
           headers: authFor("GET", realmUrl),
         });
@@ -172,7 +172,7 @@ test.describe("core object invariants", () => {
         // RealmLifecycleResponse does not currently surface. The events
         // query response item shape follows the Event Envelope projection:
         // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
-        const eventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
+        const eventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
         const eventsRes = await request.get(eventsUrl, {
           headers: authFor("GET", eventsUrl),
         });
@@ -255,7 +255,7 @@ test.describe("core object invariants", () => {
       // A ck.strand.update carrying a STALE `head_eq` precondition (claims
       // status == "closed" when it is actually "open") MUST reject with
       // failed_precondition and apply NO effect.
-      const staleMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const staleMove = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -286,7 +286,7 @@ test.describe("core object invariants", () => {
 
       // A FRESH head_eq precondition (claims the real head status == "open")
       // MUST admit and apply the patch.
-      const freshMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const freshMove = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -367,7 +367,7 @@ test.describe("core object invariants", () => {
 
       // Archiving the parent MUST NOT cascade to the child per spec §3.4;
       // soland's cascade behaviour means this assertion does not yet hold.
-      const archiveRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const archiveRes = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -380,7 +380,7 @@ test.describe("core object invariants", () => {
 
       // Tombstone with a live dependent MUST fail with space_has_live_dependents
       // (not yet enforced by soland).
-      const tombFail = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const tombFail = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -479,7 +479,7 @@ test.describe("core object invariants", () => {
       // the same signed envelope is accepted by the events submit surface.
       const dupRelationId = typedId("relation");
       await createDefaultView(v2, dupRelationId);
-      const dupAgain = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const dupAgain = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -519,7 +519,7 @@ test.describe("core object invariants", () => {
         realmB,
         `card in B ${stamp}`,
       );
-      const crossRealm = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const crossRealm = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,

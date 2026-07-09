@@ -5,8 +5,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use arkret::{SecretShareRequestContent, SecretShareSendContent};
-use cokret_core::canonical::{canonical_json_bytes, from_canonical_json_slice};
-use cokret_core::{
+use arkret_core::canonical::{canonical_json_bytes, from_canonical_json_slice};
+use arkret_core::{
     DeviceId, DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody, Did,
 };
 use hpke_rs::{Hpke, HpkePrivateKey, HpkePublicKey, Mode};

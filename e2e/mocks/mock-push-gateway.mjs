@@ -11,10 +11,10 @@
 //     gateway accepted a payload without re-revealing E2EE content.
 //
 // Endpoints:
-//   POST /_cokret/edge/push/register-device
+//   POST /_arkret/edge/push/register-device
 //     body = { pusher_id, app_id, push_key, push_token, device_did, kind, dnd? }
 //     Register a pusher. `kind` ∈ {"http","apns","fcm"}.
-//   POST /_cokret/edge/push/notify
+//   POST /_arkret/edge/push/notify
 //     body = { pusher_id, payload, blind_wake?, priority?, event_id? }
 //     Honours DnD: if the gateway's current time falls inside either the
 //     pusher's DnD window or the global quiet_hours window, the call logs
@@ -242,7 +242,7 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  if (url.pathname === "/_cokret/edge/push/register-device" && req.method === "POST") {
+  if (url.pathname === "/_arkret/edge/push/register-device" && req.method === "POST") {
     const body = await readJson(req);
     if (
       !body ||
@@ -290,7 +290,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/edge/push/notify" && req.method === "POST") {
+  if (url.pathname === "/_arkret/edge/push/notify" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.pusher_id || body.payload === undefined) {
       res.statusCode = 400;

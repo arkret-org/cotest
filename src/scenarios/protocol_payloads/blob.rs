@@ -1,4 +1,4 @@
-//! Phase 8 — `/_cokret/self/blob/{upload,get}`.
+//! Phase 8 — `/_arkret/self/blob/{upload,get}`.
 //!
 //! Confirms that a sha-mismatch upload is rejected with `409`, then runs the
 //! happy-path upload + range GET. The returned `blob_ref` is consumed by the
@@ -19,7 +19,7 @@ async fn sha_mismatch_is_rejected(server: &CokretServer, token: &str) -> Result<
     expect_status(
         server
             .http()
-            .post(server.url("/_cokret/self/blob/upload"))
+            .post(server.url("/_arkret/self/blob/upload"))
             .bearer_auth(token)
             .header(
                 "x-arkret-content-digest",
@@ -39,7 +39,7 @@ async fn upload_then_range_get(server: &CokretServer, token: &str) -> Result<()>
     let blob = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/blob/upload"))
+            .post(server.url("/_arkret/self/blob/upload"))
             .bearer_auth(token)
             .multipart(crate::scenarios::delivery_media::blob_upload_form(
                 b"encrypted-bytes",
@@ -60,7 +60,7 @@ async fn upload_then_range_get(server: &CokretServer, token: &str) -> Result<()>
         server
             .http()
             .get(server.url(&format!(
-                "/_cokret/self/blob/get?blob_ref={}&purpose=message.attachment",
+                "/_arkret/self/blob/get?blob_ref={}&purpose=message.attachment",
                 blob["blob_ref"].as_str().unwrap()
             )))
             .bearer_auth(token)

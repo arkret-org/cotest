@@ -401,7 +401,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "event_digest": event_digest,
         "redaction_authorization_ref": redaction_event_id,
     });
-    let digest = cokret_core::canonical::canonical_sha256(&stub)
+    let digest = arkret_core::canonical::canonical_sha256(&stub)
         .map_err(|err| anyhow!("hard_erasure_receipt: canonical stub digest failed: {err}"))?;
     if !stub_validator.is_valid(&stub) {
         let detail = stub_validator
@@ -500,7 +500,7 @@ fn verify_erasure_receipt_stub_digest(receipt: &Value, retained_stub: &Value) ->
     if proofs.is_empty() {
         bail!("erasure receipt proofs must not be empty");
     }
-    let recomputed = cokret_core::canonical::canonical_sha256(retained_stub)
+    let recomputed = arkret_core::canonical::canonical_sha256(retained_stub)
         .map_err(|err| anyhow!("erasure receipt retained_stub canonicalization failed: {err}"))?;
     if recomputed != digest {
         bail!("erasure_receipt_stub_digest_mismatch");

@@ -34,13 +34,13 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
         surfaces.iter().any(|surface| {
             surface["name"] == "push_register_device"
-                && surface["path"] == "/_cokret/edge/push/register-device"
+                && surface["path"] == "/_arkret/edge/push/register-device"
         })
     }));
     assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
         surfaces.iter().any(|surface| {
             surface["name"] == "agent_runtime_attestation"
-                && surface["path"] == "/_cokret/gate/account/agent-key-pair"
+                && surface["path"] == "/_arkret/gate/account/agent-key-pair"
         })
     }));
     assert_eq!(
@@ -62,15 +62,15 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     assert_eq!(auth_bridge["contract"], "arkret.rest.principal_bridge.v1");
     assert_eq!(
         auth_bridge["auth"]["session_grant_issuance_path"],
-        "/_cokret/gate/account/session-grants"
+        "/_arkret/gate/account/session-grants"
     );
     assert_eq!(
         auth_bridge["auth"]["session_grant_presentation"],
-        "Authorization: Bearer <ck.session.grant> with a DPoP proof on /_cokret/self/*"
+        "Authorization: Bearer <ck.session.grant> with a DPoP proof on /_arkret/self/*"
     );
     assert_eq!(
         auth_bridge["push"]["register_device_path"],
-        "/_cokret/edge/push/register-device"
+        "/_arkret/edge/push/register-device"
     );
     assert_eq!(
         auth_bridge["examples"]["session_grant_issue_request"]["principal_id"],
@@ -110,7 +110,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert_eq!(
         push_bridge["examples"]["resolve_request"]["push_gateway_url"],
-        "https://floria.example/_cokret/edge/push/notify"
+        "https://floria.example/_arkret/edge/push/notify"
     );
     assert_eq!(
         push_bridge["examples"]["fetch_request"]["force_refresh"],

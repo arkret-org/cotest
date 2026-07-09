@@ -48,7 +48,7 @@
 - `alice` 的 browser context 通过 `inkson.config.v1` localStorage 注入 server_url / account_did / device_id / session_credential
 - `remote_agent` 的 DID Document 暴露至少一个 `service` entry,且 `serviceEndpoint` 字段精确等于 mock-agent-runtime 实际监听的 base URL (spec §6 步骤 4 normative MUST)
 - mock-agent-runtime 健康检查 `GET /healthz` 返回 200,且 `GET /.well-known/agent-card.json` 返回符合 A2A AgentCard 形状的 JSON;ACP `GET /info` 返回 metadata
-- soland 已认领 `ck.profile.agent_runtime.v1` extension profile (gap:目前 `/_cokret/describe` 的 `claimed_profiles` 大概率没有这一条,见 Implementation notes)
+- soland 已认领 `ck.profile.agent_runtime.v1` extension profile (gap:目前 `/_arkret/describe` 的 `claimed_profiles` 大概率没有这一条,见 Implementation notes)
 
 ## Steps
 
@@ -57,22 +57,22 @@
 1. **alice** 进入 inkson `/agents`,断言 `agents-panel` 渲染 (live probe);
 2. **alice** 通过 `agent-register-form` 录入 `remote_agent.did` + `protocol = "a2a"` + `capabilities = "strand.read,strand.publish"`,点 `agent-register-submit-button`;
 3. 断言 `agent-register-status` 文本包含 `event_id`,且 `agent-endpoint-row` 出现一条以 `remote_agent.did` 为 head 的记录;
-4. **harness** 调 `GET /_cokret/root/identity/${remote_agent.did}/did-document` 拉 DID Document,断言其中 `service[].serviceEndpoint` 与 mock-agent-runtime base URL 字节级相等 (spec §6 步骤 4 的 host pinning 前置条件);
-5. **local_agent** (通过 harness HTTP) 调 `POST /_cokret/self/agents/discover` (gap),传 `{ agent_id: remote_agent.did }`;断言返回 `{ supported_protocols: ["a2a", "acp"], agent_card_url, metadata_url }`,且 protocol 列表与 §11 adapter registry 合法 ID 子集一致 (`a2a` / `acp` / `mcp_bridge` / `http_custom`)。
+4. **harness** 调 `GET /_arkret/root/identity/${remote_agent.did}/did-document` 拉 DID Document,断言其中 `service[].serviceEndpoint` 与 mock-agent-runtime base URL 字节级相等 (spec §6 步骤 4 的 host pinning 前置条件);
+5. **local_agent** (通过 harness HTTP) 调 `POST /_arkret/self/agents/discover` (gap),传 `{ agent_id: remote_agent.did }`;断言返回 `{ supported_protocols: ["a2a", "acp"], agent_card_url, metadata_url }`,且 protocol 列表与 §11 adapter registry 合法 ID 子集一致 (`a2a` / `acp` / `mcp_bridge` / `http_custom`)。
 
 ### Phase B — Capability approval (§4 / §7 capability constraint / §8 启动前检查)
 
 6. **alice** 在 inkson `/agents` 触发一个 protocol session draft — 选择 `remote_agent.did`、勾选 `requires_human_approval = true`、把 `allowed_protocols` 限定为 `["a2a"]`、`max_duration_seconds = 3600`、`max_artifact_bytes = 10485760`、`egress_policy = "metadata_only"`、`audit_mode = "summary_and_artifacts"`;
 7. **alice** 在 `publish-modal-confirm` 之前必须看到一个明确的 human-approval gate (spec §4 要求 explicit + authorizable);**alice** 点 confirm 提交 capability grant `cg`;
 8. 断言 soland 写入一条 `ck.capability.grant.create` 事件,`payload.actions` 包含 `ck.agent.protocol_session.start`,`payload.constraint.allowed_endpoints` 是单值列表精确指向 mock-agent-runtime base URL (spec §7 的 wildcard `https://*.trusted.example` 在测试里要收敛成精确值);
-9. **harness** 再用 `local_agent` token 调 `POST /_cokret/self/agents/sessions` 不带 `capability_grant_ref` → 断言 HTTP 4xx 且 `error.code === "policy_denied"` (spec §12),证明启动前 capability 检查生效。
+9. **harness** 再用 `local_agent` token 调 `POST /_arkret/self/agents/sessions` 不带 `capability_grant_ref` → 断言 HTTP 4xx 且 `error.code === "policy_denied"` (spec §12),证明启动前 capability 检查生效。
 
 ### Phase C — Invocation handoff with transcript (§5.2 / §5.3 / §6 步骤 5-7 / §9 audit modes)
 
-10. **local_agent** (harness HTTP) 调 `POST /_cokret/self/agents/sessions` body `{ session_id, counterparty_agent: remote_agent.did, protocol: "a2a", endpoint_ref, capability_grant: cg, allowed_artifact_types: ["text","json"], max_duration_seconds: 3600, audit_mode: "summary_and_artifacts" }`;
-11. 断言响应 200,且 soland 在 `GET /_cokret/self/account/subscribe?catchup=true` 或 `GET /_cokret/self/events` 里能立即观察到 `ck.agent.protocol_session.start` 事件 (kind 严格相等);
+10. **local_agent** (harness HTTP) 调 `POST /_arkret/self/agents/sessions` body `{ session_id, counterparty_agent: remote_agent.did, protocol: "a2a", endpoint_ref, capability_grant: cg, allowed_artifact_types: ["text","json"], max_duration_seconds: 3600, audit_mode: "summary_and_artifacts" }`;
+11. 断言响应 200,且 soland 在 `GET /_arkret/self/account/subscribe?catchup=true` 或 `GET /_arkret/self/events` 里能立即观察到 `ck.agent.protocol_session.start` 事件 (kind 严格相等);
 12. **soland** (`routing/events/agent_bridge.rs`) 触发外部协议握手:向 mock-agent-runtime `POST /v1/a2a/tasks` 投递 task,带 RFC 9421 HTTP Message Signature + Content-Digest (gap,见 Implementation notes);
-13. **mock-agent-runtime** 在 N×500ms 节奏内向 soland `POST /_cokret/self/agents/sessions/${session_id}/status` 至少回写三条 `status` 事件,枚举至少包含 `negotiating → accepted → working` (spec §5.3 标准状态集合);
+13. **mock-agent-runtime** 在 N×500ms 节奏内向 soland `POST /_arkret/self/agents/sessions/${session_id}/status` 至少回写三条 `status` 事件,枚举至少包含 `negotiating → accepted → working` (spec §5.3 标准状态集合);
 14. **alice** 在 inkson `/agents` 的 `agent-session-list` 看到 `agent-session-row` 出现,`status` 字段在 3s 内从 `negotiating` 推进到 `working`;
 15. **harness** 断言:在 `audit_mode = "summary_and_artifacts"` 下,soland **不会**为每个外部 token 都持久化 status 事件;3 条 status 摘要事件足以满足 spec §9 的节流要求;反向证明:同一次 handoff 在 `status_only` 模式下 status 事件数 ≤ 1。
 
@@ -86,15 +86,15 @@
 
 ### Phase E — Audit chain verification (§5 + §9 + agent_binding SDK)
 
-21. **harness** 调 `GET /_cokret/self/events?after=<cursor>` 拉一组事件,按 `event_kind` 过滤出本次 session_id 的全部记录,断言顺序严格为 `start → status (negotiating) → status (accepted) → status (working) → result (completed)` (不允许 status 在 start 之前出现,不允许 result 之后再有 status);
+21. **harness** 调 `GET /_arkret/self/events?after=<cursor>` 拉一组事件,按 `event_kind` 过滤出本次 session_id 的全部记录,断言顺序严格为 `start → status (negotiating) → status (accepted) → status (working) → result (completed)` (不允许 status 在 start 之前出现,不允许 result 之后再有 status);
 22. 对每个事件,断言其 `prev_event_id` 与上一条的 `event_id` 一致 (audit chain hash 链);
-23. 对 `result` 事件,用 `cokret_sdk::agent_binding::verify_audit_binding_by_kind` 跑一次 in-process 校验 — 通过则证明 SDK 与 soland 签发端一致 (与 `inkson/src/views/agents.rs::verify_agent_audit_binding` 完全等价);
+23. 对 `result` 事件,用 `arkret_sdk::agent_binding::verify_audit_binding_by_kind` 跑一次 in-process 校验 — 通过则证明 SDK 与 soland 签发端一致 (与 `inkson/src/views/agents.rs::verify_agent_audit_binding` 完全等价);
 24. **alice** 在 `/agents` 顶部的 `agent-incoming-poll-tick` 出现 `tick N`,且 `agent-incoming-status` 显示 `1 result event(s) (1 new since last poll)` 至少一次,证明 inkson 的 4s 轮询拉到了刚回写的 result 事件;
 25. **harness** 把整段事件链写入测试 artifact (testInfo attach `agent-handoff-audit-chain.json`),便于人工审查。
 
 ## Observable assertions (合并清单)
 
-- Phase A:`agents-panel` 渲染、`agent-endpoint-row` 出现、DID Document `service.serviceEndpoint` 与 mock URL 字节级相等、`POST /_cokret/self/agents/discover` 返回 `supported_protocols` 是 §11 adapter registry 子集
+- Phase A:`agents-panel` 渲染、`agent-endpoint-row` 出现、DID Document `service.serviceEndpoint` 与 mock URL 字节级相等、`POST /_arkret/self/agents/discover` 返回 `supported_protocols` 是 §11 adapter registry 子集
 - Phase B:`ck.capability.grant.create` 持久化、`allowed_endpoints` 精确单值、缺失 `capability_grant_ref` 的启动尝试返回 `policy_denied`
 - Phase C:session.start event 在 backfill 中可见;status 事件 3s 内推进 `negotiating → working`;`summary_and_artifacts` 节流模式下 status 事件数远少于实际 token 数
 - Phase D:result 事件携带 `result_objects` / `artifacts` / `external_transcript_digest` 三者至少之一;`audit_binding.binding_kind === "ed25519_v1"`;inkson 渲染 `audit valid` 徽章;publish 落地 Strand 保留 `attribution`
@@ -104,7 +104,7 @@
 
 - **E1.1 agent rejects capability**:mock-agent-runtime 在 Phase C 步骤 12 收到 task 后直接返回 403 / `remote_rejected`;soland 必须写入一条 `ck.agent.protocol_session.result` (status=`failed`、`error.code="remote_rejected"`),并**不再**伪造 status(working);inkson 徽章应该是 `no binding` (Absent,因为 fail-closed 路径不签 audit_binding,见 `agent_bridge.rs::maybe_emit_echo_result_for_session_start` 的 unknown_agent 分支)。
 - **E1.2 transcript hash mismatch**:mock-agent-runtime 在 result 里故意写一个错误的 `external_transcript_digest` (不匹配它实际投递的 transcript);harness 用本地重算的 hash 与 result 字段比对,断言报告 mismatch;reducer 在严格 audit 模式下应拒绝 publish (返回 4xx + `error.code="artifact_rejected"`,spec §12)。
-- **E1.3 endpoint binding drift**:mock-agent-runtime 在 Phase A 之后偷偷换 `serviceEndpoint` 到另一个 host;在 Phase C 步骤 10 调 `POST /_cokret/self/agents/sessions` 时,soland 必须重新校验 DID Document service binding (spec §6 步骤 4 normative MUST),发现 mismatch 后返回 `policy_denied`。
+- **E1.3 endpoint binding drift**:mock-agent-runtime 在 Phase A 之后偷偷换 `serviceEndpoint` 到另一个 host;在 Phase C 步骤 10 调 `POST /_arkret/self/agents/sessions` 时,soland 必须重新校验 DID Document service binding (spec §6 步骤 4 normative MUST),发现 mismatch 后返回 `policy_denied`。
 - **E1.4 audit gap repaired**:故意 drop 一条 status 事件 (模拟网络),手动 POST 一条带正确 `prev_event_id` 的补偿事件,断言 reducer 接受并把 audit chain 修补回完整链;再跑一次 Phase E 步骤 21-22,顺序与 prev_event_id 链都仍然连贯。
 - **E1.5 cancel mid-flight**:alice 在 Phase C `working` 状态时点 session cancel;soland 发出 `ck.agent.protocol_session.cancel` (capability `ck.agent.protocol_session.cancel`,spec §7),mock-agent-runtime 回写 `status="cancelled"` + 一个空 result `{ status: "cancelled", error: {...} }`;inkson 徽章是 `audit valid` (cancellation 仍签 audit_binding,只是 result 不含 artifacts);Phase D publish 路径必须 disabled。
 
@@ -113,10 +113,10 @@
 ## Implementation notes
 
 - **soland 缺口**:
-  - `POST /_cokret/self/agents/discover` 端点目前**未实现**,需新增 (从 `ck.agent.endpoint` projection 反查 supported_protocols + agent_card_url)。
-  - `POST /_cokret/self/agents/sessions` 与 `POST /_cokret/self/agents/sessions/${id}/status` 当前由 `agent_bridge.rs` 内部 fan-out 模拟 (in-process echo);真实的外部 HTTP handoff (RFC 9421 + Content-Digest + DID Document service binding 校验) 仍**未实现**,见 `agent_bridge.rs` 头注 "When the registered agent carries an `endpoint_url`, the runtime POSTs the invocation to it via reqwest"。
+  - `POST /_arkret/self/agents/discover` 端点目前**未实现**,需新增 (从 `ck.agent.endpoint` projection 反查 supported_protocols + agent_card_url)。
+  - `POST /_arkret/self/agents/sessions` 与 `POST /_arkret/self/agents/sessions/${id}/status` 当前由 `agent_bridge.rs` 内部 fan-out 模拟 (in-process echo);真实的外部 HTTP handoff (RFC 9421 + Content-Digest + DID Document service binding 校验) 仍**未实现**,见 `agent_bridge.rs` 头注 "When the registered agent carries an `endpoint_url`, the runtime POSTs the invocation to it via reqwest"。
   - `claimed_profiles` 数组应该包含 `ck.profile.agent_runtime.v1`,但 `routing/system/describe.rs` 还没把它写进去 — 这条覆盖 Phase A 步骤 5 的 supported_protocols 列表来源。
-  - audit_binding 签名 / 校验 SDK 已有 (`cokret_sdk::agent_binding`),但 fail-closed 路径 (E1.1) 故意 absent,需要 e2e 显式钉住。
+  - audit_binding 签名 / 校验 SDK 已有 (`arkret_sdk::agent_binding`),但 fail-closed 路径 (E1.1) 故意 absent,需要 e2e 显式钉住。
 - **inkson 缺口**:
   - `/agents` 的 protocol session draft 仍需与 soland capability grant API 做真实绑定。
   - publish modal 的 "保留 remote_agent attribution" 选项 (testid `publish-modal-signer-self-with-attribution`) 需要从 protocol session result 状态进入。

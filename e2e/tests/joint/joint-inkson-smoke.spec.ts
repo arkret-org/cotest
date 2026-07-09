@@ -81,7 +81,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
 
     for (const observedPage of [alicePage.page, bobPage.page]) {
       observedPage.on("response", async (response) => {
-        if (!response.url().includes("/_cokret/self/account/subscribe")) {
+        if (!response.url().includes("/_arkret/self/account/subscribe")) {
           return;
         }
         subscribeResponses += 1;
@@ -191,7 +191,7 @@ async function submitMessageEvent(
     payload,
   });
 
-  const url = `${serverUrl}/_cokret/self/events`;
+  const url = `${serverUrl}/_arkret/self/events`;
   const response = await request.post(url, {
     headers: selfPathHeadersForDpopSession(session, "POST", url),
     data: envelope,
@@ -206,7 +206,7 @@ async function listInvitesForDpop(
   serverUrl: string,
   subjectDid: string,
 ): Promise<Array<{ id: string; realm_id: string; invitee?: string }>> {
-  const url = new URL("/_cokret/self/authz/invites", serverUrl);
+  const url = new URL("/_arkret/self/authz/invites", serverUrl);
   url.searchParams.set("subject", subjectDid);
   const href = url.toString();
   const response = await request.get(href, {
@@ -231,7 +231,7 @@ async function resolveDefaultStrandId(
   serverUrl: string,
   realmId: string,
 ): Promise<string> {
-  const realmUrl = `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}`;
+  const realmUrl = `${serverUrl}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
   const realmResp = await request.get(realmUrl, {
     headers: selfPathHeadersForDpopSession(session, "GET", realmUrl),
   });
@@ -241,7 +241,7 @@ async function resolveDefaultStrandId(
       return realm.default_strand_id;
     }
   }
-  const flowsUrl = `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const flowsUrl = `${serverUrl}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
   const flowsResp = await request.get(flowsUrl, {
     headers: selfPathHeadersForDpopSession(session, "GET", flowsUrl),
   });

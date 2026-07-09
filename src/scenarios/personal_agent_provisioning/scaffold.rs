@@ -5,7 +5,7 @@
 //! fails this test before reaching the live soland surface.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{
+use arkret_core::{
     AgentInteropSessionId, CAP_ACTION_AGENT_PROVISION, Did, EventId, OP_ACCOUNT_AGENT_KEY_PAIR,
     OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST,
     OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY,

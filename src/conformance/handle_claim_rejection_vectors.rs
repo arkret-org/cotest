@@ -8,7 +8,7 @@
 //!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
 //!   * `subject` MUST be a holder/principal DID. A `ck:actor:` / `ck:account:` typed id or a
 //!     non-DID resource id MUST reject (VECT-COT-7), enforced by
-//!     [`cokret_core::models::validate_handle_claim_subject`] and by the schema `subject` pattern.
+//!     [`arkret_core::models::validate_handle_claim_subject`] and by the schema `subject` pattern.
 //!
 //! VECT-COT-6 also pins that the SDK `HandleClaimKind` enum no longer carries a
 //! `ServiceHandle` variant, so any attempt to parse `service_handle` into
@@ -18,8 +18,8 @@ use std::ffi::OsStr;
 use std::fs;
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::Did;
-use cokret_core::models::{HandleClaimKind, validate_handle_claim_subject};
+use arkret_core::Did;
+use arkret_core::models::{HandleClaimKind, validate_handle_claim_subject};
 use jsonschema::{Registry, Resource};
 use serde_json::{Value, json};
 

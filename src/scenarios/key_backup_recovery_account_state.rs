@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::multibase::ed25519_pubkey_to_did_key_multibase;
-use cokret_core::{
+use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
     KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
     KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
@@ -29,7 +29,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
     let alice = server.demo_client(&principal_id, DEVICE_A).await?;
 
     let initial_policy = expect_json(
-        alice.get("/_cokret/root/identity/recovery-policy"),
+        alice.get("/_arkret/root/identity/recovery-policy"),
         StatusCode::OK,
     )
     .await?;
@@ -47,7 +47,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
     let rejected = expect_api_error_code(
         alice
             .put(&format!(
-                "/_cokret/self/keys/backups/{DID_RECOVERY_BACKUP_ID}"
+                "/_arkret/self/keys/backups/{DID_RECOVERY_BACKUP_ID}"
             ))
             .json(&did_recovery_backup_body(&principal_id, POLICY_ID)?),
         StatusCode::CONFLICT,
@@ -64,7 +64,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
 
     let rejected_policy = expect_api_error_code(
         alice
-            .post("/_cokret/root/identity/recovery-policy")
+            .post("/_arkret/root/identity/recovery-policy")
             .json(&unsigned_recovery_policy(
                 &principal_id,
                 &verification_method,
@@ -103,7 +103,7 @@ async fn list_backups_by_class(
 ) -> Result<Vec<Value>> {
     let body = expect_json(
         alice.get(&format!(
-            "/_cokret/self/keys/backups?backup_class={backup_class}"
+            "/_arkret/self/keys/backups?backup_class={backup_class}"
         )),
         StatusCode::OK,
     )

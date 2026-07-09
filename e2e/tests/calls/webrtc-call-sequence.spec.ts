@@ -7,7 +7,7 @@
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
 // derived `call_state` from the signal log. In the canonical model the
-// `POST /_cokret/self/ephemeral` relay is content-agnostic (it broadcasts the
+// `POST /_arkret/self/ephemeral` relay is content-agnostic (it broadcasts the
 // verbatim signed envelope), and the call lifecycle lives in the durable
 // `ck.call.state` cell driven by `ck.call.state` events (call-state.md §4.2).
 // This spec therefore asserts (a) the signaling stream is relayed in seq order

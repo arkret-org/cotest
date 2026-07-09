@@ -737,7 +737,7 @@ export async function submitJoinWithProofsApi(
   opts: { server?: SolandKey; createdAt?: string } = {},
 ) {
   return await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
     {
       headers: authHeaders(token),
       data: signedEventEnvelope({
@@ -797,7 +797,7 @@ export async function submitInviteCreateApi(
   const inviteId = typedId("invite");
   const expiresAt = canonicalTimestamp(new Date(Date.now() + 86_400_000));
   return await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
     {
       headers: authHeaders(token),
       data: signedEventEnvelope({
@@ -826,7 +826,7 @@ export async function submitInviteCreateApi(
 
 // join-policy.md §9 — list member applications scoped to the caller.
 // `member.application` is a spec *candidate* workflow concept
-// (`governance/join-policy.md` §7.2) that MUST NOT occupy the `/_cokret/...`
+// (`governance/join-policy.md` §7.2) that MUST NOT occupy the `/_arkret/...`
 // protocol root before formal registration; soland serves it from the
 // product-local `/_soland/self/realms/...` surface (realms.rs `local_router`).
 export async function listMemberApplicationsApi(
@@ -886,7 +886,7 @@ export async function listInvitesApi(
 > {
   const actorDid = await currentActorDidApi(request, token, opts);
   const url = new URL(
-    "/_cokret/self/authz/invites",
+    "/_arkret/self/authz/invites",
     solandBaseUrl(opts.server),
   );
   url.searchParams.set("subject", actorDid);
@@ -986,7 +986,7 @@ export async function queryRealmEventsApi(
   opts: { server?: SolandKey; limit?: number } = {},
 ) {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=${opts.limit ?? 100}`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=${opts.limit ?? 100}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<Record<string, unknown>>(
@@ -1025,7 +1025,7 @@ export async function accountSubscribeFramesApi(
 ): Promise<Array<Record<string, unknown>>> {
   void request;
   const url = new URL(
-    `${solandBaseUrl(opts.server)}/_cokret/self/account/subscribe`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/account/subscribe`,
   );
   if (opts.catchup !== false) {
     url.searchParams.set("catchup", "true");
@@ -1193,7 +1193,7 @@ export async function currentActorDidApi(
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/account/viewer`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`,
     {
       headers: authHeaders(token),
     },
@@ -1369,7 +1369,7 @@ export async function submitSignedEventApi(
   opts: { server?: SolandKey; context?: string } = {},
 ) {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
     {
       headers: authHeaders(token),
       data: envelope,
@@ -1398,7 +1398,7 @@ export async function resolveDefaultStrandId(
 ): Promise<string> {
   // Primary: Realm projection carries the authoritative default_strand_id.
   const realmResp = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
   if (realmResp.ok()) {
@@ -1413,7 +1413,7 @@ export async function resolveDefaultStrandId(
 
   // Fallback: discover via the Strand projection's derived is_default marker.
   const flowsResp = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
     { headers: authHeaders(token) },
   );
   expect(
@@ -1555,7 +1555,7 @@ export async function rawPushFederationEvents(
   },
 ) {
   const destination = opts.destination ?? solandServiceDid(opts.server);
-  const url = `${solandBaseUrl(opts.server)}/_cokret/peer/events`;
+  const url = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
   const body = peerEventsSubmitBody(
     opts.realmId,
     events.map(federationEventWireBody),
@@ -1615,7 +1615,7 @@ export async function rawSubmitPeerInviteDeliveryApi(
 ) {
   const destination =
     opts.destination ?? body.invite_address.recipient_service_did;
-  const url = `${solandBaseUrl(opts.server)}/_cokret/peer/invites`;
+  const url = `${solandBaseUrl(opts.server)}/_arkret/peer/invites`;
   return await request.post(url, {
     data: canonicalJson(body),
     headers: signedFederationPushHeaders(opts.origin, destination, url, body),
@@ -1651,7 +1651,7 @@ export async function queryPeerEventsApi(
   if (opts.after) {
     params.set("after", opts.after);
   }
-  const targetUri = `${solandBaseUrl(opts.server)}/_cokret/peer/events?${params.toString()}`;
+  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events?${params.toString()}`;
   const response = await request.get(targetUri, {
     headers: peerGetHeaders(
       opts.sourceDid,
@@ -1672,7 +1672,7 @@ export async function peerEventFrontierApi(
   realmId: string,
   opts: { server?: SolandKey; sourceDid?: string } = {},
 ) {
-  const targetUri = `${solandBaseUrl(opts.server)}/_cokret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`;
+  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`;
   const response = await request.get(targetUri, {
     headers: peerGetHeaders(
       opts.sourceDid,

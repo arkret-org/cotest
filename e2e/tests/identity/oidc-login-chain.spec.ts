@@ -8,14 +8,14 @@
 // caught are pinned here at the HTTP layer instead, where they are stable.
 //
 // Coverage:
-//   1. Discovery — `/_cokret/describe` advertises a usable OIDC method:
+//   1. Discovery — `/_arkret/describe` advertises a usable OIDC method:
 //      a non-empty `client_id` (else coauth answers "could not find client")
 //      and an Account Authority pinned to the Auth Server origin (so the
 //      session-grant POST + its DPoP `htu` line up with coauth, not soland).
-//   2. Self-path auth — a session grant only authenticates a `/_cokret/root/*`
+//   2. Self-path auth — a session grant only authenticates a `/_arkret/root/*`
 //      authenticated read when accompanied by a bound DPoP proof; a bare grant
 //      (no DPoP) is rejected. This is the contract the inkson fix relied on
-//      when it started attaching DPoP to `/_cokret/root/` calls (recovery-policy
+//      when it started attaching DPoP to `/_arkret/root/` calls (recovery-policy
 //      had been going out as a naked bearer → 401 → spurious logout).
 //
 // Spec refs: sync/service-surface.md §2.5.1 (Account Authority discovery),
@@ -39,14 +39,14 @@ import {
   type DpopDeviceKey,
 } from "../../helpers/session-grant-dpop";
 
-// A `/_cokret/root/*` authenticated read. recovery-policy is the exact endpoint
+// A `/_arkret/root/*` authenticated read. recovery-policy is the exact endpoint
 // whose naked-bearer 401 derailed login; it is principal-isolated and returns
 // `{ active_policy: null }` for a fresh account, so a 200 here proves the
 // inbound credential authenticated on a root path.
-const RECOVERY_POLICY_PATH = "/_cokret/root/identity/recovery-policy";
+const RECOVERY_POLICY_PATH = "/_arkret/root/identity/recovery-policy";
 
 function describeUrl(): string {
-  return `${solandBaseUrl()}/_cokret/describe`;
+  return `${solandBaseUrl()}/_arkret/describe`;
 }
 
 function recoveryPolicyUrl(): string {
@@ -56,7 +56,7 @@ function recoveryPolicyUrl(): string {
 test.describe.configure({ mode: "serial" });
 
 test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
-  test("1. /_cokret/describe advertises the OIDC client_id and Auth-Server Account Authority", async ({
+  test("1. /_arkret/describe advertises the OIDC client_id and Auth-Server Account Authority", async ({
     request,
   }) => {
     const coauth = coauthBaseUrl();
@@ -99,7 +99,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     expect(accountAuthority, "auth_metadata.account_authority missing").toBeTruthy();
     const coauthOrigin = new URL(coauth!).origin;
     expect(new URL(accountAuthority.origin).origin).toBe(coauthOrigin);
-    expect(accountAuthority.gate_account_base).toBe(`${coauthOrigin}/_cokret/gate/account`);
+    expect(accountAuthority.gate_account_base).toBe(`${coauthOrigin}/_arkret/gate/account`);
 
     // The advertised OIDC issuer is the Auth Server too (OIDC discovery target).
     expect(new URL(oidc!.issuer!).origin).toBe(coauthOrigin);
@@ -137,7 +137,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     return { deviceKey, grant, actorDid: user.did };
   }
 
-  test("2. a session grant authenticates a /_cokret/root/* read only WITH a bound DPoP proof", async ({
+  test("2. a session grant authenticates a /_arkret/root/* read only WITH a bound DPoP proof", async ({
     request,
   }) => {
     const coauth = coauthBaseUrl();
@@ -175,7 +175,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     );
   });
 
-  test("3. a dev-login bearer still authenticates the /_cokret/root/* read (no regression)", async ({
+  test("3. a dev-login bearer still authenticates the /_arkret/root/* read (no regression)", async ({
     request,
   }) => {
     // The legacy dev bearer (no DPoP) must keep working on root paths so the

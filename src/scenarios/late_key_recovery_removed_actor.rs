@@ -22,8 +22,8 @@
 //! decrypting.
 
 use anyhow::{Result, anyhow};
-use cokret_core::REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP;
-use cokret_core::schema::embedded_error_code_identifiers;
+use arkret_core::REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP;
+use arkret_core::schema::embedded_error_code_identifiers;
 
 /// The canonical error code surfaced by the reducer when a late key
 /// share is accepted by a Realm whose membership for the recipient was

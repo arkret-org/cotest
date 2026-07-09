@@ -47,7 +47,7 @@
 //!       * encrypt each domain's plaintext under its own subdomain key (HKDF info =
 //!         `"arkret-key-backup/<class>/<sub>/v1"`) with XChaCha20-Poly1305; AAD covers `actor_id,
 //!         device_id, backup_class, backup_version, item_type, created_at, schema_id`.
-//!       * upload via `PUT /_cokret/self/keys/backups/{backup_id}` (current soland surface; see
+//!       * upload via `PUT /_arkret/self/keys/backups/{backup_id}` (current soland surface; see
 //!         `routing/identity/key_backup.rs`).
 //!     Validate the response is 200 with `ok=true`.
 //! 4. "Lose" device-A: revoke it by submitting `ck.device.revoke` from a sibling device (per CT-9
@@ -56,15 +56,15 @@
 //! 5. Onboard new device-B:
 //!       * generate a fresh `ck:device:<uuidv7>` and Ed25519 keypair.
 //!       * dev-login (or full recovery via SSK proof — see §7.4) to get a bearer.
-//!       * `GET /_cokret/self/keys/backups` discovers metadata and `POST
-//!         /_cokret/self/keys/backups/{backup_id}/unlock` returns the full envelope after a
+//!       * `GET /_arkret/self/keys/backups` discovers metadata and `POST
+//!         /_arkret/self/keys/backups/{backup_id}/unlock` returns the full envelope after a
 //!         body-borne unlock proof (per soland E2E-KEY-BACKUP-2; today this is implemented).
 //!       * derive the passphrase keys; verify `key_commitment`; decrypt the two domains.
 //!       * mint a SSK proof per §7.4 canonical fields and POST it back (recovery confirmation);
 //!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
 //!         ownership strand which is not yet wired.
 //! 6. device-B replays MLS history:
-//!       * `GET /_cokret/self/realms/{R}/timeline?since=...` pulls all `ck.mls.commit` events.
+//!       * `GET /_arkret/self/realms/{R}/timeline?since=...` pulls all `ck.mls.commit` events.
 //!       * with the recovered `mls_history_backup_key`, device-B derives the pre-loss epoch secret
 //!         and decrypts each message's ciphertext.
 //!     Assert: device-B reconstructs all 3 plaintexts that device-A
@@ -74,12 +74,12 @@
 //! ## Status — `#[ignore]`'d
 //!
 //! Prerequisite status (soland-side):
-//!   * **`PUT /_cokret/self/keys/backups/{backup_id}`** — IMPLEMENTED today (see
+//!   * **`PUT /_arkret/self/keys/backups/{backup_id}`** — IMPLEMENTED today (see
 //!     `routing/identity/key_backup.rs::put_key_backup`). Validates `REQUIRED_KEY_BACKUP_FIELDS`
 //!     and stores opaque ciphertext. Steps 3 and 5b work today.
-//!   * **`POST /_cokret/self/keys/backups/{backup_id}/unlock`** — IMPLEMENTED (same module,
+//!   * **`POST /_arkret/self/keys/backups/{backup_id}/unlock`** — IMPLEMENTED (same module,
 //!     `unlock_key_backup`).
-//!   * **`DELETE /_cokret/self/keys/backups/{backup_id}` with SSK proof** — soland `_todos.md`
+//!   * **`DELETE /_arkret/self/keys/backups/{backup_id}` with SSK proof** — soland `_todos.md`
 //!     E2E-KEY-BACKUP-2 status is "needs SSK `payload=delete:backup_id:nonce` signature"; today
 //!     only session- token DELETE is enforced. Step 5e is partially blocked.
 //!   * **`mls_history_backup_key` semantics + `ck.mls.commit` reducer** — soland now HAS an MLS
@@ -135,7 +135,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //                                         /*epoch=*/ i as u64);
     //       let ciphertext = xchacha20_seal(&epoch_key, body.as_bytes(),
     //                                       /*aad=*/ b"ct11-e2ee-history");
-    //       alice.post("/_cokret/self/events").json(&event_envelope(
+    //       alice.post("/_arkret/self/events").json(&event_envelope(
     //           &alice.actor, &realm_id, "ck.mls.commit",
     //           json!({
     //               "epoch": i,
@@ -190,7 +190,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   //  envelopes per the §7.1 default: domains MUST stay separated.)
     //
     //   expect_json(
-    //       alice.put(&format!("/_cokret/self/keys/backups/{backup_id}"))
+    //       alice.put(&format!("/_arkret/self/keys/backups/{backup_id}"))
     //            .json(&json!({
     //                "backup_id": backup_id,
     //                "actor_id": alice.actor,
@@ -236,7 +236,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let pair_token = ... pair via CT-9 strand ...;
     //   expect_json(
     //       server.http()
-    //             .post(server.url("/_cokret/self/events"))
+    //             .post(server.url("/_arkret/self/events"))
     //             .bearer_auth(&pair_token)
     //             .json(&event_envelope(
     //                 &alice.actor,
@@ -263,7 +263,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let envelope: Value = expect_json(
     //       server.http()
     //             .get(server.url(&format!(
-    //                 "/_cokret/self/keys/backups/{backup_id}")))
+    //                 "/_arkret/self/keys/backups/{backup_id}")))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::OK,
     //   ).await?;
@@ -297,7 +297,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let timeline = expect_json(
     //       server.http()
     //             .get(server.url(&format!(
-    //                 "/_cokret/self/realms/{realm_id}/timeline")))
+    //                 "/_arkret/self/realms/{realm_id}/timeline")))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::OK,
     //   ).await?;
@@ -330,8 +330,8 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
          projects the commit-epoch chain server-side, but deriving historical \
          epoch secrets from the recovered `mls_history_backup_key` and \
          decrypting pre-loss ciphertext is client work this scaffold has not \
-         implemented. `PUT /_cokret/self/keys/backups/{{id}}` and \
-         `POST /_cokret/self/keys/backups/{{id}}/unlock` ARE implemented \
+         implemented. `PUT /_arkret/self/keys/backups/{{id}}` and \
+         `POST /_arkret/self/keys/backups/{{id}}/unlock` ARE implemented \
          today (key_backup.rs) so steps 3 + 5b work. cotest also \
          uses the cotest Argon2id + XChaCha20 conformance harness for §7.2; \
          the remaining missing piece is live client replay crypto, and the \

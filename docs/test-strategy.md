@@ -187,7 +187,7 @@ that the smoke matrix does not exercise:
 - `chat-interactions.spec.ts` exercises the `/chat/:space_id` view: send,
   open the reaction picker, render `chat-reactions`, open the reply banner,
   and post a reply that renders `chat-reply-indicator`.
-- `failure-paths.spec.ts` route-mocks `POST /_cokret/self/events` to return 500,
+- `failure-paths.spec.ts` route-mocks `POST /_arkret/self/events` to return 500,
   asserts `chat-message-error` and `chat-retry-button` appear, clears the
   mock, and confirms `chat-retry-button` recovers the send.
 - `notifications-smoke.spec.ts` renders `/notifications`, cycles the grouping
@@ -218,7 +218,7 @@ The coauth/soland test mapping is fixed by the runner:
 - coauth publishes soland under `arkret.principal_servers`
 - soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
 - soland introspects session grants at
-  `<coauth>/_cokret/gate/account/session-grants/introspect`
+  `<coauth>/_arkret/gate/account/session-grants/introspect`
 - the static bearer values are local E2E-only defaults and never exposed to the
   browser
 - event proof mode: `COTEST_EVENT_PROOF_MODE` selects the envelope proof the
@@ -235,7 +235,7 @@ Recommended local run:
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1 -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
-.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
+.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
 .\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
@@ -305,10 +305,10 @@ single-witness env vars and the quorum lists
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
 | `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/mock/email/verification/send` (with `ttl_seconds` + `body_html`), `/mock/email/verification/inbox?to=`, `/mock/email/verification/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
 | `mock-witness.mjs` | S9 did:webvh rotation | `/mock/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/mock/witness/policy`, `/mock/witness/health` test hook, `/inspect` |
-| `mock-audit-agent.mjs` | S25 audited E2EE / `ck.audit.accessed` | `/_cokret/self/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ck.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
-| `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_cokret/self/policy/check`, `/_cokret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
-| `mock-push-gateway.mjs` | notification push / blind wake | `/_cokret/edge/push/register-device`, `/_cokret/edge/push/notify`, `/mock/push/inbox`, `/scenarios`, `/jwks` |
-| `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_cokret/edge/applet/register`, `/_cokret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
+| `mock-audit-agent.mjs` | S25 audited E2EE / `ck.audit.accessed` | `/_arkret/self/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ck.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
+| `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_arkret/self/policy/check`, `/_arkret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
+| `mock-push-gateway.mjs` | notification push / blind wake | `/_arkret/edge/push/register-device`, `/_arkret/edge/push/notify`, `/mock/push/inbox`, `/scenarios`, `/jwks` |
+| `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_arkret/edge/applet/register`, `/_arkret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
 | `mock-tsp-endpoint.mjs` | TSP relationship bootstrap / message ACK | `/tsp/relationship-bootstrap`, `/tsp/message`, `/tsp/inbox`, `/tsp/outbox`, `/identity`, `/inspect` |
 | `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/mock/mimi/join-requests`, `/mock/mimi/approve`, `/mock/mimi/outbound`, `/mock/mimi/inbound`, `/identity`, `/inspect` |
 

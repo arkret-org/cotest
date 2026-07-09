@@ -1,6 +1,6 @@
 //! TB-3 — teabay unsigned-ingest rejection gate (entrypoint).
 //!
-//! Verifies an unsigned `POST /_cokret/find/directory/announce` is rejected at the
+//! Verifies an unsigned `POST /_arkret/find/directory/announce` is rejected at the
 //! transport layer with 401/403. TB-1 has landed — see
 //! `teabay/crates/server/src/middleware/http_sig.rs` and the
 //! `.hoop(HttpSigMiddleware::new(...))` wire-up in

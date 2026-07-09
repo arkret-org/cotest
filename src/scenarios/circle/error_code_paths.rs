@@ -15,7 +15,7 @@
 //! anti-enumeration scenarios will fire in P2F.4.
 
 use anyhow::{Result, anyhow};
-use cokret_core::error::{
+use arkret_core::error::{
     KNOWN_REASON_CODES_CKP_0007, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
     REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER, REASON_CIRCLE_NOT_ACTIVE,
     REASON_CIRCLE_REALM_MISMATCH, REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
@@ -23,7 +23,7 @@ use cokret_core::error::{
     REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE, REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
     REASON_SCOPE_REBIND_FORBIDDEN,
 };
-use cokret_core::{
+use arkret_core::{
     ERROR_CODE_DELIVERY_BINDING_HANDED_OVER, error_code_http_status, is_known_error_code,
 };
 

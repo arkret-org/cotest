@@ -110,7 +110,7 @@ async function addEncryptedDescription(
 
   const strandUpdate = page.waitForResponse(
     (response) =>
-      response.url().includes("/_cokret/self/events") &&
+      response.url().includes("/_arkret/self/events") &&
       response.request().method() === "POST" &&
       (response.request().postData() ?? "").includes("ck.strand.update"),
     { timeout: 60_000 },
@@ -366,7 +366,7 @@ test.describe("cross-member encrypted kanban", () => {
       await expect
         .poll(
           async () => {
-            const url = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
+            const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
             const resp = await request.get(url, {
               headers: selfPathGrantHeaders({
                 deviceKey: bobSession.deviceKey,
@@ -421,7 +421,7 @@ test.describe("cross-member encrypted kanban", () => {
 
       // 7) Raw wire stays ciphertext for the private body: the encrypted realm
       //    must never expose alice's description verbatim in the event log.
-      const rawEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
       const rawEvents = await request.get(rawEventsUrl, {
         headers: selfPathGrantHeaders({
           deviceKey: aliceSession.deviceKey,
@@ -525,7 +525,7 @@ test.describe("cross-member encrypted kanban", () => {
       await expect
         .poll(
           async () => {
-            const url = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
+            const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
             const resp = await request.get(url, {
               headers: selfPathGrantHeaders({
                 deviceKey: bobSession.deviceKey,
@@ -556,7 +556,7 @@ test.describe("cross-member encrypted kanban", () => {
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
       await stepShot(bobPage.page, testInfo, "C-bob-prejoin-card-survives-reload");
 
-      const rawEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
       const rawEvents = await request.get(rawEventsUrl, {
         headers: selfPathGrantHeaders({
           deviceKey: aliceSession.deviceKey,

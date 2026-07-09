@@ -170,7 +170,7 @@ export async function prepareRecoveryPrincipal(
 
   // 1) Publish the cross-signing identity (PSK→SSK/USK) — accepts the SSK at
   //    generation 1 (§5.1 ingest).
-  const publish = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  const publish = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
       actorDid: user.did,
@@ -209,7 +209,7 @@ export async function prepareRecoveryPrincipal(
     privateKey: sessionDeviceKey.privateKey,
   });
   const selfAuthorize = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
+    `${solandBaseUrl()}/_arkret/self/events`,
     {
       headers: authHeaders(token),
       data: signedEventEnvelope({
@@ -241,7 +241,7 @@ export async function prepareRecoveryPrincipal(
     .poll(
       async () => {
         const viewer = await request.get(
-          `${solandBaseUrl()}/_cokret/self/account/viewer`,
+          `${solandBaseUrl()}/_arkret/self/account/viewer`,
           { headers: authHeaders(token) },
         );
         if (!viewer.ok()) {
@@ -298,7 +298,7 @@ export async function prepareRecoveryPrincipal(
     },
   };
   const policyResp = await request.post(
-    `${solandBaseUrl()}/_cokret/root/identity/recovery-policy`,
+    `${solandBaseUrl()}/_arkret/root/identity/recovery-policy`,
     { headers: authHeaders(token), data: policyPayload },
   );
   expect(
@@ -403,7 +403,7 @@ export async function restoreViaRecoveryUnlock(
 
   // 1) Open a recovery session bound to the active policy snapshot.
   const createResp = await request.post(
-    `${solandBaseUrl()}/_cokret/root/identity/recovery-sessions`,
+    `${solandBaseUrl()}/_arkret/root/identity/recovery-sessions`,
     {
       headers: authHeaders(device2Token),
       data: {
@@ -443,7 +443,7 @@ export async function restoreViaRecoveryUnlock(
   const unlockCommitment = `sha256:${commitmentHash.digest("hex")}`;
 
   const proofResp = await request.post(
-    `${solandBaseUrl()}/_cokret/root/identity/recovery-sessions/${encodeURIComponent(session.recovery_session_id)}/proofs`,
+    `${solandBaseUrl()}/_arkret/root/identity/recovery-sessions/${encodeURIComponent(session.recovery_session_id)}/proofs`,
     {
       headers: authHeaders(device2Token),
       data: {
@@ -487,7 +487,7 @@ export async function restoreViaRecoveryUnlock(
   });
   const authorizeEventId = typedId("event");
   const authorize = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
+    `${solandBaseUrl()}/_arkret/self/events`,
     {
       headers: authHeaders(submitterToken),
       data: signedEventEnvelope({
@@ -518,7 +518,7 @@ export async function restoreViaRecoveryUnlock(
 
   const listUpdateEventId = typedId("event");
   const listUpdate = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
+    `${solandBaseUrl()}/_arkret/self/events`,
     {
       headers: authHeaders(submitterToken),
       data: signedEventEnvelope({
@@ -540,7 +540,7 @@ export async function restoreViaRecoveryUnlock(
 
   // 4) Complete the session by referencing the two durable event ids.
   const completeResp = await request.post(
-    `${solandBaseUrl()}/_cokret/root/identity/recovery-sessions/${encodeURIComponent(session.recovery_session_id)}/complete`,
+    `${solandBaseUrl()}/_arkret/root/identity/recovery-sessions/${encodeURIComponent(session.recovery_session_id)}/complete`,
     {
       headers: authHeaders(device2Token),
       data: {
@@ -574,7 +574,7 @@ export async function revokeDevice(
   revokedBy: string,
   submitterToken: string,
 ): Promise<void> {
-  const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(submitterToken),
     data: signedEventEnvelope({
       actorDid: principal.user.did,

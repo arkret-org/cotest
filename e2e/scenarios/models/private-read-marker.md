@@ -74,7 +74,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 inkson 触发 read-position 上报
 9. 客户端提交 actor-private `ck.read_cursor.advance`,payload 使用 `ck.schema.read_cursor.v1`,
    含 `position.event_id = M2.event_id`、`position.hlc = M2.hlc` 和对应 `read_scope`
-10. 断言:`GET /_cokret/self/account/subscribe?catchup=true` 返回的 actor-private read cursor
+10. 断言:`GET /_arkret/self/account/subscribe?catchup=true` 返回的 actor-private read cursor
     delta / notification projection 反映"M3 是未读、M1/M2 已读"
 
 ### Phase D — alice device-1 settings 显示 marker 位置
@@ -87,7 +87,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 13. alice (device-2) 打开第二个 browser context,进 `/settings`(`gotoSettings()`)
 14. 等待 sync 窗口(测试上界 30s);inkson 应通过 to-device 同步把 marker 落到本地
 15. 断言:device-2 的 settings 也显示 "Last read in S: M2"
-16. 断言:device-2 经 `/_cokret/self/account/subscribe` 看到的 read cursor position 与 device-1 一致
+16. 断言:device-2 经 `/_arkret/self/account/subscribe` 看到的 read cursor position 与 device-1 一致
 
 ### Phase F — bob 发 M4,两台 device 的 inbox 都显示未读
 
@@ -102,7 +102,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
     `ck.read_cursor.advance`
 21. 断言:device-2 本地 notification projection `unread_count = 0`,read cursor position 覆盖 Phase C
 22. 等待 to-device 同步窗口(测试上界 30s)
-23. 断言:device-1 `/_cokret/self/account/subscribe` 收到同一 read cursor position 后
+23. 断言:device-1 `/_arkret/self/account/subscribe` 收到同一 read cursor position 后
     `unread_count = 0`
 
 ## Observable assertions(合并清单)
@@ -122,7 +122,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   最终一定收敛到 device-1 写入的最新值
 - **E10.2 E2EE Realm 中 notification 脱敏**:把 `realmId` 切到一个 `encryption_locus =
   per_realm_mls` 的 Realm;bob 发的 M4 在 server 侧 payload 是密文,但 server 仍能投递 to-device
-  wake;notification 投影由 client 在解密后产生 — 测试断言 `/_cokret/self/account/subscribe`
+  wake;notification 投影由 client 在解密后产生 — 测试断言 `/_arkret/self/account/subscribe`
   的 notification projection 不暴露明文 body,只暴露 source event / sender / timestamp / `encrypted: true`
 - **E10.3 Circle-scoped private Strand 的 read marker 独立于 Realm-default Strand**:在 Realm `R`
   内创建公开 Strand `F_public`,再创建 Circle `C_discussion` 与私密 Strand `F_private`
@@ -137,7 +137,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   在 alice 当前 device 上写 actor-private state OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
   Phase G 的 cross-device 断言会 fail。主流程标 `test.fixme`,内联注释说明 gap
 - **soland 现状**:notification projection 的读取面是
-  `GET /_cokret/self/account/subscribe?catchup=true`;单 device 的本地 mark-all-read 由 inkson
+  `GET /_arkret/self/account/subscribe?catchup=true`;单 device 的本地 mark-all-read 由 inkson
   提交 read cursor 并更新本地 projection
 - **inkson gap**:`/settings` 当前没有 `read-position-row` testid;Phase D / E 的 UI 断言依赖该
   testid 上线后才能跑(或者改成纯 API 断言绕过)

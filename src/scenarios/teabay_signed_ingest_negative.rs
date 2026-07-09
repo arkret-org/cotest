@@ -20,7 +20,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
-    let url = proc.url("/_cokret/find/directory/announce");
+    let url = proc.url("/_arkret/find/directory/announce");
     let body = serde_json::to_vec(&json!({
         "resource_kind": "space",
         "resource_id": "cotest-d5-signed-negative-resource",

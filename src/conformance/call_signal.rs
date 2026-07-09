@@ -2,7 +2,7 @@
 //!
 //! The retired soland WebRTC session stack enforced `seq` monotonicity and
 //! accepted non-spec signal types (`offer` / `ice` / `device_change`)
-//! server-side. The canonical `POST /_cokret/self/ephemeral` relay is
+//! server-side. The canonical `POST /_arkret/self/ephemeral` relay is
 //! content-agnostic — it broadcasts the verbatim signed envelope — and the
 //! *receiver* enforces both the canonical signal_type enum and `seq`
 //! monotonicity (§5.1). These vectors drive the real SDK surfaces a receiver
@@ -17,11 +17,11 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{SecondsFormat, TimeZone, Utc};
-use cokret_core::{
+use arkret_core::{
     CALL_SIGNAL_TYPES, CallSignalSeqKey, CallSignalState, EphemeralEnvelope, Proof,
     validate_call_signal_envelope, validate_signal_seq,
 };
-use cokret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 
@@ -109,13 +109,13 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     // Stateful reducer over the [1, 2, 1] stream the e2e relay delivers
     // verbatim: the trailing 1 is the only rejection.
     let key = CallSignalSeqKey::new(
-        cokret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())
+        arkret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("realm id: {e}"))?,
-        cokret_core::CallId::new("ak:call:0196441c-0000-7000-8000-000000000000".to_owned())
+        arkret_core::CallId::new("ak:call:0196441c-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("call id: {e}"))?,
-        cokret_core::Did::new("did:web:alice.example.com".to_owned())
+        arkret_core::Did::new("did:web:alice.example.com".to_owned())
             .map_err(|e| anyhow!("did: {e}"))?,
-        cokret_core::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000".to_owned())
+        arkret_core::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("device id: {e}"))?,
     );
     let mut state = CallSignalState::new();
@@ -171,9 +171,9 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     });
 
     // 2. event_digest = sha256: || hex(sha256(JCS(envelope_without_proof))).
-    let canonical_bytes = cokret_core::canonical::canonical_json_bytes(&envelope)
+    let canonical_bytes = arkret_core::canonical::canonical_json_bytes(&envelope)
         .map_err(|err| anyhow!("envelope JCS failed: {err}"))?;
-    let event_digest = cokret_core::canonical::sha256_digest(&canonical_bytes);
+    let event_digest = arkret_core::canonical::sha256_digest(&canonical_bytes);
 
     // 3. JWS transcript = protected `.` base64url(JCS(binding object)). The binding object is the
     //    §5.1 {event_digest, actor_id, verification_method, created_at} — byte-identical to the
@@ -184,7 +184,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     // the proof object + binding, not the header.
     let header = json!({ "alg": "EdDSA" });
     let header_b64 = b64url(
-        &cokret_core::canonical::canonical_json_bytes(&header)
+        &arkret_core::canonical::canonical_json_bytes(&header)
             .map_err(|err| anyhow!("header JCS failed: {err}"))?,
     );
     // encoding.md §2: the Event proof binding carries the fixed context tag
@@ -198,7 +198,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         "created_at": created_at_str,
     });
     let binding_b64 = b64url(
-        &cokret_core::canonical::canonical_json_bytes(&binding)
+        &arkret_core::canonical::canonical_json_bytes(&binding)
             .map_err(|err| anyhow!("binding JCS failed: {err}"))?,
     );
     let signing_input = format!("{header_b64}.{binding_b64}");
@@ -218,7 +218,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     //    verifier recomputes event_digest from it).
     let proof: Proof = serde_json::from_value(envelope["proof"].clone())
         .map_err(|err| anyhow!("proof deserialise failed: {err}"))?;
-    let did = cokret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
+    let did = arkret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
     verify_eddsa_detached_jws_proof(&proof, &canonical_bytes, &did, &public)
         .map_err(|err| anyhow!("the e2e-style detached-JWS proof MUST verify: {err}"))?;
 
@@ -227,7 +227,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     // envelope, not merely a shape.
     let mut tampered_env = envelope.clone();
     tampered_env["payload"]["seq"] = json!(99);
-    let tampered_bytes = cokret_core::canonical::canonical_json_bytes(&{
+    let tampered_bytes = arkret_core::canonical::canonical_json_bytes(&{
         let mut v = tampered_env.clone();
         v.as_object_mut().unwrap().remove("proof");
         v

@@ -29,7 +29,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 let target = input
                     .and_then(|value| value.get("target_uri"))
                     .and_then(Value::as_str)
-                    .unwrap_or("/_cokret/peer/events");
+                    .unwrap_or("/_arkret/peer/events");
                 let body = input
                     .and_then(|value| value.get("body"))
                     .cloned()

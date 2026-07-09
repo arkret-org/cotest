@@ -44,7 +44,7 @@
 ### Phase C — Session refresh
 
 12. 测试 harness 把 device-1 session_credential 标过期(后端用 `Authorization: Bearer <expired>` → 401)
-13. inkson 客户端捕捉 401 → 自动 `POST /_cokret/gate/account/session-grants/refresh` 用旧 grant + DPoP holder proof
+13. inkson 客户端捕捉 401 → 自动 `POST /_arkret/gate/account/session-grants/refresh` 用旧 grant + DPoP holder proof
 14. coauth 校验 holder proof → 颁新 session grant
 15. 断言:device-1 重新可用,不需要 re-OIDC
 
@@ -65,7 +65,7 @@
 
 ## Implementation notes
 
-- **coauth 缺口**:OIDC bridge 实现度未知;`/_cokret/gate/account/session-grants/refresh` 路由可能未实现;session_grant 短 TTL 机制需要验证
+- **coauth 缺口**:OIDC bridge 实现度未知;`/_arkret/gate/account/session-grants/refresh` 路由可能未实现;session_grant 短 TTL 机制需要验证
 - **harness 缺口**:mock IdP 必须新增(本会话 harness 改动)
 - **inkson 缺口**:OIDC 重定向流;自动 401 refresh interceptor
 

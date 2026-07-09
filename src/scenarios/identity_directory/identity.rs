@@ -10,7 +10,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let describe = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/root/identity/describe")),
+            .get(server.url("/_arkret/root/identity/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -19,7 +19,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let resolved = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/root/identity/resolve"))
+            .post(server.url("/_arkret/root/identity/resolve"))
             .json(&json!({"did": "did:web:alice.example"})),
         StatusCode::OK,
     )
@@ -32,7 +32,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let document = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/root/identity/document?did=did:web:alice.example")),
+            .get(server.url("/_arkret/root/identity/document?did=did:web:alice.example")),
         StatusCode::OK,
     )
     .await?;
@@ -44,7 +44,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let log = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/root/identity/log?did=did:web:alice.example")),
+            .get(server.url("/_arkret/root/identity/log?did=did:web:alice.example")),
         StatusCode::OK,
     )
     .await?;
@@ -53,7 +53,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let submitted = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/root/identity/submit-did-operation"))
+            .post(server.url("/_arkret/root/identity/submit-did-operation"))
             .json(&json!({
                 "did": "did:web:alice.example",
                 "did_method": "did:web",
@@ -94,7 +94,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let resolved_after_submit = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/root/identity/resolve"))
+            .post(server.url("/_arkret/root/identity/resolve"))
             .json(&json!({"did": "did:web:alice.example"})),
         StatusCode::OK,
     )
@@ -112,7 +112,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let log_after_submit = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/root/identity/log?did=did:web:alice.example")),
+            .get(server.url("/_arkret/root/identity/log?did=did:web:alice.example")),
         StatusCode::OK,
     )
     .await?;
@@ -122,7 +122,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let receipts = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/root/identity/receipts?did=did:web:alice.example")),
+            .get(server.url("/_arkret/root/identity/receipts?did=did:web:alice.example")),
         StatusCode::OK,
     )
     .await?;

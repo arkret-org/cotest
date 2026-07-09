@@ -2,8 +2,8 @@ use anyhow::{Context, Result, anyhow};
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
-use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
+use arkret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -305,7 +305,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/peer/events"))
+            .post(server.url("/_arkret/peer/events"))
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -320,19 +320,19 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/peer/events"))
+            .post(server.url("/_arkret/peer/events"))
             .json(&json!({"operations": []})),
         StatusCode::BAD_REQUEST,
         "schema_violation",
     )
     .await?;
     expect_api_error(
-        server.http().get(server.url("/_cokret/peer/events")),
+        server.http().get(server.url("/_arkret/peer/events")),
         StatusCode::BAD_REQUEST,
         "schema_violation",
     )
     .await?;
-    let invalid_realms_url = server.url("/_cokret/peer/events?realms=bad");
+    let invalid_realms_url = server.url("/_arkret/peer/events?realms=bad");
     expect_api_error(
         with_signed_federation_empty_request(
             server.http().get(&invalid_realms_url),
@@ -426,7 +426,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         message_create_text_payload(realm_id, "from federation")?,
     )?;
 
-    let first_push_url = server.url("/_cokret/peer/events");
+    let first_push_url = server.url("/_arkret/peer/events");
     let first_push_body = peer_events_submit_body(
         realm_id,
         vec![
@@ -453,7 +453,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     assert_json_array_contains(&first_push["accepted"], replay_event_id, &first_push);
     assert!(json_array_absent_or_empty(&first_push["rejected"]));
 
-    let pulled_url = server.url(&format!("/_cokret/peer/events?realms={realm_id}"));
+    let pulled_url = server.url(&format!("/_arkret/peer/events?realms={realm_id}"));
     let pulled = expect_json(
         with_signed_federation_empty_request(
             server.http().get(&pulled_url),
@@ -470,7 +470,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "peer pull did not include replay event: {pulled}"
     );
 
-    let snapshot_head_url = server.url(&format!("/_cokret/peer/snapshot/head?realm_id={realm_id}"));
+    let snapshot_head_url = server.url(&format!("/_arkret/peer/snapshot/head?realm_id={realm_id}"));
     expect_api_error(
         with_signed_federation_empty_request(
             server.http().get(&snapshot_head_url),
@@ -484,7 +484,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     )
     .await?;
 
-    let replay_url = server.url("/_cokret/peer/events");
+    let replay_url = server.url("/_arkret/peer/events");
     // Replay the already-delivered DataEvent: federation re-delivery MUST be
     // idempotent — the duplicate is accepted as a no-op and the event is not
     // persisted twice (asserted below). The one-time realm-establishing events
@@ -509,7 +509,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     assert_json_array_contains(&replay["accepted"], replay_event_id, &replay);
     assert!(json_array_absent_or_empty(&replay["rejected"]));
 
-    let after_replay_pull_url = server.url(&format!("/_cokret/peer/events?realms={realm_id}"));
+    let after_replay_pull_url = server.url(&format!("/_arkret/peer/events?realms={realm_id}"));
     let after_replay_pull = expect_json(
         with_signed_federation_empty_request(
             server.http().get(&after_replay_pull_url),
@@ -543,7 +543,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "content": {"ciphertext": "missing-envelope-fields"}
         }),
     )?;
-    let invalid_push_url = server.url("/_cokret/peer/events");
+    let invalid_push_url = server.url("/_arkret/peer/events");
     let invalid_push_body =
         peer_events_submit_body(realm_id, vec![invalid_event], Some("invalid-1"))?;
     let invalid_push = expect_json(
@@ -583,7 +583,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         6,
         message_redact_payload(replay_event_id, None)?,
     )?;
-    let redaction_push_url = server.url("/_cokret/peer/events");
+    let redaction_push_url = server.url("/_arkret/peer/events");
     let redaction_push_body =
         peer_events_submit_body(realm_id, vec![redaction], Some("redaction-1"))?;
     let redaction_push = expect_json(
@@ -607,7 +607,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         &redaction_push,
     );
 
-    let redacted_pull_url = server.url(&format!("/_cokret/peer/events?realms={realm_id}"));
+    let redacted_pull_url = server.url(&format!("/_arkret/peer/events?realms={realm_id}"));
     let redacted_pull = expect_json(
         with_signed_federation_empty_request(
             server.http().get(&redacted_pull_url),
@@ -730,7 +730,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         EventId::new(delivery_binding_frontier_id)
             .context("invalid delivery binding frontier id")?,
     ];
-    let txn_url = server.url("/_cokret/peer/events");
+    let txn_url = server.url("/_arkret/peer/events");
     let txn_body = peer_events_submit_body_with_delivery_frontier(
         realm_id,
         vec![event],
@@ -759,7 +759,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     let sync_response = expect_response(
         server
             .http()
-            .get(server.url("/_cokret/self/account/subscribe?catchup=true"))
+            .get(server.url("/_arkret/self/account/subscribe?catchup=true"))
             .bearer_auth(&alice)
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,

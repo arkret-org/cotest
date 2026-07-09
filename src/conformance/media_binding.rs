@@ -10,11 +10,11 @@
 //! - `ck.vector.media_binding.unknown_type_fail_closed.v1`
 //! - `ck.vector.media_binding.e2ee_key_source.v1`
 //! - `ck.vector.media_binding.participant_identity_unrecognised.v1`
-//! - `ck.vector.media_binding.recording_artifact_via_cokret_blob.v1`
+//! - `ck.vector.media_binding.recording_artifact_via_arkret_blob.v1`
 //! - `ck.vector.media_binding.recording_exporter_label.v1`
 //!
 //! These are SDK-pure wire-shape pins. They lock the spelling of the
-//! 10 new error codes (cotest mirrors `cokret_core`'s registry), the
+//! 10 new error codes (cotest mirrors `arkret_core`'s registry), the
 //! participant_binding scheme id, the 600s TTL ceiling, the
 //! oldest-membership focus-selection contract, and the
 //! `ck.profile.media_service_binding.v1` registry id so a downstream
@@ -23,14 +23,14 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::error::{
+use arkret_core::error::{
     REASON_E2EE_KEY_SOURCE_UNAUTHORISED, REASON_FOCUS_MISMATCH,
     REASON_FOCUS_UNAVAILABLE_FOR_CLIENT, REASON_PARTICIPANT_BINDING_INVALID,
     REASON_PARTICIPANT_IDENTITY_UNRECOGNISED, REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
     REASON_SESSION_FOCUS_ALREADY_COMMITTED, REASON_TOKEN_ISSUER_UNAUTHORISED,
     REASON_UNKNOWN_FOCUS_TYPE,
 };
-use cokret_core::{
+use arkret_core::{
     MEDIA_TOKEN_TTL_MAX_SECS, OP_CALL_MEDIA_TOKEN_EXCHANGE, PARTICIPANT_BINDING_SCHEMA,
 };
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
@@ -56,7 +56,7 @@ pub const VECTOR_ID_E2EE_KEY_SOURCE: &str = "ck.vector.media_binding.e2ee_key_so
 pub const VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED: &str =
     "ck.vector.media_binding.participant_identity_unrecognised.v1";
 pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB: &str =
-    "ck.vector.media_binding.recording_artifact_via_cokret_blob.v1";
+    "ck.vector.media_binding.recording_artifact_via_arkret_blob.v1";
 pub const VECTOR_ID_RECORDING_EXPORTER_LABEL: &str =
     "ck.vector.media_binding.recording_exporter_label.v1";
 
@@ -112,7 +112,7 @@ fn validate_media_binding_fixture_metadata() -> Result<()> {
 }
 
 /// Known media-backend type tags from `ck.realm.media_service.foci[].type`.
-/// Mirrors `cokret_sdk::media::MediaBackendType` enum (R3 SDK feature
+/// Mirrors `arkret_sdk::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
 /// minimal `arkret-core` dep slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
@@ -231,7 +231,7 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
 
 /// Validate that `remaining_secs` (token expires_at - now) is within
 /// the spec's 600s ceiling and strictly positive. Mirrors
-/// `cokret_sdk::media::validate_token_ttl` so cotest can pin the
+/// `arkret_sdk::media::validate_token_ttl` so cotest can pin the
 /// constraint at the wire layer without pulling the full-surface SDK.
 fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
     if remaining_secs <= 0 {
@@ -379,7 +379,7 @@ fn participant_binding_signing_input(
         "participant_identity": participant_identity,
         "realm_id": realm_id,
     });
-    let jcs = cokret_core::canonical::canonical_json_bytes(&seven_tuple)
+    let jcs = arkret_core::canonical::canonical_json_bytes(&seven_tuple)
         .map_err(|err| anyhow!("participant_binding JCS encoding failed: {err}"))?;
     let mut input = Vec::with_capacity(PARTICIPANT_BINDING_SCHEMA.len() + 1 + jcs.len());
     input.extend_from_slice(PARTICIPANT_BINDING_SCHEMA.as_bytes());
@@ -487,7 +487,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
     cross_input.extend_from_slice(ICE_CONFIG_LABEL.as_bytes());
     cross_input.push(0x00);
     cross_input.extend_from_slice(
-        &cokret_core::canonical::canonical_json_bytes(&json!({
+        &arkret_core::canonical::canonical_json_bytes(&json!({
             "actor_id": actor_id, "call_id": call_id, "device_id": device_id,
             "expires_at": expires_at, "focus_id": focus_id,
             "participant_identity": participant_identity, "realm_id": realm_id,
@@ -700,7 +700,7 @@ fn sframe_context(
     participant_identity: &str,
     device_id: &str,
 ) -> Result<Vec<u8>> {
-    cokret_core::canonical::canonical_json_bytes(&json!({
+    arkret_core::canonical::canonical_json_bytes(&json!({
         "realm_id": realm_id,
         "call_id": call_id,
         "focus_id": focus_id,
@@ -736,9 +736,9 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     Ok(())
 }
 
-// ─── VECT-MB-9 — recording_artifact_via_cokret_blob ───────────────────────
+// ─── VECT-MB-9 — recording_artifact_via_arkret_blob ───────────────────────
 
-pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
+pub fn run_recording_artifact_via_arkret_blob_vector() -> Result<()> {
     if REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
         bail!(
             "REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
@@ -746,11 +746,11 @@ pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
     }
     // Egress MUST land on a Arkret blob endpoint. Direct S3 / GCS
     // / arbitrary http upload is bypass.
-    let is_cokret_blob = |url: &str| {
+    let is_arkret_blob = |url: &str| {
         url.starts_with("https://")
             && (url.contains("/_matrix/arkret/v1/media") || url.contains("/arkret/v1/media"))
     };
-    if !is_cokret_blob("https://server.example/arkret/v1/media/upload") {
+    if !is_arkret_blob("https://server.example/arkret/v1/media/upload") {
         bail!("legit arkret blob endpoint not accepted");
     }
     for bad in [
@@ -758,7 +758,7 @@ pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
         "https://my-egress.example/dump",
         "https://storage.googleapis.com/foo",
     ] {
-        if is_cokret_blob(bad) {
+        if is_arkret_blob(bad) {
             bail!("non-arkret egress endpoint `{bad}` leaked past pipeline check");
         }
     }
@@ -775,7 +775,7 @@ fn recording_context(
     media_service_did: &str,
     recording_start_event_id: &str,
 ) -> Result<Vec<u8>> {
-    cokret_core::canonical::canonical_json_bytes(&json!({
+    arkret_core::canonical::canonical_json_bytes(&json!({
         "realm_id": realm_id,
         "call_id": call_id,
         "focus_id": focus_id,
@@ -915,7 +915,7 @@ pub fn run_media_binding_vector_suite() -> Result<()> {
     run_unknown_type_fail_closed_vector()?;
     run_e2ee_key_source_vector()?;
     run_participant_identity_unrecognised_vector()?;
-    run_recording_artifact_via_cokret_blob_vector()?;
+    run_recording_artifact_via_arkret_blob_vector()?;
     run_recording_exporter_label_vector()?;
     Ok(())
 }

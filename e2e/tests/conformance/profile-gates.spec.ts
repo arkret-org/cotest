@@ -79,7 +79,7 @@ type ConformanceCatalog = {
   // profile ids in the authoritative conformance-profiles.json matrix
   // (conformance-profiles.md §2.1: the json is the full matrix; the markdown
   // is a non-exhaustive view). They are independently advertisable in
-  // /_cokret/describe.claimed_profiles — e.g. crypto-media/encryption-and-audit.md
+  // /_arkret/describe.claimed_profiles — e.g. crypto-media/encryption-and-audit.md
   // §2.5 requires a principal server federating MLS-backed Realms to advertise
   // ck.profile.mls_governance_binding.full.v1.
   hardening_profiles?: string[];
@@ -105,7 +105,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     //   artifact_ref / cotest_issuer_did / signature / timestamp.
     // The two profile_id sets MUST be disjoint — a profile cannot be simultaneously
     // self-claimed and cotest-verified.
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
 
@@ -163,7 +163,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     // spec: service-surface.md §3.0 — when development_mode=true, verified_profiles
     //   MUST be []; never null, never a placeholder stub. soland enforces this with
     //   validate (`describe.rs::server_describe`).
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
 
@@ -202,7 +202,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     ]);
     expect(knownProfiles.size, "catalog known-profiles set is non-empty").toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
 
@@ -255,7 +255,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       payload: { transaction_id: "ak:txn:profile-gate", params: {} },
     });
 
-    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
@@ -296,7 +296,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     ];
     refreshEventEnvelopeProof(envelope);
 
-    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
@@ -313,7 +313,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
   }) => {
     const baseUrl = coauthBaseUrl();
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
-    const resp = await request.get(`${baseUrl}/_cokret/describe`);
+    const resp = await request.get(`${baseUrl}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
     const claimed = body.claimed_profiles ?? [];

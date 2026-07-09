@@ -35,7 +35,7 @@ session under the `circle-rollout` branch convention).
 | gate | meaning | first pass | notes |
 |---|---|---|---|
 | GATE-A | SDK lock (P1 → P2) | 2026-05-26 | `cargo check/test --workspace --all-features` green; spec-drift 0; 7 event kinds + 6 caps + 6 errors all registered |
-| GATE-B | Backend API lock (P2 → P3) | 2026-05-26 | soland `/_cokret/self/circles/*` exposed; coauth admin cx.circle.* surface live; floria + chime accept `circle_id`; cargo workspaces green across 7 projects |
+| GATE-B | Backend API lock (P2 → P3) | 2026-05-26 | soland `/_arkret/self/circles/*` exposed; coauth admin cx.circle.* surface live; floria + chime accept `circle_id`; cargo workspaces green across 7 projects |
 | GATE-C | End-to-end usable (P3 → P4) | 2026-05-26 | sodmin Circle admin UI + inkson Circle UX both shipped; 920 inkson tests + sodmin wasm build clean |
 | GATE-D | Engineering hygiene (P4 → P5) | 2026-05-26 | all 10 projects have CI, typos, deny.toml, SECURITY.md, CHANGELOG.Unreleased, Dockerfile HEALTHCHECK where applicable |
 | GATE-E | Conformance (P5 → P6) | 2026-05-26 | cotest UJ-A..UJ-I either >= 90% or explicitly deferred (see § 4 and § 5); mock-parity baseline 0; no expired fixme |

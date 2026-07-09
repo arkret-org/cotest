@@ -65,7 +65,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let mut tasks = JoinSet::new();
     tasks.spawn({
         let client = server.http();
-        let url = server.url("/_cokret/self/events");
+        let url = server.url("/_arkret/self/events");
         let token = token.clone();
         let event = event.clone();
         async move {
@@ -94,7 +94,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let retry = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
             .json(&event),
         StatusCode::OK,
@@ -132,7 +132,7 @@ impl ChaosDatabase {
 
 async fn create_chaos_realm(alice: &TestActorClient, event: &Value) -> Result<()> {
     let response = expect_json(
-        alice.post("/_cokret/self/events").json(event),
+        alice.post("/_arkret/self/events").json(event),
         StatusCode::OK,
     )
     .await?;

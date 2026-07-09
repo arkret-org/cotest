@@ -18,10 +18,10 @@ use serial_test::serial;
 
 /// Gating: needs soland E2E-FED-1 (outbound HTTP federation push) +
 /// E2E-FED-2 (RFC 9421 verify) + §4.5 peer frontier comparison surface
-/// (`GET /_cokret/peer/events/frontier` + `duplicate_conflict` reason_code).
+/// (`GET /_arkret/peer/events/frontier` + `duplicate_conflict` reason_code).
 /// Issue: CT-1 (three-server fork quarantine)
 #[tokio::test]
-#[ignore = "needs soland E2E-FED-1 (outbound HTTP federation push) + E2E-FED-2 (RFC 9421 verify) + §4.5 peer frontier comparison surface (`GET /_cokret/peer/events/frontier` + `duplicate_conflict` reason_code) — see CT-1"]
+#[ignore = "needs soland E2E-FED-1 (outbound HTTP federation push) + E2E-FED-2 (RFC 9421 verify) + §4.5 peer frontier comparison surface (`GET /_arkret/peer/events/frontier` + `duplicate_conflict` reason_code) — see CT-1"]
 #[serial]
 async fn three_server_fork_quarantine_converges_on_canonical_frontier() -> Result<()> {
     cotest::scenarios::federation_three_server_fork_quarantine::three_server_fork_quarantine_run()

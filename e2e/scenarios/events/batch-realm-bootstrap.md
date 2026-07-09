@@ -7,7 +7,7 @@ Prove `ck.self.events.command.submit` batch mode is a real protocol response pat
 ## Strand
 
 1. Register Alice and issue a dev session.
-2. Submit a batch body `{ events: [ck.realm.create], idempotency_key }` to `POST /_cokret/self/events`.
+2. Submit a batch body `{ events: [ck.realm.create], idempotency_key }` to `POST /_arkret/self/events`.
 3. Assert the response is JSON, accepted, and contains no rejected events.
 4. Submit a `ck.message.create` event as Alice into the new Realm.
 5. Query the Realm timeline and confirm the message is visible.

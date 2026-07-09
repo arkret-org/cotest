@@ -282,7 +282,7 @@ async function registerWebvhPrincipal(
 async function solandTrustDomain(
   request: import("@playwright/test").APIRequestContext,
 ): Promise<string> {
-  const response = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+  const response = await request.get(`${solandBaseUrl()}/_arkret/describe`);
   expect(response.ok()).toBeTruthy();
   const body = await response.json();
   return String(body.trust_domain ?? "ak:trust_domain:soland.joint-e2e.local");
@@ -564,7 +564,7 @@ async function submitMlsCommit(
     payload,
   });
   if (args.raw) {
-    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(token),
       data: envelope,
     });
@@ -597,7 +597,7 @@ async function sendEncryptedTimelineMessage(
       const postData = request.postData() ?? "";
       return (
         request.method() === "POST" &&
-        response.url().includes("/_cokret/self/events") &&
+        response.url().includes("/_arkret/self/events") &&
         postData.includes("ck.message.create") &&
         [200, 201].includes(response.status())
       );
@@ -765,7 +765,7 @@ test.describe("MLS group encryption", () => {
       });
 
       // Non-member access to raw events MUST be rejected.
-      const eventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
+      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
       const eventsResp = await request.get(eventsUrl, {
         headers: selfPathGrantHeaders({
           deviceKey: mallorySession.deviceKey,
@@ -799,7 +799,7 @@ test.describe("MLS group encryption", () => {
     });
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/export`,
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
@@ -810,7 +810,7 @@ test.describe("MLS group encryption", () => {
     const incompatibleRealmId = typedId("realm");
     const incompatibleCreatedAt = canonicalTimestamp();
     const incompatible = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
@@ -896,7 +896,7 @@ test.describe("MLS group encryption", () => {
     };
 
     const publish = await request.post(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/upload`,
+      `${solandBaseUrl()}/_arkret/self/keys/keypackages/upload`,
       {
         headers: authHeaders(bobToken),
         data: {
@@ -943,7 +943,7 @@ test.describe("MLS group encryption", () => {
     expect((await pendingBefore.json()).welcomes).toEqual([]);
 
     const claim = await request.post(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
+      `${solandBaseUrl()}/_arkret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -972,7 +972,7 @@ test.describe("MLS group encryption", () => {
     const claimSskGeneration = Number(keypackageClaim.ssk_generation);
 
     const claimAgain = await request.post(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
+      `${solandBaseUrl()}/_arkret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -1171,7 +1171,7 @@ test.describe("MLS group encryption", () => {
     expect(pendingAfterDrain.ok()).toBeTruthy();
     expect((await pendingAfterDrain.json()).welcomes).toEqual([]);
 
-    const staleCommit = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const staleCommit = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,
@@ -1290,7 +1290,7 @@ test.describe("MLS group encryption", () => {
       await expect(aliceSeesBob).toBeVisible({ timeout: 60_000 });
       await expect(aliceSeesBob.getByTestId("event-body")).toContainText(bobPlaintext);
 
-      const rawEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
       const rawEvents = await request.get(rawEventsUrl, {
         headers: selfPathGrantHeaders({
           deviceKey: bobSession!.deviceKey,
@@ -1372,7 +1372,7 @@ test.describe("MLS group encryption", () => {
 
     // carol reads the realm event stream: history_visibility=joined crops the
     // pre-join epoch event but surfaces the post-join one.
-    const carolEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+    const carolEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
     await expect
       .poll(
         async () => {
@@ -1675,7 +1675,7 @@ test.describe("MLS group encryption", () => {
       `MLS create-lock realm ${stamp}`,
     );
 
-    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,
@@ -1746,7 +1746,7 @@ test.describe("MLS group encryption", () => {
       { context: `create circle ${circleId}` },
     );
 
-    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,
@@ -1831,7 +1831,7 @@ test.describe("MLS group encryption", () => {
       deviceB.page.on("request", (req) => {
         if (
           req.method() !== "POST" ||
-          !req.url().includes("/_cokret/self/events")
+          !req.url().includes("/_arkret/self/events")
         ) {
           return;
         }

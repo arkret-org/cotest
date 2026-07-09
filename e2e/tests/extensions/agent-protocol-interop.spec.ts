@@ -8,7 +8,7 @@
 //       §8 (security boundary), §9 (audit_mode), §11 (adapter registry),
 //       §12 (failure codes).
 //
-// Naming note: the spec truth source + cokret_sdk use
+// Naming note: the spec truth source + arkret_sdk use
 // `ck.agent.interop_session.*` (NOT the older `protocol_session.*` draft
 // term that earlier scaffolding referenced). All kinds below follow the
 // spec / SDK.
@@ -16,7 +16,7 @@
 // soland status: agent_bridge.rs runs the full start -> status(working) ->
 // result(completed) fan-out with an Ed25519 `audit_binding`, an outbound
 // HTTP path (POST to a registered endpoint_url), and a fail-closed path.
-// `POST /_cokret/self/agents/discover` reflects the `ck.agent.endpoint`
+// `POST /_arkret/self/agents/discover` reflects the `ck.agent.endpoint`
 // projection (supported_protocols / agent_card_url / metadata_url). The
 // external runtime is represented by `mock-agent-runtime.mjs`
 // (`mockAgentRuntimeBaseUrl()`).
@@ -69,11 +69,11 @@ test.describe("agent protocol interop", () => {
   }, testInfo) => {
     // Live probe — asserts two surface invariants:
     //   1. inkson's `/agents` route mounts and renders `agents-panel`.
-    //   2. soland's `/_cokret/describe` responds 200, and its
+    //   2. soland's `/_arkret/describe` responds 200, and its
     //      `claimed_profiles` now includes `ck.profile.agent_runtime.v1`
     //      (the extension profile that backs this scenario).
     const stamp = Date.now();
-    const describe = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const describe = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(describe.status()).toBe(200);
     const describeBody = await describe.json();
     expect(describeBody).toBeTruthy();
@@ -175,12 +175,12 @@ test.describe("agent protocol interop", () => {
     );
     expect(endpointResp.status).toBe("accepted");
 
-    // 2. Discover: POST /_cokret/self/agents/discover { agent_id }.
+    // 2. Discover: POST /_arkret/self/agents/discover { agent_id }.
     //    Assert supported_protocols ⊆ the §11 adapter registry, and that
     //    a2a + acp both surface; assert agent_card_url / metadata_url
     //    round-trip from the ck.agent.endpoint declaration.
     const discoverResp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/agents/discover`,
+      `${solandBaseUrl()}/_arkret/self/agents/discover`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: { agent_id: remoteAgent.did },
@@ -215,7 +215,7 @@ test.describe("agent protocol interop", () => {
     //    fails closed with HTTP 404 + error.code=discovery_failed (§12).
     const unknown = uniqueUser(`agent-handoff-unknown-${stamp}`);
     const missingResp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/agents/discover`,
+      `${solandBaseUrl()}/_arkret/self/agents/discover`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: { agent_id: unknown.did },
@@ -295,7 +295,7 @@ test.describe("agent protocol interop", () => {
 
     // Poll the events surface until the result lands (the bridge appends
     // status + result; result may be a tick behind the start response).
-    const eventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+    const eventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
     let sessionEvents: Array<Record<string, unknown>> = [];
     for (let attempt = 0; attempt < 30; attempt++) {
       const resp = await request.get(eventsUrl, {
@@ -355,7 +355,7 @@ test.describe("agent protocol interop", () => {
     expect(typeof binding?.canonical_subject).toBe("string");
 
     // 3. The canonical_subject is the spec-pinned shape that
-    //    cokret_sdk::agent_binding::verify_audit_binding_by_kind recomputes:
+    //    arkret_sdk::agent_binding::verify_audit_binding_by_kind recomputes:
     //    session_id / agent_principal_id / echo / actor_id / binding_kind.
     const subject = binding?.canonical_subject as string;
     expect(subject).toContain(`session_id=${sessionId}`);
@@ -439,7 +439,7 @@ test.describe("agent protocol interop", () => {
       // Assert the wire grant: actions include the start action, and
       // allowed_endpoints is a single-valued precise list (spec §7).
       const events = await request.get(
-        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
+        `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
         { headers: { authorization: `Bearer ${aliceToken}` } },
       );
       expect(events.status()).toBe(200);
@@ -647,7 +647,7 @@ test.describe("agent protocol interop", () => {
       // Assert the published Strand: actor_id = alice, attribution =
       // remote agent, workflow_type contains synthesis (spec §5.4).
       const events = await request.get(
-        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
+        `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
         { headers: { authorization: `Bearer ${aliceToken}` } },
       );
       expect(events.status()).toBe(200);

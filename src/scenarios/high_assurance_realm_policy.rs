@@ -3,8 +3,8 @@
 //!
 //! Spec: a Realm declared with `security_class=high_assurance` MUST
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`. The
-//! SDK exposes this as a struct invariant on `cokret_core::Realm`'s
-//! [`validate_kind_invariants`](cokret_core::Realm::validate_kind_invariants)
+//! SDK exposes this as a struct invariant on `arkret_core::Realm`'s
+//! [`validate_kind_invariants`](arkret_core::Realm::validate_kind_invariants)
 //! and soland enforces it at the reducer with the canonical reason
 //! code `high_assurance_federation_policy_invalid`.
 //!
@@ -12,7 +12,7 @@
 //! integration test lives at `soland/tests/high_assurance_policy.rs`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{
+use arkret_core::{
     Did, Discoverability, EncryptionFloor, EncryptionProfile, FederationPolicy, HistoryVisibility,
     JoinRule, NotaryProfile, NotaryValue, Realm, RealmId, SecurityClass, TypedTrustDomainId,
 };
@@ -61,7 +61,7 @@ fn build_realm(
         durability_policy: None,
         federation_policy,
         sync_endpoints: Vec::new(),
-        digest_algorithm: cokret_core::canonical::DigestSuite::Sha256,
+        digest_algorithm: arkret_core::canonical::DigestSuite::Sha256,
         retention_policy_id: None,
         avatar_blob_ref: None,
         created_at: chrono::Utc::now(),

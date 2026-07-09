@@ -25,7 +25,7 @@
 //! `bail!` when the bootstrap can't bring up the stack.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{
+use arkret_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleSymbol, Did,
     EncryptionProfile, RealmId,
 };
@@ -121,14 +121,14 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST /_cokret/self/realms                       (ck.realm.create) →
+    //         POST /_arkret/self/realms                       (ck.realm.create) →
     //              response carries `default_mls_group_ref`
-    //         POST /_cokret/self/realms/<rid>/circles         (ck.circle.create) →
+    //         POST /_arkret/self/realms/<rid>/circles         (ck.circle.create) →
     //              response carries Circle.mls_group_ref (distinct id)
-    //         POST /_cokret/self/circles/<cid>/members        membership commit
+    //         POST /_arkret/self/circles/<cid>/members        membership commit
     //              advances the Circle group's epoch (verify via GET on
     //              the Circle projection)
-    //         GET  /_cokret/self/realms/<rid>                 → realm-default
+    //         GET  /_arkret/self/realms/<rid>                 → realm-default
     //              group epoch UNCHANGED across the Circle commit
     //
     //       Cryptographic isolation: drive two `SdkClient` channels (one
@@ -138,7 +138,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     //       (NOT a decoding error — soland must withhold the key, not
     //       hand it out + fail decode).
     let _ = admin
-        .post("/_cokret/self/realms")
+        .post("/_arkret/self/realms")
         .json(&json!({
             "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),

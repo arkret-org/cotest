@@ -14,7 +14,7 @@
 //           ck.vector.query.*.json, ck.vector.scalability.*.json
 //
 // Phases A-E exercise the test-only conformance endpoints under the
-// spec-reserved namespace /_cokret/_conformance/{snapshot,query}
+// spec-reserved namespace /_arkret/_conformance/{snapshot,query}
 // (service-http-binding.md §2.1.2). The leading `_` marks `_conformance` as a
 // reserved test-only segment, NOT a production trust-surface; the namespace is
 // profile-gated on ck.profile.conformance_harness.v1 and production builds MUST
@@ -25,7 +25,7 @@
 //   - Phase F: harness-only vector loader smoke (filesystem read; never
 //     touches soland). Always-pass on count so the suite stays green even
 //     when the fixtures directory has zero matching files today.
-//   - Phase G: optional surface probe of GET /_cokret/describe to
+//   - Phase G: optional surface probe of GET /_arkret/describe to
 //     assert the surface is *internally consistent* (does NOT claim the
 //     ck.profile.conformance_harness.v1 profile while the endpoint is 404,
 //     OR if it does claim it then the endpoint must respond with something
@@ -361,14 +361,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // Optional surface probe — the assertion is "the surface is internally
     // consistent", NOT "the endpoint works". Two outcomes are acceptable:
     //   (a) /server/describe does NOT claim ck.profile.conformance_harness.v1
-    //       → any status from /_cokret/_conformance/snapshot (incl. 404) is OK,
+    //       → any status from /_arkret/_conformance/snapshot (incl. 404) is OK,
     //         because the server isn't promising the endpoint exists.
     //   (b) /server/describe DOES claim ck.profile.conformance_harness.v1
-    //       → /_cokret/_conformance/snapshot MUST NOT return 404 (anything else
+    //       → /_arkret/_conformance/snapshot MUST NOT return 404 (anything else
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
     //         claim is a lie).
 
-    const describeResp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const describeResp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     if (!describeResp.ok()) {
       // soland might be on an older build without /server/describe at all;
       // that's a different bug, surfaced by service-surface-contract. Skip
@@ -410,7 +410,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     });
     expect(
       probe.status(),
-      `server claims ck.profile.conformance_harness.v1 but /_cokret/_conformance/snapshot returned 404 — surface is inconsistent`,
+      `server claims ck.profile.conformance_harness.v1 but /_arkret/_conformance/snapshot returned 404 — surface is inconsistent`,
     ).not.toBe(404);
   });
 });

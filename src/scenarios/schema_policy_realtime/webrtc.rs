@@ -24,7 +24,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let call_id = "ak:call:01964137-0000-7000-8000-000000000001";
 
     expect_api_error(
-        carol.post("/_cokret/self/rtc/ice-config").json(&json!({
+        carol.post("/_arkret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
             "call_id": call_id,
             "actor_id": carol.actor.as_str(),
@@ -37,7 +37,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     .await?;
 
     expect_api_error(
-        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
             "call_id": "not-a-call-id",
             "actor_id": alice.actor.as_str(),
@@ -50,7 +50,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     .await?;
 
     expect_api_error(
-        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
             "call_id": call_id,
             "actor_id": carol.actor.as_str(),
@@ -63,7 +63,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     .await?;
 
     let ice = expect_json(
-        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
             "call_id": call_id,
             "actor_id": alice.actor.as_str(),
@@ -123,7 +123,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert!(!turn_username.contains("alice"));
 
     let turn_only = expect_json(
-        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
             "call_id": "ak:call:01964137-0000-7000-8000-000000000002",
             "actor_id": alice.actor.as_str(),

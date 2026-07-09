@@ -3,7 +3,7 @@
 //! The e2e harness runs on Node and re-implements Arkret canonical JSON in
 //! TypeScript (`canonicalJson` in `e2e/helpers/soland-api.ts`) because it cannot
 //! call the Rust SDK directly. The authoritative implementation is the SDK's
-//! `cokret_core::canonical` (RFC 8785 JCS, integer-only number profile), and the
+//! `arkret_core::canonical` (RFC 8785 JCS, integer-only number profile), and the
 //! final signatures e2e produces are verified by soland using that SDK — so any
 //! byte-level drift between the TS reimplementation and the SDK is a silent
 //! signature false-negative/false-positive vector.
@@ -54,7 +54,7 @@ pub fn run_canonical_cross_lang_suite() -> Result<()> {
     }
 
     for (idx, vector) in doc.vectors.iter().enumerate() {
-        let produced = cokret_core::canonical::canonical_json_string(&vector.value)
+        let produced = arkret_core::canonical::canonical_json_string(&vector.value)
             .with_context(|| format!("vector[{idx}]: SDK canonicalization failed"))?;
         if produced != vector.canonical {
             bail!(

@@ -25,7 +25,7 @@
       "include_all_tests": false,
       "cargo_filters": [
         "server_exposes_core_service_surface",
-        "framework_errors_and_invalid_json_use_cokret_envelopes",
+        "framework_errors_and_invalid_json_use_arkret_envelopes",
         "account_auth_and_session_edges_are_enforced",
         "repo_submit_read_expand_idempotency_and_cas_edges",
         "event_envelope_fixture_suite_matches_reference_semantics",

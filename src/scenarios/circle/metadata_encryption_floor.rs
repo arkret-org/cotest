@@ -23,8 +23,8 @@
 //! SHOULD mirror.
 
 use anyhow::{Result, anyhow};
-use cokret_core::EncryptionFloor;
-use cokret_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
+use arkret_core::EncryptionFloor;
+use arkret_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
 
 /// Strictness rank for the two floor values: stricter → larger rank.
 fn rank(floor: EncryptionFloor) -> u8 {

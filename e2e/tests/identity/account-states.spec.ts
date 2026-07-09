@@ -75,7 +75,7 @@ test.describe("account states", () => {
     );
     test.skip(!grant, "coauth DPoP grant debug endpoint is unavailable");
 
-    const logoutUrl = `${solandBaseUrl()}/_cokret/gate/account/logout`;
+    const logoutUrl = `${solandBaseUrl()}/_arkret/gate/account/logout`;
     const logout = await request.post(logoutUrl, {
       headers: selfPathGrantHeaders({
         deviceKey,
@@ -284,7 +284,7 @@ test.describe("account states", () => {
     expect(wireErrCode(await login.json())).toBe("account_deactivated");
 
     const search = await request.post(
-      `${solandBaseUrl()}/_cokret/find/directory/search-actors`,
+      `${solandBaseUrl()}/_arkret/find/directory/search-actors`,
       {
         headers: authHeaders(bobToken),
         data: { query: alice.handle },
@@ -346,7 +346,7 @@ test.describe("account states", () => {
     expect(wireErrCode(await oldMe.json())).toBe("account_erased");
 
     const search = await request.post(
-      `${solandBaseUrl()}/_cokret/find/directory/search-actors`,
+      `${solandBaseUrl()}/_arkret/find/directory/search-actors`,
       {
         headers: authHeaders(bobToken),
         data: { query: alice.handle },

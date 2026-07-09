@@ -37,7 +37,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 2. inkson 客户端:
    - 创建 Call Morph:`{ morph_type: "call", mode: "p2p", state: "ringing", participants: [alice.did, bob.did], recording_policy: "none" }`
    - 提交 `ck.morph.create`
-   - 调 `POST /_cokret/self/rtc/ice-config?call_id=<callId>&device_id=<alice_dev>` 拿 ICE config:`{ stun_servers, turn_servers: [{ url, username: "pairwise-pseudonym", credential, expires_at }] }`(spec §6)
+   - 调 `POST /_arkret/self/rtc/ice-config?call_id=<callId>&device_id=<alice_dev>` 拿 ICE config:`{ stun_servers, turn_servers: [{ url, username: "pairwise-pseudonym", credential, expires_at }] }`(spec §6)
 3. alice 客户端用浏览器 RTCPeerConnection 创建 offer SDP
 4. inkson 发 `ck.call.signal`(ephemeral)`{ kind: "invite", offer_sdp, call_id, target: bob.did }`
 5. soland Sync Service 路由该 signal 到 bob 的 to-device 队列
@@ -92,7 +92,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ### Phase F — Mid-call ICE credential refresh
 
 35. 假设 TURN credential 5 分钟过期;长 call 触发 refresh
-36. inkson 重新调 `POST /_cokret/self/rtc/ice-config`,携带同一
+36. inkson 重新调 `POST /_arkret/self/rtc/ice-config`,携带同一
     `realm_id`/`call_id`/`device_id` → 拿新 credential
 37. peer connection ICE restart
 38. 断言:call 不掉线,媒体 channel 持续
@@ -118,13 +118,13 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 ## Implementation notes
 
-- **spec wire**:通话信令走 `POST /_cokret/self/ephemeral` +
+- **spec wire**:通话信令走 `POST /_arkret/self/ephemeral` +
   `ck.call.signal`;持久状态走 `ck.call.state` / `ck.call.recording.start`;
-  媒体凭证走 `/_cokret/self/rtc/ice-config` 与 `/_cokret/self/rtc/token`。
+  媒体凭证走 `/_arkret/self/rtc/ice-config` 与 `/_arkret/self/rtc/token`。
   soland-private WebRTC / calls surfaces 已退役,本场景不得依赖。
 - **soland/cotest 覆盖**:服务端覆盖 ephemeral `ck.call.signal` 路由、TTL、
   capability guard、self-device filtering、ban 后 token 拒绝、LiveKit token
-  claim;cotest 覆盖 `ck.call.signal` receiver vectors 与 `/_cokret/self/rtc/*`
+  claim;cotest 覆盖 `ck.call.signal` receiver vectors 与 `/_arkret/self/rtc/*`
   realtime policy guards。
 - **inkson 预期**:`/call` 的本地 renderer FSM 暴露
   `call-status-ringing`、`call-status-connecting`、`call-status-active`、

@@ -11,7 +11,7 @@ use arkret::{
     CokretMlsGroup, CokretMlsIdentity, CryptoStore, DeviceId, Did, MemoryCryptoStore,
     MlsDeviceWorkflowAction, MlsRecoveryAction, late_device_join_steps,
 };
-use cokret_core::MlsKeyPackageState;
+use arkret_core::MlsKeyPackageState;
 use serde_json::Value;
 
 const MLS_FIXTURE: &str = include_str!("fixtures/mls_e2ee_basic_fixture.json");

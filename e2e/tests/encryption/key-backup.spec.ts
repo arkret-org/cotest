@@ -58,9 +58,9 @@ test.describe("key backup + restore", () => {
     });
 
     try {
-      // Probe: is /_cokret/self/keys/backups routed?
+      // Probe: is /_arkret/self/keys/backups routed?
       const listResp = await request.get(
-        `${solandBaseUrl()}/_cokret/self/keys/backups`,
+        `${solandBaseUrl()}/_arkret/self/keys/backups`,
         {
           headers: { authorization: `Bearer ${aliceToken}` },
         },
@@ -274,7 +274,7 @@ test.describe("key backup + restore", () => {
 
       expect(
         protocolFailures.filter((line) =>
-          /MLS runtime|SnapshotDecryptFailed|\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
+          /MLS runtime|SnapshotDecryptFailed|\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
             line,
           ),
         ),
@@ -413,7 +413,7 @@ test.describe("key backup + restore", () => {
       ).toEqual([]);
       expect(
         protocolFailures.filter((line) =>
-          /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
+          /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
             line,
           ),
         ),
@@ -597,7 +597,7 @@ test.describe("key backup + restore", () => {
       ).toBeVisible({ timeout: 90_000 });
 
       const fatalProtocolPattern =
-        /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|MLS commit event failed|\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/;
+        /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|MLS commit event failed|\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/;
       expect(
         protocolFailures.filter((line) => fatalProtocolPattern.test(line)),
         protocolFailures.join("\n"),
@@ -723,7 +723,7 @@ async function expectDpopDeviceActive(
   request: APIRequestContext,
   session: DpopUserSession,
 ) {
-  const url = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+  const url = `${solandBaseUrl()}/_arkret/self/account/viewer`;
   await expect
     .poll(
       async () => {
@@ -771,7 +771,7 @@ function collectKeyBackupPuts(page: Page): KeyBackupPut[] {
   page.on("response", (response) => {
     if (
       response.request().method() !== "PUT" ||
-      !/\/(?:api\/v1|_cokret\/self)\/keys\/backups\//.test(response.url())
+      !/\/(?:api\/v1|_arkret\/self)\/keys\/backups\//.test(response.url())
     ) {
       return;
     }
@@ -795,7 +795,7 @@ function collectSessionGrantHolderProofTrace(
   page.on("response", (response) => {
     const request = response.request();
     const url = response.url();
-    if (!/\/_cokret\/(?:self|root)\//.test(url)) {
+    if (!/\/_arkret\/(?:self|root)\//.test(url)) {
       return;
     }
     const headers = request.headers();
@@ -817,13 +817,13 @@ function collectSessionGrantHolderProofTrace(
     trace.authorizedSelfRequests.push(hit);
     if (
       hit.method === "PUT" &&
-      /\/_cokret\/self\/keys\/backups\/[^/]+$/.test(url)
+      /\/_arkret\/self\/keys\/backups\/[^/]+$/.test(url)
     ) {
       trace.keyBackupWrites.push(hit);
     }
     if (
       hit.method === "POST" &&
-      /\/_cokret\/self\/keys\/backups\/[^/]+\/unlock$/.test(url)
+      /\/_arkret\/self\/keys\/backups\/[^/]+\/unlock$/.test(url)
     ) {
       trace.unlocks.push({
         ...hit,
@@ -933,7 +933,7 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
     const errorText = request.failure()?.errorText ?? "";
     if (
       request.method() === "GET" &&
-      /\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|events\/subscribe|events\/describe|describe)(?:\?|$)/.test(
+      /\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|events\/subscribe|events\/describe|describe)(?:\?|$)/.test(
         url,
       ) &&
       /ERR_ABORTED|NS_BINDING_ABORTED|aborted|cancel/i.test(errorText)
@@ -941,7 +941,7 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
       return;
     }
     if (
-      /\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
+      /\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
         url,
       )
     ) {
@@ -953,19 +953,19 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
     if (
       response.status() === 404 &&
       response.request().method() === "GET" &&
-      /\/_cokret\/self\/events\/frontier\?actor_id=/.test(url)
+      /\/_arkret\/self\/events\/frontier\?actor_id=/.test(url)
     ) {
       return;
     }
     if (
       response.status() >= 400 &&
-      /\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
+      /\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
         url,
       )
     ) {
       const entry = `http:${response.status()} ${response.request().method()} ${url}`;
       failures.push(entry);
-      if (/\/(?:api\/v1|_cokret\/self)\/events/.test(url)) {
+      if (/\/(?:api\/v1|_arkret\/self)\/events/.test(url)) {
         void response
           .text()
           .then((body) => {

@@ -17,14 +17,14 @@ use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 
 /// Spawn a `starid` binary and assert 4 webvh conformance vectors:
 ///   1. /health              — liveness pings 200
-///   2. /_cokret/root/identity/describe — exposes profile/contract metadata
+///   2. /_arkret/root/identity/describe — exposes profile/contract metadata
 ///   3. /openapi.yaml        — published openapi document is reachable
 ///   4. negative GET on POST-only `/_starid/webvh/dids` returns 404 or 405
 ///
 /// STA-07-002: the legacy starid `/describe` liveness probe (asserting
 /// `supported_methods` advertises `did:webvh`) has been removed — that route no
 /// longer exists; canonical discovery strands exclusively through
-/// `/_cokret/root/identity/describe`.
+/// `/_arkret/root/identity/describe`.
 pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     let proc = spawn_required(&STARID_SPEC)
         .await
@@ -43,13 +43,13 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
         bail!("/health did not report ok=true: {body}");
     }
 
-    // ── Vector 2: /_cokret/root/identity/describe surfaces profile metadata ─────
+    // ── Vector 2: /_arkret/root/identity/describe surfaces profile metadata ─────
     let resp = client
-        .get(proc.url("/_cokret/root/identity/describe"))
+        .get(proc.url("/_arkret/root/identity/describe"))
         .send()
         .await?;
     if !resp.status().is_success() {
-        bail!("/_cokret/root/identity/describe returned {}", resp.status());
+        bail!("/_arkret/root/identity/describe returned {}", resp.status());
     }
     let body: serde_json::Value = resp.json().await?;
     let has_profile_metadata = body.get("profiles").is_some()

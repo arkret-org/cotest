@@ -2,14 +2,14 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, Duration, Utc};
-use cokret_core::error::{
+use arkret_core::error::{
     ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_UNAUTHENTICATED, REASON_PROOF_INVALID,
 };
-use cokret_core::{
+use arkret_core::{
     DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
     canonical,
 };
-use cokret_signatures::http_signature::{
+use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
     SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,
     verify_signed_http_message,
@@ -369,7 +369,7 @@ struct SignedRequest {
 }
 
 fn signing_key(seed: u8) -> Ed25519SigningKey {
-    cokret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
+    arkret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
 }
 
 struct SelfRequestSigning<'a> {
@@ -459,7 +459,7 @@ fn sign_self_request(request: SelfRequestSigning<'_>) -> Result<SignedRequest> {
 
 fn verify_self_pop(
     request: &SignedRequest,
-    public_key: &cokret_signatures::http_signature::Ed25519PublicKey,
+    public_key: &arkret_signatures::http_signature::Ed25519PublicKey,
     expected_key_id: &str,
     now: i64,
 ) -> std::result::Result<(), &'static str> {
@@ -824,7 +824,7 @@ pub fn run_session_pop_presentation_vector() -> Result<()> {
 
     let mut tampered_transcript = request.clone();
     tampered_transcript.target_uri =
-        "https://soland.example.com/_cokret/self/events/tampered".to_owned();
+        "https://soland.example.com/_arkret/self/events/tampered".to_owned();
     if verify_self_pop(
         &tampered_transcript,
         &key.verifying_key(),
@@ -913,9 +913,9 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
         signing_key: &key,
         key_id: "did:web:alice.example#session-key-1",
         method: "POST",
-        target_uri: "https://soland.example.com/_cokret/self/events",
+        target_uri: "https://soland.example.com/_arkret/self/events",
         authority: "soland.example.com",
-        path: "/_cokret/self/events",
+        path: "/_arkret/self/events",
         body,
         idempotency_key: None,
         created,

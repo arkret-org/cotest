@@ -40,7 +40,7 @@ test.describe("sovereign deployment", () => {
     await expectErrorCode(rogue, "did_method_not_trusted");
 
     // Deployment/enclave introspection is a soland product-private surface
-    // (`/_soland/self/...`), not part of the `/_cokret/` protocol catalog.
+    // (`/_soland/self/...`), not part of the `/_arkret/` protocol catalog.
     const betaRealm = await getJson(
       request,
       "beta",
@@ -71,7 +71,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/_cokret/self/realms/${encodeURIComponent(fixture.internalRealmId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
+      `${solandBaseUrl("alpha")}/_arkret/self/realms/${encodeURIComponent(fixture.internalRealmId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(direct.status()).toBe(403);
     await expectErrorCode(direct, "external_user_no_main_access");
@@ -82,7 +82,7 @@ test.describe("sovereign deployment", () => {
     // assertion is that the external user cannot discover the internal Realm:
     // the authorized search returns an empty realm set.
     const directoryResp = await request.post(
-      `${solandBaseUrl("alpha")}/_cokret/find/directory/search-realms`,
+      `${solandBaseUrl("alpha")}/_arkret/find/directory/search-realms`,
       {
         data: {
           query: "internal",
@@ -99,7 +99,7 @@ test.describe("sovereign deployment", () => {
       data: {
         actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
-        path: `/_cokret/self/realms/${fixture.internalRealmId}`,
+        path: `/_arkret/self/realms/${fixture.internalRealmId}`,
       },
     });
     expect(proxy.status()).toBe(403);

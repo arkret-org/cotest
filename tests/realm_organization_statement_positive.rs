@@ -5,7 +5,7 @@
 //! It drives the *shared* arkret-rust-sdk surfaces end to end so cotest never
 //! re-implements the organization-side crypto:
 //!
-//!   * `cokret_signatures::realm_organization_statement_sign` signs the canonical transcript with
+//!   * `arkret_signatures::realm_organization_statement_sign` signs the canonical transcript with
 //!     the organization's control key (the same key a verifier resolves from the organization's own
 //!     DID document).
 //!   * the verification mirrors soland's `verify_realm_organization_proof_signature` exactly:
@@ -19,14 +19,14 @@
 //! field tamper MUST fail verification.
 
 use chrono::{DateTime, TimeZone, Utc};
-use cokret_core::base64url::base64url_decode;
-use cokret_core::models::{
+use arkret_core::base64url::base64url_decode;
+use arkret_core::models::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
     SignatureMaterial, realm_organization_statement_signing_bytes,
 };
-use cokret_core::{Did, RealmId};
-use cokret_signatures::realm_organization_statement_sign;
+use arkret_core::{Did, RealmId};
+use arkret_signatures::realm_organization_statement_sign;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 
 const ORG_DID: &str = "did:webvh:example.test:orgs:01J0000000000000000000000A";
@@ -40,7 +40,7 @@ fn now() -> DateTime<Utc> {
 
 fn org_control_key() -> SigningKey {
     // Stands in for the organization control key minted by
-    // `cokret_signatures::webvh::prepare_inception` (`did_key_seed`); the webvh
+    // `arkret_signatures::webvh::prepare_inception` (`did_key_seed`); the webvh
     // crate's own tests cover the minting + document-proof path.
     SigningKey::from_bytes(&[0x2au8; 32])
 }

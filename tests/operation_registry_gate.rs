@@ -19,12 +19,12 @@ fn openapi_operation_id_drift_fails() -> Result<()> {
         &artifacts_root,
         &[(
             "ck.server.query.describe",
-            "GET /_cokret/describe",
+            "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_cokret/describe", "ck.server.query.wrong")],
+        &[("GET", "/_arkret/describe", "ck.server.query.wrong")],
     )?;
     write_json(
         &product_private_path,
@@ -33,7 +33,7 @@ fn openapi_operation_id_drift_fails() -> Result<()> {
     write_source(
         &source_dir,
         "src/api.rs",
-        r#"client.get_json("_cokret/describe")"#,
+        r#"client.get_json("_arkret/describe")"#,
     )?;
 
     let report = build_operation_registry_gate_report_from_paths(paths(
@@ -59,12 +59,12 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
         &artifacts_root,
         &[(
             "ck.server.query.describe",
-            "GET /_cokret/describe",
+            "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_cokret/describe", "ck.server.query.describe")],
+        &[("GET", "/_arkret/describe", "ck.server.query.describe")],
     )?;
     write_json(
         &product_private_path,
@@ -73,7 +73,7 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
     write_source(
         &source_dir,
         "src/api.rs",
-        r#"client.post_json("_cokret/self/private-control", &body)"#,
+        r#"client.post_json("_arkret/self/private-control", &body)"#,
     )?;
 
     let report = build_operation_registry_gate_report_from_paths(paths(
@@ -85,7 +85,7 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
     let error = validate_operation_registry_gate_report(&report)
         .expect_err("unregistered source path must fail")
         .to_string();
-    assert!(error.contains("/_cokret/self/private-control"));
+    assert!(error.contains("/_arkret/self/private-control"));
     assert!(error.contains("product-private"));
     Ok(())
 }
@@ -100,12 +100,12 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
         &artifacts_root,
         &[(
             "ck.server.query.describe",
-            "GET /_cokret/describe",
+            "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_cokret/describe", "ck.server.query.describe")],
+        &[("GET", "/_arkret/describe", "ck.server.query.describe")],
     )?;
     write_json(
         &product_private_path,
@@ -114,7 +114,7 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
             "allowed": [{
                 "source": "soland",
                 "method": "POST",
-                "path": "/_cokret/self/private-control",
+                "path": "/_arkret/self/private-control",
                 "classification": "product-private",
                 "reason": "deployment-local control surface"
             }]
@@ -123,7 +123,7 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
     write_source(
         &source_dir,
         "src/api.rs",
-        r#"Router::with_path("_cokret/self/private-control").post(handler)"#,
+        r#"Router::with_path("_arkret/self/private-control").post(handler)"#,
     )?;
 
     let report = build_operation_registry_gate_report_from_paths(paths(
@@ -135,7 +135,7 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
     let entry = report
         .entries
         .iter()
-        .find(|entry| entry.path == "/_cokret/self/private-control")
+        .find(|entry| entry.path == "/_arkret/self/private-control")
         .expect("source path should be observed");
     assert_eq!(
         entry.gate_status,
@@ -160,12 +160,12 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
         &artifacts_root,
         &[(
             "ck.server.query.describe",
-            "GET /_cokret/describe",
+            "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_cokret/describe", "ck.server.query.describe")],
+        &[("GET", "/_arkret/describe", "ck.server.query.describe")],
     )?;
     write_json(
         &product_private_path,
@@ -174,7 +174,7 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
     write_source(
         &source_dir,
         "e2e/tests/self-gate.spec.ts",
-        r#"await request.post(`${base}/_cokret/self/private-test`, { data: {} });"#,
+        r#"await request.post(`${base}/_arkret/self/private-test`, { data: {} });"#,
     )?;
 
     let report = build_operation_registry_gate_report_from_paths(paths(
@@ -185,7 +185,7 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
     let error = validate_operation_registry_gate_report(&report)
         .expect_err("cotest .spec.ts paths must be scanned")
         .to_string();
-    assert!(error.contains("cotest POST /_cokret/self/private-test"));
+    assert!(error.contains("cotest POST /_arkret/self/private-test"));
     Ok(())
 }
 

@@ -16,12 +16,12 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
     let server_b = scaffold.server(1);
 
     let describe_a = expect_json(
-        server_a.http().get(server_a.url("/_cokret/describe")),
+        server_a.http().get(server_a.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
     let describe_b = expect_json(
-        server_b.http().get(server_b.url("/_cokret/describe")),
+        server_b.http().get(server_b.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -32,7 +32,7 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
     let resolve = expect_json(
         server_a
             .http()
-            .post(server_a.url("/_cokret/root/identity/resolve"))
+            .post(server_a.url("/_arkret/root/identity/resolve"))
             .json(&json!({"did": "did:web:alice.example"})),
         StatusCode::OK,
     )

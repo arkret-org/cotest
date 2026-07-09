@@ -10,7 +10,7 @@ import {
 export type JointRealmFixture = {
   alice: JointUser;
   bob: JointUser;
-  /// Real `ck.session.grant` JWT (the bearer presented on `/_cokret/self/*`).
+  /// Real `ck.session.grant` JWT (the bearer presented on `/_arkret/self/*`).
   aliceToken: string;
   bobToken: string;
   aliceSession: DpopUserSession;

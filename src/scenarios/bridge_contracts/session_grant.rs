@@ -21,7 +21,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&json!({
                 "principal_id": principal_id,
                 "display_name": "Alice Session Grant",
@@ -34,7 +34,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     let push = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/edge/push/register-device"))
+            .post(server.url("/_arkret/edge/push/register-device"))
             .header("X-Arkret-Session-Grant", "coauth.session.jwt")
             .header("X-Arkret-Principal-Id", principal_id)
             .header("X-Arkret-Session-Grant-Challenge", "soland-push-challenge")
@@ -44,7 +44,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             )
             .json(&json!({
                 "device_id": device_id,
-                "push_gateway": "https://floria.example/_cokret/edge/push/notify",
+                "push_gateway": "https://floria.example/_arkret/edge/push/notify",
                 "push_key": "webpush:opaque-token",
                 "platform": "web",
                 "app_id": "inkson"

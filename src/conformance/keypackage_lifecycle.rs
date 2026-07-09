@@ -5,8 +5,8 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::error::{ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED, ERROR_CODE_KEYPACKAGE_UNKNOWN};
-use cokret_core::{
+use arkret_core::error::{ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED, ERROR_CODE_KEYPACKAGE_UNKNOWN};
+use arkret_core::{
     DeviceId, Did, Hash, KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome,
     KeyPackagesUploadOutcome, MlsKeypackagePayload, MlsWelcomePayload, OP_KEYS_KEYPACKAGES_CLAIM,
     OP_KEYS_KEYPACKAGES_CONSUME, OP_KEYS_KEYPACKAGES_REVOKE, OP_KEYS_KEYPACKAGES_UPLOAD, RealmId,

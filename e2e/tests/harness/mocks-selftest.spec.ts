@@ -207,12 +207,12 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const baseUrl = mockAuditAgentBaseUrl();
     test.skip(!baseUrl, "mock-audit-agent not started for this run");
 
-    const identity = await (await request.get(`${baseUrl}/_cokret/self/audit-agent/identity`)).json();
+    const identity = await (await request.get(`${baseUrl}/_arkret/self/audit-agent/identity`)).json();
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
     const realmId = `ck:realm:selftest:${Date.now()}`;
-    const invite = await request.post(`${baseUrl}/_cokret/self/audit-agent/invite`, {
+    const invite = await request.post(`${baseUrl}/_arkret/self/audit-agent/invite`, {
       data: { realm_id: realmId, invite: { event_id: "evt-selftest" } },
     });
     expect(invite.status()).toBe(200);
@@ -223,7 +223,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(typeof inviteBody.emitted.binding_proof).toBe("string");
 
     const accessed = await (
-      await request.get(`${baseUrl}/_cokret/self/audit-agent/accessed`)
+      await request.get(`${baseUrl}/_arkret/self/audit-agent/accessed`)
     ).json();
     expect(
       (accessed.events as Array<{ realm_id: string }>).some((e) => e.realm_id === realmId),
@@ -248,7 +248,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(resetResp.status()).toBe(200);
     expect((await resetResp.json()).default).toBe("deny");
 
-    const defaultDenyResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
+    const defaultDenyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
       data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
     });
     expect(defaultDenyResp.status()).toBe(200);
@@ -259,7 +259,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
 
     // Explicit permissive baseline when no rules match.
-    const allowResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
+    const allowResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
       data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
     });
     expect(allowResp.status()).toBe(200);
@@ -281,7 +281,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       },
     });
 
-    const denyResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
+    const denyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
       data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:bob" },
     });
     expect(denyResp.status()).toBe(200);
@@ -310,7 +310,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     await request.delete(`${baseUrl}/scenarios`);
 
     const pusherId = `selftest-pusher-${Date.now()}`;
-    const reg = await request.post(`${baseUrl}/_cokret/edge/push/register-device`, {
+    const reg = await request.post(`${baseUrl}/_arkret/edge/push/register-device`, {
       data: {
         pusher_id: pusherId,
         app_id: "selftest",
@@ -322,7 +322,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(reg.status()).toBe(200);
 
-    const notify = await request.post(`${baseUrl}/_cokret/edge/push/notify`, {
+    const notify = await request.post(`${baseUrl}/_arkret/edge/push/notify`, {
       data: {
         pusher_id: pusherId,
         payload: { title: "selftest", body: "hello" },
@@ -336,7 +336,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(notifyBody.delivery_receipt.split(".").length).toBe(3);
 
     // Blind-wake payload MUST not contain plain content.
-    const blindBad = await request.post(`${baseUrl}/_cokret/edge/push/notify`, {
+    const blindBad = await request.post(`${baseUrl}/_arkret/edge/push/notify`, {
       data: {
         pusher_id: pusherId,
         blind_wake: true,
@@ -556,7 +556,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(accepted.status).toBe(200);
     expect(accepted.body.status).toBe("accepted");
-    expect(String(accepted.body.cokret_event_hint)).toMatch(/^ck:event:mimi:/);
+    expect(String(accepted.body.arkret_event_hint)).toMatch(/^ck:event:mimi:/);
 
     const quarantined = await facade.injectInbound({
       realm_id: realmId,

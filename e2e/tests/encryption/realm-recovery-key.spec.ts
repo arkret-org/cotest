@@ -412,7 +412,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           }),
         ],
       };
-      const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: realmCreateEnvelope({
           ownerDid: alice.did,
@@ -465,7 +465,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           toEpoch: epoch,
           sealedCiphertext,
         });
-        const share = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        const share = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
           headers: authHeaders(aliceToken),
           data: shareEnvelope,
         });
@@ -494,7 +494,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       // Organizational recovery: the org retrieves the durable RRK shares (they
       // are stored ciphertext-only on the server, §2.10.8) and HPKE-opens each
       // with the RRK private key to recover history_secret[1..N].
-      const recoveryUrl = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(
+      const recoveryUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(
         realmId,
       )}/durability/recovery-shares`;
       const sharesResp = await request.get(recoveryUrl, {
@@ -561,7 +561,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
       const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
       const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: realmCreateEnvelope({
           ownerDid: alice.did,
@@ -603,7 +603,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           epoch,
           plaintext,
         );
-        const share = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        const share = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
           headers: authHeaders(aliceToken),
           data: rrkRealmKeyShareEnvelope({
             senderDid: alice.did,
@@ -648,7 +648,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       // [1,2] with the RRK private key, then RE-SEALS history_secret[1..2] to
       // dave's device HPKE public key as a fresh ck.realm_key.share. The
       // sender_device of this re-share is the RRK holder's device.
-      const reSeal = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const reSeal = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(daveToken),
         data: rrkRealmKeyShareEnvelope({
           senderDid: orgRrk.did,
@@ -702,7 +702,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
       // Realm created WITHOUT mls-exporter-aead-v1 (explicit mls-rfc9420).
       const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: realmCreateEnvelope({
           ownerDid: alice.did,
@@ -715,7 +715,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
       // Writing durability_policy.mode != none via ck.realm.policy_components MUST
       // failed_precondition with reason durability_scheme_incompatible.
-      const write = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -763,7 +763,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       const { user: orgRrk } = await registeredSession(request, "rrk-c2-org");
 
       const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: realmCreateEnvelope({
           ownerDid: alice.did,
@@ -779,7 +779,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       // entry (e.g. it points at the did_recovery-domain key, or the service
       // entry is absent/revoked). The seal MUST fail closed.
       const unverifiedVm = `${orgRrk.did}#did-recovery-1`; // wrong domain on purpose
-      const write = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -832,7 +832,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
       const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
       const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: realmCreateEnvelope({
           ownerDid: alice.did,
@@ -865,7 +865,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       // for epoch 1. Whether the GC intent is signalled by a client-side guard
       // or a server-observed precondition, the spec requires the operation to be
       // refused with durability_seal_missing_before_gc and the secret retained.
-      const gcUrl = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(
+      const gcUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(
         realmId,
       )}/durability/history-secret/gc`;
       const gc = await request.post(gcUrl, {
@@ -880,7 +880,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       expect(wireErrCode(await gc.json())).toBe("durability_seal_missing_before_gc");
 
       // After the eager seal IS accepted, the same GC becomes permissible.
-      const share = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const share = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: rrkRealmKeyShareEnvelope({
           senderDid: alice.did,

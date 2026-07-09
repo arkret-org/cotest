@@ -12,7 +12,7 @@
 //!
 //! The scenario in `cotest::scenarios::handle_to_join_e2e` always exercises
 //! the SDK happy path + all seven negatives, and best-effort drives a live
-//! `POST /_cokret/find/directory/resolve-handle` against teabay when COAUTH_BIN,
+//! `POST /_arkret/find/directory/resolve-handle` against teabay when COAUTH_BIN,
 //! SOLAND_BIN, TEABAY_BIN and their required env vars (DATABASE_URL,
 //! COAUTH_DATABASE_URI, docker) are all present.
 //!

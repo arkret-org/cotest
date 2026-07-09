@@ -15,7 +15,7 @@
 - `arkret-spec/spec/v1/zh/sync/service-http-binding.md` §4 — 服务间 origin/destination service DID 绑定
 - `arkret-spec/spec/v1/zh/sync/service-http-binding.md` §5 — 错误 envelope、404 unrecognized_endpoint、405 method_not_allowed
 - `arkret-spec/spec/v1/zh/sync/federation.md` §3.2 — RFC 9421 HTTP Message Signature 在 federation 调用上的具体要求
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — push 协议(复用 `POST /_cokret/peer/peer/events` 在当前 implementation 路径下)
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — push 协议(复用 `POST /_arkret/peer/peer/events` 在当前 implementation 路径下)
 
 ## 拓扑
 
@@ -50,7 +50,7 @@
 
 1. **soland_a → soland_b**:测试 harness 触发 alice 在 server A 上对 bob 发 `ck.invite.create`(remote DID)
 2. 期望:soland_a 自动构造 federation push 请求
-   - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/peer/events`
+   - URL: `${SOLAND_B_PUBLIC_URL}/_arkret/peer/peer/events`
    - Method: `POST`
    - Headers:
      - `Content-Type: application/json`
@@ -68,27 +68,27 @@
    - 验证 `Content-Digest` 与 body 一致
    - 验证 `Destination-Service-DID` 是自身 DID
    - 验证 nonce / `created` ts 在窗口内(防 replay)
-4. 断言:`POST /_cokret/peer/peer/events` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
-5. 断言:bob 通过 `GET /_cokret/self/account/subscribe?catchup=true` 的 `notifications.events`
+4. 断言:`POST /_arkret/peer/peer/events` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
+5. 断言:bob 通过 `GET /_arkret/self/account/subscribe?catchup=true` 的 `notifications.events`
    在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
 ### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
 
-6. **soland_a** 通过 `GET ${SOLAND_B_PUBLIC_URL}/_cokret/describe` 读取 server B 的 `supported_bindings`
-   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ck.profile.binding.websocket.v1", upgrade_path: "/_cokret/peer/events stream binding"}`
+6. **soland_a** 通过 `GET ${SOLAND_B_PUBLIC_URL}/_arkret/describe` 读取 server B 的 `supported_bindings`
+   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ck.profile.binding.websocket.v1", upgrade_path: "/_arkret/peer/events stream binding"}`
 7. **soland_a** 发起 WebSocket 升级:
-   - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/events stream binding`(`wss://` 在生产、`ws://` 在测试)
+   - URL: `${SOLAND_B_PUBLIC_URL}/_arkret/peer/events stream binding`(`wss://` 在生产、`ws://` 在测试)
    - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ck.federation.v1`
    - 同时携带 RFC 9421 `Signature` 对 upgrade 请求的 covered components 签名(handshake 阶段)
 8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `ck.federation.v1` subprotocol
 9. **soland_a** 通过 WebSocket 帧推送下一批 federation event(例如 alice 在 space 发的消息)
    - 每个帧 body 仍然是 canonical EventEnvelope;帧本身携带 `frame_signature`(per-frame service signature) 而非 per-request RFC 9421
 10. **soland_b** 验证 frame_signature → 入库 → bob 30s 内看到消息
-11. 断言:server A 和 server B 都通过 `GET /_cokret/describe` 或内部 admin endpoint 报告当前活跃 binding = `websocket_frame`(至少一条 active connection)
+11. 断言:server A 和 server B 都通过 `GET /_arkret/describe` 或内部 admin endpoint 报告当前活跃 binding = `websocket_frame`(至少一条 active connection)
 
 ### Phase C — TSP binding (optional extension)
 
-12. **soland_a** 在 `GET /_cokret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ck.profile.binding.tsp.v1"`)
+12. **soland_a** 在 `GET /_arkret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ck.profile.binding.tsp.v1"`)
 13. **soland_b** 选择 TSP — 通过 `ck.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
 14. **soland_a** 通过 TSP node 向 soland_b 发送下一批事件
     - TSP envelope: outer wrapper 携带 sender/receiver VID(verifiable identifier),inner payload 是 canonical EventEnvelope
@@ -110,9 +110,9 @@
 
 ## Observable assertions (合并清单)
 
-- Phase A:POST `/_cokret/peer/peer/events` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
-- Phase A:bob 在 `/_cokret/self/account/subscribe` 的 `notifications.events` 看到 invite
-- Phase B:`GET /_cokret/describe` 含 `supported_bindings[].kind=websocket_frame`
+- Phase A:POST `/_arkret/peer/peer/events` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
+- Phase A:bob 在 `/_arkret/self/account/subscribe` 的 `notifications.events` 看到 invite
+- Phase B:`GET /_arkret/describe` 含 `supported_bindings[].kind=websocket_frame`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ck.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息
 - Phase C(fixme):TSP binding 出现在 `supported_bindings` 中;TSP envelope 解封成功

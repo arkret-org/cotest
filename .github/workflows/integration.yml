@@ -133,7 +133,7 @@ jobs:
             sleep 1
           done
           curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
-          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /_cokret/describe"
+          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /_arkret/describe"
       - name: run federation security hardening Playwright
         working-directory: cotest/e2e
         env:

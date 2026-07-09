@@ -49,7 +49,7 @@ test.describe("world_readable history @fully-implemented", () => {
     // outsider is registered but NOT a member; with world_readable the
     // events query MUST succeed for them.
     const events = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
+      `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}`,
       { headers: { authorization: `Bearer ${outsiderToken}` } },
     );
     expect(events.status()).toBe(200);
@@ -57,7 +57,7 @@ test.describe("world_readable history @fully-implemented", () => {
     expectEventsContainRealmCreate(body, realmId);
   });
 
-  test("anonymous (no session token) GET /_cokret/self/events succeeds when history_visibility=world_readable", async ({
+  test("anonymous (no session token) GET /_arkret/self/events succeeds when history_visibility=world_readable", async ({
     request,
   }) => {
     // spec: realm-and-space.md §3.7 — world_readable also opens the read
@@ -80,7 +80,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const anonRequest = await playwrightRequest.newContext({});
     try {
       const anonResp = await anonRequest.get(
-        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}`,
       );
       expect(anonResp.status()).toBe(200);
       const body = await anonResp.json();
@@ -132,7 +132,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const event = encryptedWorldReadableRealmCreateEvent(alice.did);
-    const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: event,
     });

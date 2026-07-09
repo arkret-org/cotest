@@ -78,7 +78,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
-    let url = proc.url("/_cokret/self/events");
+    let url = proc.url("/_arkret/self/events");
 
     // Build an envelope that *looks* like a inkson `OperationBuilder::build()`
     // output before T1.3 — a `ck.message.create` payload with the
@@ -121,7 +121,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
         .json(&envelope)
         .send()
         .await
-        .context("POST /_cokret/self/events to production soland")?;
+        .context("POST /_arkret/self/events to production soland")?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
 

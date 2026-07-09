@@ -491,7 +491,7 @@ async fn fetch_account_subscribe_with_size(
 ) -> Result<(Value, usize)> {
     let response = expect_response(
         actor
-            .get(&format!("/_cokret/self/account/subscribe?{query}"))
+            .get(&format!("/_arkret/self/account/subscribe?{query}"))
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )
@@ -508,7 +508,7 @@ async fn fetch_account_subscribe_json(
 ) -> Result<(Value, String)> {
     let response = expect_response(
         actor
-            .get(&format!("/_cokret/self/account/subscribe?{query}"))
+            .get(&format!("/_arkret/self/account/subscribe?{query}"))
             .header("accept", "application/json"),
         StatusCode::OK,
     )
@@ -649,7 +649,7 @@ async fn submit_event_now(
     }
     crate::harness::refresh_event_proof(&mut event);
     let mut response = crate::harness::expect_json(
-        actor.post("/_cokret/self/events").json(&event),
+        actor.post("/_arkret/self/events").json(&event),
         StatusCode::OK,
     )
     .await?;

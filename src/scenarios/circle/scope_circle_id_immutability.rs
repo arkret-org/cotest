@@ -20,8 +20,8 @@
 //! locally that any future SDK helper / reducer SHOULD match bit-for-bit.
 
 use anyhow::{Result, anyhow};
-use cokret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
-use cokret_core::{CircleId, Did, RealmId, Strand, StrandId};
+use arkret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
+use arkret_core::{CircleId, Did, RealmId, Strand, StrandId};
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {

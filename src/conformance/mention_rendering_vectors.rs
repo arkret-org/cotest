@@ -17,8 +17,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use arkret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
-use cokret_core::Did;
-use cokret_core::models::{Handle, HandleBindingState, HandleClaim, Mention};
+use arkret_core::Did;
+use arkret_core::models::{Handle, HandleBindingState, HandleClaim, Mention};
 use serde_json::json;
 
 pub const VECTOR_ID_MENTION_NEW_ACCEPTED: &str =

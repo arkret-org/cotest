@@ -10,7 +10,7 @@
 //   3. session persistence    → a full page reload stays signed in (this is the
 //                               exact regression for the "login succeeds but
 //                               reload bounces to /login" bug — naked-bearer 401
-//                               on /_cokret/root/* + bearer not re-persisted to
+//                               on /_arkret/root/* + bearer not re-persisted to
 //                               the upgraded secure store)
 //   4. logout                 → returns to the login panel, session cleared
 //   5. returning-user login   → the same account signs back in

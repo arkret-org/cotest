@@ -2,8 +2,8 @@
 //!
 //! Every Arkret service (coauth / soland / starid / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
-//! the SDK's `cokret_core::canonical` module and the
-//! `cokret_signatures::EventProofBuilder` facade. This test pins a
+//! the SDK's `arkret_core::canonical` module and the
+//! `arkret_signatures::EventProofBuilder` facade. This test pins a
 //! handful of fixture payloads representing the three shapes that
 //! matter on the wire — coauth `handle_claim`, soland event-envelope
 //! payload, starid did:webvh update — and asserts every entry point
@@ -16,7 +16,7 @@
 //! failures in federation / replication tests).
 
 use arkret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
-use cokret_core::canonical::{
+use arkret_core::canonical::{
     blake3_digest, canonical_hash, canonical_json_bytes, canonical_sha256, verify_digest,
 };
 use serde_json::{Value, json};
@@ -51,7 +51,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_service_did": "did:web:coauth.example",
-                "audience": "https://soland.example/_cokret",
+                "audience": "https://soland.example/_arkret",
                 "member_delivery_binding": {
                     "recipient_service_did": "did:web:soland.example",
                     "recipient_service_type": "principal_server",
@@ -63,7 +63,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // R3.1 digest — recomputed after the `handle_uri` → `handle`
             // wire rename. Source of truth: SDK's
-            // `cokret_core::canonical::canonical_sha256` over the canonical
+            // `arkret_core::canonical::canonical_sha256` over the canonical
             // JSON bytes of the payload above. If this digest drifts, the
             // first place to look is whether any downstream service has
             // re-introduced a hand-rolled canonical encoder. To regenerate:
@@ -132,7 +132,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_service_did": "did:webvh:zcotestcoauthscid0000000000000000:coauth.example",
-                "audience": "https://soland.example/_cokret",
+                "audience": "https://soland.example/_arkret",
                 "member_delivery_binding": {
                     "recipient_service_did": "did:webvh:zcotestsolandscid0000000000000000:soland.example",
                     "recipient_service_type": "principal_server",
@@ -161,7 +161,7 @@ fn canonical_fixture_suite() -> CanonicalFixtureSuite {
     builder.finish()
 }
 
-/// Round-trip every vector through `cokret_core::canonical::canonical_sha256`
+/// Round-trip every vector through `arkret_core::canonical::canonical_sha256`
 /// to make sure the SDK hash itself is stable and matches what we encode
 /// in `expected_digest`. The other downstream services all reach the same
 /// digest by going through this same SDK helper, so this is also our
@@ -196,14 +196,14 @@ fn sdk_blake3_digest_backend_matches_known_vector() {
         digest,
         "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
     );
-    assert!(cokret_core::Hash::new(digest.clone()).is_ok());
+    assert!(arkret_core::Hash::new(digest.clone()).is_ok());
     verify_digest(b"", &digest).expect("empty BLAKE3 digest verifies");
     assert!(verify_digest(b"not-empty", &digest).is_err());
 
     let payload = json!({ "b": 2, "a": 1 });
     let canonical = canonical_hash(&payload, "blake3").expect("canonical BLAKE3");
     assert!(canonical.starts_with("blake3:"));
-    assert!(cokret_core::Hash::new(canonical).is_ok());
+    assert!(arkret_core::Hash::new(canonical).is_ok());
 }
 
 /// Diagnostic: prints the SDK-computed canonical digest for every vector.
@@ -239,17 +239,17 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 }
 
 /// Every service ultimately goes through one of two SDK entry points:
-/// the low-level `cokret_core::canonical::canonical_sha256` (used by
+/// the low-level `arkret_core::canonical::canonical_sha256` (used by
 /// `coauth::handlers::arkret::canonical_json_sha256`, soland's
 /// `validate_event_proofs`, and starid's `proof::canonical_bytes`), or
-/// the high-level `cokret_signatures::EventProofBuilder` (used by
+/// the high-level `arkret_signatures::EventProofBuilder` (used by
 /// inkson / floria when emitting a fresh detached-JWS proof). Both
 /// must yield the same canonical bytes for the same input; this test
 /// pins the equivalence so a future EventProofBuilder change cannot
 /// silently drift from the canonical encoder.
 #[test]
 fn event_proof_builder_matches_low_level_canonical_helpers() {
-    use cokret_signatures::EventProofBuilder;
+    use arkret_signatures::EventProofBuilder;
     let builder = EventProofBuilder::new();
     for vector in canonical_fixture_suite().vectors {
         let low_level_bytes = canonical_json_bytes(&vector.input).unwrap();
@@ -282,16 +282,16 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 //     dump_r3_2_identity_digests -- --ignored --nocapture
 
 fn pinned_r3_2_inputs() -> (
-    cokret_core::RealmId,
-    cokret_core::Did,
-    Vec<cokret_core::models::EffectiveIdentityEntry>,
-    Vec<cokret_core::models::RosterHandleClaimDigestEntry>,
+    arkret_core::RealmId,
+    arkret_core::Did,
+    Vec<arkret_core::models::EffectiveIdentityEntry>,
+    Vec<arkret_core::models::RosterHandleClaimDigestEntry>,
 ) {
-    use cokret_core::models::{
+    use arkret_core::models::{
         EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
         RosterHandleClaimDigestEntry,
     };
-    use cokret_core::{Did, EventId, Hash, RealmId};
+    use arkret_core::{Did, EventId, Hash, RealmId};
 
     let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap();
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
@@ -330,7 +330,7 @@ fn pinned_r3_2_inputs() -> (
 
 #[test]
 fn r3_2_identity_digests_match_pinned_baseline() {
-    use cokret_core::models::{
+    use arkret_core::models::{
         MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
@@ -366,7 +366,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
 #[test]
 #[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
 fn dump_r3_2_identity_digests() {
-    use cokret_core::models::{
+    use arkret_core::models::{
         MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();

@@ -22,8 +22,8 @@
 //!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::schema::embedded_error_code_identifiers;
-use cokret_core::{
+use arkret_core::schema::embedded_error_code_identifiers;
+use arkret_core::{
     EventId, REASON_CROSS_DOMAIN_REPLAY_REJECTED, REASON_RESET_EVENT_ID_MISMATCH,
     TypedTrustDomainId,
 };

@@ -200,7 +200,7 @@ For the PR-sized soland service-surface probe:
   -SkipInkson `
   -RunProfile joint-smoke `
   -PlaywrightProject chromium `
-  -Grep "soland /_cokret/describe"
+  -Grep "soland /_arkret/describe"
 ```
 
 For the full product topology, keep Inkson and coauth enabled:
@@ -315,7 +315,7 @@ The runner now also emits:
   to how Complement validates homeserver images.
 - Use `run-joint-e2e.ps1 -SolandRuntime docker` for release-quality browser/API
   verification, especially when checking that the built image still exposes the
-  expected `/_cokret/*` service surface.
+  expected `/_arkret/*` service surface.
 - Use `artifacts/latest/summary.md` as the first place to inspect a run instead
   of relying on terminal scrollback.
 - `process` mode is the authoritative path for validating the current local

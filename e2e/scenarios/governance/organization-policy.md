@@ -19,7 +19,7 @@ cotest **不再**用 `_soland/self/organizations`(本地部署面,非标准协�
 - `identity/identity-did.md` §6 — Organization 是 DID Principal(不是 Space)
 - `models/governance-objects.md` §3 — Policy 对象
 - `event-payload.schema.json#/$defs/realm_organization_payload` — 关系声明 wire shape
-- SDK:`cokret_core::models::verify_realm_organization_statement` — 组织侧验证不变量
+- SDK:`arkret_core::models::verify_realm_organization_statement` — 组织侧验证不变量
 
 ## 拓扑
 

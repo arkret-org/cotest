@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering;
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
-use cokret_core::{
+use arkret_core::{
     ContentBlock, DeliveryStatus, Did, EventId, Hash, InviteCreatePayload, InviteDeliveryTarget,
     InviteId, MembershipPayload, MembershipPayloadState, MessageCreatePayload, MessageId,
     MessageRedactPayload, MessageRevisePayload, RealmId, StrandId,
@@ -51,7 +51,7 @@ pub async fn register_account_with_handle(
     expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/account/register"))
+            .post(server.url("/_arkret/gate/account/register"))
             .json(&body),
         StatusCode::OK,
     )
@@ -165,7 +165,7 @@ pub async fn submit_event(
     let mut body = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
             .json(&event),
         status,

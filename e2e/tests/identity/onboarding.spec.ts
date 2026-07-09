@@ -70,7 +70,7 @@ test.describe("account onboarding", () => {
         expect.objectContaining({
           name: "session_grants",
           method: "POST",
-          path: "/_cokret/gate/account/session-grants",
+          path: "/_arkret/gate/account/session-grants",
           contract: "ck.gate.account.command.issue_session_grant",
         }),
         expect.objectContaining({
@@ -81,14 +81,14 @@ test.describe("account onboarding", () => {
     );
 
     const user = uniqueUser("p1-025-webvh-email");
-    const serviceDescribe = await request.get(`${coauth}/_cokret/describe`);
+    const serviceDescribe = await request.get(`${coauth}/_arkret/describe`);
     expect(serviceDescribe.status()).toBe(200);
     const service = await serviceDescribe.json();
     expect(service.supported_operations).toContain("ck.gate.account.command.issue_session_grant");
     expect(service.auth_metadata?.issuer_did).toBe(coauthServiceDid());
     expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth!).origin);
     expect(service.auth_metadata?.account_authority?.gate_account_base).toBe(
-      `${coauth}/_cokret/gate/account`,
+      `${coauth}/_arkret/gate/account`,
     );
     expect(JSON.stringify(service.auth_metadata)).not.toContain(solandServiceDid());
 
@@ -171,7 +171,7 @@ test.describe("account onboarding", () => {
     }
   });
 
-  test("alice onboards for real (no dev-login); coauth binds a did:webvh principal and issues a device-bound ck.session.grant that works on /_cokret/self/*", async ({
+  test("alice onboards for real (no dev-login); coauth binds a did:webvh principal and issues a device-bound ck.session.grant that works on /_arkret/self/*", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1, key-management.md §5.0/§6, device-lifecycle.md §3.2
@@ -194,9 +194,9 @@ test.describe("account onboarding", () => {
     expect(onboarded.principalDid).toMatch(/^did:webvh:/);
     expect(onboarded.grantAudience).toBe(solandServiceDid());
 
-    // The short-term grant authenticates a `/_cokret/self/*` call with a
+    // The short-term grant authenticates a `/_arkret/self/*` call with a
     // per-request DPoP proof bound to the device key it was minted for.
-    const meUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
     const meResp = await request.get(meUrl, {
       headers: selfPathGrantHeaders({
         deviceKey: onboarded.deviceKey,

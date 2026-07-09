@@ -229,7 +229,7 @@ async function strandState(
   session: DpopUserSession,
   strandId: string,
 ): Promise<string | undefined> {
-  const url = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands?include_terminal=true`;
+  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands?include_terminal=true`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

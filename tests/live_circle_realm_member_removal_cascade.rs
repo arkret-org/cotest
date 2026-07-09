@@ -23,7 +23,7 @@
 //! soft-skipped via a descriptive `bail!` when the stack cannot start.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{
+use arkret_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleScopeError, CircleSymbol,
     Did, RealmId,
 };
@@ -146,23 +146,23 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     // ── 3. Drive the live wire: create Realm + 2 Circles, add X to both,
     //       then `realm.ck.member.state → left` for X. The expected
     //       endpoints are:
-    //         POST /_cokret/self/realms                            (ck.realm.create)
-    //         POST /_cokret/self/realms/<rid>/circles              (ck.circle.create) x2
-    //         POST /_cokret/self/realms/<rid>/members              for alice + X (active)
-    //         POST /_cokret/self/circles/<cid>/members             for X (active)  x2
-    //         POST /_cokret/self/realms/<rid>/members/<x>/state    body {"state":"left"}
+    //         POST /_arkret/self/realms                            (ck.realm.create)
+    //         POST /_arkret/self/realms/<rid>/circles              (ck.circle.create) x2
+    //         POST /_arkret/self/realms/<rid>/members              for alice + X (active)
+    //         POST /_arkret/self/circles/<cid>/members             for X (active)  x2
+    //         POST /_arkret/self/realms/<rid>/members/<x>/state    body {"state":"left"}
     //
     //       Assertions to wire in once the endpoints land:
-    //         a) GET /_cokret/self/realms/<rid>/members/<x>  → 200 with state=left
-    //         b) GET /_cokret/self/circles/<alpha>/members/<x> → state=left (cascade)
-    //         c) GET /_cokret/self/circles/<beta>/members/<x>  → state=left (cascade)
-    //         d) GET /_cokret/self/circles/<alpha>             → mls_group_ref epoch ↑
-    //         e) GET /_cokret/self/circles/<beta>              → mls_group_ref epoch ↑
+    //         a) GET /_arkret/self/realms/<rid>/members/<x>  → 200 with state=left
+    //         b) GET /_arkret/self/circles/<alpha>/members/<x> → state=left (cascade)
+    //         c) GET /_arkret/self/circles/<beta>/members/<x>  → state=left (cascade)
+    //         d) GET /_arkret/self/circles/<alpha>             → mls_group_ref epoch ↑
+    //         e) GET /_arkret/self/circles/<beta>              → mls_group_ref epoch ↑
     //         f) other-member sync stream contains the synthetic
     //            `ck.circle.member.state` event with state=left for X
     //            (eventually() with 10s timeout, 250ms cadence).
     let _ = admin
-        .post("/_cokret/self/realms")
+        .post("/_arkret/self/realms")
         .json(&json!({
             "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),

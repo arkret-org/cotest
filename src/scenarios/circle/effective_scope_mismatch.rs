@@ -12,7 +12,7 @@
 //! accepting the envelope. The check is local to the envelope bytes.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{CircleId, EffectiveScope, RealmId};
+use arkret_core::{CircleId, EffectiveScope, RealmId};
 use serde_json::{Value, json};
 
 fn realm_id() -> Result<RealmId> {

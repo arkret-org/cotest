@@ -59,22 +59,22 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/identity.rs",
           "markers": [
-            "/_cokret/root/identity/resolve",
-            "/_cokret/root/identity/document"
+            "/_arkret/root/identity/resolve",
+            "/_arkret/root/identity/document"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/recovery/policy.rs",
           "markers": [
-            "/_cokret/root/identity/recovery-policy"
+            "/_arkret/root/identity/recovery-policy"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/recovery/session.rs",
           "markers": [
-            "/_cokret/root/identity/recovery-sessions",
+            "/_arkret/root/identity/recovery-sessions",
             "ck.root.identity.recovery_session.command.submit_proof"
           ]
         },
@@ -82,7 +82,7 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/key_backup_recovery_account_state.rs",
           "markers": [
-            "/_cokret/root/identity/recovery-policy"
+            "/_arkret/root/identity/recovery-policy"
           ]
         }
       ]
@@ -176,8 +176,8 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/auth.rs",
           "markers": [
-            "/_cokret/gate/account/register",
-            "/_cokret/gate/account/logout"
+            "/_arkret/gate/account/register",
+            "/_arkret/gate/account/logout"
           ]
         },
         {
@@ -185,7 +185,7 @@
           "path": "../coauth/crates/backend/src/handlers/arkret/tests.rs",
           "markers": [
             "ck.gate.account.command.logout_auth_session",
-            "/_cokret/gate/account/session-grants/introspect"
+            "/_arkret/gate/account/session-grants/introspect"
           ]
         },
         {
@@ -200,8 +200,8 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/api_contracts_auth.rs",
           "markers": [
-            "/_cokret/gate/account/register",
-            "/_cokret/gate/account/session-grants/revoke"
+            "/_arkret/gate/account/register",
+            "/_arkret/gate/account/session-grants/revoke"
           ]
         },
         {
@@ -389,16 +389,16 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/collaboration_workflow.rs",
           "markers": [
-            "/_cokret/find/directory/resolve-realm",
-            "/_cokret/self/realms/{realm_id}"
+            "/_arkret/find/directory/resolve-realm",
+            "/_arkret/self/realms/{realm_id}"
           ]
         },
         {
           "kind": "joint_e2e",
           "path": "src/scenarios/authz_policy_presence.rs",
           "markers": [
-            "/_cokret/self/authz/check",
-            "/_cokret/self/authz/effective-grants"
+            "/_arkret/self/authz/check",
+            "/_arkret/self/authz/effective-grants"
           ]
         }
       ]
@@ -533,23 +533,23 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/push_keys/keys_devices.rs",
           "markers": [
-            "/_cokret/self/keys/upload",
-            "/_cokret/self/blob/upload"
+            "/_arkret/self/keys/upload",
+            "/_arkret/self/blob/upload"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/push_keys/device_messages.rs",
           "markers": [
-            "/_cokret/self/device_messages",
-            "/_cokret/self/device_messages/ack"
+            "/_arkret/self/device_messages",
+            "/_arkret/self/device_messages/ack"
           ]
         },
         {
           "kind": "joint_e2e",
           "path": "src/scenarios/protocol_payloads/key_backups.rs",
           "markers": [
-            "/_cokret/self/keys/backups",
+            "/_arkret/self/keys/backups",
             "ck.self.keys.backups.command.unlock"
           ]
         },
@@ -557,8 +557,8 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/protocol_payloads/blob.rs",
           "markers": [
-            "/_cokret/self/blob/upload",
-            "/_cokret/self/blob/get"
+            "/_arkret/self/blob/upload",
+            "/_arkret/self/blob/get"
           ]
         },
         {
@@ -566,7 +566,7 @@
           "path": "tests/device_enroll_rollout_e2e.rs",
           "markers": [
             "device-enroll-rollout",
-            "/_cokret/self/keys/query"
+            "/_arkret/self/keys/query"
           ]
         }
       ]
@@ -651,7 +651,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/directory_index.rs",
           "markers": [
-            "/_cokret/find/directory/search-realms",
+            "/_arkret/find/directory/search-realms",
             "ck.find.directory.query.private_contact_discovery"
           ]
         },
@@ -659,8 +659,8 @@
           "kind": "ordinary",
           "path": "../teabay/crates/server/tests/it/conformance.rs",
           "markers": [
-            "/_cokret/find/directory/announce",
-            "/_cokret/find/directory/withdraw"
+            "/_arkret/find/directory/announce",
+            "/_arkret/find/directory/withdraw"
           ]
         },
         {
@@ -674,7 +674,7 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/teabay_unsigned_ingest.rs",
           "markers": [
-            "/_cokret/find/directory/announce"
+            "/_arkret/find/directory/announce"
           ]
         },
         {
@@ -760,7 +760,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/devices_webrtc.rs",
           "markers": [
-            "/_cokret/self/ephemeral",
+            "/_arkret/self/ephemeral",
             "rtc_media_token"
           ]
         },
@@ -768,8 +768,8 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/account_data_sync.rs",
           "markers": [
-            "/_cokret/edge/push/register-device",
-            "/_cokret/edge/push/notify"
+            "/_arkret/edge/push/register-device",
+            "/_arkret/edge/push/notify"
           ]
         },
         {
@@ -777,15 +777,15 @@
           "path": "../floria/tests/provider_payload_strictness.rs",
           "markers": [
             "notify_blind_profile_accepts_pure_blind_payload",
-            "/_cokret/edge/push/notify"
+            "/_arkret/edge/push/notify"
           ]
         },
         {
           "kind": "joint_e2e",
           "path": "src/scenarios/authz_policy_presence.rs",
           "markers": [
-            "/_cokret/edge/push/register-device",
-            "/_cokret/self/rtc/ice-config"
+            "/_arkret/edge/push/register-device",
+            "/_arkret/self/rtc/ice-config"
           ]
         },
         {
@@ -793,7 +793,7 @@
           "path": "src/scenarios/soland_floria_push_e2e.rs",
           "markers": [
             "ck.edge.push.command.register_device",
-            "/_cokret/edge/push/notify"
+            "/_arkret/edge/push/notify"
           ]
         }
       ]
@@ -900,7 +900,7 @@
           "path": "tests/agent_provision_e2e.rs",
           "markers": [
             "ck.self.agent.command.provision",
-            "/_cokret/gate/account/agent-key-pair"
+            "/_arkret/gate/account/agent-key-pair"
           ]
         },
         {
@@ -993,23 +993,23 @@
           "path": "../soland/crates/server/tests/http_api/federation.rs",
           "markers": [
             "ck.peer.events.command.submit",
-            "/_cokret/peer/events/frontier"
+            "/_arkret/peer/events/frontier"
           ]
         },
         {
           "kind": "joint_e2e",
           "path": "src/scenarios/federation_two_node_e1.rs",
           "markers": [
-            "/_cokret/peer/events",
-            "/_cokret/peer/events/frontier"
+            "/_arkret/peer/events",
+            "/_arkret/peer/events/frontier"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/mimi.rs",
           "markers": [
-            "/_cokret/open/mimi/provider-directory",
-            "/_cokret/open/mimi/strands/{room_id}/messages"
+            "/_arkret/open/mimi/provider-directory",
+            "/_arkret/open/mimi/strands/{room_id}/messages"
           ]
         },
         {

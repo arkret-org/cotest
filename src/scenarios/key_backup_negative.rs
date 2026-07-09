@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::{
+use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
     KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
     KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
@@ -38,7 +38,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         .remove("ciphertext");
     expect_backup_error(
         alice
-            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
             .json(&missing_ciphertext),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -52,7 +52,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )?;
     expect_backup_error(
         alice
-            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
             .json(&body_id_mismatch),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -62,7 +62,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let wrong_actor = backup_body(&bob.actor, DEVICE_A, BACKUP_ID)?;
     expect_backup_error(
         alice
-            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
             .json(&wrong_actor),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -71,7 +71,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 
     let accepted = expect_json(
         alice
-            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
             .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?),
         StatusCode::OK,
     )
@@ -79,7 +79,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     assert_eq!(accepted["backup_id"], BACKUP_ID);
     assert_eq!(accepted["status"], "accepted");
 
-    let bob_backups = expect_json(bob.get("/_cokret/self/keys/backups"), StatusCode::OK).await?;
+    let bob_backups = expect_json(bob.get("/_arkret/self/keys/backups"), StatusCode::OK).await?;
     assert!(
         bob_backups["backups"]
             .as_array()
@@ -103,7 +103,7 @@ async fn reject_wrong_device_on_put(server: &CokretServer, token: &str, actor: &
     expect_backup_error(
         server
             .http()
-            .put(server.url(&format!("/_cokret/self/keys/backups/{id}")))
+            .put(server.url(&format!("/_arkret/self/keys/backups/{id}")))
             .bearer_auth(token)
             .json(&body),
         StatusCode::FORBIDDEN,
@@ -126,7 +126,7 @@ async fn reject_digest_mismatch_on_put(
     expect_backup_error(
         server
             .http()
-            .put(server.url(&format!("/_cokret/self/keys/backups/{id}")))
+            .put(server.url(&format!("/_arkret/self/keys/backups/{id}")))
             .bearer_auth(token)
             .json(&body),
         StatusCode::BAD_REQUEST,

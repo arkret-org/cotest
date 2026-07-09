@@ -45,7 +45,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     let health = get_json(&http, directory.url("/health")).await?;
     assert_eq!(health["ok"], true);
 
-    let describe = get_json(&http, directory.url("/_cokret/find/directory/describe")).await?;
+    let describe = get_json(&http, directory.url("/_arkret/find/directory/describe")).await?;
     assert!(
         describe["service_did"]
             .as_str()
@@ -72,10 +72,10 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
 
     let openapi = get_json(&http, directory.url("/.well-known/arkret/openapi.json")).await?;
     for path in [
-        "/_cokret/find/directory/describe",
-        "/_cokret/find/directory/search-realms",
-        "/_cokret/find/directory/resolve-handle",
-        "/_cokret/find/directory/private-contact-discovery",
+        "/_arkret/find/directory/describe",
+        "/_arkret/find/directory/search-realms",
+        "/_arkret/find/directory/resolve-handle",
+        "/_arkret/find/directory/private-contact-discovery",
         "/api/admin/v1/resources",
     ] {
         assert!(
@@ -85,7 +85,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     }
 
     let not_found = http
-        .post(directory.url("/_cokret/find/directory/resolve-handle"))
+        .post(directory.url("/_arkret/find/directory/resolve-handle"))
         .json(&json!({ "handle": "absent.example" }))
         .send()
         .await?;

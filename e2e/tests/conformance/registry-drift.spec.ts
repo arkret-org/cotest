@@ -10,7 +10,7 @@
 //   - arkret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
 // Treat the artifacts as the source-of-truth and walk soland's live
-// `/_cokret/describe` for drift. The LIVE phases below (C / E)
+// `/_arkret/describe` for drift. The LIVE phases below (C / E)
 // are pure artifact-vs-describe diffs and need no fixme — they are tagged
 // @fully-implemented so they run under the joint-smoke profile.
 //
@@ -347,7 +347,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     );
     expect(deprecated.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -376,7 +376,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const canonicalOps = new Set(operationRegistry.operations.map((o) => o.operation_id));
     expect(canonicalOps.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -422,7 +422,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       kind: removed!.id,
       payload: {},
     });
-    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
@@ -459,7 +459,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const auth = { authorization: `Bearer ${token}` };
 
     // Submit a benign event so the write receipt is part of the scan surface.
-    const submitReceipt = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const submitReceipt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: auth,
       data: signedEventEnvelope({
         actorDid: alice.did,
@@ -470,12 +470,12 @@ test.describe("conformance registry drift @fully-implemented", () => {
     });
 
     const surfaces: Array<{ name: string; response: APIResponse; requireOk?: boolean }> = [
-      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_cokret/describe`), requireOk: true },
+      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_arkret/describe`), requireOk: true },
       { name: "health", response: await request.get(`${solandBaseUrl()}/health`), requireOk: true },
-      { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_cokret/find/directory/describe`) },
-      { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_cokret/self/account/viewer`, { headers: auth }) },
-      { name: "events.query", response: await request.get(`${solandBaseUrl()}/_cokret/self/events?limit=20`, { headers: auth }) },
-      { name: "notifications", response: await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, { headers: auth }) },
+      { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_arkret/find/directory/describe`) },
+      { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_arkret/self/account/viewer`, { headers: auth }) },
+      { name: "events.query", response: await request.get(`${solandBaseUrl()}/_arkret/self/events?limit=20`, { headers: auth }) },
+      { name: "notifications", response: await request.get(`${solandBaseUrl()}/_arkret/self/notifications`, { headers: auth }) },
       { name: "events.submit.receipt", response: submitReceipt },
     ];
 

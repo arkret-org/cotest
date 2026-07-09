@@ -197,7 +197,7 @@ test.describe("workflow: incident response", () => {
     );
 
     const badResolved = await request.post(
-      `${solandBaseUrl()}/_cokret/self/events`,
+      `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(token),
         data: signedEventEnvelope({
@@ -338,7 +338,7 @@ async function queryRealmEventsWithDpop(
   session: DpopUserSession,
   realmId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+  const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
   const response = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

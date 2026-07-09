@@ -102,7 +102,7 @@ test.describe("organization principal bootstrap / delegation", () => {
       });
 
       // Statement signed under the delegation (governance_service issuer).
-      const submit = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const submit = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: signedEventEnvelope({
           actorDid: admin.did,
@@ -176,7 +176,7 @@ test.describe("organization principal bootstrap / delegation", () => {
 
       // soland must reject a statement that still references the revoked
       // delegation — fail closed.
-      const submit = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const submit = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: signedEventEnvelope({
           actorDid: admin.did,

@@ -40,7 +40,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .json(&event_envelope(
                 "did:web:alice.example",
                 unauth_realm_id,
@@ -86,7 +86,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(&bob)
             .json(&event_envelope(
                 "did:web:bob-space.example",
@@ -143,7 +143,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     let anonymous_search = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-realms"))
+            .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&json!({"query": "Private Space"})),
         StatusCode::OK,
     )
@@ -157,7 +157,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(&bob.token)
             .json(&event_envelope(
                 "did:web:bob-visible.example",
@@ -201,7 +201,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(&alice.token)
             .json(&event_envelope(
                 "did:web:alice.example",

@@ -34,7 +34,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     );
 
     let first = expect_json(
-        alice.post("/_cokret/self/events").json(&event),
+        alice.post("/_arkret/self/events").json(&event),
         StatusCode::OK,
     )
     .await?;
@@ -44,7 +44,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     assert_eq!(event_id, json_string(&event, "event_id")?);
 
     let duplicate = expect_json(
-        alice.post("/_cokret/self/events").json(&event),
+        alice.post("/_arkret/self/events").json(&event),
         StatusCode::OK,
     )
     .await?;
@@ -53,7 +53,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
 
     let listed = expect_json(
         alice
-            .get("/_cokret/self/events")
+            .get("/_arkret/self/events")
             .query(&[("realms", realm_id.as_str()), ("limit", "100")]),
         StatusCode::OK,
     )
@@ -193,7 +193,7 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
         }),
     );
     let response = expect_json(
-        alice.post("/_cokret/self/events").json(&event),
+        alice.post("/_arkret/self/events").json(&event),
         StatusCode::OK,
     )
     .await?;
@@ -203,7 +203,7 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
 
 async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<Value> {
     let first = expect_json(
-        alice.post("/_cokret/self/events").json(event),
+        alice.post("/_arkret/self/events").json(event),
         StatusCode::OK,
     )
     .await?;
@@ -212,7 +212,7 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<
     assert_eq!(submitted_event_id(&first), event_id);
 
     let duplicate = expect_json(
-        alice.post("/_cokret/self/events").json(event),
+        alice.post("/_arkret/self/events").json(event),
         StatusCode::OK,
     )
     .await?;
@@ -226,7 +226,7 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<
 async fn list_realm_events(alice: &TestActorClient, realm_id: &str) -> Result<Value> {
     expect_json(
         alice
-            .get("/_cokret/self/events")
+            .get("/_arkret/self/events")
             .query(&[("realms", realm_id), ("limit", "100")]),
         StatusCode::OK,
     )

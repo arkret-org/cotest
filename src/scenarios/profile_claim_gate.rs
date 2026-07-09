@@ -141,7 +141,7 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
     add_base_targets(
         &mut targets,
         std::env::var("COTEST_PROFILE_GATE_BASE_URLS").ok(),
-        "/_cokret/describe",
+        "/_arkret/describe",
     )?;
 
     for (service, exact_env, base_env, default_path) in [
@@ -149,19 +149,19 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
             "soland",
             "COTEST_SOLAND_DESCRIBE_URL",
             "COTEST_SOLAND_BASE_URL",
-            "/_cokret/describe",
+            "/_arkret/describe",
         ),
         (
             "floria",
             "COTEST_FLORIA_DESCRIBE_URL",
             "COTEST_FLORIA_BASE_URL",
-            "/_cokret/describe",
+            "/_arkret/describe",
         ),
         (
             "teabay",
             "COTEST_TEABAY_DESCRIBE_URL",
             "COTEST_TEABAY_BASE_URL",
-            "/_cokret/find/directory/describe",
+            "/_arkret/find/directory/describe",
         ),
         (
             "starid",
@@ -173,7 +173,7 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
             "coauth",
             "COTEST_COAUTH_DESCRIBE_URL",
             "COTEST_COAUTH_BASE_URL",
-            "/_cokret/describe",
+            "/_arkret/describe",
         ),
     ] {
         if let Ok(url) = std::env::var(exact_env)

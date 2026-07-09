@@ -128,7 +128,7 @@ test.describe("discovery", () => {
   }) => {
     // spec: discovery/profiles-presence.md §2 — actor profile updates
     // fan out through the directory's actor projection. We assert via
-    // `POST /_cokret/find/directory/search-actors` (the same endpoint inkson's
+    // `POST /_arkret/find/directory/search-actors` (the same endpoint inkson's
     // tab-actors hits) rather than driving the inkson profile-edit UI
     // because the inkson profile form is not in scope here.
     const stamp = Date.now();
@@ -145,7 +145,7 @@ test.describe("discovery", () => {
     const newBio = `Engineer doing E2E work · ${stamp}`;
 
     const update = await request.post(
-      `${solandBaseUrl()}/_cokret/self/account/profile`,
+      `${solandBaseUrl()}/_arkret/self/account/profile`,
       {
         headers: { authorization: `Bearer ${bobToken}` },
         data: {
@@ -180,7 +180,7 @@ test.describe("discovery", () => {
 
     // alice searches actors — bob's directory row carries the new fields.
     const search = await request.post(
-      `${solandBaseUrl()}/_cokret/find/directory/search-actors`,
+      `${solandBaseUrl()}/_arkret/find/directory/search-actors`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: { query: newDisplay },
@@ -202,7 +202,7 @@ test.describe("discovery", () => {
 
     // /account/viewer reflects new fields on the canonical account surface.
     const me = await request.get(
-      `${solandBaseUrl()}/_cokret/self/account/viewer`,
+      `${solandBaseUrl()}/_arkret/self/account/viewer`,
       {
         headers: { authorization: `Bearer ${bobToken}` },
       },
@@ -217,7 +217,7 @@ test.describe("discovery", () => {
   }) => {
     // spec: profiles-presence.md §3 — presence is ephemeral and projects into
     // the directory actor row. A client signals `online` while its tab is open
-    // by broadcasting `ck.presence` on `POST /_cokret/self/ephemeral`;
+    // by broadcasting `ck.presence` on `POST /_arkret/self/ephemeral`;
     // closing the tab stops the refresh and the row decays to `offline`
     // (mirroring the Sync presence projection's stale-online TTL). Reopening
     // re-asserts `online`. We drive this through the API rather than the inkson
@@ -258,7 +258,7 @@ test.describe("discovery", () => {
 
     const bobPresenceFromSearch = async (): Promise<string | undefined> => {
       const search = await request.post(
-        `${solandBaseUrl()}/_cokret/find/directory/search-actors`,
+        `${solandBaseUrl()}/_arkret/find/directory/search-actors`,
         {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: { query: bob.did },
@@ -277,7 +277,7 @@ test.describe("discovery", () => {
 
     const broadcastBobPresence = async (state: "online" | "offline") => {
       const response = await request.post(
-        `${solandBaseUrl()}/_cokret/self/ephemeral`,
+        `${solandBaseUrl()}/_arkret/self/ephemeral`,
         {
           headers: { authorization: `Bearer ${bobToken}` },
           data: presenceEnvelope(bob.did, bob.deviceId, presenceRealmId, state),
@@ -315,7 +315,7 @@ test.describe("discovery", () => {
     request,
   }) => {
     // spec: identity/account-lifecycle.md (contacts) — once a contact request
-    // is rejected, alice's subsequent `POST /_cokret/self/contacts/request` for the
+    // is rejected, alice's subsequent `POST /_arkret/self/contacts/request` for the
     // same target MUST NOT open a fresh pending row. The server's cooldown
     // implementation today is "return the existing rejected record" rather
     // than a fresh 4xx — that satisfies the spec invariant (no new pending
@@ -374,7 +374,7 @@ test.describe("discovery", () => {
 
     // API surface check — inkson renders the same response payload.
     const orgResp = await request.post(
-      `${solandBaseUrl()}/_cokret/find/directory/search-organizations`,
+      `${solandBaseUrl()}/_arkret/find/directory/search-organizations`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: { query: "Arkret" },

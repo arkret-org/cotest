@@ -6,10 +6,10 @@
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
 // assigned + enforced `seq` server-side. The canonical
-// `POST /_cokret/self/ephemeral` relay is content-agnostic: it broadcasts the
+// `POST /_arkret/self/ephemeral` relay is content-agnostic: it broadcasts the
 // verbatim signed envelope and the *receiver* enforces seq monotonicity (§5.1
 // assigns rollback rejection to the receiver, not the relay — see
-// `cokret_sdk::validate_signal_seq` / `CallSignalState`). So the relay delivers
+// `arkret_sdk::validate_signal_seq` / `CallSignalState`). So the relay delivers
 // every frame (including a rollback) verbatim with its `seq` intact, and the
 // receiver-side rollback rejection is pinned by the Rust conformance vector
 // `ck.vector.call_signal.seq_monotonic.v1` (src/conformance/call_signal.rs).
@@ -139,7 +139,7 @@ test.describe("ck.call.signal seq monotonicity (spec wire)", () => {
 });
 
 // Receiver-side seq monotonicity guard, mirroring
-// `cokret_sdk::validate_signal_seq`: `prev = None` accepts any `next`; a
+// `arkret_sdk::validate_signal_seq`: `prev = None` accepts any `next`; a
 // `next <= prev` is a rollback the receiver MUST drop. This is the same rule
 // the Rust conformance vector pins; here it documents how a real receiver
 // processes the relayed (verbatim) stream.

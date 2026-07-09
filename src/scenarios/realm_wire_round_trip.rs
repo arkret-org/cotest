@@ -4,25 +4,25 @@
 //! Realm event kinds cover the security boundary, and Space event kinds cover
 //! containers inside a Realm.
 //!
-//! This module builds SDK-typed [`cokret_core::Event`] envelopes for
+//! This module builds SDK-typed [`arkret_core::Event`] envelopes for
 //! each renamed kind, canonical-encodes them via the SDK encoder, and
 //! asserts:
 //!
 //! 1. Round-trip parses back into the same `(kind, realm_id, payload)` triple (the wire bytes any
 //!    other project — soland / inkson / federation peer — would receive).
-//! 2. [`cokret_core::events::classify_event_kind`] recognises the new kinds in their new family
+//! 2. [`arkret_core::events::classify_event_kind`] recognises the new kinds in their new family
 //!    (Realm / Space-container).
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no
 //! binary, no network — the round-trip is entirely against the SDK so
 //! we catch contract drift in CI without spinning up soland.
 
 use anyhow::{Result, anyhow};
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use cokret_core::events::{
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_core::events::{
     EventClass, REALM_CREATE, REALM_DELIVERY_BINDING_POLICY, REALM_LINK, SPACE_CREATE,
     classify_event_kind,
 };
-use cokret_core::{Did, Event, Hlc, RealmId};
+use arkret_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
 /// Build a minimal SDK-typed [`Event`] for a Realm/Space boundary split wire

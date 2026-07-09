@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow};
-use cokret_core::canonical::canonical_sha256;
+use arkret_core::canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -114,7 +114,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_search = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-realms"))
+            .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&json!({"query": "Visibility Matrix", "limit": 20})),
         StatusCode::OK,
     )
@@ -143,7 +143,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         let resolved = expect_json(
             server
                 .http()
-                .post(server.url("/_cokret/find/directory/resolve-realm"))
+                .post(server.url("/_arkret/find/directory/resolve-realm"))
                 .json(&json!({"realm_id": resolvable_realm_id.as_str()})),
             StatusCode::OK,
         )
@@ -157,7 +157,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({"realm_id": invite_only_realm_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
@@ -166,14 +166,14 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({"realm_id": secret_realm_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
     )
     .await?;
 
-    let invites = expect_json(bob.get("/_cokret/self/authz/invites"), StatusCode::OK).await?;
+    let invites = expect_json(bob.get("/_arkret/self/authz/invites"), StatusCode::OK).await?;
     let invite_token = invites["invites"]
         .as_array()
         .unwrap()
@@ -184,7 +184,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let invite_only_resolved = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({
                 "realm_id": invite_only_realm_id.clone(),
                 "invite_token": invite_token
@@ -200,7 +200,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let secret_resolved = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({
                 "realm_id": secret_realm_id.clone(),
                 "signed_link": "cotest-signed-link"
@@ -216,7 +216,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_bob_actors = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-actors"))
+            .post(server.url("/_arkret/find/directory/search-actors"))
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
@@ -231,7 +231,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_bob_users = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-users"))
+            .post(server.url("/_arkret/find/directory/search-users"))
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
@@ -246,7 +246,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_alice = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-actors"))
+            .post(server.url("/_arkret/find/directory/search-actors"))
             .json(&json!({"query": "alice"})),
         StatusCode::OK,
     )
@@ -258,7 +258,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
 
     let alice_before_contact = expect_json(
         alice
-            .post("/_cokret/find/directory/search-actors")
+            .post("/_arkret/find/directory/search-actors")
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
@@ -271,7 +271,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     );
 
     let bob_self = expect_json(
-        bob.post("/_cokret/find/directory/search-actors")
+        bob.post("/_arkret/find/directory/search-actors")
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
@@ -280,13 +280,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
 
     let request = expect_json(
         alice
-            .post("/_cokret/self/contacts/request")
+            .post("/_arkret/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/_cokret/self/contacts/respond").json(&json!({
+        bob.post("/_arkret/self/contacts/respond").json(&json!({
             "request_id": request["request_event_ref"],
             "requester": alice.actor,
             "action": "accept"
@@ -297,7 +297,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
 
     let alice_after_contact = expect_json(
         alice
-            .post("/_cokret/find/directory/search-actors")
+            .post("/_arkret/find/directory/search-actors")
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
@@ -306,7 +306,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
 
     let alice_user_after_contact = expect_json(
         alice
-            .post("/_cokret/find/directory/search-users")
+            .post("/_arkret/find/directory/search-users")
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
@@ -322,7 +322,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_after_contact = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-actors"))
+            .post(server.url("/_arkret/find/directory/search-actors"))
             .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )

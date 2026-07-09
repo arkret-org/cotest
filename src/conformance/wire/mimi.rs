@@ -257,8 +257,8 @@ fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
 /// unknown-handling mapping. The cotest test cross-references every Arkret
 /// component named in the fixture against the active event-kind registry's
 /// component_type set, asserts that bidirectional vectors carry both legs
-/// (`cokret_component_type` + `mimi_path`), and asserts that
-/// `direction = cokret_only` vectors declare the private facade media-type so
+/// (`arkret_component_type` + `mimi_path`), and asserts that
+/// `direction = arkret_only` vectors declare the private facade media-type so
 /// the facade cannot silently impersonate a standard MIMI component.
 pub fn run_mimi_components_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("mimi_components_fixture.json")?;
@@ -284,11 +284,11 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         );
     }
     for (vector, (arkret, mimi)) in crit_vectors.iter().zip(expected_pairs.iter()) {
-        let actual_cokret = required_str(vector, "arkret")?;
+        let actual_arkret = required_str(vector, "arkret")?;
         let actual_mimi = required_str(vector, "mimi_unknown_handling")?;
-        if actual_cokret != *arkret || actual_mimi != *mimi {
+        if actual_arkret != *arkret || actual_mimi != *mimi {
             bail!(
-                "criticality mapping drift: expected ({arkret} <-> {mimi}), got ({actual_cokret} <-> {actual_mimi})"
+                "criticality mapping drift: expected ({arkret} <-> {mimi}), got ({actual_arkret} <-> {actual_mimi})"
             );
         }
         if vector.get("round_trip").and_then(Value::as_bool) != Some(true) {
@@ -323,9 +323,9 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     }
 
     let mut bidirectional = 0usize;
-    let mut cokret_only = 0usize;
+    let mut arkret_only = 0usize;
     for vector in component_vectors {
-        let component_type = required_str(vector, "cokret_component_type")?;
+        let component_type = required_str(vector, "arkret_component_type")?;
         if !registered_components.contains(component_type) {
             bail!("mimi component vector references unknown component_type {component_type}");
         }
@@ -335,19 +335,19 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
                 let _ = required_str(vector, "mimi_path")?;
                 bidirectional += 1;
             }
-            "cokret_only" => {
+            "arkret_only" => {
                 let media = required_str(vector, "facade_media_type")?;
                 if media != "application/vnd.arkret.component+json" {
                     bail!(
-                        "cokret_only component {component_type} must use the application/vnd.arkret.component+json media type, got {media}"
+                        "arkret_only component {component_type} must use the application/vnd.arkret.component+json media type, got {media}"
                     );
                 }
                 if vector.get("mimi_path").is_some() {
                     bail!(
-                        "cokret_only component {component_type} declared a mimi_path (cannot have a standard MIMI mapping)"
+                        "arkret_only component {component_type} declared a mimi_path (cannot have a standard MIMI mapping)"
                     );
                 }
-                cokret_only += 1;
+                arkret_only += 1;
             }
             other => {
                 bail!("mimi component vector {component_type} unknown direction {other}");
@@ -365,15 +365,15 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             "mimi component fixture must cover at least 5 bidirectional mappings, got {bidirectional}"
         );
     }
-    if cokret_only < 5 {
+    if arkret_only < 5 {
         bail!(
-            "mimi component fixture must cover at least 5 Arkret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {cokret_only}"
+            "mimi component fixture must cover at least 5 Arkret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {arkret_only}"
         );
     }
 
     // Move/Anchor/Lattice rebase (spec 2026-05-08) removed cx.component.space.host*;
     // anchorer cell governs Anchor signing instead. Anchorer-related cell families
-    // SHOULD be marked cokret_only (no direct MIMI equivalent for Anchor authority).
+    // SHOULD be marked arkret_only (no direct MIMI equivalent for Anchor authority).
     Ok(())
 }
 /// Read receipt disclosure policy + per-scope preference vectors.

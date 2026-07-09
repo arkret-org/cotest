@@ -59,7 +59,7 @@ async function readStrandRow(
   opts: { includeTerminal?: boolean } = {},
 ): Promise<StrandProjectionRow | undefined> {
   const url = new URL(
-    `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`,
+    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
   );
   if (opts.includeTerminal) {
     url.searchParams.set("include_terminal", "true");
@@ -82,7 +82,7 @@ async function readSpaceRow(
   spaceId: string,
 ): Promise<SpaceProjectionRow | undefined> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`,
+    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`,
     { headers: authHeaders(token) },
   );
   expect(
@@ -410,7 +410,7 @@ test.describe("project simulation", () => {
         { context: "create todo card strand" },
       );
 
-      const badDone = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const badDone = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -483,7 +483,7 @@ test.describe("project simulation", () => {
         { context: "create investigating incident strand" },
       );
 
-      const badResolved = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const badResolved = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -809,7 +809,7 @@ test.describe("project simulation", () => {
     expect(archivedCard?.state).toBe("archived");
 
     // Read-only: a write to the archived Card is rejected (strand_not_active).
-    const write = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,

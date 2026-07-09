@@ -19,8 +19,8 @@
 use std::collections::BTreeSet;
 
 use chrono::{Duration, Utc};
-use cokret_core::Did;
-use cokret_core::models::{
+use arkret_core::Did;
+use arkret_core::models::{
     DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
     HandleHintBindingSource, RecipientServiceType,
 };

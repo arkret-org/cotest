@@ -10,7 +10,7 @@
 //!      publish fan-out group.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{
+use arkret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, CircleId,
     PROFILE_AGENT_SIDECAR_THREAD,
@@ -60,7 +60,7 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
         return Err(anyhow!("sidecar capability action trio has duplicates"));
     }
 
-    // TODO(P4-impl): exercise live `POST /_cokret/self/agents/{id}/sidecar-
+    // TODO(P4-impl): exercise live `POST /_arkret/self/agents/{id}/sidecar-
     // thread/ensure` against a soland server. The endpoint MUST be
     // idempotent (same controller/agent pair returns the same
     // sidecar_circle_id). Pending soland P2-impl deterministic Circle

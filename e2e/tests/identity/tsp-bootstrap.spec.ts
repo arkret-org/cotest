@@ -95,7 +95,7 @@ async function assertTspTransportIfExposed(
   did: string,
   token: string,
 ): Promise<void> {
-  const url = `${solandBaseUrl()}/_cokret/root/identity/${encodeURIComponent(did)}/transports`;
+  const url = `${solandBaseUrl()}/_arkret/root/identity/${encodeURIComponent(did)}/transports`;
   const resp = await request
     .get(url, { headers: { authorization: `Bearer ${token}` } })
     .catch(() => undefined);
@@ -158,7 +158,7 @@ test.describe("tsp bootstrap", () => {
       invitee: bobExternVid,
       actor: alice.did,
       // The Arkret event signature is independent of TSP authenticity (§5).
-      cokret_signature: randomBytes(64).toString("base64url"),
+      arkret_signature: randomBytes(64).toString("base64url"),
     };
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
@@ -249,7 +249,7 @@ test.describe("tsp bootstrap", () => {
     // plain authenticated GET of self/events proves the default transport is
     // alive and the client is NOT fail-closed on the TSP outage.
     const eventsResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events?actor_id=${encodeURIComponent(alice.did)}`,
+      `${solandBaseUrl()}/_arkret/self/events?actor_id=${encodeURIComponent(alice.did)}`,
       { headers: { authorization: `Bearer ${aliceToken}` } },
     );
     expect(

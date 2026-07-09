@@ -43,7 +43,7 @@
 //!     handle.
 //!   * `starid` resolver health-state surfacing: the in-process resolver would need to expose
 //!     `degraded_no_witness` / `stale_history` via a diagnostic endpoint (e.g. `GET
-//!     /_cokret/root/identity/health/{did}`). Not yet present in `starid/src/`.
+//!     /_arkret/root/identity/health/{did}`). Not yet present in `starid/src/`.
 //!   * Test-clock injection or short-window override: the 24h hard cap is a real wall-clock window
 //!     in production. The test needs either a `STARID_WITNESS_MAX_EVIDENCE_AGE` env that we can set
 //!     to a few seconds, or a fake-clock harness. Neither exists today.
@@ -67,7 +67,7 @@ pub async fn webvh_witness_offline_recovery_run() -> Result<()> {
     //   let client = Client::new();
     //
     //   // Step 3: healthy resolve
-    //   let h1 = client.get(starid.url("/_cokret/root/identity/health/did:webvh:.../scid"))
+    //   let h1 = client.get(starid.url("/_arkret/root/identity/health/did:webvh:.../scid"))
     //                  .send().await?.json::<Value>().await?;
     //   assert_eq!(h1["state"], "healthy");
     //
@@ -76,13 +76,13 @@ pub async fn webvh_witness_offline_recovery_run() -> Result<()> {
     //         .json(&json!({"state":"down"})).send().await?;
     //
     //   // Step 5: degraded_no_witness within window
-    //   let h2 = client.get(starid.url("/_cokret/root/identity/health/did:webvh:.../scid"))
+    //   let h2 = client.get(starid.url("/_arkret/root/identity/health/did:webvh:.../scid"))
     //                  .send().await?.json::<Value>().await?;
     //   assert_eq!(h2["state"], "degraded_no_witness");
     //
     //   // Step 7: stale_history past window (with short max-evidence-age)
     //   tokio::time::sleep(Duration::from_secs(3)).await;
-    //   let h3 = client.get(starid.url("/_cokret/root/identity/health/did:webvh:.../scid"))
+    //   let h3 = client.get(starid.url("/_arkret/root/identity/health/did:webvh:.../scid"))
     //                  .send().await?.json::<Value>().await?;
     //   assert!(matches!(h3["state"].as_str(), Some("stale_history"|"untrusted")));
     //

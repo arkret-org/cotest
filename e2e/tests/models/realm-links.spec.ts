@@ -28,10 +28,10 @@ test.describe("realm links", () => {
       // PROMOTED + reshaped to the real surface. soland's realm-link +
       // inheritance pipeline is fully wired (routing/realms.rs +
       // reducer/realm_links.rs):
-      //   - POST /_cokret/self/realms/{id}/links writes ck.realm.link with
+      //   - POST /_arkret/self/realms/{id}/links writes ck.realm.link with
       //     reducer-side cycle / kind / status validation.
       //   - ck.realm.inheritance_policy (signed event) is the §6 opt-in.
-      //   - GET /_cokret/self/realms/{id}/effective-policy walks active
+      //   - GET /_arkret/self/realms/{id}/effective-policy walks active
       //     governed_by / inherits_policy_from links and merges the source
       //     realm's allow-lists ONLY when the child opted in (§5 no implicit
       //     cascade), severing inheritance when the link flips to rejected.
@@ -76,7 +76,7 @@ test.describe("realm links", () => {
         ownerDid: alice.did,
       });
       const linkRes = await request.post(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
         {
           headers: aliceAuth,
           data: {
@@ -108,7 +108,7 @@ test.describe("realm links", () => {
       // Phase C — T's effective policy now derives G's allow-list via the
       // active governed_by link.
       const eff1 = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
         { headers: aliceAuth },
       );
       expect(eff1.ok()).toBeTruthy();
@@ -125,14 +125,14 @@ test.describe("realm links", () => {
         ownerDid: alice.did,
       });
       await request.post(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(team2RealmId)}/links`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(team2RealmId)}/links`,
         {
           headers: aliceAuth,
           data: { target_realm_id: govRealmId, link_kind: "governed_by", status: "active" },
         },
       );
       const eff2NoOptIn = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(team2RealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(team2RealmId)}/effective-policy`,
         { headers: aliceAuth },
       );
       const eff2NoOptInBody = await eff2NoOptIn.json();
@@ -144,7 +144,7 @@ test.describe("realm links", () => {
       // Phase E — alice rejects the T --> G link; inheritance is severed even
       // though T's inheritance_policy declaration is still on file (§6.3).
       const rejectRes = await request.post(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
         {
           headers: aliceAuth,
           data: { target_realm_id: govRealmId, link_kind: "governed_by", status: "rejected" },
@@ -153,7 +153,7 @@ test.describe("realm links", () => {
       expect(rejectRes.ok()).toBeTruthy();
 
       const eff3 = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
         { headers: aliceAuth },
       );
       const eff3Body = await eff3.json();
@@ -184,7 +184,7 @@ test.describe("realm links", () => {
       const C = await mk("C");
 
       const link = async (src: string, dst: string) =>
-        request.post(`${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(src)}/links`, {
+        request.post(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(src)}/links`, {
           headers: auth,
           data: {
             target_realm_id: dst,
@@ -199,7 +199,7 @@ test.describe("realm links", () => {
       expect(bc.ok()).toBeTruthy();
 
       const outboundA = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(A)}/links?direction=outbound`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(A)}/links?direction=outbound`,
         { headers: auth },
       );
       expect(outboundA.ok()).toBeTruthy();
@@ -268,7 +268,7 @@ test.describe("realm links", () => {
       });
       for (const G of [G1, G2]) {
         await request.post(
-          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(T)}/links`,
+          `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(T)}/links`,
           {
             headers: auth,
             data: { target_realm_id: G, link_kind: "governed_by", status: "active" },
@@ -293,7 +293,7 @@ test.describe("realm links", () => {
       }
 
       const eff = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(T)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(T)}/effective-policy`,
         { headers: auth },
       );
       const effBody = await eff.json();
@@ -354,7 +354,7 @@ test.describe("realm links", () => {
       // outbound view — the non-propagation invariant holds regardless of
       // declaration side).
       const linkRes = await request.post(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(G)}/links`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(G)}/links`,
         {
           headers: aliceAuth,
           data: { target_realm_id: T, link_kind: "governed_by", status: "active" },
@@ -365,7 +365,7 @@ test.describe("realm links", () => {
       // alice (no membership / capability in T) tries to ban bob in T via the
       // canonical member-state event. MUST fail closed — the governed_by link
       // does not carry alice's G-admin into T.
-      const attempt = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const attempt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: aliceAuth,
         data: signedEventEnvelope({
           actorDid: alice.did,

@@ -7,18 +7,18 @@
 // surfaces emitted `ck.audit.accessed` events back to admin views.
 //
 // Endpoints:
-//   GET  /_cokret/self/audit-agent/identity
+//   GET  /_arkret/self/audit-agent/identity
 //     Returns { did, public_jwk, key_package? }. Soland reads this to
 //     bind audit_disclosure_policy.audit_agent_principal_id.
-//   POST /_cokret/self/audit-agent/events  { kind, event }
+//   POST /_arkret/self/audit-agent/events  { kind, event }
 //     Forward `ck.moderation.franking_proof` / `org.arkret.soland.audit.report` events to the
 //     mock. Auto-acknowledges by recording a generated `ck.audit.accessed`
 //     envelope, fetchable via /inspect.
-//   POST /_cokret/self/audit-agent/invite { realm_id, invite, mls_key_package? }
+//   POST /_arkret/self/audit-agent/invite { realm_id, invite, mls_key_package? }
 //     Acknowledge an invite. Returns a synthetic `ck.audit.accessed`
 //     envelope signed by the agent.
-//   GET  /_cokret/self/audit-agent/inbox   → events received
-//   GET  /_cokret/self/audit-agent/accessed → ck.audit.accessed envelopes emitted
+//   GET  /_arkret/self/audit-agent/inbox   → events received
+//   GET  /_arkret/self/audit-agent/accessed → ck.audit.accessed envelopes emitted
 //   GET  /inspect → full mock state
 //   DELETE /inspect → reset
 //   GET  /jwks → audit-agent public key
@@ -125,7 +125,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/self/audit-agent/identity" && req.method === "GET") {
+  if (url.pathname === "/_arkret/self/audit-agent/identity" && req.method === "GET") {
     res.end(
       JSON.stringify({
         did: agentDid,
@@ -136,7 +136,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/self/audit-agent/events" && req.method === "POST") {
+  if (url.pathname === "/_arkret/self/audit-agent/events" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.kind || !body.event) {
       res.statusCode = 400;
@@ -157,7 +157,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/self/audit-agent/invite" && req.method === "POST") {
+  if (url.pathname === "/_arkret/self/audit-agent/invite" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.realm_id) {
       res.statusCode = 400;
@@ -181,12 +181,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/self/audit-agent/inbox" && req.method === "GET") {
+  if (url.pathname === "/_arkret/self/audit-agent/inbox" && req.method === "GET") {
     res.end(JSON.stringify({ events: inboxLog.entries }));
     return;
   }
 
-  if (url.pathname === "/_cokret/self/audit-agent/accessed" && req.method === "GET") {
+  if (url.pathname === "/_arkret/self/audit-agent/accessed" && req.method === "GET") {
     res.end(JSON.stringify({ events: accessedLog.entries }));
     return;
   }

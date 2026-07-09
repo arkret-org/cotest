@@ -1,7 +1,7 @@
 // Pluggable policy decision service (realm-level external policy_server)
 // Contract: e2e/scenarios/authz/policy-server-check.md
 // Spec: authz/policy-server.md §2 (ck.realm.policy_server Move),
-//        §3 (POST /_cokret/self/policy/check request/response contract),
+//        §3 (POST /_arkret/self/policy/check request/response contract),
 //        §4 (obligations + fail-closed default).
 //
 // Started by run-joint-e2e.ps1 -StartMockPolicyServer (or -StartMocks): the
@@ -59,15 +59,15 @@ async function declarePolicyServer(
   opts: { cacheTtlSeconds?: number; timeoutMs?: number } = {},
 ): Promise<void> {
   const put = await request.put(
-    `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
     {
       headers: authHeaders(token),
       data: {
         policy_server_did: did,
         // soland's reducer (realm_policy_server.rs::validate_policy_server_url)
-        // pins the path to exactly /_cokret/self/policy/check and forbids any
+        // pins the path to exactly /_arkret/self/policy/check and forbids any
         // query string, so the declared URL is always the bare check endpoint.
-        policy_server_url: `${baseUrl}/_cokret/self/policy/check`,
+        policy_server_url: `${baseUrl}/_arkret/self/policy/check`,
         cache_ttl_seconds: opts.cacheTtlSeconds ?? 5,
         timeout_ms: opts.timeoutMs ?? 1500,
         on_timeout: "fail_closed",
@@ -101,7 +101,7 @@ async function submitGatedMessage(
     },
   });
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
+    `${solandBaseUrl()}/_arkret/self/events`,
     { headers: authHeaders(token), data: envelope },
   );
   const text = await response.text();
@@ -149,7 +149,7 @@ test.describe("policy server check", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const describeResp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const describeResp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     const describe = await expectJsonOk<Record<string, unknown>>(
       describeResp,
       "server describe authz self surface",
@@ -166,15 +166,15 @@ test.describe("policy server check", () => {
     const authzPolicy = limits.authz_policy as Record<string, unknown>;
     expect(authzPolicy.self_surface_status).toBe("standard_self_supported");
     const authzCheck = authzPolicy.authz_check as Record<string, unknown>;
-    expect(authzCheck.path).toBe("/_cokret/self/authz/check");
+    expect(authzCheck.path).toBe("/_arkret/self/authz/check");
     expect(authzCheck.operation_specific_error_codes).toEqual(
       expect.arrayContaining(["policy_unavailable"]),
     );
     expect(authzCheck.usable_as_event_auth_context).toBe(false);
     const effectiveGrants = authzPolicy.effective_grants as Record<string, unknown>;
-    expect(effectiveGrants.path).toBe("/_cokret/self/authz/effective-grants");
+    expect(effectiveGrants.path).toBe("/_arkret/self/authz/effective-grants");
     const invites = authzPolicy.invites as Record<string, unknown>;
-    expect(invites.path).toBe("/_cokret/self/authz/invites");
+    expect(invites.path).toBe("/_arkret/self/authz/invites");
     expect(invites.response_schema_ref).toBe(
       "schemas/authz-operations.schema.json#/$defs/authz_invite_list",
     );
@@ -193,10 +193,10 @@ test.describe("policy server check", () => {
       public: true,
     });
     const policyServerDid = mockPolicyServerDid() ?? "did:web:policy.example.com";
-    const policyServerUrl = `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`;
+    const policyServerUrl = `${mockPolicyServerBaseUrl()}/_arkret/self/policy/check`;
 
     const put = await request.put(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -218,7 +218,7 @@ test.describe("policy server check", () => {
     expect(projected.from_org_fallback).toBe(false);
 
     const get = await request.get(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
       { headers: authHeaders(aliceToken) },
     );
     const fetched = await expectJsonOk<Record<string, unknown>>(
@@ -228,7 +228,7 @@ test.describe("policy server check", () => {
     expect(fetched.policy_server_did).toBe(policyServerDid);
     expect(fetched.policy_server_url).toBe(policyServerUrl);
 
-    const denied = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
+    const denied = await request.post(`${solandBaseUrl()}/_arkret/self/authz/check`, {
       headers: authHeaders(aliceToken),
       data: {
         actor_id: bob.did,
@@ -408,20 +408,20 @@ test.describe("policy server check", () => {
 
       const orgDid = "did:web:policy-org.example.com";
       const orgBaseUrl = "http://127.0.0.1:9";
-      const orgUrl = `${orgBaseUrl}/_cokret/self/policy/check`;
+      const orgUrl = `${orgBaseUrl}/_arkret/self/policy/check`;
       await declarePolicyServer(request, aliceToken, orgRealmId, orgBaseUrl, orgDid, {
         cacheTtlSeconds: 17,
         timeoutMs: 1200,
       });
 
       const noFallbackYet = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
         { headers: authHeaders(aliceToken) },
       );
       expect(noFallbackYet.status()).toBe(404);
 
       const link = await request.post(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/links`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/links`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -441,7 +441,7 @@ test.describe("policy server check", () => {
       expect(linkBody.status).toBe("active");
 
       const fallback = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
         { headers: authHeaders(aliceToken) },
       );
       const fallbackBody = await expectJsonOk<Record<string, unknown>>(
@@ -457,14 +457,14 @@ test.describe("policy server check", () => {
 
       const childDid = "did:web:policy-child.example.com";
       const childBaseUrl = "http://127.0.0.1:10";
-      const childUrl = `${childBaseUrl}/_cokret/self/policy/check`;
+      const childUrl = `${childBaseUrl}/_arkret/self/policy/check`;
       await declarePolicyServer(request, aliceToken, childRealmId, childBaseUrl, childDid, {
         cacheTtlSeconds: 3,
         timeoutMs: 900,
       });
 
       const direct = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
         { headers: authHeaders(aliceToken) },
       );
       const directBody = await expectJsonOk<Record<string, unknown>>(

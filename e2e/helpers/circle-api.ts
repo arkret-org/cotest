@@ -1,10 +1,10 @@
-// Circle administration HTTP helpers (`/_cokret/self/circles/*`).
+// Circle administration HTTP helpers (`/_arkret/self/circles/*`).
 //
 // Face note: Circle administration is now a NORMATIVE Arkret protocol surface.
 // The `ck.self.circle.*` operations (list/create/get/members/scope-rotate/
 // archive/restore/tombstone) are published in the arkret-spec OpenAPI artifact
-// (`/_cokret/self/circles*`), the operation registry, and the contract catalog,
-// so soland mounts them under the `/_cokret` tree. (Previously these were
+// (`/_arkret/self/circles*`), the operation registry, and the contract catalog,
+// so soland mounts them under the `/_arkret` tree. (Previously these were
 // CKP-0014 §5 implementation-local DRAFT candidates served under
 // `/_soland/self/circles`; they have since been accepted into the normative
 // catalog, and the legacy `/_soland` mirror was retired.)
@@ -195,7 +195,7 @@ export async function createCircleCokret(
   },
 ): Promise<CircleOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(args.server)}/_cokret/self/circles`,
+    `${solandBaseUrl(args.server)}/_arkret/self/circles`,
     {
       headers: authHeaders(token),
       data: {
@@ -219,7 +219,7 @@ export async function getCircleCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<CircleOutcome> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<CircleOutcome>(response, `get circle ${circleId}`);
@@ -234,7 +234,7 @@ export async function addCircleMemberRaw(
   args: { actorId: string; membership?: CircleMembership; server?: SolandKey },
 ): Promise<APIResponse> {
   return await request.post(
-    `${solandBaseUrl(args.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/members`,
+    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`,
     {
       headers: authHeaders(token),
       data: {
@@ -269,7 +269,7 @@ export async function removeCircleMemberCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<CircleMembershipOutcome> {
   const response = await request.delete(
-    `${solandBaseUrl(opts.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<CircleMembershipOutcome>(
@@ -286,7 +286,7 @@ async function submitCircleLifecycleCokret(
   opts: { reasonCode?: string; server?: SolandKey } = {},
 ): Promise<CircleOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/${action}`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/${action}`,
     {
       headers: authHeaders(token),
       data:
@@ -348,7 +348,7 @@ export async function tombstoneCircleCokret(
 
 // Read the canonical wire `code` off a soland error envelope. soland renders
 // errors as `{ ok:false, error:{ code, message }, request_id }`
-// (cokret_sdk::ErrorEnvelope), so the canonical code lives at `error.code`.
+// (arkret_sdk::ErrorEnvelope), so the canonical code lives at `error.code`.
 export async function errorWireCode(
   response: APIResponse,
 ): Promise<string | undefined> {

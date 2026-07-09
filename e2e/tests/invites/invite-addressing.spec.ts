@@ -65,7 +65,7 @@ test.describe("invite addressing", () => {
     ).toString("base64url");
 
     const ok = await request.post(
-      `${solandBaseUrl()}/_cokret/open/invite-locators/resolve`,
+      `${solandBaseUrl()}/_arkret/open/invite-locators/resolve`,
       { data: { locator_token: locatorToken } },
     );
     expect(ok.status(), await ok.text()).toBe(200);
@@ -82,7 +82,7 @@ test.describe("invite addressing", () => {
     );
 
     const queryLeak = await request.post(
-      `${solandBaseUrl()}/_cokret/open/invite-locators/resolve?locator_token=${encodeURIComponent(locatorToken)}`,
+      `${solandBaseUrl()}/_arkret/open/invite-locators/resolve?locator_token=${encodeURIComponent(locatorToken)}`,
       { data: { locator_token: locatorToken } },
     );
     expect(queryLeak.status()).toBe(400);

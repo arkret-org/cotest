@@ -30,7 +30,7 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`,暴露 `/_cokret/_conformance/*` 端点
+- 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`,暴露 `/_arkret/_conformance/*` 端点
 - 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使签名向量阶段可以拿到一个真实的 actor signing key
 - 1 × conformance harness (Playwright `request` fixture) — 加载 `arkret-spec/spec/v1/artifacts/fixtures/*.json` vector,逐项 POST 到 soland,断言响应字段与 `expected_*` 字段相等
 
@@ -59,19 +59,19 @@
   }
   ```
 - soland 暴露以下 conformance 端点 (gap,见 Implementation notes):
-  - `POST /_cokret/_conformance/encode` — body `{ vector_id, input }` → `{ canonical_json, digest }`
-  - `POST /_cokret/_conformance/sign` — body `{ vector_id, event, signing_key_ref }` → `{ canonical_bytes, digest, signature }`
-  - `POST /_cokret/_conformance/hlc-merge` — body `{ vector_id, clocks: [{actor, hlc, payload_hint}] }` → `{ ordered: [...] }`
-  - `POST /_cokret/_conformance/cursor` — body `{ vector_id, events, reduce_round }` → `{ cursor }`
-  - `POST /_cokret/_conformance/envelope` — body `{ vector_id, envelope }` → `{ canonical_bytes, digest }`
-  - `POST /_cokret/_conformance/redact` — body `{ vector_id, event, redaction, viewer_did }` → `{ projected_event }`
+  - `POST /_arkret/_conformance/encode` — body `{ vector_id, input }` → `{ canonical_json, digest }`
+  - `POST /_arkret/_conformance/sign` — body `{ vector_id, event, signing_key_ref }` → `{ canonical_bytes, digest, signature }`
+  - `POST /_arkret/_conformance/hlc-merge` — body `{ vector_id, clocks: [{actor, hlc, payload_hint}] }` → `{ ordered: [...] }`
+  - `POST /_arkret/_conformance/cursor` — body `{ vector_id, events, reduce_round }` → `{ cursor }`
+  - `POST /_arkret/_conformance/envelope` — body `{ vector_id, envelope }` → `{ canonical_bytes, digest }`
+  - `POST /_arkret/_conformance/redact` — body `{ vector_id, event, redaction, viewer_did }` → `{ projected_event }`
 
 ## Steps
 
 ### Phase A — Canonical JSON encoding (§1.3 / §1.4 / §1.5 / §1.5.1)
 
 1. **harness** 加载 `ck.vector.encoding.canonical_json.basic.v1`、`...nested.v1`
-2. 对每个 vector,`POST /_cokret/_conformance/encode` with `{ vector_id, input }`
+2. 对每个 vector,`POST /_arkret/_conformance/encode` with `{ vector_id, input }`
 3. 断言:
    - `response.canonical_json` 与 `expected_canonical_json` 完全字节相等 (含字段排序、无空白)
    - `response.digest === expected_digest`(`sha256:<lowercase_hex>` 格式,大小写敏感)
@@ -82,12 +82,12 @@
 ### Phase B — Event digest + Signature binding (§1.6 / §1.7 / §1.8)
 
 7. **harness** 加载 `ck.vector.encoding.event_digest.v1`
-8. `POST /_cokret/_conformance/encode` with §1.6 输入事件
+8. `POST /_arkret/_conformance/encode` with §1.6 输入事件
 9. 断言:`canonical_json` / `digest` 与 spec §1.6 期望值一致
 10. **harness** 加载 `ck.vector.encoding.batch_receipt_digest.v1` (§1.7)
 11. `POST .../encode` 输入 batch receipt → 断言 receipt 的 canonical bytes / digest 一致
 12. **harness** 加载 `ck.vector.encoding.signature_binding.v1` (§1.8)
-13. `POST /_cokret/_conformance/sign` with `{ event, signing_key_ref: alice.dev_key }`
+13. `POST /_arkret/_conformance/sign` with `{ event, signing_key_ref: alice.dev_key }`
 14. 断言:
     - `canonical_bytes` 与 vector `expected_canonical_bytes` 一致
     - `signature` 在 `(canonical_bytes, alice.public_key)` 下 verify 通过
@@ -96,7 +96,7 @@
 ### Phase C — HLC timestamp ordering (§1.9 / §1.10)
 
 15. **harness** 加载 `ck.vector.encoding.hlc_order.v1`,内含一组并发 logical clocks
-16. `POST /_cokret/_conformance/hlc-merge` with `{ clocks: [...] }`
+16. `POST /_arkret/_conformance/hlc-merge` with `{ clocks: [...] }`
 17. 断言:`response.ordered` 序列与 vector `expected_order` 完全相同 (包括 tie-break 时 actor_id 字典序)
 18. **harness** 加载 `ck.vector.encoding.hlc_logical_overflow.v1` (§1.10)
 19. 断言:logical counter 溢出时端点返回明确错误码 (`hlc_logical_overflow`),不静默 wrap
@@ -104,7 +104,7 @@
 ### Phase D — Cursor stability across re-reduce (§1.11)
 
 20. **harness** 加载 `ck.vector.encoding.cursor_opaqueness.v1`,内含同一组 events 的两次 reduce 序列 (顺序不同,最终态相同)
-21. `POST /_cokret/_conformance/cursor` with `{ events, reduce_round: 1 }` → cursor_A
+21. `POST /_arkret/_conformance/cursor` with `{ events, reduce_round: 1 }` → cursor_A
 22. `POST .../cursor` with `{ events_shuffled, reduce_round: 2 }` → cursor_B
 23. 断言:
     - `cursor_A === cursor_B` (cursor 对内部 reduce 顺序不可见)
@@ -113,7 +113,7 @@
 ### Phase E — Encrypted envelope round-trip (§1.12)
 
 24. **harness** 加载 `ck.vector.encoding.encrypted_envelope_digest.v1`
-25. `POST /_cokret/_conformance/envelope` with `{ envelope: { mls_ciphertext, header, ... } }`
+25. `POST /_arkret/_conformance/envelope` with `{ envelope: { mls_ciphertext, header, ... } }`
 26. 断言:
     - `response.canonical_bytes` 与 vector 一致 (header 字段排序后)
     - `response.digest === expected_digest`
@@ -122,7 +122,7 @@
 ### Phase F — Redaction visibility matrix (§3.2 / §3.3 / §3.4 / §3.5)
 
 27. **harness** 加载 `ck.vector.redaction.field_retention.v1` (§3.2),内含一对 `(original_event, redaction_event)`
-28. `POST /_cokret/_conformance/redact` with `{ event, redaction, viewer_did: alice.did }`
+28. `POST /_arkret/_conformance/redact` with `{ event, redaction, viewer_did: alice.did }`
 29. 断言:`projected_event` 中保留字段集 = vector `expected_retained_fields_owner`,被剥离字段不出现(不是 set null,是 key 缺失)
 30. 再次 `POST .../redact` with `{ ..., viewer_did: guest.did }` (未授权读者)
 31. 断言:`projected_event` 是 vector `expected_retained_fields_guest` 的精确投影(典型情况:guest 看不到 `payload.content`,但看得到 `event_id` / `redacted_because` / tombstone marker)
@@ -131,7 +131,7 @@
 
 ### Phase G — 覆盖矩阵 (§1.13)
 
-34. **harness** 跑完所有 §1 vector 后,POST 一份 `coverage_report` 到 soland 的 `/_cokret/_conformance/coverage` (或直接在 harness 侧产 artifact)
+34. **harness** 跑完所有 §1 vector 后,POST 一份 `coverage_report` 到 soland 的 `/_arkret/_conformance/coverage` (或直接在 harness 侧产 artifact)
 35. 断言:每个 spec §1.13 矩阵条目至少有一个 vector 报告 `pass`;没有任何条目报告 `not_executed`
 
 ## Observable assertions (合并清单)
@@ -157,9 +157,9 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`/_cokret/_conformance/{encode,sign,hlc-merge,cursor,envelope,redact}` 端点目前**未实现**。当前 conformance 只跑在 Rust 侧 (`cotest/src/conformance/encoding.rs`、`...redaction.rs`、`...envelope.rs`) 的 integration tests,直接调内部 trait,不走 HTTP。本 e2e scenario 的价值正是要把同一组 vector 通过 HTTP 暴露出来,确保 wire-level 一致(避免内部 canonicalizer 与 HTTP layer 之间的 serializer drift)
+- **soland 缺口**:`/_arkret/_conformance/{encode,sign,hlc-merge,cursor,envelope,redact}` 端点目前**未实现**。当前 conformance 只跑在 Rust 侧 (`cotest/src/conformance/encoding.rs`、`...redaction.rs`、`...envelope.rs`) 的 integration tests,直接调内部 trait,不走 HTTP。本 e2e scenario 的价值正是要把同一组 vector 通过 HTTP 暴露出来,确保 wire-level 一致(避免内部 canonicalizer 与 HTTP layer 之间的 serializer drift)
 - **fixture loader**:spec fixture 落在 `arkret-spec/spec/v1/artifacts/fixtures/<vector_id>.json`;harness 可在测试 setup 阶段一次性读入,挂在 `test.use({ vectors: ... })` 或顶层 `beforeAll` 里。Rust 侧已有 `cotest/tests/fixtures/*.json` 的 loader 范式可参考,但 e2e 侧要重写为 TS
-- **signing key 注入**:Phase B 用的是 alice 的 dev session signing key,通过 `issueDevSession` 拿到 token 后,从 coauth 拉 actor 的 public key (`GET /_cokret/self/account/keys`) 用来本地 verify
+- **signing key 注入**:Phase B 用的是 alice 的 dev session signing key,通过 `issueDevSession` 拿到 token 后,从 coauth 拉 actor 的 public key (`GET /_arkret/self/account/keys`) 用来本地 verify
 - **cursor opacity 断言**:不要 hardcode cursor 字节格式;只断言 (a) 同输入稳定 (b) 不含明文 event_id 子串 (c) base64url decode 不报错
 - **redaction visibility 投影**:vector 里的 `expected_retained_fields_*` 是 key path 列表,断言用 `lodash.pick` / 手写 walker 把 actual / expected 都裁到同一 key 集合后 diff
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession`;不要新增 `helpers/conformance.ts`,vector loader 放在 spec 文件顶部即可

@@ -49,7 +49,7 @@
    - `requested_scopes = ["ck.message.create", "ck.applet.ghost.provision"]`
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
-3. 测试以 alice 的 admin token 调 soland `POST /_cokret/self/applets/install/preview`,再用返回的 `plan_digest` 调 `POST /_cokret/self/applets/install`
+3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`,再用返回的 `plan_digest` 调 `POST /_arkret/self/applets/install`
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
    - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`
 4. **断言**:`bot_actor_id` 形如 `did:web:bot-bridge-demo-...`;projection events 中出现 `ck.applet.registration`
@@ -90,7 +90,7 @@
 14. **alice** 点击该 timeline-event,断言:
     - 消息卡片显示 ghost 标记(`ghost-actor-badge` testid),且文本含 `External X`
     - `actor_id` 字段 = `ghost_actor_id`
-15. 调 soland `GET /_cokret/root/identity/${ghost_actor_id}/did-document`,断言:
+15. 调 soland `GET /_arkret/root/identity/${ghost_actor_id}/did-document`,断言:
     - `accountability` 数组非空
     - 含一个 entry `kind = "bot_actor"`,`did = bot_actor_id`
     - 含一个 entry `kind = "applet_registry"`,`did = applet_service.did`
@@ -103,14 +103,14 @@
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
 17. **alice** 在 `/realms/${realmId}/admin/access` 或 `/settings/applets`(以 inkson 实际路由为准)对 `applet_id` 执行 revoke:
-    - 调 soland `POST /_cokret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope`、`reason_code` 和 `revoke_mode`
+    - 调 soland `POST /_arkret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope`、`reason_code` 和 `revoke_mode`
     - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
     - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
     - **断言**:alice timeline 不出现 `"after revoke ${stamp}"`
 19. 已存在的 bot/ghost 记录保留(historic accountability 不能事后被抹去) — 断言:
-    - `GET /_cokret/root/identity/${bot_actor_id}/did-document` 仍 200
-    - `GET /_cokret/root/identity/${ghost_actor_id}/did-document` 仍 200
+    - `GET /_arkret/root/identity/${bot_actor_id}/did-document` 仍 200
+    - `GET /_arkret/root/identity/${ghost_actor_id}/did-document` 仍 200
     - 两者的 `status` 字段含 `revoked`
 
 ## Observable assertions (合并清单)
@@ -135,7 +135,7 @@
 
 ## Implementation notes
 
-- soland 已提供 canonical applet runnable surface:`/_cokret/self/applets/install/preview`、`/_cokret/self/applets/install`、`/_cokret/self/applets/{applet_id}/revoke`、`/_cokret/self/applets/{applet_id}/ghosts/provision`、`/_cokret/edge/applet/transactions`,以及 `GET /_cokret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
+- soland 已提供 canonical applet runnable surface:`/_arkret/self/applets/install/preview`、`/_arkret/self/applets/install`、`/_arkret/self/applets/{applet_id}/revoke`、`/_arkret/self/applets/{applet_id}/ghosts/provision`、`/_arkret/edge/applet/transactions`,以及 `GET /_arkret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`

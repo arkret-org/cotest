@@ -1,5 +1,5 @@
 //! Shared `service_binding_ref` construction for federation peer-submit
-//! scenarios (`POST /_cokret/peer/events`).
+//! scenarios (`POST /_arkret/peer/events`).
 //!
 //! Spec: `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 request table and
 //! §4.1.1 (`reducer_profile_digest` computation, normative):
@@ -20,8 +20,8 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, Result};
-use cokret_core::canonical::canonical_sha256;
-use cokret_core::{
+use arkret_core::canonical::canonical_sha256;
+use arkret_core::{
     Event, EventId, EventsSubmitFederationRequestBody, FederationServiceBindingRef, Hash, RealmId,
 };
 use serde_json::json;
@@ -103,7 +103,7 @@ pub fn peer_service_binding_ref_with_delivery(
     })
 }
 
-/// Full `POST /_cokret/peer/events` request body for a fabricated batch.
+/// Full `POST /_arkret/peer/events` request body for a fabricated batch.
 pub fn peer_events_submit_body(
     realm_id: &str,
     events: Vec<Event>,

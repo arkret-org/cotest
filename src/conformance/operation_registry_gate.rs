@@ -379,7 +379,7 @@ fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>
 
     let mut operations = BTreeMap::new();
     for (path, item) in paths {
-        if !path.starts_with("/_cokret") {
+        if !path.starts_with("/_arkret") {
             continue;
         }
         let Some(item) = item.as_object() else {
@@ -598,9 +598,9 @@ fn validate_product_private_index(index: &ProductPrivateIndex) -> Vec<String> {
                 entry.method, entry.path
             ));
         }
-        if !entry.path.starts_with("/_cokret/") {
+        if !entry.path.starts_with("/_arkret/") {
             failures.push(format!(
-                "{} {} product-private path must stay under /_cokret/*",
+                "{} {} product-private path must stay under /_arkret/*",
                 entry.method, entry.path
             ));
         }
@@ -667,7 +667,7 @@ fn classify_observed_operation(
         gate_status: OperationRegistryGateStatus::Failed,
         operation_id: None,
         reason: Some(
-            "unregistered /_cokret/* path is not explicitly classified as product-private"
+            "unregistered /_arkret/* path is not explicitly classified as product-private"
                 .to_owned(),
         ),
     }
@@ -774,7 +774,7 @@ fn is_generated_or_test_file(path: &Path) -> bool {
 
 /// Pure data files that embed a verbatim copy of the spec artifacts, NOT
 /// implementation source. The SDK ships `embedded_artifacts.json` — a mirror of
-/// the spec's `/_cokret/*` registries — which the path scanner would otherwise
+/// the spec's `/_arkret/*` registries — which the path scanner would otherwise
 /// read as if every mirrored path string were an operation the implementation
 /// actually exposes (with a guessed HTTP method), producing spurious
 /// unregistered-operation entries.
@@ -815,7 +815,7 @@ fn scan_source_file(
         }
         let method = infer_method_near(&lines, index);
         for literal in extract_string_literals(line) {
-            if !literal.contains("_cokret") {
+            if !literal.contains("_arkret") {
                 continue;
             }
             if !source_context_allows_literal(line, &lines, index, method.as_deref()) {
@@ -917,7 +917,7 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
         return Some(method);
     }
     // Router-table style spread across lines:
-    //   Router::with_path("/_cokret/...")
+    //   Router::with_path("/_arkret/...")
     //       .post(handler),
     // The verb binding sits on the line(s) immediately *after* the path. Prefer
     // the nearest following `.<verb>(` over the symmetric context window, which
@@ -938,7 +938,7 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
         }
     }
     // A bare path-list element (a string literal that is the whole statement,
-    // e.g. inside `for path in [ "/_cokret/...", ... ]`) carries no verb of its
+    // e.g. inside `for path in [ "/_arkret/...", ... ]`) carries no verb of its
     // own. Treating the verb as unknown lets the registry lookup match the path
     // template against whichever method the spec registers it under, instead of
     // borrowing an unrelated verb (a nearby `get_json(...openapi.json)` call)
@@ -969,8 +969,8 @@ fn is_bare_path_list_element(line: &str) -> bool {
 }
 
 fn infer_method_from_line(line: &str) -> Option<String> {
-    let cokret_index = line.find("_cokret")?;
-    let prefix = &line[..cokret_index];
+    let arkret_index = line.find("_arkret")?;
+    let prefix = &line[..arkret_index];
     for token in prefix.split(|ch: char| !ch.is_ascii_alphabetic()) {
         for method in HTTP_METHODS {
             if token == *method {
@@ -979,12 +979,12 @@ fn infer_method_from_line(line: &str) -> Option<String> {
         }
     }
     // Router-table style: the HTTP verb follows the path on the same line, e.g.
-    // `Router::with_path("/_cokret/...").post(handler)`. The path literal sits
+    // `Router::with_path("/_arkret/...").post(handler)`. The path literal sits
     // between the `with_path(` call and the `.<verb>(` binding, so the verb is
     // in the suffix rather than the prefix. Inferring it from the same line is
     // far more precise than the multi-line context fallback, which can latch
     // onto a neighbouring route's verb in a `.push(...).push(...)` chain.
-    let suffix = &line[cokret_index..];
+    let suffix = &line[arkret_index..];
     for method in HTTP_METHODS {
         if suffix.contains(&format!(").{}(", method.to_ascii_lowercase())) {
             return Some((*method).to_owned());
@@ -1016,9 +1016,9 @@ fn infer_method_from_context(context: &str) -> Option<String> {
         }
     }
     for method in HTTP_METHODS {
-        if context.contains(&format!("{method} /_cokret"))
-            || context.contains(&format!("{method} `_cokret"))
-            || context.contains(&format!("{method} `/_cokret"))
+        if context.contains(&format!("{method} /_arkret"))
+            || context.contains(&format!("{method} `_arkret"))
+            || context.contains(&format!("{method} `/_arkret"))
         {
             return Some((*method).to_owned());
         }
@@ -1091,7 +1091,7 @@ fn extract_string_literals(line: &str) -> Vec<String> {
 }
 
 fn extract_regex_path_candidates(line: &str) -> Vec<String> {
-    let Some(start) = line.find(r"\/_cokret\/") else {
+    let Some(start) = line.find(r"\/_arkret\/") else {
         return Vec::new();
     };
     let tail = &line[start..];
@@ -1175,7 +1175,7 @@ fn extract_path_candidates(value: &str) -> Vec<String> {
         .replace("*", "{wildcard}");
     let mut out = Vec::new();
     let mut search_from = 0usize;
-    while let Some(offset) = normalized[search_from..].find("_cokret") {
+    while let Some(offset) = normalized[search_from..].find("_arkret") {
         let match_start = search_from + offset;
         let mut start = match_start;
         if start > 0 && normalized.as_bytes()[start - 1] == b'/' {
@@ -1194,7 +1194,7 @@ fn extract_path_candidates(value: &str) -> Vec<String> {
         if let Some(candidate) = normalize_observed_path(&candidate) {
             out.push(candidate);
         }
-        search_from = match_start + "_cokret".len();
+        search_from = match_start + "_arkret".len();
     }
     out
 }
@@ -1203,9 +1203,9 @@ fn extract_path_candidates(value: &str) -> Vec<String> {
 /// into a single `{wildcard}` segment-token before path extraction.
 ///
 /// Without this, an interpolation like
-/// `/_cokret/self/keys/backups/${encodeURIComponent(id)}/unlock` would be cut
+/// `/_arkret/self/keys/backups/${encodeURIComponent(id)}/unlock` would be cut
 /// short at the `(` that `trim_path_candidate` treats as a terminator, dropping
-/// the `/unlock` tail and producing a spurious `/_cokret/self/keys/backups/{wildcard}`
+/// the `/unlock` tail and producing a spurious `/_arkret/self/keys/backups/{wildcard}`
 /// observation that never matches the registered `.../unlock` operation. By
 /// folding the full `${...}` expression (balanced across one nested paren level)
 /// into `{wildcard}` first, the trailing path segments survive and the real
@@ -1263,9 +1263,9 @@ fn normalize_observed_path(candidate: &str) -> Option<String> {
     } else if let Some(rest) = candidate.strip_prefix("https://") {
         candidate = rest.find('/').map(|idx| &rest[idx..]).unwrap_or("");
     }
-    let mut path = if candidate.starts_with("/_cokret") {
+    let mut path = if candidate.starts_with("/_arkret") {
         candidate.to_owned()
-    } else if candidate.starts_with("_cokret") {
+    } else if candidate.starts_with("_arkret") {
         format!("/{candidate}")
     } else {
         return None;
@@ -1278,10 +1278,10 @@ fn normalize_observed_path(candidate: &str) -> Option<String> {
         path = before.to_owned();
     }
     path = path.trim_end_matches('/').to_owned();
-    if path == "/_cokret" || path == "/_cokret/" {
+    if path == "/_arkret" || path == "/_arkret/" {
         return None;
     }
-    if !path.starts_with("/_cokret/") {
+    if !path.starts_with("/_arkret/") {
         return None;
     }
     Some(normalize_path_template(&path))
@@ -1318,8 +1318,8 @@ fn parse_http_binding(http: &str) -> Result<OperationKey> {
     if !HTTP_METHODS.contains(&method.as_str()) {
         bail!("http binding has unsupported method {method}");
     }
-    if !path.starts_with("/_cokret/") && path != "/_cokret/describe" {
-        bail!("http binding path must stay under /_cokret/*: {path}");
+    if !path.starts_with("/_arkret/") && path != "/_arkret/describe" {
+        bail!("http binding path must stay under /_arkret/*: {path}");
     }
     Ok(OperationKey::new(method, path))
 }
@@ -1398,49 +1398,49 @@ mod tests {
 
     #[test]
     fn extracts_rust_format_paths() {
-        let line = r#"self.get_json(&format!("_cokret/self/agents/{agent_principal_id}"))"#;
+        let line = r#"self.get_json(&format!("_arkret/self/agents/{agent_principal_id}"))"#;
         let literals = extract_string_literals(line);
         let paths = extract_path_candidates(&literals[0]);
-        assert_eq!(paths, vec!["/_cokret/self/agents/{agent_principal_id}"]);
+        assert_eq!(paths, vec!["/_arkret/self/agents/{agent_principal_id}"]);
     }
 
     #[test]
     fn regex_path_normalizes_to_placeholder() {
-        let line = r#"url.pathname.match(/^\/_cokret\/open\/mimi\/strands\/[^/]+\/update$/)"#;
+        let line = r#"url.pathname.match(/^\/_arkret\/open\/mimi\/strands\/[^/]+\/update$/)"#;
         let paths = extract_regex_path_candidates(line);
-        assert_eq!(paths, vec!["/_cokret/open/mimi/strands/{wildcard}/update"]);
+        assert_eq!(paths, vec!["/_arkret/open/mimi/strands/{wildcard}/update"]);
     }
 
     #[test]
     fn regex_capture_group_path_preserves_tail_segments() {
-        let line = r#"url.pathname.match(/^\/_cokret\/self\/agents\/([^/]+)\/grants$/)"#;
+        let line = r#"url.pathname.match(/^\/_arkret\/self\/agents\/([^/]+)\/grants$/)"#;
         let paths = extract_regex_path_candidates(line);
-        assert_eq!(paths, vec!["/_cokret/self/agents/{wildcard}/grants"]);
+        assert_eq!(paths, vec!["/_arkret/self/agents/{wildcard}/grants"]);
     }
 
     #[test]
     fn regex_alternative_group_expands_to_literal_paths() {
         let line =
-            r#"url.pathname.match(/^\/_cokret\/self\/circles\/([^/]+)\/(archive|restore)$/)"#;
+            r#"url.pathname.match(/^\/_arkret\/self\/circles\/([^/]+)\/(archive|restore)$/)"#;
         let paths = extract_regex_path_candidates(line);
         assert_eq!(
             paths,
             vec![
-                "/_cokret/self/circles/{wildcard}/archive",
-                "/_cokret/self/circles/{wildcard}/restore",
+                "/_arkret/self/circles/{wildcard}/archive",
+                "/_arkret/self/circles/{wildcard}/restore",
             ]
         );
     }
 
     #[test]
     fn extracts_absolute_paths_without_looping() {
-        let paths = extract_path_candidates("/_cokret/describe");
-        assert_eq!(paths, vec!["/_cokret/describe"]);
+        let paths = extract_path_candidates("/_arkret/describe");
+        assert_eq!(paths, vec!["/_arkret/describe"]);
     }
 
     #[test]
     fn infers_method_from_aligned_surface_line() {
-        let method = infer_method_from_line("surface GET    /_cokret/self/account/subscribe")
+        let method = infer_method_from_line("surface GET    /_arkret/self/account/subscribe")
             .expect("aligned method should parse");
         assert_eq!(method, "GET");
     }
@@ -1448,16 +1448,16 @@ mod tests {
     #[test]
     fn placeholders_match_registry_patterns() {
         assert!(pattern_matches_path(
-            "/_cokret/self/keys/backups/{backup_id}",
-            "/_cokret/self/keys/backups/{wildcard}"
+            "/_arkret/self/keys/backups/{backup_id}",
+            "/_arkret/self/keys/backups/{wildcard}"
         ));
         assert!(pattern_matches_path(
-            "/_cokret/open/mimi/strands/{strand_id}/messages",
-            "/_cokret/open/mimi/strands/{room_id}/messages"
+            "/_arkret/open/mimi/strands/{strand_id}/messages",
+            "/_arkret/open/mimi/strands/{room_id}/messages"
         ));
         assert!(!pattern_matches_path(
-            "/_cokret/self/events",
-            "/_cokret/self/events/query"
+            "/_arkret/self/events",
+            "/_arkret/self/events/query"
         ));
     }
 }

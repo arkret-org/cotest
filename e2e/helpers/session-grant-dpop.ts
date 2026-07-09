@@ -4,7 +4,7 @@
 // cotask/tasks/_auth_todos.md "## ② 最终路线".
 //
 // Under ②, the Principal Server (soland) does not mint a second local
-// credential. A client accesses `/_cokret/self/*` by presenting
+// credential. A client accesses `/_arkret/self/*` by presenting
 // `Authorization: Bearer <ck.session.grant>` plus a per-request DPoP proof
 // bound to the request (`htm`/`htu`/`ath`). soland verifies the DPoP against
 // the grant's `cnf.jkt` (RFC 7638 JWK SHA-256 thumbprint) obtained via
@@ -200,7 +200,7 @@ export function mintDpopProof(args: {
 }
 
 /// Build the full header set for a real grant + DPoP request to a soland
-/// `/_cokret/self/*` (or `/root/`) endpoint: `Authorization: Bearer <grant>`, a
+/// `/_arkret/self/*` (or `/root/`) endpoint: `Authorization: Bearer <grant>`, a
 /// request-bound `DPoP` proof. `deviceKey` MUST be the key the grant is bound
 /// to (`cnf.jkt`).
 export function selfPathGrantHeaders(args: {

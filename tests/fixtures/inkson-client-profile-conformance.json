@@ -73,7 +73,7 @@
         },
         {
           "method": "POST",
-          "path": "/_cokret/gate/account/session-grants",
+          "path": "/_arkret/gate/account/session-grants",
           "status": 200
         }
       ],

@@ -8,7 +8,7 @@
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Duration, Utc};
-use cokret_core::error::REASON_BACKUP_POST_RESET_STALE;
+use arkret_core::error::REASON_BACKUP_POST_RESET_STALE;
 
 /// Returns true when an existing envelope is "stale" relative to the
 /// most recent cross-signing reset.

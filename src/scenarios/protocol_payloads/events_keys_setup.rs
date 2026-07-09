@@ -1,7 +1,7 @@
 //! Phase 1 — event submit + key upload/query/claim setup.
 //!
 //! Walks Alice through pushing a single signed event, then uploading her
-//! device-key bundle and exercising `/_cokret/self/keys/{query,claim}` to confirm
+//! device-key bundle and exercising `/_arkret/self/keys/{query,claim}` to confirm
 //! the upload is visible.
 
 use anyhow::Result;
@@ -76,7 +76,7 @@ async fn authorize_keys_device(
     let accepted = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
             .json(&event),
         StatusCode::OK,
@@ -101,7 +101,7 @@ async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> 
     let submit = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
             .json(&event),
         StatusCode::OK,
@@ -124,7 +124,7 @@ async fn create_adapter_realm(server: &CokretServer, token: &str) -> Result<Stri
     let submit = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/events"))
+            .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
             .json(&event),
         StatusCode::OK,
@@ -251,7 +251,7 @@ async fn upload_and_inspect_keys(
     let upload_keys = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/upload"))
+            .post(server.url("/_arkret/self/keys/upload"))
             .bearer_auth(token)
             .json(&signed_keys_upload_body(
                 KEYS_ACTOR_DID,
@@ -274,7 +274,7 @@ async fn upload_and_inspect_keys(
     let query_keys = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/query"))
+            .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(token)
             .json(&json!({"device_keys": {"did:web:alice.example": ["ak:device:01904100-0000-7000-8000-0000000000a1"]}})),
         StatusCode::OK,
@@ -293,7 +293,7 @@ async fn upload_and_inspect_keys(
     let claimed = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/claim"))
+            .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(token)
             .json(&json!({
                 "one_time_keys": {

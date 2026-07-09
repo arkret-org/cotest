@@ -201,7 +201,7 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         let base = coauth.base_url().trim_end_matches('/');
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
-            format!("{base}/_cokret/gate/account/session-grants/introspect"),
+            format!("{base}/_arkret/gate/account/session-grants/introspect"),
         ));
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER".to_owned(),
@@ -234,7 +234,7 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         // key is optional (default: no announce), so unset is harmless.
         soland_env.push((
             "SOLAND_DIRECTORY_ANNOUNCE_URL".to_owned(),
-            format!("{}/_cokret/find/directory/announce", teabay.base_url),
+            format!("{}/_arkret/find/directory/announce", teabay.base_url),
         ));
     }
 

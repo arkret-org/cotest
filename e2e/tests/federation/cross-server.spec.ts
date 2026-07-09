@@ -8,8 +8,8 @@
 //   - §5.1 cross-domain invite
 //
 // Soland implementation status (2026-05 audit):
-//   ✓ POST /_cokret/peer/events handler routed and ingests events
-//   ✓ GET  /_cokret/peer/events cursor-based
+//   ✓ POST /_arkret/peer/events handler routed and ingests events
+//   ✓ GET  /_arkret/peer/events cursor-based
 //   ✓ Per-event accepted / rejected partial-accept
 //   ✓ Idempotent by event_id
 //   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
@@ -110,7 +110,7 @@ async function waitForMember(
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -189,7 +189,7 @@ test.describe("cross-server federation", () => {
 
     // POST without auth/body should not 404 — endpoint MUST exist.
     const pushProbe = await request.post(
-      `${solandBaseUrl("beta")}/_cokret/peer/events`,
+      `${solandBaseUrl("beta")}/_arkret/peer/events`,
       {
         data: {},
       },
@@ -197,14 +197,14 @@ test.describe("cross-server federation", () => {
     expect(pushProbe.status()).not.toBe(404);
 
     const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/peer/events?realms=ck:realm:probe`,
+      `${solandBaseUrl("beta")}/_arkret/peer/events?realms=ck:realm:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
   });
 
   test("unsigned peer GET pull is rejected", async ({ request }) => {
     const response = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/peer/events?limit=1`,
+      `${solandBaseUrl("beta")}/_arkret/peer/events?limit=1`,
       {
         headers: unsignedPeerGetHeaders(
           solandServiceDid("alpha"),
@@ -328,7 +328,7 @@ test.describe("cross-server federation", () => {
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
     const alphaDescribe = await request.get(
-      `${solandBaseUrl("alpha")}/_cokret/describe`,
+      `${solandBaseUrl("alpha")}/_arkret/describe`,
     );
     expect(alphaDescribe.ok()).toBeTruthy();
     const alphaDescribeBody = await alphaDescribe.json();
@@ -402,7 +402,7 @@ test.describe("cross-server federation", () => {
     );
 
     const betaSpace = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/self/realms/${encodeURIComponent(invite!.realm_id)}`,
+      `${solandBaseUrl("beta")}/_arkret/self/realms/${encodeURIComponent(invite!.realm_id)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();
@@ -521,7 +521,7 @@ test.describe("cross-server federation", () => {
     await waitForEventBody(request, aliceToken, realmId, bobBody, "alpha");
   });
 
-  test("peer query recovery: after a network partition, β fetches missing α events via GET /_cokret/peer/events", async ({
+  test("peer query recovery: after a network partition, β fetches missing α events via GET /_arkret/peer/events", async ({
     request,
   }) => {
     const stamp = Date.now();

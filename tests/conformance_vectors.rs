@@ -211,7 +211,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 
 // ─── R3.3 / OA-COT-1..4 — CKP-0011 object addressing + resolve_target ─────
 //
-// SDK-pure vectors over `cokret_core::models::*` object-addressing surface:
+// SDK-pure vectors over `arkret_core::models::*` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
 //     keyword/order/missing-via, realm-id vs alias.
 //   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks strand/message
@@ -275,7 +275,7 @@ fn test_cot_1_handle_reassignment_full_strand_live() {
 }
 
 #[test]
-#[ignore = "R3.2-followup: teabay POST /_cokret/find/directory/list-handles-for-subject \
+#[ignore = "R3.2-followup: teabay POST /_arkret/find/directory/list-handles-for-subject \
             endpoint not yet reachable end-to-end across services"]
 fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
     // Live integration (teabay directory):
@@ -421,7 +421,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // we additionally assert that a stateless body is rejected by the
     // SDK's closed stateful cursor shape. Servers without
     // `ck.profile.stateless_cursor.v1` have no compat path.
-    use cokret_core::cursor::{Cursor, CursorPurpose};
+    use arkret_core::cursor::{Cursor, CursorPurpose};
 
     let stateless = serde_json::json!({
         "v": "1",
@@ -547,12 +547,12 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // effective-set filter that soland's MID reducer MUST mirror. An
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
-    use cokret_core::models::{
+    use arkret_core::models::{
         DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
         MemberIdentityUpdatePayload, effective_identity_events,
     };
-    use cokret_core::{Did, EventId, Hash, RealmId};
+    use arkret_core::{Did, EventId, Hash, RealmId};
 
     let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-000000007007")
         .map_err(|e| anyhow!("realm: {e}"))?;
@@ -671,7 +671,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // live `#[ignore]` companion below.
     use std::collections::BTreeSet;
 
-    use cokret_core::{
+    use arkret_core::{
         Audience, CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle,
         HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate, PayloadProof,
         RecipientServiceType,

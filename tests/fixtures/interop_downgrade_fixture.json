@@ -125,12 +125,12 @@
           "protocol": "a2a",
           "remote_task_id": "task-remote-7"
         },
-        "cokret_capability_refs": [],
+        "arkret_capability_refs": [],
         "realm_policy_ref": null
       },
       "expected": {
         "outcome": "reject",
-        "reason_code": "cokret_capability_required",
+        "reason_code": "arkret_capability_required",
         "marker_authorizes": false,
         "session_started": false,
         "authorized_by": []

@@ -7,7 +7,7 @@
       "expect": "reject",
       "source": {
         "mode": "fixture",
-        "path": "/_cokret/describe"
+        "path": "/_arkret/describe"
       },
       "describe": {
         "service": "soland",
@@ -36,7 +36,7 @@
       "expect": "pass",
       "source": {
         "mode": "fixture",
-        "path": "/_cokret/describe"
+        "path": "/_arkret/describe"
       },
       "describe": {
         "service": "floria",
@@ -66,7 +66,7 @@
       "expect": "pass",
       "source": {
         "mode": "fixture",
-        "path": "/_cokret/find/directory/describe"
+        "path": "/_arkret/find/directory/describe"
       },
       "describe": {
         "service": "teabay",
@@ -109,7 +109,7 @@
       "expect": "reject",
       "source": {
         "mode": "fixture",
-        "path": "/_cokret/describe"
+        "path": "/_arkret/describe"
       },
       "describe": {
         "service": "coauth",

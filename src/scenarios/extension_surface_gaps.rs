@@ -16,7 +16,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
     let realm_id = alice.create_realm("Applet Surface Realm").await?;
 
     let describe = expect_json(
-        server.http().get(server.url("/_cokret/describe")),
+        server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -34,7 +34,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
 
     expect_api_error(
         alice
-            .post(&format!("/_cokret/self/realms/{realm_id}/applets"))
+            .post(&format!("/_arkret/self/realms/{realm_id}/applets"))
             .json(&json!({
                 "applet_id": "ak:applet:board",
                 "manifest": {"name": "Board"}
@@ -59,7 +59,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let realm_id = alice.create_realm("Agent Surface Realm").await?;
 
     let describe = expect_json(
-        server.http().get(server.url("/_cokret/describe")),
+        server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -87,11 +87,11 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         );
     }
 
-    let empty_list = expect_json(alice.get("/_cokret/self/agents"), StatusCode::OK).await?;
+    let empty_list = expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?;
     assert!(empty_list["agents"].as_array().unwrap().is_empty());
 
     let provisioned = expect_json(
-        alice.post("/_cokret/self/agents").json(&json!({
+        alice.post("/_arkret/self/agents").json(&json!({
             "display_name": "Planner",
             "agent_slug": "planner"
         })),
@@ -111,7 +111,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
 
     expect_api_error(
         alice
-            .post(&format!("/_cokret/self/realms/{realm_id}/agents"))
+            .post(&format!("/_arkret/self/realms/{realm_id}/agents"))
             .json(&json!({
                 "agent_id": "did:web:agent.example",
                 "display_name": "Planner"

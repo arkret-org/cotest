@@ -5,10 +5,10 @@
 //! gate. These tests drive the *shared* arkret-rust-sdk surfaces so cotest
 //! never re-implements the organization-side invariants:
 //!
-//!   * `cokret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
+//!   * `arkret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
 //!     `ck.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
 //!     organization_ref }` shape).
-//!   * `cokret_core::models::verify_realm_organization_statement` enforces the issuer-role /
+//!   * `arkret_core::models::verify_realm_organization_statement` enforces the issuer-role /
 //!     delegation / proof / validity-window / scope / revocation invariants, fail-closed.
 //!
 //! COT-ORG-01 asserts the coverage fixture's active + revoked
@@ -25,13 +25,13 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use cokret_core::Did;
-use cokret_core::models::{
+use arkret_core::Did;
+use arkret_core::models::{
     NoDelegationResolver, ObjectRef, RealmId, RealmOrganizationControlScope,
     RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationPayload,
     RealmOrganizationRelationship, verify_realm_organization_statement,
 };
-use cokret_core::schema::{
+use arkret_core::schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
 use serde_json::Value;
@@ -157,7 +157,7 @@ impl RealmOrganizationDelegationResolver for FixedResolver {
         &self,
         _delegation_ref: &ObjectRef,
         _organization_id: &Did,
-    ) -> cokret_core::Result<Option<RealmOrganizationDelegation>> {
+    ) -> arkret_core::Result<Option<RealmOrganizationDelegation>> {
         Ok(self.0.clone())
     }
 }
@@ -180,7 +180,7 @@ fn run_verifier(
     expected_realm_id: &RealmId,
     now: DateTime<Utc>,
     resolver_name: &str,
-) -> cokret_core::Result<()> {
+) -> arkret_core::Result<()> {
     use RealmOrganizationControlScope::*;
     use RealmOrganizationRelationship::*;
     match resolver_name {

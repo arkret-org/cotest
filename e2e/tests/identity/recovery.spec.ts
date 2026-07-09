@@ -144,7 +144,7 @@ async function putBackup(
   envelope: Record<string, unknown>,
 ) {
   return request.put(
-    `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`,
+    `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
     {
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       data: envelope,
@@ -159,7 +159,7 @@ test.describe("account recovery", () => {
     const token = await issueDevSession(request, alice);
 
     const backupsResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/keys/backups?backup_class=did_recovery`,
+      `${solandBaseUrl()}/_arkret/self/keys/backups?backup_class=did_recovery`,
       {
         headers: { authorization: `Bearer ${token}` },
       },
@@ -205,7 +205,7 @@ test.describe("account recovery", () => {
       const recoveryBackupPut = page.page.waitForResponse((response) => {
         if (
           response.request().method() !== "PUT" ||
-          !/\/_cokret\/self\/keys\/backups\//.test(response.url())
+          !/\/_arkret\/self\/keys\/backups\//.test(response.url())
         ) {
           return false;
         }
@@ -238,7 +238,7 @@ test.describe("account recovery", () => {
       const grantHeaders = (method: string, url: string) =>
         selfPathHeadersForDpopSession(session, method, url);
 
-      const policyUrl = `${solandBaseUrl()}/_cokret/root/identity/recovery-policy`;
+      const policyUrl = `${solandBaseUrl()}/_arkret/root/identity/recovery-policy`;
       await expect
         .poll(
           async () => {
@@ -253,7 +253,7 @@ test.describe("account recovery", () => {
         )
         .toBe("active");
 
-      const backupsUrl = `${solandBaseUrl()}/_cokret/self/keys/backups?backup_class=did_recovery`;
+      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_class=did_recovery`;
       await expect
         .poll(
           async () => {
@@ -310,7 +310,7 @@ test.describe("account recovery", () => {
       .poll(
         async () => {
           const viewer = await request.get(
-            `${solandBaseUrl()}/_cokret/self/account/viewer`,
+            `${solandBaseUrl()}/_arkret/self/account/viewer`,
             { headers: authHeaders(result.deviceToken) },
           );
           if (!viewer.ok()) {
@@ -395,7 +395,7 @@ test.describe("account recovery", () => {
 
     // The recovery-policy GET surface MUST be routed and MUST report null
     // active policy for a brand-new principal (fail-closed default, §7.11).
-    const policyUrl = `${solandBaseUrl()}/_cokret/root/identity/recovery-policy`;
+    const policyUrl = `${solandBaseUrl()}/_arkret/root/identity/recovery-policy`;
     const getResp = await request.get(policyUrl, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -525,7 +525,7 @@ test.describe("account recovery", () => {
       .poll(
         async () => {
           const viewer = await request.get(
-            `${solandBaseUrl()}/_cokret/self/account/viewer`,
+            `${solandBaseUrl()}/_arkret/self/account/viewer`,
             { headers: authHeaders(secondRestore.deviceToken) },
           );
           if (!viewer.ok()) {

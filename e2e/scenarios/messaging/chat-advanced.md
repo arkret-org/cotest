@@ -60,7 +60,7 @@
     - 在 plain text Realm:`ck.message.create.payload.mentions = [bob.did]`
     - 在 E2EE Realm:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
 16. 断言:bob 收到 notification(检查 inkson 的 in-app notification panel,或测试侧调
-    `GET /_cokret/self/account/subscribe?catchup=true` 查 bob 的 `notifications.events`)
+    `GET /_arkret/self/account/subscribe?catchup=true` 查 bob 的 `notifications.events`)
 17. 断言:carol **没**收到 mention 通知(她没被点名)
 
 ### Phase E — Poll

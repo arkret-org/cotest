@@ -6,15 +6,15 @@
 //!   - `ck.vector.sidecar.existence_privacy.v1`
 //!   - `ck.vector.sidecar.multi_agent_publish.v1`
 //!
-//! Wire-shape pins only. Live `POST /_cokret/self/agent-sidecar-threads:ensure`
+//! Wire-shape pins only. Live `POST /_arkret/self/agent-sidecar-threads:ensure`
 //! and the multi-agent fan-out reducer path land in soland P2-impl;
 //! this suite hard-fails on registry drift today.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::error::{
+use arkret_core::error::{
     REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED, REASON_SIDECAR_CREATE_DENIED,
 };
-use cokret_core::{
+use arkret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
     OP_AGENT_SIDECAR_THREAD_ENSURE, PROFILE_AGENT_SIDECAR_THREAD,

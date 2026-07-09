@@ -27,7 +27,7 @@
 //! `bail!` when the stack cannot be bootstrapped.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{
+use arkret_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleSymbol, Did, RealmId,
     RelationKind,
 };
@@ -125,18 +125,18 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST /_cokret/self/realms                                 (admin)
-    //         POST /_cokret/self/realms/<rid>/circles                   (admin)
-    //         POST /_cokret/self/realms/<rid>/members                   add incircle + realm-only
-    //         POST /_cokret/self/circles/<cid>/members                  add incircle only
-    //         POST /_cokret/self/realms/<rid>/strands                     create F1
-    // (scope_circle_id: null)         POST /_cokret/self/realms/<rid>/strands
-    // create F2 (scope_circle_id: <cid>)         POST /_cokret/self/relations
+    //         POST /_arkret/self/realms                                 (admin)
+    //         POST /_arkret/self/realms/<rid>/circles                   (admin)
+    //         POST /_arkret/self/realms/<rid>/members                   add incircle + realm-only
+    //         POST /_arkret/self/circles/<cid>/members                  add incircle only
+    //         POST /_arkret/self/realms/<rid>/strands                     create F1
+    // (scope_circle_id: null)         POST /_arkret/self/realms/<rid>/strands
+    // create F2 (scope_circle_id: <cid>)         POST /_arkret/self/relations
     // kind=confidential_discussion_of, from=F1, to=F2         GET
-    // /_cokret/self/strands/<F1>/relations as incircle       expect edge present + F2 hint
-    // GET  /_cokret/self/strands/<F1>/relations as realm-only     expect F2 edge OMITTED
-    // GET  /_cokret/self/strands/<F2> as realm-only expect 404 (NOT 403)         (teabay) POST
-    // /_cokret/find/directory/search-strands        as realm-only → F2 absent
+    // /_arkret/self/strands/<F1>/relations as incircle       expect edge present + F2 hint
+    // GET  /_arkret/self/strands/<F1>/relations as realm-only     expect F2 edge OMITTED
+    // GET  /_arkret/self/strands/<F2> as realm-only expect 404 (NOT 403)         (teabay) POST
+    // /_arkret/find/directory/search-strands        as realm-only → F2 absent
     //
     //       Assertions:
     //         (a) circle_member's view: edge present, points at F2,
@@ -152,7 +152,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     //             hits for F2's title/id; same query as circle_member
     //             returns F2.
     let _ = admin
-        .post("/_cokret/self/realms")
+        .post("/_arkret/self/realms")
         .json(&json!({
             "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),

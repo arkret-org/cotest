@@ -63,7 +63,7 @@ type SelfEventsOutcome = {
   body: Record<string, unknown>;
 };
 
-// `/_cokret/self/events` is a batch endpoint: a reducer rejection comes back as
+// `/_arkret/self/events` is a batch endpoint: a reducer rejection comes back as
 // HTTP 200 with `status:"partial"` and the failure in `rejected[].reason_code`,
 // NOT as a 4xx. Submit one envelope and surface that outcome uniformly.
 async function submitSelfEvent(
@@ -72,7 +72,7 @@ async function submitSelfEvent(
   envelope: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/events`,
+    `${solandBaseUrl()}/_arkret/self/events`,
     { headers: authHeaders(token), data: envelope },
   );
   const text = await response.text();
@@ -394,7 +394,7 @@ test.describe("third-party invite", () => {
 
       // Reducer effect: bob is now an invite-membership proposal in the Realm.
       const invitesResp = await request.get(
-        `${solandBaseUrl()}/_cokret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.did)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
+        `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.did)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
         { headers: authHeaders(ctx.bobToken) },
       );
       const invitesBody = await expectJsonOk<{

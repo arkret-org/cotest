@@ -80,7 +80,7 @@ export async function acceptInviteViaApi(
   opts: { server?: SolandKey } = {},
 ) {
   const base = solandBaseUrl(opts.server);
-  const listUrl = new URL("/_cokret/self/authz/invites", base);
+  const listUrl = new URL("/_arkret/self/authz/invites", base);
   listUrl.searchParams.set("subject", actorDid);
   listUrl.searchParams.set("realm_id", realmId);
   const list = await request.get(listUrl.toString(), {
@@ -194,7 +194,7 @@ export async function listRealmEventsViaApi(
   opts: { limit?: number; server?: SolandKey } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=${
+    `${solandBaseUrl(opts.server)}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=${
       opts.limit ?? 50
     }`,
     { headers: authHeaders(token) },

@@ -117,7 +117,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //
     //   // 3a. mint the SSK if alice hasn't already; publish §5.1
     //   //     envelope:
-    //   alice.post("/_cokret/self/events").json(&event_envelope(
+    //   alice.post("/_arkret/self/events").json(&event_envelope(
     //       &alice.actor,
     //       <principal_control_realm_id>,
     //       "ck.cross_signing.publish",
@@ -151,7 +151,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let ssk_sig = ssk_signing_key.sign(canonical.as_bytes());
     //
     //   expect_json(
-    //       alice.post("/_cokret/gate/account/device-pair")
+    //       alice.post("/_arkret/gate/account/device-pair")
     //           .json(&json!({
     //               "pairing_code": <qr_pairing_code>,
     //               "new_device_pubkey": {
@@ -176,7 +176,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     // ── Step 4: assert both devices visible + verified ──────────────────
     //
     //   let account = expect_json(
-    //       alice.get("/_cokret/self/account/viewer"),
+    //       alice.get("/_arkret/self/account/viewer"),
     //       StatusCode::OK,
     //   ).await?;
     //   let entries = account["devices"].as_array().unwrap();
@@ -203,7 +203,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   })).await?["realm_id"].as_str().unwrap().to_owned();
     //
     //   // Welcome device-B into the MLS group on `realm_id`:
-    //   alice.post(&format!("/_cokret/self/realms/{realm_id}/mls/welcomes"))
+    //   alice.post(&format!("/_arkret/self/realms/{realm_id}/mls/welcomes"))
     //        .json(&json!({"recipient_device_id": device_b, ... }))
     //        .send().await?;
     //
@@ -213,7 +213,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //
     //   // 6a. revoke
     //   let revoke = expect_json(
-    //       alice.post("/_cokret/self/events").json(&event_envelope(
+    //       alice.post("/_arkret/self/events").json(&event_envelope(
     //           &alice.actor,
     //           <principal_control_realm_id>,
     //           "ck.device.revoke",
@@ -227,7 +227,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   assert_eq!(revoke["accepted"][0]["kind"], "ck.device.revoke");
     //
     //   // 6b. device-A still works:
-    //   expect_status(alice.get("/_cokret/self/account/viewer"), StatusCode::OK).await?;
+    //   expect_status(alice.get("/_arkret/self/account/viewer"), StatusCode::OK).await?;
     //
     //   // 6c. device-B's bearer is now 401:
     //   //   (need a separate bearer issued to device-B — today only
@@ -236,7 +236,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let device_b_token = dev_login(&server, &alice.actor, &device_b).await?;
     //   expect_status(
     //       server.http()
-    //             .get(server.url("/_cokret/self/account/viewer"))
+    //             .get(server.url("/_arkret/self/account/viewer"))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::UNAUTHORIZED,
     //   ).await?;

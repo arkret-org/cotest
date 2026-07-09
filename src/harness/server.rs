@@ -10,7 +10,7 @@ use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
-use cokret_http_client::{Auth, Client as SdkClient};
+use arkret_http_client::{Auth, Client as SdkClient};
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::Value;
 use url::Url;
@@ -505,13 +505,13 @@ impl TestServerGroup {
     /// are reserved for all nodes up front so each node's `did:webvh` + base URL
     /// is known before any node starts, which is the only way to inject a
     /// mutual peer mesh through start-time env. Without this, an inbound
-    /// `/_cokret/peer/events` submission can never resolve the source peer's
+    /// `/_arkret/peer/events` submission can never resolve the source peer's
     /// ServiceDescribe, so the federation profile gate falls back to
     /// `federation_minimal` and rejects core kinds like `ck.message.create`.
     ///
     /// The outbound dispatcher is disabled (`SOLAND_FEDERATION_OUTBOUND=0`)
     /// because federation scenarios drive cross-server delivery with explicit
-    /// `/_cokret/peer/events` POSTs; leaving the background dispatcher on would
+    /// `/_arkret/peer/events` POSTs; leaving the background dispatcher on would
     /// race those deterministic submissions with unsolicited broadcasts.
     async fn spawn_external_federated(
         name: &str,
@@ -582,7 +582,7 @@ impl TestServerGroup {
     pub async fn multi(name: &str, count: usize) -> Result<Self> {
         // Process-mode fast path: when a pre-built soland binary is available,
         // spawn the nodes as a mutually-wired federation mesh so inbound
-        // `/_cokret/peer/events` submissions can resolve each peer's
+        // `/_arkret/peer/events` submissions can resolve each peer's
         // ServiceDescribe (see `spawn_external_federated`). The slow
         // `cargo run` and Docker paths below keep their original behavior.
         if sut_runtime_mode() == SutRuntimeMode::Process {

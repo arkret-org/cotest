@@ -13,7 +13,7 @@
 // the same code path `helpers/users.ts::createDpopUserSession` already uses.
 // It exercises the real onboarding (webvh DID + cross-signing-backed account +
 // session grant) WITHOUT the WebAuthn browser ceremony or dev-login, so the
-// minted DID is a resolvable did:webvh and the grant works on `/_cokret/self/*`.
+// minted DID is a resolvable did:webvh and the grant works on `/_arkret/self/*`.
 
 import { expect, type APIRequestContext } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
@@ -185,14 +185,14 @@ export async function loginPrincipalViaCoauth(
 }
 
 /// Resolve a principal DID through soland's public resolver
-/// (`POST /_cokret/root/identity/resolve`) and return the DID Document + log.
+/// (`POST /_arkret/root/identity/resolve`) and return the DID Document + log.
 /// Throws if the resolver does not return the requested DID.
 export async function resolvePrincipalDid(
   request: APIRequestContext,
   did: string,
   opts: { server?: SolandKey } = {},
 ): Promise<{ document: JsonRecord; log: JsonRecord[] }> {
-  const url = `${solandBaseUrl(opts.server)}/_cokret/root/identity/resolve`;
+  const url = `${solandBaseUrl(opts.server)}/_arkret/root/identity/resolve`;
   const resp = await request.post(url, { data: { did } });
   const text = await resp.text();
   if (!resp.ok()) {
@@ -211,7 +211,7 @@ export async function resolvePrincipalDid(
   if (!document) {
     throw new Error(`identity resolve ${did} omitted document: ${text}`);
   }
-  const logUrl = `${solandBaseUrl(opts.server)}/_cokret/root/identity/log?did=${encodeURIComponent(
+  const logUrl = `${solandBaseUrl(opts.server)}/_arkret/root/identity/log?did=${encodeURIComponent(
     did,
   )}`;
   const logResp = await request.get(logUrl);

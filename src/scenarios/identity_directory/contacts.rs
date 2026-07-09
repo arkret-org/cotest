@@ -1,5 +1,5 @@
 use anyhow::Result;
-use cokret_core::canonical::canonical_sha256;
+use arkret_core::canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -26,13 +26,13 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let request = expect_json(
         alice
-            .post("/_cokret/self/contacts/request")
+            .post("/_arkret/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/_cokret/self/contacts/respond").json(&json!({
+        bob.post("/_arkret/self/contacts/respond").json(&json!({
             "request_id": request["request_event_ref"],
             "requester": alice.actor,
             "action": "accept"
@@ -41,7 +41,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
 
-    let contacts = expect_json(bob.get("/_cokret/self/contacts"), StatusCode::OK).await?;
+    let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
     let invite_realm = alice
@@ -75,7 +75,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         serde_json::to_string_pretty(&invite_event)?
     );
 
-    let invites = expect_json(bob.get("/_cokret/self/authz/invites"), StatusCode::OK).await?;
+    let invites = expect_json(bob.get("/_arkret/self/authz/invites"), StatusCode::OK).await?;
     assert_eq!(
         invites["invites"].as_array().unwrap().len(),
         1,
@@ -90,7 +90,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({"invite_token": "ak:invite-token:invalid"})),
         StatusCode::NOT_FOUND,
     )
@@ -99,7 +99,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let invite_resolve = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({"invite_token": invite_token})),
         StatusCode::OK,
     )
@@ -116,7 +116,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let listed_search = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-realms"))
+            .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&json!({"query": "Listed Directory Realm"})),
         StatusCode::OK,
     )
@@ -133,7 +133,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let unlisted_search = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/search-realms"))
+            .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&json!({"query": "Unlisted Directory Realm"})),
         StatusCode::OK,
     )
@@ -143,7 +143,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let unlisted_resolve = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/find/directory/resolve-realm"))
+            .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&json!({"realm_id": unlisted_realm_id})),
         StatusCode::OK,
     )
@@ -164,7 +164,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await?;
 
     let exported = expect_json(
-        alice.get(&format!("/_cokret/self/realms/{shared_realm_id}/export")),
+        alice.get(&format!("/_arkret/self/realms/{shared_realm_id}/export")),
         StatusCode::OK,
     )
     .await?;
@@ -184,7 +184,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let waited_sync = expect_response(
         alice
-            .get("/_cokret/self/account/subscribe?catchup=true")
+            .get("/_arkret/self/account/subscribe?catchup=true")
             .header("x-arkret-wait-for", sent["cursor"].as_str().unwrap())
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
@@ -210,7 +210,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     expect_status(
         alice
-            .get("/_cokret/self/account/subscribe?catchup=true")
+            .get("/_arkret/self/account/subscribe?catchup=true")
             .header("x-arkret-wait-for", "not-a-sync-token")
             .header("accept", "application/x-ndjson"),
         StatusCode::BAD_REQUEST,

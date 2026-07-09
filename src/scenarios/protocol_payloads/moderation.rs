@@ -1,4 +1,4 @@
-//! Phase 10 — `/_cokret/self/moderation/report` submission.
+//! Phase 10 — `/_arkret/self/moderation/report` submission.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -10,7 +10,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     let report = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/moderation/report"))
+            .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(token)
             .json(&json!({
                 // soland validates that the reported target exists; point at the

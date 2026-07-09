@@ -27,13 +27,13 @@
 //! soland-side `realm_policy_components_check` reducer (no drift).
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::error::Error;
-use cokret_core::models::{
+use arkret_core::error::Error;
+use arkret_core::models::{
     MediaDecryptPolicyValue, MediaPlaintextService, derive_media_decrypt_metadata_digest,
     verify_media_decrypt_metadata,
 };
-use cokret_core::schema::embedded_error_code_identifiers;
-use cokret_core::{
+use arkret_core::schema::embedded_error_code_identifiers;
+use arkret_core::{
     Did, REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, REASON_MLS_GOVERNANCE_BINDING_STALE,
 };
 

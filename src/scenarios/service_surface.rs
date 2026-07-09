@@ -27,7 +27,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     assert_eq!(description.service_type, "principal_server");
 
     let server_describe = expect_json(
-        server.http().get(server.url("/_cokret/describe")),
+        server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -58,7 +58,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     let sync = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/account/describe")),
+            .get(server.url("/_arkret/self/account/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -71,7 +71,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     let directory = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/find/directory/describe")),
+            .get(server.url("/_arkret/find/directory/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -82,7 +82,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     );
 
     expect_status(
-        server.http().post(server.url("/_cokret/describe")),
+        server.http().post(server.url("/_arkret/describe")),
         StatusCode::METHOD_NOT_ALLOWED,
     )
     .await?;

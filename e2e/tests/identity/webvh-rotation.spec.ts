@@ -7,8 +7,8 @@
 // Drives soland's embedded did:webvh provider end to end:
 //   - POST /_soland/root/identity/webvh/register  (genesis inception)
 //   - POST /_soland/root/identity/webvh/rotate     (append a rotation entry)
-//   - POST /_cokret/root/identity/resolve          (resolver re-validates the chain)
-//   - GET  /_cokret/root/identity/log              (did.jsonl history)
+//   - POST /_arkret/root/identity/resolve          (resolver re-validates the chain)
+//   - GET  /_arkret/root/identity/log              (did.jsonl history)
 //
 // The resolver gate (run_webvh_resolution_checks) re-validates the hash chain,
 // SCID, witness quorum / degraded window, and rotation control authorisation on

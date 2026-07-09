@@ -36,7 +36,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let strand_id = default_strand_id(&alice, &realm_id).await?;
 
     expect_api_error(
-        carol.post("/_cokret/self/ephemeral").json(&typing_envelope(
+        carol.post("/_arkret/self/ephemeral").json(&typing_envelope(
             &carol.actor,
             "ak:device:01904100-0000-7000-8000-000000000ca0",
             &realm_id,
@@ -49,7 +49,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     .await?;
 
     let typing = expect_json(
-        bob.post("/_cokret/self/ephemeral").json(&typing_envelope(
+        bob.post("/_arkret/self/ephemeral").json(&typing_envelope(
             &bob.actor,
             "ak:device:01904100-0000-7000-8000-0000000000b0",
             &realm_id,
@@ -78,7 +78,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     );
 
     let stopped = expect_json(
-        bob.post("/_cokret/self/ephemeral").json(&typing_envelope(
+        bob.post("/_arkret/self/ephemeral").json(&typing_envelope(
             &bob.actor,
             "ak:device:01904100-0000-7000-8000-0000000000b0",
             &realm_id,
@@ -205,7 +205,7 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
     // needs nor exercises.
     let realm_path_id = encode_path_segment(realm_id);
     let strands = expect_json(
-        client.get(&format!("/_cokret/self/realms/{realm_path_id}/strands")),
+        client.get(&format!("/_arkret/self/realms/{realm_path_id}/strands")),
         StatusCode::OK,
     )
     .await?;
@@ -246,16 +246,16 @@ fn typing_envelope(
     realm_id: &str,
     strand_id: &str,
     typing: bool,
-) -> cokret_core::EphemeralEnvelope {
+) -> arkret_core::EphemeralEnvelope {
     let sent_at = Utc::now()
         .with_nanosecond(0)
         .expect("zeroing nanos is valid");
     let expires_at = sent_at + ChronoDuration::seconds(30);
-    let mut envelope = cokret_core::EphemeralEnvelope::new(
+    let mut envelope = arkret_core::EphemeralEnvelope::new(
         "ck.typing",
-        cokret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
-        cokret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-        Some(cokret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
+        arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
+        arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
+        Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
         sent_at,
         expires_at,
         json!({

@@ -31,7 +31,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/upload"))
+            .post(server.url("/_arkret/self/keys/upload"))
             .json(&signed_keys_upload_body(
                 alice_did,
                 alice_device,
@@ -46,7 +46,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/query"))
+            .post(server.url("/_arkret/self/keys/query"))
             .json(&json!({"device_keys": {}})),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -58,7 +58,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/upload"))
+            .post(server.url("/_arkret/self/keys/upload"))
             .bearer_auth(&token)
             .json(&signed_keys_upload_body(
                 alice_did,
@@ -75,7 +75,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/upload"))
+            .post(server.url("/_arkret/self/keys/upload"))
             .bearer_auth(&token)
             .json(&signed_keys_upload_body(
                 alice_did,
@@ -97,7 +97,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let first_claim = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/claim"))
+            .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
@@ -116,7 +116,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let second_claim = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/keys/claim"))
+            .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
@@ -148,7 +148,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .header("Idempotency-Key", "device-noauth")
             .json(&json!({"messages": {}})),
         StatusCode::UNAUTHORIZED,
@@ -158,7 +158,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-bad-json")
             .header("content-type", "application/json")
@@ -171,7 +171,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let send = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-idempotent-txn")
             .json(&json!({
@@ -196,7 +196,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let duplicate = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-idempotent-txn")
             .json(&json!({
@@ -222,7 +222,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let delivered = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/device_messages"))
+            .get(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -241,7 +241,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         server
             .http()
             .get(server.url(&format!(
-                "/_cokret/self/device_messages?from={}",
+                "/_arkret/self/device_messages?from={}",
                 delivered["next_cursor"].as_str().unwrap()
             )))
             .bearer_auth(&token),
@@ -292,7 +292,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/blob/upload"))
+            .post(server.url("/_arkret/self/blob/upload"))
             .body("no auth"),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -301,7 +301,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/blob/upload"))
+            .post(server.url("/_arkret/self/blob/upload"))
             .bearer_auth(&alice.token)
             .header(
                 "x-arkret-content-digest",
@@ -316,7 +316,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let blob = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/blob/upload"))
+            .post(server.url("/_arkret/self/blob/upload"))
             .bearer_auth(&alice.token)
             .header("x-arkret-realm-id", &realm_id)
             .multipart(blob_upload_form(b"encrypted-bytes", "text/plain")?),
@@ -329,7 +329,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
         server
             .http()
             .head(server.url(&format!(
-                "/_cokret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+                "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
             )))
             .bearer_auth(&bob.token),
         StatusCode::OK,
@@ -339,7 +339,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
 
     let range = expect_text(
         bob.get(&format!(
-            "/_cokret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+            "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
         ))
         .header("range", "bytes=0-8"),
         StatusCode::PARTIAL_CONTENT,
@@ -349,7 +349,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
 
     expect_api_error(
         bob.get(&format!(
-            "/_cokret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+            "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
         ))
         .header("range", "bytes=99-100"),
         StatusCode::BAD_REQUEST,
@@ -358,7 +358,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     .await?;
     expect_api_error(
         server.http().get(server.url(&format!(
-            "/_cokret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
+            "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
             alice.token
         ))),
         StatusCode::UNAUTHORIZED,
@@ -367,10 +367,10 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     .await?;
     let _ = expect_indistinguishable_api_errors(
         carol.get(&format!(
-            "/_cokret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+            "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
         )),
         carol.get(
-            "/_cokret/self/blob/get?blob_ref=ck:blob:sha256:missing&purpose=message.attachment",
+            "/_arkret/self/blob/get?blob_ref=ck:blob:sha256:missing&purpose=message.attachment",
         ),
         StatusCode::NOT_FOUND,
         "not_found",
@@ -393,7 +393,7 @@ async fn create_blob_access_realm(
         alice.service_did(),
     )?;
     let create = expect_json(
-        alice.post("/_cokret/self/events").json(&realm_create),
+        alice.post("/_arkret/self/events").json(&realm_create),
         StatusCode::OK,
     )
     .await?;
@@ -408,7 +408,7 @@ async fn create_blob_access_realm(
         "join",
     )?;
     let member = expect_json(
-        alice.post("/_cokret/self/events").json(&bob_member),
+        alice.post("/_arkret/self/events").json(&bob_member),
         StatusCode::OK,
     )
     .await?;
@@ -536,7 +536,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/edge/push/unregister-device"))
+            .post(server.url("/_arkret/edge/push/unregister-device"))
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -550,7 +550,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/edge/push/notify"))
+            .post(server.url("/_arkret/edge/push/notify"))
             .json(&json!({
                 "notification": {
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}],
@@ -564,7 +564,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let notify = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/edge/push/notify"))
+            .post(server.url("/_arkret/edge/push/notify"))
             .json(&json!({
                 "notification": {
                     "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
@@ -579,7 +579,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/moderation/report"))
+            .post(server.url("/_arkret/self/moderation/report"))
             .json(&json!({
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
@@ -593,7 +593,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/moderation/report"))
+            .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&alice)
             .json(&json!({
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
@@ -608,7 +608,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/moderation/report"))
+            .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",

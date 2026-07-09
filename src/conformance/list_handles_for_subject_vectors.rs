@@ -14,8 +14,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use arkret::identity::{PrimaryHandleSelectInput, select_primary_handle};
-use cokret_core::Did;
-use cokret_core::models::{
+use arkret_core::Did;
+use arkret_core::models::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList, Handle,
     HandleBindingState, HandleClaim,
 };

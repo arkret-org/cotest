@@ -22,9 +22,9 @@
 
 1. appellant / moderator / reviewer 注册并获取 dev session。
 2. moderator 创建 Realm,加入 appellant / reviewer;appellant 写入一条 target message。
-3. moderator 通过 `POST /_cokret/self/events` 提交 `ck.moderation.decision`。
-4. appellant 通过 `POST /_cokret/self/events` 提交 `ck.moderation.appeal.submit`。
-5. reviewer 通过 `POST /_cokret/self/events` 依次提交:
+3. moderator 通过 `POST /_arkret/self/events` 提交 `ck.moderation.decision`。
+4. appellant 通过 `POST /_arkret/self/events` 提交 `ck.moderation.appeal.submit`。
+5. reviewer 通过 `POST /_arkret/self/events` 依次提交:
    - `ck.moderation.appeal.review`
    - `ck.moderation.appeal.decision`
    - `ck.moderation.appeal.close`

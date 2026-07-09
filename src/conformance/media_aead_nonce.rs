@@ -10,7 +10,7 @@ use arkret::{
     AeadNonceReplayTracker, Error, compose_aead_nonce, derive_aead_sender_nonce_prefix,
     verify_aead_nonce_derivation, verify_aead_sender_nonce,
 };
-use cokret_core::error::{
+use arkret_core::error::{
     REASON_AEAD_NONCE_COUNTER_REPLAY, REASON_AEAD_NONCE_DERIVATION_INVALID,
     REASON_AEAD_NONCE_SENDER_DOMAIN_COLLISION,
 };

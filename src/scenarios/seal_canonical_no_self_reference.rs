@@ -19,7 +19,7 @@
 
 use anyhow::{Result, anyhow};
 use chrono::TimeZone;
-use cokret_core::{
+use arkret_core::{
     Did, Hash, Hlc, MoveId, MoveSignature, NotarySig, RealmId, Seal, SealId, SealKind,
     compute_seal_id, seal_canonical_bytes,
 };

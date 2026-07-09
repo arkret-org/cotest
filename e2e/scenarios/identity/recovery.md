@@ -45,12 +45,12 @@
    - 发布或确认 genesis recovery policy accepted
    - 上传 `backup_class="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope
    - 用同一个 recovery public key HPKE 加密账户 secret(`mls_account_secret` 等 `secret_storage` 域材料)
-4. `PUT /_cokret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
+4. `PUT /_arkret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
 5. 服务端**只能存** ciphertext,不接受 Recovery Key 词串明文
 6. 断言:
-   - `GET /_cokret/root/identity/recovery-policy` 返回 non-null `active_policy`
-   - `GET /_cokret/self/keys/backups?backup_class=did_recovery` 至少 1 条
-   - `GET /_cokret/self/keys/backups?backup_class=secret_storage` 至少 1 条(有本地 account MLS secret 时)
+   - `GET /_arkret/root/identity/recovery-policy` 返回 non-null `active_policy`
+   - `GET /_arkret/self/keys/backups?backup_class=did_recovery` 至少 1 条
+   - `GET /_arkret/self/keys/backups?backup_class=secret_storage` 至少 1 条(有本地 account MLS secret 时)
    - metadata **不含** Recovery Key plaintext;此后新材料按 §7.10 自动持续备份
 
 ### Phase B — (可选)alice 在 E2EE Realm 中收发消息

@@ -3,10 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::CellRef;
-use cokret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
-use cokret_core::lattice::CellState;
-use cokret_core::state::{EMPTY_STATE_ROOT, compute_state_root};
+use arkret_core::CellRef;
+use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
+use arkret_core::lattice::CellState;
+use arkret_core::state::{EMPTY_STATE_ROOT, compute_state_root};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 

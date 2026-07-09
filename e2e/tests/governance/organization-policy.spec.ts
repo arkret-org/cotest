@@ -87,7 +87,7 @@ async function submitOrganizationStatement(
   realmId: string,
   payload: Record<string, unknown>,
 ) {
-  return request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  return request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
       actorDid,
@@ -139,7 +139,7 @@ test.describe("organization governance — verified relationship semantics", () 
 
       // No ck.realm.organization statement is written — only the declaration.
       const effective = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       expect(effective.ok()).toBeTruthy();
@@ -188,7 +188,7 @@ test.describe("organization governance — verified relationship semantics", () 
       expect(accepted.ok()).toBeTruthy();
 
       const effective = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       expect(effective.ok()).toBeTruthy();
@@ -222,7 +222,7 @@ test.describe("organization governance — verified relationship semantics", () 
       );
       expect(narrowAccepted.ok()).toBeTruthy();
       const narrow = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(narrowRealmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(narrowRealmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       const narrowBody = await narrow.json();
@@ -287,7 +287,7 @@ test.describe("organization governance — verified relationship semantics", () 
       expect(revoke.ok()).toBeTruthy();
 
       const effective = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       const body = await effective.json();
@@ -337,7 +337,7 @@ test.describe("organization governance — verified relationship semantics", () 
       expect(accepted.ok()).toBeTruthy();
 
       const effective = await request.get(
-        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       const body = await effective.json();

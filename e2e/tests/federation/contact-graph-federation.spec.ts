@@ -2,21 +2,21 @@
 //
 // Gated on hasDualSoland(): pass -DualSoland to scripts/run-joint-e2e.ps1.
 //
-// Protocol face: `/_cokret/self/contacts/*`,
-// `/_cokret/self/direct-conversations/resolve`, `/_cokret/peer/invites`.
+// Protocol face: `/_arkret/self/contacts/*`,
+// `/_arkret/self/direct-conversations/resolve`, `/_arkret/peer/invites`.
 // Spec refs: contact-and-direct-conversation.md §3-§4, invite-addressing.md
 // §2/§5 (cross-domain private delivery), §5.1 graded disclosure.
 //
 // Cross-PS contact federation (spec contact-and-direct-conversation.md §2/§4.1):
 // the contact request/respond protocol face delivers signed `ck.contact.*`
 // facts to the target holder's home PS via `ck.peer.contacts.command.submit`
-// (`POST /_cokret/peer/contacts`) over the durable federation outbox. The
+// (`POST /_arkret/peer/contacts`) over the durable federation outbox. The
 // requester addresses the remote target with `recipient_service_did`; the
 // responder addresses the remote requester with `requester_service_did`
 // (principal DIDs do not embed their home PS).
 //
 // What ALSO crosses a PS boundary is the consent_grant-evidence invite delivery
-// (`POST /_cokret/peer/invites`): the recipient PS verifies the grant against
+// (`POST /_arkret/peer/invites`): the recipient PS verifies the grant against
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
 import { expect, test } from "@playwright/test";
@@ -202,7 +202,7 @@ test.describe("contact graph federation (α/β)", () => {
     // α: accepted contact + bob -> alice direct_message consent (both projected
     // from the federated accept fact).
     const resolved = await request.post(
-      `${solandBaseUrl("alpha")}/_cokret/self/direct-conversations/resolve`,
+      `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
       {
         headers: authHeaders(aliceToken),
         data: { peer: bob.did, create: true },
@@ -227,7 +227,7 @@ test.describe("contact graph federation (α/β)", () => {
   // a consent_grant whose grant the RECIPIENT server (β) can verify against its
   // own consent cells. The consent setup is done locally on β (alice + bob both
   // registered on β so bob can grant alice an invite consent there); the cross
-  // boundary is the private `POST /_cokret/peer/invites` delivery from α to β.
+  // boundary is the private `POST /_arkret/peer/invites` delivery from α to β.
   test("S4-fed consent_grant evidence delivers cross-PS to β and bob joins", async ({
     request,
   }) => {
@@ -324,7 +324,7 @@ test.describe("contact graph federation (α/β)", () => {
       .poll(
         async () => {
           const resp = await request.get(
-            `${solandBaseUrl("beta")}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+            `${solandBaseUrl("beta")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
             { headers: authHeaders(bobTokenBeta) },
           );
           if (!resp.ok()) return false;

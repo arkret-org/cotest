@@ -16,7 +16,7 @@
 - `crypto-media/encryption-and-audit.md` §2.5-§2.5.3 — Governance Binding(GroupContext extension `0xF1C0`、`covered_frontier_cell`)
 - `crypto-media/encryption-and-audit.md` §2.6 — KeyPackage 发布与索取
 - `crypto-media/encryption-and-audit.md` §5 — Proposal / Commit / epoch 进展
-- `crypto-media/device-lifecycle.md` §9 — `/_cokret/self/keys/keypackages/claim` API
+- `crypto-media/device-lifecycle.md` §9 — `/_arkret/self/keys/keypackages/claim` API
 - `models/realm-and-space.md` §2.2 — Realm `encryption_profile` 字段
 - `models/realm-and-space.md` §3.7.2 — E2EE Realm (`encryption_profile=mls_rfc9420`)
 
@@ -36,7 +36,7 @@
 ## Pre-conditions
 
 - 三人都已注册 + 拿到 session token
-- 参与 Welcome 的设备已上传 KeyPackage 到 `POST /_cokret/self/keys/keypackages/upload`
+- 参与 Welcome 的设备已上传 KeyPackage 到 `POST /_arkret/self/keys/keypackages/upload`
 
 ## Steps
 
@@ -48,11 +48,11 @@
    - 写 `ck.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
    - 写 `ck.realm.create` Move,关联 genesis
 3. 断言:`/realms/${realmId}/admin/security` 显示 MLS 管理控件
-4. 断言:`GET /_cokret/self/realms/${realmId}` 返回 `encryption_profile = "mls_rfc9420"`
+4. 断言:`GET /_arkret/self/realms/${realmId}` 返回 `encryption_profile = "mls_rfc9420"`
 
 ### Phase B — bob 加入(Welcome)
 
-5. alice 调用 `POST /_cokret/self/keys/keypackages/claim?actor=bob.did` → 拿到 bob 的 KeyPackage
+5. alice 调用 `POST /_arkret/self/keys/keypackages/claim?actor=bob.did` → 拿到 bob 的 KeyPackage
 6. alice 客户端:
    - 计算 `ck.mls.commit`:Add 提案(bob.leaf)
    - 派生新 epoch secrets
@@ -68,12 +68,12 @@
 11. soland Sync Service:**只**用 plaintext metadata 路由,不解 `encrypted_payload`(关键 invariant)
 12. bob 拉 sync → 用 epoch 1 application key 解密 → timeline 渲染 `"alice greet"`
 13. 断言:bob timeline 包含 `"alice greet"`
-14. 测试 harness 直接 `GET /_cokret/self/events?realms=${realmId}&include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
+14. 测试 harness 直接 `GET /_arkret/self/events?realms=${realmId}&include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
 15. bob 反向发 `M_b`,alice 同步可见,断言对称
 
 ### Phase D — carol 加入触发 epoch advance
 
-16. alice `POST /_cokret/self/keys/keypackages/claim?actor=carol.did`
+16. alice `POST /_arkret/self/keys/keypackages/claim?actor=carol.did`
 17. alice 客户端:`ck.mls.commit` Add carol;epoch 1 → epoch 2;新 application key
 18. soland 接受 commit + welcome → carol 拉 welcome → 派生 epoch 2 secrets
 19. 断言:carol `/timeline/${realmId}` 可见;**但** carol 解 Phase C 的 `M_a` / `M_b`?
@@ -93,7 +93,7 @@
 
 ### Phase F — Non-member ciphertext-only
 
-29. mallory(非成员)调 `GET /_cokret/self/events?realms=${realmId}` → soland 应拒(403 / not a member)
+29. mallory(非成员)调 `GET /_arkret/self/events?realms=${realmId}` → soland 应拒(403 / not a member)
 30. 即使 mallory 拿到 raw event(假设泄漏),没有 epoch key → 无法解密
 
 ## Observable assertions(合并)

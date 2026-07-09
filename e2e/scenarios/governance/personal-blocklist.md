@@ -60,9 +60,9 @@
 ### Phase D — client 提交 account_data blocklist event
 
 8. alice 的 inkson client 应该把这次 block 持久化为 soland 的 actor-private account_data event:
-   - 调用:`POST /_cokret/self/events`,提交 `ck.account_data.set`,payload `{ key: "ck.account.blocklist", owner: alice.did, body: <encrypted account_data carrier or client_side_conformance marker>, updated_at: <ts> }`
+   - 调用:`POST /_arkret/self/events`,提交 `ck.account_data.set`,payload `{ key: "ck.account.blocklist", owner: alice.did, body: <encrypted account_data carrier or client_side_conformance marker>, updated_at: <ts> }`
    - 断言 (HTTP 层):events submit 返回 `status=accepted`
-   - 断言 (跨设备 sync):`GET /_cokret/self/account/subscribe?catchup=true` 的 `account_data.events` 返回不透明 carrier / marker, 且不包含 bob DID 明文
+   - 断言 (跨设备 sync):`GET /_arkret/self/account/subscribe?catchup=true` 的 `account_data.events` 返回不透明 carrier / marker, 且不包含 bob DID 明文
    - 备注:这是 actor-private — 只对 alice 自己的 device 同步,bob 拿不到
 
 ### Phase E — bob 发 M2,alice 看不到(client-side filter)
@@ -109,10 +109,10 @@
 
 ## Edge cases / sub-tests
 
-- **E11.1 Quarantine vs block**:同一个 Realm 中 admin 把 bob 的某条消息 quarantine(`POST /_cokret/self/moderation/quarantine`)— 这是**服务端**操作,影响**所有**成员;alice 的个人 block 只影响 alice 自己。验证两者**互不依赖**:即使 alice 没 block bob,quarantine 的消息对 alice 也不可见(以 placeholder 渲染);即使 admin 没 quarantine,alice block 也能让 bob 的消息对 alice 单独不可见。
+- **E11.1 Quarantine vs block**:同一个 Realm 中 admin 把 bob 的某条消息 quarantine(`POST /_arkret/self/moderation/quarantine`)— 这是**服务端**操作,影响**所有**成员;alice 的个人 block 只影响 alice 自己。验证两者**互不依赖**:即使 alice 没 block bob,quarantine 的消息对 alice 也不可见(以 placeholder 渲染);即使 admin 没 quarantine,alice block 也能让 bob 的消息对 alice 单独不可见。
 - **E11.2 mute vs block 差异**:alice 在 `/settings/notifications` 把 bob mute(不是 block)→ bob 的消息在 alice timeline **仍可见**,但 push notification 不送达(`notifications-panel` 中无新条目)。这与 block 的"完全隐藏"形成对照。
 - **E11.3 被 block 的用户视角**:bob 在 `/timeline/${realmId}` 自己看自己的消息,M1/M2/M3 都正常显示,`write-status` 全部 `persisted`;bob 的 `/notifications` 不会出现"You were blocked by alice"这类提示(spec §4 明确:block 不可被被 block 方探测,反 social-graph 泄露)。
-- **E11.4 account_data overwrite**:同一 `client.*` data_type 重复 `PUT /_cokret/self/account_data/{data_type}` 只保留最新 `content`;direct GET/list 与 `ck.self.account.stream.subscribe` 都只能看到一个最新 entry。
+- **E11.4 account_data overwrite**:同一 `client.*` data_type 重复 `PUT /_arkret/self/account_data/{data_type}` 只保留最新 `content`;direct GET/list 与 `ck.self.account.stream.subscribe` 都只能看到一个最新 entry。
 
 ## Implementation notes
 

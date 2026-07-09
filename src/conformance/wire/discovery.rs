@@ -11,7 +11,7 @@ use crate::conformance::{required_str, validate_profile};
 ///
 /// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
 /// `capability_tiers`. The fixture asserts:
-///   * core surfaces are implied by claiming `ck.profile.cokret_v1.core` — events_sync /
+///   * core surfaces are implied by claiming `ck.profile.arkret_v1.core` — events_sync /
 ///     identity_registry / service_discovery MUST appear and the discovery client MAY call ops in
 ///     those surfaces;
 ///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST

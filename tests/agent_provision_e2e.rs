@@ -24,8 +24,8 @@ use anyhow::{Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{SecondsFormat, Utc};
-use cokret_core::{Error as CokretError, EventsSubscribeFrameKind};
-use cokret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
+use arkret_core::{Error as CokretError, EventsSubscribeFrameKind};
+use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use cotest::harness::{
     CokretServer, add_member, create_realm, event_envelope, register_account, submit_event,
 };
@@ -552,7 +552,7 @@ async fn pair_agent_runtime_key(
         }),
     };
     // `agent_key_pair` drives `ck.gate.account.command.pair_agent_key`, bound to
-    // `POST /_cokret/gate/account/agent-key-pair`: the controller submits the
+    // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the
     // durable `ck.agent.key.authorize` event that clears `pending_runtime_key`.
     Ok(bearer_sdk_client(server, token)?
         .agent_key_pair(&body)
@@ -617,7 +617,7 @@ fn event_from_value(value: &Value) -> Result<arkret::Event> {
 }
 
 fn expect_sdk_api_error<T>(
-    result: cokret_core::Result<T>,
+    result: arkret_core::Result<T>,
     status: StatusCode,
     code: &str,
 ) -> Result<()> {

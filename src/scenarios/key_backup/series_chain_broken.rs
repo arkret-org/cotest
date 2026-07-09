@@ -5,7 +5,7 @@
 //! reject with HTTP 409 + errcode `series_chain_broken`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::error::REASON_SERIES_CHAIN_BROKEN;
+use arkret_core::error::REASON_SERIES_CHAIN_BROKEN;
 
 pub async fn series_chain_broken_run() -> Result<()> {
     if REASON_SERIES_CHAIN_BROKEN != "series_chain_broken" {
@@ -21,7 +21,7 @@ pub async fn series_chain_broken_run() -> Result<()> {
         return Err(anyhow!("test scaffold accidentally produced equal digests"));
     }
 
-    // TODO(P4-impl): drive a live PUT /_cokret/self/keys/backups/{id} with
+    // TODO(P4-impl): drive a live PUT /_arkret/self/keys/backups/{id} with
     // series_seq=2 and a supersedes_digest that doesn't match the
     // genesis envelope's digest; assert 409 + `series_chain_broken`.
     Ok(())

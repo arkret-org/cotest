@@ -11,9 +11,9 @@ use arkret::{
     MediaServiceAnchors, call_media_token_exchange, participant_binding_signing_input,
     verify_call_media_token_outcome,
 };
-use cokret_core::error::REASON_PARTICIPANT_BINDING_INVALID;
-use cokret_core::lattice::{CellState, Fsm, Lattice, SealedOp};
-use cokret_core::{
+use arkret_core::error::REASON_PARTICIPANT_BINDING_INVALID;
+use arkret_core::lattice::{CellState, Fsm, Lattice, SealedOp};
+use arkret_core::{
     BottomKind, CallId, CallMediaParticipantBinding, CallMediaServiceSignature,
     CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody, CellRef, DeviceId, Did,
     LatticeOp, LatticeOpType, MoveId, PARTICIPANT_BINDING_SCHEMA, RealmId, base64url_encode,

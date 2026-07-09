@@ -8,10 +8,10 @@ use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use arkret::identity::binding::multicodec_ed25519_public_key;
-use cokret_core::canonical::{
+use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
-use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
+use arkret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -59,12 +59,12 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let bob = register_account(server_b, BOB_DID, "@cotest-fed-bob", BOB_DEVICE_ID).await?;
 
     let describe_a = expect_json(
-        server_a.http().get(server_a.url("/_cokret/describe")),
+        server_a.http().get(server_a.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
     let describe_b = expect_json(
-        server_b.http().get(server_b.url("/_cokret/describe")),
+        server_b.http().get(server_b.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -74,7 +74,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let bob_document = expect_json(
         server_a
             .http()
-            .post(server_a.url("/_cokret/root/identity/resolve"))
+            .post(server_a.url("/_arkret/root/identity/resolve"))
             .json(&json!({"did": BOB_DID})),
         StatusCode::OK,
     )
@@ -176,7 +176,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         ],
         Some("a-to-b-01"),
     )?;
-    let a_to_b_url = server_b.url("/_cokret/peer/events");
+    let a_to_b_url = server_b.url("/_arkret/peer/events");
     let pushed_to_b = expect_json(
         with_federation_trust_headers(
             server_b.http().post(&a_to_b_url).json(&a_to_b_body),
@@ -206,7 +206,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     );
     assert_json_array_contains(&pushed_to_b["accepted"], BOB_JOIN_EVENT_ID, &pushed_to_b);
 
-    let pulled_url = server_b.url(&format!("/_cokret/peer/events?realms={realm_id}"));
+    let pulled_url = server_b.url(&format!("/_arkret/peer/events?realms={realm_id}"));
     let pulled_on_b = expect_json(
         with_federation_trust_headers_empty(
             server_b.http().get(&pulled_url),
@@ -230,7 +230,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let bob_sync = expect_account_subscribe_delta(
         server_b
             .http()
-            .get(server_b.url("/_cokret/self/account/subscribe?catchup=true"))
+            .get(server_b.url("/_arkret/self/account/subscribe?catchup=true"))
             .bearer_auth(&bob),
         StatusCode::OK,
     )
@@ -251,7 +251,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         message_create_text_payload(&realm_id, "hello alice from server b")?,
     )?;
     let b_to_a_delivery_frontier = vec![
-        cokret_core::EventId::new(alice_local_binding_frontier)
+        arkret_core::EventId::new(alice_local_binding_frontier)
             .context("invalid alice server_a binding frontier id")?,
     ];
     let b_to_a_body = peer_events_submit_body_with_delivery_frontier(
@@ -260,7 +260,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &b_to_a_delivery_frontier,
         Some("b-to-a-01"),
     )?;
-    let b_to_a_url = server_a.url("/_cokret/peer/events");
+    let b_to_a_url = server_a.url("/_arkret/peer/events");
     let txn = expect_json(
         with_federation_trust_headers(
             server_a.http().post(&b_to_a_url).json(&b_to_a_body),
@@ -277,7 +277,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let alice_sync = expect_account_subscribe_delta(
         server_a
             .http()
-            .get(server_a.url("/_cokret/self/account/subscribe?catchup=true"))
+            .get(server_a.url("/_arkret/self/account/subscribe?catchup=true"))
             .bearer_auth(&alice),
         StatusCode::OK,
     )
@@ -312,7 +312,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         vec![alice_device_authorize],
         Some("a-to-b-device-01"),
     )?;
-    let alice_device_url = server_b.url("/_cokret/peer/events");
+    let alice_device_url = server_b.url("/_arkret/peer/events");
     let alice_device_pushed = expect_json(
         with_federation_trust_headers(
             server_b
@@ -403,10 +403,10 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         with_federation_trust_headers(
             server_b
                 .http()
-                .post(server_b.url("/_cokret/peer/events"))
+                .post(server_b.url("/_arkret/peer/events"))
                 .json(&e2ee_body),
             "POST",
-            &server_b.url("/_cokret/peer/events"),
+            &server_b.url("/_arkret/peer/events"),
             server_a,
             server_b,
             &e2ee_body,
@@ -446,7 +446,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let bob_e2ee_sync = expect_account_subscribe_delta(
         server_b
             .http()
-            .get(server_b.url("/_cokret/self/account/subscribe?catchup=true"))
+            .get(server_b.url("/_arkret/self/account/subscribe?catchup=true"))
             .bearer_auth(&bob),
         StatusCode::OK,
     )
@@ -477,7 +477,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let key_upload = expect_json(
         server_b
             .http()
-            .post(server_b.url("/_cokret/self/keys/upload"))
+            .post(server_b.url("/_arkret/self/keys/upload"))
             .bearer_auth(&bob)
             .json(&signed_keys_upload_body(
                 BOB_DID,
@@ -494,7 +494,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let device_message = expect_json(
         server_b
             .http()
-            .post(server_b.url("/_cokret/self/device_messages"))
+            .post(server_b.url("/_arkret/self/device_messages"))
             .bearer_auth(&bob)
             .header("Idempotency-Key", "federation-to-bob-01")
             .json(&json!({
@@ -516,7 +516,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let received = expect_json(
         server_b
             .http()
-            .get(server_b.url("/_cokret/self/device_messages"))
+            .get(server_b.url("/_arkret/self/device_messages"))
             .bearer_auth(&bob),
         StatusCode::OK,
     )
@@ -529,7 +529,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let blob = expect_json(
         server_a
             .http()
-            .post(server_a.url("/_cokret/self/blob/upload"))
+            .post(server_a.url("/_arkret/self/blob/upload"))
             .bearer_auth(&alice)
             .multipart(crate::scenarios::delivery_media::blob_upload_form(
                 b"federated-media",
@@ -542,7 +542,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         server_a
             .http()
             .get(server_a.url(&format!(
-                "/_cokret/self/blob/get?blob_ref={}&purpose=federation.media",
+                "/_arkret/self/blob/get?blob_ref={}&purpose=federation.media",
                 blob["blob_ref"].as_str().unwrap()
             )))
             .bearer_auth(&alice),
@@ -554,7 +554,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let push = expect_json(
         server_b
             .http()
-            .post(server_b.url("/_cokret/edge/push/register-device"))
+            .post(server_b.url("/_arkret/edge/push/register-device"))
             .bearer_auth(&bob)
             .json(&json!({
                 "device_id": BOB_DEVICE_ID,
@@ -571,7 +571,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let report = expect_json(
         server_b
             .http()
-            .post(server_b.url("/_cokret/self/moderation/report"))
+            .post(server_b.url("/_arkret/self/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
                 "realm_id": realm_id,
@@ -874,7 +874,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
     device_signing_key: &SigningKey,
 ) -> Result<Value> {
     let device_public_key = multicodec_ed25519_public_key(&device_signing_key.verifying_key());
-    let mut payload = cokret_core::DeviceAuthorizePayload {
+    let mut payload = arkret_core::DeviceAuthorizePayload {
         principal_id: Did::new(principal_id.to_owned())
             .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
         device_id: device_id.to_owned(),
@@ -885,7 +885,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
             "ck.mls.v1".to_owned(),
         ],
         device_key_algorithm: Some("EdDSA".to_owned()),
-        authorized_by: cokret_core::DeviceOrPrincipalRef::Did(
+        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(
             Did::new(principal_id.to_owned())
                 .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
         ),
@@ -897,7 +897,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
         device_signature: None,
         proof: None,
         cross_signing_binding: None,
-        bootstrap_binding: Some(cokret_core::DeviceBootstrapBinding {
+        bootstrap_binding: Some(arkret_core::DeviceBootstrapBinding {
             kind: "inception_self_authorized".to_owned(),
             did_method_evidence_ref: format!("{principal_id}#inception"),
         }),
@@ -918,7 +918,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
         "sig".to_owned(),
         json!(URL_SAFE_NO_PAD.encode(signature.to_bytes())),
     );
-    payload.device_signature = Some(cokret_core::SignatureMaterial::Variant1(signature_material));
+    payload.device_signature = Some(arkret_core::SignatureMaterial::Variant1(signature_material));
     serde_json::to_value(&payload).context("serialize device.authorize payload")
 }
 

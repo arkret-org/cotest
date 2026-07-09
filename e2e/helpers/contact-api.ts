@@ -1,9 +1,9 @@
-// Contact-graph protocol-face helpers (`/_cokret/self/contacts/*`,
-// `/_cokret/self/direct-conversations/resolve`,
-// `/_cokret/self/invite-receive-policy`, and the `consent_grant`-evidence
-// invite-delivery path `/_cokret/peer/invites`).
+// Contact-graph protocol-face helpers (`/_arkret/self/contacts/*`,
+// `/_arkret/self/direct-conversations/resolve`,
+// `/_arkret/self/invite-receive-policy`, and the `consent_grant`-evidence
+// invite-delivery path `/_arkret/peer/invites`).
 //
-// These target the NEW `/_cokret` contract with `requested_scopes:[...]`,
+// These target the NEW `/_arkret` contract with `requested_scopes:[...]`,
 // distinct from the legacy `/_soland/self/contacts/request` + `scope` helper
 // used by other specs (helpers/soland-api.ts + consent-grant.spec.ts). Do not
 // route new contact-graph coverage through the legacy surface.
@@ -127,7 +127,7 @@ export async function requestContactCokret(
   },
 ): Promise<{ outcome: ContactRequestOutcome; response: APIResponse }> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/contacts/request`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/contacts/request`,
     {
       headers: authHeaders(token),
       data: {
@@ -163,7 +163,7 @@ export async function respondContactCokret(
   },
 ): Promise<ContactRespondOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/contacts/respond`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/contacts/respond`,
     {
       headers: authHeaders(token),
       data: {
@@ -189,7 +189,7 @@ export async function listContactsCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<ContactListRow[]> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/contacts`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/contacts`,
     { headers: authHeaders(token) },
   );
   const body = await expectJsonOk<{ contacts?: ContactListRow[] }>(
@@ -225,7 +225,7 @@ export async function tombstoneContactCokret(
   } = {},
 ): Promise<ContactTombstoneOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/contacts/tombstone`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/contacts/tombstone`,
     {
       headers: authHeaders(token),
       data: {
@@ -254,7 +254,7 @@ export async function resolveDirectConversationCokret(
   opts: { create?: boolean; server?: SolandKey } = {},
 ): Promise<DirectConversationResolveOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/direct-conversations/resolve`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/direct-conversations/resolve`,
     {
       headers: authHeaders(token),
       data: {
@@ -415,7 +415,7 @@ async function solandTrustDomain(
   request: APIRequestContext,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.get(`${solandBaseUrl(opts.server)}/_cokret/describe`);
+  const response = await request.get(`${solandBaseUrl(opts.server)}/_arkret/describe`);
   const body = await expectJsonOk<{ trust_domain?: string }>(
     response,
     "describe trust_domain",
@@ -431,7 +431,7 @@ async function submitFixtureDidDocument(
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/root/identity/submit-did-operation`,
+    `${solandBaseUrl(opts.server)}/_arkret/root/identity/submit-did-operation`,
     {
       data: {
         did,
@@ -487,7 +487,7 @@ async function uploadDirectConversationKeyPackage(
     sig: b64url(`direct-conversation-device-signature-${stamp}`),
   };
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/self/keys/keypackages/upload`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`,
     {
       headers: authHeaders(token),
       data: {
@@ -543,7 +543,7 @@ export async function getInviteReceivePolicyCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<InviteReceivePolicy> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/invite-receive-policy`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/invite-receive-policy`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<InviteReceivePolicy>(
@@ -559,7 +559,7 @@ export async function setInviteReceivePolicyCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<InviteReceivePolicy> {
   const response = await request.put(
-    `${solandBaseUrl(opts.server)}/_cokret/self/invite-receive-policy`,
+    `${solandBaseUrl(opts.server)}/_arkret/self/invite-receive-policy`,
     { headers: authHeaders(token), data: policy },
   );
   return await expectJsonOk<InviteReceivePolicy>(
@@ -619,7 +619,7 @@ export function buildInviteCreateEvent(args: {
 }
 
 // Privately deliver a consent_grant-evidence invite to the subject's principal
-// server via `POST /_cokret/peer/invites`. Returns the graded-disclosure
+// server via `POST /_arkret/peer/invites`. Returns the graded-disclosure
 // outcome. `origin` is the inviter's service DID (signs the federation push).
 export async function deliverInviteWithConsentGrant(
   request: APIRequestContext,
@@ -723,7 +723,7 @@ export async function listAuthzInvitesCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<AuthzInvite[]> {
   const actorDid = await currentActorDidApi(request, token, opts);
-  const url = new URL("/_cokret/self/authz/invites", solandBaseUrl(opts.server));
+  const url = new URL("/_arkret/self/authz/invites", solandBaseUrl(opts.server));
   url.searchParams.set("subject", actorDid);
   const response = await request.get(
     url.toString(),

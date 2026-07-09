@@ -580,7 +580,7 @@ async function createCustomerRiskMorph(
           schema: "ck.schema.morph.v1",
           realm_id: realmId,
           // views.md §377 / service-http-binding.md §230 — the single-Morph read
-          // surface GET /_cokret/self/realms/{realm_id}/morphs/{morph_id} is the
+          // surface GET /_arkret/self/realms/{realm_id}/morphs/{morph_id} is the
           // *document* Morph projection (response document_morph_projection_outcome,
           // which carries `document.schema_refs` and `document.fields`). It serves
           // only morph_type=="document" (soland projection_query.rs
@@ -657,7 +657,7 @@ async function submitSchemaMigrateRaw(
       ...(args.transformationRules ? { transformation_rules: args.transformationRules } : {}),
     },
   });
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  const response = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: envelope,
   });
@@ -678,7 +678,7 @@ async function readMorphProjection(
   morphId: string,
 ): Promise<{ document: { schema_refs: string[]; fields: Record<string, unknown> } }> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/morphs/${encodeURIComponent(morphId)}`,
+    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/morphs/${encodeURIComponent(morphId)}`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();

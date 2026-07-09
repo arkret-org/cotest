@@ -6,8 +6,8 @@
 //! provision, grant-before-pairing) MUST be rejected.
 
 use anyhow::{Result, anyhow};
-use cokret_core::events::kinds::AGENT_PAUSE;
-use cokret_core::{OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_GRANT_ATTACH, OP_AGENT_PROVISION};
+use arkret_core::events::kinds::AGENT_PAUSE;
+use arkret_core::{OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_GRANT_ATTACH, OP_AGENT_PROVISION};
 
 /// Canonical landing order. Index = step number.
 const SPEC_ORDER: &[&str] = &[
@@ -38,9 +38,9 @@ pub async fn provisioning_pairing_grant_order_run() -> Result<()> {
         ));
     }
     // TODO(P4-impl): walk a real envelope sequence:
-    //   1. POST /_cokret/self/agents          (ck.self.agent.command.provision)  → 201
-    //   2. POST /_cokret/gate/account/agent-key-pair (ck.gate.account.command.pair_agent_key) → 200
-    //   3. POST /_cokret/self/agents/{id}/grants (ck.self.agent.grant.command.attach) → 201
+    //   1. POST /_arkret/self/agents          (ck.self.agent.command.provision)  → 201
+    //   2. POST /_arkret/gate/account/agent-key-pair (ck.gate.account.command.pair_agent_key) → 200
+    //   3. POST /_arkret/self/agents/{id}/grants (ck.self.agent.grant.command.attach) → 201
     // then re-submit steps in (2,1,3) order and assert each out-of-order
     // step is rejected with `provisioning_order_violation`. Pending
     // soland reducer wiring (P2-impl agent_principal projection).

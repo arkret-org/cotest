@@ -72,7 +72,7 @@ test.describe("personal blocklist", () => {
     const second = { version: 2, label: `second-${stamp}` };
 
     const firstPut = await request.put(
-      `${solandBaseUrl()}/_cokret/self/account_data/${encodeURIComponent(dataType)}`,
+      `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       {
         headers: authHeaders(token),
         data: { content: first },
@@ -85,7 +85,7 @@ test.describe("personal blocklist", () => {
     ).toMatchObject(first);
 
     const secondPut = await request.put(
-      `${solandBaseUrl()}/_cokret/self/account_data/${encodeURIComponent(dataType)}`,
+      `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       {
         headers: authHeaders(token),
         data: { content: second },
@@ -98,7 +98,7 @@ test.describe("personal blocklist", () => {
     ).toMatchObject(second);
 
     const get = await request.get(
-      `${solandBaseUrl()}/_cokret/self/account_data/${encodeURIComponent(dataType)}`,
+      `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       { headers: authHeaders(token) },
     );
     expect(get.status()).toBe(200);
@@ -107,7 +107,7 @@ test.describe("personal blocklist", () => {
     ).toMatchObject(second);
 
     const list = await request.get(
-      `${solandBaseUrl()}/_cokret/self/account_data`,
+      `${solandBaseUrl()}/_arkret/self/account_data`,
       {
         headers: authHeaders(token),
       },
@@ -376,7 +376,7 @@ test.describe("personal blocklist", () => {
     ).toContain(mutedVisible);
 
     const registerDevice = await request.post(
-      `${solandBaseUrl()}/_cokret/edge/push/register-device`,
+      `${solandBaseUrl()}/_arkret/edge/push/register-device`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -414,7 +414,7 @@ test.describe("personal blocklist", () => {
       },
     );
     const notify = await request.post(
-      `${solandBaseUrl()}/_cokret/edge/push/notify`,
+      `${solandBaseUrl()}/_arkret/edge/push/notify`,
       {
         data: {
           notification: {
@@ -579,7 +579,7 @@ async function blocklistAccountDataEntry(
 }
 
 function accountSubscribeDpopOpts(session: DpopUserSession): AccountSubscribeOpts {
-  const url = new URL(`${solandBaseUrl()}/_cokret/self/account/subscribe`);
+  const url = new URL(`${solandBaseUrl()}/_arkret/self/account/subscribe`);
   url.searchParams.set("catchup", "true");
   return {
     headers: selfPathHeadersForDpopSession(session, "GET", url.toString()),

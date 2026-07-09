@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{Did, EventId, RealmId, StrandId};
+use arkret_core::{Did, EventId, RealmId, StrandId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -177,7 +177,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             anyhow!("operation registry missing ck.self.direct_conversation.command.resolve")
         })?;
     if operation.get("http").and_then(Value::as_str)
-        != Some("POST /_cokret/self/direct-conversations/resolve")
+        != Some("POST /_arkret/self/direct-conversations/resolve")
     {
         bail!("direct conversation resolver HTTP binding drifted");
     }
@@ -259,7 +259,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         "private_chat_privacy.direct_conversation_artifacts",
         &json!({"operation_id": "ck.self.direct_conversation.command.resolve"}),
         &json!({
-            "http": "POST /_cokret/self/direct-conversations/resolve",
+            "http": "POST /_arkret/self/direct-conversations/resolve",
             "request_field": "peer",
             "response_field": "state",
             "binding_field": "binding_event_ref",

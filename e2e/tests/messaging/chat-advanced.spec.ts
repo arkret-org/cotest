@@ -384,7 +384,7 @@ test.describe("chat advanced", () => {
     );
     const sentAt = new Date();
     const typing = await request.post(
-      `${solandBaseUrl()}/_cokret/self/ephemeral`,
+      `${solandBaseUrl()}/_arkret/self/ephemeral`,
       {
         headers: authHeaders(fixture.aliceToken),
         data: withBroadcastEphemeralProof({

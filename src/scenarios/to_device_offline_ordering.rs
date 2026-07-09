@@ -8,14 +8,14 @@
 //!
 //! Scenario walk-through:
 //!   1. Alice and Bob log in with verified dev devices.
-//!   2. Alice sends message 1 to dev_bob_a (POST /_cokret/self/device_messages with
+//!   2. Alice sends message 1 to dev_bob_a (POST /_arkret/self/device_messages with
 //!      `Idempotency-Key: msg-1`).
-//!   3. Bob's device polls (GET /_cokret/self/device_messages) — receives msg 1. We retain the
+//!   3. Bob's device polls (GET /_arkret/self/device_messages) — receives msg 1. We retain the
 //!      returned `next_cursor` cursor.
 //!   4. "Disconnect": bob does NOT poll between steps 4 and 7.
 //!   5. Alice sends message 2 (Idempotency-Key: msg-2).
 //!   6. Alice sends message 3 (Idempotency-Key: msg-3).
-//!   7. Bob "reconnects" by polling GET /_cokret/self/device_messages without acking the cursor
+//!   7. Bob "reconnects" by polling GET /_arkret/self/device_messages without acking the cursor
 //!      from step 3 — should still see msg 2 and msg 3 in send order (positions strictly
 //!      increasing).
 //!   8. Bob acks the latest delivery token → next poll returns no messages.
@@ -26,7 +26,7 @@
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: real test, runs against the in-process soland harness.
 //!
-//! No external prerequisites — soland's `/_cokret/self/device_messages` POST and
+//! No external prerequisites — soland's `/_arkret/self/device_messages` POST and
 //! GET endpoints are wired in dev mode and the harness already supports
 //! `dev_login` with per-device-id session issuance, so multi-device wiring
 //! is straightforward.
@@ -112,7 +112,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     .await?;
 
     // ── Step 7: bob reconnects, polls WITHOUT acking the step-3 cursor.
-    // Soland's GET /_cokret/self/device_messages without `?from=` defaults to
+    // Soland's GET /_arkret/self/device_messages without `?from=` defaults to
     // ack_position=0, returning all queued events. msg 1 may still be in
     // the queue (un-acked); msg 2 and 3 are definitely there.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
@@ -195,7 +195,7 @@ async fn send_to_device(
     let response = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages"))
+            .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(sender_token)
             .header("Idempotency-Key", idempotency_key)
             .json(&body),
@@ -225,7 +225,7 @@ async fn ack_to_device(
     let ack = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/device_messages/ack"))
+            .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(recipient_token)
             .json(&json!({ "ack_token": ack_token })),
         StatusCode::OK,
@@ -244,7 +244,7 @@ async fn poll_to_device(
 ) -> Result<Value> {
     let mut req = server
         .http()
-        .get(server.url("/_cokret/self/device_messages"))
+        .get(server.url("/_arkret/self/device_messages"))
         .bearer_auth(recipient_token);
     if let Some(cursor) = from {
         req = req.query(&[("from", cursor)]);

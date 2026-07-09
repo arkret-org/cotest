@@ -80,7 +80,7 @@ test.describe("audited E2EE", () => {
       expect(JSON.stringify(inspect)).toContain(String(report.report_id));
       expect(JSON.stringify(inspect)).toContain(setup.realmId);
 
-      const invite = await (await request.get(`${setup.agentBaseUrl}/_cokret/self/audit-agent/inbox`)).json();
+      const invite = await (await request.get(`${setup.agentBaseUrl}/_arkret/self/audit-agent/inbox`)).json();
       expect(JSON.stringify(invite)).toContain(String(report.report_id));
     },
   );
@@ -146,7 +146,7 @@ test.describe("audited E2EE", () => {
       // 1. With the policy active, a first report invites the audit agent.
       const firstReport = await fileModerationReport(request, setup);
       const inboxBefore = await (
-        await request.get(`${setup.agentBaseUrl}/_cokret/self/audit-agent/inbox`)
+        await request.get(`${setup.agentBaseUrl}/_arkret/self/audit-agent/inbox`)
       ).json();
       expect(JSON.stringify(inboxBefore)).toContain(String(firstReport.report_id));
 
@@ -165,7 +165,7 @@ test.describe("audited E2EE", () => {
       // ck.realm.update patch that flips `enabled` to false. audited-e2ee.md
       // §3.1: admins MAY suspend / revoke a binding from a new accepted policy
       // frontier onward.
-      const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(setup.aliceToken),
         data: signedEventEnvelope({
           actorDid: setup.aliceDid,
@@ -198,7 +198,7 @@ test.describe("audited E2EE", () => {
         await sendAuditedMessage(request, setup, "post-revoke"),
       );
       const inboxAfter = await (
-        await request.get(`${setup.agentBaseUrl}/_cokret/self/audit-agent/inbox`)
+        await request.get(`${setup.agentBaseUrl}/_arkret/self/audit-agent/inbox`)
       ).json();
       expect(JSON.stringify(inboxAfter)).not.toContain(String(secondReport.report_id));
       // The post-revoke report is never routed to the audit agent DID.
@@ -238,7 +238,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   const agentBaseUrl = mockAuditAgentBaseUrl();
   test.skip(!agentBaseUrl, "mock-audit-agent not started for audited E2EE");
   await request.delete(`${agentBaseUrl}/inspect`);
-  const identity = await (await request.get(`${agentBaseUrl}/_cokret/self/audit-agent/identity`)).json();
+  const identity = await (await request.get(`${agentBaseUrl}/_arkret/self/audit-agent/identity`)).json();
   const agentDid = String(identity.did);
 
   const alice = uniqueUser(`${label}-alice`);
@@ -350,7 +350,7 @@ async function fileModerationReportForTarget(
   setup: AuditedSetup,
   targetRef: string,
 ) {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
+  const response = await request.post(`${solandBaseUrl()}/_arkret/self/moderation/report`, {
     headers: authHeaders(setup.reporterToken),
     data: {
       realm_id: setup.realmId,
@@ -371,7 +371,7 @@ async function fileModerationReportForTarget(
 }
 
 async function fileModerationReport(request: APIRequestContext, setup: AuditedSetup) {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
+  const response = await request.post(`${solandBaseUrl()}/_arkret/self/moderation/report`, {
     headers: authHeaders(setup.reporterToken),
     data: {
       realm_id: setup.realmId,

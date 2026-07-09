@@ -67,7 +67,7 @@
 
 ### Phase C — T 的 effective policy projection include G 的 inherited rule
 
-8. 调 `GET /_cokret/self/realms/${teamRealmId}/policy/effective`：响应中 `moderation.banned_keywords` 包含来自 G 的 `forbidden-word-${stamp}`；`source` 字段标注 `derived_from: govRealmId`，`max_depth: 1`。
+8. 调 `GET /_arkret/self/realms/${teamRealmId}/policy/effective`：响应中 `moderation.banned_keywords` 包含来自 G 的 `forbidden-word-${stamp}`；`source` 字段标注 `derived_from: govRealmId`，`max_depth: 1`。
 9. 断言：T 本地直接策略（不含 inherited）中**不**含该 keyword（验证 inherited 是合并出来的，不是写到 T 本地的副本）。
 
 ### Phase D — bob 在 T 发违规消息
@@ -79,13 +79,13 @@
 
 ### Phase E — soland 检查 effective policy 并执行 moderation
 
-14. 调 `GET /_cokret/self/realms/${teamRealmId}/moderation/decisions?message=MV`：返回 1 条 decision，`rule_id` 指向 G 的 banned_keywords rule；`derived_via_link = governed_by`。
+14. 调 `GET /_arkret/self/realms/${teamRealmId}/moderation/decisions?message=MV`：返回 1 条 decision，`rule_id` 指向 G 的 banned_keywords rule；`derived_via_link = governed_by`。
 15. 断言：bob 的 `/notifications` 收到一条 `moderation_held` 通知（in-app）；alice（T owner）的 `/notifications` 也收到一条 `moderation_action_required`。
 
 ### Phase F — alice reject the link，T 的 policy 恢复独立
 
 16. **alice** 把 step 5 的 link 状态置为 `rejected`：发送一条新的 `ck.realm.link` Move（同 `target_realm_id` + `link_kind`，`status = "rejected"`）。spec §4 — `status` 是 link 的最终态字段，新事件覆盖旧 active link。
-17. 调 `GET /_cokret/self/realms/${teamRealmId}/policy/effective`：`moderation.banned_keywords` **不再** 含 `forbidden-word-${stamp}`；`derived_from` source list 为空。
+17. 调 `GET /_arkret/self/realms/${teamRealmId}/policy/effective`：`moderation.banned_keywords` **不再** 含 `forbidden-word-${stamp}`；`derived_from` source list 为空。
 18. **bob** 重发同样的 `MV` 文本：`write-status` 含 `persisted`；timeline 出现正常 `timeline-event`。
 19. 断言：`realm-link-list` 中 step 5 的 link 显示 `edge_status = rejected`；T 的 inheritance_policy（step 6）虽仍 active，但 link 既然 rejected，derived policy 不再触发（spec §6.3 — 本地 deny / revoke / link reject 覆盖 inherited allow）。
 
@@ -103,15 +103,15 @@
 
 - **E6.1 循环 link**：alice 尝试构造 A → B → C → A 的 `governed_by` 环（A 是 G、B 是 T，再发一条从 G 指回 T 的 `governed_by`）— soland MUST 拒绝构成环的第三条 Move（cycle detection；返回 `link_cycle_detected` 错误）。spec §5 不允许隐式级联，§6.4 `max_depth = 1`，但环本身在 link graph 层面就该被拒（projection 不能容忍环）。
 - **E6.2 多个 governed_by target，narrow-only 合并**：T 同时 `governed_by` G1 与 G2。G1 banned_keywords = `["w1", "w2"]`，G2 banned_keywords = `["w2", "w3"]`。spec §6.2 — derived grant 不得宽于 source grant；多 source 时，policy 合并取**交集**（narrow-only），最终 effective banned_keywords = `["w2"]`。注意：moderation 是 deny-style，"narrow" 在 deny 语义上是只 deny 双方都 deny 的；profile 解释由 soland 决定，测试侧只断言「实际生效集合 ⊆ 任一 source」即可。
-- **E6.3 link graph 遍历时跨 realm 权能验证**：alice 在 G 持有 `realm.admin` capability。link 建立后，alice 调 `POST /_cokret/self/realms/${teamRealmId}/admin/*` —— soland MUST **拒绝**（spec §5：capability grant 不因 link 自动级联，§3 表中 `governed_by` 的「是否允许授权派生」是「MAY，但必须由本 Realm policy 显式声明」，本测试中 T 没声明派生 admin capability，所以 alice 在 T 不应有 admin 权）。断言：HTTP 403 + `reason = "capability_not_propagated_via_link"`。
+- **E6.3 link graph 遍历时跨 realm 权能验证**：alice 在 G 持有 `realm.admin` capability。link 建立后，alice 调 `POST /_arkret/self/realms/${teamRealmId}/admin/*` —— soland MUST **拒绝**（spec §5：capability grant 不因 link 自动级联，§3 表中 `governed_by` 的「是否允许授权派生」是「MAY，但必须由本 Realm policy 显式声明」，本测试中 T 没声明派生 admin capability，所以 alice 在 T 不应有 admin 权）。断言：HTTP 403 + `reason = "capability_not_propagated_via_link"`。
 
 后两条建议拆成独立的小 spec（`models/realm-links.2`、`models/realm-links.3`），保持主 scenario 紧凑。
 
 ## Implementation notes
 
-- inkson 当前没有 `ck.realm.link` 专用 UI；Phase B 的 step 5/6、Phase F 的 step 16 在 inkson 落地前需要直接调 soland 的 `POST /_cokret/self/realms/${realmId}/events`（或对应 Move endpoint）写 Move。这是已知 gap，主流程留 fixme。
+- inkson 当前没有 `ck.realm.link` 专用 UI；Phase B 的 step 5/6、Phase F 的 step 16 在 inkson 落地前需要直接调 soland 的 `POST /_arkret/self/realms/${realmId}/events`（或对应 Move endpoint）写 Move。这是已知 gap，主流程留 fixme。
 - `realm-link-list`、`realm-overview-panel`、`policy-hold-marker` 是计划中的 testid；inkson 实现时统一加。
-- effective policy projection (`/_cokret/self/realms/:id/policy/effective`) 也是 spec §6 的 derived 端点；soland 当前是否已经实现 link-aware 合并需要先确认 — Phase C 与 Phase E 在 soland 项目逻辑落地前会全员 fixme。
+- effective policy projection (`/_arkret/self/realms/:id/policy/effective`) 也是 spec §6 的 derived 端点；soland 当前是否已经实现 link-aware 合并需要先确认 — Phase C 与 Phase E 在 soland 项目逻辑落地前会全员 fixme。
 - 不需要新 helper：`ensureRegistered` / `issueDevSession` / `openUserPage` 已覆盖 actor 准备；`request` (Playwright APIRequestContext) 直接打 soland 处理 Move 与 effective policy 查询。
 - E6.1 cycle detection 是 soland 端拒绝路径，断言 HTTP 4xx + `error_code = "link_cycle_detected"`；不需要 browser context。
 - E6.3 是纯 API 检查，不需要 browser context。

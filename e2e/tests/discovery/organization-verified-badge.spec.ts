@@ -56,7 +56,7 @@ async function submitOrganizationStatement(
     signed_at: canonicalTimestamp(),
     proof: "c2ln",
   };
-  return request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  return request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
       actorDid,
@@ -74,7 +74,7 @@ async function searchOrganization(
   query: string,
 ) {
   const resp = await request.post(
-    `${solandBaseUrl()}/_cokret/find/directory/search-organizations`,
+    `${solandBaseUrl()}/_arkret/find/directory/search-organizations`,
     { headers: authHeaders(token), data: { query } },
   );
   expect(resp.ok()).toBeTruthy();
@@ -191,7 +191,7 @@ test.describe("directory verified organization badge", () => {
         owning_organizations: [orgDid],
       });
       const activeStatementId = `org-stmt-${uuidV7()}`;
-      const active = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const active = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: signedEventEnvelope({
           actorDid: alice.did,

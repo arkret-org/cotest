@@ -4,12 +4,12 @@
 //       §10 (delegation narrowing + §10.3 revoke propagation), §12 (revocation)
 //
 // Capabilities are event-minted: grants are `ck.capability.grant` events and
-// revocations `ck.capability.revoke` events submitted to /_cokret/self/events
+// revocations `ck.capability.revoke` events submitted to /_arkret/self/events
 // and projected by the reducer. The only synchronous read surfaces are the
-// registered diagnostics endpoints POST /_cokret/self/authz/check
-// (ck.self.authz.query.check) and GET /_cokret/self/authz/effective-grants
+// registered diagnostics endpoints POST /_arkret/self/authz/check
+// (ck.self.authz.query.check) and GET /_arkret/self/authz/effective-grants
 // (ck.self.authz.grants.query.effective). The former synchronous REST
-// grant/revoke/audit surface (POST/DELETE /_cokret/self/authz/grants*,
+// grant/revoke/audit surface (POST/DELETE /_arkret/self/authz/grants*,
 // GET /_soland/self/audit/events) was removed from the spec and MUST NOT be
 // reintroduced (SPEC-CR-020: zero new operations).
 
@@ -33,7 +33,7 @@ function plusSeconds(deltaSec: number): string {
     .replace(/\.\d{3}Z$/, "Z");
 }
 
-// POST /_cokret/self/authz/check — spec AuthzCheckOutcome: five-valued
+// POST /_arkret/self/authz/check — spec AuthzCheckOutcome: five-valued
 // `decision` enum; `allow` / `hard_deny` are the terminal values the local
 // projection yields.
 async function authzCheck(
@@ -41,7 +41,7 @@ async function authzCheck(
   token: string,
   args: { actorDid: string; action: string; realmId: string },
 ): Promise<{ decision: string; reasonCode?: string }> {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
+  const response = await request.post(`${solandBaseUrl()}/_arkret/self/authz/check`, {
     headers: authHeaders(token),
     data: {
       actor_id: args.actorDid,
@@ -63,7 +63,7 @@ async function submitGrantRaw(
   args: CapabilityGrantEventArgs,
 ): Promise<{ status: number; text: string; body: unknown; grantId: string }> {
   const { envelope, grantId } = buildCapabilityGrantEnvelope(args);
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+  const response = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: envelope,
   });
@@ -143,10 +143,10 @@ test.describe("capability chain (event wire)", () => {
     });
     expect(after.decision).toBe("allow");
 
-    // GET /_cokret/self/authz/effective-grants — realm owner may query a
+    // GET /_arkret/self/authz/effective-grants — realm owner may query a
     // subject's direct grants (GrantList).
     const grantsResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/authz/effective-grants?subject=${encodeURIComponent(bob.did)}&realm_id=${encodeURIComponent(realmId)}`,
+      `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(bob.did)}&realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(aliceToken) },
     );
     const grantsText = await grantsResp.text();

@@ -2,7 +2,7 @@
 
 ## 目标
 
-把 `arkret-spec/spec/v1/artifacts/migration/*.json` 中的 removed/deprecated 真源与 `artifacts/registry/operation-registry.json` 当作 e2e 级别的 schema-drift detector,对 soland 实际暴露的 wire surface (`/_cokret/describe`、事件写入、operation 调用) 做反向扫描:确保移除的 event kind / operation id 在写入路径上 hard-reject,deprecated profile 在 describe 中不被声明,且 describe 自称的 operation 在 `operation-registry.json` 中全部有 canonical 条目。
+把 `arkret-spec/spec/v1/artifacts/migration/*.json` 中的 removed/deprecated 真源与 `artifacts/registry/operation-registry.json` 当作 e2e 级别的 schema-drift detector,对 soland 实际暴露的 wire surface (`/_arkret/describe`、事件写入、operation 调用) 做反向扫描:确保移除的 event kind / operation id 在写入路径上 hard-reject,deprecated profile 在 describe 中不被声明,且 describe 自称的 operation 在 `operation-registry.json` 中全部有 canonical 条目。
 
 不验证:具体 profile 内部 `requirements_role` 的 MUST/SHOULD 行为 (见 conformance/profile-gates.md);也不验证 `/server/describe` 的 envelope shape / `claimed_profiles` 分区 (见 sync/service-surface-contract.md)。本文件只关心 *registry vs. wire* 的 drift。
 
@@ -15,11 +15,11 @@
 - `arkret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — prose / identifier 级别的禁用术语
 - `arkret-spec/spec/v1/artifacts/registry/operation-registry.json` — canonical operation 注册表 (82 个 operation_id × 14 个 surface_groups),HTTP / gRPC / MQ 绑定的唯一真源
 - 关联 OpenAPI 视图: `arkret-spec/spec/v1/artifacts/openapi/arkret-service-api.openapi.yaml` (按 `registry_rules` 中 "MUST NOT introduce/rename/remove operation_id" 的约束,是 operation-registry 的派生 view,不是第二个 namespace)
-- 关联实现: soland `/_cokret/describe` 处的 `implemented_features` / `supported_operations` / `claimed_profiles` 字段 (确切 key 名 see Implementation notes)
+- 关联实现: soland `/_arkret/describe` 处的 `implemented_features` / `supported_operations` / `claimed_profiles` 字段 (确切 key 名 see Implementation notes)
 
 ## 拓扑
 
-- 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_cokret/describe`、`/_cokret/self/events`
+- 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_arkret/describe`、`/_arkret/self/events`
 - 1 × coauth (auth) — 仅用来给 alice 颁 dev session,使 Phase A/F 能携带真实 bearer token
 - 1 × cotest harness (Playwright `request` fixture) — 加载 `artifacts/migration/*.json` 与 `artifacts/registry/*.json`,把 entry list 直接当 negative input source
 
@@ -34,7 +34,7 @@
 
 ## Pre-conditions
 
-- soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
+- soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_arkret/describe` 返回 200 + JSON
 - harness 能 ESM resolve `arkret-spec/spec/v1/artifacts/{migration,registry}/*.json` (相对 `tests/conformance/<spec>.spec.ts` 向上 4 级到 `arkret-spec/`)
 - `removed-event-kinds.json.entries[*].rejection_level === "hard_reject"` 的子集在 cotest 看来是测试输入(其他 `migration_only` 等暂不构造)
 - alice 通过标准 account helper 获取 bearer token (仅 Phase A/F)
@@ -48,18 +48,18 @@
    ```json
    { "kind": "<removed_id>", "actor_id": "<alice>", "realm_id": "<test_realm>", "payload": {} }
    ```
-3. `POST /_cokret/self/events` with bearer token
+3. `POST /_arkret/self/events` with bearer token
 4. 断言:
    - HTTP 4xx (期望 400 / 422)
    - response body `error.code` 在 `{schema_violation, unknown_event_kind}` 集合中
    - **NOT** 200 / 201 (即使 reducer 静默丢弃也算 drift — reducer 必须 fail-closed)
    - response body 不含被写入 event 的 echo (没有 partial accept)
-5. **harness** 再调 `GET /_cokret/describe` 一次,断言 `describe.implemented_features.event_kinds[]` (或等价数组) **不包含** 任何 removed id — 实现不得在 describe surface 自称还支持这些 kind
+5. **harness** 再调 `GET /_arkret/describe` 一次,断言 `describe.implemented_features.event_kinds[]` (或等价数组) **不包含** 任何 removed id — 实现不得在 describe surface 自称还支持这些 kind
 
 ### Phase C — Deprecated profile IDs absent from describe (LIVE)
 
 10. **harness** load `artifacts/migration/deprecated-profile-ids.json` → set of `entries[*].id`
-11. `GET /_cokret/describe` → parse JSON
+11. `GET /_arkret/describe` → parse JSON
 12. Collect *all* profile id strings advertised by the server,across **every** profile-bearing array:
     - `describe.claimed_profiles[]`
     - `describe.verified_profiles[]`
@@ -72,7 +72,7 @@
 ### Phase E — Operation registry coverage (LIVE)
 
 19. **harness** load `artifacts/registry/operation-registry.json` → 收集 `operations[*].operation_id` (82 个) 进 `canonical_op_ids: Set<string>`
-20. `GET /_cokret/describe` → 抽出 `describe.implemented_features.operations[]` (或 `supported_operations[]` / fallback `describe.operations[]` — 三个 key 名都尝试,取第一个非空)
+20. `GET /_arkret/describe` → 抽出 `describe.implemented_features.operations[]` (或 `supported_operations[]` / fallback `describe.operations[]` — 三个 key 名都尝试,取第一个非空)
 21. 对每个 `claimed_op_id`:
     - 断言 `canonical_op_ids.has(claimed_op_id)` (no rogue claim — 任何 describe 自称的 operation 都必须有 canonical 注册表条目)
     - 若失败,attach 整个 claimed list 到 testInfo,便于人工 diff
@@ -81,7 +81,7 @@
 ### Phase F — Forbidden model terms in audit / log surfaces (OPTIONAL fixme)
 
 23. **harness** load `artifacts/registry/forbidden-model-terms.json` → entries 主要是 prose 级别禁用术语
-24. 收集所有 *string 值* (而非 key) 出现在 `/_cokret/describe` 中的字面量
+24. 收集所有 *string 值* (而非 key) 出现在 `/_arkret/describe` 中的字面量
 25. 断言:no string value contains `\bRoom\b` / `\bPlace\b` (word-boundary,避免误伤 `RoomTitleSection` 这类合成词;同时 `interop_module` / `changelog` 在 describe 中不豁免)
 26. 同样扫描 `/_soland/self/audit/recent` (若 alice 有权限) 与一个 list operation 的 JSON 序列化结果
 27. 注意:本 phase 容易误报 (e.g. user-generated content 含 "Room");在 production 实现中应限定到 *server-managed* 字段;在测试中以 fixme 形式钉住,等 soland 明确 surface scope 后再 live 化

@@ -3,7 +3,7 @@
 // The TS port `canonicalJson` (e2e/helpers/soland-api.ts) reimplements Arkret
 // canonical JSON because the e2e harness runs on Node and cannot call the Rust
 // SDK directly. The authoritative implementation is the SDK's
-// `cokret_core::canonical` (RFC 8785 JCS, integer-only number profile), and the
+// `arkret_core::canonical` (RFC 8785 JCS, integer-only number profile), and the
 // signatures this harness produces are ultimately verified by soland using that
 // SDK — so any byte-level drift between the TS port and the SDK is a silent
 // signature false-negative/false-positive vector.

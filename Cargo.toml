@@ -32,7 +32,7 @@ test-with-containers = ["dep:testcontainers"]
 # `EventProofBuilder` facade alongside the low-level canonical helpers
 # to pin that every Arkret service hashes payloads identically.
 # lattice round-trip vectors: cotest exercises the SDK's
-# `cokret_core::lattice` module directly to confirm CasRegister / OrSet /
+# `arkret_core::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
 # normative join semantics.
 # coauth_bootstrap / floria_bootstrap render generated YAML to disk

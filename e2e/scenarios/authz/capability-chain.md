@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 capability 在事件面上的完整生命周期:grant 与 revoke 都是提交到 `/_cokret/self/events` 的事件(`ck.capability.grant` / `ck.capability.revoke`),由 reducer 投影;委托(delegated grant,`parent_grant_id` 链)必须收窄、不得扩权/扩时;revoke 必须显式且沿委托链级联。同步 REST 授权面(`POST/DELETE /_cokret/self/authz/grants*`、`GET /_soland/self/audit/events`)已从 spec 移除,本 scenario 不得复活它(SPEC-CR-020:零新增 operation);仅存的同步读面是注册端点 `POST /_cokret/self/authz/check`(`ck.self.authz.query.check`,诊断/预检,非签名决定)与 `GET /_cokret/self/authz/effective-grants`(`ck.self.authz.grants.query.effective`)。
+验证 capability 在事件面上的完整生命周期:grant 与 revoke 都是提交到 `/_arkret/self/events` 的事件(`ck.capability.grant` / `ck.capability.revoke`),由 reducer 投影;委托(delegated grant,`parent_grant_id` 链)必须收窄、不得扩权/扩时;revoke 必须显式且沿委托链级联。同步 REST 授权面(`POST/DELETE /_arkret/self/authz/grants*`、`GET /_soland/self/audit/events`)已从 spec 移除,本 scenario 不得复活它(SPEC-CR-020:零新增 operation);仅存的同步读面是注册端点 `POST /_arkret/self/authz/check`(`ck.self.authz.query.check`,诊断/预检,非签名决定)与 `GET /_arkret/self/authz/effective-grants`(`ck.self.authz.grants.query.effective`)。
 
 ## Spec 锚点
 
@@ -29,10 +29,10 @@
 ### Phase A — §3 grant 生命周期
 
 1. alice 建 Realm(API 面 `ck.realm.create`)
-2. 断言:`POST /_cokret/self/authz/check {actor_id: bob, action: ck.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
+2. 断言:`POST /_arkret/self/authz/check {actor_id: bob, action: ck.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
 3. alice 提交 `ck.capability.grant` 事件(issuer=alice、subject=bob、actions=[`ck.message.create`]、`expires_at=+1h`,grant 对象带 detached-JWS proof)
 4. 断言:同一 authz/check → `decision = "allow"`
-5. 断言:`GET /_cokret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 GrantList 含该 grant id
+5. 断言:`GET /_arkret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 GrantList 含该 grant id
 
 ### Phase B — §10 合法收窄委托
 
@@ -64,7 +64,7 @@
 - **expiry 自动失效**:grant 到期后无需显式 revoke 自动失效(需要时间推进 hook)
 - **resource selector 收窄**:委托 resources 必须是 parent 的 selector-narrowing 子集(`resource-selector-grammar.md`)
 - **delegation cycle / depth**:§10.2 cycle detection(`delegation_cycle`)与 `max_delegation_depth`(`delegation_depth_exceeded`)
-- **audit 事实面**:grant/revoke 作为事件本身即审计事实,经事件查询面(`/_cokret/self/events` query)或 `/_soland/` 产品审计面读取;旧 `GET /_soland/self/audit/events` 端点已移除
+- **audit 事实面**:grant/revoke 作为事件本身即审计事实,经事件查询面(`/_arkret/self/events` query)或 `/_soland/` 产品审计面读取;旧 `GET /_soland/self/audit/events` 端点已移除
 
 ## Implementation notes
 

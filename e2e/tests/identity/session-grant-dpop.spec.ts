@@ -4,7 +4,7 @@
 // arkret-spec/spec/v1/zh/sync/api-conventions.md §3.3.
 //
 // Under ②, soland does not mint a second local credential. A client reaches
-// `/_cokret/self/*` by presenting
+// `/_arkret/self/*` by presenting
 //   Authorization: Bearer <ck.session.grant>
 //   DPoP: <RFC 9449 proof bound to htm/htu/ath(=hash(grant))>
 // and soland verifies the DPoP against the grant's `cnf.jkt` (obtained via
@@ -42,7 +42,7 @@ import {
 // The self endpoint exercised throughout: it is a read-only `viewer` projection
 // of the authenticated principal (ck.self.account.query.viewer), so a 200 here
 // proves the inbound credential authenticated end-to-end.
-const VIEWER_PATH = "/_cokret/self/account/viewer";
+const VIEWER_PATH = "/_arkret/self/account/viewer";
 
 function grantLikeJwtWithoutDpop(): string {
   const header = Buffer.from(JSON.stringify({ alg: "EdDSA", typ: "JWT" })).toString("base64url");
@@ -215,7 +215,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       if (url.includes("/session-grants/refresh")) {
         refreshRequests.push(url);
       }
-      if (!url.includes("/_cokret/self/") && !url.includes("/_cokret/root/")) {
+      if (!url.includes("/_arkret/self/") && !url.includes("/_arkret/root/")) {
         return;
       }
       const headers = browserRequest.headers();
@@ -303,7 +303,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     const wrongHtu = mintDpopProof({
       deviceKey,
       method: "GET",
-      url: `${solandBaseUrl()}/_cokret/self/account/describe`,
+      url: `${solandBaseUrl()}/_arkret/self/account/describe`,
       grantJwt: grant.grantJwt,
     });
     const r1 = await request.get(url, {
@@ -357,7 +357,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     expect(before.status(), `pre-logout viewer: ${await before.text()}`).toBe(200);
 
     // Hard logout: grant as Bearer + a DPoP bound to the logout endpoint.
-    const logoutUrl = `${solandBaseUrl()}/_cokret/gate/account/logout`;
+    const logoutUrl = `${solandBaseUrl()}/_arkret/gate/account/logout`;
     const logout = await request.post(logoutUrl, {
       headers: {
         authorization: `Bearer ${grant.grantJwt}`,

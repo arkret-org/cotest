@@ -25,8 +25,8 @@
 //! Anchor batch → close.
 
 use anyhow::{Result, anyhow};
-use cokret_core::schema::embedded_error_code_identifiers;
-use cokret_core::{
+use arkret_core::schema::embedded_error_code_identifiers;
+use arkret_core::{
     REASON_APPEAL_OVERTURN_MISSING_LIFT, REASON_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
 };
 

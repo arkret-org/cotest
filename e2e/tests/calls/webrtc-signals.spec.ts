@@ -4,12 +4,12 @@
 //   - crypto-media/webrtc-signaling.md §5 / §5.1 (ephemeral envelope + proof,
 //     canonical 14-value signal_type enum)
 //   - service-http-binding.md §162 (ck.call.signal.send capability on
-//     POST /_cokret/self/ephemeral)
+//     POST /_arkret/self/ephemeral)
 //
 // Migrated off the retired `/_soland/self/webrtc/sessions` stack: every signal
 // is submitted as a real `ck.call.signal` ephemeral envelope (real ed25519
-// detached-JWS proof) to `POST /_cokret/self/ephemeral` and read back verbatim
-// from `GET /_cokret/self/account/subscribe`.
+// detached-JWS proof) to `POST /_arkret/self/ephemeral` and read back verbatim
+// from `GET /_arkret/self/account/subscribe`.
 
 import { expect, test } from "@playwright/test";
 import {

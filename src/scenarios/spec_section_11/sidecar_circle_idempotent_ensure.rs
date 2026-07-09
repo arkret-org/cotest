@@ -6,7 +6,7 @@
 //! DID + agent_principal_id + an HKDF salt.
 
 use anyhow::{Result, anyhow};
-use cokret_core::CircleId;
+use arkret_core::CircleId;
 use hkdf::Hkdf;
 use sha2::Sha256;
 
@@ -59,7 +59,7 @@ pub async fn sidecar_circle_idempotent_ensure_run() -> Result<()> {
         ));
     }
 
-    // TODO(P4-impl): drive POST /_cokret/self/agent-sidecar-threads:ensure
+    // TODO(P4-impl): drive POST /_arkret/self/agent-sidecar-threads:ensure
     // twice against a live soland; assert response.sidecar_circle_id is
     // byte-equal across calls and `created` is false on the second.
     Ok(())

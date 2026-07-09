@@ -4,12 +4,12 @@
 //! advertised key-backup operations, and exercises the unlock-proof gate.
 //!
 //! Surface split (G3 namespace audit):
-//! - `PUT/DELETE /_cokret/self/keys/backups/*`, `GET /_cokret/self/keys/backups`, and `POST
-//!   /_cokret/self/keys/backups/{id}/unlock` — protocol face.
-//! - `GET /_cokret/describe` — advertises the key-backup operation ids.
+//! - `PUT/DELETE /_arkret/self/keys/backups/*`, `GET /_arkret/self/keys/backups`, and `POST
+//!   /_arkret/self/keys/backups/{id}/unlock` — protocol face.
+//! - `GET /_arkret/describe` — advertises the key-backup operation ids.
 //!
 //! Full-ciphertext reads are gated by spec `identity/key-management.md`
-//! §7.7.1: every `POST /_cokret/self/keys/backups/{id}/unlock` MUST carry a
+//! §7.7.1: every `POST /_arkret/self/keys/backups/{id}/unlock` MUST carry a
 //! body `{proof: ck.schema.key_backup_unlock_proof.v1}` bound to the envelope;
 //! a bearer token without that body proof MUST be refused.
 
@@ -19,9 +19,9 @@ use anyhow::{Context as _, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
-use cokret_core::canonical::canonical_json_bytes;
-use cokret_core::multibase::ed25519_pubkey_to_did_key_multibase;
-use cokret_core::{
+use arkret_core::canonical::canonical_json_bytes;
+use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, DeviceId, Did, Hash, KeyBackup, KeyBackupAead,
     KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
     KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
@@ -68,7 +68,7 @@ async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
     let backup_put = expect_json(
         server
             .http()
-            .put(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
+            .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .json(&signed_backup_envelope()?),
         StatusCode::OK,
@@ -182,7 +182,7 @@ async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
     let backup_list = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/keys/backups"))
+            .get(server.url("/_arkret/self/keys/backups"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -193,7 +193,7 @@ async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
 
 async fn describe_backup_operations(server: &CokretServer) -> Result<()> {
     let description = expect_json(
-        server.http().get(server.url("/_cokret/describe")),
+        server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -222,7 +222,7 @@ async fn unlock_backup_requires_body_proof(server: &CokretServer, token: &str) -
     let body = expect_json(
         server
             .http()
-            .post(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}/unlock")))
+            .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
             .json(&json!({})),
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -239,7 +239,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
     let unlock = expect_json(
         server
             .http()
-            .post(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}/unlock")))
+            .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
             .json(&KeysBackupsUnlockRequestBody {
                 proof: unlock_proof()?,

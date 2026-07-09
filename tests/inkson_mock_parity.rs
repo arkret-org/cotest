@@ -1107,7 +1107,7 @@ fn normalize_server_describe(body: Value) -> Value {
     })
 }
 
-/// Reduce a `/_cokret/find/directory/describe` response to the stable semantic
+/// Reduce a `/_arkret/find/directory/describe` response to the stable semantic
 /// invariants both the inkson mock and a live soland must agree on. The full
 /// response carries environment-specific fields (development_mode, trust_domain,
 /// per-deployment base_url) and a growing surface inventory (did methods,

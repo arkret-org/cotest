@@ -21,7 +21,7 @@ import {
 } from "../../helpers/users";
 
 // GAP-events-batch-strict-typed-event — demoted from @fully-implemented.
-// The batch form of POST /_cokret/self/events deserializes its `events[]` as
+// The batch form of POST /_arkret/self/events deserializes its `events[]` as
 // the SDK's strict `Event` (EventsSubmitBatchRequestBody.events: Vec<Event>,
 // event_sync.rs), where `Event` is `#[serde(try_from = EventWire)]` with
 // `deny_unknown_fields` + a required `hlc` and a spec-shaped `Proof`
@@ -78,7 +78,7 @@ test.describe.fixme("events submit batch Realm bootstrap", () => {
       },
     });
 
-    const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    const response = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
       data: {
         events: [createEnvelope],

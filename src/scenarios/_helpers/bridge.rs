@@ -182,12 +182,12 @@ impl MockCoauthIntrospectionServer {
             device_id: device_id.to_owned(),
             requests: Arc::clone(&requests),
         };
-        let router = Router::with_path("_cokret/gate/account/session-grants/introspect")
+        let router = Router::with_path("_arkret/gate/account/session-grants/introspect")
             .hoop(affix_state::inject(state))
             .post(coauth_introspect);
         let server = super::mock_http::spawn_mock(router).await?;
         let url = format!(
-            "http://{}/_cokret/gate/account/session-grants/introspect",
+            "http://{}/_arkret/gate/account/session-grants/introspect",
             server.addr()
         );
         Ok(Self {

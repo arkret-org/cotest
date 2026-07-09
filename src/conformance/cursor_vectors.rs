@@ -4,7 +4,7 @@
 //! body `{v, purpose, t, x, h}`.
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
+use arkret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
 
 pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "ck.vector.encoding.cursor_opaque.core.v1";
 

@@ -86,7 +86,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     .await?;
 
     let denied = expect_json(
-        bob.post("/_cokret/self/policy/check").json(&json!({
+        bob.post("/_arkret/self/policy/check").json(&json!({
             "request_id": "ak:request:policy-deny",
             "request_canonical_digest": REQUEST_HASH,
             "action": "ck.message.create",
@@ -135,7 +135,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(inactive["active"], false);
 
     let allowed = expect_json(
-        bob.post("/_cokret/self/policy/check").json(&json!({
+        bob.post("/_arkret/self/policy/check").json(&json!({
             "request_id": "ak:request:policy-allow",
             "request_canonical_digest": REQUEST_HASH,
             "action": "ck.message.create",

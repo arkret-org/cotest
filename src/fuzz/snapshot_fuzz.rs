@@ -14,10 +14,10 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use cokret_core::{SNAPSHOT_SCHEMA, schema};
+use arkret_core::{SNAPSHOT_SCHEMA, schema};
 use serde_json::{Value, json};
 
-fn registry() -> cokret_core::ProtocolSchemaRegistry {
+fn registry() -> arkret_core::ProtocolSchemaRegistry {
     schema::schema_registry_from_default_spec_artifacts()
         .ok()
         .flatten()
@@ -133,7 +133,7 @@ impl FuzzSnapshotChunkHeaderInput {
 /// Fuzz the chunk header.
 pub fn fuzz_snapshot_chunk_header(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<cokret_core::SnapshotChunk>(data);
+        let _ = serde_json::from_slice::<arkret_core::SnapshotChunk>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzSnapshotChunkHeaderInput::arbitrary(&mut unstructured) else {
@@ -144,7 +144,7 @@ pub fn fuzz_snapshot_chunk_header(data: &[u8]) -> Result<(), String> {
         let _ = registry().validate_value(SNAPSHOT_SCHEMA, &value);
     })?;
     catch(|| {
-        let _ = serde_json::from_value::<cokret_core::SnapshotChunk>(value.clone());
+        let _ = serde_json::from_value::<arkret_core::SnapshotChunk>(value.clone());
     })
 }
 

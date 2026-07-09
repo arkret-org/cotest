@@ -1,10 +1,10 @@
 //! E2 Round 26 / C33.4 — federation two-node real Move replay.
 //!
 //! Spawns two real `soland` binaries on independent ports/blob roots,
-//! confirms they negotiate basic federation handshake (`/_cokret/describe`
+//! confirms they negotiate basic federation handshake (`/_arkret/describe`
 //! reachable on both, distinct service DIDs), then exercises the federation
 //! Move forwarding path: register an account on server_a, mint a Move into a
-//! Realm, push the canonical Events to server_b via `/_cokret/peer/events`,
+//! Realm, push the canonical Events to server_b via `/_arkret/peer/events`,
 //! and confirm server_b exposes the Realm frontier on the peer API.
 //!
 //! C33.4 wired the spawn through the reusable `external_binary` helper:
@@ -16,7 +16,7 @@
 //!
 //! C35.2 fixed the `device_id` fixture to use a wire-canonical
 //! `ck:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
-//! `cokret_identifiers::DeviceId` validator rejects), confirmed the actor
+//! `arkret_identifiers::DeviceId` validator rejects), confirmed the actor
 //! registration + realm-create + message-send round-trip succeeds against
 //! a real soland, and removed the wrapper's `#[ignore]` so default
 //! `cargo test` runs the full federation scenario whenever a soland binary
@@ -26,8 +26,8 @@ use anyhow::{Context, Result};
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use cokret_core::identifiers::new_prefixed_uuid7;
+use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -44,7 +44,7 @@ use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 ///   2. server_a registers an account + creates a Realm + sends a message Event
 ///   3. server_a's peer Events API returns the Realm event batch
 ///   4. server_b accepts the same Events via the peer Events push endpoint
-///   5. server_b's `/_cokret/peer/events/frontier` reports a Realm frontier
+///   5. server_b's `/_arkret/peer/events/frontier` reports a Realm frontier
 ///
 /// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling
 /// `arkret/soland/target/debug/soland[.exe]` exists (silent skip path).
@@ -62,12 +62,12 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 1: handshake ────────────────────────────────────────────────
     let describe_a = expect_json(
-        server_a.http().get(server_a.url("/_cokret/describe")),
+        server_a.http().get(server_a.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
     let describe_b = expect_json(
-        server_b.http().get(server_b.url("/_cokret/describe")),
+        server_b.http().get(server_b.url("/_arkret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -81,7 +81,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 2: actor + Realm + message Event on server_a ───────────────
     // C35.2 — `device_id` MUST be a canonical Arkret wire DeviceId
-    // (`ck:device:<uuidv7>`) per `cokret_identifiers::DeviceId`. Mint a
+    // (`ck:device:<uuidv7>`) per `arkret_identifiers::DeviceId`. Mint a
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("ak:device:");
@@ -144,7 +144,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 3: pull federation-visible Events from server_a ─────────────
     let query_a_url = format!(
-        "{}/_cokret/peer/events?realms={}&limit=100",
+        "{}/_arkret/peer/events?realms={}&limit=100",
         server_a.base_url().as_str().trim_end_matches('/'),
         realm_id
     );
@@ -171,7 +171,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         .iter()
         .map(|entry| entry.get("event").unwrap_or(entry).clone())
         .map(|event| {
-            serde_json::from_value::<cokret_core::Event>(event)
+            serde_json::from_value::<arkret_core::Event>(event)
                 .context("parse peer event envelope into SDK Event")
         })
         .collect::<Result<Vec<_>>>()?;
@@ -193,7 +193,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // signals that the federation surface is wired. The hard requirement is
     // the endpoint exists and returns structured JSON / no panics.
     let push_url = format!(
-        "{}/_cokret/peer/events",
+        "{}/_arkret/peer/events",
         server_b.base_url().as_str().trim_end_matches('/')
     );
     let push_response = with_peer_post_headers(
@@ -215,7 +215,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 5: confirm server_b's peer frontier endpoint is reachable ──
     let frontier_b_url = format!(
-        "{}/_cokret/peer/events/frontier?realm_id={}",
+        "{}/_arkret/peer/events/frontier?realm_id={}",
         server_b.base_url().as_str().trim_end_matches('/'),
         realm_id
     );

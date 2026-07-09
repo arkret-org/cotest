@@ -34,11 +34,11 @@ test.describe("mimi federation", () => {
   // helpers/mimi-facade.ts plus the mock facade; the business cases below stay
   // fixme-anchored until the server/client chain lands. All acceptance
   // surfaces are spec-registered: the MIMI protocol face is exactly
-  // `/_cokret/open/mimi/*` (openapi catalog); realm/member introspection goes
-  // through the event plane (`ck.member.state` via `/_cokret/self/events`) or
+  // `/_arkret/open/mimi/*` (openapi catalog); realm/member introspection goes
+  // through the event plane (`ck.member.state` via `/_arkret/self/events`) or
   // the `/_soland/` product face — there is NO
-  // `/_cokret/self/realm/:id/federation/mimi/*` and NO
-  // `/_cokret/self/realm/:id/members` endpoint, and none may be invented
+  // `/_arkret/self/realm/:id/federation/mimi/*` and NO
+  // `/_arkret/self/realm/:id/members` endpoint, and none may be invented
   // (SPEC-CR-020: zero new operations).
 
   test.fixme(
@@ -50,11 +50,11 @@ test.describe("mimi federation", () => {
       // Phase A — alice creates a Realm via /setup with
       //   ck.realm.federation_profile = "mimi_interop".
       // Assert MIMI interop exposure via the registered protocol face:
-      //   GET /_cokret/describe advertises the mimi_interop extension, and
-      //   GET /_cokret/open/mimi/provider-directory
+      //   GET /_arkret/describe advertises the mimi_interop extension, and
+      //   GET /_arkret/open/mimi/provider-directory
       //   (ck.open.mimi.query.provider_directory) returns the provider
       //   feature profile. The room binding is established through
-      //   POST /_cokret/open/mimi/strands/:id/update (see createBoundMimiRoom
+      //   POST /_arkret/open/mimi/strands/:id/update (see createBoundMimiRoom
       //   below for the already-live pattern).
       //
       // Phase B — mimi_facade (mock) simulates a join request from the
@@ -68,7 +68,7 @@ test.describe("mimi federation", () => {
       //   Approval is an event-plane action: the admin approval (product
       //   face /_soland/, or inkson admin panel) results in a
       //   ck.member.state{membership=join} event for the pairwise DID.
-      //   Assert membership via the event plane: query /_cokret/self/events
+      //   Assert membership via the event plane: query /_arkret/self/events
       //   (queryRealmEventsApi) for the ck.member.state event carrying the
       //   pairwise DID with a mimi source annotation.
       //
@@ -253,7 +253,7 @@ async function createBoundMimiRoom(
   });
   const strandId = await resolveDefaultStrandId(request, token, realmId);
   const roomId = `MIMI-${suffix}-${stamp}`;
-  const updateUrl = `${solandBaseUrl()}/_cokret/open/mimi/strands/${roomId}/update`;
+  const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/strands/${roomId}/update`;
   const roomBinding = {
     kind: "ck.mimi.room_binding",
     payload: {
@@ -292,7 +292,7 @@ async function createBoundMimiRoom(
 }
 
 function mimiMessagesUrl(roomId: string): string {
-  return `${solandBaseUrl()}/_cokret/open/mimi/strands/${encodeURIComponent(roomId)}/messages`;
+  return `${solandBaseUrl()}/_arkret/open/mimi/strands/${encodeURIComponent(roomId)}/messages`;
 }
 
 function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, unknown> {
