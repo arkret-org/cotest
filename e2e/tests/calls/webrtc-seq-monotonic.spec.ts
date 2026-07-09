@@ -14,14 +14,13 @@
 // receiver-side rollback rejection is pinned by the Rust conformance vector
 // `ck.vector.call_signal.seq_monotonic.v1` (src/conformance/call_signal.rs).
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
-import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
+import { expect, test } from "@playwright/test";
 import {
   buildCallSignalEnvelope,
   newCallId,
   postCallSignal,
   relayedCallSignals,
+  setupTwoPartyCallRealm,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
@@ -30,7 +29,7 @@ test.describe("ck.call.signal seq monotonicity (spec wire)", () => {
   test("relay preserves each frame's seq verbatim so the receiver can enforce monotonicity", async ({
     request,
   }) => {
-    const { alice, aliceToken, bobToken, realmId } = await setupSeqRealm(
+    const { alice, aliceToken, bobToken, realmId } = await setupTwoPartyCallRealm(
       request,
       "seq-mono",
     );
@@ -101,7 +100,7 @@ test.describe("ck.call.signal seq monotonicity (spec wire)", () => {
   test("monotonic ascending seq is fully accepted by the receiver guard", async ({
     request,
   }) => {
-    const { alice, aliceToken, bobToken, realmId } = await setupSeqRealm(
+    const { alice, aliceToken, bobToken, realmId } = await setupTwoPartyCallRealm(
       request,
       "seq-asc",
     );
@@ -160,22 +159,4 @@ function applyReceiverSeqGuard(seqs: number[]): {
     }
   }
   return { accepted, rejected };
-}
-
-async function setupSeqRealm(request: APIRequestContext, label: string) {
-  const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice-${stamp}`);
-  const bob = uniqueUser(`${label}-bob-${stamp}`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  const realmId = await createRealmApi(request, aliceToken, {
-    title: `${label} ${stamp}`,
-    public: true,
-  });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId };
 }

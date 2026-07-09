@@ -14,16 +14,12 @@
 // with senders attributed, and (b) the durable lifecycle advances via
 // ck.call.state — the two planes the spec actually defines.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import {
-  addRealmMemberApi,
-  createRealmApi,
-} from "../../helpers/soland-api";
+import { expect, test } from "@playwright/test";
+import { addRealmMemberApi } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
   uniqueUser,
-  type JointUser,
 } from "../../helpers/users";
 import {
   CAP_CALL_SIGNAL_SEND,
@@ -33,6 +29,7 @@ import {
   postCallSignal,
   relayedCallSignals,
   seedCallState,
+  setupTwoPartyCallRealm,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
@@ -41,10 +38,8 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
   test("invite -> answer -> candidate -> hangup relays in monotonic seq order and durable ck.call.state advances", async ({
     request,
   }) => {
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "seq-1to1",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "seq-1to1");
     // bob is a non-owner member; grant him ck.call.signal.send so the relay
     // accepts his `answer` (owner alice holds it by default).
     await grantCallCapability(
@@ -166,10 +161,8 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
   test("multi-party focus_join: three participants relay onto a shared focus in seq order", async ({
     request,
   }) => {
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "seq-focus",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "seq-focus");
     const carol = uniqueUser(`seq-focus-carol-${Date.now()}`);
     await ensureRegistered(request, carol);
     const carolToken = await issueDevSession(request, carol);
@@ -254,27 +247,3 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     }
   });
 });
-
-async function setupCallRealm(request: APIRequestContext, label: string) {
-  const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice-${stamp}`);
-  const bob = uniqueUser(`${label}-bob-${stamp}`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  const realmId = await createRealmApi(request, aliceToken, {
-    title: `${label} ${stamp}`,
-    public: true,
-  });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId } as {
-    alice: JointUser;
-    aliceToken: string;
-    bob: JointUser;
-    bobToken: string;
-    realmId: string;
-  };
-}

@@ -15,10 +15,10 @@
 // `ck.call.state` projection pinned by the Rust call-state conformance vectors;
 // mid-call TURN refresh is simply a re-call of the ICE config endpoint (§4.2).
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
-import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
+import { createRealmApi } from "../../helpers/soland-api";
 import {
   CAP_CALL_SIGNAL_SEND,
   buildCallSignalEnvelope,
@@ -27,6 +27,7 @@ import {
   newCallId,
   postCallSignal,
   relayedCallSignals,
+  setupTwoPartyCallRealm,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
@@ -75,10 +76,10 @@ test.describe("calls — canonical wire", () => {
   test("1:1 invite -> answer -> candidate -> hangup relays verbatim with proof + monotonic per-sender seq", async ({
     request,
   }) => {
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "s18-1to1",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "s18-1to1", {
+        realmTitlePrefix: "S18 s18-1to1",
+      });
     await grantCallCapability(
       request,
       aliceToken,
@@ -169,9 +170,12 @@ test.describe("calls — canonical wire", () => {
   test("§4.2 mid-call TURN refresh is a re-call of the ICE config endpoint; pseudonym is bucket-stable", async ({
     request,
   }) => {
-    const { alice, aliceToken, realmId } = await setupCallRealm(
+    const { alice, aliceToken, realmId } = await setupTwoPartyCallRealm(
       request,
       "s18-turn-refresh",
+      {
+        realmTitlePrefix: "S18 s18-turn-refresh",
+      },
     );
     const callId = newCallId();
 
@@ -231,10 +235,14 @@ test.describe("calls — canonical wire", () => {
   test("§4.1 TURN pseudonym: username is REST-style and never leaks the principal DID", async ({
     request,
   }) => {
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "s18-turn-pseudonym",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(
+        request,
+        "s18-turn-pseudonym",
+        {
+          realmTitlePrefix: "S18 s18-turn-pseudonym",
+        },
+      );
     const callId = newCallId();
 
     const aliceResp = await fetchIceConfig(request, aliceToken, {
@@ -282,24 +290,6 @@ test.describe("calls — canonical wire", () => {
     expect(bobParsed.pseudonym).not.toBe(aliceParsed.pseudonym);
   });
 });
-
-async function setupCallRealm(request: APIRequestContext, label: string) {
-  const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice-${stamp}`);
-  const bob = uniqueUser(`${label}-bob-${stamp}`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  const realmId = await createRealmApi(request, aliceToken, {
-    title: `S18 ${label} ${stamp}`,
-    public: true,
-  });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, bob, aliceToken, bobToken, realmId };
-}
 
 // `issued_at_bucket` is an RFC3339 timestamp; collapse it to the unix-second
 // bucket boundary for comparison.

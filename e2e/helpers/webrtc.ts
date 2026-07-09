@@ -11,6 +11,7 @@ import {
 } from "node:crypto";
 import { solandBaseUrl } from "./env";
 import {
+  addRealmMemberApi,
   authHeaders,
   accountSubscribeFramesApi,
   base64url,
@@ -25,6 +26,12 @@ import {
   uuidV7,
   wireErrCode,
 } from "./soland-api";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+  type JointUser,
+} from "./users";
 
 // ── Spec signal-type enum (webrtc-signaling.md §5.1) ─────────────────────────
 //
@@ -52,6 +59,36 @@ export const CALL_SIGNAL_TYPES = [
 ] as const;
 
 export type CallSignalType = (typeof CALL_SIGNAL_TYPES)[number];
+
+export interface TwoPartyCallRealm {
+  alice: JointUser;
+  aliceToken: string;
+  bob: JointUser;
+  bobToken: string;
+  realmId: string;
+}
+
+export async function setupTwoPartyCallRealm(
+  request: APIRequestContext,
+  label: string,
+  opts: { realmTitlePrefix?: string } = {},
+): Promise<TwoPartyCallRealm> {
+  const stamp = Date.now();
+  const alice = uniqueUser(`${label}-alice-${stamp}`);
+  const bob = uniqueUser(`${label}-bob-${stamp}`);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+  ]);
+  const aliceToken = await issueDevSession(request, alice);
+  const bobToken = await issueDevSession(request, bob);
+  const realmId = await createRealmApi(request, aliceToken, {
+    title: `${opts.realmTitlePrefix ?? label} ${stamp}`,
+    public: true,
+  });
+  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  return { alice, aliceToken, bob, bobToken, realmId };
+}
 
 // ── Real device signer (ed25519 detached-JWS proof, webrtc-signaling.md §5.1) ─
 //

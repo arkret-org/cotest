@@ -17,18 +17,8 @@
 // the durable ban gate: a banned actor's media-token re-exchange is refused
 // with `call_participant_removed`.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import {
-  addRealmMemberApi,
-  createRealmApi,
-  wireErrCode,
-} from "../../helpers/soland-api";
-import {
-  ensureRegistered,
-  issueDevSession,
-  uniqueUser,
-  type JointUser,
-} from "../../helpers/users";
+import { expect, test } from "@playwright/test";
+import { wireErrCode } from "../../helpers/soland-api";
 import {
   CAP_CALL_JOIN,
   CAP_CALL_SIGNAL_SEND,
@@ -41,6 +31,7 @@ import {
   postCallSignalRaw,
   relayedCallSignals,
   seedCallState,
+  setupTwoPartyCallRealm,
   type MediaFocusConfig,
 } from "../../helpers/webrtc";
 
@@ -61,10 +52,8 @@ test.describe("call moderation (spec wire)", () => {
   test("moderator kick relays ck.call.signal{moderation=kick} with the pinned (actor, device) target", async ({
     request,
   }) => {
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "mod-kick",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "mod-kick");
     const callId = newCallId();
 
     const moderation = buildCallSignalEnvelope({
@@ -110,10 +99,8 @@ test.describe("call moderation (spec wire)", () => {
   test("moderator ban: ck.call.signal{moderation=ban} omits target_device_id (actor-wide scope)", async ({
     request,
   }) => {
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "mod-ban",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "mod-ban");
     const callId = newCallId();
 
     await postCallSignal(
@@ -158,10 +145,8 @@ test.describe("call moderation (spec wire)", () => {
     // wire. (The pure ck.call.moderate receiver-side authz that yields the
     // `call_moderation_unauthorised` reason for a *relayed* frame is pinned by
     // the Rust conformance vector `run_moderator_kick_ban_vector` step 1.)
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "mod-unauth",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "mod-unauth");
     const callId = newCallId();
 
     // bob is a member but holds NO call capability.
@@ -214,10 +199,8 @@ test.describe("call moderation (spec wire)", () => {
     // ck.call.state.removed_participants[], the media token issuer MUST refuse
     // that actor's re-exchange. This is the HTTP-observable moderation
     // enforcement (the kick/ban signal itself is ephemeral).
-    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
-      request,
-      "mod-ban-gate",
-    );
+    const { alice, aliceToken, bob, bobToken, realmId } =
+      await setupTwoPartyCallRealm(request, "mod-ban-gate");
     await configureMediaService(
       request,
       aliceToken,
@@ -282,27 +265,3 @@ test.describe("call moderation (spec wire)", () => {
     expect(wireErrCode(postBanBody)).toBe("call_participant_removed");
   });
 });
-
-async function setupCallRealm(request: APIRequestContext, label: string) {
-  const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice-${stamp}`);
-  const bob = uniqueUser(`${label}-bob-${stamp}`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  const realmId = await createRealmApi(request, aliceToken, {
-    title: `${label} ${stamp}`,
-    public: true,
-  });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId } as {
-    alice: JointUser;
-    aliceToken: string;
-    bob: JointUser;
-    bobToken: string;
-    realmId: string;
-  };
-}

@@ -11,15 +11,14 @@
 // detached-JWS proof) to `POST /_cokret/self/ephemeral` and read back verbatim
 // from `GET /_cokret/self/account/subscribe`.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
-import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
+import { expect, test } from "@playwright/test";
 import {
   CALL_SIGNAL_TYPES,
   buildCallSignalEnvelope,
   newCallId,
   postCallSignal,
   relayedCallSignals,
+  setupTwoPartyCallRealm,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
@@ -56,8 +55,8 @@ test.describe("ck.call.signal canonical signal catalog", () => {
     test(`${signalType} relays with canonical type + monotonic seq + valid proof`, async ({
       request,
     }) => {
-      const { alice, aliceToken, bob, bobToken, realmId } =
-        await setupSignalRealm(request, `sig-${signalType}`);
+      const { alice, aliceToken, bobToken, realmId } =
+        await setupTwoPartyCallRealm(request, `sig-${signalType}`);
       const callId = newCallId();
 
       const envelope = buildCallSignalEnvelope({
@@ -116,24 +115,3 @@ test.describe("ck.call.signal canonical signal catalog", () => {
     });
   }
 });
-
-async function setupSignalRealm(request: APIRequestContext, label: string) {
-  const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice-${stamp}`);
-  const bob = uniqueUser(`${label}-bob-${stamp}`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  // alice owns the realm: the owner holds `ck.call.signal.send` by default
-  // (authz owner rule), so no explicit grant is needed for the sender.
-  const realmId = await createRealmApi(request, aliceToken, {
-    title: `${label} ${stamp}`,
-    public: true,
-  });
-  // bob must be a *joined* member to receive the realm broadcast relay.
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId };
-}

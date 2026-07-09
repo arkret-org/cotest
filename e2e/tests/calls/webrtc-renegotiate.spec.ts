@@ -11,15 +11,14 @@
 // signal type. The ICE config is fetched from `POST /_cokret/self/rtc/ice-config`
 // (no prior session needed); renegotiation rides `ck.call.signal{renegotiate}`.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
-import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
+import { expect, test } from "@playwright/test";
 import {
   buildCallSignalEnvelope,
   fetchIceConfig,
   newCallId,
   postCallSignal,
   relayedCallSignals,
+  setupTwoPartyCallRealm,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
@@ -28,7 +27,7 @@ test.describe("ck.call.signal renegotiation + ICE restart", () => {
   test("signed ICE config carries the ck.media.ice_config.v1 domain label", async ({
     request,
   }) => {
-    const { alice, aliceToken, realmId } = await setupRealm(
+    const { alice, aliceToken, realmId } = await setupTwoPartyCallRealm(
       request,
       "ice-config",
     );
@@ -75,7 +74,7 @@ test.describe("ck.call.signal renegotiation + ICE restart", () => {
   test("ICE restart rides renegotiate{reason:ice_restart} in seq order (no device_change)", async ({
     request,
   }) => {
-    const { alice, aliceToken, bobToken, realmId } = await setupRealm(
+    const { alice, aliceToken, bobToken, realmId } = await setupTwoPartyCallRealm(
       request,
       "ice-restart",
     );
@@ -132,21 +131,3 @@ test.describe("ck.call.signal renegotiation + ICE restart", () => {
     expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
   });
 });
-
-async function setupRealm(request: APIRequestContext, label: string) {
-  const stamp = Date.now();
-  const alice = uniqueUser(`${label}-alice-${stamp}`);
-  const bob = uniqueUser(`${label}-bob-${stamp}`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  const realmId = await createRealmApi(request, aliceToken, {
-    title: `${label} ${stamp}`,
-    public: true,
-  });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId };
-}
