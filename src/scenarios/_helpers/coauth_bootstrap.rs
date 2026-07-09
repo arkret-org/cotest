@@ -456,6 +456,14 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
             if debug { eprintln!("[coauth_bootstrap] {}", format!($($t)*)); }
         };
     }
+    macro_rules! fail_summary {
+        ($stage:literal) => {
+            eprintln!(
+                "[coauth_bootstrap] {} failed; set COTEST_COAUTH_BOOTSTRAP_DEBUG=1 for command details",
+                $stage
+            );
+        };
+    }
     step!("locating coauth binary");
     // 1. Locate the binary first — cheaper than spinning up postgres if the operator has no coauth
     //    checkout on disk.
@@ -466,6 +474,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         }
         None => {
             step!("coauth binary not found — skipping");
+            fail_summary!("locating coauth binary");
             return Ok(None);
         }
     };
@@ -479,6 +488,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         }
         None => {
             step!("postgres bootstrap failed — skipping");
+            fail_summary!("starting ephemeral postgres");
             return Ok(None);
         }
     };
@@ -486,7 +496,11 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     // 3. Reserve the bind address for coauth's web listener.
     let mut bind_port = match reserve_port() {
         Ok(p) => p,
-        Err(_) => return Ok(None),
+        Err(e) => {
+            step!("reserve bind port failed: {e:?}");
+            fail_summary!("reserving coauth bind port");
+            return Ok(None);
+        }
     };
     let bind_addr = format!("127.0.0.1:{}", bind_port.port());
 
@@ -503,6 +517,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         }
         Err(e) => {
             step!("config bootstrap failed: {e:?}");
+            fail_summary!("generating coauth config");
             return Ok(None);
         }
     };
@@ -511,6 +526,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     step!("running coauth database migrate");
     if let Err(e) = run_coauth_migrations(&coauth_bin, bundle.file.path()) {
         step!("migrate failed: {e:?}");
+        fail_summary!("running coauth database migrate");
         return Ok(None);
     }
     step!("migrations applied");
@@ -536,6 +552,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         Ok(c) => c,
         Err(e) => {
             step!("spawn failed: {e:?}");
+            fail_summary!("spawning coauth server");
             return Ok(None);
         }
     };
@@ -551,6 +568,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     step!("waiting for /health at {internal_health}");
     if !wait_for_health(&internal_health, Duration::from_secs(60)).await {
         step!("health probe never succeeded within deadline");
+        fail_summary!("waiting for coauth /health");
         return Ok(None);
     }
     step!("coauth /health OK at internal listener");

@@ -2,6 +2,7 @@ use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
+use cokret::auth::principal_control_realm_id;
 use cokret_core::{Did, Hash, Proof, canonical, proof_kind};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
@@ -21,6 +22,11 @@ struct EventProofInput {
     event: Value,
 }
 
+#[derive(Debug, Deserialize)]
+struct PrincipalControlRealmInput {
+    principal_id: String,
+}
+
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;
     let input = read_stdin_json()?;
@@ -30,6 +36,7 @@ fn main() -> Result<()> {
         "sha256-canonical-json" => sha256_canonical_json(input)?,
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
+        "principal-control-realm-id" => principal_control_realm(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 
@@ -58,6 +65,15 @@ fn sha256_canonical_json(input: Value) -> Result<Value> {
     Ok(json!({
         "digest": digest,
         "digest_hex": digest.strip_prefix("sha256:").unwrap_or(digest.as_str()),
+    }))
+}
+
+fn principal_control_realm(input: Value) -> Result<Value> {
+    let input: PrincipalControlRealmInput =
+        serde_json::from_value(input).context("parse principal-control realm input")?;
+    let principal = Did::new(input.principal_id).context("parse principal DID")?;
+    Ok(json!({
+        "realm_id": principal_control_realm_id(&principal),
     }))
 }
 

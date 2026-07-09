@@ -49,21 +49,9 @@ export function typedId(kind: string): string {
 }
 
 export function principalControlRealmForDid(did: string): string {
-  const realmId = derivePrincipalControlRealmForDid(did);
+  const realmId = sdkPrincipalControlRealmId(did);
   assertPrincipalControlRealmVectors(did, realmId);
   return realmId;
-}
-
-function derivePrincipalControlRealmForDid(did: string): string {
-  const digest = createHash("sha256")
-    .update("ck:realm:principal-control:v1:")
-    .update(did)
-    .digest();
-  const bytes = Buffer.from(digest.subarray(0, 16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x70;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `ck:realm:${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 // Re-exported authoritative base64url encoder (single source: encoding.ts).
@@ -1816,7 +1804,7 @@ function assertPrincipalControlRealmVectors(
           "principal-control-realm-vectors.json contains an incomplete vector",
         );
       }
-      const actual = derivePrincipalControlRealmForDid(vector.principal_id);
+      const actual = sdkPrincipalControlRealmId(vector.principal_id);
       if (actual !== vector.principal_control_realm_id) {
         throw new Error(
           `principal_control_realm_id ${actual} drifted from vector ${vector.principal_control_realm_id} for ${vector.principal_id}`,
@@ -2142,10 +2130,12 @@ type CotestWireCommand =
   | "canonical-json"
   | "sha256-canonical-json"
   | "event-proof"
-  | "event-envelope-proof";
+  | "event-envelope-proof"
+  | "principal-control-realm-id";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
+type CotestWirePrincipalControlRealm = { realm_id: string };
 
 const cotestRepoRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -2165,6 +2155,15 @@ export function canonicalJson(value: unknown): string {
   return cotestWire<CotestWireCanonicalJson>("canonical-json", {
     value,
   }).canonical;
+}
+
+function sdkPrincipalControlRealmId(principalId: string): string {
+  return cotestWire<CotestWirePrincipalControlRealm>(
+    "principal-control-realm-id",
+    {
+      principal_id: principalId,
+    },
+  ).realm_id;
 }
 
 /// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative
