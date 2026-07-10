@@ -46,7 +46,7 @@ struct ObjectShape {
 }
 
 #[test]
-fn resource_selector_rejects_schema_id_aliases() {
+fn resource_selector_rejects_legacy_schema_id_fields() {
     let realm_id = "ak:realm:01904100-0000-7000-8000-65c7feb295d7";
     let schema_ref = "ak.schema.strand.v1";
 
@@ -78,13 +78,13 @@ fn resource_selector_rejects_schema_id_aliases() {
             .to_string();
         assert!(
             error.contains("schema_id"),
-            "alias rejection should identify schema_id, got: {error}"
+            "legacy-field rejection should identify schema_id, got: {error}"
         );
     }
 }
 
 #[test]
-fn simple_mutations_use_only_ok_as_the_generic_success_discriminator() -> Result<()> {
+fn simple_mutations_reject_legacy_success_discriminators() -> Result<()> {
     let registry: OperationRegistry = load_artifact(OPERATION_REGISTRY)?;
     let schema_index: OperationSchemaIndex = load_artifact(OPERATION_SCHEMA_INDEX)?;
     let registry_by_id = registry
@@ -149,7 +149,7 @@ fn simple_mutations_use_only_ok_as_the_generic_success_discriminator() -> Result
                 .collect::<Vec<_>>();
             assert!(
                 !accepts_top_level_fields(shape, &alias_instead_of_ok),
-                "{} must not accept {alias} as an alias for ok",
+                "{} must reject legacy {alias} in place of ok",
                 operation.operation_id
             );
         }
@@ -233,7 +233,7 @@ fn assert_typed_business_value_allowed(
     let fields = object.keys().map(String::as_str).collect::<Vec<_>>();
     assert!(
         accepts_top_level_fields(shape, &fields),
-        "typed business fields for {operation_id} must not be treated as generic aliases"
+        "typed business fields for {operation_id} must remain distinct from rejected legacy fields"
     );
     if let Some(accepted) = object.get("accepted") {
         assert!(
