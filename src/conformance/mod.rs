@@ -80,8 +80,9 @@ pub use agent_participation::{
 };
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
-    run_agent_pairing_expiry_vector, run_agent_provision_vector,
-    run_agent_session_grant_replay_vector, run_agent_vector_suite,
+    run_agent_human_approval_required_vector, run_agent_pairing_expiry_vector,
+    run_agent_provision_vector, run_agent_session_grant_replay_vector, run_agent_vector_suite,
+    validate_agent_human_approval_http_response,
 };
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,

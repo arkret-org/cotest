@@ -1,11 +1,12 @@
 //! Agent surface conformance vectors (§0.11 of `_before_todos.md`).
 //!
-//! 5 vectors:
+//! 6 vectors:
 //!   - `ak.vector.agent.provision.v1`
 //!   - `ak.vector.agent.pairing_expiry.v1`
 //!   - `ak.vector.agent.controller_lifecycle.v1`
 //!   - `ak.vector.agent.act_on_behalf.v1`
 //!   - `ak.vector.agent.session_grant.replay.v1`
+//!   - `ak.vector.agent_auth.human_approval_required.v1`
 //!
 //! These are SDK-pure wire-shape pins. Live reducer paths (FSM bottom =
 //! reject, deactivate-terminal, session-grant agent-branch acceptance
@@ -22,10 +23,10 @@ use arkret_core::error::{
     REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
 };
 use arkret_core::{
-    CAP_ACTION_AGENT_PROVISION, OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT,
-    OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST,
-    OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY,
-    OP_AGENT_SIDECAR_THREAD_ENSURE,
+    AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, ErrorEnvelope,
+    OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT, OP_AGENT_DEACTIVATE, OP_AGENT_GET,
+    OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
+    OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY, OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
 use serde_json::Value;
 
@@ -34,6 +35,8 @@ pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ak.vector.agent.pairing_expiry
 pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ak.vector.agent.controller_lifecycle.v1";
 pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "ak.vector.agent.act_on_behalf.v1";
 pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "ak.vector.agent.session_grant.replay.v1";
+pub const VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED: &str =
+    "ak.vector.agent_auth.human_approval_required.v1";
 
 pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
@@ -41,6 +44,7 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE,
     VECTOR_ID_AGENT_ACT_ON_BEHALF,
     VECTOR_ID_AGENT_SESSION_GRANT_REPLAY,
+    VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED,
 ];
 
 const AGENT_VECTORS_FIXTURE_FILE: &str = "agent-vectors-fixture.json";
@@ -496,12 +500,301 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 5 agent vectors.
+// ─── VECT-AG-6 — human approval required ──────────────────────────────────
+
+const HUMAN_APPROVAL_RUNNER: &str =
+    "cotest::conformance::agent_vectors::run_agent_human_approval_required_vector";
+const ACCEPTED_APPROVAL_EVENT_REF: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
+
+fn validate_human_approval_details_schema(details: &Value) -> Result<()> {
+    let document = super::load_artifact_json("schemas/agent-operations.schema.json")?;
+    let opaque_local_id = document
+        .pointer("/$defs/opaque_local_id")
+        .cloned()
+        .ok_or_else(|| anyhow!("agent operations schema missing opaque_local_id"))?;
+    let mut schema = document
+        .pointer("/$defs/agent_human_approval_error_details")
+        .cloned()
+        .ok_or_else(|| anyhow!("agent operations schema missing human-approval details"))?;
+    schema
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("human-approval details schema must be an object"))?
+        .insert(
+            "$defs".to_owned(),
+            serde_json::json!({"opaque_local_id": opaque_local_id}),
+        );
+    let validator = jsonschema::options()
+        .build(&schema)
+        .map_err(|error| anyhow!("compile human-approval details schema: {error}"))?;
+    if !validator.is_valid(details) {
+        let errors = validator
+            .iter_errors(details)
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("human-approval details violate the closed schema: {errors}");
+    }
+    Ok(())
+}
+
+fn ensure_exact_keys(value: &Value, expected: &[&str], context: &str) -> Result<()> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("{context} must be an object"))?;
+    let actual = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    let expected = expected.iter().copied().collect::<BTreeSet<_>>();
+    if actual != expected {
+        bail!("{context} fields must be exactly {expected:?}, got {actual:?}");
+    }
+    Ok(())
+}
+
+fn contains_interactive_challenge(value: &Value) -> bool {
+    const FORBIDDEN: &[&str] = &[
+        "browser_redirect",
+        "browser_login",
+        "captcha",
+        "challenge_url",
+        "login_url",
+        "otp",
+        "password",
+        "password_prompt",
+        "redirect",
+        "redirect_uri",
+    ];
+
+    match value {
+        Value::Object(object) => object.iter().any(|(key, child)| {
+            let key = key.to_ascii_lowercase();
+            FORBIDDEN.iter().any(|forbidden| key.contains(forbidden))
+                || contains_interactive_challenge(child)
+        }),
+        Value::Array(items) => items.iter().any(contains_interactive_challenge),
+        Value::String(text) => {
+            let text = text.to_ascii_lowercase();
+            FORBIDDEN.iter().any(|forbidden| text.contains(forbidden))
+        }
+        _ => false,
+    }
+}
+
+/// Validate the live HTTP contract for the human-approval branch.
+///
+/// The response is intentionally strict: it accepts only the current v1
+/// envelope shape and rejects flat fields, embedded JSON, authentication
+/// challenges, and any interactive controller material.
+pub fn validate_agent_human_approval_http_response(status: u16, body: &Value) -> Result<String> {
+    if status != 403 {
+        bail!("human approval must use HTTP 403, got {status}");
+    }
+    ensure_exact_keys(body, &["error", "ok", "request_id"], "error envelope")?;
+    if body.get("ok").and_then(Value::as_bool) != Some(false) {
+        bail!("human-approval error envelope must set ok=false");
+    }
+
+    let error = body
+        .get("error")
+        .ok_or_else(|| anyhow!("human-approval response missing error"))?;
+    ensure_exact_keys(error, &["code", "details", "message"], "error")?;
+    if error.get("code").and_then(Value::as_str) != Some("claim_required") {
+        bail!("human approval must use error.code=claim_required");
+    }
+    let message = error
+        .get("message")
+        .and_then(Value::as_str)
+        .filter(|message| !message.trim().is_empty())
+        .ok_or_else(|| anyhow!("human-approval error message must be non-empty text"))?;
+    if serde_json::from_str::<Value>(message).is_ok() {
+        bail!("human-approval error message must not contain serialized JSON");
+    }
+
+    if contains_interactive_challenge(body) {
+        bail!("human-approval response contains interactive challenge material");
+    }
+    let details = error
+        .get("details")
+        .ok_or_else(|| anyhow!("human-approval response missing error.details"))?;
+    validate_human_approval_details_schema(details)?;
+    let typed: AgentHumanApprovalErrorDetails = serde_json::from_value(details.clone())
+        .map_err(|error| anyhow!("decode typed human-approval details: {error}"))?;
+    Ok(typed.approval_request_id().to_owned())
+}
+
+#[derive(Debug)]
+struct MiniHumanApprovalGate {
+    approval_request_id: String,
+    accepted_evidence_ref: Option<&'static str>,
+    evidence_fresh: bool,
+    evidence_consumed: bool,
+}
+
+impl MiniHumanApprovalGate {
+    fn new(approval_request_id: String) -> Self {
+        Self {
+            approval_request_id,
+            accepted_evidence_ref: None,
+            evidence_fresh: false,
+            evidence_consumed: false,
+        }
+    }
+
+    fn approval_required_response(&self) -> Result<Value> {
+        let details = AgentHumanApprovalErrorDetails::new(self.approval_request_id.clone())?;
+        Ok(serde_json::to_value(
+            ErrorEnvelope::claim_required_human_approval("controller approval required", details)
+                .with_request_id("cotest-human-approval"),
+        )?)
+    }
+
+    fn approve_out_of_band(&mut self, evidence_ref: &'static str) {
+        self.accepted_evidence_ref = Some(evidence_ref);
+        self.evidence_fresh = true;
+    }
+
+    fn retry(
+        &mut self,
+        agent_key_proof_valid: bool,
+        scope_within_ceiling: bool,
+        evidence_ref: Option<&str>,
+    ) -> std::result::Result<(), &'static str> {
+        if !agent_key_proof_valid {
+            return Err(REASON_PROOF_INVALID);
+        }
+        if !scope_within_ceiling {
+            return Err("agent_scope_exceeds_ceiling");
+        }
+        let Some(evidence_ref) = evidence_ref else {
+            return Err("accepted_approval_evidence_missing");
+        };
+        if self.accepted_evidence_ref != Some(evidence_ref) {
+            return Err("accepted_approval_evidence_mismatch");
+        }
+        if !self.evidence_fresh {
+            return Err("accepted_approval_evidence_stale");
+        }
+        if self.evidence_consumed {
+            return Err(REASON_APPROVAL_ALREADY_CONSUMED);
+        }
+        self.evidence_consumed = true;
+        Ok(())
+    }
+}
+
+pub fn run_agent_human_approval_required_vector() -> Result<()> {
+    let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
+    let case = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("vector_id").and_then(Value::as_str)
+                    == Some(VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED)
+            })
+        })
+        .ok_or_else(|| anyhow!("human-approval vector case missing"))?;
+    if case.get("runner").and_then(Value::as_str) != Some(HUMAN_APPROVAL_RUNNER) {
+        bail!("human-approval fixture runner is not resolvable");
+    }
+    let request = case
+        .get("request")
+        .ok_or_else(|| anyhow!("human-approval vector request missing"))?;
+    ensure_exact_keys(
+        request,
+        &[
+            "operation_id",
+            "proof_kind",
+            "requested_scope_requires_controller_approval",
+            "risk_class",
+        ],
+        "human-approval request",
+    )?;
+    if request.get("operation_id").and_then(Value::as_str) != Some(OP_ACCOUNT_ISSUE_SESSION_GRANT)
+        || request.get("proof_kind").and_then(Value::as_str) != Some("agent_key_proof")
+        || request.get("risk_class").and_then(Value::as_str) != Some("high")
+        || request
+            .get("requested_scope_requires_controller_approval")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        bail!("human-approval fixture request semantics drifted");
+    }
+
+    let details = case
+        .pointer("/expected_error/error/details")
+        .cloned()
+        .ok_or_else(|| anyhow!("human-approval fixture expected details missing"))?;
+    let approval_request_id = details
+        .get("approval_request_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("human-approval fixture approval_request_id missing"))?
+        .to_owned();
+    let mut gate = MiniHumanApprovalGate::new(approval_request_id.clone());
+    let response = gate.approval_required_response()?;
+    if validate_agent_human_approval_http_response(403, &response)? != approval_request_id {
+        bail!("human-approval response changed the opaque correlation handle");
+    }
+
+    let forbidden = case
+        .get("forbidden_runtime_challenges")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("human-approval forbidden challenge list missing"))?;
+    for required in ["captcha", "otp", "browser_redirect", "password_prompt"] {
+        if !forbidden
+            .iter()
+            .any(|entry| entry.as_str() == Some(required))
+        {
+            bail!("human-approval fixture missing forbidden challenge {required}");
+        }
+    }
+
+    if gate.retry(true, true, None) != Err("accepted_approval_evidence_missing") {
+        bail!("session grant was available before out-of-band approval");
+    }
+    gate.approve_out_of_band(ACCEPTED_APPROVAL_EVENT_REF);
+    if gate.retry(false, true, Some(ACCEPTED_APPROVAL_EVENT_REF)) != Err(REASON_PROOF_INVALID) {
+        bail!("approved retry skipped agent key proof revalidation");
+    }
+    if gate.retry(true, false, Some(ACCEPTED_APPROVAL_EVENT_REF))
+        != Err("agent_scope_exceeds_ceiling")
+    {
+        bail!("approved retry skipped scope ceiling revalidation");
+    }
+    gate.retry(true, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
+        .map_err(|reason| anyhow!("accepted approval evidence was rejected: {reason}"))?;
+    if gate.retry(true, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
+        != Err(REASON_APPROVAL_ALREADY_CONSUMED)
+    {
+        bail!("accepted approval evidence was not single-use");
+    }
+
+    let mut flat = response.clone();
+    flat["error"]["reason_code"] = Value::String("human_approval_required".to_owned());
+    if validate_agent_human_approval_http_response(403, &flat).is_ok() {
+        bail!("legacy flat human-approval fields were accepted");
+    }
+    let mut json_message = response.clone();
+    json_message["error"]["message"] = Value::String(details.to_string());
+    if validate_agent_human_approval_http_response(403, &json_message).is_ok() {
+        bail!("JSON-in-message human-approval response was accepted");
+    }
+    if validate_agent_human_approval_http_response(401, &response).is_ok() {
+        bail!("human approval was accepted as HTTP 401");
+    }
+    let mut challenge = response;
+    challenge["error"]["details"]["captcha"] = Value::String("challenge-token".to_owned());
+    if validate_agent_human_approval_http_response(403, &challenge).is_ok() {
+        bail!("interactive challenge material was accepted");
+    }
+
+    Ok(())
+}
+
+/// Suite entry point — runs all 6 agent vectors.
 pub fn run_agent_vector_suite() -> Result<()> {
     validate_agent_vectors_fixture_metadata()?;
-    if ALL_AGENT_VECTOR_IDS.len() != 5 {
+    if ALL_AGENT_VECTOR_IDS.len() != 6 {
         bail!(
-            "expected 5 agent vector ids, got {}",
+            "expected 6 agent vector ids, got {}",
             ALL_AGENT_VECTOR_IDS.len()
         );
     }
@@ -510,6 +803,7 @@ pub fn run_agent_vector_suite() -> Result<()> {
     run_agent_controller_lifecycle_vector()?;
     run_agent_act_on_behalf_vector()?;
     run_agent_session_grant_replay_vector()?;
+    run_agent_human_approval_required_vector()?;
     Ok(())
 }
 
@@ -518,7 +812,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_five_agent_vectors_run_clean() {
+    fn all_six_agent_vectors_run_clean() {
         run_agent_vector_suite().unwrap();
+    }
+
+    #[test]
+    fn human_approval_vector_runs_clean() {
+        run_agent_human_approval_required_vector().unwrap();
     }
 }
