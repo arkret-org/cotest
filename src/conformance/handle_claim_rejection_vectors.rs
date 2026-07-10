@@ -101,6 +101,18 @@ fn base_claim() -> Value {
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": "2026-05-20T00:00:00Z",
                 "jws": "eyJhbGciOiJFZERTQSJ9..signature"
+            },
+            // binding_state=verified claims MUST also carry a
+            // holder_acceptance proof (handle-claim.schema.json allOf[0]).
+            {
+                "kind": "detached_jws",
+                "alg": "EdDSA",
+                "verification_method": "did:web:alice.principal.example#key-1",
+                "proof_purpose": "holder_acceptance",
+                "payload_digest":
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "created_at": "2026-05-20T00:00:00Z",
+                "jws": "eyJhbGciOiJFZERTQSJ9..signature"
             }
         ]
     })

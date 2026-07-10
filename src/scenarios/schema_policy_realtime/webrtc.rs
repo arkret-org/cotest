@@ -118,7 +118,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         .split_once(':')
         .expect("turn username must be `<expiry>:<pseudonym>`");
     assert!(!expiry.is_empty() && expiry.chars().all(|c| c.is_ascii_digit()));
-    assert!(pseudonym.starts_with("ak.pseudonym_call_"));
+    assert!(pseudonym.starts_with("ak_pseudonym_call_"));
     assert!(!turn_username.contains("did:web"));
     assert!(!turn_username.contains("alice"));
 

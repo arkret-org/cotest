@@ -70,7 +70,8 @@ fn call_state_media_lifecycle_vector_suite_runs_clean() {
 #[test]
 fn agent_vector_suite_runs_clean() {
     run_agent_vector_suite().expect("agent vectors must pass");
-    assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 5);
+    // VECT-AG-1..5 plus the human-approval-required error-details vector.
+    assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 6);
 }
 
 // ─── P0 / VECT-SC-1..4 — sidecar vectors ───────────────────────────────────

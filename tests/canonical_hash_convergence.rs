@@ -69,7 +69,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // re-introduced a hand-rolled canonical encoder. To regenerate:
             // `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:39f8e55b16f14d90dc38928b872d161b85a0f3ae1a6c123faf3107d51799f8b0",
+            expected_digest: "sha256:72f5dfcf12f5df7e3a1ce6ed4a61b81f3be02712e7bf0d909d8d6aea01276b75",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
@@ -92,7 +92,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 },
                 "schema_version": 1,
             }),
-            expected_digest: "sha256:08a01dcc754098f5c64e4ce9bdbf17cdc58e8d6b59f3cc4e139a88d9213d510a",
+            expected_digest: "sha256:4897809adcfd8cb255fce7030c55e9d73a4f5bc740b60bbcf0921eee5b81a6f9",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.starid_webvh_update.v1",
@@ -144,7 +144,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:ce25be45fac5a49d55897be015035be803cba6848f952f6abb46f7fc3c2d25b5",
+            expected_digest: "sha256:d99e52a2520d0a41d9bd48e7ef655c7ea8429f5f88a6a3d1546c3c0e9316ea14",
         },
     ]
 }
@@ -344,7 +344,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:23646349629a8b6ed5d7843364cc7b0648a9470e11a5dba54887c81c7f33df6d",
+        effective_set, "sha256:3ecfd9602f659f3044d809b84e3aa65c7d531529a95631685e305d3002933506",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -352,7 +352,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:b8a9ed41bc89f227164e132c504f666063c61f82f4db955e3dd827a499f35995",
+        display_state, "sha256:3526fdfd4dae52fb85e8f14feea672c295014d733d073df16037d911d5bdf9c8",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

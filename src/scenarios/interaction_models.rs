@@ -58,18 +58,58 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     )
     .await?;
 
-    let subscribe_response = expect_response(
+    // A bare subscribe is live-only, and catch-up replay needs an `after`
+    // resume cursor minted by the stream itself. Cover both legs: hold a
+    // bounded live stream open while submitting a follow-up (live delivery),
+    // then replay past that follow-up's own cursor with catchup=true.
+    let live_subscribe = expect_response(
         alice.get(&format!(
-            "/_arkret/self/events/subscribe?realms={realm_id}&limit=10"
+            "/_arkret/self/events/subscribe?realms={realm_id}&max_duration_ms=2500&heartbeat_ms=200"
+        )),
+        StatusCode::OK,
+    );
+    let delayed_followup = async {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        alice
+            .send_message(&realm_id, "ak:thread:interaction", "hello live stream")
+            .await
+    };
+    let (subscribe_response, followup) = tokio::join!(live_subscribe, delayed_followup);
+    let (subscribe_response, followup) = (subscribe_response?, followup?);
+    let subscribe_frames = ndjson_frames(&subscribe_response.text())?;
+    let live_frame = subscribe_frames
+        .iter()
+        .find(|frame| frame["payload"]["event_id"] == followup["event_id"])
+        .ok_or_else(|| {
+            anyhow!("live subscribe must deliver the follow-up event: {subscribe_frames:?}")
+        })?;
+    let resume_cursor = live_frame["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("live event frame must mint a resume cursor: {live_frame}"))?
+        .to_owned();
+
+    let catchup_target = alice
+        .send_message(&realm_id, "ak:thread:interaction", "hello catchup")
+        .await?;
+    let catchup_response = expect_response(
+        alice.get(&format!(
+            "/_arkret/self/events/subscribe?realms={realm_id}&after={resume_cursor}&catchup=true&max_duration_ms=1500&heartbeat_ms=200"
         )),
         StatusCode::OK,
     )
     .await?;
-    let subscribe_frames = ndjson_frames(&subscribe_response.text())?;
+    let catchup_frames = ndjson_frames(&catchup_response.text())?;
     assert!(
-        subscribe_frames
+        catchup_frames
             .iter()
-            .any(|frame| frame["payload"]["event_id"] == sent["event_id"])
+            .any(|frame| frame["payload"]["event_id"] == catchup_target["event_id"]),
+        "catch-up replay must deliver the follow-up event: {catchup_frames:?}"
+    );
+    assert!(
+        catchup_frames
+            .iter()
+            .any(|frame| frame["kind"] == "catchup_complete"),
+        "catch-up replay must emit catchup_complete: {catchup_frames:?}"
     );
 
     let reaction = bob

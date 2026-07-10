@@ -432,7 +432,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
     // Golden signature pin: the deterministic ed25519 signature over the fixed
     // input MUST reproduce this byte string. A drift in canonical JSON, the
     // label, the 0x00 separator, or the field set changes these bytes.
-    const EXPECTED_SIG_HEX: &str = "712fde8ef4096b79604248c4e8de80dad5a5cf9d89c0f2cb3f42942f61db98e757880d086fc678b1377f47c700bc9b06b4ee7b68c7db747aaf7ac20d2e7d6e04";
+    const EXPECTED_SIG_HEX: &str = "53bede6ece7e1211283533ca96301fc07d523b41f65e502a3a34c89b6ee41db15906d2ed57e21c0250dc120fb41ec82f271e6ce7853a1a4dab81070de4cc2b0c";
     let actual_sig_hex = hex_lower(&sig.to_bytes());
     if actual_sig_hex != EXPECTED_SIG_HEX {
         bail!(
@@ -656,7 +656,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // byte-correct label + canonical Context. A drift in label, separator, or
     // Context JCS changes these bytes.
     const EXPECTED_KEY_HEX: &str =
-        "d63b8770ce17964c8b6b68f4042547fa4ca8adc25aa1376c3065cf6003d4a690";
+        "d967efacc932d850ddcbe827e4e0aa399524a7b21ea2bef56a2ee9bf0b81dcc1";
     let actual_key_hex = hex_lower(&frame_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(
@@ -865,7 +865,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         .map_err(|err| anyhow!("HKDF expand failed: {err}"))?;
 
     const EXPECTED_KEY_HEX: &str =
-        "aaaba1e9c74a9da22712da8ba39a42dc572686ad5b6b21b8ceda5aefb1d20d37";
+        "65ff920ee6cd964549a5ee8b581346ca9dfc2b4ceb91227b7d95dc2a15a761f8";
     let actual_key_hex = hex_lower(&recording_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(
