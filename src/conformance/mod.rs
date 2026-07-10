@@ -247,7 +247,9 @@ pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
 };
-pub use push_rule_core::run_push_rule_core_fixture_suite;
+pub use push_rule_core::{
+    run_hardened_mention_routing_hint_vector, run_push_rule_core_fixture_suite,
+};
 pub use redaction::run_redaction_fixture_suite;
 pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
 pub use scaffold_gate::{
