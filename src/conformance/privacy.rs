@@ -454,6 +454,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            // §9.14 `ak.vector.identity_link.minimal_metadata_author_credential.v1`
+            // — dedicated runner (the fixture's `runner` field names it);
+            // executed here too so the suite covers every fixture case.
+            super::privacy_security::MINIMAL_METADATA_AUTHOR_CREDENTIAL_CASE => {
+                super::privacy_security::run_minimal_metadata_author_credential_vector()?;
+            }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }
     }
