@@ -125,6 +125,97 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     Ok(())
 }
 
+/// AKP-0008 runtime-side approval status poll
+/// (`ak.open.agent_pairing.query.runtime_key_request_status`): the runtime
+/// learns the controller decision after submitting a runtime key request
+/// (cotask 2026-07-10-agent-runtime-approval-status-closure acceptance #5).
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
+    let server = ArkretServer::spawn("agent-approval-status-e2e").await?;
+    let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    let controller = bearer_sdk_client(&server, &token)?;
+    let prov = controller
+        .agent_provision(&arkret::AgentProvisionRequestBody {
+            display_name: Some("Status Poll Assistant".to_owned()),
+            agent_slug: Some("statuspoll".to_owned()),
+            requested_scope: None,
+            accountability: Value::Null,
+            pairing_ttl_ms: None,
+        })
+        .await?;
+    let agent_did = prov.agent_principal_id.to_string();
+    let status_body = arkret::models::AgentRuntimeApprovalStatusRequestBody {
+        pairing_request_id: prov.pairing_request_id.clone(),
+        pairing_code: prov
+            .pairing_code
+            .clone()
+            .ok_or_else(|| anyhow!("pairing_code missing"))?,
+        agent_principal_id: prov.agent_principal_id.clone(),
+    };
+
+    // 1. Open pairing, nothing submitted yet: pending without an
+    //    approval_request_id or any authorized binding.
+    let status = controller.agent_runtime_approval_status(&status_body).await?;
+    assert_eq!(
+        status.status,
+        arkret::models::AgentStatus::PendingRuntimeKey
+    );
+    assert!(status.approval_request_id.is_none());
+    assert!(status.authorized_event_ref.is_none());
+    assert!(status.authorized_public_key_digest.is_none());
+
+    // 2. Runtime submits the open approval request; the poll echoes its id.
+    let approval_request = build_runtime_approval_request(&server, &prov)?;
+    let submitted = controller
+        .agent_runtime_approval_request(&approval_request)
+        .await?;
+    assert!(submitted.ok);
+    let status = controller.agent_runtime_approval_status(&status_body).await?;
+    assert_eq!(
+        status.status,
+        arkret::models::AgentStatus::PendingRuntimeKey
+    );
+    assert_eq!(
+        status.approval_request_id.as_deref(),
+        Some(submitted.approval_request_id.as_str())
+    );
+
+    // 3. Anti-enumeration: a wrong pairing_code is indistinguishable from an
+    //    unknown pairing_request_id.
+    let wrong_code = arkret::models::AgentRuntimeApprovalStatusRequestBody {
+        pairing_code: "00000000".to_owned(),
+        ..status_body.clone()
+    };
+    expect_sdk_api_error(
+        controller.agent_runtime_approval_status(&wrong_code).await,
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )?;
+
+    // 4. Controller approves; the poll flips to active and hands the runtime
+    //    the exact key binding the controller authorized.
+    let pair = pair_agent_runtime_key(&server, &token, &prov).await?;
+    let status = controller.agent_runtime_approval_status(&status_body).await?;
+    assert_eq!(status.status, arkret::models::AgentStatus::Active);
+    assert!(status.approval_request_id.is_none());
+    assert_eq!(
+        status.authorized_event_ref.as_ref().map(|id| id.as_str()),
+        Some(pair.authorized_event_ref.as_str())
+    );
+    let (verification_method, _, public_key) = runtime_key_material(&agent_did);
+    assert_eq!(
+        status.authorized_verification_method.as_deref(),
+        Some(verification_method.as_str())
+    );
+    let local_digest = arkret::agent_runtime_public_key_digest(&public_key)?;
+    assert_eq!(
+        status.authorized_public_key_digest.as_deref(),
+        Some(local_digest.as_str())
+    );
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
@@ -298,31 +389,64 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         "DPoP-bound agent scan must include accepted reply event {agent_event_id}: {scan:?}"
     );
 
+    // Catch-up replay now requires an `after` cursor (the old
+    // include-history-from-genesis stream semantics are gone), so cover the
+    // agent streaming surface with the live leg instead: subscribe first,
+    // submit another agent-authored event, and expect its live frame.
     let mut stream = agent_client
-        .events_subscribe_frames(
-            &EventsSubscribeOptions::new()
-                .realm(realm_id.clone())
-                .include_history(true)
-                .max_duration_ms(150)
-                .heartbeat_ms(100),
-        )
+        .events_subscribe_frames(&EventsSubscribeOptions::new().realm(realm_id.clone()))
         .await?;
-    let mut stream_frames = Vec::new();
-    while let Some(frame) = stream.next_frame().await? {
-        stream_frames.push(frame);
-    }
-    assert!(
-        stream_frames
-            .iter()
-            .any(|frame| frame.kind == EventsSubscribeFrameKind::CatchupComplete),
-        "agent stream must emit catchup_complete: {stream_frames:?}"
+    let live_message = event_envelope(
+        &agent_did,
+        &realm_id,
+        "ak.message.create",
+        json!({
+            "body": "agent_key_proof live stream",
+            "content": {"body": "agent_key_proof live stream"},
+            "agent_context": {
+                "agent_id": agent_did,
+                "operator_or_controller": ALICE_DID,
+                "execution_purpose": "reply",
+                "authorization_ref": agent_grant_id,
+            },
+        }),
     );
+    let live_event_id = live_message["event_id"]
+        .as_str()
+        .expect("live message event_id")
+        .to_owned();
+    let accepted_live = agent_client
+        .events_submit(&event_from_value(&live_message)?)
+        .await?;
+    assert_eq!(
+        accepted_live
+            .accepted
+            .first()
+            .map(|event_id| event_id.to_string())
+            .as_deref(),
+        Some(live_event_id.as_str()),
+        "agent live message must be accepted"
+    );
+    let mut saw_live_event = false;
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        while let Some(frame) = stream.next_frame().await? {
+            if frame.kind == EventsSubscribeFrameKind::Event
+                && serde_json::to_string(&frame)
+                    .is_ok_and(|frame_json| frame_json.contains(&live_event_id))
+            {
+                saw_live_event = true;
+                break;
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .map_err(|_| {
+        anyhow!("agent stream did not deliver live event {live_event_id} within 15s")
+    })??;
     assert!(
-        stream_frames
-            .iter()
-            .any(|frame| serde_json::to_string(frame)
-                .is_ok_and(|frame_json| frame_json.contains(&agent_event_id))),
-        "DPoP-bound agent stream history must include accepted reply event {agent_event_id}: {stream_frames:?}"
+        saw_live_event,
+        "DPoP-bound agent stream must deliver the accepted live event {live_event_id}"
     );
 
     let paused = controller
@@ -453,6 +577,69 @@ async fn provision_and_pair_agent(
     Ok(agent_did)
 }
 
+/// Deterministic local runtime key material shared by the pairing and the
+/// approval-status tests: verification method, Ed25519 signing key, and the
+/// spec-shape OKP public key JWK.
+fn runtime_key_material(agent_did: &str) -> (String, SigningKey, Value) {
+    let verification_method = format!("{agent_did}#runtime-key-1");
+    let signing_key = SigningKey::from_bytes(&[13_u8; 32]);
+    let public_key = json!({
+        "kty": "OKP",
+        "kid": verification_method,
+        "alg": "Ed25519",
+        "key": URL_SAFE_NO_PAD.encode(signing_key.verifying_key().to_bytes()),
+    });
+    (verification_method, signing_key, public_key)
+}
+
+/// Build the open `agent_runtime_approval_request_body` a runtime submits to
+/// `POST /_arkret/open/agent-pairing/runtime-key-requests`, from the same key
+/// material as [`pair_agent_runtime_key`].
+fn build_runtime_approval_request(
+    server: &ArkretServer,
+    provisioned: &arkret::AgentProvisionOutcome,
+) -> Result<arkret::AgentRuntimeApprovalRequestBody> {
+    let pairing_request_id = provisioned.pairing_request_id.as_str();
+    let pairing_code = provisioned
+        .pairing_code
+        .as_deref()
+        .ok_or_else(|| anyhow!("pairing_code missing"))?;
+    let agent_id = provisioned.agent_principal_id.clone();
+    let (verification_method, signing_key, public_key) = runtime_key_material(agent_id.as_str());
+    let request_digest = arkret::agent_key_pair_proof_request_binding_digest(
+        pairing_request_id,
+        &agent_id,
+        &verification_method,
+        &public_key,
+        None,
+    )?;
+    let proof_expires_at =
+        chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
+    let signing_input = arkret::agent::agent_key_pair_proof_signing_input(
+        verification_method.clone(),
+        pairing_request_id.to_owned(),
+        server.service_did().to_owned(),
+        proof_expires_at,
+        request_digest.clone(),
+    );
+    let signature = signing_key.sign(&signing_input.canonical_bytes()?);
+    Ok(arkret::AgentRuntimeApprovalRequestBody {
+        pairing_code: pairing_code.to_owned(),
+        pairing_request_id: pairing_request_id.to_owned(),
+        agent_principal_id: agent_id,
+        verification_method,
+        public_key,
+        proof_of_possession: json!({
+            "challenge": pairing_request_id,
+            "audience": server.service_did(),
+            "request_canonical_digest": request_digest.as_str(),
+            "expires_at": proof_expires_at.to_rfc3339_opts(SecondsFormat::Millis, true),
+            "signature": URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        }),
+        runtime_attestation: None,
+    })
+}
+
 async fn pair_agent_runtime_key(
     server: &ArkretServer,
     token: &str,
@@ -470,16 +657,9 @@ async fn pair_agent_runtime_key(
     let agent_id = provisioned.agent_principal_id.clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
-    let verification_method = format!("{agent_did}#runtime-key-1");
-    let signing_key = SigningKey::from_bytes(&[13_u8; 32]);
-    let public_key = json!({
-        "kty": "OKP",
-        "kid": verification_method,
-        "alg": "Ed25519",
-        "key": URL_SAFE_NO_PAD.encode(signing_key.verifying_key().to_bytes()),
-    });
-    let runtime_public_key_digest = arkret::agent::agent_runtime_public_key_digest(&public_key)?;
-    let request_digest = arkret::agent::agent_key_pair_proof_request_binding_digest(
+    let (verification_method, signing_key, public_key) = runtime_key_material(&agent_did);
+    let runtime_public_key_digest = arkret::agent_runtime_public_key_digest(&public_key)?;
+    let request_digest = arkret::agent_key_pair_proof_request_binding_digest(
         pairing_request_id,
         &agent_id,
         &verification_method,
@@ -496,7 +676,7 @@ async fn pair_agent_runtime_key(
         request_digest.clone(),
     );
     let signature = signing_key.sign(&signing_input.canonical_bytes()?);
-    let pairing_binding_digest = arkret::agent::agent_key_pairing_request_binding_digest(
+    let pairing_binding_digest = arkret::agent_key_pairing_request_binding_digest(
         &controller_id,
         &agent_id,
         &verification_method,
@@ -564,10 +744,14 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
     let status = list
         .agents
         .iter()
-        .find(|agent| agent["agent_principal_id"].as_str() == Some(agent_did))
-        .and_then(|agents| agents["status"].as_str())
-        .unwrap_or_default()
-        .to_owned();
+        .find(|agent| agent.agent_principal_id.as_str() == agent_did)
+        .map(|agent| {
+            serde_json::to_value(agent.status)
+                .ok()
+                .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
     Ok(status)
 }
 
