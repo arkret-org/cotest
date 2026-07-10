@@ -1,8 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use arkret_core::canonical::canonical_json_bytes;
-use arkret_core::{
-    ed25519_pubkey_to_did_key_multibase, encode_base58btc, encode_multibase_base58btc,
-};
+use arkret_core::{ed25519_pubkey_to_did_key_multibase, encode_base58btc};
 use cotest::harness::{
     ArkretServer, dev_login, expect_api_error, expect_json, refresh_event_proof,
 };
@@ -174,7 +172,7 @@ fn webvh_registration_body(
         authority_did,
     );
     let entry_skeleton = json!({
-        "versionId": format!("0-{WEBVH_SCID_PLACEHOLDER}"),
+        "versionId": WEBVH_SCID_PLACEHOLDER,
         "versionTime": version_time,
         "parameters": {
             "scid": WEBVH_SCID_PLACEHOLDER,
@@ -183,9 +181,10 @@ fn webvh_registration_body(
         },
         "state": document_skeleton,
     });
-    let scid = sha256_multihash_multibase(&canonical_bytes(&entry_skeleton)?);
+    let scid = sha256_multihash_base58btc(&canonical_bytes(&entry_skeleton)?);
     let mut log_entry = substitute_scid(&entry_skeleton, &scid)?;
-    let version_hash = sha256_multihash_multibase(&canonical_bytes(&strip_for_hash(&log_entry))?);
+    let version_hash =
+        sha256_multihash_base58btc(&canonical_bytes(&strip_for_hash(&log_entry, &scid))?);
     if let Value::Object(map) = &mut log_entry {
         map.insert(
             "versionId".to_owned(),
@@ -275,11 +274,16 @@ fn canonical_bytes(value: &Value) -> Result<Vec<u8>> {
     canonical_json_bytes(value).map_err(|error| anyhow!("{error}"))
 }
 
-fn strip_for_hash(value: &Value) -> Value {
+/// did:webvh v1.0 entry-hash preimage: drop `proof`, set `versionId` to the
+/// predecessor anchor (the SCID for the inception entry).
+fn strip_for_hash(value: &Value, prev_anchor: &str) -> Value {
     let mut clone = value.clone();
     if let Value::Object(map) = &mut clone {
         map.remove("proof");
-        map.remove("versionId");
+        map.insert(
+            "versionId".to_owned(),
+            Value::String(prev_anchor.to_owned()),
+        );
     }
     clone
 }
@@ -291,13 +295,14 @@ fn substitute_scid(value: &Value, scid: &str) -> Result<Value> {
     )?)
 }
 
-fn sha256_multihash_multibase(bytes: &[u8]) -> String {
+/// Bare base58btc sha256 multihash — no multibase `z` prefix (did:webvh v1.0).
+fn sha256_multihash_base58btc(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut multihash = Vec::with_capacity(34);
     multihash.push(0x12);
     multihash.push(0x20);
     multihash.extend_from_slice(&digest);
-    encode_multibase_base58btc(multihash)
+    encode_base58btc(&multihash)
 }
 
 fn format_webvh_did(method_authority: &str, scid: &str, local_id: &str) -> String {

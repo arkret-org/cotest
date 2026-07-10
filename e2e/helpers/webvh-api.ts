@@ -6,11 +6,15 @@
 // genesis SCID, per-entry hash chain, controller proof (eddsa-jcs-2022) and
 // witness attestation all verify against a live soland:
 //
-//   - SCID  = sha256-multihash-multibase of the canonical-JCS genesis skeleton
-//             with `{SCID}` placeholders and `proof`/`versionId`/`witness`
-//             stripped (derive_webvh_scid_from_skeleton).
-//   - hash  = sha256-multihash-multibase of the canonical-JCS entry with
-//             `proof` + `versionId` stripped (webvh_entry_hash_multibase).
+//   - SCID  = bare base58btc sha256-multihash (no multibase `z` prefix, per
+//             DIF did:webvh v1.0) of the canonical-JCS genesis skeleton with
+//             `{SCID}` placeholders, `proof`/`witness` stripped and
+//             `versionId` set to the bare `{SCID}` placeholder
+//             (derive_webvh_scid_from_skeleton).
+//   - hash  = bare base58btc sha256-multihash of the canonical-JCS entry with
+//             `proof` stripped and `versionId` set to the predecessor anchor —
+//             the SCID for the genesis entry, the previous `versionId`
+//             otherwise (webvh_entry_hash_multibase).
 //   - proof = ed25519 signature (eddsa-jcs-2022) over the canonical-JCS entry
 //             with `proof` stripped, `verificationMethod = did:key:<mb>#<mb>`
 //             (build_proof / verify_webvh_log_proof).
@@ -66,22 +70,32 @@ export function generateWebvhKey(): WebvhKey {
   };
 }
 
-function sha256MultihashMultibase(bytes: Buffer): string {
+function sha256MultihashBase58btc(bytes: Buffer): string {
   const digest = createHash("sha256").update(bytes).digest();
-  // multihash: sha2-256 (0x12) + length 32 (0x20) + digest.
+  // multihash: sha2-256 (0x12) + length 32 (0x20) + digest. Bare base58btc,
+  // no multibase `z` prefix (did:webvh v1.0).
   const multihash = Buffer.concat([Buffer.from([0x12, 0x20]), digest]);
-  return `z${base58btcEncode(multihash)}`;
+  return base58btcEncode(multihash);
 }
 
-function stripForHash(entry: Record<string, unknown>): Record<string, unknown> {
+/// did:webvh v1.0 entry-hash preimage: drop `proof`, set `versionId` to the
+/// predecessor anchor (the SCID for the genesis entry, the previous
+/// `versionId` otherwise).
+function stripForHash(
+  entry: Record<string, unknown>,
+  prevAnchor: string,
+): Record<string, unknown> {
   const clone = { ...entry };
   delete clone.proof;
-  delete clone.versionId;
+  clone.versionId = prevAnchor;
   return clone;
 }
 
-export function entryHashMultibase(entry: Record<string, unknown>): string {
-  return sha256MultihashMultibase(canonicalBytes(stripForHash(entry)));
+export function entryHashMultibase(
+  entry: Record<string, unknown>,
+  prevAnchor: string,
+): string {
+  return sha256MultihashBase58btc(canonicalBytes(stripForHash(entry, prevAnchor)));
 }
 
 /// Sign an entry (with `proof` stripped) under eddsa-jcs-2022 and return the
@@ -237,17 +251,17 @@ export function buildGenesisEntry(input: GenesisInput): BuiltEntry {
     };
   }
   const entrySkeleton: Record<string, unknown> = {
-    versionId: `0-${WEBVH_SCID_PLACEHOLDER}`,
+    versionId: WEBVH_SCID_PLACEHOLDER,
     versionTime,
     parameters,
     state: skeletonDoc,
   };
-  const scid = sha256MultihashMultibase(canonicalBytes(entrySkeleton));
+  const scid = sha256MultihashBase58btc(canonicalBytes(entrySkeleton));
   const did = formatWebvhDid(methodAuthority, scid, input.localId);
   const realised = JSON.parse(
     JSON.stringify(entrySkeleton).split(WEBVH_SCID_PLACEHOLDER).join(scid),
   ) as Record<string, unknown>;
-  const versionHash = entryHashMultibase(realised);
+  const versionHash = entryHashMultibase(realised, scid);
   const versionId = `1-${versionHash}`;
   realised.versionId = versionId;
   realised.proof = [buildEntryProof(realised, input.updateKey)];
@@ -364,7 +378,7 @@ export function buildRotationEntry(input: RotationInput): BuiltEntry {
       buildWitnessProof(body, witness),
     );
   }
-  const versionHash = entryHashMultibase(body);
+  const versionHash = entryHashMultibase(body, input.prevVersionId);
   const versionId = `${seq}-${versionHash}`;
   body.versionId = versionId;
   body.proof = input.signers.map((signer) => buildEntryProof(body, signer));

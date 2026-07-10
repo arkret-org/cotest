@@ -132,13 +132,14 @@ function ed25519SignatureBase58(privateKey: KeyObject, payload: Buffer): string 
   return `z${base58btc(nodeSign(null, payload, privateKey))}`;
 }
 
-function sha256MultihashMultibase(payload: Buffer): string {
-  return `z${base58btc(
+// Bare base58btc sha256 multihash — no multibase `z` prefix (did:webvh v1.0).
+function sha256MultihashBase58btc(payload: Buffer): string {
+  return base58btc(
     Buffer.concat([
       Buffer.from([0x12, 0x20]),
       createHash("sha256").update(payload).digest(),
     ]),
-  )}`;
+  );
 }
 
 function canonicalBytes(value: unknown): Buffer {
@@ -163,9 +164,13 @@ function substituteScid(value: unknown, scid: string): unknown {
   return value;
 }
 
-function stripVersionId(value: Record<string, unknown>): Record<string, unknown> {
-  const { versionId: _versionId, ...rest } = value;
-  return rest;
+// did:webvh v1.0 entry-hash preimage: `versionId` set to the predecessor
+// anchor (the SCID for the genesis entry).
+function anchorVersionId(
+  value: Record<string, unknown>,
+  prevAnchor: string,
+): Record<string, unknown> {
+  return { ...value, versionId: prevAnchor };
 }
 
 function webvhAuthorities(): { methodAuthority: string; serviceEndpoint: string } {
@@ -218,7 +223,7 @@ async function registerWebvhPrincipal(
     ],
   };
   const entrySkeleton = {
-    versionId: `0-${WEBVH_SCID_PLACEHOLDER}`,
+    versionId: WEBVH_SCID_PLACEHOLDER,
     versionTime,
     parameters: {
       scid: WEBVH_SCID_PLACEHOLDER,
@@ -227,10 +232,10 @@ async function registerWebvhPrincipal(
     },
     state: didDocumentSkeleton,
   };
-  const scid = sha256MultihashMultibase(canonicalBytes(entrySkeleton));
+  const scid = sha256MultihashBase58btc(canonicalBytes(entrySkeleton));
   const realizedEntry = substituteScid(entrySkeleton, scid) as Record<string, unknown>;
-  const versionHash = sha256MultihashMultibase(
-    canonicalBytes(stripVersionId(realizedEntry)),
+  const versionHash = sha256MultihashBase58btc(
+    canonicalBytes(anchorVersionId(realizedEntry, scid)),
   );
   const signedEntry = {
     ...realizedEntry,
