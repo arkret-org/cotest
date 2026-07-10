@@ -24,7 +24,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
-use chrono::{DateTime, Utc};
 use arkret_core::Did;
 use arkret_core::models::{
     NoDelegationResolver, ObjectRef, RealmId, RealmOrganizationControlScope,
@@ -34,6 +33,7 @@ use arkret_core::models::{
 use arkret_core::schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 const ORG_EVENT_KIND: &str = "ak.realm.organization";

@@ -1262,6 +1262,13 @@ if ($SolandRuntime -eq "docker" -and $SolandCommand) {
 if ($SkipInkson -and ($InksonCommand -or $InksonBetaCommand -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonBetaBaseUrl"))) {
     throw "-SkipInkson cannot be combined with Inkson URLs or commands."
 }
+# Coauth's generated development config still requires an Inkson origin even
+# for API-only runs. Keep that service URL out of the caller's scope while
+# providing a harmless placeholder for config generation; no Inkson process or
+# readiness probe is started when -SkipInkson is set.
+if ($SkipInkson -and -not $InksonBaseUrl) {
+    $InksonBaseUrl = "http://127.0.0.1:22817"
+}
 $inksonPort = $null
 if (-not $SkipInkson) {
     if (-not $InksonBaseUrl) {
@@ -1650,7 +1657,7 @@ try {
         # so set it here too — otherwise coauth panics on boot and the whole MLS
         # joint suite (which needs DPoP session-grant login) silently `test.skip`s.
         #
-        # The generated config likewise enables `passwords.password_login_session_grants_enabled`
+        # The generated config likewise enables `arkret.password_login_session_grants_enabled`
         # so the headless password-bootstrap login path works. coauth's validator fails
         # closed on that one too and demands `COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP`;
         # without it coauth panics on boot ("password-bootstrap scaffold is for dev/test

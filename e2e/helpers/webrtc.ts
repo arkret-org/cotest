@@ -371,6 +371,7 @@ export async function seedCallState(
     removedParticipants?: RemovedParticipant[];
   } = {},
 ): Promise<void> {
+  const eventId = typedId("event");
   const payload: Record<string, unknown> = {
     call_id: callId,
     state: opts.state ?? "active",
@@ -383,9 +384,11 @@ export async function seedCallState(
   }
   if (opts.removedParticipants) {
     payload.removed_participants = opts.removedParticipants.map((entry) => ({
+      removal_event_id: eventId,
       actor_id: entry.actor_id,
       ...(entry.device_id ? { device_id: entry.device_id } : {}),
       action: entry.action,
+      removed_by: ownerDid,
       removed_at: entry.removed_at ?? canonicalTimestamp(),
     }));
   }
@@ -393,6 +396,7 @@ export async function seedCallState(
     request,
     ownerToken,
     signedEventEnvelope({
+      eventId,
       actorDid: ownerDid,
       realmId,
       kind: "ak.call.state",

@@ -21,12 +21,12 @@
 //! strings may appear only inside signed `HandleClaim` objects.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{TimeZone, Utc};
 use arkret_core::models::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
     MemberRosterEntry, MembershipState, RosterHandleClaimDigestEntry, member_display_state_digest,
 };
 use arkret_core::{Did, EventId, Hash, RealmId};
+use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_ROSTER_SHAPE: &str = "ak.cotest_vector.sync.member_roster_shape.v1";

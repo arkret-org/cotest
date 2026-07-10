@@ -9,8 +9,8 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
-use chrono::Utc;
 use arkret_http_client::{Auth, Client as SdkClient};
+use chrono::Utc;
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::Value;
 use url::Url;

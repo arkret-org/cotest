@@ -504,7 +504,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
       discoverability: "listed",
       history_visibility: "joined",
     });
-    const sourceServiceDid = `did:web:applet-inbound-${stamp}.joint-e2e.local`;
+    const sourceServiceDid =
+      `did:webvh:z6mkfixture:applet-inbound-${stamp}.joint-e2e.local`;
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,

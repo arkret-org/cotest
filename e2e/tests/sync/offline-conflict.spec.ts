@@ -208,6 +208,7 @@ test.describe("offline sync + conflict repair", () => {
           discoverability: "listed",
           history_visibility: "shared",
           invitees: [bob.did],
+          invitee_service_dids: { [bob.did]: solandServiceDid("beta") },
           ownerDid: alice.did,
           plaintext_visible_services: [
             solandServiceDid("alpha"),

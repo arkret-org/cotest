@@ -454,6 +454,213 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            // Handle claims are checked for confusable / mixed-script
+            // collisions before IDNA normalization.  This vector is a pure
+            // wire-policy assertion: the candidates must fail closed with a
+            // stable reason code rather than being normalized into a claim.
+            "reject_handle_homograph_before_idna" => {
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
+                let candidates = input
+                    .get("candidates")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing candidates", case.name))?;
+                if candidates.len() < 3 {
+                    bail!(
+                        "privacy fixture {} must cover confusable, mixed-script, and hyphen candidates",
+                        case.name
+                    );
+                }
+                let expected = case
+                    .expected
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+                if expected.get("accepted").and_then(Value::as_bool) != Some(false)
+                    || expected.get("error_code").and_then(Value::as_str)
+                        != Some("failed_precondition")
+                    || expected.get("reason_code").and_then(Value::as_str)
+                        != Some("handle_homograph_forbidden")
+                {
+                    bail!(
+                        "privacy fixture {} homograph rejection contract drifted",
+                        case.name
+                    );
+                }
+                let checks = expected
+                    .get("checks")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing checks", case.name))?;
+                for required in [
+                    "uts39_confusable_skeleton_collision",
+                    "mixed_script_label",
+                    "hyphen_disallowed_position",
+                ] {
+                    if !checks.iter().any(|v| v.as_str() == Some(required)) {
+                        bail!(
+                            "privacy fixture {} missing homograph check {required}",
+                            case.name
+                        );
+                    }
+                }
+                record_vector_event(
+                    "privacy.reject_handle_homograph_before_idna",
+                    &json!({"candidates": candidates}),
+                    &json!({
+                        "accepted": false,
+                        "error_code": "failed_precondition",
+                        "reason_code": "handle_homograph_forbidden",
+                    }),
+                    &json!({
+                        "accepted": expected.get("accepted").cloned(),
+                        "error_code": expected.get("error_code").cloned(),
+                        "reason_code": expected.get("reason_code").cloned(),
+                    }),
+                );
+            }
+            "reject_realm_alias_homograph_before_canonical_alias" => {
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
+                let candidates = input
+                    .get("candidates")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing candidates", case.name))?;
+                if candidates.len() < 2 {
+                    bail!(
+                        "privacy fixture {} must cover alias confusable candidates",
+                        case.name
+                    );
+                }
+                let expected = case
+                    .expected
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+                if expected.get("accepted").and_then(Value::as_bool) != Some(false)
+                    || expected.get("error_code").and_then(Value::as_str)
+                        != Some("failed_precondition")
+                    || expected.get("reason_code").and_then(Value::as_str)
+                        != Some("realm_alias_homograph_forbidden")
+                {
+                    bail!(
+                        "privacy fixture {} alias homograph contract drifted",
+                        case.name
+                    );
+                }
+                let checks = expected
+                    .get("checks")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing checks", case.name))?;
+                for required in [
+                    "uts39_confusable_skeleton_collision",
+                    "mixed_script_label",
+                    "hyphen_disallowed_position",
+                ] {
+                    if !checks.iter().any(|v| v.as_str() == Some(required)) {
+                        bail!(
+                            "privacy fixture {} missing alias check {required}",
+                            case.name
+                        );
+                    }
+                }
+                record_vector_event(
+                    "privacy.reject_realm_alias_homograph_before_canonical_alias",
+                    &json!({"candidates": candidates}),
+                    &json!({
+                        "accepted": false,
+                        "error_code": "failed_precondition",
+                        "reason_code": "realm_alias_homograph_forbidden",
+                    }),
+                    &json!({
+                        "accepted": expected.get("accepted").cloned(),
+                        "error_code": expected.get("error_code").cloned(),
+                        "reason_code": expected.get("reason_code").cloned(),
+                    }),
+                );
+            }
+            "minimal_metadata_author_credential_is_the_only_author_trust_anchor" => {
+                let base = case
+                    .base
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing base", case.name))?;
+                let actor = base
+                    .get("actor_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} base actor_id missing", case.name)
+                    })?;
+                let leaf_identity = base
+                    .pointer("/leaf/credential_identity_utf8")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} leaf identity missing", case.name)
+                    })?;
+                if actor != leaf_identity {
+                    bail!(
+                        "privacy fixture {} base actor/credential identity mismatch",
+                        case.name
+                    );
+                }
+                let proof_key = base
+                    .pointer("/proof/resolved_public_key")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("privacy fixture {} proof key missing", case.name))?;
+                let leaf_key = base
+                    .pointer("/leaf/signature_key")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} leaf signature key missing", case.name)
+                    })?;
+                if proof_key != leaf_key {
+                    bail!("privacy fixture {} base proof/leaf key mismatch", case.name);
+                }
+                let cases = case.cases.as_ref().ok_or_else(|| {
+                    anyhow!("privacy fixture {} missing mutation cases", case.name)
+                })?;
+                let mut seen_accept = false;
+                let mut seen_reject = 0usize;
+                for mutation in cases {
+                    let expected = mutation.get("expected").ok_or_else(|| {
+                        anyhow!("privacy fixture {} mutation missing expected", case.name)
+                    })?;
+                    match expected.get("result").and_then(Value::as_str) {
+                        Some("accept_pairwise_author") => seen_accept = true,
+                        Some("reject") => {
+                            seen_reject += 1;
+                            if expected.get("reason_code").and_then(Value::as_str)
+                                != Some("minimal_metadata_author_credential_invalid")
+                                && expected
+                                    .get("principal_directory_queries")
+                                    .and_then(Value::as_u64)
+                                    != Some(0)
+                            {
+                                bail!(
+                                    "privacy fixture {} mutation reject reason drifted",
+                                    case.name
+                                );
+                            }
+                        }
+                        other => bail!(
+                            "privacy fixture {} unexpected mutation result {other:?}",
+                            case.name
+                        ),
+                    }
+                }
+                if !seen_accept || seen_reject < 4 {
+                    bail!(
+                        "privacy fixture {} does not cover active accept + mutation rejects",
+                        case.name
+                    );
+                }
+                record_vector_event(
+                    "privacy.minimal_metadata_author_credential",
+                    &json!({"actor_id": actor, "group_id": base.get("group_id")}),
+                    &json!({"active_unique_leaf": "accept_pairwise_author", "principal_directory_queries": 0}),
+                    &json!({"active_unique_leaf": seen_accept, "mutation_rejects": seen_reject}),
+                );
+            }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }
     }

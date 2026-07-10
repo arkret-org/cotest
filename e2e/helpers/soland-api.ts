@@ -176,6 +176,13 @@ export async function createRealmApi(
     encryption_profile?: string;
     content_scheme?: string;
     invitees?: string[];
+    /**
+     * Optional home Principal Server DID for directed invite-create events.
+     * Seed-member (`ak.member.state{membership=invite}`) events intentionally
+     * have no delivery target; callers exercising cross-server invite fanout
+     * opt in here so the helper emits the canonical `ak.invite.create` event.
+     */
+    invitee_service_dids?: Record<string, string>;
     plaintext_visible_services?: string[];
     public?: boolean;
     federation_policy?: string;
@@ -266,6 +273,31 @@ export async function createRealmApi(
       }),
       { server: opts.server, context: `invite ${invitee}` },
     );
+
+    const recipientServiceDid = data.invitee_service_dids?.[invitee];
+    if (recipientServiceDid) {
+      const evidence = { kind: "explicit_address" };
+      await submitSignedEventApi(
+        request,
+        token,
+        signedEventEnvelope({
+          actorDid: ownerDid,
+          realmId,
+          kind: "ak.invite.create",
+          payload: {
+            invite_id: typedId("invite"),
+            invitee,
+            invite_delivery_target: {
+              recipient_service_did: recipientServiceDid,
+              recipient_service_type: "principal_server",
+            },
+            introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
+            expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+          },
+        }),
+        { server: opts.server, context: `directed invite ${invitee}` },
+      );
+    }
   }
 
   return realmId;

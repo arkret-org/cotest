@@ -7,8 +7,8 @@
 //! `backup_post_reset_stale`.
 
 use anyhow::{Result, anyhow};
-use chrono::{DateTime, Duration, Utc};
 use arkret_core::error::REASON_BACKUP_POST_RESET_STALE;
+use chrono::{DateTime, Duration, Utc};
 
 /// Returns true when an existing envelope is "stale" relative to the
 /// most recent cross-signing reset.

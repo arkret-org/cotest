@@ -15,10 +15,10 @@
 //! (materialised from the subject DID Document `metadata.primary_handle`).
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, TimeZone, Utc};
 use arkret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
 use arkret_core::models::{Handle, HandleBindingState, HandleClaim, PayloadProof};
 use arkret_core::{Did, Hash};
+use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
     "ak.cotest_vector.primary_handle_selection.empty_candidate_fallback.v1";

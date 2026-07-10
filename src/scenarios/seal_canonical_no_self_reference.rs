@@ -18,11 +18,11 @@
 //! Seal whose canonical bytes leak `id` or `notary_signature` is rejected.
 
 use anyhow::{Result, anyhow};
-use chrono::TimeZone;
 use arkret_core::{
     Did, Hash, Hlc, MoveId, MoveSignature, NotarySig, RealmId, Seal, SealId, SealKind,
     compute_seal_id, seal_canonical_bytes,
 };
+use chrono::TimeZone;
 
 fn realm() -> Result<RealmId> {
     RealmId::new("ak:realm:0196419b-0000-7000-8000-00000000014a".to_owned())

@@ -219,7 +219,7 @@ test.describe("morph schema migration @fully-implemented", () => {
 
     expect(profileBlock!.additional_requirements).toBeDefined();
     expect(profileBlock!.additional_requirements.capability_must).toMatch(
-      /ck\.morph\.schema_migrate/,
+      /ak\.morph\.schema_migrate/,
     );
     expect(profileBlock!.additional_requirements.from_set_check_must).toMatch(
       /from_schema_refs/,

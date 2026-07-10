@@ -4,7 +4,6 @@
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{TimeZone, Utc};
 use arkret_core::{
     AGENT_SELECTOR_CLAIM_SCHEMA, AgentParticipation, AgentParticipationEntry,
     AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope,
@@ -12,6 +11,7 @@ use arkret_core::{
     HandleVisibility, Mention, MentionNode, RealmId, effective_participation, fold_ceiling_chain,
     validate_agent_participation_tightens, validate_selection_within_ceiling,
 };
+use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;

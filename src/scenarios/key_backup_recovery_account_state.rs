@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use chrono::{DateTime, Utc};
 use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
@@ -10,6 +9,7 @@ use arkret_core::{
     KeyBackupSignatureAlgorithm, PolicyId, RecoveryPolicy, RecoveryPolicyAuthData,
     RecoveryPolicyRef, RecoveryProofKind, TypedTrustDomainId,
 };
+use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::Value;

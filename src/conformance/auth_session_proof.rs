@@ -1,7 +1,6 @@
 //! Auth, DID-proof, and sender-constrained session proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, Duration, Utc};
 use arkret_core::error::{
     ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_UNAUTHENTICATED, REASON_PROOF_INVALID,
 };
@@ -14,6 +13,7 @@ use arkret_signatures::http_signature::{
     SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,
     verify_signed_http_message,
 };
+use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;

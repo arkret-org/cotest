@@ -8,8 +8,8 @@ mod call_state_core;
 mod call_state_media_lifecycle;
 mod canonical_cross_lang;
 mod capability;
-mod cross_signing_binding_golden;
 mod coauth_lifecycle;
+mod cross_signing_binding_golden;
 mod cursor_vectors;
 mod encoding;
 mod envelope;
@@ -17,6 +17,7 @@ mod federation;
 mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
 mod history_crypto_closure;
+mod inkson_client;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
 mod lattice_mixed_kinds;
@@ -55,7 +56,6 @@ mod sync;
 mod vector_registry_gate;
 mod visibility_policy;
 mod wire;
-mod inkson_client;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,12 +115,12 @@ pub use call_state_media_lifecycle::{
     run_transcribe_lifecycle_vector,
 };
 pub use canonical_cross_lang::run_canonical_cross_lang_suite;
-pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use capability::{
     run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
     run_capability_fixture_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
+pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector, run_cursor_vector_suite,
 };
@@ -152,6 +152,7 @@ pub use history_crypto_closure::{
     run_history_sharing_e2ee_prejoin_key_share_policy_vector,
     run_preview_token_scoped_stripped_state_vector,
 };
+pub use inkson_client::run_inkson_client_profile_manifest_suite;
 pub use key_backup_hardening::{
     ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, run_key_backup_hardening_fixture_suite,
     run_key_backup_kdf_floor_rejected_vector, run_key_backup_unlock_proof_vector,
@@ -325,7 +326,6 @@ pub use wire::{
     run_redaction_history_visibility_fixture_suite, run_restore_full_workflows_fixture_suite,
     run_state_resolution_quarantine_fixture_suite, run_threshold_multisig_fixture_suite,
 };
-pub use inkson_client::run_inkson_client_profile_manifest_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
 
@@ -437,6 +437,11 @@ pub(crate) struct NamedCase {
     pub(crate) expected_digest: Option<String>,
     pub(crate) sender_reducer_profile_digest: Option<String>,
     pub(crate) receiver_reducer_profile_digest: Option<String>,
+    // Privacy identity-link vectors carry a base envelope plus mutation
+    // cases; keep these generic so fixture evolution does not require a new
+    // ad-hoc DTO for every vector family.
+    pub(crate) base: Option<Value>,
+    pub(crate) cases: Option<Vec<Value>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

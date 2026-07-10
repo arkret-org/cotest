@@ -18,12 +18,12 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{Duration, Utc};
 use arkret_core::Did;
 use arkret_core::models::{
     DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
     HandleHintBindingSource, RecipientServiceType,
 };
+use chrono::{Duration, Utc};
 use proptest::prelude::*;
 
 const PROPTEST_CASES: u32 = 64;

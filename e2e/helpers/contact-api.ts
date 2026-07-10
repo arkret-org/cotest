@@ -124,6 +124,13 @@ export async function requestContactArkret(
     idempotencyKey?: string;
     server?: SolandKey;
     recipientServiceDid?: string;
+    /**
+     * Introduction evidence is required for a cross-Principal-Server
+     * request.  The recipient's default policy quarantines
+     * `explicit_address`, so callers exercising a real federation delivery
+     * should pass a locator (or another allow-listed evidence kind).
+     */
+    introductionEvidence?: Record<string, unknown>;
   },
 ): Promise<{ outcome: ContactRequestOutcome; response: APIResponse }> {
   const response = await request.post(
@@ -140,6 +147,9 @@ export async function requestContactArkret(
         ...(opts.recipientServiceDid !== undefined
           ? { recipient_service_did: opts.recipientServiceDid }
           : {}),
+        ...(opts.introductionEvidence !== undefined
+          ? { introduction_evidence: opts.introductionEvidence }
+          : {}),
       },
     },
   );
@@ -148,6 +158,39 @@ export async function requestContactArkret(
     `contact request -> ${target}`,
   );
   return { outcome, response };
+}
+
+/**
+ * Resolve a short-lived Principal Locator from a server's public locator
+ * endpoint.  The resulting object is suitable for
+ * `requestContactArkret(..., { introductionEvidence: { kind: "locator_ref",
+ * principal_locator: locator } })` and satisfies the recipient policy's
+ * allow-listed `locator_ref` evidence requirement.
+ */
+export async function resolvePrincipalLocator(
+  request: APIRequestContext,
+  subjectDid: string,
+  server: SolandKey,
+): Promise<Record<string, unknown>> {
+  const expiresAt = canonicalTimestamp(new Date(Date.now() + 15 * 60 * 1000));
+  const locatorToken = Buffer.from(
+    JSON.stringify({
+      subject_id: subjectDid,
+      nonce: Buffer.from(`cotest-contact-locator-${Date.now()}`).toString(
+        "base64url",
+      ),
+      expires_at: expiresAt,
+    }),
+    "utf8",
+  ).toString("base64url");
+  const response = await request.post(
+    `${solandBaseUrl(server)}/_arkret/open/invite-locators/resolve`,
+    { data: { locator_token: locatorToken } },
+  );
+  return await expectJsonOk<Record<string, unknown>>(
+    response,
+    `resolve principal locator for ${subjectDid}`,
+  );
 }
 
 export async function respondContactArkret(

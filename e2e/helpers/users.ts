@@ -604,7 +604,19 @@ export class JointUserPage {
     };
     await this.dismissCreateRealmBlockingPrompts(promptHandling);
     const strand = this.page.getByTestId("realm-lifecycle-strand").last();
-    await expect(strand.getByTestId("realm-title-input")).toBeVisible({
+    // The setup wizard remembers its last step in some Inkson builds. A page
+    // reload can therefore land on Boundary/Policy while this helper expects
+    // the Basics form. Explicitly select Basics when the title field is not
+    // immediately present; this keeps the helper resilient to that harmless
+    // UI state without weakening the subsequent field assertions.
+    const titleInput = strand.getByTestId("realm-title-input");
+    if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
+      const basicsStep = strand.getByRole("button", { name: /^Basics/ }).first();
+      if (await basicsStep.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await basicsStep.click();
+      }
+    }
+    await expect(titleInput).toBeVisible({
       timeout: 120_000,
     });
 

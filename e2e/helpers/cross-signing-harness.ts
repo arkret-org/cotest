@@ -68,7 +68,7 @@ function signB64url(message: Buffer, key: CrossSigningKey): string {
 }
 
 /// Canonical signing input for a PSK→subordinate binding
-/// (`ak-cross-signing-bind-v1`, device-lifecycle.md §5.1). Byte-mirrors the SDK
+/// (`ak.cross-signing-bind-v1`, device-lifecycle.md §5.1). Byte-mirrors the SDK
 /// `canonical_cross_signing_binding_input`.
 ///
 /// 05-2 — exported so the cross-language golden-vector regression
@@ -100,7 +100,7 @@ export function crossSigningBindingInput(args: {
 }
 
 /// Canonical signing input for a per-device SSK→device binding
-/// (`ak-device-trust-bind-v1`, device-lifecycle.md §5.2). Byte-mirrors the SDK
+/// (`ak.device-trust-bind-v1`, device-lifecycle.md §5.2). Byte-mirrors the SDK
 /// `canonical_device_trust_binding_input`.
 ///
 /// 05-2 — exported for the cross-language golden-vector regression against the

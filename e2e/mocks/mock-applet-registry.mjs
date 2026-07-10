@@ -137,7 +137,8 @@ function signedPackage(body) {
       ? body.applet_id
       : typedId("applet");
   const createdAt = rfc3339Now();
-  const serviceDid = body.service_did ?? `did:web:applet-${safe}.joint-e2e.local`;
+  const serviceDid =
+    body.service_did ?? `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
   const webhookAuth = body.webhook_auth ?? {
     type: "http_message_signature",
     key_ref: `${serviceDid}#applet-service-key`,

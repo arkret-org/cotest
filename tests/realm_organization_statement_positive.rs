@@ -18,7 +18,6 @@
 //! produce an accepted statement. A different key (forgery) or any post-signing
 //! field tamper MUST fail verification.
 
-use chrono::{DateTime, TimeZone, Utc};
 use arkret_core::base64url::base64url_decode;
 use arkret_core::models::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
@@ -27,6 +26,7 @@ use arkret_core::models::{
 };
 use arkret_core::{Did, RealmId};
 use arkret_signatures::realm_organization_statement_sign;
+use chrono::{DateTime, TimeZone, Utc};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 
 const ORG_DID: &str = "did:webvh:example.test:orgs:01J0000000000000000000000A";

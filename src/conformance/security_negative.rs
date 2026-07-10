@@ -350,9 +350,9 @@ impl SecurityCoverage {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
     use arkret_core::{Hash, base64url_encode, proof_kind};
     use arkret_signatures::proof::sign_eddsa_detached_jws;
+    use chrono::{TimeZone, Utc};
     use ed25519_dalek::SigningKey;
 
     use super::*;

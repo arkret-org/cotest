@@ -28,7 +28,6 @@
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, TimeZone, Utc};
 use arkret_core::error::{
     REASON_MEMBER_IDENTITY_PROOF_INVALID, REASON_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
     REASON_MEMBER_IDENTITY_STATE_MISMATCH, REASON_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
@@ -40,6 +39,7 @@ use arkret_core::models::{
     member_identity_effective_set_digest,
 };
 use arkret_core::{Did, EventId, Hash, RealmId};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_MID_UPDATE_INITIAL: &str = "ak.cotest_vector.member_identity.update_initial.v1";

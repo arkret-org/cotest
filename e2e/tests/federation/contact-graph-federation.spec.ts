@@ -41,6 +41,7 @@ import {
   deliverInviteWithConsentGrant,
   listAuthzInvitesArkret,
   requestContactArkret,
+  resolvePrincipalLocator,
   respondContactArkret,
   tombstoneContactArkret,
 } from "../../helpers/contact-api";
@@ -77,6 +78,10 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    // The beta default invite/contact policy quarantines explicit-address
+    // requests. Resolve a signed principal locator so the peer can notify and
+    // project the pending_incoming row (invite-addressing.md Â§5).
+    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta");
 
     const { outcome } = await requestContactArkret(
       request,
@@ -86,6 +91,10 @@ test.describe("contact graph federation (α/β)", () => {
         requestedScopes: ["invite"],
         server: "alpha",
         recipientServiceDid: solandServiceDid("beta"),
+        introductionEvidence: {
+          kind: "locator_ref",
+          principal_locator: bobLocator,
+        },
       },
     );
     // alice's local view: a pending outgoing request exists on α.
@@ -164,6 +173,7 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta");
 
     // Federated direct_message contact handshake (same path as S1-fed, but with
     // direct_message scope so the resolver's consent precondition is met).
@@ -171,6 +181,10 @@ test.describe("contact graph federation (α/β)", () => {
       requestedScopes: ["direct_message"],
       server: "alpha",
       recipientServiceDid: solandServiceDid("beta"),
+      introductionEvidence: {
+        kind: "locator_ref",
+        principal_locator: bobLocator,
+      },
     });
     await expect
       .poll(
@@ -359,12 +373,17 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta");
 
     // Federated accepted handshake (reuse S1-fed path).
     const { outcome } = await requestContactArkret(request, aliceToken, bob.did, {
       requestedScopes: ["invite"],
       server: "alpha",
       recipientServiceDid: solandServiceDid("beta"),
+      introductionEvidence: {
+        kind: "locator_ref",
+        principal_locator: bobLocator,
+      },
     });
     await expect
       .poll(

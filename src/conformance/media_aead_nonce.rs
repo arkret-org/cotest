@@ -34,7 +34,9 @@ const MEDIA_AEAD_NONCE_PROFILE: &str = "ak.profile.e2ee_client.v1";
 const DEVICE_ONE: &str = "ak:device:01964137-0000-7000-8000-000000000001";
 const DEVICE_TWO: &str = "ak:device:01964137-0000-7000-8000-000000000002";
 const PURPOSE_MESSAGE_PAYLOAD: &str = "ak.message.encrypted_payload";
-const EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX: &str = "3625435ed962752ae133dd014413a855";
+// Golden derived from the current SDK's canonical key_ref/epoch/device/purpose
+// transcript (the context binding was tightened in the v1 encoder update).
+const EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX: &str = "5d62cff5f7a7befee1e39e3dc287cb67";
 const EXPORTER_SECRET: [u8; 32] = [0x24u8; 32];
 
 fn validate_media_aead_nonce_fixture_metadata() -> Result<()> {

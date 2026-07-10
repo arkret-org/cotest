@@ -28,7 +28,7 @@ struct PrincipalControlRealmInput {
     principal_id: String,
 }
 
-/// 05-2 — flat inputs for the SSK→device `ak-device-trust-bind-v1` canonical
+/// 05-2 — flat inputs for the SSK→device `ak.device-trust-bind-v1` canonical
 /// signing input. Mirrors the args the TS `deviceTrustBindingInput` byte-mirror
 /// helper takes, but the bytes are produced by the SDK.
 #[derive(Debug, Deserialize)]
@@ -96,7 +96,7 @@ fn principal_control_realm(input: Value) -> Result<Value> {
 /// 05-2 — deserialize a full `ak.cross_signing.publish` payload (the shape the
 /// TS `buildCrossSigningPublishPayload` helper emits) into the SDK's
 /// `CrossSigningPublishContent` and return the SDK-authoritative PSK→SSK and
-/// PSK→USK `ak-cross-signing-bind-v1` canonical signing inputs. The TS
+/// PSK→USK `ak.cross-signing-bind-v1` canonical signing inputs. The TS
 /// `crossSigningBindingInput` byte-mirror is regression-checked against these
 /// bytes so a drift in the prefix / body field-set / canonical-JSON encoding
 /// is caught cross-language.
@@ -115,7 +115,7 @@ fn cross_signing_binding_input(input: Value) -> Result<Value> {
     }))
 }
 
-/// 05-2 — SDK-authoritative `ak-device-trust-bind-v1` canonical signing input
+/// 05-2 — SDK-authoritative `ak.device-trust-bind-v1` canonical signing input
 /// (SSK→device) for the TS `deviceTrustBindingInput` byte-mirror to regress
 /// against.
 fn device_trust_binding_input(input: Value) -> Result<Value> {

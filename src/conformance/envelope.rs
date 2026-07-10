@@ -615,8 +615,8 @@ fn validate_event_envelope(
         > context.max_prev_refs as u64
     {
         return Ok(EventEnvelopeDecision::reject(
-            "payload_too_large",
-            "prev_refs <= 128",
+            "schema_violation",
+            "prev_refs_too_large",
         ));
     }
     let event_id = value_field_str(event, "event_id")?;

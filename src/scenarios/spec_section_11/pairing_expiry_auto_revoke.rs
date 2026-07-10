@@ -6,8 +6,8 @@
 //! invalidated within one tick.
 
 use anyhow::{Result, anyhow};
-use chrono::{Duration, Utc};
 use arkret_core::AgentInteropSessionId;
+use chrono::{Duration, Utc};
 
 pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
     let session = AgentInteropSessionId::new(

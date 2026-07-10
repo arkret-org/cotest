@@ -16,9 +16,6 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow};
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::{DateTime, Utc};
 use arkret_core::canonical::canonical_json_bytes;
 use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::{
@@ -28,6 +25,9 @@ use arkret_core::{
     KeyBackupRetention, KeyBackupSignatureAlgorithm, KeyBackupUnlockProof,
     KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, RecoverySessionId,
 };
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 use serde_json::{Value, json};

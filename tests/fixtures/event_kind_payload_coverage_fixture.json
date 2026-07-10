@@ -131,7 +131,7 @@
       "event_kind": "ak.consent.grant",
       "cell_family": "ak.component.consent.grant.v1",
       "lattice": "or_set",
-      "bottom": "reject",
+      "bottom": "inert",
       "payload_shape": { "consent_id": "ak:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "peer": "did:web:bob.example", "scope": "messaging" }
     },
     {
@@ -139,7 +139,7 @@
       "event_kind": "ak.consent.revoke",
       "cell_family": "ak.component.consent.grant.v1",
       "lattice": "or_set",
-      "bottom": "reject",
+      "bottom": "inert",
       "payload_shape": { "consent_id": "ak:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "revokes_op_id": "ak:event:7fd5ae82-44e2-7a8a-9a4b-8857991142f0" }
     },
     {
@@ -147,7 +147,7 @@
       "event_kind": "ak.capability.grant",
       "cell_family": "ak.component.capability.grant.v1",
       "lattice": "or_set",
-      "bottom": "reject",
+      "bottom": "inert",
       "payload_shape": { "grant_id": "ak:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "actions": ["ak.message.create"] }
     },
     {
@@ -155,7 +155,7 @@
       "event_kind": "ak.capability.revoke",
       "cell_family": "ak.component.capability.grant.v1",
       "lattice": "or_set",
-      "bottom": "reject",
+      "bottom": "inert",
       "payload_shape": { "revokes_grant_id": "ak:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }
     },
     {
@@ -163,7 +163,7 @@
       "event_kind": "ak.device.authorize",
       "cell_family": "ak.component.device.authorization.v1",
       "lattice": "or_set",
-      "bottom": "reject",
+      "bottom": "inert",
       "payload_shape": { "device_id": "dev_alice_01", "principal_id": "did:web:alice.example" }
     },
     {
@@ -227,7 +227,7 @@
       "event_kind": "ak.session.grant",
       "cell_family": "ak.component.session.grant.v1",
       "lattice": "or_set",
-      "bottom": "reject",
+      "bottom": "inert",
       "payload_shape": { "session_id": "ak:session:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "device_id": "dev_alice_01" }
     }
   ],

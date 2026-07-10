@@ -16,12 +16,12 @@
 //! - `ak.vector.call_signal.proof_detached_jws.v1`
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{SecondsFormat, TimeZone, Utc};
 use arkret_core::{
     CALL_SIGNAL_TYPES, CallSignalSeqKey, CallSignalState, EphemeralEnvelope, Proof,
     validate_call_signal_envelope, validate_signal_seq,
 };
 use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use chrono::{SecondsFormat, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 

@@ -6,8 +6,8 @@
 //! (`e2e/helpers/cross-signing-harness.ts`) because it cannot call the Rust SDK
 //! directly. The authoritative construction is
 //! `arkret_crypto::CrossSigningPublishContent::{self,user}_signing_binding_input`
-//! (`ak-cross-signing-bind-v1`) and `arkret_crypto::DeviceTrustBinding::canonical_input`
-//! (`ak-device-trust-bind-v1`); soland verifies the resulting signatures with
+//! (`ak.cross-signing-bind-v1`) and `arkret_crypto::DeviceTrustBinding::canonical_input`
+//! (`ak.device-trust-bind-v1`); soland verifies the resulting signatures with
 //! those exact bytes, so any drift between the TS mirror and the SDK is a silent
 //! signature false-negative/false-positive vector.
 //!
@@ -23,12 +23,11 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
+use arkret_core::{DeviceId, Did};
+use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
 use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::Value;
-
-use arkret_core::{DeviceId, Did};
-use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
 
 #[derive(Debug, Deserialize)]
 struct GoldenDoc {
@@ -74,10 +73,18 @@ fn golden_fixture_path() -> PathBuf {
 /// byte-mirror.
 pub fn run_cross_signing_binding_golden_suite() -> Result<()> {
     let path = golden_fixture_path();
-    let raw = std::fs::read_to_string(&path)
-        .with_context(|| format!("read cross-signing binding golden fixture {}", path.display()))?;
-    let doc: GoldenDoc = serde_json::from_str(&raw)
-        .with_context(|| format!("parse cross-signing binding golden fixture {}", path.display()))?;
+    let raw = std::fs::read_to_string(&path).with_context(|| {
+        format!(
+            "read cross-signing binding golden fixture {}",
+            path.display()
+        )
+    })?;
+    let doc: GoldenDoc = serde_json::from_str(&raw).with_context(|| {
+        format!(
+            "parse cross-signing binding golden fixture {}",
+            path.display()
+        )
+    })?;
 
     if doc.cross_signing_vectors.is_empty() {
         bail!("cross-signing binding golden fixture has no cross_signing_vectors");
@@ -91,18 +98,19 @@ pub fn run_cross_signing_binding_golden_suite() -> Result<()> {
     for vector in &doc.cross_signing_vectors {
         let content: CrossSigningPublishContent =
             serde_json::from_value(vector.publish_payload.clone()).with_context(|| {
-                format!("vector {}: parse publish_payload into SDK type", vector.name)
+                format!(
+                    "vector {}: parse publish_payload into SDK type",
+                    vector.name
+                )
             })?;
-        let self_signing = b64.encode(
-            content
-                .self_signing_binding_input()
-                .map_err(|err| anyhow::anyhow!("vector {}: self_signing input: {err}", vector.name))?,
-        );
-        let user_signing = b64.encode(
-            content
-                .user_signing_binding_input()
-                .map_err(|err| anyhow::anyhow!("vector {}: user_signing input: {err}", vector.name))?,
-        );
+        let self_signing =
+            b64.encode(content.self_signing_binding_input().map_err(|err| {
+                anyhow::anyhow!("vector {}: self_signing input: {err}", vector.name)
+            })?);
+        let user_signing =
+            b64.encode(content.user_signing_binding_input().map_err(|err| {
+                anyhow::anyhow!("vector {}: user_signing input: {err}", vector.name)
+            })?);
         if self_signing != vector.expected_self_signing_input_b64 {
             bail!(
                 "vector {}: SDK self_signing input drift from golden\n  golden:   {}\n  produced: {}",

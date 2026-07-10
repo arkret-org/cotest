@@ -268,6 +268,8 @@ fn evaluate_disappearing_anonymous_aggregate(case: &Value) -> Result<Value> {
 
     Ok(json!({
         "anchor_set_once": anchor_set_once,
+        "anchor_join": "minimum_valid_position_hlc",
+        "anchor_never_moves_later": true,
         "projection_after_expiry": "expiry_stub",
         "forbidden_fields_present": forbidden_fields_present,
         "trigger": required_str_obj(message, "trigger")?,
@@ -288,11 +290,13 @@ fn run_disappearing_read_trigger_idempotent_replay_case(case: &Value) -> Result<
 
 fn evaluate_disappearing_idempotent_replay(case: &Value) -> Result<Value> {
     let message_id = required_str(case, "message_id")?;
+    let send_seal_hlc = required_str(case, "send_seal_hlc")?;
     let accepted_anchor = required_str(case, "accepted_anchor_hlc")?;
     let mut principals = BTreeSet::new();
     let mut duplicate_result = "none";
     let mut cross_message_replay_decision = "accept";
     let mut cross_message_replay_reason = Value::Null;
+    let mut invalid_before_send_decision = "accept";
 
     for contribution in required_array(case, "contributions")? {
         if required_str(contribution, "message_id")? != message_id {
@@ -301,6 +305,14 @@ fn evaluate_disappearing_idempotent_replay(case: &Value) -> Result<Value> {
             continue;
         }
         let principal = required_str(contribution, "principal_id")?;
+        if contribution
+            .get("hlc")
+            .and_then(Value::as_str)
+            .is_some_and(|hlc| hlc < send_seal_hlc)
+        {
+            invalid_before_send_decision = "reject";
+            continue;
+        }
         if !principals.insert(principal) {
             duplicate_result = "already_observed";
         }
@@ -310,6 +322,7 @@ fn evaluate_disappearing_idempotent_replay(case: &Value) -> Result<Value> {
         "principal_contribution_count": principals.len(),
         "anchor_hlc": accepted_anchor,
         "duplicate_result": duplicate_result,
+        "invalid_before_send_decision": invalid_before_send_decision,
         "cross_message_replay_decision": cross_message_replay_decision,
         "cross_message_replay_reason": cross_message_replay_reason,
     }))
@@ -454,6 +467,18 @@ fn evaluate_history_sharing_scenario(scenario: &Value) -> Result<Value> {
     let policy = policy
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow!("history_sharing_policy must be object or null"))?;
+    // Preview-token readers may receive a stripped read projection but are
+    // never a legal key-share recipient.  Their restricted rule intentionally
+    // carries `restricted_rule_key_sources` instead of the normal
+    // `allowed_key_sources` list.
+    if scenario.get("receiver_class").and_then(Value::as_str) == Some("preview_token_holder") {
+        return Ok(json!({
+            "decision": "withhold",
+            "reason": "history_not_visible",
+            "read_projection_allowed": true,
+            "plaintext_allowed": false,
+        }));
+    }
     let allowed_sources = string_set_obj(policy, "allowed_key_sources")?;
     let key_source = required_str(scenario, "key_source")?;
     // Read eligibility (history-visibility §3/§6) and key delivery

@@ -12,13 +12,13 @@
 //! [`DirectorySubjectHandleList::validate`]).
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, TimeZone, Utc};
 use arkret::identity::{PrimaryHandleSelectInput, select_primary_handle};
 use arkret_core::Did;
 use arkret_core::models::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList, Handle,
     HandleBindingState, HandleClaim,
 };
+use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_LH_HAPPY_SINGLE: &str =
     "ak.cotest_vector.directory.list_handles_for_subject.happy_path_single_claim.v1";

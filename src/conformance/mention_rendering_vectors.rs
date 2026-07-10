@@ -15,10 +15,10 @@
 //! `Verified → Cached → NameOnly → Unresolved`.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, TimeZone, Utc};
 use arkret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
 use arkret_core::Did;
 use arkret_core::models::{Handle, HandleBindingState, HandleClaim, Mention};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::json;
 
 pub const VECTOR_ID_MENTION_NEW_ACCEPTED: &str =

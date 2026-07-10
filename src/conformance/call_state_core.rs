@@ -6,7 +6,6 @@
 //! core `Fsm` lattice directly.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, Duration, TimeZone, Utc};
 use arkret::{
     MediaServiceAnchors, call_media_token_exchange, participant_binding_signing_input,
     verify_call_media_token_outcome,
@@ -18,6 +17,7 @@ use arkret_core::{
     CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody, CellRef, DeviceId, Did,
     LatticeOp, LatticeOpType, MoveId, PARTICIPANT_BINDING_SCHEMA, RealmId, base64url_encode,
 };
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 

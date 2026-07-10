@@ -4,7 +4,6 @@
 //! Welcome digest binding against the spec artifact fixture.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{DateTime, Utc};
 use arkret_core::error::{ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED, ERROR_CODE_KEYPACKAGE_UNKNOWN};
 use arkret_core::{
     DeviceId, Did, Hash, KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome,
@@ -12,6 +11,7 @@ use arkret_core::{
     OP_KEYS_KEYPACKAGES_CONSUME, OP_KEYS_KEYPACKAGES_REVOKE, OP_KEYS_KEYPACKAGES_UPLOAD, RealmId,
     validate_mls_welcome_claim_envelope,
 };
+use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;

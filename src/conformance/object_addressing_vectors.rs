@@ -27,12 +27,12 @@
 //!     `source_refs`, `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
-use chrono::{TimeZone, Utc};
 use arkret_core::models::{
     AddressAction, DirectoryTargetResolutionOutcome, LinkType, RealmRef, TargetDescriptor,
     TargetKind, build_address, build_https_landing, parse_address, target_digest,
     verify_token_target,
 };
+use chrono::{TimeZone, Utc};
 use serde_json::json;
 
 // ── Vector ids ───────────────────────────────────────────────────────────────

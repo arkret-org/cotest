@@ -826,14 +826,38 @@ fn evaluate_moderation_appeal_atomicity(scenario: &Value) -> Result<Value> {
                     "original_decision_active": true,
                 }))
             } else {
+                // An overturn lifts the reversible decision atomically, but
+                // irreversible effects (for example a redaction tombstone)
+                // remain in force.  Surface both facts so the fixture can
+                // assert that no original plaintext is resurrected.
+                let tombstone_present = scenario
+                    .get("original_irreversible_effect")
+                    .and_then(Value::as_str)
+                    == Some("redaction_tombstone");
                 Ok(json!({
                     "decision": "accept",
                     "appeal_state": "decided",
                     "original_decision_active": false,
+                    "redaction_tombstone_present": tombstone_present,
+                    "original_content_resurrected": false,
                 }))
             }
         }
         "modify" => {
+            if scenario
+                .get("same_batch_lift_target_matches")
+                .and_then(Value::as_bool)
+                != Some(true)
+            {
+                return Ok(json!({
+                    "decision": "reject",
+                    "reason": "appeal_modify_missing_lift",
+                    "appeal_state": "under_review",
+                    "original_decision_active": true,
+                    "replacement_decision_active": false,
+                    "partial_state_written": false,
+                }));
+            }
             if scenario
                 .get("modify_decision_ref_in_same_batch")
                 .and_then(Value::as_bool)
@@ -853,6 +877,8 @@ fn evaluate_moderation_appeal_atomicity(scenario: &Value) -> Result<Value> {
                     "decision": "accept",
                     "appeal_state": "decided",
                     "original_decision_active": false,
+                    "replacement_decision_active": true,
+                    "partial_state_written": false,
                 }))
             }
         }

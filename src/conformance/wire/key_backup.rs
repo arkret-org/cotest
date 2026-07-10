@@ -319,7 +319,9 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
     // Re-run the authoritative validator explicitly (idempotent with the
     // deserialize `try_from` shim) to pin cotest onto the SDK's rules.
     encryption.validate().map_err(|e| {
-        anyhow!("vector {name} SDK KeyBackupEncryption::validate() rejected a well-formed envelope: {e}")
+        anyhow!(
+            "vector {name} SDK KeyBackupEncryption::validate() rejected a well-formed envelope: {e}"
+        )
     })?;
     if encryption.recipient_method != arkret_core::KeyBackupRecipientMethod::PassphraseKdf {
         bail!("vector {name} SDK parsed recipient_method != passphrase_kdf");

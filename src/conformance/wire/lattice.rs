@@ -295,7 +295,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
 ///   in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log};
 /// * cell_family namespace prefix is `ak.component.`;
 /// * a single cell_family is bound to exactly one lattice across all kinds that declare it;
-/// * bottom mode ∈ {reject, expose};
+/// * bottom mode ∈ {reject, expose, inert};
 /// * every family in `expected_cell_family_lattice_bindings.<lattice>` MUST resolve to that lattice
 ///   in the live registry; conversely, every live cell_family that appears in the registry MUST be
 ///   listed under the correct lattice in the expected bindings.
@@ -316,7 +316,11 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         "counter",
         "ordered_log",
     ];
-    const VALID_BOTTOM_MODES: &[&str] = &["reject", "expose"];
+    // `inert` is the registry's explicit mode for lattices whose join cannot
+    // produce a Bottom diagnostic (for example an or-set).  It is distinct
+    // from `reject` (quarantine on Bottom) and `expose` (surface conflict),
+    // and is normative in event-kind-registry.json.
+    const VALID_BOTTOM_MODES: &[&str] = &["reject", "expose", "inert"];
 
     // Walk the live registry and build cell_family → set<lattice>.
     let registry = crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;

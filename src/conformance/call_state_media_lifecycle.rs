@@ -24,7 +24,6 @@
 //! error enum grows them.
 
 use anyhow::{Result, bail};
-use chrono::{DateTime, Utc};
 use arkret_core::error::{
     ERROR_CODE_SCHEMA_VIOLATION, REASON_LEGAL_HOLD_ACTIVE,
     REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED, REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED,
@@ -37,6 +36,7 @@ use arkret_core::{
     CallStatePayload, CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, Did,
     EventId, GrantId, Hash, PolicyId, RealmId,
 };
+use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 // ── Canonical vector ids (registered in vector-registry.json) ───────────────
