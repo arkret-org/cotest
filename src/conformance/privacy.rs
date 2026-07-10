@@ -580,86 +580,11 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            "minimal_metadata_author_credential_is_the_only_author_trust_anchor" => {
-                let base = case
-                    .base
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("privacy fixture {} missing base", case.name))?;
-                let actor = base
-                    .get("actor_id")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                        anyhow!("privacy fixture {} base actor_id missing", case.name)
-                    })?;
-                let leaf_identity = base
-                    .pointer("/leaf/credential_identity_utf8")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                        anyhow!("privacy fixture {} leaf identity missing", case.name)
-                    })?;
-                if actor != leaf_identity {
-                    bail!(
-                        "privacy fixture {} base actor/credential identity mismatch",
-                        case.name
-                    );
-                }
-                let proof_key = base
-                    .pointer("/proof/resolved_public_key")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("privacy fixture {} proof key missing", case.name))?;
-                let leaf_key = base
-                    .pointer("/leaf/signature_key")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                        anyhow!("privacy fixture {} leaf signature key missing", case.name)
-                    })?;
-                if proof_key != leaf_key {
-                    bail!("privacy fixture {} base proof/leaf key mismatch", case.name);
-                }
-                let cases = case.cases.as_ref().ok_or_else(|| {
-                    anyhow!("privacy fixture {} missing mutation cases", case.name)
-                })?;
-                let mut seen_accept = false;
-                let mut seen_reject = 0usize;
-                for mutation in cases {
-                    let expected = mutation.get("expected").ok_or_else(|| {
-                        anyhow!("privacy fixture {} mutation missing expected", case.name)
-                    })?;
-                    match expected.get("result").and_then(Value::as_str) {
-                        Some("accept_pairwise_author") => seen_accept = true,
-                        Some("reject") => {
-                            seen_reject += 1;
-                            if expected.get("reason_code").and_then(Value::as_str)
-                                != Some("minimal_metadata_author_credential_invalid")
-                                && expected
-                                    .get("principal_directory_queries")
-                                    .and_then(Value::as_u64)
-                                    != Some(0)
-                            {
-                                bail!(
-                                    "privacy fixture {} mutation reject reason drifted",
-                                    case.name
-                                );
-                            }
-                        }
-                        other => bail!(
-                            "privacy fixture {} unexpected mutation result {other:?}",
-                            case.name
-                        ),
-                    }
-                }
-                if !seen_accept || seen_reject < 4 {
-                    bail!(
-                        "privacy fixture {} does not cover active accept + mutation rejects",
-                        case.name
-                    );
-                }
-                record_vector_event(
-                    "privacy.minimal_metadata_author_credential",
-                    &json!({"actor_id": actor, "group_id": base.get("group_id")}),
-                    &json!({"active_unique_leaf": "accept_pairwise_author", "principal_directory_queries": 0}),
-                    &json!({"active_unique_leaf": seen_accept, "mutation_rejects": seen_reject}),
-                );
+            // §9.14 `ak.vector.identity_link.minimal_metadata_author_credential.v1`
+            // — dedicated runner (the fixture's `runner` field names it);
+            // executed here too so the suite covers every fixture case.
+            super::privacy_security::MINIMAL_METADATA_AUTHOR_CREDENTIAL_CASE => {
+                super::privacy_security::run_minimal_metadata_author_credential_vector()?;
             }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }

@@ -95,7 +95,7 @@ blake3 = {version = "1.5.5",default-features = false}
 chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
-arkret = {path = "../arkret-rust-sdk/crates/sdk"}
+arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "mls"]}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth"}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}

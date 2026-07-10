@@ -36,6 +36,7 @@ mod policy_server;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
+mod privacy_security;
 mod private_chat_privacy;
 mod profile_matrix;
 mod profile_registry;
@@ -242,6 +243,7 @@ pub use principal_server_certification::{
     validate_principal_server_certification,
 };
 pub use privacy::run_privacy_security_fixture_suite;
+pub use privacy_security::run_minimal_metadata_author_credential_vector;
 pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
 pub use profile_matrix::{run_profile_requirement_gate_suite, validate_server_profile_claims};
 pub use profile_registry::{
