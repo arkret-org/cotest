@@ -44,6 +44,7 @@ import {
 } from "../../helpers/users";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
+import { buildGenesisEntry, type WebvhKey } from "../../helpers/webvh-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -53,7 +54,6 @@ function sha256Digest(value: Buffer): string {
 
 const BASE58BTC_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const WEBVH_SCID_PLACEHOLDER = "{SCID}";
 const CROSS_SIGNING_BINDING_LABEL = "ak.cross-signing-bind-v1\n";
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
   "ak.profile.mls_governance_binding.full.v1";
@@ -61,6 +61,7 @@ const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
 
 type Ed25519FixtureKey = {
   privateKey: KeyObject;
+  publicKey: Buffer;
   publicKeyMultibase: string;
 };
 
@@ -120,70 +121,28 @@ function ed25519FixtureKey(): Ed25519FixtureKey {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   return {
     privateKey,
+    publicKey: rawEd25519PublicKey(publicKey),
     publicKeyMultibase: ed25519PublicKeyMultibase(publicKey),
   };
 }
 
-function ed25519SignatureB64url(privateKey: KeyObject, payload: Buffer): string {
+function asWebvhKey(key: Ed25519FixtureKey): WebvhKey {
+  return {
+    privateKey: key.privateKey,
+    publicKey: key.publicKey,
+    multibase: key.publicKeyMultibase,
+  };
+}
+
+function ed25519SignatureB64url(
+  privateKey: KeyObject,
+  payload: Buffer,
+): string {
   return nodeSign(null, payload, privateKey).toString("base64url");
-}
-
-function ed25519SignatureBase58(privateKey: KeyObject, payload: Buffer): string {
-  return `z${base58btc(nodeSign(null, payload, privateKey))}`;
-}
-
-// Bare base58btc sha256 multihash — no multibase `z` prefix (did:webvh v1.0).
-function sha256MultihashBase58btc(payload: Buffer): string {
-  return base58btc(
-    Buffer.concat([
-      Buffer.from([0x12, 0x20]),
-      createHash("sha256").update(payload).digest(),
-    ]),
-  );
 }
 
 function canonicalBytes(value: unknown): Buffer {
   return Buffer.from(canonicalJson(value), "utf8");
-}
-
-function substituteScid(value: unknown, scid: string): unknown {
-  if (typeof value === "string") {
-    return value.replaceAll(WEBVH_SCID_PLACEHOLDER, scid);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => substituteScid(item, scid));
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-        key,
-        substituteScid(item, scid),
-      ]),
-    );
-  }
-  return value;
-}
-
-// did:webvh v1.0 entry-hash preimage: `versionId` set to the predecessor
-// anchor (the SCID for the genesis entry).
-function anchorVersionId(
-  value: Record<string, unknown>,
-  prevAnchor: string,
-): Record<string, unknown> {
-  return { ...value, versionId: prevAnchor };
-}
-
-function webvhAuthorities(): { methodAuthority: string; serviceEndpoint: string } {
-  const serviceEndpoint = solandBaseUrl().replace(/\/$/, "");
-  const parsed = new URL(serviceEndpoint);
-  const host = parsed.hostname;
-  if (!host.includes(".")) {
-    throw new Error(`soland host must contain a dot for did:webvh: ${host}`);
-  }
-  return {
-    methodAuthority: parsed.port ? `${host}%3A${parsed.port}` : host,
-    serviceEndpoint,
-  };
 }
 
 async function registerWebvhPrincipal(
@@ -194,59 +153,20 @@ async function registerWebvhPrincipal(
   const updateKey = ed25519FixtureKey();
   const ssk = ed25519FixtureKey();
   const usk = ed25519FixtureKey();
-  const { methodAuthority, serviceEndpoint } = webvhAuthorities();
+  const serviceEndpoint = solandBaseUrl().replace(/\/$/, "");
   const didKeyFragment = "did-key-1";
   const updateKeyFragment = "update-key-1";
-  const placeholderDid = `did:webvh:${WEBVH_SCID_PLACEHOLDER}:${methodAuthority}:webvh:${localId}`;
-  const placeholderDidKeyId = `${placeholderDid}#${didKeyFragment}`;
   const versionTime = canonicalTimestamp();
-  const didDocumentSkeleton = {
-    "@context": ["https://www.w3.org/ns/did/v1"],
-    id: placeholderDid,
-    verificationMethod: [
-      {
-        id: placeholderDidKeyId,
-        type: "Multikey",
-        controller: placeholderDid,
-        publicKeyMultibase: psk.publicKeyMultibase,
-      },
-    ],
-    authentication: [placeholderDidKeyId],
-    assertionMethod: [placeholderDidKeyId],
+  const built = buildGenesisEntry({
+    baseUrl: serviceEndpoint,
+    localId,
+    didKey: asWebvhKey(psk),
+    updateKey: asWebvhKey(updateKey),
     alsoKnownAs: [],
-    service: [
-      {
-        id: `${placeholderDid}#soland`,
-        type: "ArkretPrincipalServer",
-        serviceEndpoint,
-      },
-    ],
-  };
-  const entrySkeleton = {
-    versionId: WEBVH_SCID_PLACEHOLDER,
+    serviceEndpoint,
     versionTime,
-    parameters: {
-      scid: WEBVH_SCID_PLACEHOLDER,
-      method: "did:webvh:1.0",
-      updateKeys: [updateKey.publicKeyMultibase],
-    },
-    state: didDocumentSkeleton,
-  };
-  const scid = sha256MultihashBase58btc(canonicalBytes(entrySkeleton));
-  const realizedEntry = substituteScid(entrySkeleton, scid) as Record<string, unknown>;
-  const versionHash = sha256MultihashBase58btc(
-    canonicalBytes(anchorVersionId(realizedEntry, scid)),
-  );
-  const signedEntry = {
-    ...realizedEntry,
-    versionId: `1-${versionHash}`,
-  };
-  const proof = {
-    type: "DataIntegrityProof",
-    cryptosuite: "eddsa-jcs-2022",
-    verificationMethod: `did:key:${updateKey.publicKeyMultibase}#${updateKey.publicKeyMultibase}`,
-    proofValue: ed25519SignatureBase58(updateKey.privateKey, canonicalBytes(signedEntry)),
-  };
+  });
+  const proof = (built.entry.proof as Record<string, unknown>[])[0];
   const response = await request.post(
     `${solandBaseUrl()}/_soland/root/identity/webvh/register`,
     {
@@ -587,7 +507,9 @@ async function sendEncryptedTimelineMessage(
 ): Promise<string> {
   await userPage.gotoTimelineRealm(realmId);
 
-  const secondarySecureButton = userPage.page.getByTestId("send-e2ee-move-button");
+  const secondarySecureButton = userPage.page.getByTestId(
+    "send-e2ee-move-button",
+  );
   const primarySendButton = userPage.page.getByTestId("send-chat-button");
   const secureSendButton = (await secondarySecureButton
     .isVisible()
@@ -914,9 +836,7 @@ test.describe("MLS group encryption", () => {
               keypackage_ref: keypackageRef,
               key_package: keyPackage,
               keypackage_digest: keypackageDigest,
-              cipher_suites: [
-                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
-              ],
+              cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
               capabilities: keypackageCapabilities,
               device_signature: deviceSignature,
               created_at: createdAt,
@@ -996,7 +916,9 @@ test.describe("MLS group encryption", () => {
     expect(claimAgain.ok()).toBeTruthy();
     const claimAgainBody = await claimAgain.json();
     expect(claimAgainBody.claims ?? []).toEqual([]);
-    expect(claimAgainBody.failures?.[0]?.reason_code).toBe("mls_keypackage_not_found");
+    expect(claimAgainBody.failures?.[0]?.reason_code).toBe(
+      "mls_keypackage_not_found",
+    );
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `MLS lifecycle ${stamp}`,
@@ -1052,7 +974,9 @@ test.describe("MLS group encryption", () => {
     const welcomeId = typedId("mls_welcome");
     const welcomeEventId = typedId("event");
     const welcomeCiphertext = b64url(`opaque-mls-welcome-${stamp}`);
-    const welcomeDigest = sha256Digest(Buffer.from(welcomeCiphertext, "base64url"));
+    const welcomeDigest = sha256Digest(
+      Buffer.from(welcomeCiphertext, "base64url"),
+    );
     const claimEnvelopeCreatedAt = canonicalTimestamp();
     const claimEnvelopeUnsigned = {
       keypackage_ref: keypackageRef,
@@ -1176,15 +1100,18 @@ test.describe("MLS group encryption", () => {
     expect(pendingAfterDrain.ok()).toBeTruthy();
     expect((await pendingAfterDrain.json()).welcomes).toEqual([]);
 
-    const staleCommit = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(aliceToken),
-      data: signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.mls.commit",
-        payload: commitPayload(`opaque-stale-commit-${stamp}`),
-      }),
-    });
+    const staleCommit = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ak.mls.commit",
+          payload: commitPayload(`opaque-stale-commit-${stamp}`),
+        }),
+      },
+    );
     expect([409, 412, 422]).toContain(staleCommit.status());
     expect(wireErrCode(await staleCommit.json())).toBe("mls_epoch_skew");
   });
@@ -1204,8 +1131,12 @@ test.describe("MLS group encryption", () => {
     test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
-      createDpopUserSession(request, "s11-decrypt-alice", { skipDeviceEnrollment: true }),
-      createDpopUserSession(request, "s11-decrypt-bob", { skipDeviceEnrollment: true }),
+      createDpopUserSession(request, "s11-decrypt-alice", {
+        skipDeviceEnrollment: true,
+      }),
+      createDpopUserSession(request, "s11-decrypt-bob", {
+        skipDeviceEnrollment: true,
+      }),
     ]);
     if (!aliceSession || !bobSession) {
       // Fail loud on the joint harness (coauth up) instead of green-skipping the
@@ -1262,13 +1193,21 @@ test.describe("MLS group encryption", () => {
       await bobPage.gotoTimelineRealm(realmId);
 
       const plaintext = `joined member decrypts post-join ciphertext ${stamp}`;
-      const submittedWire = await sendEncryptedTimelineMessage(alicePage, realmId, plaintext);
+      const submittedWire = await sendEncryptedTimelineMessage(
+        alicePage,
+        realmId,
+        plaintext,
+      );
       expect(submittedWire).not.toContain(plaintext);
 
-      await expect(alicePage.timelineEvent(plaintext)).toBeVisible({ timeout: 30_000 });
+      await expect(alicePage.timelineEvent(plaintext)).toBeVisible({
+        timeout: 30_000,
+      });
 
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(bobPage.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
+      await expect(bobPage.page.getByTestId("message-list")).toBeVisible({
+        timeout: 120_000,
+      });
       // An invitee viewing encrypted content is required to set up a Recovery Key
       // first; its modal (no dismiss) otherwise blocks the encrypted timeline from
       // rendering. Complete it before asserting the decrypted message. (soland DOES
@@ -1277,7 +1216,9 @@ test.describe("MLS group encryption", () => {
       await bobPage.completeRecoveryKeySetupIfPrompted();
       const bobMessage = bobPage.timelineEvent(plaintext);
       await expect(bobMessage).toBeVisible({ timeout: 60_000 });
-      await expect(bobMessage.getByTestId("event-body")).toContainText(plaintext);
+      await expect(bobMessage.getByTestId("event-body")).toContainText(
+        plaintext,
+      );
 
       // Bidirectional decrypt: the admission fork (add-member commit rejected
       // `governance_binding_mismatch` while its Welcome still landed) broke BOTH
@@ -1285,15 +1226,25 @@ test.describe("MLS group encryption", () => {
       // read the other. Assert a message Bob authors after joining also decrypts
       // for Alice, not just Alice → Bob.
       const bobPlaintext = `joined member round-trips back to admin ${stamp}`;
-      const bobWire = await sendEncryptedTimelineMessage(bobPage, realmId, bobPlaintext);
+      const bobWire = await sendEncryptedTimelineMessage(
+        bobPage,
+        realmId,
+        bobPlaintext,
+      );
       expect(bobWire).not.toContain(bobPlaintext);
-      await expect(bobPage.timelineEvent(bobPlaintext)).toBeVisible({ timeout: 30_000 });
+      await expect(bobPage.timelineEvent(bobPlaintext)).toBeVisible({
+        timeout: 30_000,
+      });
 
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
+      await expect(alicePage.page.getByTestId("message-list")).toBeVisible({
+        timeout: 120_000,
+      });
       const aliceSeesBob = alicePage.timelineEvent(bobPlaintext);
       await expect(aliceSeesBob).toBeVisible({ timeout: 60_000 });
-      await expect(aliceSeesBob.getByTestId("event-body")).toContainText(bobPlaintext);
+      await expect(aliceSeesBob.getByTestId("event-body")).toContainText(
+        bobPlaintext,
+      );
 
       const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
       const rawEvents = await request.get(rawEventsUrl, {
@@ -1310,7 +1261,11 @@ test.describe("MLS group encryption", () => {
       expect(rawWire).toContain("mls-exporter-aead");
       expect(rawWire).not.toContain(plaintext);
 
-      await stepShot(bobPage.page, testInfo, "joined-member-decrypted-e2ee-message");
+      await stepShot(
+        bobPage.page,
+        testInfo,
+        "joined-member-decrypted-e2ee-message",
+      );
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
@@ -1392,7 +1347,8 @@ test.describe("MLS group encryption", () => {
         {
           timeout: 60_000,
           intervals: [1_000, 2_000, 5_000],
-          message: "carol's synced event stream should surface the post-join event",
+          message:
+            "carol's synced event stream should surface the post-join event",
         },
       )
       .toContain(postJoinEventId);
@@ -1497,7 +1453,8 @@ test.describe("MLS group encryption", () => {
           {
             timeout: 120_000,
             intervals: [1_000, 2_000, 5_000],
-            message: "Bob joined member row should appear in synced admin projection",
+            message:
+              "Bob joined member row should appear in synced admin projection",
           },
         )
         .toBeGreaterThan(0);
@@ -1514,8 +1471,14 @@ test.describe("MLS group encryption", () => {
       );
       await expect(epochBanner).toBeVisible({ timeout: 30_000 });
       await expect(epochBanner).toContainText("epoch_update_required");
-      await expect(alicePage.page.getByTestId("send-chat-button")).toBeDisabled();
-      await stepShot(alicePage.page, testInfo, "epoch-update-required-after-ban");
+      await expect(
+        alicePage.page.getByTestId("send-chat-button"),
+      ).toBeDisabled();
+      await stepShot(
+        alicePage.page,
+        testInfo,
+        "epoch-update-required-after-ban",
+      );
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
@@ -1781,129 +1744,128 @@ test.describe("MLS group encryption", () => {
   // card-detail-edit-status ("MLS state is not ready on this device yet ...")
   // and returns false BEFORE any strand.update event is built or submitted —
   // so the encrypted scope never falls back to a plaintext write.
-  test(
-    "fresh device without MLS welcome/restore refuses encrypted private writes instead of silently downgrading to plaintext",
-    async ({ browser, request }) => {
-      test.setTimeout(300_000);
-      const stamp = Date.now();
-      const coauth = coauthBaseUrl();
-      if (!coauth) {
-        assertJointStackNotRequired("MLS not-ready browser login");
-        test.skip(
-          true,
-          "coauth DPoP session-grant login is required for fresh-device MLS",
-        );
+  test("fresh device without MLS welcome/restore refuses encrypted private writes instead of silently downgrading to plaintext", async ({
+    browser,
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const stamp = Date.now();
+    const coauth = coauthBaseUrl();
+    if (!coauth) {
+      assertJointStackNotRequired("MLS not-ready browser login");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for fresh-device MLS",
+      );
+      return;
+    }
+
+    const boardTitle = `Not-ready Board ${stamp}`;
+    const listTitle = `Not-ready Todos ${stamp}`;
+    const cardTitle = `Not-ready encrypted card ${stamp}`;
+    const privateDescription = `Not-ready secret detail ${stamp}`;
+
+    // 1) deviceA (the MLS group creator) builds the encrypted realm + board +
+    //    list + card via the UI so a genuine MLS group exists.
+    const account = await registerCoauthPasswordAccount(request, coauth);
+    const deviceAFlow = await openDpopUserPageForAccount(
+      browser,
+      request,
+      `mls-not-ready-a-${stamp}`,
+      account,
+      { coauthBase: coauth },
+    );
+    const deviceBFlow = await openDpopUserPageForAccount(
+      browser,
+      request,
+      `mls-not-ready-b-${stamp}`,
+      account,
+      { coauthBase: coauth, prepareMlsDevice: false },
+    );
+    if (!deviceAFlow || !deviceBFlow) {
+      assertJointStackNotRequired("MLS not-ready browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const deviceA = deviceAFlow.page;
+
+    // 2) deviceB = same account, fresh device id, fresh dev session => empty
+    //    local store: NO Welcome applied, NO encrypted-history restore.
+    const deviceB = deviceBFlow.page;
+
+    // Capture any plaintext private write that would leak the description.
+    // A plaintext ak.strand.update would carry `privateDescription` verbatim
+    // in its body/fields.body patch; an encrypted one never does.
+    const plaintextPrivateWrites: string[] = [];
+    deviceB.page.on("request", (req) => {
+      if (
+        req.method() !== "POST" ||
+        !req.url().includes("/_arkret/self/events")
+      ) {
         return;
       }
-
-      const boardTitle = `Not-ready Board ${stamp}`;
-      const listTitle = `Not-ready Todos ${stamp}`;
-      const cardTitle = `Not-ready encrypted card ${stamp}`;
-      const privateDescription = `Not-ready secret detail ${stamp}`;
-
-      // 1) deviceA (the MLS group creator) builds the encrypted realm + board +
-      //    list + card via the UI so a genuine MLS group exists.
-      const account = await registerCoauthPasswordAccount(request, coauth);
-      const deviceAFlow = await openDpopUserPageForAccount(
-        browser,
-        request,
-        `mls-not-ready-a-${stamp}`,
-        account,
-        { coauthBase: coauth },
-      );
-      const deviceBFlow = await openDpopUserPageForAccount(
-        browser,
-        request,
-        `mls-not-ready-b-${stamp}`,
-        account,
-        { coauthBase: coauth, prepareMlsDevice: false },
-      );
-      if (!deviceAFlow || !deviceBFlow) {
-        assertJointStackNotRequired("MLS not-ready browser login");
-        test.skip(true, "coauth DPoP session-grant login is unavailable");
-        return;
+      const postData = req.postData() ?? "";
+      if (
+        postData.includes("ak.strand.update") &&
+        postData.includes(privateDescription)
+      ) {
+        plaintextPrivateWrites.push(postData);
       }
-      const deviceA = deviceAFlow.page;
+    });
 
-      // 2) deviceB = same account, fresh device id, fresh dev session => empty
-      //    local store: NO Welcome applied, NO encrypted-history restore.
-      const deviceB = deviceBFlow.page;
-
-      // Capture any plaintext private write that would leak the description.
-      // A plaintext ak.strand.update would carry `privateDescription` verbatim
-      // in its body/fields.body patch; an encrypted one never does.
-      const plaintextPrivateWrites: string[] = [];
-      deviceB.page.on("request", (req) => {
-        if (
-          req.method() !== "POST" ||
-          !req.url().includes("/_arkret/self/events")
-        ) {
-          return;
-        }
-        const postData = req.postData() ?? "";
-        if (
-          postData.includes("ak.strand.update") &&
-          postData.includes(privateDescription)
-        ) {
-          plaintextPrivateWrites.push(postData);
-        }
+    try {
+      const realmId = await deviceA.createRealm({
+        title: `MLS not-ready ${stamp}`,
+        summary: "fresh device must refuse plaintext private writes",
+        discoverability: "unlisted",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
       });
+      const boardId = await createKanbanBoardListAndCard(
+        deviceA.page,
+        realmId,
+        boardTitle,
+        listTitle,
+        cardTitle,
+      );
 
-      try {
-        const realmId = await deviceA.createRealm({
-          title: `MLS not-ready ${stamp}`,
-          summary: "fresh device must refuse plaintext private writes",
-          discoverability: "unlisted",
-          joinRule: "invite",
-          historyVisibility: "joined",
-          encryptionProfile: "mls_rfc9420",
-        });
-        const boardId = await createKanbanBoardListAndCard(
-          deviceA.page,
-          realmId,
-          boardTitle,
-          listTitle,
-          cardTitle,
-        );
+      // 3) deviceB opens the board, opens the card (title is plaintext
+      //    container metadata it can render), and tries to add a private
+      //    description.
+      await deviceB.page.goto(`/kanban/${realmId}/board/${boardId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(
+        deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+      ).toBeVisible({ timeout: 90_000 });
 
-        // 3) deviceB opens the board, opens the card (title is plaintext
-        //    container metadata it can render), and tries to add a private
-        //    description.
-        await deviceB.page.goto(`/kanban/${realmId}/board/${boardId}`, {
-          waitUntil: "domcontentloaded",
-        });
-        await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
-          timeout: 120_000,
-        });
-        await expect(
-          deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
-        ).toBeVisible({ timeout: 90_000 });
+      await attemptCardDescription(deviceB.page, cardTitle, privateDescription);
 
-        await attemptCardDescription(deviceB.page, cardTitle, privateDescription);
+      // 4a) The not-ready affordance is surfaced. The MissingWelcome guard
+      //     copy lands in card-detail-edit-status (and board-status).
+      await expect(
+        deviceB.page.getByTestId("card-detail-edit-status"),
+      ).toContainText(/MLS state is not ready/i, { timeout: 60_000 });
 
-        // 4a) The not-ready affordance is surfaced. The MissingWelcome guard
-        //     copy lands in card-detail-edit-status (and board-status).
-        await expect(
-          deviceB.page.getByTestId("card-detail-edit-status"),
-        ).toContainText(/MLS state is not ready/i, { timeout: 60_000 });
+      // 4b) The private description was NEVER committed to the card — the
+      //     write was refused, not silently downgraded.
+      await expect(
+        deviceB.page
+          .locator('[data-testid="card-description-panel"]:visible')
+          .filter({ hasText: privateDescription }),
+      ).toHaveCount(0);
 
-        // 4b) The private description was NEVER committed to the card — the
-        //     write was refused, not silently downgraded.
-        await expect(
-          deviceB.page
-            .locator('[data-testid="card-description-panel"]:visible')
-            .filter({ hasText: privateDescription }),
-        ).toHaveCount(0);
-
-        // 4c) No plaintext ak.strand.update carrying the private body ever left
-        //     the client (so the server never had to accept or bounce one).
-        expect(
-          plaintextPrivateWrites,
-          plaintextPrivateWrites.join("\n"),
-        ).toEqual([]);
-      } finally {
-        await Promise.allSettled([deviceA.close(), deviceB.close()]);
-      }
-    },
-  );
+      // 4c) No plaintext ak.strand.update carrying the private body ever left
+      //     the client (so the server never had to accept or bounce one).
+      expect(plaintextPrivateWrites, plaintextPrivateWrites.join("\n")).toEqual(
+        [],
+      );
+    } finally {
+      await Promise.allSettled([deviceA.close(), deviceB.close()]);
+    }
+  });
 });
