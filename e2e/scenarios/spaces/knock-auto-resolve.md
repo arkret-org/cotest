@@ -30,7 +30,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 ### Phase A — alice 配置 knock_restricted + 全 auto-resolve gates
 
 1. alice createRealm `R`,`join_rule=knock_restricted`
-2. alice 通过 API 写 `ak:cell:realm.join_policy.v1:<R>`:
+2. alice 通过 API 写 `ak:cell:ak.component.realm.join_policy.v1:<R>`:
    ```json
    {
      "gates": [

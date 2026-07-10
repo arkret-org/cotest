@@ -390,7 +390,7 @@ conformance_test!(
     /// Round-22 — Event-kind ? LatticeKind dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core lattice, no cell_family appears in
-    /// two lattices, nameRealm is ck.component.*, bottom ? {reject, expose},
+    /// two lattices, namespace is ak.component.*, bottom is in {reject, expose},
     /// and the fixture's expected_cell_family_lattice_bindings exactly matches
     /// the registry.
     event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,

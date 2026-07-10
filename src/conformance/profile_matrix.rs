@@ -531,8 +531,10 @@ fn collect_cell_refs(
         if value.trim().is_empty() {
             bail!("requirement {field} contains an empty value");
         }
-        if require_cell_prefix && !value.starts_with("ak:cell:") {
-            bail!("requirement {field} references non-cell value {value}");
+        if require_cell_prefix && arkret_core::CellRef::new(value.to_owned()).is_err() {
+            bail!(
+                "requirement {field} references non-canonical cell value {value}; expected ak:cell:ak.component.*.v<n>:<subject>"
+            );
         }
         refs.insert(value.to_owned());
     }

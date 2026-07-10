@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.event_kind_lattice_dispatch_vectors.v1",
   "version": "2026-05-09",
-  "comment": "Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors per spec event-kind-registry.json + soland/src/reducer/lattice_kinds.rs::default_lattice_registry. Validates that the spec event-kind registry's (event_kind, cell_family, lattice, bottom) tuples are coherent: (a) every active reducer-input durable kind that declares cell_family also declares a single lattice in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log}; (b) any single cell_family is bound to exactly ONE lattice across ALL kinds that declare it (no cell_family in two lattices); (c) cell_family namespace prefix is `ck.component.`; (d) bottom ∈ {reject, expose}; (e) the aggregate cell-family set covers the spec-mandated families used by Move/Anchor pipeline. Cross-checks the LIVE event-kind-registry (not a frozen snapshot). The validator is structural — does not run dispatch — and complements `validate_event_kind_registry` by surfacing the same-cell-family/different-lattice drift loudly. Pattern mirrors `discovery_profile_fixture` and the Round-21 anchor_view_compaction approach: the fixture declares EXPECTED canonical lattices per cell-family AND the validator confirms the live registry matches. Drift from either side fails loudly.",
+  "comment": "Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors per spec event-kind-registry.json + soland/src/reducer/lattice_kinds.rs::default_lattice_registry. Validates that the spec event-kind registry's (event_kind, cell_family, lattice, bottom) tuples are coherent: (a) every active reducer-input durable kind that declares cell_family also declares a single lattice in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log}; (b) any single cell_family is bound to exactly ONE lattice across ALL kinds that declare it (no cell_family in two lattices); (c) cell_family namespace prefix is `ak.component.`; (d) bottom ∈ {reject, expose}; (e) the aggregate cell-family set covers the spec-mandated families used by Move/Anchor pipeline. Cross-checks the LIVE event-kind-registry (not a frozen snapshot). The validator is structural — does not run dispatch — and complements `validate_event_kind_registry` by surfacing the same-cell-family/different-lattice drift loudly. Pattern mirrors `discovery_profile_fixture` and the Round-21 anchor_view_compaction approach: the fixture declares EXPECTED canonical lattices per cell-family AND the validator confirms the live registry matches. Drift from either side fails loudly.",
   "encoder": {
     "core_lattices": ["or_set", "mv_register", "cas_register", "fsm", "counter", "ordered_log"],
     "valid_bottom_modes": ["reject", "expose"],
@@ -107,11 +107,11 @@
       }
     },
     {
-      "name": "cell_family_namespace_is_cx_component",
+      "name": "cell_family_namespace_is_ak_component",
       "scope": "live_registry",
       "expected": {
         "outcome": "namespace_ok",
-        "rationale": "Every cell_family MUST start with `ck.component.`. Non-conforming families would not match any LatticeKind impl in `default_lattice_registry`."
+        "rationale": "Every cell_family MUST start with `ak.component.`. Non-conforming families would not match any LatticeKind impl in `default_lattice_registry`."
       }
     },
     {
@@ -183,7 +183,7 @@
       }
     },
     {
-      "name": "cell_family_outside_cx_component_namespace_rejected",
+      "name": "cell_family_outside_ak_component_namespace_rejected",
       "scope": "synthetic",
       "drift": {
         "kind": "wrong_namespace",
@@ -192,7 +192,7 @@
       "expected": {
         "outcome": "reject",
         "reason_code": "cell_family_invalid_namespace",
-        "rationale": "Spec mandates cell_family starts with `ck.component.`. Any other prefix is a registry drift bug."
+        "rationale": "Spec mandates cell_family starts with `ak.component.`. Any other prefix is a registry drift bug."
       }
     },
     {

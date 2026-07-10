@@ -157,6 +157,11 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                 let mut cell_families: std::collections::BTreeSet<&str> = Default::default();
                 for effect in effects {
                     let cell = required_str(effect, "cell")?;
+                    arkret_core::CellRef::new(cell.to_owned()).map_err(|_| {
+                        anyhow!(
+                            "vector {name} cell {cell} is not a canonical ak:cell:ak.component.*.v<n>:<subject> reference"
+                        )
+                    })?;
                     let family = cell
                         .strip_prefix("ak:cell:")
                         .and_then(|tail| tail.split(':').next())
@@ -288,7 +293,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
 /// Validator pins:
 /// * every active+reducer_input+durable_event kind that declares `cell_family` declares a `lattice`
 ///   in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log};
-/// * cell_family namespace prefix is `ck.component.`;
+/// * cell_family namespace prefix is `ak.component.`;
 /// * a single cell_family is bound to exactly one lattice across all kinds that declare it;
 /// * bottom mode ∈ {reject, expose};
 /// * every family in `expected_cell_family_lattice_bindings.<lattice>` MUST resolve to that lattice
@@ -339,7 +344,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         };
         if !family.starts_with("ak.component.") {
             bail!(
-                "live event-kind-registry: cell_family {family} does not start with `ck.component.`"
+                "live event-kind-registry: cell_family {family} does not start with `ak.component.`"
             );
         }
         let lattice = required_str(entry, "lattice")?;
@@ -452,7 +457,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
                 "live_registry",
                 "single_lattice_per_cell_family",
             )
-            | ("cell_family_namespace_is_cx_component", "live_registry", "namespace_ok")
+            | ("cell_family_namespace_is_ak_component", "live_registry", "namespace_ok")
             | ("bottom_mode_is_reject_or_expose", "live_registry", "bottom_mode_ok") => {
                 covered_invariants.insert(name);
             }
@@ -500,7 +505,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     for required in [
         "every_active_reducer_input_durable_kind_with_cell_family_declares_one_lattice",
         "no_cell_family_appears_in_two_distinct_lattices",
-        "cell_family_namespace_is_cx_component",
+        "cell_family_namespace_is_ak_component",
         "bottom_mode_is_reject_or_expose",
         "expected_or_set_families_resolve_to_or_set_in_live_registry",
         "expected_cas_register_families_resolve_to_cas_register_in_live_registry",
@@ -549,7 +554,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
                 let cf = required_str(drift, "cell_family")?;
                 if cf.starts_with("ak.component.") {
                     bail!(
-                        "negative vector {name} drift.cell_family {cf} IS in ck.component.* namespace — not a real drift"
+                        "negative vector {name} drift.cell_family {cf} IS in ak.component.* namespace — not a real drift"
                     );
                 }
                 neg_wrong_ns = true;
