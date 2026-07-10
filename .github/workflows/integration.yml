@@ -40,6 +40,26 @@ jobs:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
+          ref: ${{ env.SIBLING_REF }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/yoface
+          path: yoface
+          ref: ${{ env.SIBLING_REF }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
       # P5.1 — upstream checkout failures MUST hard-fail the job. The previous
       # `continue-on-error: true` markers were a circle-rollout bootstrap
       # tolerance; once the sibling repos are on the `circle-rollout` ref the
@@ -97,6 +117,20 @@ jobs:
         run: |
           npm ci || npm install
           npx playwright install --with-deps chromium
+      - name: install dioxus cli
+        run: cargo install dioxus-cli --version 0.7.9 --locked
+      - name: terminal-auth UI logout live lane
+        working-directory: cotest
+        shell: pwsh
+        run: >
+          ./scripts/run-joint-e2e.ps1
+          -StartCoauth
+          -RunProfile joint-smoke
+          -PlaywrightProject chromium
+          -Grep 'terminal auth loss|transient self-path failure'
+          -SkipNpmInstall
+          -SkipBrowserInstall
+          -StartupTimeoutSeconds 900
       - name: run cotest harness
         working-directory: cotest
         # Default tests must pass before any live opt-in gates run.

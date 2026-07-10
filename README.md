@@ -334,6 +334,14 @@ The platform lane sends a captured authentic provider delivery to a deployed
 bridge. The protected environment supplies the bridge URL, webhook path,
 base64 body, and signature headers; secrets are never committed as fixtures.
 
+The MLS lane first runs inkson's real OpenMLS vector as a wasm test inside
+headless Chrome, distinguishing never-joined, removed-member, wrong-key, and
+damaged-ciphertext outcomes. It then runs the paired device-revoke control-plane
+sentinel against the declared soland/inkson versions, so cryptographic and
+server `device_revoked` evidence are retained separately. The former Playwright
+scenario that fabricated commit/tree digests was deleted rather than retained
+as a second, misleading `mls-data-plane` test.
+
 ## Runtime Modes
 
 - `process`: spawn the SUT with local `cargo run` against a checkout manifest.

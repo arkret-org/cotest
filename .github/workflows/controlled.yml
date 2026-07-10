@@ -19,6 +19,11 @@ on:
         description: Comma-separated component@version/ref declarations
         required: true
         type: string
+      sibling_ref:
+        description: Cross-repository ref used for the controlled build
+        required: true
+        default: main
+        type: string
       mls_harness_version:
         description: MLS browser/wasm harness version or commit
         required: false
@@ -59,9 +64,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: cotest
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
+          ref: ${{ inputs.sibling_ref }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
+          ref: ${{ inputs.sibling_ref }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ inputs.sibling_ref }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/yoface
+          path: yoface
+          ref: ${{ inputs.sibling_ref }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ inputs.sibling_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - uses: dtolnay/rust-toolchain@master
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          toolchain: "1.96"
+          targets: wasm32-unknown-unknown
       - name: Validate controlled-lane preconditions
         working-directory: cotest
         run: bash scripts/check_tier_preconditions.sh "${{ inputs.lane }}"
@@ -70,10 +110,29 @@ jobs:
         run: |
           npm ci || npm install
           npx playwright install --with-deps chromium
-      - name: Run MLS data-plane tier
+      - name: Install wasm-bindgen test runner
+        if: inputs.lane == 'mls-data-plane'
+        working-directory: inkson
+        shell: bash
+        run: |
+          version=$(awk '/name = "wasm-bindgen"/{found=1; next} found && /version = /{gsub(/[" ]/, "", $3); print $3; exit}' Cargo.lock)
+          test -n "$version"
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: Run real MLS wasm crypto vector in headless Chrome
+        if: inputs.lane == 'mls-data-plane'
+        working-directory: inkson
+        env:
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
+        run: cargo test --target wasm32-unknown-unknown --test mls_data_plane_wasm -- --nocapture
+      - name: Run paired device-revoke control-plane sentinel
         if: inputs.lane == 'mls-data-plane'
         working-directory: cotest/e2e
-        run: npx playwright test --config playwright.config.ts --project=chromium --grep '@mls-data-plane'
+        run: >
+          npx playwright test
+          --config playwright.config.ts
+          --project=chromium
+          tests/identity/multi-device.spec.ts
+          --grep 'Device 1 revokes Device 2 via'
       - name: Run platform live tier
         if: inputs.lane == 'platform-live'
         working-directory: cotest/e2e
