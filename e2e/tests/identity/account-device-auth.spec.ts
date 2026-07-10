@@ -186,10 +186,11 @@ test.describe("account auth + device strand", () => {
     // The restore leg is the same refresh endpoint: a device holder proof, now
     // verified against the Principal Server device signing-key directory, lets an
     // authorized device resume its grant chain without re-authentication. We
-    // enrol the device signing key, then drive the holder-proof refresh and
-    // assert the rotated grant once again authorizes `/_arkret/self/*`.
+    // enrol the device signing key, revoke the live grant through the standard
+    // logout endpoint, then drive the holder-proof refresh and assert the
+    // rotated grant once again authorizes `/_arkret/self/*`.
     const coauth = coauthBaseUrl();
-    test.skip(!coauth, "coauth not started for this run");
+    test.skip(!coauth, "PRECONDITION_COAUTH_UNAVAILABLE: coauth is not configured");
 
     const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "ad-restore");
 
@@ -198,7 +199,49 @@ test.describe("account auth + device strand", () => {
       coauth!,
       onboarded,
     );
-    test.skip(!enrolledKey, "coauth device-enroll seam not available in this build");
+    test.skip(
+      !enrolledKey,
+      "PRECONDITION_DEVICE_ENROLL_UNAVAILABLE: coauth device-enroll seam is unavailable",
+    );
+
+    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+    const beforeLogout = await request.get(meUrl, {
+      headers: selfPathGrantHeaders({
+        deviceKey: onboarded.deviceKey,
+        grantJwt: onboarded.grantJwt,
+        method: "GET",
+        url: meUrl,
+      }),
+    });
+    expect(beforeLogout.ok(), await beforeLogout.text()).toBeTruthy();
+
+    const logoutUrl = `${solandBaseUrl()}/_arkret/gate/account/logout`;
+    const logout = await request.post(logoutUrl, {
+      headers: selfPathGrantHeaders({
+        deviceKey: onboarded.deviceKey,
+        grantJwt: onboarded.grantJwt,
+        method: "POST",
+        url: logoutUrl,
+      }),
+    });
+    const logoutText = await logout.text();
+    expect([200, 204], `soft logout: ${logoutText}`).toContain(logout.status());
+    if (logout.status() === 200) {
+      expect(JSON.parse(logoutText).revoked).toBe(true);
+    }
+
+    const afterLogout = await request.get(meUrl, {
+      headers: selfPathGrantHeaders({
+        deviceKey: onboarded.deviceKey,
+        grantJwt: onboarded.grantJwt,
+        method: "GET",
+        url: meUrl,
+      }),
+    });
+    expect(
+      [401, 403],
+      `revoked grant still authorized viewer: ${afterLogout.status()} ${await afterLogout.text()}`,
+    ).toContain(afterLogout.status());
 
     const refreshBody = buildHolderProofRefreshBody({
       grantJwt: onboarded.grantJwt,
@@ -221,7 +264,6 @@ test.describe("account auth + device strand", () => {
     expect(restoredGrant).not.toBe(onboarded.grantJwt);
 
     // The restored grant authorizes the self-path with the same device key.
-    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
     const meResp = await request.get(meUrl, {
       headers: selfPathGrantHeaders({
         deviceKey: onboarded.deviceKey,
