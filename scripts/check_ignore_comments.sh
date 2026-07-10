@@ -3,12 +3,19 @@
 # be preceded by a `/// Issue:` or `/// Gating:` doc comment so reviewers can
 # trace why the test is skipped and what unblocks it.
 #
+# ARC-0002 (重构计划 2026-07-10): additionally, every `#[ignore]` must carry a
+# machine-readable `/// Tier:` line declaring its test layer:
+#   contract       — deterministic cross-project contract check (PR lane)
+#   live           — needs real service binaries / Docker / live stack (nightly lane)
+#   mls-data-plane — needs real MLS group state / epoch secrets / ciphertext
+#                    (controlled-environment lane)
+#
 # Usage:
 #   scripts/check_ignore_comments.sh
 #
 # Exits non-zero if any `#[ignore]` line in `tests/` or `src/` (excluding
-# `target/`) is not preceded — within a small lookback window — by a
-# `/// Issue:` or `/// Gating:` doc-comment line.
+# `target/`) is not preceded — within a small lookback window — by BOTH a
+# `/// Issue:` or `/// Gating:` doc-comment line and a valid `/// Tier:` line.
 
 set -euo pipefail
 
@@ -55,20 +62,27 @@ for file in $FILES; do
     # Window of preceding lines (exclusive of the #[ignore] line itself).
     snippet=$(sed -n "${start},$((lineno - 1))p" "$file")
 
-    if echo "$snippet" | grep -qE '^\s*///\s*(Issue|Gating):'; then
-      continue
+    ok=1
+    if ! echo "$snippet" | grep -qE '^\s*///\s*(Issue|Gating):'; then
+      echo "missing /// Issue: or /// Gating: doc comment above #[ignore] at ${file}:${lineno}" >&2
+      ok=0
     fi
-
-    echo "missing /// Issue: or /// Gating: doc comment above #[ignore] at ${file}:${lineno}" >&2
-    missing=$((missing + 1))
+    if ! echo "$snippet" | grep -qE '^\s*///\s*Tier:\s*(contract|live|mls-data-plane)\s*$'; then
+      echo "missing or invalid /// Tier: (contract|live|mls-data-plane) above #[ignore] at ${file}:${lineno}" >&2
+      ok=0
+    fi
+    if [ "$ok" -eq 0 ]; then
+      missing=$((missing + 1))
+    fi
   done
 done
 
 if [ "$missing" -gt 0 ]; then
   echo >&2
-  echo "FAIL: ${missing} of ${total} #[ignore] attribute(s) lack a tracking doc comment." >&2
-  echo "Add `/// Issue: <ticket>` or `/// Gating: <reason>` immediately above each one." >&2
+  echo "FAIL: ${missing} of ${total} #[ignore] attribute(s) lack tracking doc comments." >&2
+  echo "Add `/// Issue: <ticket>` or `/// Gating: <reason>` plus" >&2
+  echo "`/// Tier: contract|live|mls-data-plane` immediately above each one." >&2
   exit 1
 fi
 
-echo "ok: ${total} #[ignore] attribute(s) all have /// Issue: or /// Gating: tracking comments"
+echo "ok: ${total} #[ignore] attribute(s) all have /// Issue:|Gating: and /// Tier: comments"

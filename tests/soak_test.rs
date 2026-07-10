@@ -29,6 +29,7 @@ use serial_test::serial;
 /// harness hook, per-process memory introspection, `hdrhistogram`, and
 /// an anchor-store row-count probe.
 /// Issue: CT-18 (soak test)
+/// Tier: live
 #[tokio::test]
 #[ignore = "long-running soak; opt-in via --profile soak; also needs persistent-storage harness hook + memory introspection + hdrhistogram + anchor row-count probe (see CT-18)"]
 #[serial]

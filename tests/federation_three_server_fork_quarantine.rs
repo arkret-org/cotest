@@ -20,6 +20,7 @@ use serial_test::serial;
 /// E2E-FED-2 (RFC 9421 verify) + §4.5 peer frontier comparison surface
 /// (`GET /_arkret/peer/events/frontier` + `duplicate_conflict` reason_code).
 /// Issue: CT-1 (three-server fork quarantine)
+/// Tier: live
 #[tokio::test]
 #[ignore = "needs soland E2E-FED-1 (outbound HTTP federation push) + E2E-FED-2 (RFC 9421 verify) + §4.5 peer frontier comparison surface (`GET /_arkret/peer/events/frontier` + `duplicate_conflict` reason_code) — see CT-1"]
 #[serial]

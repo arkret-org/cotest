@@ -210,6 +210,9 @@ fn sdk_blake3_digest_backend_matches_known_vector() {
 /// Run with `cargo test -p cotest --test canonical_hash_convergence \
 /// dump_canonical_digests -- --nocapture` to regenerate the pinned values
 /// after a fixture rename.
+/// Gating: diagnostic-only — prints canonical digests; run explicitly with
+/// `--nocapture` after a fixture rename.
+/// Tier: contract
 #[test]
 #[ignore = "diagnostic — run with --nocapture to print canonical digests"]
 fn dump_canonical_digests() {
@@ -363,6 +366,9 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     );
 }
 
+/// Gating: diagnostic-only — regenerates the R3.2 identity digest baseline;
+/// run explicitly with `--nocapture`.
+/// Tier: contract
 #[test]
 #[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
 fn dump_r3_2_identity_digests() {

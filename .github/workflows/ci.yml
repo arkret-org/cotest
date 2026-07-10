@@ -70,7 +70,7 @@ jobs:
       - name: check_ignore_comments hygiene
         working-directory: cotest
         # Every `#[ignore]` attribute must carry a `/// Issue:` or
-        # `/// Gating:` justification — see scripts/check_ignore_comments.sh.
+        # `/// Gating:` justification and a valid `/// Tier:` declaration.
         run: bash scripts/check_ignore_comments.sh
 
   typecheck:

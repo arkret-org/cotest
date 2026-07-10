@@ -155,6 +155,9 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
     Ok(())
 }
 
+/// Gating: G2 blocked — agent KeyPackage upload/claim and encrypted Welcome
+/// consume path is not exposed end-to-end.
+/// Tier: mls-data-plane
 #[test]
 #[ignore = "G2 blocked: agent KeyPackage upload/claim and encrypted Welcome consume path is not exposed end-to-end"]
 fn agent_member_encrypted_realm_e2e_requires_agent_welcome_lifecycle() -> Result<()> {

@@ -15,6 +15,7 @@ use serial_test::serial;
 /// Gating: needs a `starid` binary on PATH (or `STARID_BIN=...`); spawns
 /// a real process to exercise replay-rejection.
 /// Issue: ST-1 (starid replay rejection)
+/// Tier: live
 #[tokio::test]
 #[ignore = "needs starid binary on PATH or `STARID_BIN=...`"]
 #[serial]

@@ -23,6 +23,7 @@ use serial_test::serial;
 /// Gating: needs tagged soland releases + cross-version build helper +
 /// schema-migration manifest + persistent-storage harness hook.
 /// Issue: CT-17 (N-1 → N upgrade replay)
+/// Tier: live
 #[tokio::test]
 #[ignore = "needs tagged soland releases + cross-version build helper + schema-migration manifest + persistent-storage harness hook (see CT-17)"]
 #[serial]

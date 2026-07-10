@@ -300,6 +300,25 @@ the proof shape:
   placeholder (see `.github/workflows/integration.yml`
   `production_rejects_placeholder_proof_e2e`).
 
+## Test Tiers (ARC-0002)
+
+Every test belongs to exactly one tier; the tier decides which CI lane runs it:
+
+- `contract` — deterministic cross-project contract/conformance checks. Default
+  tier for every non-`#[ignore]` cargo test and runs in the PR lane.
+- `live` — needs real service binaries, Docker, or a multi-service stack.
+  Nightly lane (`integration.yml`). All Playwright e2e specs are `live` by
+  construction (they target a real soland).
+- `mls-data-plane` — needs real MLS group state, epoch secrets, and application
+  ciphertext (CT-002 harness). Controlled-environment lane. Playwright tests in
+  this tier carry the `@mls-data-plane` tag.
+
+Rust: every `#[ignore]` must carry `/// Tier: contract|live|mls-data-plane`
+plus the existing `/// Issue:`/`/// Gating:` reason —
+`scripts/check_ignore_comments.sh` enforces both in CI. Playwright: a missing
+prerequisite must be an explicit `test.skip(cond, "reason")` / `test.fixme`
+with a machine-readable reason string, never a silent pass.
+
 ## Runtime Modes
 
 - `process`: spawn the SUT with local `cargo run` against a checkout manifest.

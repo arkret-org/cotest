@@ -34,6 +34,7 @@ fn chaos_inject_smoke() {
 /// running Docker daemon. Skipped on Windows and on default-feature
 /// builds because testcontainers + named-pipe docker-engine on Windows
 /// is unreliable.
+/// Tier: live
 #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
 #[test]
 #[ignore = "Gating: requires `test-with-containers` feature + Linux + Docker daemon"]

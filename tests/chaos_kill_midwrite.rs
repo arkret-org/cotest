@@ -15,6 +15,7 @@ use serial_test::serial;
 /// child. Needs `COTEST_SOLAND_DATABASE_URL` or Docker so an ephemeral
 /// Postgres is available. Tracked by CT-16.
 /// Issue: CT-16 (chaos kill mid-write recovery harness)
+/// Tier: live
 #[tokio::test]
 #[ignore = "destructive process-kill chaos test; requires COTEST_SOLAND_DATABASE_URL or Docker for ephemeral Postgres"]
 #[serial]

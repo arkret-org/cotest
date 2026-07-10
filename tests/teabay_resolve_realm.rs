@@ -18,6 +18,7 @@ use serial_test::serial;
 /// Gating: spawns teabay against a real Postgres — needs `TEABAY_BIN`
 /// and `DATABASE_URL`.
 /// Issue: TB-2 (resolve-realm three-lookup fixture)
+/// Tier: live
 #[tokio::test]
 #[ignore = "needs teabay binary + DATABASE_URL"]
 #[serial]

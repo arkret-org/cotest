@@ -30,6 +30,7 @@ use tokio::sync::Mutex;
 /// reducer ordering end-to-end; without it the SDK-level happy path
 /// invariant still runs but cannot surface scheduling regressions.
 /// Issue: C.8 (concurrency: Circle member delta ordering)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "C.8 concurrent Circle member delta — needs live soland stack to observe reducer ordering; SDK-level invariant runs unconditionally"]
 #[serial]

@@ -22,6 +22,7 @@ use serial_test::serial;
 /// soland+coauth+sodmin bootstrap + Rust-side playwright integration +
 /// soland device-revoke cascade.
 /// Issue: SOD-1 (sodmin device revoke cascade)
+/// Tier: live
 #[tokio::test]
 #[ignore = "needs sodmin Dioxus UI spawner + soland+coauth+sodmin joint bootstrap + Rust-side playwright + soland device-revoke cascade (see SOD-1)"]
 #[serial]

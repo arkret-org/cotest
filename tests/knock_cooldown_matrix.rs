@@ -22,6 +22,7 @@ use serial_test::serial;
 /// enforcement (`cooldown_after_reject`, `application_ttl`,
 /// `max_open_applications_per_actor`).
 /// Issue: CT-4 (knock cooldown matrix)
+/// Tier: live
 #[tokio::test]
 #[ignore = "needs soland reducer support for knock join_rule + member.application + cooldown/TTL/max_open enforcement (see CT-4)"]
 #[serial]

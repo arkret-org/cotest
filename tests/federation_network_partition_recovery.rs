@@ -78,6 +78,7 @@ impl Sim {
 /// `#[ignore]` per C.8 review: the simulator is a controlled-partition
 /// smoke, not a per-PR gate.
 /// Issue: C.8 (federation partition recovery)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "C.8 controlled partition simulation; opt-in only — full 3-soland wire version tracked under CT-1"]
 #[serial]

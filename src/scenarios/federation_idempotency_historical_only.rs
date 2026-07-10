@@ -508,6 +508,7 @@ mod tests {
     /// rotation harness so the idempotency cache replay can be observed end-
     /// to-end.
     /// Issue: federation-idempotency-e2e-docker
+    /// Tier: live
     #[test]
     #[ignore = "TODO(federation-idempotency-e2e-docker): needs live soland + teabay + key rotation harness"]
     fn live_multi_server_federation_historical_only_docker_e2e() {

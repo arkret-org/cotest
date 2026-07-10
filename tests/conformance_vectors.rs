@@ -236,6 +236,9 @@ fn object_addressing_vector_suite_runs_clean() {
 // the strand/message subject through the access gate) lands once teabay's
 // strand/message access-gate is reachable end-to-end.
 
+/// Gating: R3.3-followup — needs teabay strand/message access-gate reachable
+/// end-to-end.
+/// Tier: live
 #[test]
 #[ignore = "R3.3-followup: needs teabay strand/message access-gate"]
 fn test_oa_cot_5_share_resolve_open_live() {
@@ -260,6 +263,9 @@ fn test_oa_cot_5_share_resolve_open_live() {
 // their R3.2 work, so the live legs stay `#[ignore]` with a reason string
 // (cotest CI enforces ignore-comment hygiene).
 
+/// Gating: R3.2-followup — needs soland MID reducer + coauth issuer +
+/// inkson/floria refresh wiring live.
+/// Tier: live
 #[test]
 #[ignore = "R3.2-followup: soland MID reducer + coauth issuer + inkson/floria refresh \
             not yet wired for the end-to-end handle reassignment strand"]
@@ -275,6 +281,9 @@ fn test_cot_1_handle_reassignment_full_strand_live() {
     unreachable!("integration target gated on soland/coauth/inkson R3.2 P0 wiring");
 }
 
+/// Gating: R3.2-followup — needs teabay
+/// `POST /_arkret/find/directory/list-handles-for-subject` live.
+/// Tier: live
 #[test]
 #[ignore = "R3.2-followup: teabay POST /_arkret/find/directory/list-handles-for-subject \
             endpoint not yet reachable end-to-end across services"]
@@ -289,6 +298,9 @@ fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
     unreachable!("integration target gated on teabay DIR-TBY-1 P0 wiring");
 }
 
+/// Gating: R3.2-followup — inkson §3.8.2 mention renderer fallback
+/// transitions not yet observable live.
+/// Tier: live
 #[test]
 #[ignore = "R3.2-followup: inkson §3.8.2 mention renderer fallback transitions \
             (verified → cached → name-only → unresolved) not yet observable live"]
@@ -370,6 +382,8 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
 // terminal deactivate. Soland's reducer FSM is `TODO(R3.1)` so the
 // integration path is ignored.
 
+/// Gating: R3.1 — soland agent FSM reducer wiring not yet implemented.
+/// Tier: live
 #[test]
 #[ignore = "R3.1: soland agent FSM reducer wiring not yet implemented"]
 fn test_1_agent_fsm_active_paused_active_deactivated_terminal() {
@@ -385,6 +399,8 @@ fn test_1_agent_fsm_active_paused_active_deactivated_terminal() {
 
 // ─── P0 / TEST-2 — Media token exchange happy path + 4 negative paths ──────
 
+/// Gating: live cotest harness for media-token exchange is not wired yet.
+/// Tier: live
 #[test]
 #[ignore = "live cotest harness for media-token exchange is not wired yet"]
 fn test_2_media_token_exchange_happy_path_plus_negatives() {
@@ -402,6 +418,8 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
 
 // ─── P0 / TEST-3 — `accountable_principals.strict_reject` profile toggle ───
 
+/// Gating: R3.1 — soland strict_reject reducer branch not yet implemented.
+/// Tier: live
 #[test]
 #[ignore = "R3.1: soland strict_reject reducer branch not yet implemented"]
 fn test_3_accountable_principals_strict_reject_profile_toggle() {
@@ -514,6 +532,9 @@ fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
     Ok(())
 }
 
+/// Gating: R3.1 — soland recovery reducer + witness-revoke check not yet
+/// implemented.
+/// Tier: live
 #[test]
 #[ignore = "R3.1: soland recovery reducer + witness-revoke check not yet implemented"]
 fn test_5_recovery_policy_state_machine_live() {
@@ -528,6 +549,9 @@ fn test_5_recovery_policy_state_machine_live() {
 
 // ─── P0 / TEST-6 — Handle homograph reject ─────────────────────────────────
 
+/// Gating: R3.1 — soland / starid / teabay wire-level homograph reject not
+/// yet implemented.
+/// Tier: live
 #[test]
 #[ignore = "R3.1: soland / starid / teabay wire-level homograph reject not yet implemented"]
 fn test_6_handle_homograph_script_mix_or_nfc_variant_reject() {
@@ -644,6 +668,9 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     Ok(())
 }
 
+/// Gating: R3.1 — soland MID reducer + `ak.profile.update` field-level delta
+/// wiring not yet implemented.
+/// Tier: live
 #[test]
 #[ignore = "R3.1: soland MID reducer + ak.profile.update field-level delta wiring not yet implemented"]
 fn test_7_cx_member_identity_update_live() {
@@ -756,6 +783,9 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     Ok(())
 }
 
+/// Gating: R3.1 — live coauth + soland + teabay handle wire rename not yet
+/// visible at runtime.
+/// Tier: live
 #[test]
 #[ignore = "R3.1: live coauth + soland + teabay handle wire rename not yet visible at runtime"]
 fn test_8_handle_rename_round_trip_live() {

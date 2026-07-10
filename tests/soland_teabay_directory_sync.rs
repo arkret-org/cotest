@@ -19,6 +19,7 @@ use serial_test::serial;
 /// coauth/starid/teabay binaries + `DATABASE_URL`. The CT-6
 /// `FourServiceStack` bootstrap is already wired.
 /// Issue: CT-8 (soland + teabay directory sync latency)
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires DATABASE_URL + starid/teabay/coauth binaries; CT-6 bootstrap is ready"]
 #[serial]

@@ -15,6 +15,7 @@ use cotest::scenarios::four_service_smoke::four_service_smoke_run;
 /// Gating: manual debug helper — needs a built coauth binary at the
 /// hard-coded sibling path. Not for CI.
 /// Issue: C34.3 (coauth bootstrap config debug)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn dump_patched_coauth_config() -> Result<()> {
@@ -38,6 +39,7 @@ async fn dump_patched_coauth_config() -> Result<()> {
 /// Gating: needs Docker daemon for the ephemeral Postgres image; soft-skips
 /// (prints `skip:`) when docker is unavailable.
 /// Issue: C34.3 (ephemeral Postgres helper smoke)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
@@ -57,6 +59,7 @@ async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
 /// Gating: needs Docker (for ephemeral Postgres) plus a coauth binary;
 /// soft-skips when prereqs are missing.
 /// Issue: C34.3 (coauth bootstrap smoke)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
@@ -82,6 +85,7 @@ async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
 /// Gating: needs a floria binary on PATH (or `FLORIA_BIN`); soft-skips
 /// when the binary is missing.
 /// Issue: C34.3 (floria bootstrap smoke)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
@@ -112,6 +116,7 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
 /// Gating: needs Docker (coauth ephemeral Postgres) plus sibling
 /// coauth/starid/teabay binaries and a `DATABASE_URL` for teabay.
 /// Issue: CT-6 (four-service joint bootstrap smoke)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn four_service_joint_smoke() -> Result<()> {

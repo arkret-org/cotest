@@ -30,6 +30,7 @@ use serial_test::serial;
 /// `TEABAY_BIN` (or a sibling debug build) + `DATABASE_URL`. Middleware
 /// itself (TB-1) is shipped and unit-tested.
 /// Issue: TB-3 (teabay unsigned-ingest rejection)
+/// Tier: live
 #[tokio::test]
 #[ignore = "TB-1 middleware landed; this test still requires teabay binary + Postgres in the cotest harness for execution. Run with --ignored to exercise."]
 #[serial]

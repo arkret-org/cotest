@@ -34,6 +34,7 @@ use serial_test::serial;
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or pass `--ignored`) once the P5 stack is up.
 /// Issue: AKP-0007 (Realm-member-removal → Circle cascade)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "AKP-0007 Realm-member-removal → Circle cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]

@@ -40,6 +40,7 @@ use serial_test::serial;
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
 /// Issue: AKP-0007 (Circle capability two-tier AND)
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "AKP-0007 Circle capability two-tier AND — live soland + coauth stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]

@@ -645,6 +645,10 @@ test.describe("multi-device pairing + revocation", () => {
 
   test(
     "after revoke in an E2EE Realm, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages",
+    // 02-16: control-plane assertions run today; the title's data-plane claim
+    // (removed device fails to decrypt post-Remove epochs) needs the real MLS
+    // wasm harness (CT-002) — tagged for the controlled-environment lane.
+    { tag: "@mls-data-plane" },
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s10-revoke-mls-remove-${stamp}`);

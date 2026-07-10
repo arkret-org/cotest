@@ -24,6 +24,7 @@ use serial_test::serial;
 /// sibling-checkout build. Missing binary is a hard failure when this ignored
 /// test is explicitly selected.
 /// Issue: T1.3 (production rejects placeholder proof)
+/// Tier: live
 #[tokio::test]
 #[ignore = "T1.3 — spawns soland binary; run with --ignored when SOLAND_BIN or a sibling-checkout build is available."]
 #[serial]

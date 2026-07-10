@@ -6,6 +6,9 @@ use serde_json::Value;
 /// Exercises the real coauth session-grant endpoint with a fully prepared
 /// agent request. The request must already contain a valid fresh agent key
 /// proof and a scope whose policy requires controller approval.
+/// Gating: requires a live coauth instance and
+/// `COTEST_COAUTH_AGENT_APPROVAL_REQUEST_JSON`.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a live coauth instance and COTEST_COAUTH_AGENT_APPROVAL_REQUEST_JSON"]
 async fn live_coauth_returns_closed_human_approval_error() -> Result<()> {
