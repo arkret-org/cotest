@@ -426,9 +426,8 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 (disclosure.to_owned(), visibility.to_owned())
             }
             "strand" => {
-                // Per spec 2026-05-08 (removed-event-kinds.json:
-                // ak.strand.track.read_receipt_policy), track-level read-receipt
-                // overrides are not in v1. A discussion timeline that needs a
+                // Track-level read-receipt overrides are not in the current v1
+                // catalog. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
                 // independent Strand/Circle scope (Strand.scope_circle_id, AKP-0007)
                 // whose own ak.realm.read_receipt_policy composes against the

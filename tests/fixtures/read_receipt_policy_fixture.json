@@ -82,7 +82,7 @@
     },
     {
       "name": "branch_overrides_tighten_only",
-      "comment": "A Strand/Circle scope (upgraded discussion timeline, Strand.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy only when scope_overrides_allowed=true. Optional → Disabled at the Strand/Circle scope is a privacy tightening, Members → Private is also a visibility tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: ak.strand.track.read_receipt_policy) — the Strand/Circle-scope surface is the only legitimate scope for a per-discussion override.",
+      "comment": "A Strand/Circle scope (upgraded discussion timeline, Strand.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy only when scope_overrides_allowed=true. Optional → Disabled at the Strand/Circle scope is a privacy tightening, Members → Private is also a visibility tightening (smaller audience). Note: track-level overrides are not part of the current v1 catalog; the Strand/Circle-scope surface is the only legitimate scope for a per-discussion override.",
       "policy": {
         "scope": "strand",
         "parent": {
@@ -139,7 +139,7 @@
     },
     {
       "name": "prefs_resolution_strand_overrides_realm",
-      "comment": "When policy is optional and the user has both parent-Realm-level and Strand/Circle-scope-level (Strand.scope_circle_id, AKP-0007) overrides, the Strand/Circle-scope override wins. Resolution order is strand → realm → default (track-level overrides are not in v1; see removed-event-kinds.json).",
+      "comment": "When policy is optional and the user has both parent-Realm-level and Strand/Circle-scope-level (Strand.scope_circle_id, AKP-0007) overrides, the Strand/Circle-scope override wins. Resolution order is strand → realm → default; track-level overrides are not in the current v1 catalog.",
       "policy": {
         "scope": "realm",
         "disclosure": "optional",

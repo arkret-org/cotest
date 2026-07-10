@@ -780,6 +780,7 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$PostgresUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBaseUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBind,
+        [Parameter(Mandatory = $true)][string]$CedarPolicyFile,
         [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
@@ -812,6 +813,7 @@ function New-CoauthJointConfig {
         "--postgres-url", $PostgresUrl,
         "--coauth-base-url", $CoauthBaseUrl,
         "--coauth-bind", $CoauthBind,
+        "--cedar-policy-file", $CedarPolicyFile,
         "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
@@ -1607,6 +1609,10 @@ try {
             $coauthPort = $coauthUri.Port
         }
         $coauthBinary = Resolve-CoauthBinary -ExplicitPath $CoauthBin -WorkspaceRoot $workspaceRoot
+        $coauthPolicyFile = Join-Path $workspaceRoot "coauth\policies\cedar\default.cedar"
+        if (-not (Test-Path -LiteralPath $coauthPolicyFile -PathType Leaf)) {
+            throw "Coauth Cedar policy file not found: $coauthPolicyFile"
+        }
         if ($CoauthPostgresUrl) {
             Write-Host "coauth postgres: using externally-provisioned DSN (docker skipped)"
             $coauthPostgresDsn = $CoauthPostgresUrl
@@ -1621,6 +1627,7 @@ try {
             -PostgresUrl $coauthPostgresDsn `
             -CoauthBaseUrl $CoauthBaseUrl `
             -CoauthBind "127.0.0.1:$coauthPort" `
+            -CedarPolicyFile $coauthPolicyFile `
             -InksonBaseUrl $InksonBaseUrl `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `

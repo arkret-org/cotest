@@ -13,10 +13,6 @@
 //!   unsupported behavior (`unsupported(profile_id=...)`). The list is explicit so a profile is
 //!   never silently skipped from the rollup.
 //!
-//! - **Deprecated hard-reject profiles** — removed profile ids are validated against the drift
-//!   registry and must not reappear in implementation profile catalogs. They are negative-test
-//!   context only, not rollup implementation entries.
-//!
 //! The resulting [`ProfileGateReport`] is consumed by the certification-report
 //! scenario so each new profile id appears in the JSON / Markdown summary with
 //! its status (`certified` / `unsupported` / `skipped` / `not_implemented`).
@@ -72,9 +68,6 @@ pub struct ProfileGateEntry {
 pub struct ProfileGateReport {
     pub schema: String,
     pub entries: Vec<ProfileGateEntry>,
-    pub deprecated_profile_count: usize,
-    pub removed_operation_count: usize,
-    pub removed_event_kind_count: usize,
 }
 
 /// New vector profiles that cotest MUST gate. Membership is hardcoded so a
@@ -229,22 +222,9 @@ pub fn build_profile_gate_report() -> Result<ProfileGateReport> {
             )),
         });
     }
-    let deprecated_profile_count = validate_deprecated_profile_drift(&declared_impl_profiles)?;
-    let removed_operation_count = validate_hard_reject_registry_entries(
-        "registry/removed-operation-ids.json",
-        "removed operation",
-    )?;
-    let removed_event_kind_count = validate_hard_reject_registry_entries(
-        "registry/removed-event-kinds.json",
-        "removed event kind",
-    )?;
-
     let report = ProfileGateReport {
         schema: "ak.cotest.profile_gate_report.v1".to_owned(),
         entries,
-        deprecated_profile_count,
-        removed_operation_count,
-        removed_event_kind_count,
     };
     Ok(report)
 }
@@ -308,58 +288,4 @@ fn collect_declared_implementation_profiles(profiles: &Value) -> Result<BTreeSet
         }
     }
     Ok(declared)
-}
-
-fn validate_deprecated_profile_drift(declared_impl_profiles: &BTreeSet<String>) -> Result<usize> {
-    let registry = load_artifact_json("registry/deprecated-profile-ids.json")?;
-    let entries = registry
-        .get("entries")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("registry/deprecated-profile-ids.json missing entries[]"))?;
-
-    for entry in entries {
-        let profile_id = required_str(entry, "id")?;
-        let rejection_level = required_str(entry, "rejection_level")?;
-        if rejection_level != "hard_reject" {
-            bail!("deprecated profile {profile_id} must be hard_reject, got {rejection_level}");
-        }
-        let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
-        if !allowed_contexts.contains(&"negative_test") {
-            bail!("deprecated profile {profile_id} must allow cotest negative_test context");
-        }
-        if declared_impl_profiles.contains(profile_id) {
-            bail!(
-                "deprecated hard-reject profile {profile_id} still declared as an \
-                 implementation profile; keep it only in registry-drift negative context"
-            );
-        }
-    }
-
-    Ok(entries.len())
-}
-
-fn validate_hard_reject_registry_entries(relative_path: &str, entry_label: &str) -> Result<usize> {
-    let registry = load_artifact_json(relative_path)?;
-    let entries = registry
-        .get("entries")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{relative_path} missing entries[]"))?;
-
-    let mut hard_reject_count = 0usize;
-    for entry in entries {
-        let id = required_str(entry, "id")?;
-        let rejection_level = required_str(entry, "rejection_level")?;
-        if rejection_level != "hard_reject" {
-            bail!("{entry_label} {id} must be hard_reject, got {rejection_level}");
-        }
-
-        let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
-        if !allowed_contexts.contains(&"negative_test") {
-            bail!("{entry_label} {id} must allow cotest negative_test context");
-        }
-
-        hard_reject_count += 1;
-    }
-
-    Ok(hard_reject_count)
 }

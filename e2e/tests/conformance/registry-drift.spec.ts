@@ -1,12 +1,13 @@
-// Conformance — Registry Drift / Removed IDs
+// Conformance — Registry Drift / Current Catalog
 // Contract: e2e/scenarios/conformance/registry-drift.md
 // Spec: conformance/schema-registry.md §1 (source-of-truth declaration) /
 //       §3 (event type constraints) / §6 (evolution constraints + critical
 //       extension fail-closed)
 // Artifacts (machine-readable source-of-truth):
-//   - arkret-spec/spec/v1/artifacts/migration/removed-event-kinds.json
-//   - arkret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json
+//   - arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
+//   - arkret-spec/spec/v1/artifacts/registry/event-kind-registry.json
 //   - arkret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
+//   - arkret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json
 //   - arkret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
 // Treat the artifacts as the source-of-truth and walk soland's live
@@ -44,11 +45,11 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const artifactsRoot = resolve(__dirname, "../../../../arkret-spec/spec/v1/artifacts");
-const migrationRoot = resolve(artifactsRoot, "migration");
+const profilesRoot = resolve(artifactsRoot, "profiles");
 const registryRoot = resolve(artifactsRoot, "registry");
 
-function loadMigrationJson<T = unknown>(name: string): T {
-  const path = resolve(migrationRoot, name);
+function loadProfileJson<T = unknown>(name: string): T {
+  const path = resolve(profilesRoot, name);
   return JSON.parse(readFileSync(path, "utf8")) as T;
 }
 
@@ -78,6 +79,14 @@ type DriftRegistry = {
 type OperationRegistry = {
   operations: Array<{ operation_id: string; http?: string; grpc?: string; mq?: string }>;
   surface_groups: Array<{ surface: string; tier: string; operations: string[] }>;
+};
+
+type ConformanceProfiles = {
+  profile_roles: Record<string, string>;
+};
+
+type EventKindRegistry = {
+  event_kinds: Array<{ event_kind: string; status: string }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -327,25 +336,20 @@ test.describe.configure({ mode: "serial" });
 test.describe("conformance registry drift @fully-implemented", () => {
   // Load all artifacts once; failures here surface as test setup errors which
   // is what we want (the spec build is broken, not the wire).
-  const removedEventKinds = loadMigrationJson<DriftRegistry>("removed-event-kinds.json");
-  const deprecatedProfileIds = loadMigrationJson<DriftRegistry>("deprecated-profile-ids.json");
+  const conformanceProfiles = loadProfileJson<ConformanceProfiles>("conformance-profiles.json");
+  const eventKindRegistry = loadRegistryJson<EventKindRegistry>("event-kind-registry.json");
   const forbiddenModelTerms = loadRegistryJson<DriftRegistry>("forbidden-model-terms.json");
   const forbiddenWireFields = loadRegistryJson<DriftRegistry>("forbidden-wire-fields.json");
   const operationRegistry = loadRegistryJson<OperationRegistry>("operation-registry.json");
 
-  test("Phase C — /server/describe does not claim any deprecated profile id", async ({
+  test("Phase C — every claimed profile has a canonical conformance profile entry", async ({
     request,
   }, testInfo) => {
-    // spec: schema-registry.md §1; artifact: deprecated-profile-ids.json
-    // Hard-reject means: any current implementation that *declares* one of
-    // these profile ids is in drift. Service describe is the canonical
-    // declaration surface, so this is a pure GET + set-diff assertion.
-    const deprecated = new Set(
-      deprecatedProfileIds.entries
-        .filter((e) => e.rejection_level === "hard_reject")
-        .map((e) => e.id),
-    );
-    expect(deprecated.size).toBeGreaterThan(0);
+    // The candidate v1 line intentionally carries no historical migration or
+    // deprecated-profile registry. `profile_roles` is the canonical index for
+    // every current profile id, so any describe claim absent from it is drift.
+    const canonicalProfiles = new Set(Object.keys(conformanceProfiles.profile_roles));
+    expect(canonicalProfiles.size).toBeGreaterThan(0);
 
     const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.ok()).toBeTruthy();
@@ -356,13 +360,13 @@ test.describe("conformance registry drift @fully-implemented", () => {
       body: JSON.stringify([...claimed].sort(), null, 2),
       contentType: "application/json",
     });
-    await testInfo.attach("deprecated-profile-ids", {
-      body: JSON.stringify([...deprecated].sort(), null, 2),
+    await testInfo.attach("canonical-conformance-profile-ids", {
+      body: JSON.stringify([...canonicalProfiles].sort(), null, 2),
       contentType: "application/json",
     });
 
-    const violations = [...claimed].filter((id) => deprecated.has(id));
-    expect(violations, `soland describe claimed deprecated profile id(s): ${violations.join(", ")}`).toEqual([]);
+    const rogue = [...claimed].filter((id) => !canonicalProfiles.has(id));
+    expect(rogue, `soland describe claimed profile id(s) absent from canonical catalog: ${rogue.join(", ")}`).toEqual([]);
   });
 
   test("Phase E — every claimed operation has a canonical operation-registry entry", async ({
@@ -405,14 +409,21 @@ test.describe("conformance registry drift @fully-implemented", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Pinned fixme — depend on soland write-path / operation-invoke helpers
+  // Live negative probes against the current rejection registries
   // -------------------------------------------------------------------------
 
   test("Phase A — POST event with removed kind is hard-rejected with schema_violation", async ({
     request,
   }) => {
-    const removed = removedEventKinds.entries.find((entry) => entry.rejection_level === "hard_reject");
-    expect(removed, "removed hard-reject event kind fixture").toBeTruthy();
+    const removed = forbiddenWireFields.entries.find(
+      (entry) =>
+        entry.rejection_level === "hard_reject" &&
+        entry.context === "event_kind" &&
+        entry.allowed_contexts?.includes("negative_test"),
+    );
+    expect(removed, "forbidden hard-reject event kind fixture").toBeTruthy();
+    const activeEventKinds = new Set(eventKindRegistry.event_kinds.map((entry) => entry.event_kind));
+    expect(activeEventKinds.has(removed!.id), "negative event kind must be absent from active registry").toBeFalsy();
     const alice = uniqueUser("registry-drift-a");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);

@@ -86,6 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--postgres-url", required=True)
     parser.add_argument("--coauth-base-url", required=True)
     parser.add_argument("--coauth-bind", required=True)
+    parser.add_argument("--cedar-policy-file", required=True, type=pathlib.Path)
     parser.add_argument("--inkson-base-url", required=True)
     parser.add_argument("--oauth-client-id", required=True)
     parser.add_argument("--soland-base-url", required=True)
@@ -123,6 +124,13 @@ def main() -> int:
         rf"\1 {coauth_base}",
     )
     src = replace_http_listeners(src, args.coauth_bind)
+
+    policy = (
+        "policy:\n"
+        "  engine: cedar\n"
+        f"  cedar_policy_file: {yaml_string(str(args.cedar_policy_file.resolve()))}\n"
+    )
+    src = replace_top_level_section(src, "policy", policy)
 
     account = (
         "account:\n"
