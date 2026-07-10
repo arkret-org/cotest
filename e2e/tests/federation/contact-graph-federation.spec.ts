@@ -61,9 +61,9 @@ test.describe("contact graph federation (α/β)", () => {
   // S1-fed: cross-PS add friend (alice@α <-> bob@β), full positive handshake.
   //
   // alice@α requests bob@β with recipient_service_did=β -> the signed
-  // ck.contact.requested fact federates to β over the outbox -> bob@β sees
+  // ak.contact.requested fact federates to β over the outbox -> bob@β sees
   // pending_incoming -> bob accepts with requester_service_did=α -> the
-  // ck.contact.accepted fact federates back to α -> alice@α sees accepted +
+  // ak.contact.accepted fact federates back to α -> alice@α sees accepted +
   // invite_consent_grant_ref (bob -> alice invite grant projected on α).
   test("S1-fed cross-PS add friend federates request + accept and converges both sides", async ({
     request,
@@ -91,7 +91,7 @@ test.describe("contact graph federation (α/β)", () => {
     // alice's local view: a pending outgoing request exists on α.
     expect(outcome.state).toBe("pending_outgoing");
 
-    // The signed ck.contact.requested fact federates to β; bob@β sees the
+    // The signed ak.contact.requested fact federates to β; bob@β sees the
     // incoming request once the outbox dispatcher drains (poll for delivery).
     await expect
       .poll(
@@ -116,7 +116,7 @@ test.describe("contact graph federation (α/β)", () => {
     });
     expect(respondOutcome.state).toBe("accepted");
 
-    // The ck.contact.accepted fact federates back to α; alice@α converges to
+    // The ak.contact.accepted fact federates back to α; alice@α converges to
     // accepted, with bob -> alice invite grant surfaced as
     // invite_consent_grant_ref on her row.
     await expect

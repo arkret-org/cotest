@@ -48,7 +48,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ### Phase D — 并发 title update 不产生 bottom
 
 12. alice 和 bob 都在网,测试 harness 直接提交两条同 anchor basis 的 `ck.realm.update { patch.title }`
-13. soland 接受/归并 Realm metadata 更新,但不得把 title patch 投影为 `cx.component.realm.organization.v1` 的 cas-register bottom
+13. soland 接受/归并 Realm metadata 更新,但不得把 title patch 投影为 `ak.component.realm.organization.v1` 的 cas-register bottom
 14. 断言:`GET /_soland/admin/realms/<S>/bottom` 返回空数组
 
 ### Phase E — repair 区仍为只读

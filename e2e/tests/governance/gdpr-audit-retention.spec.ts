@@ -163,7 +163,7 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(false);
   });
 
-  test("audit log contains org.arkret.soland.audit.exported, org.arkret.soland.audit.erasure_initiated, ck.audit.erasure_receipt entries", async ({
+  test("audit log contains org.arkret.soland.audit.exported, org.arkret.soland.audit.erasure_initiated, ak.audit.erasure_receipt entries", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §3 + §8 — every export / erasure

@@ -109,7 +109,7 @@
 ## Observable assertions (合并清单)
 
 - Phase A:Realm policy-server projection 中 `policy_server_url` 等于 mock URL,`on_timeout = "fail_closed"`
-- Phase B 步骤 8-9:allow 决策下邀请成功,mock 收到一条 `action = ck.invite.create` 的 check
+- Phase B 步骤 8-9:allow 决策下邀请成功,mock 收到一条 `action = ak.invite.create` 的 check
 - Phase C 步骤 13-14:deny 决策下 HTTP 412,errcode `policy_denied`,inkson 渲染 reason
 - Phase D 步骤 19-20:obligation `log_event` 写入 audit log,且 mock inspect 标记 obligations_executed=true
 - Phase E 步骤 22-23:signed_transcript 包含本次测试所有 check;签名验证成功;每条 entry 五字段齐全

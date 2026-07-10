@@ -72,7 +72,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
             match kind {
                 "ak.consent.grant" => {
                     if outcome != "accept" {
-                        bail!("vector {name} ck.consent.grant must accept");
+                        bail!("vector {name} ak.consent.grant must accept");
                     }
                     let effects = mv
                         .get("effects")
@@ -112,7 +112,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                 }
                 "ak.consent.revoke" => {
                     if outcome != "accept" {
-                        bail!("vector {name} ck.consent.revoke must accept");
+                        bail!("vector {name} ak.consent.revoke must accept");
                     }
                     let effects = mv
                         .get("effects")
@@ -163,8 +163,8 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                 }
                 _ => {
-                    // Downstream Move (ck.invite.send / ck.message.send /
-                    // ck.call.invite ...) carrying a `consent_active`
+                    // Downstream Move (ck.invite.send / ak.message.send /
+                    // ak.call.invite ...) carrying a `consent_active`
                     // precondition. Resolve precondition against the
                     // consent.grant.v1 cell join.
                     let preconditions = mv
@@ -275,7 +275,7 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("composite_state_subject fixture missing vectors"))?;
 
-    let kinds = ["ak.device.authorize", "ck.device.revoke"];
+    let kinds = ["ak.device.authorize", "ak.device.revoke"];
     let mut covered: std::collections::BTreeSet<String> = Default::default();
 
     for vector in vectors {

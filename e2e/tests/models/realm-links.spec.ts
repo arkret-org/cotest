@@ -28,9 +28,9 @@ test.describe("realm links", () => {
       // PROMOTED + reshaped to the real surface. soland's realm-link +
       // inheritance pipeline is fully wired (routing/realms.rs +
       // reducer/realm_links.rs):
-      //   - POST /_arkret/self/realms/{id}/links writes ck.realm.link with
+      //   - POST /_arkret/self/realms/{id}/links writes ak.realm.link with
       //     reducer-side cycle / kind / status validation.
-      //   - ck.realm.inheritance_policy (signed event) is the §6 opt-in.
+      //   - ak.realm.inheritance_policy (signed event) is the §6 opt-in.
       //   - GET /_arkret/self/realms/{id}/effective-policy walks active
       //     governed_by / inherits_policy_from links and merges the source
       //     realm's allow-lists ONLY when the child opted in (§5 no implicit
@@ -328,7 +328,7 @@ test.describe("realm links", () => {
       // alice owns G and links T --governed_by--> G, but holds no capability
       // in T — so her ban attempt against T fails closed, which IS the §5
       // non-propagation invariant (a derived grant would require T to publish
-      // an explicit ck.capability.derived, which this test does not set up).
+      // an explicit ak.capability.derived, which this test does not set up).
       const stamp = Date.now();
       const alice = uniqueUser(`s-rl-cap-${stamp}`);
       const bob = uniqueUser(`s-rl-cap-bob-${stamp}`);

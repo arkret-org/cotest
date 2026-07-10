@@ -1,5 +1,5 @@
 // Contract: e2e/scenarios/events/batch-realm-bootstrap.md
-// Regression guard for ck.self.events.command.submit batch responses and Realm creator
+// Regression guard for ak.self.events.command.submit batch responses and Realm creator
 // membership materialization.
 
 import { expect, test } from "@playwright/test";
@@ -35,7 +35,7 @@ import {
 // such as `hlc`.
 // Restore once such a builder exists.
 test.describe.fixme("events submit batch Realm bootstrap", () => {
-  test("batch ck.realm.create returns JSON and owner can write immediately", async ({
+  test("batch ak.realm.create returns JSON and owner can write immediately", async ({
     request,
   }) => {
     const alice = uniqueUser("events-batch-alice");

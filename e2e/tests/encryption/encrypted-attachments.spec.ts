@@ -3,7 +3,7 @@
 // Spec refs:
 //   - crypto-media/media-and-blob.md §3 (encrypted metadata), §5 (authz + download), §5.1 (no plaintext content-type), §6 (asset privacy)
 //   - crypto-media/encryption-and-audit.md §2.3.1 (key_ref MLS)
-//   - crypto-media/audited-e2ee.md §3-§4 (franking, ck.audit.accessed)
+//   - crypto-media/audited-e2ee.md §3-§4 (franking, ak.audit.accessed)
 
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -199,11 +199,11 @@ test.describe("encrypted attachments", () => {
     await runInksonLibTest("blob::tests::thumbnail_is_always_whole_file_and_independent");
   });
 
-  test("E12.4 audited E2EE: ck.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
+  test("E12.4 audited E2EE: ak.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
     request,
   }) => {
     // spec: audited-e2ee.md §4 / §8 — a report carries the optional
-    // ck.moderation.franking_proof to the bound audit agent; the agent sees
+    // ak.moderation.franking_proof to the bound audit agent; the agent sees
     // the receipt (ciphertext_digest / routing metadata) but never the
     // attachment plaintext or its plaintext digest.
     const agentBaseUrl = mockAuditAgentBaseUrl();

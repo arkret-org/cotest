@@ -32,7 +32,7 @@ test.describe("read receipts + privacy", () => {
     request,
   }) => {
     // Live G2.T7 smoke: the ephemeral receipt API and durable read-cursor API
-    // are separate surfaces. Durable ck.read_cursor.advance writes, UI receipt rendering,
+    // are separate surfaces. Durable ak.read_cursor.advance writes, UI receipt rendering,
     // and policy toggles stay fixme.
     const stamp = Date.now();
     const alice = uniqueUser("g2t7-receipt-alice");
@@ -188,11 +188,11 @@ test.describe("read receipts + privacy", () => {
     ).toHaveLength(0);
   });
 
-  test("space disclosure=disabled rejects inbound ck.receipt.read and leaves no peer-visible marker", async ({
+  test("space disclosure=disabled rejects inbound ak.receipt.read and leaves no peer-visible marker", async ({
     request,
   }) => {
     // spec: read-receipts.md §2.5 — with disclosure=disabled the client does
-    // not send, and an inbound ck.receipt.read for the space is dropped by the
+    // not send, and an inbound ak.receipt.read for the space is dropped by the
     // Sync Service. soland enforces the server-side leg by rejecting the
     // ephemeral admission with a PolicyViolation (403) whose body names the
     // disabled disclosure, and no peer-visible marker is created.
@@ -299,7 +299,7 @@ test.describe("read receipts + privacy", () => {
   test("actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
     request,
   }) => {
-    // spec: read-receipts.md §3.1-§3.2 / §6.6 — ck.read_cursor.advance is an
+    // spec: read-receipts.md §3.1-§3.2 / §6.6 — ak.read_cursor.advance is an
     // actor-private durable cursor (POST /_arkret/self/read-cursors). The
     // Principal/Sync Service returns it only to the same principal's authorized
     // devices (account-private projection read-back), never to other Realm
@@ -582,7 +582,7 @@ type ReadCursorMarker = {
   updated_at: string;
 };
 
-// POST /_arkret/self/read-cursors — durable actor-private ck.read_cursor.advance
+// POST /_arkret/self/read-cursors — durable actor-private ak.read_cursor.advance
 // (spec read-receipts.md §6.6). The body is exactly {realm_id, read_scope,
 // position}; the actor/device are bound from the bearer session.
 async function advanceReadCursor(

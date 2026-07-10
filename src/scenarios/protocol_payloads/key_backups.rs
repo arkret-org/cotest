@@ -10,7 +10,7 @@
 //!
 //! Full-ciphertext reads are gated by spec `identity/key-management.md`
 //! §7.7.1: every `POST /_arkret/self/keys/backups/{id}/unlock` MUST carry a
-//! body `{proof: ck.schema.key_backup_unlock_proof.v1}` bound to the envelope;
+//! body `{proof: ak.schema.key_backup_unlock_proof.v1}` bound to the envelope;
 //! a bearer token without that body proof MUST be refused.
 
 use std::collections::BTreeMap;

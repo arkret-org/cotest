@@ -253,7 +253,7 @@ test.describe("third-party invite", () => {
   }
 
   test(
-    "alice issues ck.invite.third_party with token_commitment; plaintext email never leaves client",
+    "alice issues ak.invite.third_party with token_commitment; plaintext email never leaves client",
     async ({ request }) => {
       // third-party-invites.md §3.1 — the durable Event carries only the salted
       // token_commitment; the plaintext 3PID never enters the event chain.
@@ -339,7 +339,7 @@ test.describe("third-party invite", () => {
   );
 
   test(
-    "bob submits ck.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership",
+    "bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership",
     async ({ request }) => {
       // third-party-invites.md §4.1-4.3 — happy path. The did:key verification
       // service signs the binding_proof; bob signs the subject_proof; the

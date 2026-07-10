@@ -149,7 +149,7 @@ async function setCardDetailEditorValue(page: Page, value: string): Promise<void
 }
 
 // API-level Card creation that mirrors kanban/project-simulation's active
-// ck.strand.create payload (full `object` with metadata.fields.status). Returns
+// ak.strand.create payload (full `object` with metadata.fields.status). Returns
 // the new strand id so the API-driven reject tests below can target it without
 // the brittle inkson kanban UI load path.
 async function createCardStrandApi(
@@ -294,7 +294,7 @@ test.describe("kanban end-to-end", () => {
   test("concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_conflict", async ({
     request,
   }) => {
-    // spec: realm-and-space.md §3.6 — ck.strand.move writes the strand
+    // spec: realm-and-space.md §3.6 — ak.strand.move writes the strand
     // position on the Move/Seal cas-register; concurrent moves of the same
     // Card race for the same actor frontier. soland's actor_seq frontier is
     // the cas-register guard (event_log/submit.rs): the first move advances
@@ -662,12 +662,12 @@ test.describe("kanban end-to-end", () => {
   // inkson setup wizard, however, defaults new Realms to `mls_rfc9420` (the
   // "Encrypted" badge). Adding a Strand description writes the private `body`
   // patch path, so on an encrypted Realm the client MUST encrypt it before
-  // submit; if it ships plaintext, soland rejects the ck.strand.update with 412
+  // submit; if it ships plaintext, soland rejects the ak.strand.update with 412
   // `content_encryption_floor_violation` (exactly the failure reported from
   // the UI). encryption/key-backup.spec.ts A2 exercises this only on a
   // RESTORED second device — never on the original creator device, which is
   // the path this guards.
-  test("alice adds a strand description on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.strand.update (no content_encryption_floor_violation)", async ({
+  test("alice adds a strand description on a freshly-created MLS-encrypted realm; soland accepts the encrypted ak.strand.update (no content_encryption_floor_violation)", async ({
     browser,
     request,
   }, testInfo) => {
@@ -764,7 +764,7 @@ test.describe("kanban end-to-end", () => {
         );
       }, description);
 
-      // The encrypted ck.strand.update submit must reach soland and be accepted,
+      // The encrypted ak.strand.update submit must reach soland and be accepted,
       // not bounced by the content-encryption floor.
       const strandUpdate = alicePage.page.waitForResponse(
         (response) =>
@@ -790,7 +790,7 @@ test.describe("kanban end-to-end", () => {
       // the submitted payload (it should be an MLS encrypted envelope).
       expect(
         (response.request().postData() ?? "").includes(description),
-        `description leaked as plaintext into the ck.strand.update body — the realm was not actually encrypted or the client skipped MLS encryption`,
+        `description leaked as plaintext into the ak.strand.update body — the realm was not actually encrypted or the client skipped MLS encryption`,
       ).toBe(false);
 
       // UI corroboration: the description renders and no encrypted-write error
@@ -813,7 +813,7 @@ test.describe("kanban end-to-end", () => {
   // strand_operation_carries_plaintext_private_content / inkson
   // KANBAN_PRIVATE_STRAND_PATCH_PATHS) and rides its own client encryption +
   // commit code path, so it needs its own guard.
-  test("alice adds a strand synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.strand.update", async ({
+  test("alice adds a strand synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted ak.strand.update", async ({
     browser,
     request,
   }, testInfo) => {
@@ -861,15 +861,15 @@ test.describe("kanban end-to-end", () => {
       const responseBody = await response.text();
       expect(
         responseBody.includes("content_encryption_floor_violation"),
-        `synthesis ck.strand.update hit the content-encryption floor — client shipped plaintext synthesis: ${response.status()} ${responseBody.slice(0, 500)}`,
+        `synthesis ak.strand.update hit the content-encryption floor — client shipped plaintext synthesis: ${response.status()} ${responseBody.slice(0, 500)}`,
       ).toBe(false);
       expect(
         response.status(),
-        `synthesis ck.strand.update should be accepted; body=${responseBody.slice(0, 500)}`,
+        `synthesis ak.strand.update should be accepted; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
       expect(
         (response.request().postData() ?? "").includes(synthesis),
-        `synthesis leaked as plaintext into the ck.strand.update body — realm not actually encrypted or client skipped MLS encryption`,
+        `synthesis leaked as plaintext into the ak.strand.update body — realm not actually encrypted or client skipped MLS encryption`,
       ).toBe(false);
 
       await expect(alicePage.page.getByTestId("card-synthesis-panel")).toContainText(synthesis, {
@@ -884,12 +884,12 @@ test.describe("kanban end-to-end", () => {
 
   // Regression: encrypted Strand DISCUSSION comment on the creator device.
   //
-  // Historical regression: this path used to submit plaintext ck.message.create
+  // Historical regression: this path used to submit plaintext ak.message.create
   // envelopes from the discussion composer. The client now routes chat sends
   // through secure_send and SDK encrypted-envelope construction; this test pins
   // that soland accepts the encrypted event and that plaintext does not appear
   // in the submitted request body.
-  test("alice posts a strand discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.message.create", async ({
+  test("alice posts a strand discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted ak.message.create", async ({
     browser,
     request,
   }, testInfo) => {
@@ -941,11 +941,11 @@ test.describe("kanban end-to-end", () => {
       ).toBe(false);
       expect(
         response.status(),
-        `discussion ck.message.create should be accepted (encrypted), not rejected; body=${responseBody.slice(0, 500)}`,
+        `discussion ak.message.create should be accepted (encrypted), not rejected; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
       expect(
         (response.request().postData() ?? "").includes(comment),
-        `comment leaked as plaintext into the ck.message.create body — realm not actually encrypted or client skipped MLS encryption`,
+        `comment leaked as plaintext into the ak.message.create body — realm not actually encrypted or client skipped MLS encryption`,
       ).toBe(false);
 
       await expect(alicePage.page.getByTestId("chat-panel")).toContainText(comment, {

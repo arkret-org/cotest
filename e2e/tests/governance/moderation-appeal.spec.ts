@@ -32,7 +32,7 @@ import { grantCallCapability } from "../../helpers/webrtc";
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation appeal", () => {
-  test("appellant submits ck.moderation.appeal.submit against an admin decision", async ({
+  test("appellant submits ak.moderation.appeal.submit against an admin decision", async ({
     request,
   }) => {
     const fixture = await createAppealFixture(request, "submit");

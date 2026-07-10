@@ -39,7 +39,7 @@ test.describe("audited E2EE", () => {
   });
 
   test(
-    "alice configures audit_disclosure_policy on E2EE Realm; ck.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
+    "alice configures audit_disclosure_policy on E2EE Realm; ak.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-frank");
 
@@ -113,7 +113,7 @@ test.describe("audited E2EE", () => {
   );
 
   test(
-    "E25.1 tampered ck.moderation.franking_proof ciphertext_digest causes downstream verification to fail",
+    "E25.1 tampered ak.moderation.franking_proof ciphertext_digest causes downstream verification to fail",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-tamper");
       const audit = await request.get(
@@ -162,7 +162,7 @@ test.describe("audited E2EE", () => {
       );
 
       // 2. Alice (the Realm owner) revokes the audit_disclosure_policy via a
-      // ck.realm.update patch that flips `enabled` to false. audited-e2ee.md
+      // ak.realm.update patch that flips `enabled` to false. audited-e2ee.md
       // §3.1: admins MAY suspend / revoke a binding from a new accepted policy
       // frontier onward.
       const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {

@@ -1,4 +1,4 @@
-// Media-service binding (CKP-0010): ck.realm.media_service foci -> media token
+// Media-service binding (CKP-0010): ak.realm.media_service foci -> media token
 // exchange issues a LiveKit-shaped backend_token + participant_binding.
 // Contract: e2e/scenarios/calls/webrtc-media-token.md
 // Spec refs:
@@ -149,13 +149,13 @@ test.describe("media token exchange", () => {
   );
 
   test(
-    "token exchange requires ck.call.join: a realm member lacking it is refused, granting it admits them",
+    "token exchange requires ak.call.join: a realm member lacking it is refused, granting it admits them",
     async ({ request }) => {
       // WIRE NOTE (migration): the retired stack gated token exchange on a
       // pre-existing signaling session + participant row. The canonical issuer
       // (media-service-binding.md §6 / call-state.md §4.1) gates on realm
       // membership + the `ck.call.join` capability + the durable ban set — NOT
-      // a prior participant row. So a member WITHOUT ck.call.join is refused
+      // a prior participant row. So a member WITHOUT ak.call.join is refused
       // (capability_denied), and granting it admits them.
       const { alice, aliceToken, realmId, callId } = await setupMediaCall(request);
       const member = uniqueUser(`media-member-${Date.now()}`);
@@ -163,7 +163,7 @@ test.describe("media token exchange", () => {
       const memberToken = await issueDevSession(request, member);
       await addRealmMemberApi(request, aliceToken, realmId, member.did);
 
-      // Member, but no ck.call.join → refused.
+      // Member, but no ak.call.join → refused.
       const denied = await exchangeMediaToken(request, memberToken, {
         realm_id: realmId,
         call_id: callId,
@@ -174,7 +174,7 @@ test.describe("media token exchange", () => {
       expect(denied.status()).toBe(403);
       expect(wireErrCode(await denied.json())).toBe("capability_denied");
 
-      // Grant ck.call.join → admitted (token issued). alice is the realm owner.
+      // Grant ak.call.join → admitted (token issued). alice is the realm owner.
       await grantCallCapability(
         request,
         aliceToken,
@@ -218,8 +218,8 @@ async function setupMediaCall(
   );
 
   // Token exchange is decoupled from any prior signaling session
-  // (media-service-binding.md settlement ordering): a brand-new call has no ck.call.state
-  // cell yet, and authorization is realm membership + ck.call.join. alice owns
+  // (media-service-binding.md settlement ordering): a brand-new call has no ak.call.state
+  // cell yet, and authorization is realm membership + ak.call.join. alice owns
   // the realm (holds all caps), so no explicit grant is needed for her.
   const callId = newCallId();
   return { alice, aliceToken, realmId, callId };

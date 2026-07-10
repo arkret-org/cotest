@@ -5,7 +5,7 @@
 //
 // COT-ORG-05 — "who controls the organization principal when there is no shared
 // account?" An organization is a DID principal, not a human's account. Issuing a
-// ck.realm.organization statement requires the organization DID controller, or
+// ak.realm.organization statement requires the organization DID controller, or
 // an explicit delegation (governance_service / account_authority); a logged-in
 // human admin does NOT become the organization principal.
 //
@@ -31,7 +31,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("organization principal bootstrap / delegation", () => {
   test.fixme(
     // @blocking-on: COA-ORG-03 — coauth must refuse to issue a
-    //   ck.realm.organization authorization for an actor that holds no
+    //   ak.realm.organization authorization for an actor that holds no
     //   organization delegation. There is no coauth organization-authorization
     //   endpoint yet, so the "human admin cannot self-issue" gate cannot be
     //   exercised live.
@@ -65,7 +65,7 @@ test.describe("organization principal bootstrap / delegation", () => {
 
   test.fixme(
     // @blocking-on: COA-ORG-02/03 + SOL-ORG-03 — coauth issues a delegation
-    //   whose purpose covers ck.realm.organization, then signs the statement as
+    //   whose purpose covers ak.realm.organization, then signs the statement as
     //   governance_service/account_authority (or the DID controller signs
     //   directly), and soland accepts it after resolving the live delegation.
     // @user-promise: e2e/scenarios/governance/organization-bootstrap.md (Case B)
@@ -79,7 +79,7 @@ test.describe("organization principal bootstrap / delegation", () => {
       const token = await issueDevSession(request, admin);
       const orgDid = `did:web:acme-boot-${Date.now()}.example`;
 
-      // coauth issues an organization delegation covering ck.realm.organization.
+      // coauth issues an organization delegation covering ak.realm.organization.
       const delegation = await request.post(
         `${coauthBase}/_coauth/self/organizations/${encodeURIComponent(orgDid)}/delegations`,
         {

@@ -130,7 +130,7 @@ test.describe("chat advanced", () => {
       fixture.realmId,
     );
     expect(events.map((event) => event.kind)).toEqual(
-      expect.arrayContaining(["ak.reaction.add", "ck.reaction.remove"]),
+      expect.arrayContaining(["ak.reaction.add", "ak.reaction.remove"]),
     );
     expect(
       events.find((event) => event.kind === "ak.reaction.add")?.payload,

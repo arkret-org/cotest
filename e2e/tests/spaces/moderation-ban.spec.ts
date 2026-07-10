@@ -4,8 +4,8 @@
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
 //   - §2.5 Moderation MUST anchored
 //   - §3 Report
-//   - §5.1 Redact requires ck.moderation.decision
-//   - §5.2 Ban via ck.member.state{membership="ban"}
+//   - §5.1 Redact requires ak.moderation.decision
+//   - §5.2 Ban via ak.member.state{membership="ban"}
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -30,7 +30,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation and ban", () => {
-  test("report -> ck.member.state ban -> post-ban writes rejected -> redaction filters public timeline", async ({
+  test("report -> ak.member.state ban -> post-ban writes rejected -> redaction filters public timeline", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -211,7 +211,7 @@ test.describe("moderation and ban", () => {
     expect(exportText).toContain(sent.event_id);
   });
 
-  test("E5.3 idempotent ban smoke: re-issuing ck.member.state{ban} leaves mallory non-member", async ({
+  test("E5.3 idempotent ban smoke: re-issuing ak.member.state{ban} leaves mallory non-member", async ({
     request,
   }) => {
     const stamp = Date.now();

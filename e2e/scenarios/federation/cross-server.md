@@ -80,7 +80,7 @@
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `realm_id = realmId`
    - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier` / `reducer_profile_digest`
-   - `events: [<完整签名的 ck.invite.create Envelope>]`
+   - `events: [<完整签名的 ak.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
 7. β 校验:
    - HTTP signature transcript + destination DID 匹配

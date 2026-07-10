@@ -397,7 +397,7 @@ async function publishCrossSigning(
   return trustDomain;
 }
 
-// Build an encrypted Realm via a direct ck.realm.create envelope. This local
+// Build an encrypted Realm via a direct ak.realm.create envelope. This local
 // helper deliberately omits plaintext service declarations so the MLS tests
 // exercise the encrypted path only.
 async function createEncryptedRealm(
@@ -472,7 +472,7 @@ function mlsGovernanceBinding(
   };
 }
 
-// Submit ck.mls.genesis for a fresh MLS group bound to `realmId` at epoch 0 and
+// Submit ak.mls.genesis for a fresh MLS group bound to `realmId` at epoch 0 and
 // return the group context the commit helper threads through. The genesis locks
 // the group's policy_root; later commits MUST carry the same root.
 async function submitMlsGenesis(
@@ -518,7 +518,7 @@ async function submitMlsGenesis(
   return group;
 }
 
-// Submit a ck.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`. Optional
+// Submit a ak.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`. Optional
 // `policyRoot` override forges a mismatched governance binding (E11.2);
 // `concurrentCommit` flags a racing fork at the same base epoch (E11.1). Returns
 // the raw submit response so callers can assert accepted ids or wire codes.
@@ -784,7 +784,7 @@ test.describe("MLS group encryption", () => {
   test("alice creates space with encryption_profile=mls_rfc9420 at create time; world_readable policy is rejected", async ({
     request,
   }) => {
-    // Smoke for the create-time encryption profile path. Full ck.mls.genesis
+    // Smoke for the create-time encryption profile path. Full ak.mls.genesis
     // materialization remains pinned below in the richer lifecycle cases.
     const stamp = Date.now();
     const alice = uniqueUser("s11-create-alice");
@@ -1311,7 +1311,7 @@ test.describe("MLS group encryption", () => {
     }
   });
 
-  test("carol added in epoch 1 → ck.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async ({
+  test("carol added in epoch 1 → ak.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async ({
     request,
   }) => {
     // spec: encryption-and-audit.md §2.4.1, models/realm-and-space.md §3.4.
@@ -1612,7 +1612,7 @@ test.describe("MLS group encryption", () => {
     // (reducer/mls.rs apply_commit_epoch) rejects a forged / stale binding with
     // `governance_binding_mismatch`. This is the same reducer gate the
     // federation-push ingest pipeline (submit_federation_events ->
-    // submit_event_value -> reducer) runs every pushed ck.mls.commit through, so
+    // submit_event_value -> reducer) runs every pushed ak.mls.commit through, so
     // a mismatched binding is rejected on the local submit and the federation
     // boundary alike.
     const stamp = Date.now();
@@ -1768,7 +1768,7 @@ test.describe("MLS group encryption", () => {
   // an MLS Welcome and has NOT restored its account secret must NOT silently
   // downgrade an encrypted private write to plaintext. The client surfaces a
   // recoverable "MLS state not ready" affordance and refuses to submit; it
-  // never POSTs a plaintext ck.strand.update carrying the private `body`.
+  // never POSTs a plaintext ak.strand.update carrying the private `body`.
   //
   // inkson guard: encrypt_values_with_device_snapshot returns
   // MlsRuntimeError::MissingWelcome when no local MLS snapshot exists, which
@@ -1825,7 +1825,7 @@ test.describe("MLS group encryption", () => {
       const deviceB = deviceBFlow.page;
 
       // Capture any plaintext private write that would leak the description.
-      // A plaintext ck.strand.update would carry `privateDescription` verbatim
+      // A plaintext ak.strand.update would carry `privateDescription` verbatim
       // in its body/fields.body patch; an encrypted one never does.
       const plaintextPrivateWrites: string[] = [];
       deviceB.page.on("request", (req) => {
@@ -1890,7 +1890,7 @@ test.describe("MLS group encryption", () => {
             .filter({ hasText: privateDescription }),
         ).toHaveCount(0);
 
-        // 4c) No plaintext ck.strand.update carrying the private body ever left
+        // 4c) No plaintext ak.strand.update carrying the private body ever left
         //     the client (so the server never had to accept or bounce one).
         expect(
           plaintextPrivateWrites,

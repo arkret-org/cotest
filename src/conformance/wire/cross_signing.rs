@@ -375,10 +375,10 @@ pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {
         let name = required_str(v, "name")?;
         let outcome = expected_outcome(v, name)?;
         if required_str(v, "event_kind")? != "ak.cross_signing.reset" {
-            bail!("vector {name} event_kind must be ck.cross_signing.reset");
+            bail!("vector {name} event_kind must be ak.cross_signing.reset");
         }
         if required_str(v, "schema_id")? != "ak.schema.cross_signing_reset.v1" {
-            bail!("vector {name} schema_id must be ck.schema.cross_signing_reset.v1");
+            bail!("vector {name} schema_id must be ak.schema.cross_signing_reset.v1");
         }
         let previous = v
             .get("previous_generation")
@@ -415,7 +415,7 @@ pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("vector {name} missing successor publish"))?;
                 if successor_kind != "ak.cross_signing.publish" {
-                    bail!("vector {name} successor publish must be ck.cross_signing.publish");
+                    bail!("vector {name} successor publish must be ak.cross_signing.publish");
                 }
                 saw_accept = true;
             }

@@ -30,7 +30,7 @@ fn media_binding_vector_suite_runs_clean() {
     assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 10);
 }
 
-// ─── webrtc-signaling.md §5.1 — ck.call.signal receiver vectors ────────────
+// ─── webrtc-signaling.md §5.1 — ak.call.signal receiver vectors ────────────
 //
 // signal_type enum (rejects retired offer/ice/device_change) + seq
 // monotonicity (receiver-side rollback drop) + a REAL ed25519 detached-JWS
@@ -49,7 +49,7 @@ fn call_signal_receiver_vector_suite_runs_clean() {
 // additions for recording retention + audit lock, ready recording artifact
 // binding, the transcribe pipeline + dedicated exporter label, moderator
 // kick/ban + removed_participants[] token-reissue gating, and the P2P→SFU
-// upgrade + ck.call.summary terminal-state gate.
+// upgrade + ak.call.summary terminal-state gate.
 
 #[test]
 fn call_state_media_lifecycle_vector_suite_runs_clean() {
@@ -134,7 +134,7 @@ fn mention_rendering_vector_suite_runs_clean() {
     );
 }
 
-// ─── R3.2 / VECT-COT-3 — ck.find.directory.query.list_handles_for_subject ────────────
+// ─── R3.2 / VECT-COT-3 — ak.find.directory.query.list_handles_for_subject ────────────
 
 #[test]
 fn list_handles_for_subject_vector_suite_runs_clean() {
@@ -644,7 +644,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 }
 
 #[test]
-#[ignore = "R3.1: soland MID reducer + ck.profile.update field-level delta wiring not yet implemented"]
+#[ignore = "R3.1: soland MID reducer + ak.profile.update field-level delta wiring not yet implemented"]
 fn test_7_cx_member_identity_update_live() {
     // Live integration:
     //   1. Actor publishes initial `ck.member.identity.update` event with MemberIdentity v1

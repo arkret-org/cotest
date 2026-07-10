@@ -26,7 +26,7 @@ use serial_test::serial;
 /// device revoke.
 /// Issue: CT-9 (multi-device QR pairing)
 #[tokio::test]
-#[ignore = "needs soland E2E-MULTI-DEV-1: account device projection + `cross_signing_binding` validation + MLS state machine (ck.mls.commit reducer) + ck.device.list_update emission + Remove-proposal fanout on device revoke — see CT-9"]
+#[ignore = "needs soland E2E-MULTI-DEV-1: account device projection + `cross_signing_binding` validation + MLS state machine (ck.mls.commit reducer) + ak.device.list_update emission + Remove-proposal fanout on device revoke — see CT-9"]
 #[serial]
 async fn multi_device_qr_pairing_and_revoke_cascades_mls_remove() -> Result<()> {
     cotest::scenarios::multi_device_qr_pairing::multi_device_qr_pairing_run().await

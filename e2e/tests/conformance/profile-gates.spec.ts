@@ -81,7 +81,7 @@ type ConformanceCatalog = {
   // is a non-exhaustive view). They are independently advertisable in
   // /_arkret/describe.claimed_profiles — e.g. crypto-media/encryption-and-audit.md
   // §2.5 requires a principal server federating MLS-backed Realms to advertise
-  // ck.profile.mls_governance_binding.full.v1.
+  // ak.profile.mls_governance_binding.full.v1.
   hardening_profiles?: string[];
   candidate_profiles?: string[];
   profile_tiers?: {
@@ -188,7 +188,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     // the canonical catalog. This catches typos and forward-references to draft
     // profiles before they ship. hardening_profiles[] is included because opt-in
     // hardening profiles are independently advertisable in claimed_profiles (e.g.
-    // ck.profile.mls_governance_binding.full.v1, the cross-deployment E2EE MLS
+    // ak.profile.mls_governance_binding.full.v1, the cross-deployment E2EE MLS
     // federation interop floor — crypto-media/encryption-and-audit.md §2.5).
     expect(fs.existsSync(CATALOG_PATH), `catalog exists at ${CATALOG_PATH}`).toBe(true);
     const catalog = JSON.parse(fs.readFileSync(CATALOG_PATH, "utf8")) as ConformanceCatalog;
@@ -216,7 +216,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       `claimed profile ids missing from catalog ${CATALOG_PATH}: ${JSON.stringify(orphans)}`,
     ).toEqual([]);
 
-    // unsupported_profiles[] (e.g. ck.profile.soland_limited_server.v1) are limitation
+    // unsupported_profiles[] (e.g. ak.profile.soland_limited_server.v1) are limitation
     // descriptors, not conformance claims. They MUST NOT appear in claimed_profiles
     // and they MUST NOT be required to live in the catalog.
     const unsupported = body.unsupported_profiles ?? [];

@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/calls/webrtc-call-sequence.md
 // Spec refs:
 //   - crypto-media/webrtc-signaling.md §5-§6 (signaling envelope, 1:1 payloads)
-//   - crypto-media/call-state.md §4.2 (durable ck.call.state lifecycle)
+//   - crypto-media/call-state.md §4.2 (durable ak.call.state lifecycle)
 //   - crypto-media/media-service-binding.md §5 (focus_join migration on upgrade)
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
@@ -12,7 +12,7 @@
 // `ck.call.state` cell driven by `ck.call.state` events (call-state.md §4.2).
 // This spec therefore asserts (a) the signaling stream is relayed in seq order
 // with senders attributed, and (b) the durable lifecycle advances via
-// ck.call.state — the two planes the spec actually defines.
+// ak.call.state — the two planes the spec actually defines.
 
 import { expect, test } from "@playwright/test";
 import { addRealmMemberApi } from "../../helpers/soland-api";
@@ -35,12 +35,12 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
-  test("invite -> answer -> candidate -> hangup relays in monotonic seq order and durable ck.call.state advances", async ({
+  test("invite -> answer -> candidate -> hangup relays in monotonic seq order and durable ak.call.state advances", async ({
     request,
   }) => {
     const { alice, aliceToken, bob, bobToken, realmId } =
       await setupTwoPartyCallRealm(request, "seq-1to1");
-    // bob is a non-owner member; grant him ck.call.signal.send so the relay
+    // bob is a non-owner member; grant him ak.call.signal.send so the relay
     // accepts his `answer` (owner alice holds it by default).
     await grantCallCapability(
       request,
@@ -144,7 +144,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       .map((e) => (e.payload as Record<string, unknown>).seq as number);
     expect(bobSeqs).toEqual([1]);
 
-    // Durable lifecycle plane — ck.call.state advances connecting -> active ->
+    // Durable lifecycle plane — ak.call.state advances connecting -> active ->
     // ended (call-state.md §4.2). The owner writes the durable cell; we drive
     // it through the legal FSM transitions.
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {

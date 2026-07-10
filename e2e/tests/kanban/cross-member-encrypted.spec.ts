@@ -86,7 +86,7 @@ async function buildEncryptedBoardListCard(
 }
 
 // Add an encrypted private description to a card through the UI and assert the
-// ck.strand.update was accepted AND actually encrypted (description never
+// ak.strand.update was accepted AND actually encrypted (description never
 // appears verbatim on the wire). Mirrors kanban/end-to-end.spec.ts.
 async function addEncryptedDescription(
   page: Page,
@@ -121,12 +121,12 @@ async function addEncryptedDescription(
   const body = await response.text();
   expect(
     body.includes("content_encryption_floor_violation"),
-    `description ck.strand.update hit the content-encryption floor — client shipped plaintext to an encrypted realm: ${response.status()} ${body.slice(0, 500)}`,
+    `description ak.strand.update hit the content-encryption floor — client shipped plaintext to an encrypted realm: ${response.status()} ${body.slice(0, 500)}`,
   ).toBe(false);
   expect(response.status(), `ck.strand.update should be accepted; body=${body.slice(0, 500)}`).toBeLessThan(400);
   expect(
     (response.request().postData() ?? "").includes(description),
-    "description leaked as plaintext into the ck.strand.update wire — realm not actually encrypted",
+    "description leaked as plaintext into the ak.strand.update wire — realm not actually encrypted",
   ).toBe(false);
 
   await expect(page.getByTestId("card-description-panel")).toContainText(description, {
@@ -491,7 +491,7 @@ test.describe("cross-member encrypted kanban", () => {
 
       // 1) Alice creates a shared-history MLS realm. For this visibility the
       // card events are visible to a later joined member, but the private body
-      // still requires the explicit ck.realm_key.request -> ck.realm_key.share
+      // still requires the explicit ak.realm_key.request -> ak.realm_key.share
       // path before Bob may render plaintext.
       const realmId = await alicePage.createRealm({
         title: `Shared-history MLS Kanban ${stamp}`,

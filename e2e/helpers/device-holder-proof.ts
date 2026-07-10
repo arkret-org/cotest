@@ -89,7 +89,7 @@ export async function enrollOnboardedDeviceSigningKey(
       // §5.4: the enrollment authority also attests the device HPKE sealing
       // key and the canonical algorithm set.
       hpke_key: "z6LSCotestE2eDeviceHpkeKey",
-      algorithms: ["ak.hpke_x25519_aead_chacha20poly1305.v1", "ck.mls.v1"],
+      algorithms: ["ak.hpke_x25519_aead_chacha20poly1305.v1", "ak.mls.v1"],
       actor_seq: 1,
     },
   });
@@ -109,7 +109,7 @@ export async function enrollOnboardedDeviceSigningKey(
     throw new Error(`device-enroll omitted authorized_event: ${enrollText}`);
   }
 
-  // Submit the signed ck.device.authorize verbatim to the Principal Server via
+  // Submit the signed ak.device.authorize verbatim to the Principal Server via
   // the onboarded grant + per-request DPoP (the /_arkret/self/* edge).
   const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const submitResp = await request.post(eventsUrl, {
@@ -124,7 +124,7 @@ export async function enrollOnboardedDeviceSigningKey(
   const submitText = await submitResp.text();
   expect(
     submitResp.ok(),
-    `submit ck.device.authorize returned ${submitResp.status()}: ${submitText}`,
+    `submit ak.device.authorize returned ${submitResp.status()}: ${submitText}`,
   ).toBeTruthy();
 
   return deviceSigningKeyDid(onboarded.deviceKey);

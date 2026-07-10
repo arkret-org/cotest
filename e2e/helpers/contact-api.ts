@@ -501,7 +501,7 @@ async function uploadDirectConversationKeyPackage(
             key_package: keyPackage,
             keypackage_digest: keypackageDigest,
             cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-            capabilities: ["ak.mls.rfc9420", "ck.mls.profile.full"],
+            capabilities: ["ak.mls.rfc9420", "ak.mls.profile.full"],
             device_signature: deviceSignature,
             created_at: canonicalTimestamp(),
             expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
@@ -578,7 +578,7 @@ export type IntroductionEvidence =
 // Build a `ck.invite.create` invite event whose payload satisfies soland's
 // invite-delivery consistency checks (src/routing/invites.rs
 // validate_invite_delivery_consistency + projection required fields):
-//   - kind == ck.invite.create
+//   - kind == ak.invite.create
 //   - payload.invitee == invite_address.subject_id
 //   - payload.invite_delivery_target.recipient_service_did == recipient svc
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))

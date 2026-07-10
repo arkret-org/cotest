@@ -48,7 +48,7 @@ test.describe("mimi federation", () => {
     "alice opens MIMI-enabled Realm; bob_mimi joins via facade; bidirectional messaging with identity bridging",
     async () => {
       // Phase A — alice creates a Realm via /setup with
-      //   ck.realm.federation_profile = "mimi_interop".
+      //   ak.realm.federation_profile = "mimi_interop".
       // Assert MIMI interop exposure via the registered protocol face:
       //   GET /_arkret/describe advertises the mimi_interop extension, and
       //   GET /_arkret/open/mimi/provider-directory
@@ -58,7 +58,7 @@ test.describe("mimi federation", () => {
       //   below for the already-live pattern).
       //
       // Phase B — mimi_facade (mock) simulates a join request from the
-      //   external MIMI network, translated into a Arkret ck.invite.request /
+      //   external MIMI network, translated into a Arkret ak.invite.request /
       //   knock event submitted to soland; alice's /realm/:id/admin shows the
       //   federation-inbound-panel with a mimi origin marker.
       //
@@ -67,18 +67,18 @@ test.describe("mimi federation", () => {
       //   (did:pairwise:${realmId}/${hash(handle, realmId.salt)}).
       //   Approval is an event-plane action: the admin approval (product
       //   face /_soland/, or inkson admin panel) results in a
-      //   ck.member.state{membership=join} event for the pairwise DID.
+      //   ak.member.state{membership=join} event for the pairwise DID.
       //   Assert membership via the event plane: query /_arkret/self/events
-      //   (queryRealmEventsApi) for the ck.member.state event carrying the
+      //   (queryRealmEventsApi) for the ak.member.state event carrying the
       //   pairwise DID with a mimi source annotation.
       //
       // Phase D — alice posts M1 on /timeline/:realmId;
       //   the facade mock records an outbound MIMI event; the soland message
-      //   carries ck.morph.federation_outbound = "mimi" + mimi_event_id.
+      //   carries ak.morph.federation_outbound = "mimi" + mimi_event_id.
       //   The facade translates bob_mimi's MM2 from the MIMI network into a
       //   Arkret Message; alice's timeline shows MM2 within 30s with the
       //   pairwise DID as sender; the message carries
-      //   ck.morph.federation_inbound = "mimi" + mimi_origin_event_id.
+      //   ak.morph.federation_inbound = "mimi" + mimi_origin_event_id.
       //   alice replies to MM2 with M3; the reply relation is preserved in
       //   both directions across MIMI <-> Arkret.
       //
@@ -98,7 +98,7 @@ test.describe("mimi federation", () => {
       // The facade mock deliberately returns 5xx / times out;
       // alice's M1 must still persist locally on soland and stay visible to
       // Arkret members; the message carries
-      // ck.morph.federation_outbound_status = "deferred";
+      // ak.morph.federation_outbound_status = "deferred";
       // once the facade recovers, soland retries delivery and the status
       // transitions to "delivered".
     },
@@ -194,7 +194,7 @@ test.describe("mimi federation", () => {
     );
   });
 
-  test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + ck.morph.unknown_content_kind", async ({
+  test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + ak.morph.unknown_content_kind", async ({
     request,
   }) => {
     const stamp = Date.now();

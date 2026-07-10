@@ -14,7 +14,7 @@
 //   ✓ Idempotent by event_id
 //   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
 //   ✓ Outbound push worker POSTs local invite/message Events to peers
-//   ✓ ck.invite.create, ck.member.state join, and ck.message.create trigger federation push
+//   ✓ ak.invite.create, ak.member.state join, and ak.message.create trigger federation push
 //   ✓ peer events query pulls peer pages and ingests missing local Events
 //   ✓ peer events frontier exposes deterministic Event ID coverage
 //   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
@@ -652,7 +652,7 @@ test.describe("cross-server federation", () => {
   }) => {
     // spec: federation.md §4.1 service_binding_ref.reducer_profile_digest +
     // §4.1.1 receiver gate; registered vector
-    // ck.vector.federation.reducer_profile_digest.v1: a digest diverging from
+    // ak.vector.federation.reducer_profile_digest.v1: a digest diverging from
     // the receiver's registry-derived value MUST reject the WHOLE batch with
     // reducer_profile_mismatch — no partial accept.
     // soland: validated in event_log/admission.rs
@@ -679,7 +679,7 @@ test.describe("cross-server federation", () => {
       realmId,
       idempotencyKey: `${solandServiceDid("alpha")}#cotest-reducer-profile-mismatch`,
       // Well-formed sha256:<hex> that cannot equal β's registry-derived
-      // digest for ck.profile.federation_minimal.v1.
+      // digest for ak.profile.federation_minimal.v1.
       reducerProfileDigestOverride: `sha256:${"9".repeat(64)}`,
     });
     const body = (await response.json()) as {

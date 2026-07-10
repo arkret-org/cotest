@@ -291,7 +291,7 @@ test.describe("project simulation", () => {
     }
   });
 
-  test("alice assigns Card 1 to bob via ck.relation.create assigned_to; bob's strand projection surfaces the assignment", async ({
+  test("alice assigns Card 1 to bob via ak.relation.create assigned_to; bob's strand projection surfaces the assignment", async ({
     request,
   }) => {
     // spec: relation.md §3.2 assigned_to (Strand -> DID). soland materializes
@@ -370,7 +370,7 @@ test.describe("project simulation", () => {
   });
 
   test(
-    "status FSM: Card transitions todo → in_progress → done via ck.strand.update; invalid transition (todo → done direct) rejected by FSM cell",
+    "status FSM: Card transitions todo → in_progress → done via ak.strand.update; invalid transition (todo → done direct) rejected by FSM cell",
     async ({ request }) => {
       const alice = uniqueUser("s16-fsm-alice");
       await ensureRegistered(request, alice);
@@ -673,11 +673,11 @@ test.describe("project simulation", () => {
     expect(row?.assigned_actor_ids ?? []).toEqual([winnerActor]);
   });
 
-  test("E16.1 unassign emits ck.relation.tombstone; assignment no longer shows in card projection", async ({
+  test("E16.1 unassign emits ak.relation.tombstone; assignment no longer shows in card projection", async ({
     request,
   }) => {
     // spec: relation.md §3.2 tombstoned state — unassign is a
-    // ck.relation.tombstone on the assigned_to edge. soland flips the relation
+    // ak.relation.tombstone on the assigned_to edge. soland flips the relation
     // to tombstoned (apply_relations.rs apply_relation_delete); the Strand's
     // assigned_to projection face only counts active edges, so the assignee
     // drops off.
@@ -750,7 +750,7 @@ test.describe("project simulation", () => {
   test("alice archives the entire board; archived board's cards become read-only; archive list view shows the board", async ({
     request,
   }) => {
-    // spec: realm-and-space.md §4.4 lifecycle/cascade. ck.space.archive on the
+    // spec: realm-and-space.md §4.4 lifecycle/cascade. ak.space.archive on the
     // board cascades to contained Lists and Cards (soland
     // cascade_space_container_lifecycle): Cards flip to Archived (read-only —
     // further writes 412 strand_not_active) and the board itself stays listed

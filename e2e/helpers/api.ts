@@ -217,7 +217,7 @@ export async function listReadMarkersViaApi(
   });
   return events
     .filter((event) => {
-      return event.kind === "ak.read_cursor.advance" || event.event_kind === "ck.read_cursor.advance";
+      return event.kind === "ak.read_cursor.advance" || event.event_kind === "ak.read_cursor.advance";
     })
     .map((event) => (event.payload ?? event) as ReadMarker);
 }

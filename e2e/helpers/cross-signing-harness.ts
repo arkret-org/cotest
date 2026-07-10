@@ -11,7 +11,7 @@
 //     PSK→USK binding signatures over the §5.1 ck-cross-signing-bind-v1 input
 //     at the CAS-guarded generation.
 //   * validate_device_authorize_binding → check_device_cross_signing_binding
-//     verifies a ck.device.authorize's cross_signing_binding with the accepted
+//     verifies a ak.device.authorize's cross_signing_binding with the accepted
 //     SSK over the §5.2 ck-device-trust-bind-v1 input at the live generation.
 //
 // The PSK is published under a self-contained `did:key:z…` verification method

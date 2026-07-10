@@ -127,7 +127,7 @@ function captchaGate(providerDid: string): Record<string, unknown> {
 }
 
 test.describe("knock auto-resolve path", () => {
-  test("alice sets join_rule=knock_restricted with gates=[claim_required(auto), challenge_response(auto)]; bob submits ck.member.state{join, gate_proofs[]} and joins directly", async ({
+  test("alice sets join_rule=knock_restricted with gates=[claim_required(auto), challenge_response(auto)]; bob submits ak.member.state{join, gate_proofs[]} and joins directly", async ({
     request,
   }) => {
     test.skip(

@@ -38,7 +38,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
         match name {
             "genesis_move_creates_epoch_zero" => {
                 if required_str(v, "kind")? != "ak.mls.genesis" {
-                    bail!("vector {name} kind must be ck.mls.genesis");
+                    bail!("vector {name} kind must be ak.mls.genesis");
                 }
                 let epoch_after = v
                     .pointer("/expected/epoch_after")
@@ -60,7 +60,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
             }
             "epoch_advance_via_commit_zero_to_one" => {
                 if required_str(v, "kind")? != "ak.mls.commit" {
-                    bail!("vector {name} kind must be ck.mls.commit");
+                    bail!("vector {name} kind must be ak.mls.commit");
                 }
                 let prior = v
                     .get("prior_epoch")

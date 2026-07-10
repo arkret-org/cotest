@@ -83,7 +83,7 @@ fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> 
     }
     let supported = string_set(input, "supported_profiles")?;
     if !supported.contains("ak.profile.mimi_interop.v1") {
-        bail!("provider directory must advertise ck.profile.mimi_interop.v1");
+        bail!("provider directory must advertise ak.profile.mimi_interop.v1");
     }
     let mimi = required_field(input, "mimi")?;
     for (field, draft_field) in [
@@ -116,7 +116,7 @@ fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> 
 fn validate_room_binding_case(case: &Value) -> Result<()> {
     let input = required_field(case, "input")?;
     if required_str(input, "kind")? != "ak.mimi.room_binding" {
-        bail!("room binding case must use ck.mimi.room_binding");
+        bail!("room binding case must use ak.mimi.room_binding");
     }
     let payload = required_field(input, "payload")?;
     if required_str(payload, "profile")? != "ak.profile.mimi_interop.v1" {
@@ -371,7 +371,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         );
     }
 
-    // Move/Anchor/Lattice rebase (spec 2026-05-08) removed cx.component.space.host*;
+    // Move/Anchor/Lattice rebase (spec 2026-05-08) removed ak.component.space.host*;
     // anchorer cell governs Anchor signing instead. Anchorer-related cell families
     // SHOULD be marked arkret_only (no direct MIMI equivalent for Anchor authority).
     Ok(())
@@ -427,11 +427,11 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             }
             "strand" => {
                 // Per spec 2026-05-08 (removed-event-kinds.json:
-                // cx.strand.track.read_receipt_policy), track-level read-receipt
+                // ak.strand.track.read_receipt_policy), track-level read-receipt
                 // overrides are not in v1. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
                 // independent Strand/Circle scope (Strand.scope_circle_id, CKP-0007)
-                // whose own ck.realm.read_receipt_policy composes against the
+                // whose own ak.realm.read_receipt_policy composes against the
                 // parent Realm policy via the same tighten-only rules.
                 let parent = policy
                     .get("parent")

@@ -112,7 +112,7 @@ export async function grantCircleMemberManageCapability(
     }),
     {
       server: args.server,
-      context: `grant ck.circle.member.manage for ${args.circleId} to ${args.subjectDid}`,
+      context: `grant ak.circle.member.manage for ${args.circleId} to ${args.subjectDid}`,
     },
   );
   return grantId;
@@ -175,7 +175,7 @@ export async function grantCircleManageCapability(
     }),
     {
       server: args.server,
-      context: `grant ck.circle.manage for ${args.circleId} to ${args.subjectDid}`,
+      context: `grant ak.circle.manage for ${args.circleId} to ${args.subjectDid}`,
     },
   );
   return grantId;

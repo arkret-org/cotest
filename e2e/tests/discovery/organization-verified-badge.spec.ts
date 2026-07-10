@@ -96,7 +96,7 @@ test.describe("directory verified organization badge", () => {
   test.fixme(
     // @blocking-on: SOL-ORG-06 — directory verified_badge must be false for a
     //   realm that only declares owning_organizations[] with no active verified
-    //   ck.realm.organization relationship. Today the directory derives the
+    //   ak.realm.organization relationship. Today the directory derives the
     //   badge from the local organizations registry, so declared-only realms can
     //   still show as verified — the regression this case must catch.
     // @user-promise: e2e/scenarios/discovery/organization-verified-badge.md (Case A)
@@ -124,7 +124,7 @@ test.describe("directory verified organization badge", () => {
 
   test.fixme(
     // @blocking-on: SOL-ORG-06 / TBY-ORG-01..03 — verified_badge projection from
-    //   an active verified ck.realm.organization (owner|directory_certifier)
+    //   an active verified ak.realm.organization (owner|directory_certifier)
     //   relationship, read identically by inkson + teabay.
     // @user-promise: e2e/scenarios/discovery/organization-verified-badge.md (Case B)
     "Case B: active owner / directory_certifier relationship shows the badge",

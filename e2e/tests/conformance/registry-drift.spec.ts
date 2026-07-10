@@ -193,7 +193,7 @@ function forbiddenTermMatcher(term: string): RegExp {
 // key paths (`metadata.fields.stage`), patch op paths (`patch:stage`), enum
 // `key=value` forms (`kind=room`, `actor_kind=ghost`), typed-id value prefixes
 // (`ak:rtcpart:`), and removed event-kind / schema-id VALUES
-// (`cx.device.authorized`, `cx.schema.read_marker.v1`). The scanner classifies
+// (`ak.device.authorized`, `ak.schema.read_marker.v1`). The scanner classifies
 // each hard_reject entry and applies the matching probe against a real wire
 // document (submitted Event Envelope + soland's receipt + queried events).
 

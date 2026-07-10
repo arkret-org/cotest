@@ -72,13 +72,13 @@
 5. 断言:bob 通过 `GET /_arkret/self/account/subscribe?catchup=true` 的 `notifications.events`
    在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
-### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
+### Phase B — WebSocket upgrade (negotiate via ak.transport.negotiate)
 
 6. **soland_a** 通过 `GET ${SOLAND_B_PUBLIC_URL}/_arkret/describe` 读取 server B 的 `supported_bindings`
    - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ak.profile.binding.websocket.v1", upgrade_path: "/_arkret/peer/events stream binding"}`
 7. **soland_a** 发起 WebSocket 升级:
    - URL: `${SOLAND_B_PUBLIC_URL}/_arkret/peer/events stream binding`(`wss://` 在生产、`ws://` 在测试)
-   - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ck.federation.v1`
+   - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ak.federation.v1`
    - 同时携带 RFC 9421 `Signature` 对 upgrade 请求的 covered components 签名(handshake 阶段)
 8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `ck.federation.v1` subprotocol
 9. **soland_a** 通过 WebSocket 帧推送下一批 federation event(例如 alice 在 space 发的消息)

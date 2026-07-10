@@ -276,7 +276,7 @@ test.describe("workflow: support escalation", () => {
       await stepShot(alexPage.page, testInfo, "redact-A-alex-tombstone");
 
       // Both parties reload: the receiver-side tombstone fold is now wired
-      // end-to-end (soland projects the redacted ck.message.create as a
+      // end-to-end (soland projects the redacted ak.message.create as a
       // tombstone on events_query/sync; inkson chat folds it into
       // chat-redacted-tombstone), so the plaintext disappears for both and
       // the tombstone surfaces on each reload.

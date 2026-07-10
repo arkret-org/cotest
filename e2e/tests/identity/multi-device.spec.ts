@@ -106,7 +106,7 @@ test.describe("multi-device pairing + revocation", () => {
     }
   });
 
-  test("unverified bootstrap placeholder cannot approve a new device through ck.gate.account.command.pair_device", async ({
+  test("unverified bootstrap placeholder cannot approve a new device through ak.gate.account.command.pair_device", async ({
     request,
   }) => {
     const alice = uniqueUser(`s10-device-pair-${Date.now()}`);
@@ -138,7 +138,7 @@ test.describe("multi-device pairing + revocation", () => {
     expect(wireErrCode(await pairResp.json())).toBe("device_not_authorized");
   });
 
-  test("Device 1 publishes cross-signing keys, then signs ck.device.authorize for Device 2 with a real cross_signing_binding; soland ingest verifies the SSK signature and surfaces Device 2", async ({
+  test("Device 1 publishes cross-signing keys, then signs ak.device.authorize for Device 2 with a real cross_signing_binding; soland ingest verifies the SSK signature and surfaces Device 2", async ({
     request,
   }) => {
     // spec: device-lifecycle.md §5.1 (ck.cross_signing.publish — PSK→{SSK,USK})
@@ -148,7 +148,7 @@ test.describe("multi-device pairing + revocation", () => {
     // This is NOT a dev-proof shortcut for the binding: soland's
     // validate_device_authorize_binding → check_device_cross_signing_binding
     // (routing/identity/cross_signing.rs) resolves the accepted SSK from a real
-    // ck.cross_signing.publish and verifies the §5.2 signature at the live
+    // ak.cross_signing.publish and verifies the §5.2 signature at the live
     // generation. The harness publishes a genuine cross-signing identity (PSK
     // anchored as a self-contained did:key; PSK→SSK and PSK→USK bindings signed
     // over the §5.1 input) and signs the device-trust binding with that SSK, so
@@ -440,11 +440,11 @@ test.describe("multi-device pairing + revocation", () => {
     ).toBeTruthy();
   });
 
-  test("Device 1 revokes Device 2 via ck.device.revoke; Device 2's subsequent /_arkret/self/events POST is rejected and Device 2 shows revoked", async ({
+  test("Device 1 revokes Device 2 via ak.device.revoke; Device 2's subsequent /_arkret/self/events POST is rejected and Device 2 shows revoked", async ({
     request,
   }) => {
     // spec: device-lifecycle.md §2.2 + key-management.md §5.2. After a peer
-    // device submits ck.device.revoke for Device 2, the auth gate stops
+    // device submits ak.device.revoke for Device 2, the auth gate stops
     // accepting Device 2's signed writes. soland fails the revoked-device
     // session closed at the auth layer (401 unauthenticated, "device revoked");
     // the device-set projection flips to status=revoked.
@@ -1023,7 +1023,7 @@ test.describe("multi-device pairing + revocation", () => {
     // queued for a device MUST be dropped when that device is revoked, so a
     // lost/compromised device that comes back online cannot drain key-exchange
     // material queued before the revoke. soland purges the device's to-device
-    // queue (purge_device_delivery_state) when ck.device.revoke is accepted,
+    // queue (purge_device_delivery_state) when ak.device.revoke is accepted,
     // and the revoked device's session is then fail-closed at the auth gate, so
     // the queued message is unreachable.
     const alice = uniqueUser(`s10-grace-drop-${Date.now()}`);
@@ -1178,7 +1178,7 @@ test.describe("multi-device pairing + revocation", () => {
     // `ck.key.verification.*` to a verified same-principal target). A dev-login
     // founding device is enrolled `unverified`, so we first promote it to
     // verified through the real §5.1/§5.2 ingest path (the same cross-signing
-    // publish + ck.device.authorize the suite already exercises above) before
+    // publish + ak.device.authorize the suite already exercises above) before
     // driving the UI. Device-2 then delivers its pairing request over the
     // to-device queue; device-1's background sync surfaces the global prompt.
     const device1Session = await createDpopUserSession(

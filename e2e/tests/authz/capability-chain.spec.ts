@@ -116,7 +116,7 @@ async function setupOwnerRealm(request: APIRequestContext, label: string) {
 }
 
 test.describe("capability chain (event wire)", () => {
-  test("§3 grant lifecycle: bob is denied before the grant and allowed after alice mints ck.capability.grant; effective-grants surfaces it", async ({
+  test("§3 grant lifecycle: bob is denied before the grant and allowed after alice mints ak.capability.grant; effective-grants surfaces it", async ({
     request,
   }) => {
     const { alice, bob, aliceToken, realmId } = await setupOwnerRealm(request, "grant");
@@ -205,7 +205,7 @@ test.describe("capability chain (event wire)", () => {
       expiresAt: plusSeconds(3600),
     });
 
-    // bob only holds ck.message.create; delegating moderation authority
+    // bob only holds ak.message.create; delegating moderation authority
     // violates child.actions ⊆ parent.actions (§10.1) / the issuer upper
     // bound (§3.1a, reason grant_exceeds_issuer_authority).
     const overAction = await submitGrantRaw(request, bobToken, {
@@ -300,7 +300,7 @@ test.describe("capability chain (event wire)", () => {
       ).decision,
     ).toBe("allow");
 
-    // Revocation is an explicit ck.capability.revoke event (§12), never a
+    // Revocation is an explicit ak.capability.revoke event (§12), never a
     // record deletion.
     await revokeCapabilityApi(request, aliceToken, {
       ownerDid: alice.did,

@@ -126,7 +126,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       "plaintext_visible_services": [],
     //   })).await?["realm_id"].as_str().unwrap().to_owned();
     //
-    //   // Each message is wrapped in a ck.mls.commit envelope.
+    //   // Each message is wrapped in a ak.mls.commit envelope.
     //   // Today soland has no MLS reducer; treat this as `ck.message.
     //   // create` with `encrypted=true` content for the scaffold:
     //   let plaintexts = ["pre-loss msg 1", "pre-loss msg 2", "pre-loss msg 3"];

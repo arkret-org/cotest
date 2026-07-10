@@ -122,7 +122,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     //         POST  /_arkret/self/realms/<rid>/circles                (admin)
     //         POST  /_arkret/self/realms/<rid>/members                add Y (Realm member)
     //         POST  /coauth/_arkret/gate/account/session-grants               grant Y
-    // ck.circle.manage         POST  /_arkret/self/circles/<cid>                       (Y;
+    // ak.circle.manage         POST  /_arkret/self/circles/<cid>                       (Y;
     // expect 403)         POST  /_arkret/self/circles/<cid>/members               add Y to
     // Circle (admin)         POST  /_arkret/self/circles/<cid>                       (Y; expect
     // 200)         DELETE /coauth/_arkret/gate/account/session-grants/<grant>      revoke
@@ -135,7 +135,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     //         (ii)  second update: 200 + projection reflects the patch,
     //         (iii) third update (post-revoke): 403 with reason
     //               `permission_denied` + sub-reason `capability_missing`,
-    //         (iv)  ck.circle.audit cross-check: Y without cap (still
+    //         (iv)  ak.circle.audit cross-check: Y without cap (still
     //               Circle member) MUST be rejected; Y with cap but
     //               removed from Circle MUST be rejected.
     let _ = admin
@@ -158,6 +158,6 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
          (i) cap-present + non-member → 403 `actor_not_in_circle`, \
          (ii) cap-present + member → 200 + projection reflects update, \
          (iii) cap-absent + member → 403 `capability_missing`, \
-         (iv) ck.circle.audit cross-check follows the same AND rule."
+         (iv) ak.circle.audit cross-check follows the same AND rule."
     );
 }

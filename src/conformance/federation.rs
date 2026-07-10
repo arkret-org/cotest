@@ -129,7 +129,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // ck.vector.federation.reducer_profile_digest.v1 — positive leg:
+            // ak.vector.federation.reducer_profile_digest.v1 — positive leg:
             // the §4.1.1 computation over the fixture's canonical_input MUST
             // reproduce expected_digest, and the fixture input MUST be exactly
             // the published reducer-profile-registry.json digest_input row
@@ -173,7 +173,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // ck.vector.federation.reducer_profile_digest.v1 — negative leg:
+            // ak.vector.federation.reducer_profile_digest.v1 — negative leg:
             // receiver recomputes its own digest and byte-compares; any
             // divergence MUST reject the whole batch with
             // `reducer_profile_mismatch` (no partial accept).

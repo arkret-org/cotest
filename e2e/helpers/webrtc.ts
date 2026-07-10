@@ -344,7 +344,7 @@ export async function grantCallCapability(
   );
 }
 
-// ── ck.call.state durable cell (call-state.md §4 / webrtc-signaling.md §3a) ───
+// ── ak.call.state durable cell (call-state.md §4 / webrtc-signaling.md §3a) ───
 //
 // The media token issuer + ban gate read the durable `ck.call.state` cell.
 // Seeding it over HTTP submits a signed `ck.call.state` event; the
@@ -398,7 +398,7 @@ export async function seedCallState(
       kind: "ak.call.state",
       payload,
     }),
-    { context: `seed ck.call.state ${callId}` },
+    { context: `seed ak.call.state ${callId}` },
   );
 }
 
@@ -441,7 +441,7 @@ export async function postCallSignal(
   const text = await response.text();
   expect(
     response.status(),
-    `relay ck.call.signal ${String(
+    `relay ak.call.signal ${String(
       (envelope.payload as Record<string, unknown>)?.signal_type,
     )} returned ${response.status()}: ${text}`,
   ).toBe(200);

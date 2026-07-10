@@ -256,8 +256,8 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //                  .as_array()
     //                  .map(|p| p.iter().any(|prop| prop["type"] == "remove"))
     //                  .unwrap_or(false)),
-    //               "expected at least one Remove proposal in ck.mls.commit");
-    //       // device_b appears in ck.device.list_update.left[]:
+    //               "expected at least one Remove proposal in ak.mls.commit");
+    //       // device_b appears in ak.device.list_update.left[]:
     //       let list_updates = sync["realms"]
     //           [<principal_control_realm_id>]
     //           ["timeline"]["events"]
@@ -270,7 +270,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //                  .as_array()
     //                  .map(|l| l.iter().any(|d| d == &device_b))
     //                  .unwrap_or(false)),
-    //               "expected device_b in ck.device.list_update.left[]");
+    //               "expected device_b in ak.device.list_update.left[]");
     //       Ok(())
     //   }, Duration::from_secs(5)).await?;
 

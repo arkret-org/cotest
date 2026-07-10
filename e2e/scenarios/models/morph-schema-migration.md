@@ -75,7 +75,7 @@
 ### Phase B — Compatible (additive) migration 接受 + 历史 event 兼容
 
 6. **alice** 重置一个新 Morph `morphId_B` (同 `R`),`schema_refs = ["ak.schema.morph.customer_risk.v1"]`,写入若干 v1 字段
-7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
+7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
 8. 断言:
    - HTTP 2xx,Morph 当前 `schema_refs[]` = new set
    - 后续 `GET /_arkret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
@@ -93,7 +93,7 @@
 14. **alice** 重发 step 11 的 breaking migrate
 15. 断言:
    - HTTP 2xx
-   - audit log 出现一条 `schema_migration_breaking` 类型记录,字段含 `issuer = alice.did`、`from_schema_refs[]`、`to_schema_refs[]`、`compatibility_class = "breaking"`、`capability_used = "ak.morph.schema.migrate"`、`profile_ref = "ck.profile.morph.schema_migration_transformations.v1"`(确切 audit kind 名以 soland 实现为准,test 用宽 regex `/schema_migration|morph_schema_migrate|breaking/` 匹配)
+   - audit log 出现一条 `schema_migration_breaking` 类型记录,字段含 `issuer = alice.did`、`from_schema_refs[]`、`to_schema_refs[]`、`compatibility_class = "breaking"`、`capability_used = "ak.morph.schema.migrate"`、`profile_ref = "ak.profile.morph.schema_migration_transformations.v1"`(确切 audit kind 名以 soland 实现为准,test 用宽 regex `/schema_migration|morph_schema_migrate|breaking/` 匹配)
    - 再发 `compatibility_class = "transformation"` + 合法 `transformation_rules[]`(每条 rule id 在 profile `transformation_rules_dialect` 内)→ HTTP 2xx
 16. 反向:撤销 capability(`ck.realm.policy.update` 删除 grant),再发 transformation → HTTP 4xx,`error.code = capability_denied`(spec §4.1 S3 capability 缺失分支)
 

@@ -19,13 +19,13 @@
 // when auth_data.verification_method == `${principal_id}#${session.device_id}`
 // and the session device carries an authoritative `device_public_key`. To give
 // the dev-login session device that key, the harness first publishes a real
-// cross-signing identity (PSK→SSK/USK) and a self-targeted ck.device.authorize
+// cross-signing identity (PSK→SSK/USK) and a self-targeted ak.device.authorize
 // for the session device — the same §5.1/§5.2 ingest path the multi-device
 // suite drives — which projects `device_public_key` + verified state for it.
 //
 // Completion (§15 step 3) is then driven exactly as the spec requires: the
-// recovering client publishes an SSK-signed ck.device.authorize (carrying
-// recovery_session_id) plus a ck.device.list_update onto the principal control
+// recovering client publishes an SSK-signed ak.device.authorize (carrying
+// recovery_session_id) plus a ak.device.list_update onto the principal control
 // stream, and POST /complete references those two durable event ids. soland
 // re-verifies the cross_signing_binding against the accepted SSK before flipping
 // the session to `completed` and recording the recovered device key.
@@ -233,7 +233,7 @@ export async function prepareRecoveryPrincipal(
   );
   expect(
     [200, 201],
-    `session-device ck.device.authorize returned ${selfAuthorize.status()}: ${await selfAuthorize.text()}`,
+    `session-device ak.device.authorize returned ${selfAuthorize.status()}: ${await selfAuthorize.text()}`,
   ).toContain(selfAuthorize.status());
 
   // Wait for the projection to record the session device with its key.
@@ -383,7 +383,7 @@ export type RecoveryUnlockResult = {
 
 /// Drive a full device-2 restore over the recovery_unlock factor:
 ///   open session → submit recovery_unlock proof (pending→verified)
-///   → publish SSK-signed ck.device.authorize + ck.device.list_update
+///   → publish SSK-signed ak.device.authorize + ak.device.list_update
 ///   → /complete referencing those durable event ids.
 export async function restoreViaRecoveryUnlock(
   request: APIRequestContext,
@@ -391,7 +391,7 @@ export async function restoreViaRecoveryUnlock(
   opts: { submitterToken?: string } = {},
 ): Promise<RecoveryUnlockResult> {
   // The §15 step-3 control-stream events (ck.device.authorize +
-  // ck.device.list_update) MUST be submitted by a still-valid signer device.
+  // ak.device.list_update) MUST be submitted by a still-valid signer device.
   // Defaults to the principal's original device; callers running after that
   // device is revoked pass a peer device token via `submitterToken`.
   const submitterToken = opts.submitterToken ?? principal.token;
@@ -462,8 +462,8 @@ export async function restoreViaRecoveryUnlock(
   const proofOutcome = (await proofResp.json()) as { verification?: unknown };
   expect(proofOutcome.verification).toBe("verified");
 
-  // 3) Publish the recovering client's SSK-signed ck.device.authorize (carrying
-  //    recovery_session_id) + a ck.device.list_update onto the control stream.
+  // 3) Publish the recovering client's SSK-signed ak.device.authorize (carrying
+  //    recovery_session_id) + a ak.device.list_update onto the control stream.
   const device2Key = deviceVerifyKeyMultibase();
   const binding = buildDeviceCrossSigningBinding({
     identity: principal.identity,
@@ -513,7 +513,7 @@ export async function restoreViaRecoveryUnlock(
   );
   expect(
     [200, 201],
-    `restore ck.device.authorize returned ${authorize.status()}: ${await authorize.text()}`,
+    `restore ak.device.authorize returned ${authorize.status()}: ${await authorize.text()}`,
   ).toContain(authorize.status());
 
   const listUpdateEventId = typedId("event");
@@ -535,7 +535,7 @@ export async function restoreViaRecoveryUnlock(
   );
   expect(
     [200, 201],
-    `restore ck.device.list_update returned ${listUpdate.status()}: ${await listUpdate.text()}`,
+    `restore ak.device.list_update returned ${listUpdate.status()}: ${await listUpdate.text()}`,
   ).toContain(listUpdate.status());
 
   // 4) Complete the session by referencing the two durable event ids.

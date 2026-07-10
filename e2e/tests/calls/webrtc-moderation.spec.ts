@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/calls/webrtc-moderation.md
 // Spec refs:
 //   - crypto-media/webrtc-signaling.md §3a (moderation signal + removed_participants[])
-//   - crypto-media/webrtc-signaling.md §5.1 (ephemeral relay, ck.call.signal.send gate)
+//   - crypto-media/webrtc-signaling.md §5.1 (ephemeral relay, ak.call.signal.send gate)
 //   - crypto-media/media-service-binding.md §3 (banned actor token re-issue gate)
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` +
@@ -49,7 +49,7 @@ const LIVEKIT_FOCUS: MediaFocusConfig = {
 test.describe.configure({ mode: "serial" });
 
 test.describe("call moderation (spec wire)", () => {
-  test("moderator kick relays ck.call.signal{moderation=kick} with the pinned (actor, device) target", async ({
+  test("moderator kick relays ak.call.signal{moderation=kick} with the pinned (actor, device) target", async ({
     request,
   }) => {
     const { alice, aliceToken, bob, bobToken, realmId } =
@@ -96,7 +96,7 @@ test.describe("call moderation (spec wire)", () => {
     expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
   });
 
-  test("moderator ban: ck.call.signal{moderation=ban} omits target_device_id (actor-wide scope)", async ({
+  test("moderator ban: ak.call.signal{moderation=ban} omits target_device_id (actor-wide scope)", async ({
     request,
   }) => {
     const { alice, aliceToken, bob, bobToken, realmId } =
@@ -136,13 +136,13 @@ test.describe("call moderation (spec wire)", () => {
     expect(data.target_device_id).toBeUndefined();
   });
 
-  test("call_moderation_unauthorised: a member lacking ck.call.signal.send cannot relay a moderation frame", async ({
+  test("call_moderation_unauthorised: a member lacking ak.call.signal.send cannot relay a moderation frame", async ({
     request,
   }) => {
-    // The relay gates moderation (like every ck.call.signal) on
-    // ck.call.signal.send (§162). A non-owner member who was NOT granted it is
+    // The relay gates moderation (like every ak.call.signal) on
+    // ak.call.signal.send (§162). A non-owner member who was NOT granted it is
     // refused at the relay — they can never get a moderation frame onto the
-    // wire. (The pure ck.call.moderate receiver-side authz that yields the
+    // wire. (The pure ak.call.moderate receiver-side authz that yields the
     // `call_moderation_unauthorised` reason for a *relayed* frame is pinned by
     // the Rust conformance vector `run_moderator_kick_ban_vector` step 1.)
     const { alice, aliceToken, bob, bobToken, realmId } =
@@ -196,7 +196,7 @@ test.describe("call moderation (spec wire)", () => {
     request,
   }) => {
     // §3a / media-service-binding §3 — once a ban row lands in the durable
-    // ck.call.state.removed_participants[], the media token issuer MUST refuse
+    // ak.call.state.removed_participants[], the media token issuer MUST refuse
     // that actor's re-exchange. This is the HTTP-observable moderation
     // enforcement (the kick/ban signal itself is ephemeral).
     const { alice, aliceToken, bob, bobToken, realmId } =
@@ -209,7 +209,7 @@ test.describe("call moderation (spec wire)", () => {
       SERVICE_DID,
       [LIVEKIT_FOCUS],
     );
-    // bob needs ck.call.join to exchange a token before the ban.
+    // bob needs ak.call.join to exchange a token before the ban.
     await grantCallCapability(
       request,
       aliceToken,

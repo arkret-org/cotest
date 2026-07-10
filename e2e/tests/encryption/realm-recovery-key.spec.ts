@@ -15,7 +15,7 @@
 // STATUS: every case below is `test.fixme`. The wire contract is written to the
 // spec's real expectation, but live execution depends on the parallel soland /
 // inkson RRK implementation (durability_policy projection, RRK-targeted
-// ck.realm_key.share acceptance + RYW, recovery read surface, the three reducer
+// ak.realm_key.share acceptance + RYW, recovery read surface, the three reducer
 // rejection paths, and the mls-exporter-aead-v1 content seal/open + RRK
 // HPKE seal/open in the client). Per the cotest promote protocol these
 // assertions MUST NOT be weakened to pass; they pin the spec contract until the
@@ -92,7 +92,7 @@ function mlsGovernanceBinding(
   };
 }
 
-// Build a ck.realm.create envelope declaring durability_policy. The RRK suite
+// Build a ak.realm.create envelope declaring durability_policy. The RRK suite
 // still forges the envelope directly because durability_policy is not threaded
 // through createRealmApi() (mirrors mls-group.spec.ts createEncryptedRealm).
 function realmCreateEnvelope(args: {
@@ -175,7 +175,7 @@ function realmKeyScope(
   };
 }
 
-// Forge a RRK-targeted ck.realm_key.share envelope. This is the eager seal a
+// Forge a RRK-targeted ak.realm_key.share envelope. This is the eager seal a
 // committer publishes after each epoch commit (§2.10.8): recipient is the
 // offline org RRK principal, ciphertext is history_secret[from..to] HPKE-sealed
 // to the RRK public key. provider-initiated (no recipient claim).
@@ -233,7 +233,7 @@ async function registeredSession(
   return { user, token };
 }
 
-// Submit ck.mls.genesis (epoch 0) for a fresh group bound to realmId, with the
+// Submit ak.mls.genesis (epoch 0) for a fresh group bound to realmId, with the
 // content_scheme=mls-exporter-aead-v1 policy_root locked in.
 async function submitExporterAeadGenesis(
   request: APIRequestContext,
@@ -372,7 +372,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
   // ---------------------------------------------------------------------------
   test.fixme(
     // @blocking-on rrk-soland: content_scheme + durability_policy projection on
-    //   ck.realm.create, RRK-targeted ck.realm_key.share acceptance with the
+    //   ak.realm.create, RRK-targeted ak.realm_key.share acceptance with the
     //   eager-seal RYW guard, and the org recovery read surface that returns the
     //   durable RRK shares for HPKE-open.
     // @blocking-on rrk-inkson: mls-exporter-aead-v1 content seal/open, per-epoch
@@ -646,7 +646,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
       // The RRK holder comes online transiently, HPKE-opens the sealed range
       // [1,2] with the RRK private key, then RE-SEALS history_secret[1..2] to
-      // dave's device HPKE public key as a fresh ck.realm_key.share. The
+      // dave's device HPKE public key as a fresh ak.realm_key.share. The
       // sender_device of this re-share is the RRK holder's device.
       const reSeal = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(daveToken),
@@ -713,7 +713,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       });
       expect(create.status()).toBe(200);
 
-      // Writing durability_policy.mode != none via ck.realm.policy_components MUST
+      // Writing durability_policy.mode != none via ak.realm.policy_components MUST
       // failed_precondition with reason durability_scheme_incompatible.
       const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
@@ -806,7 +806,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       const code = wireErrCode(await write.json());
       expect(code).toBe("durability_recovery_recipient_unverified");
       // fail-closed MUST NOT silently fall back: no RRK share is ever emitted to
-      // an arbitrary key. (Live check: assert no ck.realm_key.share appears for
+      // an arbitrary key. (Live check: assert no ak.realm_key.share appears for
       // this realm addressed to any key other than an active RRK VM.)
     },
   );
@@ -816,7 +816,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
   test.fixme(
     // @blocking-on rrk-soland: the GC precondition surface that raises
     //   failed_precondition(durability_seal_missing_before_gc) when an epoch's
-    //   RRK durability ck.realm_key.share is not yet accepted (read-your-writes).
+    //   RRK durability ak.realm_key.share is not yet accepted (read-your-writes).
     // @blocking-on rrk-inkson: the client-side eager-seal-before-GC ordering
     //   (MUST retain history_secret[N] until the seal is accepted) — the client
     //   half of the §2.10.8 / §2.10.5 retention guard.

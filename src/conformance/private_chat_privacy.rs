@@ -126,7 +126,7 @@ fn validate_realm_remark_registry() -> Result<()> {
         .find(|entry| {
             entry.get("key_pattern").and_then(Value::as_str) == Some("ak.contacts.realm.<realm_id>")
         })
-        .ok_or_else(|| anyhow!("account-data registry missing ck.contacts.realm.<realm_id>"))?;
+        .ok_or_else(|| anyhow!("account-data registry missing ak.contacts.realm.<realm_id>"))?;
 
     if entry.get("storage").and_then(Value::as_str) != Some("encrypted_account_data") {
         bail!("ak.contacts.realm.<realm_id> must stay encrypted account data");
@@ -142,7 +142,7 @@ fn validate_realm_remark_registry() -> Result<()> {
         .iter()
         .any(|writer| writer.as_str() == Some("ak.account_data.set"))
     {
-        bail!("ak.contacts.realm.<realm_id> must be written by ck.account_data.set");
+        bail!("ak.contacts.realm.<realm_id> must be written by ak.account_data.set");
     }
 
     record_vector_event(
@@ -174,7 +174,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
                 == Some("ak.self.direct_conversation.command.resolve")
         })
         .ok_or_else(|| {
-            anyhow!("operation registry missing ck.self.direct_conversation.command.resolve")
+            anyhow!("operation registry missing ak.self.direct_conversation.command.resolve")
         })?;
     if operation.get("http").and_then(Value::as_str)
         != Some("POST /_arkret/self/direct-conversations/resolve")

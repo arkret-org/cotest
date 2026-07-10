@@ -77,7 +77,7 @@ async function declarePolicyServer(
   expect(put.status(), "declare realm policy server").toBe(200);
 }
 
-// Submit a gated ck.message.create directly against the event log (the surface
+// Submit a gated ak.message.create directly against the event log (the surface
 // that runs policy_gate::enforce_operation_policy_server) and return the raw
 // status + parsed body so the caller can assert the gate's verdict. Bypasses
 // submitSignedEventApi because that helper hard-asserts a 2xx, whereas a policy
@@ -145,7 +145,7 @@ function mockPolicyServerBaseUrl(): string {
 }
 
 test.describe("policy server check", () => {
-  test("policy server config API projects ck.realm.policy_server and authz stays fail-closed without a grant", async ({
+  test("policy server config API projects ak.realm.policy_server and authz stays fail-closed without a grant", async ({
     request,
   }) => {
     const stamp = Date.now();

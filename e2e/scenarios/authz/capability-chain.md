@@ -29,7 +29,7 @@
 ### Phase A — §3 grant 生命周期
 
 1. alice 建 Realm(API 面 `ck.realm.create`)
-2. 断言:`POST /_arkret/self/authz/check {actor_id: bob, action: ck.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
+2. 断言:`POST /_arkret/self/authz/check {actor_id: bob, action: ak.message.create, resource: {kind: realm}}` → `decision = "hard_deny"`(grant 之前)
 3. alice 提交 `ck.capability.grant` 事件(issuer=alice、subject=bob、actions=[`ck.message.create`]、`expires_at=+1h`,grant 对象带 detached-JWS proof)
 4. 断言:同一 authz/check → `decision = "allow"`
 5. 断言:`GET /_arkret/self/authz/effective-grants?subject=<bob>&realm_id=<R>`(realm owner 可查)返回的 GrantList 含该 grant id

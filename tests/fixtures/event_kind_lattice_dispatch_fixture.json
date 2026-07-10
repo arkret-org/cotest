@@ -187,7 +187,7 @@
       "scope": "synthetic",
       "drift": {
         "kind": "wrong_namespace",
-        "cell_family": "cx.cell.legacy.v1"
+        "cell_family": "ak.cell.legacy.v1"
       },
       "expected": {
         "outcome": "reject",

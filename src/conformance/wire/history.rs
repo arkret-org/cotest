@@ -57,7 +57,7 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
             if let Some(cap) = admin.get("capability").and_then(Value::as_str) {
                 if cap != "ak.recovery.read.history.v1" {
                     bail!(
-                        "vector {name} admin_override.capability must be ck.recovery.read.history.v1"
+                        "vector {name} admin_override.capability must be ak.recovery.read.history.v1"
                     );
                 }
                 let view_mode = v
@@ -317,14 +317,14 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} missing original_event"))?;
         let _ = required_str(original, "event_id")?;
         if required_str(original, "kind")? != "ak.message.create" {
-            bail!("vector {name} original_event kind must be ck.message.create");
+            bail!("vector {name} original_event kind must be ak.message.create");
         }
 
         let redaction = v
             .get("redaction_event")
             .ok_or_else(|| anyhow!("vector {name} missing redaction_event"))?;
         if required_str(redaction, "kind")? != "ak.message.redact" {
-            bail!("vector {name} redaction_event kind must be ck.message.redact");
+            bail!("vector {name} redaction_event kind must be ak.message.redact");
         }
         let redacts = required_str(redaction, "redacts")?;
         let original_id = required_str(original, "event_id")?;
@@ -372,7 +372,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
                     }
                     let mv = v.get("unredaction_move").unwrap();
                     if required_str(mv, "kind")? != "ak.message.unredact" {
-                        bail!("vector {name} unredaction_move kind must be ck.message.unredact");
+                        bail!("vector {name} unredaction_move kind must be ak.message.unredact");
                     }
                     let removes = mv
                         .get("removes")

@@ -200,7 +200,7 @@ conformance_test!(
 
 conformance_test!(
     /// Realm private pin + direct conversation privacy contracts. Cotest-local
-    /// fixture pins ck.contacts.realm.<realm_id> subject matching, prevents
+    /// fixture pins ak.contacts.realm.<realm_id> subject matching, prevents
     /// RealmRemark leakage into directory/bridge/push payloads, and locks the
     /// direct resolver shape to peer/state/binding_event_ref/main_strand_id.
     private_chat_privacy_contract_suite_matches_reference_semantics,
@@ -547,7 +547,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// S4 — ck.profile.cross_signing.reset.v1 parser-level conformance
+    /// S4 — ak.profile.cross_signing.reset.v1 parser-level conformance
     /// vectors: proof family, generation monotonicity, replay cache, clock
     /// skew, and successor-publish window.
     cross_signing_reset_fixture_suite_matches_reference_semantics,

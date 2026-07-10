@@ -112,7 +112,7 @@ mod tests {
             .expect("vector case pins expected_digest");
         assert_eq!(
             computed, expected,
-            "reducer_profile_digest drifted from ck.vector.federation.reducer_profile_digest.v1"
+            "reducer_profile_digest drifted from ak.vector.federation.reducer_profile_digest.v1"
         );
     }
 

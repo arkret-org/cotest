@@ -3,20 +3,20 @@
 // Spec: models/morph.md §4.1 (schema_refs[] Evolution Policy, S1/S2/S3),
 //       §4.0 (decision matrix — schema evolution row),
 //       §6 (schema evolution generic constraints).
-// Profile: ck.profile.morph.schema_migration_transformations.v1
+// Profile: ak.profile.morph.schema_migration_transformations.v1
 //   defined in arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
-//   — opt-in Realm profile permitting ck.morph.schema_migrate events with
+//   — opt-in Realm profile permitting ak.morph.schema_migrate events with
 //     compatibility_class ∈ {breaking, transformation}.
 // Decision table (canonical): arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
 //   — 4 precedence sources for "what a Morph is and what it allows" merge.
-// Event kind: ck.morph.schema_migrate (event-kind-registry.json, category=morph,
+// Event kind: ak.morph.schema_migrate (event-kind-registry.json, category=morph,
 //             status=active, reducer_input=true).
 // Error codes (error-code-registry.json):
 //   - morph_schema_refs_evolution_unauthorized
 //   - morph_schema_refs_transformation_unsupported
 //   - morph_schema_version_binding_missing
 //
-// soland surface: the ck.morph.schema_migrate reducer is live. Phase A drives
+// soland surface: the ak.morph.schema_migrate reducer is live. Phase A drives
 // the unsupported-transformation-rule hard reject; Phase B the additive arm
 // (no opt-in profile); Phase C the breaking/transformation opt-in profile gate
 // + schema_migration_breaking audit emission; Phase D the deterministic
@@ -200,7 +200,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     });
   });
 
-  test("Phase E — ck.profile.morph.schema_migration_transformations.v1 profile block parses with the §4.1 S3 invariants", async ({}, testInfo) => {
+  test("Phase E — ak.profile.morph.schema_migration_transformations.v1 profile block parses with the §4.1 S3 invariants", async ({}, testInfo) => {
     // spec: morph.md §4.1 S3 (breaking / transformation opt-in) +
     //       conformance-profiles.json profile registry entry.
     const profileBlock = profilesDoc.profile_requirements[MIGRATION_PROFILE_ID] as
@@ -211,8 +211,8 @@ test.describe("morph schema migration @fully-implemented", () => {
       `${MIGRATION_PROFILE_ID} must exist in conformance-profiles.json#/profile_requirements`,
     ).toBeDefined();
 
-    // The profile commits the deployment to a) requiring ck.morph.schema_migrate
-    // event kind support, and b) gating it on the ck.morph.schema_migrate
+    // The profile commits the deployment to a) requiring ak.morph.schema_migrate
+    // event kind support, and b) gating it on the ak.morph.schema_migrate
     // capability action. Both invariants are in additional_requirements +
     // required_event_kinds.
     expect(profileBlock!.required_event_kinds).toContain("ak.morph.schema_migrate");
@@ -252,10 +252,10 @@ test.describe("morph schema migration @fully-implemented", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Live — soland ck.morph.schema_migrate reducer + schema-evolution surface
+  // Live — soland ak.morph.schema_migrate reducer + schema-evolution surface
   // -------------------------------------------------------------------------
 
-  test("Phase A — ck.morph.schema_migrate with unsupported transformation_rules is hard-rejected", async ({
+  test("Phase A — ak.morph.schema_migrate with unsupported transformation_rules is hard-rejected", async ({
     request,
   }) => {
     // spec: morph.md §4.1 S3 — a transformation migration whose
@@ -281,7 +281,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       realmId,
       morphId,
       fromRefs,
-      toRefs: ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
+      toRefs: ["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.ext.v1"],
       compatibilityClass: "transformation",
       transformationRules: [{ rule: "ak.transform.bogus.unsupported.v1", from: "status", to: "state" }],
     });
@@ -306,17 +306,17 @@ test.describe("morph schema migration @fully-implemented", () => {
     expect(projection.document.schema_refs).toEqual(fromRefs);
   });
 
-  test("Phase B — additive ck.morph.schema_migrate accepted without opt-in profile and preserves fields", async ({
+  test("Phase B — additive ak.morph.schema_migrate accepted without opt-in profile and preserves fields", async ({
     request,
   }) => {
     // spec: morph.md §4.1 S3 additive arm — the core reducer MUST accept an
-    // additive ck.morph.schema_migrate (to_schema_refs[] only adds a
+    // additive ak.morph.schema_migrate (to_schema_refs[] only adds a
     // backward-compatible profile) WITHOUT the opt-in
-    // ck.profile.morph.schema_migration_transformations.v1 profile, and the
+    // ak.profile.morph.schema_migration_transformations.v1 profile, and the
     // §4.1 S1 per-event requirements.schema[] binding carries the union of
     // from/to schema ids.
     //
-    // Scope note: the §4.1 S2 ck.morph.update schema_refs[] additive fast path
+    // Scope note: the §4.1 S2 ak.morph.update schema_refs[] additive fast path
     // is a separate (still-rejected) surface — soland's morph.update payload
     // validator returns morph_schema_refs_evolution_unauthorized for any patch
     // touching schema_refs — so this phase exercises the schema_migrate additive
@@ -330,7 +330,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     });
     const morphId = morphTypedId();
     const fromRefs = ["ak.schema.morph.customer_risk.v1"];
-    const toRefs = ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"];
+    const toRefs = ["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.ext.v1"];
     const fields = { status: "open", severity: "high" };
     await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, fields);
 
@@ -355,7 +355,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     request,
   }) => {
     // spec: morph.md §4.1 S3 — breaking / transformation migrations require the
-    // Realm to declare ck.profile.morph.schema_migration_transformations.v1;
+    // Realm to declare ak.profile.morph.schema_migration_transformations.v1;
     // absent → morph_schema_refs_transformation_unsupported. On acceptance the
     // server emits a schema_migration_breaking audit carrying issuer / from /
     // to / compatibility_class / capability_used / profile_ref.
@@ -392,7 +392,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     expect(beforeProfile.status, `breaking pre-profile body: ${beforeProfile.text}`).toBeGreaterThanOrEqual(400);
     expect(wireErrCode(beforeProfile.body)).toBe("morph_schema_refs_transformation_unsupported");
 
-    // 2. declare the opt-in migration profile via ck.realm.update.
+    // 2. declare the opt-in migration profile via ak.realm.update.
     await submitSignedEventApi(
       request,
       token,
@@ -442,7 +442,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       realmId,
       morphId,
       fromRefs: toRefs,
-      toRefs: ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
+      toRefs: ["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.ext.v1"],
       compatibilityClass: "transformation",
       transformationRules: [{ rule: "ak.transform.identity.v1" }],
     });
@@ -455,7 +455,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       actorDid: alice.did,
       realmId,
       morphId,
-      fromRefs: ["ak.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.ext.v1"],
+      fromRefs: ["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.ext.v1"],
       toRefs: ["ak.schema.morph.customer_risk.ext.v1"],
       compatibilityClass: "transformation",
       transformationRules: [{ rule: "ak.transform.not_in_dialect.v1" }],
@@ -473,7 +473,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     // expected_output deterministically; running the same vector twice yields
     // byte-identical canonical JSON.
     const vectors = loadMorphTransformationVectors();
-    expect(vectors.length, "no ck.vector.morph.* transformation vectors found").toBeGreaterThan(0);
+    expect(vectors.length, "no ak.vector.morph.* transformation vectors found").toBeGreaterThan(0);
 
     const alice = uniqueUser("morph-migrate-d-alice");
     await ensureRegistered(request, alice);
@@ -621,7 +621,7 @@ async function submitSchemaMigrateRaw(
   // morph.md §4.1 S1 — bind the migration schema set (union of from/to) into
   // requirements.schema[] so the reducer's version-binding check is satisfied.
   const requirementsSchema = Array.from(new Set([...args.fromRefs, ...args.toRefs]));
-  // morph.md §4.1 S3 — ck.morph.schema_migrate is gated by the high-tier
+  // morph.md §4.1 S3 — ak.morph.schema_migrate is gated by the high-tier
   // capability action `ck.morph.schema_migrate`; the authorization is carried on
   // the envelope `refs[]` with role `authorized_by`, which MUST resolve to the
   // accepted Event that produced the authorizing grant (event-and-patch.md §2.2;

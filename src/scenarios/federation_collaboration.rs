@@ -906,7 +906,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
     };
     let signature_input = payload
         .device_possession_signature_input()
-        .context("build ck.device.authorize device possession signature input")?;
+        .context("build ak.device.authorize device possession signature input")?;
     let signature = device_signing_key.sign(&signature_input);
     let mut signature_material = BTreeMap::new();
     signature_material.insert("alg".to_owned(), json!("EdDSA"));

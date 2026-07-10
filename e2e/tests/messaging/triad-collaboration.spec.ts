@@ -117,7 +117,7 @@ test.describe("single-server triad collaboration", () => {
 
     const beforeRedact = await listRealmEventsViaApi(request, bobToken, realmId);
     expect(beforeRedact.map(eventKind)).toEqual(
-      expect.arrayContaining(["ak.message.create", "ck.message.revise"]),
+      expect.arrayContaining(["ak.message.create", "ak.message.revise"]),
     );
     expect(eventPayload(beforeRedact.find((event) => eventKind(event) === "ak.message.revise")))
       .toMatchObject({ target_ref: messageRef });
@@ -233,7 +233,7 @@ test.describe("single-server triad collaboration", () => {
   // Phases A-D (space lifecycle, invite, mutual messaging, reply, edit) are
   // fully wired in inkson (chat-* reply/edit testids + the realm-members invite
   // modal). Phase E's *receive-side* redaction tombstone is now wired end-to-end:
-  // soland folds a redacted ck.message.create into a per-message tombstone on the
+  // soland folds a redacted ak.message.create into a per-message tombstone on the
   // sync timeline (projection/timeline.rs + sync/snapshot.rs call
   // apply_message_redaction_timeline_projection, which uses the SDK
   // redaction_tombstone_message_value shape: event_id preserved, body stripped,

@@ -42,7 +42,7 @@ import {
 } from "../../helpers/users";
 
 // ── Shared strand factory used by the promoted phases below. Mirrors the
-// live kanban/end-to-end ck.strand.create payload (full `object` with
+// live kanban/end-to-end ak.strand.create payload (full `object` with
 // metadata.fields.status) so the strand projects with a readable
 // `fields.status`.
 async function createStrandApi(
@@ -252,7 +252,7 @@ test.describe("core object invariants", () => {
       );
       const fieldsCell = `ak:cell:ck.component.strand.fields.v1:${strandId}`;
 
-      // A ck.strand.update carrying a STALE `head_eq` precondition (claims
+      // A ak.strand.update carrying a STALE `head_eq` precondition (claims
       // status == "closed" when it is actually "open") MUST reject with
       // failed_precondition and apply NO effect.
       const staleMove = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -330,7 +330,7 @@ test.describe("core object invariants", () => {
   // changes that cannot be validated without breaking the existing,
   // separately-owned tombstone/archive flows.
   test.fixme(
-    "Phase C — ck.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
+    "Phase C — ak.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-c-${stamp}`);
@@ -418,7 +418,7 @@ test.describe("core object invariants", () => {
       // `has_default_view` is many_to_one on (from_ref, relation_kind). The
       // relation reducer requires a structural from_ref endpoint
       // (`ak:strand:`/`ak:space:`) to be projected, so anchor the edges on a
-      // real Strand created via the proven ck.strand.create path. The
+      // real Strand created via the proven ak.strand.create path. The
       // `ak:view:` to_ref does not need a local projection (View objects are
       // not reduced today), so two synthetic view ids are valid targets.
       const sourceRef = await createStrandApi(
@@ -588,7 +588,7 @@ test.describe("core object invariants", () => {
         { context: "create board space" },
       );
 
-      // A board projection on a Space that has never had ck.view.create called
+      // A board projection on a Space that has never had ak.view.create called
       // MUST be derived (kind=collection, renderer=board), not 404. Endpoint
       // does not exist yet.
       const proj = await request.get(

@@ -17,8 +17,8 @@
 //   GET  /jwks
 //     Registry public key (for verifying registry-signed envelopes).
 //   POST /sign-package
-//     Returns a sealed controller-signed ck.schema.applet_package.v1 for
-//     soland's canonical ck.self.applet.install.command.preview / ck.self.applet.command.install strand.
+//     Returns a sealed controller-signed ak.schema.applet_package.v1 for
+//     soland's canonical ak.self.applet.install.command.preview / ak.self.applet.command.install strand.
 //   POST /external-event
 //     Forwards an external payload to soland's typed applet ingress route.
 //   GET  /inspect → full mock state.
@@ -112,7 +112,7 @@ function requestedScopesFromBody(body) {
   const input =
     body.requested_scopes ??
     body.requested_capabilities ??
-    body.capabilities ?? ["ak.message.create", "ck.applet.ghost.provision"];
+    body.capabilities ?? ["ak.message.create", "ak.applet.ghost.provision"];
   const mapped = input.map((scope) => {
     if (scope === "message:write") return "ak.message.create";
     if (scope === "actor:provision-ghost") return "ak.applet.ghost.provision";

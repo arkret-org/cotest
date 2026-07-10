@@ -389,7 +389,7 @@ test.describe("consent grant", () => {
       },
     });
     await submitSignedEventApi(request, aliceToken, grantEnvelope, {
-      context: "submit ck.consent.grant",
+      context: "submit ak.consent.grant",
     });
     const grantDot = `${String(grantEnvelope.event_id)}:${Number(grantEnvelope.actor_seq)}`;
 
@@ -424,7 +424,7 @@ test.describe("consent grant", () => {
       },
     });
     await submitSignedEventApi(request, aliceToken, revokeEnvelope, {
-      context: "submit ck.consent.revoke",
+      context: "submit ak.consent.revoke",
     });
 
     const revoked = await expectConsentCell(

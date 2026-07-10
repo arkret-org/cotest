@@ -46,9 +46,9 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     // account-scoped `ck.self.agent.*` trust segment (lifecycle actions such as
     // provision/pause/resume/deactivate and sidecar_thread.ensure).
     for action in AGENT_CAPABILITY_ACTIONS {
-        if !(action.starts_with("ak.agent.") || action.starts_with("ck.self.agent.")) {
+        if !(action.starts_with("ak.agent.") || action.starts_with("ak.self.agent.")) {
             return Err(anyhow!(
-                "capability action `{action}` MUST start with ck.agent. or ck.self.agent."
+                "capability action `{action}` MUST start with ck.agent. or ak.self.agent."
             ));
         }
         if action.contains(char::is_whitespace) {

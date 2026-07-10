@@ -1,5 +1,5 @@
 // Mock audit-agent — supports S25 audited E2EE (audit-agent invited via
-// audit_disclosure_policy.trigger, acks invite, emits ck.audit.accessed).
+// audit_disclosure_policy.trigger, acks invite, emits ak.audit.accessed).
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
 // harness configures soland's audit_disclosure_policy.audit_agent_principal_id to
@@ -18,7 +18,7 @@
 //     Acknowledge an invite. Returns a synthetic `ck.audit.accessed`
 //     envelope signed by the agent.
 //   GET  /_arkret/self/audit-agent/inbox   → events received
-//   GET  /_arkret/self/audit-agent/accessed → ck.audit.accessed envelopes emitted
+//   GET  /_arkret/self/audit-agent/accessed → ak.audit.accessed envelopes emitted
 //   GET  /inspect → full mock state
 //   DELETE /inspect → reset
 //   GET  /jwks → audit-agent public key

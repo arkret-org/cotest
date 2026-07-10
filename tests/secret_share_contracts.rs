@@ -235,20 +235,20 @@ fn open_secret_send(
     envelope: &DeviceMessageEnvelope,
 ) -> Result<OpenedSecret> {
     if envelope.kind != SEND_KIND {
-        bail!("not a ck.secret.send envelope");
+        bail!("not a ak.secret.send envelope");
     }
     let content: SecretShareSendContent = serde_json::from_value(envelope.content.clone())?;
     if content.request_id != request.request_id {
-        bail!("unsolicited ck.secret.send");
+        bail!("unsolicited ak.secret.send");
     }
     if content.secret_id != request.secret_id || content.secret_id != SECRET_ID {
-        bail!("unsupported ck.secret.send secret_id");
+        bail!("unsupported ak.secret.send secret_id");
     }
     if content.from_device != envelope.sender_device_id {
         bail!("ak.secret.send from_device does not match envelope sender");
     }
     if content.scheme != SCHEME {
-        bail!("unsupported ck.secret.send scheme");
+        bail!("unsupported ak.secret.send scheme");
     }
 
     let aad = send_aad(

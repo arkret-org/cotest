@@ -33,7 +33,7 @@
 //     (outbound.rs::enqueue_outbound_for) is a {resource_kind,resource_id}
 //     reference placeholder, not the sealed Event Envelope events[] batch the
 //     peer endpoint requires — so cross-server delivery does not yet complete.
-//   ✗ ck.transport.negotiate operation — NOT in spec registry (reserved name)
+//   ✗ ak.transport.negotiate operation — NOT in spec registry (reserved name)
 //   ✗ WebSocket frame binding — extension profile, not v1 core (tb §6)
 //   ✗ TSP binding — extension profile, not v1 core
 //   ✗ Binding fallback chain state machine — presupposes the above bindings
@@ -159,7 +159,7 @@ test.describe("transport negotiation", () => {
       // Acceptance criteria once soland ships the full binding stack:
       //
       // Phase A — HTTP baseline (RFC 9421 signed POST):
-      //   1. alice@α issues ck.invite.create targeting bob's DID on β
+      //   1. alice@α issues ak.invite.create targeting bob's DID on β
       //   2. soland_a constructs POST ${SOLAND_B}/_arkret/peer/events with:
       //        - Source-Service-DID / Destination-Service-DID headers
       //        - Signature-Input covering (@method @target-uri content-digest
@@ -174,7 +174,7 @@ test.describe("transport negotiation", () => {
       // Phase B — WebSocket upgrade:
       //   5. soland_a reads β's /_arkret/describe → finds websocket_frame
       //      entry with a peer Events streaming binding declared by spec
-      //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: ck.federation.v1
+      //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: ak.federation.v1
       //      and RFC 9421 Signature on the upgrade request
       //   7. β responds 101 Switching Protocols
       //   8. soland_a streams the next event (alice's timeline message) over WS
@@ -183,8 +183,8 @@ test.describe("transport negotiation", () => {
       //      websocket_frame on both sides
       //
       // Phase C — TSP binding (optional extension):
-      //  10. soland_a announces ck.profile.binding.tsp.v1 in supported_bindings
-      //  11. soland_b chooses TSP via ck.transport.negotiate
+      //  10. soland_a announces ak.profile.binding.tsp.v1 in supported_bindings
+      //  11. soland_b chooses TSP via ak.transport.negotiate
       //  12. subsequent events strand inside TSP relationship envelopes
       //      (outer wrapper carries sender/receiver VID; inner = EventEnvelope)
       //  13. RFC 9421 NOT required on TSP-wrapped traffic — envelope crypto
@@ -395,16 +395,16 @@ test.describe("transport negotiation", () => {
     //   soland bug — it presupposes the extension binding stack.
     // @user-promise: e2e/scenarios/sync/transport-negotiation.md
     // @expected-live-by: unscheduled (requires a published WebSocket binding
-    //   extension profile + ck.transport.negotiate; not on the v1 core path)
+    //   extension profile + ak.transport.negotiate; not on the v1 core path)
     "E8.3 binding negotiation timeout: α requests WebSocket upgrade; β does not respond within 30s; α cancels and falls back to HTTP/JSON",
     async ({ request }) => {
       // spec: transport-bindings.md §3 (binding requirements — background /
       //       backpressure) + §7 (binding discovery)
-      // soland gap: ck.transport.negotiate runtime + fallback state machine
+      // soland gap: ak.transport.negotiate runtime + fallback state machine
       //             both missing.
       //
       // Acceptance criteria:
-      //   1. α calls ck.transport.negotiate against β with desired binding
+      //   1. α calls ak.transport.negotiate against β with desired binding
       //      = websocket_frame
       //   2. β intentionally does not respond (test harness blackholes the
       //      negotiation endpoint with route.fulfill delay > 30s)

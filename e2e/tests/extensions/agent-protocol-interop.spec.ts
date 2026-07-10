@@ -116,7 +116,7 @@ test.describe("agent protocol interop", () => {
     }
   });
 
-  test("Phase A — agent endpoint discovery via ck.agent.endpoint + adapter registry", async ({
+  test("Phase A — agent endpoint discovery via ak.agent.endpoint + adapter registry", async ({
     request,
   }, testInfo) => {
     // spec: §5.1 (ck.agent.endpoint declares per-endpoint protocol /
@@ -171,14 +171,14 @@ test.describe("agent protocol interop", () => {
         schemaId: "ak.schema.agent.v1",
         payload: endpointPayload,
       }),
-      { context: "register ck.agent.endpoint" },
+      { context: "register ak.agent.endpoint" },
     );
     expect(endpointResp.status).toBe("accepted");
 
     // 2. Discover: POST /_arkret/self/agents/discover { agent_id }.
     //    Assert supported_protocols ⊆ the §11 adapter registry, and that
     //    a2a + acp both surface; assert agent_card_url / metadata_url
-    //    round-trip from the ck.agent.endpoint declaration.
+    //    round-trip from the ak.agent.endpoint declaration.
     const discoverResp = await request.post(
       `${solandBaseUrl()}/_arkret/self/agents/discover`,
       {
@@ -211,7 +211,7 @@ test.describe("agent protocol interop", () => {
     );
     expect(discover.metadata_url).toBe(`${cardBase}/info`);
 
-    // 3. Negative: discover an agent with no accepted ck.agent.endpoint
+    // 3. Negative: discover an agent with no accepted ak.agent.endpoint
     //    fails closed with HTTP 404 + error.code=discovery_failed (§12).
     const unknown = uniqueUser(`agent-handoff-unknown-${stamp}`);
     const missingResp = await request.post(
@@ -427,7 +427,7 @@ test.describe("agent protocol interop", () => {
       await expect(confirm).toBeEnabled();
       await confirm.click();
 
-      // The grant id surfaces once the ck.capability.grant lands.
+      // The grant id surfaces once the ak.capability.grant lands.
       const grantIdNode = modal.getByTestId("agent-interop-grant-id");
       await expect(grantIdNode).toBeVisible({ timeout: 30_000 });
       const grantId = await grantIdNode.getAttribute("data-grant-id");

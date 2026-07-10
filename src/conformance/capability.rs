@@ -93,7 +93,7 @@ fn action_implies(granted: &str, requested: &str) -> bool {
 fn parent_can_delegate(parent_actions: &[String], child_actions: &[String]) -> bool {
     let can_delegate = parent_actions
         .iter()
-        .any(|action| action == "ak.capability.delegate" || action == "ck.realm.admin");
+        .any(|action| action == "ak.capability.delegate" || action == "ak.realm.admin");
     can_delegate
         && child_actions.iter().all(|child| {
             parent_actions

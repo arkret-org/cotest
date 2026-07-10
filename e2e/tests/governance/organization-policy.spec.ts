@@ -79,7 +79,7 @@ function realmOrganizationStatement(args: {
 }
 
 /** Submit a `ck.realm.organization` statement into Realm history (writer must
- * hold ck.realm.admin). Returns the raw response for assertion. */
+ * hold ak.realm.admin). Returns the raw response for assertion. */
 async function submitOrganizationStatement(
   request: APIRequestContext,
   token: string,
@@ -119,7 +119,7 @@ test.describe("organization governance — verified relationship semantics", () 
 
   test.fixme(
     // @blocking-on: SOL-ORG-05 — effective-policy must derive organization
-    //   layers ONLY from active verified ck.realm.organization statements, and
+    //   layers ONLY from active verified ak.realm.organization statements, and
     //   must NOT inherit from realm.create.owning_organizations[] alone. Until
     //   that lands soland still treats owning_organizations[] as the inheritance
     //   chain, which is exactly the behaviour this case is meant to fail on.
@@ -137,7 +137,7 @@ test.describe("organization governance — verified relationship semantics", () 
         owning_organizations: [orgDid],
       });
 
-      // No ck.realm.organization statement is written — only the declaration.
+      // No ak.realm.organization statement is written — only the declaration.
       const effective = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
@@ -154,7 +154,7 @@ test.describe("organization governance — verified relationship semantics", () 
   test.fixme(
     // @blocking-on: SOL-ORG-02 (statement reducer + verification) and SOL-ORG-05
     //   (effective-policy derivation + official badge projection). No self-API
-    //   yet accepts a ck.realm.organization statement or projects the resulting
+    //   yet accepts a ak.realm.organization statement or projects the resulting
     //   organization layer / badge.
     // @user-promise: e2e/scenarios/governance/organization-policy.md (Case B)
     "Case B: active verified statement with covering scope inherits policy + badge",

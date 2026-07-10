@@ -244,7 +244,7 @@ test.describe("contact graph (same principal server)", () => {
   // S4 (core closed loop): already friends (invite scope) -> use
   // invite_consent_grant_ref as consent_grant evidence to pull the peer into a
   // NEW realm (no locator) -> private delivery high-trust outcome -> peer lists
-  // it in authz/invites -> peer ck.invite.accept -> peer is a realm member.
+  // it in authz/invites -> peer ak.invite.accept -> peer is a realm member.
   test("S4 consent_grant evidence pulls friend into a new realm (closed loop)", async ({
     request,
   }) => {

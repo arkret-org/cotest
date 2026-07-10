@@ -199,7 +199,7 @@ function expectEventsContainRealmCreate(body: unknown, realmId: string) {
       const kind = event.kind ?? event.event_kind;
       return event.realm_id === realmId && kind === "ak.realm.create";
     }),
-    `world_readable history response must include ck.realm.create for ${realmId}: ${JSON.stringify(body)}`,
+    `world_readable history response must include ak.realm.create for ${realmId}: ${JSON.stringify(body)}`,
   ).toBe(true);
 }
 

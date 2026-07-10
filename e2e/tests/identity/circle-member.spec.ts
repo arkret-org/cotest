@@ -59,7 +59,7 @@ test.describe("circle membership (same principal server)", () => {
     ]);
 
     // alice owns the realm and pulls bob in as a `join` member (owner one-way
-    // add — `addRealmMemberApi` submits ck.member.state{join}).
+    // add — `addRealmMemberApi` submits ak.member.state{join}).
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S8 circle realm ${Date.now()}`,
       ownerDid: alice.did,

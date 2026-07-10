@@ -365,7 +365,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const signed = await request.post(`${baseUrl}/sign-package`, {
       data: {
         namespace,
-        requested_scopes: ["ak.message.create", "ck.applet.ghost.provision"],
+        requested_scopes: ["ak.message.create", "ak.applet.ghost.provision"],
       },
     });
     expect(signed.status()).toBe(200);

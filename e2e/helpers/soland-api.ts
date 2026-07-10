@@ -23,7 +23,7 @@ export type SignedEventEnvelopeArgs = {
   schemaId?: string;
   /// Override the full `requirements.schema[]` binding. morph.md §4.1 S1/S2
   /// requires schema-evolving events (ck.morph.schema_migrate /
-  /// schema_refs-changing ck.morph.update) to bind the active Morph schema set
+  /// schema_refs-changing ak.morph.update) to bind the active Morph schema set
   /// (the union of from/to schema_refs) here, not just the payload schema id.
   requirementsSchema?: string[];
   proofVerificationMethod?: string;
@@ -387,7 +387,7 @@ export async function grantRealmReviewCapabilityApi(
     }),
     {
       server: args.server,
-      context: `grant ck.realm.join.review to ${args.subjectDid}`,
+      context: `grant ak.realm.join.review to ${args.subjectDid}`,
     },
   );
   return grantId;
@@ -638,7 +638,7 @@ export async function submitApplicationApi(
 
 // join-policy.md §7.3 — `member.application.review`. The reviewer submits a
 // `ck.member.state` event targeting the applicant; `accept` keeps the
-// applicant in `knock` (the join is later authorised via ck.invite.create),
+// applicant in `knock` (the join is later authorised via ak.invite.create),
 // `reject` drives the applicant to `leave` and stamps cooldown_after_reject.
 export async function submitApplicationReviewApi(
   request: APIRequestContext,
@@ -1434,7 +1434,7 @@ export async function resolveDefaultStrandId(
     return def.strand_id;
   }
   // Final fallback: the inkson UI realm-create flow does not emit an explicit
-  // ck.realm.set_default_strand, so soland never marks a strand is_default for
+  // ak.realm.set_default_strand, so soland never marks a strand is_default for
   // those realms. inkson itself addresses the default strand by a deterministic
   // convention (default_strand_id_for_realm in inkson/src/local_state): the
   // realm UUID suffix under the ak:strand: prefix. Derive the same id so events
@@ -1710,7 +1710,7 @@ function schemaIdForEventKind(kind: string): string {
 // spec/v1/artifacts/registry/reducer-profile-registry.json: resolve the row
 // whose profile_id equals the Realm's declared reducer profile and hash ONLY
 // that row's digest_input object (Arkret canonical JSON → sha256 lowercase
-// hex). Registered vector: ck.vector.federation.reducer_profile_digest.v1
+// hex). Registered vector: ak.vector.federation.reducer_profile_digest.v1
 // (federation-fixture.json case reducer_profile_digest_federation_minimal),
 // used below as a drift guard on the computed value.
 

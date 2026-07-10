@@ -601,7 +601,7 @@ fn token_reissue_allowed(
 }
 
 pub fn run_moderator_kick_ban_vector() -> Result<()> {
-    // Step 1 — moderation without ck.call.moderate is unauthorised.
+    // Step 1 — moderation without ak.call.moderate is unauthorised.
     match moderation_authorised(false) {
         Err(code) if code == REASON_CALL_MODERATION_UNAUTHORISED => {}
         other => {

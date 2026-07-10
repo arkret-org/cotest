@@ -10,7 +10,7 @@ const FIXTURE: &str = "inkson-client-profile-conformance.json";
 const FIXTURE_PROFILE: &str = "ak.profile.inkson_client_blackbox_manifest.v1";
 
 const REQUIRED_TARGET_PROFILES: &[&str] =
-    &["ak.profile.full_client.v1", "ck.profile.e2ee_client.v1"];
+    &["ak.profile.full_client.v1", "ak.profile.e2ee_client.v1"];
 
 const REQUIRED_STRANDS: &[&str] = &[
     "oidc_session_grant",

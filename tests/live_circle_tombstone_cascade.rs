@@ -126,12 +126,12 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
     // ── 3. Drive the live wire: create Realm + Circle + Strands ───────────
     //
     // The remaining wire steps require canonical signed event submission:
-    //   - POST /_arkret/self/events with ck.realm.create
-    //   - POST /_arkret/self/events with ck.circle.create
-    //   - POST /_arkret/self/events with ck.circle.member.state -> active
+    //   - POST /_arkret/self/events with ak.realm.create
+    //   - POST /_arkret/self/events with ak.circle.create
+    //   - POST /_arkret/self/events with ak.circle.member.state -> active
     //   - POST /_arkret/self/events with strand creation scoped to the circle
-    //   - POST /_arkret/self/events with ck.circle.tombstone
-    //   - POST /_arkret/self/events with ck.realm.tombstone
+    //   - POST /_arkret/self/events with ak.circle.tombstone
+    //   - POST /_arkret/self/events with ak.realm.tombstone
     //
     // P5 finalises these endpoints; once they're stable replace the bail
     // below with the wire dance and the assertions documented in the doc

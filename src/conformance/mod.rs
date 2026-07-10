@@ -428,7 +428,7 @@ pub(crate) struct NamedCase {
     pub(crate) input: Option<Value>,
     pub(crate) inputs: Option<Vec<Value>>,
     pub(crate) expected: Option<Value>,
-    // ck.vector.federation.reducer_profile_digest.v1 case fields
+    // ak.vector.federation.reducer_profile_digest.v1 case fields
     // (federation-fixture.json, registered by arkret-spec ec404fd).
     pub(crate) canonical_input: Option<Value>,
     pub(crate) expected_digest: Option<String>,

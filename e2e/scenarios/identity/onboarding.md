@@ -13,7 +13,7 @@
 - `identity/identity-did.md` §2 — DID 主体 + 控制密钥
 - `identity/identity-did.md` §3.4 — `did:webvh` genesis entry
 - `identity/key-management.md` §5.0 — Inception key + control stream genesis
-- `identity/key-management.md` §5.0.1 — 4 步 bootstrap (inception key → did:webvh entry 0 → principal control Realm → ck.device.authorize)
+- `identity/key-management.md` §5.0.1 — 4 步 bootstrap (inception key → did:webvh entry 0 → principal control Realm → ak.device.authorize)
 - `identity/key-management.md` §5.1 — Cross-signing 三对密钥(PSK / SSK / USK)
 - `identity/key-management.md` §6 — Session grant
 - `crypto-media/device-lifecycle.md` §3 — 注册路径选项

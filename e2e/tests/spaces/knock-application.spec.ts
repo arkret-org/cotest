@@ -5,7 +5,7 @@
 //   - §7 application-review path, §7.5 invite ref binding
 //   - §12 anti-abuse (cooldown_after_reject, application_ttl,
 //     max_open_applications_per_actor)
-//   - §3 #2 / §8.1 applicant_visibility=reviewer_only + ck.audit.accessed
+//   - §3 #2 / §8.1 applicant_visibility=reviewer_only + ak.audit.accessed
 
 import {
   expect,
@@ -112,7 +112,7 @@ test.describe("knock + application + cooldown", () => {
     expect(listed.viewer_is_reviewer).toBe(true);
   });
 
-  test("E6.A bob submits structured member.application after knocking; alice (with ck.realm.join.review) sees the answers and accepts", async ({
+  test("E6.A bob submits structured member.application after knocking; alice (with ak.realm.join.review) sees the answers and accepts", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -178,7 +178,7 @@ test.describe("knock + application + cooldown", () => {
     expect(accepted?.status).toBe("accepted");
   });
 
-  test('E6.B alice\'s ck.invite.create.refs[role="join_authorised_by"] is required to point at a fresh review accept; reducer rejects re-used or stale refs', async ({
+  test('E6.B alice\'s ak.invite.create.refs[role="join_authorised_by"] is required to point at a fresh review accept; reducer rejects re-used or stale refs', async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -377,7 +377,7 @@ test.describe("knock + application + cooldown", () => {
     expect(String(reviewResp)).toMatch(/ttl_expired|application_ttl|expired/i);
   });
 
-  test("E6.F reviewer loses ck.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted", async ({
+  test("E6.F reviewer loses ak.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -442,7 +442,7 @@ test.describe("knock + application + cooldown", () => {
     expect(await rejectCode(inviteResp)).toContain("join_authorisation_invalid");
   });
 
-  test("E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes ck.audit.accessed", async ({
+  test("E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes ak.audit.accessed", async ({
     request,
   }) => {
     const stamp = Date.now();

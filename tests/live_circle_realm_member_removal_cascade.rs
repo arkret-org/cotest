@@ -9,7 +9,7 @@
 //!      the same Realm.
 //!   3. Register actor `X` and add X as a Realm member; also add X to both Circles
 //!      (`ck.circle.member.state → active`).
-//!   4. Admin issues `ck.realm.ck.member.state → left` for actor X. Assert: a) X's Realm membership
+//!   4. Admin issues `ck.realm.member.state → left` for actor X. Assert: a) X's Realm membership
 //!      flips to `left` in soland's projection, b) X's membership in BOTH `circle_alpha` AND
 //!      `circle_beta` is auto-flipped to `left` (CKP-0007 strict-subset cascade: any Circle
 //!      membership is invalid when the actor leaves the parent Realm, so the reducer MUST emit
@@ -144,7 +144,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     );
 
     // ── 3. Drive the live wire: create Realm + 2 Circles, add X to both,
-    //       then `realm.ck.member.state → left` for X. The expected
+    //       then `realm.member.state → left` for X. The expected
     //       endpoints are:
     //         POST /_arkret/self/realms                            (ck.realm.create)
     //         POST /_arkret/self/realms/<rid>/circles              (ck.circle.create) x2
@@ -174,7 +174,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
 
     bail!(
         "TODO(P5/CKP-0007): live-stack wiring for Realm-member-left → Circle cascade \
-         is scaffolded; finalise once soland exposes the `ck.realm.ck.member.state` \
+         is scaffolded; finalise once soland exposes the `ck.realm.member.state` \
          and `ck.circle.member.state` projections + MLS epoch field. Expected \
          assertions: (a) X.realm.state=left, (b/c) X.circle.alpha.state=left + \
          X.circle.beta.state=left within 5s, (d/e) MLS epoch advanced exactly once \

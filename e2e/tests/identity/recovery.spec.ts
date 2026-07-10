@@ -280,7 +280,7 @@ test.describe("account recovery", () => {
     }
   });
 
-  test("device-2 restores account using the Recovery Key; new device authorized via ck.device.authorize with a recovery_unlock proof", async ({
+  test("device-2 restores account using the Recovery Key; new device authorized via ak.device.authorize with a recovery_unlock proof", async ({
     request,
   }) => {
     // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1; device-lifecycle.md §15.
@@ -292,7 +292,7 @@ test.describe("account recovery", () => {
     // key into a genesis recovery policy and signs the unlock proof with it
     // (helpers/recovery-unlock-harness.ts). The full §15 state machine runs:
     // open session → recovery_unlock proof (pending→verified) → SSK-signed
-    // ck.device.authorize (carrying recovery_session_id) + ck.device.list_update
+    // ak.device.authorize (carrying recovery_session_id) + ak.device.list_update
     // on the control stream → /complete referencing those durable event ids.
     test.setTimeout(120_000);
     const alice = uniqueUser("recovery-restore-alice");
@@ -346,7 +346,7 @@ test.describe("account recovery", () => {
     "after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline",
     async () => {
       // spec: key-management.md §7.3 step 6, encryption-and-audit.md §2.4
-      // BLOCKED: depends on the device-2 ck.device.authorize restore stage above
+      // BLOCKED: depends on the device-2 ak.device.authorize restore stage above
       // being end-to-end wired. The MLS-history decrypt-on-fresh-device path
       // itself is already live-covered by tests/encryption/key-backup.spec.ts
       // A1 (historical encrypted cards visible after unlock) and A2 (kanban

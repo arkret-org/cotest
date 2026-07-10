@@ -806,7 +806,7 @@ export class JointUserPage {
     if (![200, 201].includes(acceptResp.status())) {
       const text = await acceptResp.text();
       throw new Error(
-        `acceptInviteById: ck.invite.accept returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
+        `acceptInviteById: ak.invite.accept returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
       );
     }
   }

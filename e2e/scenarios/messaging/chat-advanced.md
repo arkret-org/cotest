@@ -66,7 +66,7 @@
 ### Phase E — Poll
 
 18. alice 发一个 poll `M5`:
-    - `content_type = ck.content.poll`
+    - `content_type = ak.content.poll`
     - `options = [{ id: "p", label: "Pizza" }, { id: "q", label: "Poutine" }]`
     - `max_selections = 1`,`closes_at = +1h`
 19. inkson `M5` 渲染投票按钮

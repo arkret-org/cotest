@@ -375,10 +375,10 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "principal control Realm is created (purpose=principal_control); first device registered via ck.device.authorize; cross-signing PSK/SSK/USK published",
+    "principal control Realm is created (purpose=principal_control); first device registered via ak.device.authorize; cross-signing PSK/SSK/USK published",
     async () => {
-      // The principal control Realm is auto-materialized and ck.cross_signing.publish
-      // / ck.device.authorize are EVENT-log operations, not observable HTTP
+      // The principal control Realm is auto-materialized and ak.cross_signing.publish
+      // / ak.device.authorize are EVENT-log operations, not observable HTTP
       // surfaces. There is no client-visible projection that lets a black-box
       // test assert "the first device's DPoP key is enrolled as a
       // verificationMethod `{principal}#{device_id}` in the DID document" — the
