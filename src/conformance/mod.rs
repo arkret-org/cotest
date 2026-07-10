@@ -439,11 +439,6 @@ pub(crate) struct NamedCase {
     pub(crate) expected_digest: Option<String>,
     pub(crate) sender_reducer_profile_digest: Option<String>,
     pub(crate) receiver_reducer_profile_digest: Option<String>,
-    // Privacy identity-link vectors carry a base envelope plus mutation
-    // cases; keep these generic so fixture evolution does not require a new
-    // ad-hoc DTO for every vector family.
-    pub(crate) base: Option<Value>,
-    pub(crate) cases: Option<Vec<Value>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
