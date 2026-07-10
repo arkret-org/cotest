@@ -101,7 +101,7 @@
 
 ## Edge cases / sub-tests
 
-- **E6.1 循环 link**：alice 尝试构造 A → B → C → A 的 `governed_by` 环（A 是 G、B 是 T，再发一条从 G 指回 T 的 `governed_by`）— soland MUST 拒绝构成环的第三条 Move（cycle detection；返回 `link_cycle_detected` 错误）。spec §5 不允许隐式级联，§6.4 `max_depth = 1`，但环本身在 link graph 层面就该被拒（projection 不能容忍环）。
+- **E6.1 循环 link**：alice 构造 A → B → C → A 的 `governed_by` 环，三条 Move 均 MUST 接受。Realm Link graph 允许一般环；`max_depth = 1` 约束派生计算深度，不是 graph admission gate。只有 `source_realm_id == target_realm_id` 的 self-reference 必须以 `realm_link_self_reference` 拒绝。
 - **E6.2 多个 governed_by target，narrow-only 合并**：T 同时 `governed_by` G1 与 G2。G1 banned_keywords = `["w1", "w2"]`，G2 banned_keywords = `["w2", "w3"]`。spec §6.2 — derived grant 不得宽于 source grant；多 source 时，policy 合并取**交集**（narrow-only），最终 effective banned_keywords = `["w2"]`。注意：moderation 是 deny-style，"narrow" 在 deny 语义上是只 deny 双方都 deny 的；profile 解释由 soland 决定，测试侧只断言「实际生效集合 ⊆ 任一 source」即可。
 - **E6.3 link graph 遍历时跨 realm 权能验证**：alice 在 G 持有 `realm.admin` capability。link 建立后，alice 调 `POST /_arkret/self/realms/${teamRealmId}/admin/*` —— soland MUST **拒绝**（spec §5：capability grant 不因 link 自动级联，§3 表中 `governed_by` 的「是否允许授权派生」是「MAY，但必须由本 Realm policy 显式声明」，本测试中 T 没声明派生 admin capability，所以 alice 在 T 不应有 admin 权）。断言：HTTP 403 + `reason = "capability_not_propagated_via_link"`。
 
@@ -113,7 +113,7 @@
 - `realm-link-list`、`realm-overview-panel`、`policy-hold-marker` 是计划中的 testid；inkson 实现时统一加。
 - effective policy projection (`/_arkret/self/realms/:id/policy/effective`) 也是 spec §6 的 derived 端点；soland 当前是否已经实现 link-aware 合并需要先确认 — Phase C 与 Phase E 在 soland 项目逻辑落地前会全员 fixme。
 - 不需要新 helper：`ensureRegistered` / `issueDevSession` / `openUserPage` 已覆盖 actor 准备；`request` (Playwright APIRequestContext) 直接打 soland 处理 Move 与 effective policy 查询。
-- E6.1 cycle detection 是 soland 端拒绝路径，断言 HTTP 4xx + `error_code = "link_cycle_detected"`；不需要 browser context。
+- E6.1 是 soland 端一般 graph cycle 接受路径，断言第三条 link 写入成功并出现在 C 的 outbound projection；不需要 browser context。
 - E6.3 是纯 API 检查，不需要 browser context。
 
 ## 总耗时预估

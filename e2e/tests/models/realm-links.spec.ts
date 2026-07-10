@@ -1,4 +1,4 @@
-// Realm links (governed_by / inherits_policy_from / link reject / cycle / narrow-only / cap non-propagation)
+// Realm links (governed_by / inherits_policy_from / link reject / graph cycle / narrow-only / cap non-propagation)
 // Contract: e2e/scenarios/models/realm-links.md
 // Spec: models/realm-links.md §2 (design principles), §3 (standard link kinds),
 //       §4 (status: active/rejected/tombstoned), §5 (no implicit cascade),
@@ -29,7 +29,7 @@ test.describe("realm links", () => {
       // inheritance pipeline is fully wired (routing/realms.rs +
       // reducer/realm_links.rs):
       //   - POST /_arkret/self/realms/{id}/links writes ak.realm.link with
-      //     reducer-side cycle / kind / status validation.
+      //     reducer-side self-reference / kind / status validation.
       //   - ak.realm.inheritance_policy (signed event) is the §6 opt-in.
       //   - GET /_arkret/self/realms/{id}/effective-policy walks active
       //     governed_by / inherits_policy_from links and merges the source
@@ -163,7 +163,7 @@ test.describe("realm links", () => {
   );
 
   test(
-    "E6.1 cycle detection: link graph A→B→C→A is rejected with link_cycle_detected (spec §5)",
+    "E6.1 general graph cycle: link graph A→B→C→A is accepted",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-rl-cycle-${stamp}`);
@@ -210,11 +210,21 @@ test.describe("realm links", () => {
         ]),
       );
 
-      // The Move that would close the cycle must be rejected.
+      // General graph cycles are valid; only a Realm linking to itself is rejected.
       const ca = await link(C, A);
-      expect(ca.status()).toBe(422);
-      const caBody = await ca.json();
-      expect(wireErrCode(caBody)).toBe("realm_link_cycle");
+      expect(ca.ok()).toBeTruthy();
+
+      const outboundC = await request.get(
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(C)}/links?direction=outbound`,
+        { headers: auth },
+      );
+      expect(outboundC.ok()).toBeTruthy();
+      const outboundCBody = await outboundC.json();
+      expect(outboundCBody.links).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ realm_id: C, target_realm_id: A, link_kind: "governed_by", status: "active" }),
+        ]),
+      );
     },
   );
 

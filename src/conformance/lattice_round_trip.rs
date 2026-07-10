@@ -13,6 +13,8 @@
 //! - **Counter**: PN counter sums increments and decrements deterministically.
 //! - **Fsm**: legal transitions advance state; illegal transitions produce `Bottom` with `kind =
 //!   InvalidTransition`.
+//! - **Realm Link Fsm**: all initial states and declared transitions execute through the SDK's
+//!   canonical admission helper; self-reference and terminal writes fail closed.
 //! - **MvRegister**: concurrent `set` ops surface multiple values without choosing a winner (vs.
 //!   CasRegister which produces Bottom).
 //! - **OrderedLog**: per-issuer monotonic `append` produces a deterministic linearization; gaps are
@@ -29,15 +31,22 @@ use arkret_core::lattice::ordered_log::IssuedOp;
 use arkret_core::lattice::{
     CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
 };
-use arkret_core::{CellRef, Did, LatticeOp, LatticeOpType, MoveId};
+use arkret_core::{
+    CellRef, Did, ErrorCode, LatticeOp, LatticeOpType, MoveId, REALM_LINK_ALLOWED_TRANSITIONS,
+    REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES, RealmId, RealmLinkKind,
+    RealmLinkPayload, RealmLinkStatus, RealmLinkTransitionCandidate, RealmLinkTransitionOutcome,
+    evaluate_realm_link_transition,
+};
 use serde_json::{Value, json};
 
-const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 5] = [
+const REALM_LINK_FSM_VECTOR_ID: &str = "ak.vector.realm_link.fsm_transition_matrix.v1";
+const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 6] = [
     "ak.vector.lattice.mv_register_join.v1",
     "ak.vector.lattice.counter_join.v1",
     "ak.vector.lattice.ordered_log_join.v1",
     "ak.vector.lattice.ordered_log_gap.v1",
     "ak.vector.lattice.fsm_join.v1",
+    REALM_LINK_FSM_VECTOR_ID,
 ];
 
 /// Public entry point matching the cotest fixture-suite naming convention.
@@ -54,6 +63,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     fsm_duplicate_transition_is_idempotent()?;
     fsm_same_from_different_to_returns_bottom()?;
     fsm_illegal_transition_returns_bottom()?;
+    run_realm_link_fsm_transition_matrix_vector()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
     ordered_log_per_issuer_monotonic_append()?;
     ordered_log_gap_reports_pending_until_backfill()?;
@@ -101,6 +111,295 @@ fn validate_lattice_fixture_metadata() -> Result<()> {
         }) {
             bail!("lattice_round_trip metadata missing asserted case {vector_id}");
         }
+    }
+
+    Ok(())
+}
+
+fn realm_link_vector_case() -> Result<Value> {
+    let fixture = super::load_fixture_value("cba-lattice-fixture.json")?;
+    fixture
+        .pointer("/lattice_round_trip/cases")
+        .and_then(Value::as_array)
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("vector_id").and_then(Value::as_str) == Some(REALM_LINK_FSM_VECTOR_ID)
+            })
+        })
+        .cloned()
+        .ok_or_else(|| anyhow!("Realm Link FSM vector case missing"))
+}
+
+fn parse_realm_link_statuses(value: &Value, pointer: &str) -> Result<Vec<RealmLinkStatus>> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("Realm Link FSM vector missing {pointer}"))?
+        .iter()
+        .map(|entry| {
+            let status = entry
+                .as_str()
+                .ok_or_else(|| anyhow!("Realm Link status in {pointer} must be a string"))?;
+            RealmLinkStatus::parse(status)
+                .ok_or_else(|| anyhow!("unknown Realm Link status {status}"))
+        })
+        .collect()
+}
+
+fn parse_realm_link_transitions(value: &Value) -> Result<Vec<(RealmLinkStatus, RealmLinkStatus)>> {
+    value
+        .pointer("/parameters/allowed_transitions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("Realm Link FSM vector missing allowed_transitions"))?
+        .iter()
+        .map(|entry| {
+            let pair = entry
+                .as_array()
+                .filter(|pair| pair.len() == 2)
+                .ok_or_else(|| anyhow!("Realm Link transition must be a two-item array"))?;
+            let from = pair[0]
+                .as_str()
+                .and_then(RealmLinkStatus::parse)
+                .ok_or_else(|| anyhow!("invalid Realm Link transition source"))?;
+            let to = pair[1]
+                .as_str()
+                .and_then(RealmLinkStatus::parse)
+                .ok_or_else(|| anyhow!("invalid Realm Link transition target"))?;
+            Ok((from, to))
+        })
+        .collect()
+}
+
+fn realm_link_payload(target_realm_id: RealmId, status: RealmLinkStatus) -> RealmLinkPayload {
+    RealmLinkPayload {
+        target_realm_id,
+        link_kind: RealmLinkKind::GovernedBy,
+        status,
+        label: None,
+        commitment: None,
+    }
+}
+
+fn realm_id(suffix: &str) -> Result<RealmId> {
+    RealmId::new(format!("ak:realm:0196419b-0000-7000-8000-{suffix:0>12}")).map_err(Into::into)
+}
+
+pub fn run_realm_link_fsm_transition_matrix_vector() -> Result<()> {
+    let case = realm_link_vector_case()?;
+    if case.get("cell_family").and_then(Value::as_str) != Some("ak.component.realm.link.v1")
+        || case.get("lattice").and_then(Value::as_str) != Some("fsm")
+        || case.get("bottom").and_then(Value::as_str) != Some("reject")
+    {
+        bail!("Realm Link FSM vector metadata drifted");
+    }
+
+    let states = parse_realm_link_statuses(&case, "/parameters/states")?;
+    let initial_states = parse_realm_link_statuses(&case, "/parameters/initial_states")?;
+    let terminal_states = parse_realm_link_statuses(&case, "/parameters/terminal_states")?;
+    let allowed_transitions = parse_realm_link_transitions(&case)?;
+    if initial_states != REALM_LINK_INITIAL_STATES
+        || terminal_states != REALM_LINK_TERMINAL_STATES
+        || allowed_transitions != REALM_LINK_ALLOWED_TRANSITIONS
+        || states != initial_states
+    {
+        bail!("Realm Link SDK FSM constants drifted from the fixture matrix");
+    }
+
+    let source = realm_id("1")?;
+    let target = realm_id("2")?;
+    for status in &initial_states {
+        let payload = realm_link_payload(target.clone(), *status);
+        let move_bytes = canonical_json_bytes(&payload)?;
+        let outcome = evaluate_realm_link_transition(
+            &source,
+            None,
+            RealmLinkTransitionCandidate {
+                payload: &payload,
+                canonical_move_bytes: &move_bytes,
+                canonical_basis_bytes: b"initial-basis",
+            },
+        )?;
+        if outcome != RealmLinkTransitionOutcome::Apply {
+            bail!(
+                "Realm Link initial state {} was not applied",
+                status.as_str()
+            );
+        }
+    }
+
+    let mut executed_transitions = 0usize;
+    for (from, to) in &allowed_transitions {
+        let current_payload = realm_link_payload(target.clone(), *from);
+        let candidate_payload = realm_link_payload(target.clone(), *to);
+        let current_move_bytes = canonical_json_bytes(&current_payload)?;
+        let candidate_move_bytes = canonical_json_bytes(&candidate_payload)?;
+        let terminal_replay = from.is_terminal();
+        let outcome = evaluate_realm_link_transition(
+            &source,
+            Some(RealmLinkTransitionCandidate {
+                payload: &current_payload,
+                canonical_move_bytes: &current_move_bytes,
+                canonical_basis_bytes: b"accepted-basis",
+            }),
+            RealmLinkTransitionCandidate {
+                payload: &candidate_payload,
+                canonical_move_bytes: if terminal_replay {
+                    &current_move_bytes
+                } else {
+                    &candidate_move_bytes
+                },
+                canonical_basis_bytes: if terminal_replay {
+                    b"accepted-basis"
+                } else {
+                    b"next-basis"
+                },
+            },
+        )?;
+        let expected = if terminal_replay {
+            RealmLinkTransitionOutcome::IdempotentReplay
+        } else {
+            RealmLinkTransitionOutcome::Apply
+        };
+        if outcome != expected {
+            bail!(
+                "Realm Link transition {} -> {} returned {outcome:?}, expected {expected:?}",
+                from.as_str(),
+                to.as_str()
+            );
+        }
+        executed_transitions += 1;
+    }
+    if executed_transitions != 7 {
+        bail!("Realm Link runner did not execute all 7 declared transitions");
+    }
+
+    for from in &states {
+        for to in &states {
+            if allowed_transitions.contains(&(*from, *to)) {
+                continue;
+            }
+            let current_payload = realm_link_payload(target.clone(), *from);
+            let candidate_payload = realm_link_payload(target.clone(), *to);
+            let current_move_bytes = canonical_json_bytes(&current_payload)?;
+            let candidate_move_bytes = canonical_json_bytes(&candidate_payload)?;
+            let transition_error = match evaluate_realm_link_transition(
+                &source,
+                Some(RealmLinkTransitionCandidate {
+                    payload: &current_payload,
+                    canonical_move_bytes: &current_move_bytes,
+                    canonical_basis_bytes: b"accepted-basis",
+                }),
+                RealmLinkTransitionCandidate {
+                    payload: &candidate_payload,
+                    canonical_move_bytes: &candidate_move_bytes,
+                    canonical_basis_bytes: b"next-basis",
+                },
+            ) {
+                Ok(outcome) => {
+                    bail!("undeclared transition unexpectedly returned {outcome:?}")
+                }
+                Err(error) => error,
+            };
+            if transition_error.error_code() != ErrorCode::FailedPrecondition
+                || transition_error.reason_code()
+                    != arkret_core::REASON_REALM_LINK_INVALID_TRANSITION
+            {
+                bail!("undeclared Realm Link transition returned the wrong error mapping");
+            }
+        }
+    }
+
+    let active = realm_link_payload(target.clone(), RealmLinkStatus::Active);
+    let active_bytes = canonical_json_bytes(&active)?;
+    let active_head = RealmLinkTransitionCandidate {
+        payload: &active,
+        canonical_move_bytes: &active_bytes,
+        canonical_basis_bytes: b"same-basis",
+    };
+    if evaluate_realm_link_transition(&source, Some(active_head), active_head)?
+        != RealmLinkTransitionOutcome::IdempotentReplay
+    {
+        bail!("same-status same-basis exact replay was not idempotent");
+    }
+    let rejected = realm_link_payload(target.clone(), RealmLinkStatus::Rejected);
+    let rejected_bytes = canonical_json_bytes(&rejected)?;
+    if evaluate_realm_link_transition(
+        &source,
+        Some(active_head),
+        RealmLinkTransitionCandidate {
+            payload: &rejected,
+            canonical_move_bytes: &rejected_bytes,
+            canonical_basis_bytes: b"same-basis",
+        },
+    )? != RealmLinkTransitionOutcome::Bottom
+    {
+        bail!("same-basis different-status siblings did not return Bottom");
+    }
+
+    let tombstone = realm_link_payload(target.clone(), RealmLinkStatus::Tombstoned);
+    let tombstone_bytes = canonical_json_bytes(&tombstone)?;
+    let tombstone_head = RealmLinkTransitionCandidate {
+        payload: &tombstone,
+        canonical_move_bytes: &tombstone_bytes,
+        canonical_basis_bytes: b"tombstone-basis",
+    };
+    if evaluate_realm_link_transition(&source, Some(tombstone_head), tombstone_head)?
+        != RealmLinkTransitionOutcome::IdempotentReplay
+    {
+        bail!("byte-equivalent tombstone replay was not idempotent");
+    }
+    let tombstone_error = evaluate_realm_link_transition(
+        &source,
+        Some(tombstone_head),
+        RealmLinkTransitionCandidate {
+            payload: &tombstone,
+            canonical_move_bytes: &tombstone_bytes,
+            canonical_basis_bytes: b"later-basis",
+        },
+    )
+    .expect_err("tombstone write on a later basis must be rejected");
+    if tombstone_error.reason_code() != arkret_core::REASON_REALM_LINK_INVALID_TRANSITION {
+        bail!("tombstone terminal rejection returned the wrong reason");
+    }
+
+    let cycle = [
+        (realm_id("10")?, realm_id("11")?),
+        (realm_id("11")?, realm_id("12")?),
+        (realm_id("12")?, realm_id("10")?),
+    ];
+    for (cycle_source, cycle_target) in cycle {
+        let payload = realm_link_payload(cycle_target, RealmLinkStatus::Active);
+        let move_bytes = canonical_json_bytes(&payload)?;
+        if evaluate_realm_link_transition(
+            &cycle_source,
+            None,
+            RealmLinkTransitionCandidate {
+                payload: &payload,
+                canonical_move_bytes: &move_bytes,
+                canonical_basis_bytes: b"cycle-edge-basis",
+            },
+        )? != RealmLinkTransitionOutcome::Apply
+        {
+            bail!("general Realm Link graph cycle edge was rejected");
+        }
+    }
+
+    let self_link = realm_link_payload(source.clone(), RealmLinkStatus::Active);
+    let self_link_bytes = canonical_json_bytes(&self_link)?;
+    let self_reference_error = evaluate_realm_link_transition(
+        &source,
+        None,
+        RealmLinkTransitionCandidate {
+            payload: &self_link,
+            canonical_move_bytes: &self_link_bytes,
+            canonical_basis_bytes: b"self-reference-basis",
+        },
+    )
+    .expect_err("self-reference must be rejected");
+    if self_reference_error.error_code() != ErrorCode::SchemaViolation
+        || self_reference_error.reason_code() != arkret_core::REASON_REALM_LINK_SELF_REFERENCE
+    {
+        bail!("Realm Link self-reference returned the wrong error mapping");
     }
 
     Ok(())
@@ -995,4 +1294,14 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
         bail!("covered_frontier should drop the rotated ref after causal remove: {serialized}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn realm_link_fsm_transition_matrix_runs_clean() {
+        run_realm_link_fsm_transition_matrix_vector().unwrap();
+    }
 }
