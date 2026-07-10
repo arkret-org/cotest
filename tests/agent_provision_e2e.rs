@@ -21,11 +21,11 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, anyhow};
+use arkret_core::{Error as ArkretError, EventsSubscribeFrameKind};
+use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{SecondsFormat, Utc};
-use arkret_core::{Error as ArkretError, EventsSubscribeFrameKind};
-use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use cotest::harness::{
     ArkretServer, add_member, create_realm, event_envelope, register_account, submit_event,
 };
@@ -578,7 +578,7 @@ async fn effective_grants(server: &ArkretServer, token: &str, agent_did: &str) -
     // owns (anti-enumeration); a bare `subject` query defaults to realm `*` and
     // is denied. Scope the query to the controller's principal-control Realm,
     // which the controller owns and where the agent grant lives.
-    let control_realm = arkret::auth::principal_control_realm_id(
+    let control_realm = arkret_core::principal_control_realm_id(
         &arkret::Did::new(ALICE_DID.to_owned()).map_err(|e| anyhow!("alice did invalid: {e}"))?,
     );
     let effective = bearer_sdk_client(server, token)?

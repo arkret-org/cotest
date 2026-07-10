@@ -1,11 +1,10 @@
 use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
+use arkret_core::{DeviceId, Did, Hash, Proof, canonical, principal_control_realm_id, proof_kind};
+use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
-use arkret::auth::principal_control_realm_id;
-use arkret_core::{DeviceId, Did, Hash, Proof, canonical, proof_kind};
-use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -102,8 +101,8 @@ fn principal_control_realm(input: Value) -> Result<Value> {
 /// bytes so a drift in the prefix / body field-set / canonical-JSON encoding
 /// is caught cross-language.
 fn cross_signing_binding_input(input: Value) -> Result<Value> {
-    let content: CrossSigningPublishContent = serde_json::from_value(input)
-        .context("parse cross_signing.publish content")?;
+    let content: CrossSigningPublishContent =
+        serde_json::from_value(input).context("parse cross_signing.publish content")?;
     let self_signing = content
         .self_signing_binding_input()
         .map_err(|err| anyhow::anyhow!("self_signing binding input: {err}"))?;

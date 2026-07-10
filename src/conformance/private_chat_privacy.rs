@@ -617,9 +617,9 @@ fn validate_pending_contact_negative(case: &PendingContactNegative) -> Result<()
         bail!("pending contact must not carry a direct_conversation summary");
     }
     if case.expected_error.error_code != "failed_precondition"
-        || case.expected_error.reason_code != "contact_not_accepted"
+        || case.expected_error.reason_code != "direct_conversation_unavailable"
     {
-        bail!("pending contact negative must fail with contact_not_accepted");
+        bail!("pending contact negative must fail with direct_conversation_unavailable");
     }
     for forbidden in ["realm_id", "main_strand_id", "binding_event_ref"] {
         if case.observed_response.get(forbidden).is_some() {
