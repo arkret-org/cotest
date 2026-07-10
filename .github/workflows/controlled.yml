@@ -1,0 +1,86 @@
+name: controlled
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Controlled test tier
+        required: true
+        type: choice
+        options:
+          - mls-data-plane
+          - platform-live
+      environment:
+        description: Protected GitHub environment containing endpoints and credentials
+        required: true
+        default: controlled-e2e
+        type: string
+      service_versions:
+        description: Comma-separated component@version/ref declarations
+        required: true
+        type: string
+      mls_harness_version:
+        description: MLS browser/wasm harness version or commit
+        required: false
+        type: string
+      platform_provider:
+        description: Provider name for platform-live
+        required: false
+        type: string
+      platform_adapter_version:
+        description: Provider adapter version or commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  controlled:
+    name: ${{ inputs.lane }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 90
+    env:
+      COTEST_SERVICE_VERSIONS: ${{ inputs.service_versions }}
+      COTEST_MLS_HARNESS_VERSION: ${{ inputs.mls_harness_version }}
+      COTEST_PLATFORM_PROVIDER: ${{ inputs.platform_provider }}
+      COTEST_PLATFORM_ADAPTER_VERSION: ${{ inputs.platform_adapter_version }}
+      COTEST_SOLAND_BASE_URL: ${{ secrets.COTEST_SOLAND_BASE_URL }}
+      COTEST_INKSON_BASE_URL: ${{ secrets.COTEST_INKSON_BASE_URL }}
+      COTEST_COAUTH_BASE_URL: ${{ secrets.COTEST_COAUTH_BASE_URL }}
+      COTEST_PLATFORM_LIVE_TOKEN: ${{ secrets.COTEST_PLATFORM_LIVE_TOKEN }}
+      COTEST_PLATFORM_LIVE_BASE_URL: ${{ secrets.COTEST_PLATFORM_LIVE_BASE_URL }}
+      COTEST_PLATFORM_WEBHOOK_PATH: ${{ secrets.COTEST_PLATFORM_WEBHOOK_PATH }}
+      COTEST_PLATFORM_WEBHOOK_BODY_BASE64: ${{ secrets.COTEST_PLATFORM_WEBHOOK_BODY_BASE64 }}
+      COTEST_PLATFORM_WEBHOOK_HEADERS_JSON: ${{ secrets.COTEST_PLATFORM_WEBHOOK_HEADERS_JSON }}
+      COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/controlled/${{ inputs.lane }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate controlled-lane preconditions
+        working-directory: cotest
+        run: bash scripts/check_tier_preconditions.sh "${{ inputs.lane }}"
+      - name: Install Playwright
+        working-directory: cotest/e2e
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+      - name: Run MLS data-plane tier
+        if: inputs.lane == 'mls-data-plane'
+        working-directory: cotest/e2e
+        run: npx playwright test --config playwright.config.ts --project=chromium --grep '@mls-data-plane'
+      - name: Run platform live tier
+        if: inputs.lane == 'platform-live'
+        working-directory: cotest/e2e
+        run: npx playwright test --config playwright.config.ts --project=chromium --grep '@platform-live'
+      - name: Upload controlled-lane evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: controlled-${{ inputs.lane }}-${{ github.run_id }}
+          path: cotest/artifacts/runs/controlled/${{ inputs.lane }}

@@ -1,5 +1,8 @@
 name: integration
 
+# CT-003 live lane. MLS data-plane and provider live tests are deliberately
+# isolated in controlled.yml behind a protected GitHub environment.
+
 # Cross-project bring-up (P2F.5.2). Builds the upstream services
 # (soland / coauth / floria) from sibling checkouts and runs the cotest
 # harness against them.

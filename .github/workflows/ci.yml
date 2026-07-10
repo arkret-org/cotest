@@ -292,3 +292,7 @@ jobs:
           -RunProfile joint-smoke
           -PlaywrightProject ${{ matrix.project }}
           -Grep "soland /_arkret/describe"
+
+      # PR is the contract/deterministic lane. Tests tagged @mls-data-plane or
+      # @platform-live are reserved for controlled.yml and must not be added to
+      # this job's smoke selection.

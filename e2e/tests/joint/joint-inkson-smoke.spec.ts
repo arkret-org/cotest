@@ -43,6 +43,129 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     });
   });
 
+  test("groups reply-enabled personal agents and offers the @me selector", async ({
+    jointRealm,
+    request,
+  }) => {
+    test.setTimeout(360_000);
+    const stamp = Date.now();
+    const slug = `summary${stamp.toString(36)}`;
+    const displayName = `Summary Agent ${stamp}`;
+    const controllerHandle = canonicalHandle(
+      jointRealm.alice.handle,
+      jointRealm.alicePage.serverUrl,
+    );
+    const agentId = await provisionAgent(
+      request,
+      jointRealm.aliceSession,
+      jointRealm.alicePage.serverUrl,
+      displayName,
+      slug,
+    );
+
+    await setAgentParticipation(
+      request,
+      jointRealm.aliceSession,
+      jointRealm.alicePage.serverUrl,
+      agentId,
+      jointRealm.realmId,
+    );
+
+    const remoteReadUrl = `${jointRealm.bobPage.serverUrl}/_arkret/self/agents/${encodeURIComponent(agentId)}/participation`;
+    const remoteRead = await request.get(remoteReadUrl, {
+      headers: selfPathHeadersForDpopSession(
+        jointRealm.bobSession,
+        "GET",
+        remoteReadUrl,
+      ),
+    });
+    expect(
+      [403, 404],
+      `remote participation read unexpectedly returned ${remoteRead.status()}: ${await remoteRead.text()}`,
+    ).toContain(remoteRead.status());
+
+    const strandId = await resolveDefaultStrandId(
+      request,
+      jointRealm.aliceSession,
+      jointRealm.alicePage.serverUrl,
+      jointRealm.realmId,
+    );
+    const actorSeq = 8_500_000_000_000_000 + (stamp % 100_000);
+    await submitSignedEvent(
+      request,
+      jointRealm.aliceSession,
+      jointRealm.alice.did,
+      jointRealm.alicePage.serverUrl,
+      jointRealm.realmId,
+      "ak.agent.endpoint",
+      {
+        agent_id: agentId,
+        endpoints: [{ protocol: "http_custom", url: "https://agent.invalid/rpc" }],
+      },
+      actorSeq,
+    );
+    await submitSignedEvent(
+      request,
+      jointRealm.aliceSession,
+      jointRealm.alice.did,
+      jointRealm.alicePage.serverUrl,
+      jointRealm.realmId,
+      "ak.message.create",
+      {
+        strand_id: strandId,
+        track_name: "discussion",
+        content: {
+          kind: "ak.content.text",
+          body: `register ${displayName}`,
+          mentions: [
+            {
+              kind: "mention",
+              subject_id: agentId,
+              controller_subject_id: jointRealm.alice.did,
+              controller_handle_at_time: controllerHandle,
+              agent_slug_at_time: slug,
+              display_name_at_time: displayName,
+              mention_text_original: `@${controllerHandle}/${slug}`,
+            },
+          ],
+        },
+      },
+      actorSeq + 1,
+    );
+
+    await jointRealm.alicePage.page.goto(`/chat/${jointRealm.realmId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(jointRealm.alicePage.page.getByTestId("chat-panel")).toBeVisible({
+      timeout: 120_000,
+    });
+    const group = jointRealm.alicePage.page
+      .locator(
+        `[data-testid="participant-agent-group"][data-controller-did="${jointRealm.alice.did}"]`,
+      )
+      .first();
+    await expect(group).toBeVisible({ timeout: 30_000 });
+    await expect(group.getByTestId("participant-self-badge")).toHaveText("ME");
+    await expect(group.getByTestId("participant-agent-group-toggle")).toHaveText("1 agent");
+
+    const agentRow = group.getByTestId("discussion-agent-row");
+    await expect(agentRow).toBeHidden();
+    await group.locator("summary").click();
+    await expect(agentRow).toBeVisible();
+    await expect(agentRow).toContainText(displayName);
+    await expect(agentRow.getByTestId("participant-agent-selector")).toHaveText(
+      `@${controllerHandle}/${slug}`,
+    );
+
+    const input = jointRealm.alicePage.page.getByTestId("chat-input");
+    await input.fill(`@me/${slug}`);
+    const suggestion = jointRealm.alicePage.page
+      .getByTestId("mention-suggestion")
+      .filter({ hasText: `@me/${slug}` });
+    await expect(suggestion).toBeVisible({ timeout: 30_000 });
+    await expect(suggestion.getByTestId("mention-suggestion-agent-badge")).toBeVisible();
+  });
+
   // inviteFromAdmin drives the current modal flow: gotoRealmAdminSection
   // navigates to /realms/:id/members (realm-members-panel), opens the invite
   // modal via open-invite-modal-button, fills invite-target-input, and submits
@@ -198,6 +321,90 @@ async function submitMessageEvent(
   });
   const text = await response.text();
   expect([200, 201], `submit ak.message.create: ${text}`).toContain(response.status());
+}
+
+async function provisionAgent(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  serverUrl: string,
+  displayName: string,
+  agentSlug: string,
+): Promise<string> {
+  const url = `${serverUrl}/_arkret/self/agents`;
+  const response = await request.post(url, {
+    headers: selfPathHeadersForDpopSession(session, "POST", url),
+    data: {
+      display_name: displayName,
+      agent_slug: agentSlug,
+      accountability: null,
+    },
+  });
+  const text = await response.text();
+  expect(response.ok(), `agent provision returned ${response.status()}: ${text}`).toBeTruthy();
+  const body = JSON.parse(text) as { agent_principal_id?: string };
+  expect(body.agent_principal_id).toBeTruthy();
+  return body.agent_principal_id!;
+}
+
+async function setAgentParticipation(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  serverUrl: string,
+  agentId: string,
+  realmId: string,
+) {
+  const url = `${serverUrl}/_arkret/self/agents/${encodeURIComponent(agentId)}/participation`;
+  const response = await request.put(url, {
+    headers: selfPathHeadersForDpopSession(session, "PUT", url),
+    data: {
+      scope: { kind: "realm", realm_id: realmId },
+      selection: {
+        reply: true,
+        accept_third_party_mention: false,
+        act_on_behalf: false,
+      },
+    },
+  });
+  const text = await response.text();
+  expect(
+    response.ok(),
+    `agent participation replace returned ${response.status()}: ${text}`,
+  ).toBeTruthy();
+}
+
+async function submitSignedEvent(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  actorDid: string,
+  serverUrl: string,
+  realmId: string,
+  kind: string,
+  payload: Record<string, unknown>,
+  actorSeq: number,
+) {
+  const url = `${serverUrl}/_arkret/self/events`;
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    eventId: `ak:event:${uuidV7()}`,
+    kind,
+    actorSeq,
+    payload,
+  });
+  const response = await request.post(url, {
+    headers: selfPathHeadersForDpopSession(session, "POST", url),
+    data: envelope,
+  });
+  const text = await response.text();
+  expect(
+    [200, 201],
+    `submit ${kind} returned ${response.status()}: ${text}`,
+  ).toContain(response.status());
+}
+
+function canonicalHandle(handle: string, serverUrl: string): string {
+  const localpart = handle.trim().replace(/^@/, "").split(":", 1)[0];
+  return `${localpart}:${new URL(serverUrl).hostname.toLowerCase()}`;
 }
 
 async function listInvitesForDpop(

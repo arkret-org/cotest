@@ -386,6 +386,125 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     ).toContain(after.status());
   });
 
+  test(
+    "4b. terminal auth loss clears the live UI session and stops authenticated polling",
+    { tag: "@live" },
+    async ({ browser, request }) => {
+      const coauth = coauthBaseUrl();
+      test.skip(!coauth, "PRECONDITION_COAUTH_UNAVAILABLE: coauth is not configured");
+      const ctx = await setupGrant(request);
+      test.skip(
+        !ctx,
+        "PRECONDITION_GRANT_ISSUER_UNAVAILABLE: coauth debug grant issuer is disabled",
+      );
+      const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
+      const user = {
+        name: actorDid.split(":").pop() ?? "terminal-auth-ui",
+        did: actorDid,
+        deviceId,
+        handle: "@terminal-auth-ui",
+        displayName,
+      };
+      const jointPage = await openUserPage(browser, user, {
+        grantJwt: grant.grantJwt,
+        dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
+        grantId: grant.grantId,
+        grantAudience: grant.audience,
+      });
+      const authenticatedRequests: string[] = [];
+      jointPage.page.on("request", (browserRequest) => {
+        if (
+          browserRequest.url().includes("/_arkret/self/") &&
+          browserRequest.headers().authorization === `Bearer ${grant.grantJwt}`
+        ) {
+          authenticatedRequests.push(browserRequest.url());
+        }
+      });
+      try {
+        await jointPage.gotoHome();
+        await expect(jointPage.page.getByTestId("client-shell")).toBeVisible();
+
+        const logoutUrl = `${solandBaseUrl()}/_arkret/gate/account/logout`;
+        const logout = await request.post(logoutUrl, {
+          headers: {
+            authorization: `Bearer ${grant.grantJwt}`,
+            dpop: mintDpopProof({
+              deviceKey,
+              method: "POST",
+              url: logoutUrl,
+              grantJwt: grant.grantJwt,
+            }),
+          },
+        });
+        expect([200, 204], `logout: ${await logout.text()}`).toContain(logout.status());
+
+        await jointPage.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(jointPage.page.getByTestId("login-panel")).toBeVisible({
+          timeout: 60_000,
+        });
+        const settledRequestCount = authenticatedRequests.length;
+        await jointPage.page.waitForTimeout(3_000);
+        expect(authenticatedRequests.length).toBe(settledRequestCount);
+      } finally {
+        await jointPage.session.context.close();
+      }
+    },
+  );
+
+  test(
+    "4c. a transient self-path failure does not clear the UI session",
+    { tag: "@live" },
+    async ({ browser, request }) => {
+      const coauth = coauthBaseUrl();
+      test.skip(!coauth, "PRECONDITION_COAUTH_UNAVAILABLE: coauth is not configured");
+      const ctx = await setupGrant(request);
+      test.skip(
+        !ctx,
+        "PRECONDITION_GRANT_ISSUER_UNAVAILABLE: coauth debug grant issuer is disabled",
+      );
+      const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
+      const user = {
+        name: actorDid.split(":").pop() ?? "transient-auth-ui",
+        did: actorDid,
+        deviceId,
+        handle: "@transient-auth-ui",
+        displayName,
+      };
+      const jointPage = await openUserPage(browser, user, {
+        grantJwt: grant.grantJwt,
+        dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
+        grantId: grant.grantId,
+        grantAudience: grant.audience,
+      });
+      let injected = false;
+      await jointPage.page.route("**/_arkret/self/**", async (route) => {
+        if (!injected) {
+          injected = true;
+          await route.fulfill({
+            status: 503,
+            contentType: "application/problem+json",
+            body: JSON.stringify({
+              type: "about:blank",
+              title: "temporarily unavailable",
+              status: 503,
+              code: "temporarily_unavailable",
+            }),
+          });
+          return;
+        }
+        await route.continue();
+      });
+      try {
+        await jointPage.gotoHome();
+        await expect.poll(() => injected, { timeout: 30_000 }).toBeTruthy();
+        await expect(jointPage.page.getByTestId("client-shell")).toBeVisible();
+        await expect(jointPage.page.getByTestId("login-panel")).toHaveCount(0);
+      } finally {
+        await jointPage.session.context.close();
+      }
+    },
+  );
+
   // ── Cases that need neither coauth nor the debug seam ────────────────────
 
   test("2. a session grant presented WITHOUT a DPoP header is rejected (401)", async ({

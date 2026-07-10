@@ -312,12 +312,27 @@ Every test belongs to exactly one tier; the tier decides which CI lane runs it:
 - `mls-data-plane` — needs real MLS group state, epoch secrets, and application
   ciphertext (CT-002 harness). Controlled-environment lane. Playwright tests in
   this tier carry the `@mls-data-plane` tag.
+- `platform-live` — provider credential/webhook smoke tests. They run only from
+  `controlled.yml` and carry the `@platform-live` tag.
 
 Rust: every `#[ignore]` must carry `/// Tier: contract|live|mls-data-plane`
 plus the existing `/// Issue:`/`/// Gating:` reason —
 `scripts/check_ignore_comments.sh` enforces both in CI. Playwright: a missing
 prerequisite must be an explicit `test.skip(cond, "reason")` / `test.fixme`
 with a machine-readable reason string, never a silent pass.
+
+CI mapping is fail-closed: `ci.yml` is the PR contract/deterministic lane,
+`integration.yml` is the nightly live lane, and `controlled.yml` is manually
+dispatched through a protected environment for `mls-data-plane` or
+`platform-live`. Controlled runs must declare `component@version/ref` values in
+`COTEST_SERVICE_VERSIONS`; `scripts/check_tier_preconditions.sh` exits with a
+`PRECONDITION_*` record when an endpoint, credential, harness version, adapter
+version, or component version is missing. Missing controlled prerequisites are
+not converted into test skips.
+
+The platform lane sends a captured authentic provider delivery to a deployed
+bridge. The protected environment supplies the bridge URL, webhook path,
+base64 body, and signature headers; secrets are never committed as fixtures.
 
 ## Runtime Modes
 
