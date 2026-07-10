@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use arkret::auth::principal_control_realm_id;
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
@@ -11,7 +8,11 @@ use arkret::identity::binding::multicodec_ed25519_public_key;
 use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
-use arkret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
+use arkret_core::{
+    Did, Event, EventId, Hash, Hlc, Proof, RealmId, principal_control_realm_id, proof_kind,
+};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde::Serialize;

@@ -36,7 +36,7 @@ fn principal_control_realm_vectors_match_sdk() -> Result<()> {
     for vector in fixture.vectors {
         let principal = arkret::Did::new(vector.principal_id.clone())
             .map_err(|error| anyhow!("invalid vector DID {}: {error}", vector.principal_id))?;
-        let actual = arkret::auth::principal_control_realm_id(&principal);
+        let actual = arkret_core::principal_control_realm_id(&principal);
         assert_eq!(
             actual, vector.principal_control_realm_id,
             "principal_control_realm_id drift for {}",

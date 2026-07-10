@@ -80,8 +80,9 @@ pub use agent_participation::{
 };
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
-    run_agent_pairing_expiry_vector, run_agent_provision_vector,
-    run_agent_session_grant_replay_vector, run_agent_vector_suite,
+    run_agent_human_approval_required_vector, run_agent_pairing_expiry_vector,
+    run_agent_provision_vector, run_agent_session_grant_replay_vector, run_agent_vector_suite,
+    validate_agent_human_approval_http_response,
 };
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
@@ -246,7 +247,9 @@ pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
 };
-pub use push_rule_core::run_push_rule_core_fixture_suite;
+pub use push_rule_core::{
+    run_hardened_mention_routing_hint_vector, run_push_rule_core_fixture_suite,
+};
 pub use redaction::run_redaction_fixture_suite;
 pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
 pub use scaffold_gate::{

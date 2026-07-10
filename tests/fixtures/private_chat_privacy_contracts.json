@@ -221,7 +221,7 @@
       },
       "expected_error": {
         "error_code": "failed_precondition",
-        "reason_code": "contact_not_accepted"
+        "reason_code": "direct_conversation_unavailable"
       },
       "observed_response": {
         "state": "not_found"

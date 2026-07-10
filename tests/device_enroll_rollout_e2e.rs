@@ -316,7 +316,7 @@ fn service_attested_device_authorize_event(
 ) -> Result<Value> {
     let principal = arkret::Did::new(principal_id.to_owned())
         .map_err(|error| anyhow!("invalid principal DID: {error}"))?;
-    let realm_id = arkret::auth::principal_control_realm_id(&principal);
+    let realm_id = arkret_core::principal_control_realm_id(&principal);
     // Typed wire payload: device-lifecycle.md §5.4 — the enrollment authority
     // attests the device verify key, HPKE sealing key AND the canonical
     // algorithm set. Built on the SDK counterpart so schema drift fails here.

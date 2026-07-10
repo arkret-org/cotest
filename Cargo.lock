@@ -135,6 +135,7 @@ dependencies = [
  "arkret-http-client",
  "arkret-keystore",
  "arkret-signatures",
+ "arkret-state",
  "base64",
  "chacha20poly1305",
  "chrono",
@@ -176,6 +177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "subtle",
  "thiserror",
  "tracing",
  "unicode-normalization",
@@ -220,6 +222,7 @@ version = "0.3.0"
 dependencies = [
  "arkret-core",
  "arkret-signatures",
+ "arkret-state",
  "base64",
  "chrono",
  "futures-util",
@@ -268,7 +271,20 @@ dependencies = [
  "subtle",
  "thiserror",
  "url",
+ "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "arkret-state"
+version = "0.3.0"
+dependencies = [
+ "arkret-core",
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -869,6 +885,7 @@ dependencies = [
  "arkret-crypto",
  "arkret-http-client",
  "arkret-signatures",
+ "arkret-state",
  "base64",
  "chacha20poly1305",
  "chrono",

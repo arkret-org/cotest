@@ -6,7 +6,7 @@
 
 use anyhow::Result;
 use arkret::Did;
-use arkret::auth::principal_control_realm_id;
+use arkret_core::principal_control_realm_id;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
