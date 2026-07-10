@@ -12,7 +12,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
+    ArkretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
     refresh_event_proof,
 };
 use crate::scenarios::federation_collaboration::signed_keys_upload_body;
@@ -24,7 +24,7 @@ const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-000000000101";
 const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000100";
 const ADAPTER_MESSAGE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
 
-pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     // soland's keys/upload requires a verified, authorized device record whose
     // device_public_key the detached JWS is verified against. Authorize the
     // device FIRST, as actor_seq 0, so it precedes this phase's contiguous
@@ -38,7 +38,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
 }
 
 async fn authorize_keys_device(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     device_key: &SigningKey,
 ) -> Result<()> {
@@ -86,7 +86,7 @@ async fn authorize_keys_device(
     Ok(())
 }
 
-async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> {
+async fn submit_adapter_event(server: &ArkretServer, token: &str) -> Result<()> {
     let realm_id = create_adapter_realm(server, token).await?;
     let event = signed_message_event(
         ADAPTER_MESSAGE_EVENT_ID,
@@ -113,7 +113,7 @@ async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> 
     Ok(())
 }
 
-async fn create_adapter_realm(server: &CokretServer, token: &str) -> Result<String> {
+async fn create_adapter_realm(server: &ArkretServer, token: &str) -> Result<String> {
     let event = signed_realm_create_event(
         ADAPTER_REALM_CREATE_EVENT_ID,
         2,
@@ -244,7 +244,7 @@ fn signed_message_event(
 }
 
 async fn upload_and_inspect_keys(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     device_key: &SigningKey,
 ) -> Result<()> {

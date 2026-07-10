@@ -2,10 +2,10 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_api_error, expect_json};
+use crate::harness::{ArkretServer, expect_api_error, expect_json};
 
 pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
-    let server = CokretServer::spawn("rtc-media").await?;
+    let server = ArkretServer::spawn("rtc-media").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
@@ -111,7 +111,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert_eq!(turn_server["credential_type"], "password");
     let turn_username = turn_server["username"].as_str().unwrap();
     // soland's REST-style TURN username is `<expiry-unix>:<pairwise-pseudonym>`
-    // where the pseudonym is `ck_pseudonym_call_<hex>` (webrtc-signaling.md
+    // where the pseudonym is `ak_pseudonym_call_<hex>` (webrtc-signaling.md
     // §4.1). There is no separate `pairwise_pseudonym` response field; the
     // pseudonym is carried in the username and must not leak the caller identity.
     let (expiry, pseudonym) = turn_username

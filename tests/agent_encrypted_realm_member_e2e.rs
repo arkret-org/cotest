@@ -8,7 +8,7 @@
 
 use anyhow::{Result, bail};
 use arkret::{
-    CokretMlsGroup, CokretMlsIdentity, CryptoStore, DeviceId, Did, MemoryCryptoStore,
+    ArkretMlsGroup, ArkretMlsIdentity, CryptoStore, DeviceId, Did, MemoryCryptoStore,
     MlsDeviceWorkflowAction, MlsRecoveryAction, late_device_join_steps,
 };
 use arkret_core::MlsKeyPackageState;
@@ -32,10 +32,10 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
     let agent_did = did("summary-agent")?;
     let agent_device = device("000000000202")?;
 
-    let owner = CokretMlsIdentity::new_basic(owner_did.clone(), owner_device)?;
+    let owner = ArkretMlsIdentity::new_basic(owner_did.clone(), owner_device)?;
     let mut owner_group = owner.create_group(b"cotest-g2-agent-member-local-fixture")?;
 
-    let agent = CokretMlsIdentity::new_basic(agent_did.clone(), agent_device.clone())?;
+    let agent = ArkretMlsIdentity::new_basic(agent_did.clone(), agent_device.clone())?;
     let agent_key_package = agent.key_package_record()?;
     let agent_private_state = agent.export_private_state()?;
     assert_eq!(agent_key_package.principal_id, agent_did);
@@ -84,12 +84,12 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
         MlsRecoveryAction::ConsumeWelcome
     ));
 
-    let restarted_identity = CokretMlsIdentity::restore_from_private_state(
+    let restarted_identity = ArkretMlsIdentity::restore_from_private_state(
         agent_did.clone(),
         agent_device.clone(),
         &agent_private_state,
     )?;
-    let agent_group = CokretMlsGroup::join_from_welcome(restarted_identity, &add.welcome)?;
+    let agent_group = ArkretMlsGroup::join_from_welcome(restarted_identity, &add.welcome)?;
     assert_eq!(agent_group.group_id(), add.welcome.group_id);
     assert_eq!(agent_group.epoch(), add.welcome.epoch);
     assert!(
@@ -108,7 +108,7 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
         .mls_group_state(&add.welcome.group_id)
         .expect("agent MLS group state must survive runtime restart")
         .clone();
-    let mut restarted_agent_group = CokretMlsGroup::restore_from_state_record(&restored_state)?;
+    let mut restarted_agent_group = ArkretMlsGroup::restore_from_state_record(&restored_state)?;
 
     let agent_payload = restarted_agent_group
         .encrypt_payload("ak.message.create", b"agent encrypted hello after restart")?;

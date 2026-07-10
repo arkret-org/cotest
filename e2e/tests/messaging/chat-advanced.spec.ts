@@ -780,7 +780,7 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test("E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async ({
+  test("E14.F typing indicator (ak.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async ({
     browser,
     request,
   }, testInfo) => {

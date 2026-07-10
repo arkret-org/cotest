@@ -35,11 +35,11 @@ use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, dev_login, encrypted_envelope, expect_json};
+use crate::harness::{ArkretServer, dev_login, encrypted_envelope, expect_json};
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
-    let server = CokretServer::spawn("to-device-offline-ordering").await?;
+    let server = ArkretServer::spawn("to-device-offline-ordering").await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
     let alice_token = dev_login(
@@ -173,7 +173,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
 }
 
 async fn send_to_device(
-    server: &CokretServer,
+    server: &ArkretServer,
     sender_token: &str,
     recipient: &str,
     device_id: &str,
@@ -218,7 +218,7 @@ async fn send_to_device(
 }
 
 async fn ack_to_device(
-    server: &CokretServer,
+    server: &ArkretServer,
     recipient_token: &str,
     ack_token: &str,
 ) -> Result<()> {
@@ -238,7 +238,7 @@ async fn ack_to_device(
 }
 
 async fn poll_to_device(
-    server: &CokretServer,
+    server: &ArkretServer,
     recipient_token: &str,
     from: Option<&str>,
 ) -> Result<Value> {

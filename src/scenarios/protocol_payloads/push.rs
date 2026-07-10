@@ -8,15 +8,15 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json};
 
-pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     let push_target_id = register_device(server, token).await?;
     notify_blind_wakeup(server, &push_target_id).await?;
     Ok(())
 }
 
-async fn register_device(server: &CokretServer, token: &str) -> Result<String> {
+async fn register_device(server: &ArkretServer, token: &str) -> Result<String> {
     let push = expect_json(
         server
             .http()
@@ -41,7 +41,7 @@ async fn register_device(server: &CokretServer, token: &str) -> Result<String> {
         .to_owned())
 }
 
-async fn notify_blind_wakeup(server: &CokretServer, push_target_id: &str) -> Result<()> {
+async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Result<()> {
     let notify = expect_json(
         server
             .http()

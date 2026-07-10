@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, SecondsFormat, Utc};
-use cotest::harness::{CokretServer, register_account};
+use cotest::harness::{ArkretServer, register_account};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -121,7 +121,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         );
     }
 
-    let server = CokretServer::spawn("inkson-mock-parity").await?;
+    let server = ArkretServer::spawn("inkson-mock-parity").await?;
     let alice_token = register_account(
         &server,
         "did:web:alice-mock-parity.example",
@@ -239,7 +239,7 @@ fn locate_inkson_contract(root: &Path) -> Result<Option<PathBuf>> {
         .join("inkson")
         .join("tests")
         .join("e2e")
-        .join("mockCokretContract.ts");
+        .join("mockArkretContract.ts");
     Ok(path.is_file().then_some(path))
 }
 
@@ -250,7 +250,7 @@ fn locate_inkson_mock_api(root: &Path) -> Result<Option<PathBuf>> {
         .join("inkson")
         .join("tests")
         .join("e2e")
-        .join("mockCokretApi.ts");
+        .join("mockArkretApi.ts");
     Ok(path.is_file().then_some(path))
 }
 
@@ -289,14 +289,14 @@ fn assert_mock_contract_artifact_gate(
         .with_context(|| format!("read {}", contract_path.display()))?;
     assert_contract_branches_have_fixture_cases(&contract_source, fixture, ctx)?;
     assert_supported_operation_literals_registered(
-        "mockCokretContract.ts",
+        "mockArkretContract.ts",
         &contract_source,
         &registry,
     )?;
     if let Some(api_path) = locate_inkson_mock_api(root)? {
         let api_source = fs::read_to_string(&api_path)
             .with_context(|| format!("read {}", api_path.display()))?;
-        assert_supported_operation_literals_registered("mockCokretApi.ts", &api_source, &registry)?;
+        assert_supported_operation_literals_registered("mockArkretApi.ts", &api_source, &registry)?;
     }
 
     for case in &fixture.cases {
@@ -881,13 +881,13 @@ const source = fs
 const context = { __input: input, __result: undefined, console };
 vm.createContext(context);
 vm.runInContext(`${source}
-if (typeof mockCokretContract !== "function") {
-  throw new Error("mockCokretContract export was not a function after stripping ESM exports");
+if (typeof mockArkretContract !== "function") {
+  throw new Error("mockArkretContract export was not a function after stripping ESM exports");
 }
 if (typeof canonicalPath !== "function") {
   throw new Error("canonicalPath export was not a function after stripping ESM exports");
 }
-__result = mockCokretContract(__input);`, context, { filename: contractPath });
+__result = mockArkretContract(__input);`, context, { filename: contractPath });
 process.stdout.write(JSON.stringify(context.__result ?? null));
 "#;
     let mut child = Command::new("node")
@@ -937,7 +937,7 @@ fn split_path_query(path: &str) -> (&str, BTreeMap<String, String>) {
 }
 
 async fn call_live_soland(
-    server: &CokretServer,
+    server: &ArkretServer,
     case: &ParityCase,
     ctx: &TemplateContext,
     rendered_path: &str,
@@ -970,7 +970,7 @@ async fn call_live_soland(
 }
 
 async fn inject_live_default_strand_id(
-    server: &CokretServer,
+    server: &ArkretServer,
     ctx: &TemplateContext,
     body: Option<Value>,
 ) -> Result<Option<Value>> {

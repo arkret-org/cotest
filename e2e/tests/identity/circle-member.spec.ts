@@ -9,7 +9,7 @@
 // `ak.self.circle.*` operations are published in the arkret-spec OpenAPI
 // artifact, operation registry, and contract catalog; see helpers/circle-api.ts
 // header for the full reasoning. The legacy `/_soland` mirror was retired).
-// Spec refs: AKP-0007 — `ck.circle.*` data model, reducer invariant
+// Spec refs: AKP-0007 — `ak.circle.*` data model, reducer invariant
 // `Circle.members ⊆ Realm.members` (`circle_member_must_be_realm_member`), and
 // §8 `ak.circle.member.manage` capability for cross-actor adds.
 //
@@ -24,15 +24,15 @@ import {
 } from "../../helpers/users";
 import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
 import {
-  addCircleMemberCokret,
+  addCircleMemberArkret,
   addCircleMemberRaw,
-  archiveCircleCokret,
-  createCircleCokret,
+  archiveCircleArkret,
+  createCircleArkret,
   errorWireCode,
-  getCircleCokret,
+  getCircleArkret,
   grantCircleManageCapability,
   grantCircleMemberManageCapability,
-  restoreCircleCokret,
+  restoreCircleArkret,
 } from "../../helpers/circle-api";
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
@@ -67,7 +67,7 @@ test.describe("circle membership (same principal server)", () => {
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
     // alice creates an invite-rule Circle bound to that realm.
-    const circle = await createCircleCokret(request, aliceToken, {
+    const circle = await createCircleArkret(request, aliceToken, {
       realmId,
       title: `S8 circle ${Date.now()}`,
       joinRule: "invite",
@@ -85,11 +85,11 @@ test.describe("circle membership (same principal server)", () => {
       subjectDid: alice.did,
       circleId: circle.circle_id,
     });
-    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+    await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
       actorId: alice.did,
       membership: "join",
     });
-    const membership = await addCircleMemberCokret(
+    const membership = await addCircleMemberArkret(
       request,
       aliceToken,
       circle.circle_id,
@@ -99,7 +99,7 @@ test.describe("circle membership (same principal server)", () => {
     expect(membership.actor_id).toBe(bob.did);
 
     // CORE ASSERTION: bob did zero operations yet is a Circle member.
-    const fetched = await getCircleCokret(
+    const fetched = await getCircleArkret(
       request,
       aliceToken,
       circle.circle_id,
@@ -118,7 +118,7 @@ test.describe("circle membership (same principal server)", () => {
       title: `S8 restore circle realm ${Date.now()}`,
       ownerDid: alice.did,
     });
-    const circle = await createCircleCokret(request, aliceToken, {
+    const circle = await createCircleArkret(request, aliceToken, {
       realmId,
       title: `S8 restore circle ${Date.now()}`,
       joinRule: "invite",
@@ -135,26 +135,26 @@ test.describe("circle membership (same principal server)", () => {
       subjectDid: alice.did,
       circleId: circle.circle_id,
     });
-    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+    await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
       actorId: alice.did,
       membership: "join",
     });
 
-    const archived = await archiveCircleCokret(
+    const archived = await archiveCircleArkret(
       request,
       aliceToken,
       circle.circle_id,
     );
     expect(archived.state).toBe("archived");
 
-    const restored = await restoreCircleCokret(
+    const restored = await restoreCircleArkret(
       request,
       aliceToken,
       circle.circle_id,
     );
     expect(restored.state).toBe("active");
 
-    const fetched = await getCircleCokret(
+    const fetched = await getCircleArkret(
       request,
       aliceToken,
       circle.circle_id,
@@ -180,7 +180,7 @@ test.describe("circle membership (same principal server)", () => {
       title: `S8n circle realm ${Date.now()}`,
       ownerDid: alice.did,
     });
-    const circle = await createCircleCokret(request, aliceToken, {
+    const circle = await createCircleArkret(request, aliceToken, {
       realmId,
       title: `S8n circle ${Date.now()}`,
       joinRule: "invite",
@@ -191,7 +191,7 @@ test.describe("circle membership (same principal server)", () => {
       subjectDid: alice.did,
       circleId: circle.circle_id,
     });
-    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+    await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
       actorId: alice.did,
       membership: "join",
     });
@@ -211,7 +211,7 @@ test.describe("circle membership (same principal server)", () => {
     );
 
     // mallory is not a member.
-    const fetched = await getCircleCokret(
+    const fetched = await getCircleArkret(
       request,
       aliceToken,
       circle.circle_id,
@@ -249,7 +249,7 @@ test.describe("circle membership (same principal server)", () => {
     await addRealmMemberApi(request, aliceToken, realmId, carol.did);
     await addRealmMemberApi(request, aliceToken, realmId, dave.did);
 
-    const circle = await createCircleCokret(request, aliceToken, {
+    const circle = await createCircleArkret(request, aliceToken, {
       realmId,
       title: `S8c circle ${Date.now()}`,
       joinRule: "invite",
@@ -260,7 +260,7 @@ test.describe("circle membership (same principal server)", () => {
       subjectDid: alice.did,
       circleId: circle.circle_id,
     });
-    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+    await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
       actorId: alice.did,
       membership: "join",
     });
@@ -281,7 +281,7 @@ test.describe("circle membership (same principal server)", () => {
     );
 
     // dave is not a Circle member.
-    const fetched = await getCircleCokret(
+    const fetched = await getCircleArkret(
       request,
       aliceToken,
       circle.circle_id,

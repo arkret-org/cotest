@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
+    ArkretServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
     member_join_payload_value, refresh_event_proof, register_account,
 };
@@ -17,7 +17,7 @@ const BLOB_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000
 const BLOB_REALM_MEMBER_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000000d102";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
-    let server = CokretServer::spawn("delivery-keys").await?;
+    let server = ArkretServer::spawn("delivery-keys").await?;
     let alice_did = "did:web:alice.example";
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let token = dev_login(&server, alice_did, alice_device).await?;
@@ -137,7 +137,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
 }
 
 pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Result<()> {
-    let server = CokretServer::spawn("device-delivery").await?;
+    let server = ArkretServer::spawn("device-delivery").await?;
     let token = dev_login(
         &server,
         "did:web:alice.example",
@@ -266,7 +266,7 @@ pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest
 }
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
-    let server = CokretServer::spawn("blob-media").await?;
+    let server = ArkretServer::spawn("blob-media").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
@@ -518,7 +518,7 @@ fn signed_event(
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
-    let server = CokretServer::spawn("push-moderation").await?;
+    let server = ArkretServer::spawn("push-moderation").await?;
     let alice = dev_login(
         &server,
         "did:web:alice.example",

@@ -27,18 +27,18 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
-  acceptInviteCokret,
+  acceptInviteArkret,
   contactRow,
   deliverInviteExplicitAddress,
   deliverInviteWithConsentGrant,
-  getInviteReceivePolicyCokret,
-  listAuthzInvitesCokret,
-  requestContactCokret,
-  resolveDirectConversationCokret,
-  respondContactCokret,
-  seedDirectConversationIdentityCokret,
-  setInviteReceivePolicyCokret,
-  tombstoneContactCokret,
+  getInviteReceivePolicyArkret,
+  listAuthzInvitesArkret,
+  requestContactArkret,
+  resolveDirectConversationArkret,
+  respondContactArkret,
+  seedDirectConversationIdentityArkret,
+  setInviteReceivePolicyArkret,
+  tombstoneContactArkret,
 } from "../../helpers/contact-api";
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
@@ -62,7 +62,7 @@ test.describe("contact graph (same principal server)", () => {
     ]);
 
     const greeting = `hello bob, let's connect ${Date.now()}`;
-    const { outcome: reqOutcome } = await requestContactCokret(
+    const { outcome: reqOutcome } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
@@ -78,7 +78,7 @@ test.describe("contact graph (same principal server)", () => {
     const bobIncoming = await contactRow(request, bobToken, alice.did);
     expect(bobIncoming?.state).toBe("pending_incoming");
 
-    const respondOutcome = await respondContactCokret(request, bobToken, {
+    const respondOutcome = await respondContactArkret(request, bobToken, {
       requestId: reqOutcome.request_event_ref,
       requester: alice.did,
       action: "accept",
@@ -118,13 +118,13 @@ test.describe("contact graph (same principal server)", () => {
       issueDevSession(request, bob),
     ]);
 
-    const { outcome } = await requestContactCokret(
+    const { outcome } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
       { requestedScopes: ["invite"] },
     );
-    const reject = await respondContactCokret(request, bobToken, {
+    const reject = await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
       requester: alice.did,
       action: "reject",
@@ -153,21 +153,21 @@ test.describe("contact graph (same principal server)", () => {
       issueDevSession(request, bob),
     ]);
     await Promise.all([
-      seedDirectConversationIdentityCokret(request, aliceToken, alice),
-      seedDirectConversationIdentityCokret(request, bobToken, bob),
+      seedDirectConversationIdentityArkret(request, aliceToken, alice),
+      seedDirectConversationIdentityArkret(request, bobToken, bob),
     ]);
 
     // Establish a bidirectional direct_message contact. direct conversation
     // resolve requires (1) accepted contact for the pair and (2) the PEER
     // granted the resolver direct_message consent. Make both directions grant
     // direct_message so either side can resolve.
-    const { outcome } = await requestContactCokret(
+    const { outcome } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
       { requestedScopes: ["direct_message"] },
     );
-    await respondContactCokret(request, bobToken, {
+    await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
       requester: alice.did,
       action: "accept",
@@ -176,7 +176,7 @@ test.describe("contact graph (same principal server)", () => {
 
     // Alice resolves: requires bob -> alice direct_message consent (granted on
     // accept above).
-    const resolved = await resolveDirectConversationCokret(
+    const resolved = await resolveDirectConversationArkret(
       request,
       aliceToken,
       bob.did,
@@ -190,7 +190,7 @@ test.describe("contact graph (same principal server)", () => {
     // Both sides converge on the same canonical 1:1 binding (same realm_id +
     // main_strand_id), and the binding is surfaced on each contact row's
     // direct_conversation summary.
-    const bobResolved = await resolveDirectConversationCokret(
+    const bobResolved = await resolveDirectConversationArkret(
       request,
       bobToken,
       alice.did,
@@ -262,13 +262,13 @@ test.describe("contact graph (same principal server)", () => {
     // alice requests invite-scope contact; bob accepts granting invite. After
     // accept, bob has granted alice an active invite consent — so alice's
     // contact row surfaces invite_consent_grant_ref (bob -> alice grant).
-    const { outcome } = await requestContactCokret(
+    const { outcome } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
       { requestedScopes: ["invite"] },
     );
-    await respondContactCokret(request, bobToken, {
+    await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
       requester: alice.did,
       action: "accept",
@@ -301,7 +301,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(delivery.disclosed_outcome).toBe("delivered");
 
     // bob lists the pending invite.
-    const invites = await listAuthzInvitesCokret(request, bobToken);
+    const invites = await listAuthzInvitesArkret(request, bobToken);
     const invite = invites.find(
       (i) => i.realm_id === realmId && i.invitee === bob.did,
     );
@@ -309,7 +309,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(invite!.id).toBe(inviteId);
 
     // bob accepts -> becomes a realm member.
-    await acceptInviteCokret(request, bobToken, {
+    await acceptInviteArkret(request, bobToken, {
       accepterDid: bob.did,
       realmId,
       inviteId: invite!.id,
@@ -366,7 +366,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(outcome.disclosed_outcome).toBeUndefined();
 
     // Victim has no pending invite (quarantined, not notified).
-    const invites = await listAuthzInvitesCokret(request, victimToken);
+    const invites = await listAuthzInvitesArkret(request, victimToken);
     expect(
       invites.find((i) => i.realm_id === realmId && i.invitee === victim.did),
     ).toBeFalsy();
@@ -387,13 +387,13 @@ test.describe("contact graph (same principal server)", () => {
     ]);
 
     // Establish invite-scope friendship so bob has a consent_grant ref to try.
-    const { outcome } = await requestContactCokret(
+    const { outcome } = await requestContactArkret(
       request,
       bobToken,
       alice.did,
       { requestedScopes: ["invite"] },
     );
-    await respondContactCokret(request, aliceToken, {
+    await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
       requester: bob.did,
       action: "accept",
@@ -404,11 +404,11 @@ test.describe("contact graph (same principal server)", () => {
     expect(grantRef).toMatch(/^ak:event:/);
 
     // alice blocks bob.
-    const tomb = await tombstoneContactCokret(request, aliceToken, bob.did, {
+    const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
       blockPeer: true,
     });
     expect(tomb.state).toBe("tombstoned");
-    const policy = await getInviteReceivePolicyCokret(request, aliceToken);
+    const policy = await getInviteReceivePolicyArkret(request, aliceToken);
     expect(policy.blocked_subjects ?? []).toContain(bob.did);
 
     // bob tries to pull alice into a realm with the (now revoked) consent_grant.
@@ -428,7 +428,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(delivery.status).toBe("deferred");
     expect(delivery.disclosed_outcome).toBeUndefined();
 
-    const invites = await listAuthzInvitesCokret(request, aliceToken);
+    const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
       invites.find((i) => i.realm_id === realmId && i.invitee === alice.did),
     ).toBeFalsy();
@@ -455,13 +455,13 @@ test.describe("contact graph (same principal server)", () => {
 
     // bob asks alice; alice accepts granting invite -> alice gave bob invite
     // consent (alice=holder, bob=peer). bob's row surfaces the grant ref.
-    const { outcome } = await requestContactCokret(
+    const { outcome } = await requestContactArkret(
       request,
       bobToken,
       alice.did,
       { requestedScopes: ["invite"] },
     );
-    await respondContactCokret(request, aliceToken, {
+    await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
       requester: bob.did,
       action: "accept",
@@ -474,7 +474,7 @@ test.describe("contact graph (same principal server)", () => {
     // alice revokes the invite consent (tombstone with revoke_scopes=[invite],
     // NO block). This revokes alice->bob invite grant so the consent_grant
     // evidence no longer verifies.
-    const tomb = await tombstoneContactCokret(request, aliceToken, bob.did, {
+    const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
       revokeScopes: ["invite"],
     });
     expect(tomb.state).toBe("tombstoned");
@@ -493,8 +493,8 @@ test.describe("contact graph (same principal server)", () => {
     // Opt alice into explicit low-trust feedback so the revoked-grant pull
     // returns an explicit disclosed_outcome (spec §5.1 graded disclosure with
     // low_trust=outcome).
-    const policy = await getInviteReceivePolicyCokret(request, aliceToken);
-    await setInviteReceivePolicyCokret(request, aliceToken, {
+    const policy = await getInviteReceivePolicyArkret(request, aliceToken);
+    await setInviteReceivePolicyArkret(request, aliceToken, {
       ...policy,
       disclosure: { high_trust: "outcome", low_trust: "outcome" },
     });
@@ -513,7 +513,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(["quarantined", "blocked"]).toContain(delivery.disclosed_outcome);
 
     // alice is not actually a member.
-    const invites = await listAuthzInvitesCokret(request, aliceToken);
+    const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
       invites.find((i) => i.realm_id === realmId && i.invitee === alice.did),
     ).toBeFalsy();

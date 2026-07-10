@@ -21,14 +21,14 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 - `crypto-media/encryption-and-audit.md` §2.10.5 — 保留义务与 per-epoch FS 边界
 - `crypto-media/encryption-and-audit.md` §2.10.8 — RRK 持久化封存(eager-at-commit + RYW + 兜底 re-share)
 - `models/realm-and-space.md` §2.3.1 — `durability_policy`(mode / recovery_recipients / threshold)
-- `identity/identity-did.md` §8.3 — `CokretRealmHistoryRecoveryKey` service entry(RRK HPKE 公钥)
+- `identity/identity-did.md` §8.3 — `ArkretRealmHistoryRecoveryKey` service entry(RRK HPKE 公钥)
 - error-code-registry:`durability_scheme_incompatible` / `durability_recovery_recipient_unverified` /
   `durability_seal_missing_before_gc`
 
 ## 拓扑
 
 - 1 × soland + 1 × coauth
-- RRK 持有者为组织 principal,发布带 active `CokretRealmHistoryRecoveryKey` service entry 的 DID Document
+- RRK 持有者为组织 principal,发布带 active `ArkretRealmHistoryRecoveryKey` service entry 的 DID Document
 
 ## Actors
 
@@ -43,7 +43,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 
 ### Phase A — 正向「组织恢复」
 
-1. org-rrk 发布 DID Document,含 active `CokretRealmHistoryRecoveryKey` service entry
+1. org-rrk 发布 DID Document,含 active `ArkretRealmHistoryRecoveryKey` service entry
    (`serviceEndpoint.verificationMethod` 指向一把 `keyAgreement` HPKE VM,`domain=mls_history`,
    独立于 `did_recovery` 域)。
 2. alice 建 Realm:`encryption_profile=mls_rfc9420`、`content_scheme=mls-exporter-aead-v1`、
@@ -72,7 +72,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
   `ak.realm.policy_components` 写 `durability_policy.mode != none` → `failed_precondition`
   reason=`durability_scheme_incompatible`(§2.3.1 / §2.10.8 适用条件)。
 - **C2 `durability_recovery_recipient_unverified`**:`recovery_recipients[].verification_method`
-  解析不到 active `CokretRealmHistoryRecoveryKey` service entry(已撤销 / 未被 service entry 指定 /
+  解析不到 active `ArkretRealmHistoryRecoveryKey` service entry(已撤销 / 未被 service entry 指定 /
   指向 `did_recovery` 域 key)→ 封存 fail closed,reason=`durability_recovery_recipient_unverified`,
   MUST NOT 回退到任意公钥。
 - **C3 `durability_seal_missing_before_gc`**:某 epoch 的 RRK share 尚未 accepted(RYW 未满足)即

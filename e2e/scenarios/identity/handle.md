@@ -70,7 +70,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.handle.{claim,transfer,release}` event kinds + handle registry projection + grace period 状态
+- **soland 缺口**:`ak.handle.{claim,transfer,release}` event kinds + handle registry projection + grace period 状态
 - **inkson 缺口**:`/settings/profile` 的 change handle / transfer 按钮
 
 ## 总耗时预估

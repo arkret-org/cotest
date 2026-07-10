@@ -2,12 +2,12 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_api_error, expect_json};
+use crate::harness::{ArkretServer, expect_api_error, expect_json};
 
 const REQUEST_HASH: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()> {
-    let server = CokretServer::spawn("policy-documents").await?;
+    let server = ArkretServer::spawn("policy-documents").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",

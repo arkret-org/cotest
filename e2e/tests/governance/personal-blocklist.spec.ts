@@ -410,7 +410,7 @@ test.describe("personal blocklist", () => {
         ],
       },
       {
-        context: "set ck.push_rules push mute",
+        context: "set ak.push_rules push mute",
       },
     );
     const notify = await request.post(

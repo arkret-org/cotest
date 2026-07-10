@@ -4,12 +4,12 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    CokretServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
+    ArkretServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
     expect_response, expect_status, invite_create_payload,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
-    let server = CokretServer::spawn("directory-workflow").await?;
+    let server = ArkretServer::spawn("directory-workflow").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",

@@ -32,7 +32,7 @@ use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
@@ -55,7 +55,7 @@ fn device_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[7u8; 32])
 }
 
-pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     put_backup(server, token).await?;
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
@@ -64,7 +64,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
+async fn put_backup(server: &ArkretServer, token: &str) -> Result<()> {
     let backup_put = expect_json(
         server
             .http()
@@ -178,7 +178,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
     Ok(envelope)
 }
 
-async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
+async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
     let backup_list = expect_json(
         server
             .http()
@@ -191,7 +191,7 @@ async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn describe_backup_operations(server: &CokretServer) -> Result<()> {
+async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
     let description = expect_json(
         server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
@@ -218,7 +218,7 @@ async fn describe_backup_operations(server: &CokretServer) -> Result<()> {
 
 /// Spec §7.7.1 / §7.8 — a bearer token alone MUST NOT release the full
 /// ciphertext: unlock is refused without a body proof.
-async fn unlock_backup_requires_body_proof(server: &CokretServer, token: &str) -> Result<()> {
+async fn unlock_backup_requires_body_proof(server: &ArkretServer, token: &str) -> Result<()> {
     let body = expect_json(
         server
             .http()
@@ -233,7 +233,7 @@ async fn unlock_backup_requires_body_proof(server: &CokretServer, token: &str) -
 }
 
 async fn principal_signing_unlock_reaches_trust_anchor(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
 ) -> Result<()> {
     let unlock = expect_json(

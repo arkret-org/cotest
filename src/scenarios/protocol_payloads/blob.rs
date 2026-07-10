@@ -7,15 +7,15 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{CokretServer, expect_json, expect_status, expect_text};
+use crate::harness::{ArkretServer, expect_json, expect_status, expect_text};
 
-pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     sha_mismatch_is_rejected(server, token).await?;
     upload_then_range_get(server, token).await?;
     Ok(())
 }
 
-async fn sha_mismatch_is_rejected(server: &CokretServer, token: &str) -> Result<()> {
+async fn sha_mismatch_is_rejected(server: &ArkretServer, token: &str) -> Result<()> {
     expect_status(
         server
             .http()
@@ -35,7 +35,7 @@ async fn sha_mismatch_is_rejected(server: &CokretServer, token: &str) -> Result<
     Ok(())
 }
 
-async fn upload_then_range_get(server: &CokretServer, token: &str) -> Result<()> {
+async fn upload_then_range_get(server: &ArkretServer, token: &str) -> Result<()> {
     let blob = expect_json(
         server
             .http()

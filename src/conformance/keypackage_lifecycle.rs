@@ -900,7 +900,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00Z",
             "signature": {
-                "kid": "did:web:alice.example#ck_self_signing_v1",
+                "kid": "did:web:alice.example#ak_self_signing_v1",
                 "alg": "EdDSA",
                 "sig": "c2ln"
             }

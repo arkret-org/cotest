@@ -8,8 +8,8 @@
 
 ## Spec 锚点
 
-- `arkret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `ck.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
-- `arkret-spec/spec/v1/artifacts/migration/removed-event-kinds.json` — 32 个被移除的 `ck.*` event.kind,`hard_reject` rejection level
+- `arkret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `ak.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
+- `arkret-spec/spec/v1/artifacts/migration/removed-event-kinds.json` — 32 个被移除的 `ak.*` event.kind,`hard_reject` rejection level
 - `arkret-spec/spec/v1/artifacts/migration/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
 - `arkret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json` — 被废弃的 profile id
 - `arkret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — prose / identifier 级别的禁用术语
@@ -96,7 +96,7 @@
 
 ## Edge cases / sub-tests
 
-- **R4.2 case-sensitivity**:registry 中的 id 都是 lowercase + `ck.` 前缀;Phase A/B/C 的 set 比对必须 case-sensitive,**不要** lowercase normalize (避免假阴性 — 服务器若返回 `Cx.Realm.Lifecycle.Set` 也是 drift)。
+- **R4.2 case-sensitivity**:registry 中的 id 都是 lowercase + `ak.` 前缀;Phase A/B/C 的 set 比对必须 case-sensitive,**不要** lowercase normalize (避免假阴性 — 服务器若返回 `Cx.Realm.Lifecycle.Set` 也是 drift)。
 - **R4.3 nested profile arrays**:Phase C 的 deep-walk profile id 收集要考虑 nested structures,e.g. `describe.implemented_features.requirements_role_map[*].profile_id`。harness 实现:遇到任何 key 名匹配 `/profile_id?$/` 的 string value,即纳入 claimed set。
 - **R4.4 describe 缺字段时的 fallback**:若 soland describe 未实现 `implemented_features.operations` 字段,Phase E 应 `test.skip("describe.implemented_features.operations 字段不存在 — 无法验证 operation coverage")`,不应让测试静默 pass。
 - **R4.5 batch artifact reload**:每个 LIVE phase 在 `beforeAll` 中一次性 readFileSync + JSON.parse,不在 per-test 重复 IO。

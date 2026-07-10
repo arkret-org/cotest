@@ -155,7 +155,7 @@
    - coauth 的 `arkret.principal_servers[]` 配置要包含两个 soland 的 entry
 2. **soland 之间的联邦发现**:
    - 需要 soland 支持 "已知 federation peers" 配置(看 soland 实现是 env var 还是 config)
-   - 或者 soland 通过 DID Document `service.CokretPrincipalServer` 自动发现
+   - 或者 soland 通过 DID Document `service.ArkretPrincipalServer` 自动发现
    - **依赖 soland**:这条 scenario 在 soland 不能联邦的情况下无法跑
 3. **环境变量**给测试用:
    - `COTEST_SOLAND_ALPHA_BASE_URL` / `COTEST_SOLAND_ALPHA_SERVICE_DID`

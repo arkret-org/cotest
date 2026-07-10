@@ -128,7 +128,7 @@ export async function onboardPrincipalViaCoauth(
 ): Promise<OnboardedPrincipal> {
   const account = await registerCoauthPasswordAccount(request, coauthBase, {
     handle: opts.handle,
-    password: "CokretOnboard!2026",
+    password: "ArkretOnboard!2026",
   });
   return loginPrincipalViaCoauth(request, coauthBase, prefix, account, opts);
 }

@@ -8,7 +8,7 @@
 //   - conformance/scalability-constraints.md (§2 wire limits, §3 authz limits,
 //     §5 Space/Relation/View limits, §8 error semantics)
 //   - conformance/conformance-vectors.md (vector loader pattern: same as the
-//     sibling encoding-vectors suite — `ck.vector.<domain>.<scenario>.v1`
+//     sibling encoding-vectors suite — `ak.vector.<domain>.<scenario>.v1`
 //     fixtures live in arkret-spec/spec/v1/artifacts/fixtures/)
 // Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ak.vector.snapshot.*.json,
 //           ak.vector.query.*.json, ak.vector.scalability.*.json
@@ -316,7 +316,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
   test("Phase F — vector loader smoke (harness-only, never touches soland)", async ({}, testInfo) => {
     // Scenario doc §"Implementation notes" → fixture-absence fallback. Today
-    // the fixtures directory has zero ck.vector.{snapshot,query,scalability}.*
+    // the fixtures directory has zero ak.vector.{snapshot,query,scalability}.*
     // files. We still want CI to log the candidate count and id list so the
     // absence is visible and so newly-added fixtures show up immediately in
     // the next run.

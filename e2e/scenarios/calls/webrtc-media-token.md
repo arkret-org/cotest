@@ -25,7 +25,7 @@ live soland instance.
   - `service_signature` is issuer-kid-prefixed.
   - `backend_token` decodes to a LiveKit JWT: `iss`, `sub` =
     `participant_identity`, `video.room` is the opaque backend room id derived
-    from `(realm_id, call_id, focus_id)` (`ck_call_<sha256-prefix>`, never raw
+    from `(realm_id, call_id, focus_id)` (`ak_call_<sha256-prefix>`, never raw
     protocol ids), `canPublish`, `canPublishSources` = [microphone, camera]
     (no `screen_share` without `capability_refs`), `canSubscribe = true`.
 - An off-focus `focus_id` fails closed with `focus_mismatch`.

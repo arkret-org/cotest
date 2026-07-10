@@ -2,8 +2,8 @@
 //
 // The e2e helpers in cotest/e2e/helpers/cross-signing-harness.ts byte-mirror the
 // SDK's device-lifecycle §5.1 / §5.2 canonical signing-input construction in
-// TypeScript (crossSigningBindingInput -> `ck-cross-signing-bind-v1`,
-// deviceTrustBindingInput -> `ck-device-trust-bind-v1`) because the e2e harness
+// TypeScript (crossSigningBindingInput -> `ak-cross-signing-bind-v1`,
+// deviceTrustBindingInput -> `ak-device-trust-bind-v1`) because the e2e harness
 // runs on Node and cannot call the Rust SDK directly. The authoritative
 // construction is `arkret_crypto::CrossSigningPublishContent::{self,user}_signing_binding_input`
 // and `arkret_crypto::DeviceTrustBinding::canonical_input`, and soland verifies

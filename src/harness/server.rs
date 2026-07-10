@@ -20,7 +20,7 @@ use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_handle};
 use super::{canonical_device_id, fixture_webvh_did};
 
-pub struct CokretServer {
+pub struct ArkretServer {
     handle: SutHandle,
     base_url: Url,
     service_did: String,
@@ -30,7 +30,7 @@ pub struct CokretServer {
 }
 
 pub struct TestServerGroup {
-    servers: Vec<CokretServer>,
+    servers: Vec<ArkretServer>,
     docker_network: Option<String>,
 }
 
@@ -46,7 +46,7 @@ enum SutRuntimeMode {
     Docker,
 }
 
-impl CokretServer {
+impl ArkretServer {
     pub async fn spawn(name: &str) -> Result<Self> {
         Self::spawn_with_env(name, &[]).await
     }
@@ -446,7 +446,7 @@ impl CokretServer {
     }
 }
 
-impl Drop for CokretServer {
+impl Drop for ArkretServer {
     fn drop(&mut self) {
         match &mut self.handle {
             SutHandle::Local(child) => {
@@ -470,7 +470,7 @@ impl Drop for CokretServer {
 impl TestServerGroup {
     pub async fn single(name: &str) -> Result<Self> {
         Ok(Self {
-            servers: vec![CokretServer::spawn(name).await?],
+            servers: vec![ArkretServer::spawn(name).await?],
             docker_network: None,
         })
     }
@@ -517,7 +517,7 @@ impl TestServerGroup {
         name: &str,
         count: usize,
         bin_path: &Path,
-    ) -> Result<Vec<CokretServer>> {
+    ) -> Result<Vec<ArkretServer>> {
         struct Pending {
             name: String,
             port: ReservedPort,
@@ -560,7 +560,7 @@ impl TestServerGroup {
                 ("SOLAND_FEDERATION_PEERS", peer_lists[index].as_str()),
                 ("SOLAND_FEDERATION_OUTBOUND", "0"),
             ];
-            match CokretServer::spawn_external_binary_with_ports_and_env(
+            match ArkretServer::spawn_external_binary_with_ports_and_env(
                 &node.name,
                 bin_path,
                 node.port,
@@ -612,7 +612,7 @@ impl TestServerGroup {
         };
         let mut servers = Vec::with_capacity(count);
         for index in 0..count {
-            match CokretServer::spawn_with_network(
+            match ArkretServer::spawn_with_network(
                 &format!("{name}-{index}"),
                 docker_network.as_deref(),
             )
@@ -634,7 +634,7 @@ impl TestServerGroup {
         })
     }
 
-    pub fn server(&self, index: usize) -> &CokretServer {
+    pub fn server(&self, index: usize) -> &ArkretServer {
         &self.servers[index]
     }
 

@@ -9,7 +9,7 @@
 //!   3. grant attach / detach -> durable `ak.capability.grant` / `ak.capability.revoke`.
 //!   4. pause / resume / deactivate -> durable lifecycle events flip status.
 //!
-//! `CokretServer::spawn` builds / locates the sibling `soland` binary and runs
+//! `ArkretServer::spawn` builds / locates the sibling `soland` binary and runs
 //! it in development mode. The agent endpoints internally author their durable
 //! fan-out events, so this test needs no client-side event signing.
 //!
@@ -24,10 +24,10 @@ use anyhow::{Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{SecondsFormat, Utc};
-use arkret_core::{Error as CokretError, EventsSubscribeFrameKind};
+use arkret_core::{Error as ArkretError, EventsSubscribeFrameKind};
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use cotest::harness::{
-    CokretServer, add_member, create_realm, event_envelope, register_account, submit_event,
+    ArkretServer, add_member, create_realm, event_envelope, register_account, submit_event,
 };
 use cotest::scenarios::_helpers::mock_http::{self, MockServer};
 use ed25519_dalek::{Signer, SigningKey};
@@ -46,7 +46,7 @@ const INTROSPECTION_BEARER: &str = "cotest-introspection-bearer";
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
-    let server = CokretServer::spawn("agent-provision-e2e").await?;
+    let server = ArkretServer::spawn("agent-provision-e2e").await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
 
     // 1-2. provision -> pending_runtime_key + pairing material -> active.
@@ -137,7 +137,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     )
     .await?;
     let introspection_url = mock.url();
-    let server = CokretServer::spawn_with_env(
+    let server = ArkretServer::spawn_with_env(
         service_name,
         &[
             (
@@ -422,7 +422,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
 }
 
 async fn provision_and_pair_agent(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     display_name: &str,
     agent_slug: &str,
@@ -454,7 +454,7 @@ async fn provision_and_pair_agent(
 }
 
 async fn pair_agent_runtime_key(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     provisioned: &arkret::AgentProvisionOutcome,
 ) -> Result<arkret::AgentKeyPairOutcome> {
@@ -559,7 +559,7 @@ async fn pair_agent_runtime_key(
         .await?)
 }
 
-async fn agent_status(server: &CokretServer, token: &str, agent_did: &str) -> Result<String> {
+async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Result<String> {
     let list = bearer_sdk_client(server, token)?.agent_list().await?;
     let status = list
         .agents
@@ -571,7 +571,7 @@ async fn agent_status(server: &CokretServer, token: &str, agent_did: &str) -> Re
     Ok(status)
 }
 
-async fn effective_grants(server: &CokretServer, token: &str, agent_did: &str) -> Result<Value> {
+async fn effective_grants(server: &ArkretServer, token: &str, agent_did: &str) -> Result<Value> {
     // The dev-mode agent grant is authored into the controller's
     // principal-control Realm (soland `ensure_self_realm`). soland only lets a
     // caller read a non-self subject's effective grants for a Realm the caller
@@ -595,14 +595,14 @@ fn grant_exists_in(effective: &Value, grant_id: &str) -> bool {
     })
 }
 
-fn bearer_sdk_client(server: &CokretServer, token: &str) -> Result<SdkClient> {
+fn bearer_sdk_client(server: &ArkretServer, token: &str) -> Result<SdkClient> {
     Ok(ClientBuilder::new(server.base_url())
         .allow_insecure_localhost()
         .auth(Auth::Bearer(token.to_owned()))
         .build()?)
 }
 
-fn agent_session_client(server: &CokretServer, holder: &AgentSessionHolder) -> Result<SdkClient> {
+fn agent_session_client(server: &ArkretServer, holder: &AgentSessionHolder) -> Result<SdkClient> {
     Ok(ClientBuilder::new(server.base_url())
         .allow_insecure_localhost()
         .auth(Auth::Dpop(garth::session::dpop::access_token_auth(
@@ -622,7 +622,7 @@ fn expect_sdk_api_error<T>(
     code: &str,
 ) -> Result<()> {
     match result {
-        Err(CokretError::Api {
+        Err(ArkretError::Api {
             status: actual_status,
             error,
         }) => {

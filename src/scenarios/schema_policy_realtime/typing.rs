@@ -5,11 +5,11 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, TestActorClient, attach_ephemeral_proof, expect_api_error, expect_json,
+    ArkretServer, TestActorClient, attach_ephemeral_proof, expect_api_error, expect_json,
 };
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
-    let server = CokretServer::spawn("typing-push-rules").await?;
+    let server = ArkretServer::spawn("typing-push-rules").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
@@ -101,10 +101,10 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let initial_sync = bob.sync().await?;
     assert!(
         account_data_entry(&initial_sync, "ak.push_rules").is_none(),
-        "initial account subscribe must not include ck.push_rules: {initial_sync}"
+        "initial account subscribe must not include ak.push_rules: {initial_sync}"
     );
 
-    // `ck.push_rules` is private account_data: soland requires the content to be
+    // `ak.push_rules` is private account_data: soland requires the content to be
     // a client-side-encrypted carrier (the plaintext rules never leave the
     // client). cotest cannot run real E2EE, so it submits the spec
     // `client_side_conformance` marker that attests the client encrypted the
@@ -134,7 +134,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let listed_sync = bob.sync().await?;
     let listed_rules =
-        account_data_entry(&listed_sync, "ak.push_rules").expect("ck.push_rules account_data row");
+        account_data_entry(&listed_sync, "ak.push_rules").expect("ak.push_rules account_data row");
     assert_eq!(
         listed_rules["content"]["client_side_conformance"]["encrypted_account_data"], true,
         "push_rules must round-trip as an encrypted-account-data conformance marker: {listed_rules}"
@@ -157,7 +157,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let final_sync = bob.sync().await?;
     assert!(
         account_data_entry(&final_sync, "ak.push_rules").is_none(),
-        "tombstoned ck.push_rules must not appear in account subscribe: {final_sync}"
+        "tombstoned ak.push_rules must not appear in account subscribe: {final_sync}"
     );
 
     Ok(())
@@ -260,7 +260,7 @@ fn typing_envelope(
         expires_at,
         json!({
             "strand_id": strand_id,
-            // ephemeral-envelope.schema.json ck.typing branch: optional, const
+            // ephemeral-envelope.schema.json ak.typing branch: optional, const
             // "discussion" in v1; omitted resolves to "discussion".
             "track_name": "discussion",
             "typing": typing

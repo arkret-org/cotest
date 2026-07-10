@@ -22,7 +22,7 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
   the project remains the test harness, not a pile of ad hoc integration files.
 - The harness now supports both local process spawning and Docker-backed SUT
   spawning from the same scenario code.
-- `CokretServer` is the one-instance lifecycle unit; `TestServerGroup` is the
+- `ArkretServer` is the one-instance lifecycle unit; `TestServerGroup` is the
   multi-instance lifecycle unit.
 - In Docker mode, `TestServerGroup::multi` creates one isolated network per
   scenario group so federated tests exercise real cross-container addressing
@@ -327,20 +327,20 @@ comment for temporary local regression containment.
 ## Per-test state isolation
 
 CT-12 (2026-05-18): cotest already gives each scenario complete state
-isolation through the per-spawn lifecycle in `CokretServer`:
+isolation through the per-spawn lifecycle in `ArkretServer`:
 
-- `CokretServer::spawn*` allocates a fresh `127.0.0.1:<free-port>`, a
+- `ArkretServer::spawn*` allocates a fresh `127.0.0.1:<free-port>`, a
   fresh `temp_dir().join("cotest-{name}-{port}-blobs")` blob root, and a
   fresh `did:web:{name}.cotest.local` service DID per call.
 - `soland` keeps `AccountRecord`, `SpaceMetaRecord`, and
   `ProjectionState` in process-local memory — there is no shared database
   or filesystem anchor that survives the per-test process drop.
-- `Drop for CokretServer` kills the spawned child (or removes the docker
+- `Drop for ArkretServer` kills the spawned child (or removes the docker
   container) and deletes the blob root.
 - `TestServerGroup::multi` extends the same per-process isolation across
   every node in a federation scenario.
 
-That means a fresh `CokretServer::spawn(label)` is already equivalent to
+That means a fresh `ArkretServer::spawn(label)` is already equivalent to
 "per-test fresh DB / state snapshot" — there is no shared `AccountRecord`
 or `SpaceMetaRecord` to snapshot and restore because the records never
 outlive the spawned process. The only process-global state cotest itself
@@ -353,14 +353,14 @@ interleaved when several tests run in parallel).
 
 `src/fixtures/scaffold.rs` ships `TestScaffold::fresh(label)` and
 `TestScaffold::fresh_multi(label, count)`, ergonomic wrappers over
-`CokretServer::spawn` / `TestServerGroup::multi` that suffix the label
+`ArkretServer::spawn` / `TestServerGroup::multi` that suffix the label
 with a `p<pid>-<seq>` token. The suffix guarantees that two parallel
 runs of the same scenario produce distinct service DIDs, transcript
 files, per-service log files, and on-disk blob roots without the
 scenario author having to coordinate names.
 
 Recommended migration cadence: when a scenario is touched for any other
-reason, swap `CokretServer::spawn(label)` →
+reason, swap `ArkretServer::spawn(label)` →
 `TestScaffold::fresh(label).server()`. Drop the surrounding
 `#[serial]` only after auditing that the test does not depend on the
 process-shared `transcript.ndjson` ordering — most scenarios do not.

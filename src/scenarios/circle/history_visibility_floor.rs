@@ -131,7 +131,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
     }
 
     // ── Pin wire shape: each variant serialises to the snake_case string
-    //    the spec uses on `ak.realm.policy` / `ck.circle.*` payloads.
+    //    the spec uses on `ak.realm.policy` / `ak.circle.*` payloads.
     for (variant, expected) in [
         (WorldReadable, "world_readable"),
         (Shared, "shared"),

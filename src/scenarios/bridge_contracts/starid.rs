@@ -2,10 +2,10 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{CokretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json};
 
 pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
-    let server = CokretServer::spawn_with_env(
+    let server = ArkretServer::spawn_with_env(
         "starid-optional",
         &[
             ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,key,webvh"),

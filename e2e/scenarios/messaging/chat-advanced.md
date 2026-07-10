@@ -79,7 +79,7 @@
 ### Phase F — Typing indicator (ephemeral)
 
 25. bob 在 composer 输入"hi" 但不发送
-26. inkson 客户端:每 N ms 发 `ck.typing` ephemeral signal,payload `{ realm_id, actor, ttl_ms: 5000 }`
+26. inkson 客户端:每 N ms 发 `ak.typing` ephemeral signal,payload `{ realm_id, actor, ttl_ms: 5000 }`
 27. 断言:alice 的 timeline 上方显示 "bob is typing..." (`chat-typing-indicator` testid)
 28. bob 停止输入 5s+
 29. 断言:alice 视图的 typing 指示消失(过 ttl)
@@ -87,9 +87,9 @@
 ### Phase G — Presence
 
 30. carol 关闭 inkson tab(或假装离线)
-31. carol 的 client 在 onbeforeunload 发 `ck.presence` `{ state: "offline" }`
+31. carol 的 client 在 onbeforeunload 发 `ak.presence` `{ state: "offline" }`
 32. 断言:alice 视图 carol 的头像旁显示 offline icon(`presence-offline-indicator`)
-33. carol 重新打开 → 发 `ck.presence` `{ state: "online" }` 
+33. carol 重新打开 → 发 `ak.presence` `{ state: "online" }` 
 34. 断言:alice 视图 carol 又变 online
 
 ## Observable assertions(合并)
@@ -112,7 +112,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、mention sidecar hash 路由、`ck.typing` / `ck.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
+- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、mention sidecar hash 路由、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
 - **inkson 缺口**:poll UI(`poll-option-button`、`poll-close-button`、`poll-vote-count`)、typing indicator、presence indicator — 这些 testid 未确认存在
 - **测试侧**:典型测 typing 需要"无 send" 状态;Playwright 用 `composer-input.fill()` 不 click send,等 N ms 然后查 alice 视图
 

@@ -8,7 +8,7 @@
 //   - crypto-media/encryption-and-audit.md §2.10.5 (retention + per-epoch FS)
 //   - crypto-media/encryption-and-audit.md §2.10.8 (RRK eager-at-commit seal + RYW + fallback re-share)
 //   - models/realm-and-space.md §2.3.1 (durability_policy)
-//   - identity/identity-did.md §8.3 (CokretRealmHistoryRecoveryKey service entry)
+//   - identity/identity-did.md §8.3 (ArkretRealmHistoryRecoveryKey service entry)
 //   - error-code-registry: durability_scheme_incompatible /
 //     durability_recovery_recipient_unverified / durability_seal_missing_before_gc
 //
@@ -139,7 +139,7 @@ function realmCreateEnvelope(args: {
 }
 
 // A RecoveryRecipient (models/realm-and-space.md §2.3.1). verification_method
-// MUST resolve to a VM designated by an active CokretRealmHistoryRecoveryKey
+// MUST resolve to a VM designated by an active ArkretRealmHistoryRecoveryKey
 // service entry (identity-did.md §8.3); domain-separated from did_recovery.
 function recoveryRecipient(args: {
   recipientId: string;
@@ -395,7 +395,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       const { user: orgRrk } = await registeredSession(request, "rrk-a-org");
 
       // org-rrk publishes a DID Document with an active
-      // CokretRealmHistoryRecoveryKey service entry whose serviceEndpoint
+      // ArkretRealmHistoryRecoveryKey service entry whose serviceEndpoint
       // .verificationMethod points to a keyAgreement HPKE VM, domain=mls_history,
       // domain-separated from did_recovery (identity-did.md §8.3). The live
       // helper for this is a inkson/soland concern (publishRrkServiceEntry).
@@ -744,11 +744,11 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
   );
 
   // C2: durability_recovery_recipient_unverified — verification_method does not
-  // resolve to an active CokretRealmHistoryRecoveryKey service entry.
+  // resolve to an active ArkretRealmHistoryRecoveryKey service entry.
   test.fixme(
     // @blocking-on rrk-soland: durability seal recipient resolution that fails
     //   closed (durability_recovery_recipient_unverified) when verification_method
-    //   is not designated by an active CokretRealmHistoryRecoveryKey service
+    //   is not designated by an active ArkretRealmHistoryRecoveryKey service
     //   entry, MUST NOT fall back to any other key. §2.10.8 + identity-did §8.3.
     // @blocking-on rrk-inkson: DID Document resolution of the recovery recipient
     //   at seal time.
@@ -775,7 +775,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       expect(create.status()).toBe(200);
 
       // org-rrk publishes a DID Document but its referenced verification_method
-      // is NOT designated by an active CokretRealmHistoryRecoveryKey service
+      // is NOT designated by an active ArkretRealmHistoryRecoveryKey service
       // entry (e.g. it points at the did_recovery-domain key, or the service
       // entry is absent/revoked). The seal MUST fail closed.
       const unverifiedVm = `${orgRrk.did}#did-recovery-1`; // wrong domain on purpose

@@ -518,7 +518,7 @@ fn validate_event_envelope(
         Some(_) | None => {
             return Ok(EventEnvelopeDecision::reject(
                 "schema_violation",
-                "Event.kind MUST use registered ck.* spelling",
+                "Event.kind MUST use registered ak.* spelling",
             ));
         }
     };

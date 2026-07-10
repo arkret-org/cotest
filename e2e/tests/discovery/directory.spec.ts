@@ -7,8 +7,8 @@ import { expect, test } from "@playwright/test";
 import { cssStringEscape } from "../../helpers/dom";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  requestContactCokret,
-  respondContactCokret,
+  requestContactArkret,
+  respondContactArkret,
 } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -163,14 +163,14 @@ test.describe("discovery", () => {
 
     // Directory search filters actors to the caller's accepted contacts
     // (or self) — establish a contact relationship so alice can see bob.
-    const { outcome: aliceReq } = await requestContactCokret(
+    const { outcome: aliceReq } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
       { requestedScopes: ["direct_message"] },
     );
     expect(aliceReq.state).toBe("pending_outgoing");
-    const bobAccept = await respondContactCokret(request, bobToken, {
+    const bobAccept = await respondContactArkret(request, bobToken, {
       requestId: aliceReq.request_event_ref,
       requester: alice.did,
       action: "accept",
@@ -217,7 +217,7 @@ test.describe("discovery", () => {
   }) => {
     // spec: profiles-presence.md §3 — presence is ephemeral and projects into
     // the directory actor row. A client signals `online` while its tab is open
-    // by broadcasting `ck.presence` on `POST /_arkret/self/ephemeral`;
+    // by broadcasting `ak.presence` on `POST /_arkret/self/ephemeral`;
     // closing the tab stops the refresh and the row decays to `offline`
     // (mirroring the Sync presence projection's stale-online TTL). Reopening
     // re-asserts `online`. We drive this through the API rather than the inkson
@@ -241,14 +241,14 @@ test.describe("discovery", () => {
 
     // Directory search filters actors to the caller's accepted contacts;
     // establish the contact edge so alice can see bob's row at all.
-    const { outcome: aliceReq } = await requestContactCokret(
+    const { outcome: aliceReq } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
       { requestedScopes: ["direct_message"] },
     );
     expect(aliceReq.state).toBe("pending_outgoing");
-    const bobAccept = await respondContactCokret(request, bobToken, {
+    const bobAccept = await respondContactArkret(request, bobToken, {
       requestId: aliceReq.request_event_ref,
       requester: alice.did,
       action: "accept",
@@ -332,7 +332,7 @@ test.describe("discovery", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // alice requests contact with bob.
-    const { outcome: aliceReqBody } = await requestContactCokret(
+    const { outcome: aliceReqBody } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,
@@ -341,7 +341,7 @@ test.describe("discovery", () => {
     expect(aliceReqBody.state).toBe("pending_outgoing");
 
     // bob rejects the request.
-    const bobBody = await respondContactCokret(request, bobToken, {
+    const bobBody = await respondContactArkret(request, bobToken, {
       requestId: aliceReqBody.request_event_ref,
       requester: alice.did,
       action: "reject",
@@ -350,7 +350,7 @@ test.describe("discovery", () => {
 
     // alice retries her contact request — must NOT open a fresh pending row.
     // The server returns the same record with status=rejected (cooldown).
-    const { outcome: retryBody } = await requestContactCokret(
+    const { outcome: retryBody } = await requestContactArkret(
       request,
       aliceToken,
       bob.did,

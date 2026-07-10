@@ -9,7 +9,7 @@
 // `/_soland/self/circles`; they have since been accepted into the normative
 // catalog, and the legacy `/_soland` mirror was retired.)
 //
-// The `ck.circle.*` data model itself is spec-canonical (AKP-0007); this HTTP
+// The `ak.circle.*` data model itself is spec-canonical (AKP-0007); this HTTP
 // surface is the convenience wrapper that builds the canonical operations and
 // routes them through the same reducer pipeline as wire events (so reducer
 // invariants like `circle_member_must_be_realm_member` fire identically).
@@ -183,7 +183,7 @@ export async function grantCircleManageCapability(
 
 // Create a Circle bound to `realmId`. Defaults `join_rule` to "invite" (the
 // soland default) so admin-only one-way adds are the membership path.
-export async function createCircleCokret(
+export async function createCircleArkret(
   request: APIRequestContext,
   token: string,
   args: {
@@ -212,7 +212,7 @@ export async function createCircleCokret(
   );
 }
 
-export async function getCircleCokret(
+export async function getCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
@@ -248,7 +248,7 @@ export async function addCircleMemberRaw(
 }
 
 // Positive-path member add: asserts 2xx and returns the membership outcome.
-export async function addCircleMemberCokret(
+export async function addCircleMemberArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
@@ -261,7 +261,7 @@ export async function addCircleMemberCokret(
   );
 }
 
-export async function removeCircleMemberCokret(
+export async function removeCircleMemberArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
@@ -278,7 +278,7 @@ export async function removeCircleMemberCokret(
   );
 }
 
-async function submitCircleLifecycleCokret(
+async function submitCircleLifecycleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
@@ -301,13 +301,13 @@ async function submitCircleLifecycleCokret(
   );
 }
 
-export async function archiveCircleCokret(
+export async function archiveCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
   opts: { reasonCode?: string; server?: SolandKey } = {},
 ): Promise<CircleOutcome> {
-  return await submitCircleLifecycleCokret(
+  return await submitCircleLifecycleArkret(
     request,
     token,
     circleId,
@@ -316,13 +316,13 @@ export async function archiveCircleCokret(
   );
 }
 
-export async function restoreCircleCokret(
+export async function restoreCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
   opts: { reasonCode?: string; server?: SolandKey } = {},
 ): Promise<CircleOutcome> {
-  return await submitCircleLifecycleCokret(
+  return await submitCircleLifecycleArkret(
     request,
     token,
     circleId,
@@ -331,13 +331,13 @@ export async function restoreCircleCokret(
   );
 }
 
-export async function tombstoneCircleCokret(
+export async function tombstoneCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
   opts: { reasonCode?: string; server?: SolandKey } = {},
 ): Promise<CircleOutcome> {
-  return await submitCircleLifecycleCokret(
+  return await submitCircleLifecycleArkret(
     request,
     token,
     circleId,

@@ -5,9 +5,9 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, encrypted_envelope, expect_json};
+use crate::harness::{ArkretServer, encrypted_envelope, expect_json};
 
-pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     send_application_message(server, token).await?;
     duplicate_send_is_idempotent(server, token).await?;
     list_delivered_keeps_ciphertext_only(server, token).await?;
@@ -15,7 +15,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn send_application_message(server: &CokretServer, token: &str) -> Result<()> {
+async fn send_application_message(server: &ArkretServer, token: &str) -> Result<()> {
     let send = expect_json(
         server
             .http()
@@ -40,7 +40,7 @@ async fn send_application_message(server: &CokretServer, token: &str) -> Result<
     Ok(())
 }
 
-async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Result<()> {
+async fn duplicate_send_is_idempotent(server: &ArkretServer, token: &str) -> Result<()> {
     let duplicate_send = expect_json(
         server
             .http()
@@ -69,7 +69,7 @@ async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Res
     Ok(())
 }
 
-async fn list_delivered_keeps_ciphertext_only(server: &CokretServer, token: &str) -> Result<()> {
+async fn list_delivered_keeps_ciphertext_only(server: &ArkretServer, token: &str) -> Result<()> {
     let delivered = expect_json(
         server
             .http()
@@ -84,7 +84,7 @@ async fn list_delivered_keeps_ciphertext_only(server: &CokretServer, token: &str
     Ok(())
 }
 
-async fn send_verification_message(server: &CokretServer, token: &str) -> Result<()> {
+async fn send_verification_message(server: &ArkretServer, token: &str) -> Result<()> {
     let verification_send = expect_json(
         server
             .http()

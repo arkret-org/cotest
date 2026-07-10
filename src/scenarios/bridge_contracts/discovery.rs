@@ -1,10 +1,10 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{CokretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json};
 
 pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
-    let server = CokretServer::spawn("bridge-contracts").await?;
+    let server = ArkretServer::spawn("bridge-contracts").await?;
 
     let integration = expect_json(
         server

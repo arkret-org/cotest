@@ -2,10 +2,10 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json};
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
-    let server = CokretServer::spawn("identity-surface").await?;
+    let server = ArkretServer::spawn("identity-surface").await?;
 
     let describe = expect_json(
         server
@@ -71,7 +71,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
                         "authentication": ["did:web:alice.example#key-1"],
                         "service": [{
                             "id": "#soland",
-                            "type": "CokretPrincipalServer",
+                            "type": "ArkretPrincipalServer",
                             "serviceEndpoint": "https://alice.example"
                         }]
                     }

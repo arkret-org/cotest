@@ -4,7 +4,7 @@
 //   §1 Provider Facade overview
 //   §2 Realm `federation_profile = "mimi_interop"` + endpoint exposure
 //   §3 Room binding: Arkret Strand ↔ MIMI room; event ↔ Message translation
-//   §4 Content mapping: standard MIMI content type ↔ `ck.morph` kind; unknown → quarantine
+//   §4 Content mapping: standard MIMI content type ↔ `ak.morph` kind; unknown → quarantine
 //   §5 Policy mapping: join_rule / history_visibility ↔ MIMI room policy
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
 //   §7 E2EE boundary: MLS-via-IETF profile transcript binding or explicit downgrade

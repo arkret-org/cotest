@@ -6,7 +6,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, TestActorClient, expect_json, expect_status, member_join_payload_value,
+    ArkretServer, TestActorClient, expect_json, expect_status, member_join_payload_value,
     member_transition_payload,
 };
 
@@ -15,7 +15,7 @@ const BOB_DID: &str = "did:web:cotest-collab-bob.example";
 const BOB_HANDLE: &str = "@cotest-collab-bob";
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
-    let server = CokretServer::spawn("collaboration-workflow").await?;
+    let server = ArkretServer::spawn("collaboration-workflow").await?;
     let alice = server
         .register_client(
             ALICE_DID,

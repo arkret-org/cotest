@@ -191,7 +191,7 @@ test.describe("core object invariants", () => {
 
         // Find the Realm lifecycle / create event — soland writes lifecycle
         // ops via record_space_lifecycle_operation, so the kind is in the
-        // ck.realm.* family. We accept any ck.realm.* kind to stay
+        // ak.realm.* family. We accept any ak.realm.* kind to stay
         // resilient to soland's exact lifecycle op naming.
         const lifecycleEvent =
           events.find((event) => event.kind?.startsWith("ak.realm.")) ?? events[0];
@@ -544,7 +544,7 @@ test.describe("core object invariants", () => {
 
   // ── Phase E — View projection fallback.
   // Retained as fixme: soland has NO View object storage or Board projection
-  // surface today. `ck.view.*` events are not reduced (no `views` projection
+  // surface today. `ak.view.*` events are not reduced (no `views` projection
   // map; only `generate_view_id` exists), and there is no
   // `/_soland/self/spaces/{id}/views/projection` derived-collection endpoint.
   // Materializing a derived `CollectionProjectionView` from

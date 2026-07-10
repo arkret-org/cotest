@@ -150,7 +150,7 @@ test.describe("tsp bootstrap", () => {
     // (nested mode: the outer envelope's VID is pairwise; the inner Arkret
     // operation carries alice's real DID + event signature).
     const realmId = `ak:realm:${randomUUID()}`;
-    const innerCokret = {
+    const innerArkret = {
       type: "ak.invite.create",
       content_type: "application/arkret+json",
       operation: "ak.invite.create",
@@ -164,7 +164,7 @@ test.describe("tsp bootstrap", () => {
       data: {
         from_vid: alice.did,
         to_vid: bobExternVid,
-        payload_b64: b64(innerCokret),
+        payload_b64: b64(innerArkret),
         signature_b64: randomBytes(64).toString("base64"),
       },
     });
@@ -176,7 +176,7 @@ test.describe("tsp bootstrap", () => {
     expect(sendBody.accepted).toBe(true);
 
     // Phase D — bob_extern (mock) decrypts the outer, recognizes the inner
-    // `ck.*` operation, and fabricates an ACK into the outbox. The inbox/outbox
+    // `ak.*` operation, and fabricates an ACK into the outbox. The inbox/outbox
     // record encodes that BOTH layers were processed independently.
     const inboxResp = await request.get(
       `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
@@ -358,7 +358,7 @@ test.describe("tsp bootstrap", () => {
     // + payload) is opaque to any intermediary. We model the on-the-wire outer
     // envelope as what a relay would forward: pairwise sender VID + a
     // payload_digest, with the inner Arkret bytes carried as opaque base64.
-    const innerCokret = {
+    const innerArkret = {
       type: "ak.invite.create",
       operation: "ak.invite.create",
       actor: alice.did, // the real vid_local — MUST stay hidden from a relay
@@ -366,7 +366,7 @@ test.describe("tsp bootstrap", () => {
       invitee: bobExternVid,
       secret_marker: `nested-secret-${randomUUID()}`,
     };
-    const innerBytesB64 = b64(innerCokret);
+    const innerBytesB64 = b64(innerArkret);
     const pairwiseVid = `did:web:pairwise-${randomUUID().slice(0, 8)}.example`;
 
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
@@ -386,7 +386,7 @@ test.describe("tsp bootstrap", () => {
     );
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
     const terminus = inbox.find(
-      (envelope) => envelope.decoded_preview?.secret_marker === innerCokret.secret_marker,
+      (envelope) => envelope.decoded_preview?.secret_marker === innerArkret.secret_marker,
     );
     expect(
       terminus,
@@ -407,7 +407,7 @@ test.describe("tsp bootstrap", () => {
     const relaySerialized = JSON.stringify(relayView);
     expect(relaySerialized).not.toContain(alice.did); // no vid_local
     expect(relaySerialized).not.toContain("ak.invite.create"); // no inner operation
-    expect(relaySerialized).not.toContain(innerCokret.secret_marker); // no plaintext payload
+    expect(relaySerialized).not.toContain(innerArkret.secret_marker); // no plaintext payload
     expect(relayView.sender_vid).toBe(pairwiseVid);
     expect(relayView.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
   });

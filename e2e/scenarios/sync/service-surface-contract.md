@@ -22,7 +22,7 @@
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
-- `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ck.server.*` / `ck.events.*` / `ck.sync.*` 等)
+- `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ak.server.*` / `ak.events.*` / `ak.sync.*` 等)
 - `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ak.schema.service_describe.v1` wire schema
 - `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
 - 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/arkret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)

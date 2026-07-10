@@ -247,8 +247,8 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 fn with_peer_get_headers(
     builder: reqwest::RequestBuilder,
     target_url: &str,
-    source: &crate::harness::CokretServer,
-    destination: &crate::harness::CokretServer,
+    source: &crate::harness::ArkretServer,
+    destination: &crate::harness::ArkretServer,
 ) -> Result<reqwest::RequestBuilder> {
     // GET peer reads carry no body: soland (peer.rs) rejects any GET that sends
     // Content-Digest / Request-Canonical-Digest headers or binds those
@@ -259,8 +259,8 @@ fn with_peer_get_headers(
 fn with_peer_post_headers(
     builder: reqwest::RequestBuilder,
     target_url: &str,
-    source: &crate::harness::CokretServer,
-    destination: &crate::harness::CokretServer,
+    source: &crate::harness::ArkretServer,
+    destination: &crate::harness::ArkretServer,
     body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
     let body_bytes = canonical_json_bytes(body)?;
@@ -287,8 +287,8 @@ fn with_peer_headers_for_digest(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    source: &crate::harness::CokretServer,
-    destination: &crate::harness::CokretServer,
+    source: &crate::harness::ArkretServer,
+    destination: &crate::harness::ArkretServer,
     body_digest: Option<(String, String)>,
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_did = source.service_did();

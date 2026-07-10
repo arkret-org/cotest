@@ -4,7 +4,7 @@ use arkret_core::{
     ed25519_pubkey_to_did_key_multibase, encode_base58btc, encode_multibase_base58btc,
 };
 use cotest::harness::{
-    CokretServer, dev_login, expect_api_error, expect_json, refresh_event_proof,
+    ArkretServer, dev_login, expect_api_error, expect_json, refresh_event_proof,
 };
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
@@ -18,7 +18,7 @@ const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
-    let server = CokretServer::spawn_with_env(
+    let server = ArkretServer::spawn_with_env(
         "device-enroll-rollout",
         &[("SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER", WEBVH_BEARER)],
     )
@@ -127,7 +127,7 @@ fn multibase_public_key(signing_key: &SigningKey) -> String {
 }
 
 async fn register_webvh_principal(
-    server: &CokretServer,
+    server: &ArkretServer,
     local_id: &str,
     authority_did: &str,
 ) -> Result<Value> {
@@ -243,7 +243,7 @@ fn webvh_document_value(
         "service": [
             {
                 "id": format!("{did}#soland"),
-                "type": "CokretPrincipalServer",
+                "type": "ArkretPrincipalServer",
                 "serviceEndpoint": service_endpoint,
             },
             {
@@ -402,7 +402,7 @@ fn assert_enrollment_authority_service(
             service.get("type").and_then(Value::as_str)
                 == Some(arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
         })
-        .context("CokretDeviceEnrollmentAuthority service")?;
+        .context("ArkretDeviceEnrollmentAuthority service")?;
     assert_eq!(
         service.get("id").and_then(Value::as_str),
         Some(expected_service_id)

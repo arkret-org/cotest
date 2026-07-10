@@ -602,7 +602,7 @@ export function expectedLiveKitRoom(
   const digest = createHash("sha256")
     .update(`${realmId}\0${callId}\0${focusId}`, "utf8")
     .digest("hex");
-  return `ck_call_${digest.slice(0, 16)}`;
+  return `ak_call_${digest.slice(0, 16)}`;
 }
 
 /**

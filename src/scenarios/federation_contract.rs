@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, dev_login, expect_api_error, expect_json, expect_response,
+    ArkretServer, dev_login, expect_api_error, expect_json, expect_response,
     member_join_payload_with_delivery_binding, message_create_text_payload, message_redact_payload,
     submit_event,
 };
@@ -23,7 +23,7 @@ fn with_signed_federation_request(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    destination: &CokretServer,
+    destination: &ArkretServer,
     source_service_did: &str,
     body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
@@ -46,7 +46,7 @@ fn with_signed_federation_empty_request(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    destination: &CokretServer,
+    destination: &ArkretServer,
     source_service_did: &str,
 ) -> Result<reqwest::RequestBuilder> {
     let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
@@ -66,7 +66,7 @@ fn with_signed_federation_request_digests(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    destination: &CokretServer,
+    destination: &ArkretServer,
     source_service_did: &str,
     content_digest: String,
     request_canonical_digest: String,
@@ -298,7 +298,7 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
 }
 
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
-    let server = CokretServer::spawn("federation-invalid").await?;
+    let server = ArkretServer::spawn("federation-invalid").await?;
 
     // A body that is not even parseable JSON fails at the JSON layer and is
     // reported as `bad_json`.
@@ -355,7 +355,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     // admits subsequent delivery pushes that a conservative server would reject
     // with `delivery_binding_stale` (no local member binding to be stale
     // against). See AppConfig::federation_replica_observer / member-delivery-binding.md §4.
-    let server = CokretServer::spawn_with_env(
+    let server = ArkretServer::spawn_with_env(
         "federation-replay",
         &[("SOLAND_FEDERATION_REPLICA_OBSERVER", "1")],
     )
@@ -632,7 +632,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 }
 
 pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<()> {
-    let server = CokretServer::spawn("federation-project").await?;
+    let server = ArkretServer::spawn("federation-project").await?;
     let alice = dev_login(
         &server,
         "did:web:alice.example",

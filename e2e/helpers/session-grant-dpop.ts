@@ -65,7 +65,7 @@ export type DpopBoundGrant = {
   expiresAt: string;
   /// The minted `did:webvh:…:webvh:<ulid>` principal DID (model B) the grant
   /// subject is bound to. coauth's debug seam mints this with a
-  /// `CokretDeviceEnrollmentAuthority` designation, so the harness MUST use it as
+  /// `ArkretDeviceEnrollmentAuthority` designation, so the harness MUST use it as
   /// the account identity for device enrollment / MLS to resolve the right DID
   /// document (not the coauth-local `…:users:<ulid>` fallback).
   principalDid: string;

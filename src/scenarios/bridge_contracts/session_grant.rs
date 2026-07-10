@@ -2,7 +2,7 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json};
 use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
 
 pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
@@ -16,7 +16,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             Some("principal-token".to_owned()),
         ),
     ]);
-    let server = CokretServer::spawn("session-grant-presentation").await?;
+    let server = ArkretServer::spawn("session-grant-presentation").await?;
 
     expect_json(
         server

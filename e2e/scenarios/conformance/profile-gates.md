@@ -23,7 +23,7 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
     `unsupported_feature` / `schema_violation` / quarantine;`requirements.critical_extensions[]`
     不支持时 fail closed 优先级高于 "可忽略可选功能";`default_unsupported_behavior` 是
     conformance lint 机读来源
-  - §3 — 通用强制要求(标准 `ck.*` kind MUST 注册、auth 不可豁免、`causal` 关系
+  - §3 — 通用强制要求(标准 `ak.*` kind MUST 注册、auth 不可豁免、`causal` 关系
     fail-closed)
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — `claimed_profiles` /
   `verified_profiles` 分区 wire 形态、`claim_kind` 枚举、`development_mode=true` MUST
@@ -156,7 +156,7 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
 ## Implementation notes
 
 - **soland 现状**:`apply_claim_level_partition` 已经实现 T6.1 partition;
-  `claimed_profiles` 4 条 `ck.profile.{core_event_store, principal_server,
+  `claimed_profiles` 4 条 `ak.profile.{core_event_store, principal_server,
   principal_server_events_api, mimi_interop}.v1`(最后一条带 `notes`),
   `verified_profiles` dev mode 下 `Vec::new()` 由 `validate` 硬性约束 — Phase A /
   D / E 可立即 live

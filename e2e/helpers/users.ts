@@ -1129,7 +1129,7 @@ export async function createDpopUserSessionForAccount(
   // Model-B identity: adopt the minted `did:webvh:…:webvh:<ulid>` principal DID
   // the grant subject is bound to (coauth debug seam), NOT the coauth-local
   // `user_did_for` fallback (`…:users:<ulid>`) that account.did carries. Only the
-  // minted DID's document designates coauth's CokretDeviceEnrollmentAuthority, so
+  // minted DID's document designates coauth's ArkretDeviceEnrollmentAuthority, so
   // device enrollment + MLS KeyPackage publish resolve the right document.
   expect(grant.principalDid, "debug seam must return the minted principal DID").toBeTruthy();
   const user = {

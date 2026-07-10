@@ -6,8 +6,8 @@
 //! (`e2e/helpers/cross-signing-harness.ts`) because it cannot call the Rust SDK
 //! directly. The authoritative construction is
 //! `arkret_crypto::CrossSigningPublishContent::{self,user}_signing_binding_input`
-//! (`ck-cross-signing-bind-v1`) and `arkret_crypto::DeviceTrustBinding::canonical_input`
-//! (`ck-device-trust-bind-v1`); soland verifies the resulting signatures with
+//! (`ak-cross-signing-bind-v1`) and `arkret_crypto::DeviceTrustBinding::canonical_input`
+//! (`ak-device-trust-bind-v1`); soland verifies the resulting signatures with
 //! those exact bytes, so any drift between the TS mirror and the SDK is a silent
 //! signature false-negative/false-positive vector.
 //!

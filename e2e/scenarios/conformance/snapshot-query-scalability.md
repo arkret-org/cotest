@@ -38,7 +38,7 @@
 
 - 1 × soland (principal server) — `solandBaseUrl()`,暴露(将暴露)`/_arkret/_conformance/snapshot`、`/_arkret/_conformance/query` 端点
 - 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使 Phase B 验证 snapshot signature 的签名者 DID 时可以拉到真实 actor signing key
-- 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `arkret-spec/spec/v1/artifacts/fixtures/` glob `ck.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
+- 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `arkret-spec/spec/v1/artifacts/fixtures/` glob `ak.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
 
 (都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/_arkret/_conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)
 
@@ -151,7 +151,7 @@
 ### Phase F — Vector loader smoke (harness-only,no soland call)
 
 31. **harness** 解析自身位置(`fileURLToPath(import.meta.url)` → `dirname(...)`)拼出 fixtures dir 绝对路径 `<repo>/arkret-spec/spec/v1/artifacts/fixtures`
-32. `readdirSync(fixturesDir)`,过滤 `ck.vector.{snapshot,query,scalability}.*.json`,得到 candidate id 列表
+32. `readdirSync(fixturesDir)`,过滤 `ak.vector.{snapshot,query,scalability}.*.json`,得到 candidate id 列表
 33. 对每个 candidate:`JSON.parse(readFileSync(...))` MUST 不抛错(即使内容是空对象)
 34. 测试通过 `console.log` / `testInfo.attach` 输出 candidate count + id 清单,便于人工 audit;不强制 candidate count > 0(fixture 可能尚未提交,此时 count === 0 也是合法的 — assertion 用 `expect(count).toBeGreaterThanOrEqual(0)`)
 35. 这一步 **不触发任何 soland HTTP 请求**;它的目的只是让 fixture 缺失这件事在 CI 日志里立刻可见
@@ -184,7 +184,7 @@
 ## Implementation notes
 
 - **soland 缺口**:`/_arkret/_conformance/{snapshot,query}` 端点目前**未实现**。当前 snapshot manifest 与 query schema 的 conformance 只跑在 Rust 侧内部测试(`soland/src/snapshot/*`、reducer 集成测试),不走 HTTP。本 scenario 的价值是把同一组 vector 通过 HTTP 暴露,捕获 reducer 与 HTTP layer 之间的 serializer drift。Phase A–E 在端点落地前以 `test.fixme(...)` 钉住 spec 合约;G3.S7 着陆后可逐项 live 化。
-- **fixture 缺失 fallback**:目前 `arkret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ck.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
+- **fixture 缺失 fallback**:目前 `arkret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ak.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "arkret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。
 - **vector id 命名**(参考 encoding-vectors §1.2):`ak.vector.snapshot.<scenario>.v1` / `ak.vector.query.<scenario>.v1` / `ak.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。

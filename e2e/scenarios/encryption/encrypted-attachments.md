@@ -115,7 +115,7 @@
 ## Implementation notes
 
 - **2026-05-25 P2-044 local close**:soland `POST /_arkret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
-- **2026-05-25 P2-044 local close**:inkson 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`CokretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
+- **2026-05-25 P2-044 local close**:inkson 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`ArkretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
 - **仍待 audited-e2ee**:`ak.moderation.franking_proof`、audit-agent invite、`ak.audit.accessed` 与 tamper verification 归入 `encryption/audited-e2ee` / GAP-P2-045。
 - **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。
 

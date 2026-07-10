@@ -2173,7 +2173,7 @@ function sdkPrincipalControlRealmId(principalId: string): string {
   ).realm_id;
 }
 
-/// 05-2 — SDK-authoritative PSK→SSK / PSK→USK `ck-cross-signing-bind-v1`
+/// 05-2 — SDK-authoritative PSK→SSK / PSK→USK `ak-cross-signing-bind-v1`
 /// canonical signing inputs (base64) for a full `ak.cross_signing.publish`
 /// payload, produced by `CrossSigningPublishContent::{self,user}_signing_binding_input`.
 /// The cross-language golden-vector regression asserts the TS byte-mirror in
@@ -2192,7 +2192,7 @@ export function sdkCrossSigningBindingInputs(
   };
 }
 
-/// 05-2 — SDK-authoritative `ck-device-trust-bind-v1` canonical signing input
+/// 05-2 — SDK-authoritative `ak-device-trust-bind-v1` canonical signing input
 /// (base64) produced by `DeviceTrustBinding::canonical_input`.
 export function sdkDeviceTrustBindingInput(args: {
   principalId: string;

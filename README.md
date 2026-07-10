@@ -31,13 +31,13 @@ The current default server under test is the sibling
 - **Space:** navigation container — board, list, section, calendar bucket.
 
 The harness constructs fixtures with current v1 wire names only:
-`ck.realm.*` for boundary events and `ck.space.*` for container events.
+`ak.realm.*` for boundary events and `ak.space.*` for container events.
 
 ## Protocol Review Closures
 
 The current harness tracks the sibling `arkret-spec` checkout and includes:
 
-- **12 new security-closure vectors** (`ck.vector.*` from
+- **12 new security-closure vectors** (`ak.vector.*` from
   `security-closure-vectors.json`) driven through a runner contract
   `{given_state, operation}` → assertions on
   `{transcript, expected_state_transition, expected_external_response,

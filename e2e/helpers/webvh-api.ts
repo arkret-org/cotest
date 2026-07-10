@@ -185,7 +185,7 @@ function genesisDidDocument(
     service: [
       {
         id: `${did}#soland`,
-        type: "CokretPrincipalServer",
+        type: "ArkretPrincipalServer",
         serviceEndpoint,
       },
     ],

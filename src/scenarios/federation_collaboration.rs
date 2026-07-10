@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
+    ArkretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
     expect_json, expect_text, member_join_payload_value, member_join_payload_with_delivery_binding,
     message_create_text_payload, register_account, submit_event,
 };
@@ -588,7 +588,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
 }
 
 async fn create_federated_realm(
-    server: &CokretServer,
+    server: &ArkretServer,
     alice: &str,
     visible_services: &[String],
 ) -> Result<String> {
@@ -923,7 +923,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
 }
 
 pub(crate) async fn authorize_device_public_key(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     actor: &str,
     device_id: &str,
@@ -1035,8 +1035,8 @@ fn with_federation_trust_headers(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    source: &CokretServer,
-    destination: &CokretServer,
+    source: &ArkretServer,
+    destination: &ArkretServer,
     body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
     let body_bytes = canonical_json_bytes(body)?;
@@ -1058,8 +1058,8 @@ fn with_federation_trust_headers_empty(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    source: &CokretServer,
-    destination: &CokretServer,
+    source: &ArkretServer,
+    destination: &ArkretServer,
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_did = source.service_did();
     let destination_service_did = destination.service_did();
@@ -1113,8 +1113,8 @@ fn with_federation_trust_headers_for_digest(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    source: &CokretServer,
-    destination: &CokretServer,
+    source: &ArkretServer,
+    destination: &ArkretServer,
     content_digest: String,
     request_canonical_digest: String,
 ) -> Result<reqwest::RequestBuilder> {

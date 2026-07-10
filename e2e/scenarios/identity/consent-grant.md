@@ -105,7 +105,7 @@
 
 ## Implementation notes
 
-- soland 侧的 `ck.consent.*` reducer 截至当前 **未实现**,因此本 scenario 的所有 test 都先用 `test.fixme` 挂起,等 reducer + projection landing 后再去掉 `.fixme`
+- soland 侧的 `ak.consent.*` reducer 截至当前 **未实现**,因此本 scenario 的所有 test 都先用 `test.fixme` 挂起,等 reducer + projection landing 后再去掉 `.fixme`
 - inkson 侧 `/settings/consent` 路由、`consent-settings-panel` / `consent-pending-row` / `grant-consent-button` / `revoke-consent-button` 等 testid 也未实现,跑测前要先确认或者补 UI
 - contact request 的发起入口当前可能是 `/contacts/new`,也可能是 DM 邀请按钮里的子流程;具体 testid 以 inkson 现有 UI 为准,先挂 TODO
 - `ak.consent.grant` / `ak.consent.revoke` 的 Move payload 字段(scope、not_before、valid_until、peer)以 spec §3 schema 为准,实现时直接对齐 schema,不要在 e2e 这边自创字段

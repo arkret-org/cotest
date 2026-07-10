@@ -59,7 +59,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase E — Audit log entries
 
 16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_soland/admin/audit/events?actor=alice.did`
-17. 断言:audit log 含 `org.arkret.soland.audit.exported`、`org.arkret.soland.audit.erasure_initiated`、`ak.audit.erasure_receipt`(前两者为产品私有审计语义,已去 `ck.` 前缀;`ak.audit.erasure_receipt` 为协议注册词汇)
+17. 断言:audit log 含 `org.arkret.soland.audit.exported`、`org.arkret.soland.audit.erasure_initiated`、`ak.audit.erasure_receipt`(前两者为产品私有审计语义,已去 `ak.` 前缀;`ak.audit.erasure_receipt` 为协议注册词汇)
 
 ### Phase F — Retention policy
 

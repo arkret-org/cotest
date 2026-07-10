@@ -5,12 +5,12 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, TestActorClient, attach_ephemeral_proof, expect_account_subscribe_delta,
+    ArkretServer, TestActorClient, attach_ephemeral_proof, expect_account_subscribe_delta,
     expect_api_error, expect_json, expect_status, submit_event,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
-    let server = CokretServer::spawn("authz-grants").await?;
+    let server = ArkretServer::spawn("authz-grants").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
@@ -264,7 +264,7 @@ async fn expect_authz_check_hard_deny(
 }
 
 pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
-    let server = CokretServer::spawn("presence-policy").await?;
+    let server = ArkretServer::spawn("presence-policy").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
@@ -275,7 +275,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     // client-sync.md: the account subscribe surface is read-only —
     // `set_presence` is not a subscribe parameter (the server ignores the
     // stray query value). Presence intent goes through
-    // `POST /_arkret/self/ephemeral` as a proof-bound `ck.presence`.
+    // `POST /_arkret/self/ephemeral` as a proof-bound `ak.presence`.
     expect_status(
         server
             .http()
@@ -582,7 +582,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     Ok(())
 }
 
-/// ephemeral-envelope.schema.json: broadcast `ck.presence` with the
+/// ephemeral-envelope.schema.json: broadcast `ak.presence` with the
 /// proof-bound sending device (detached JWS over the canonical envelope
 /// without `proof`). `payload_fields` merges over the base
 /// `{realm_id, actor_id, ttl_ms}` payload so callers only spell the

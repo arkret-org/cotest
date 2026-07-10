@@ -68,7 +68,7 @@
 //!       - the test is parameterised by an arbitrary commit hash via env
 //!         (`COTEST_UPGRADE_BASE_REV=<sha>`), trading "release compat" for "any-two-commits
 //!         compat".
-//!   * **No cross-version build helper in the cotest harness.** Today `CokretServer::spawn` builds
+//!   * **No cross-version build helper in the cotest harness.** Today `ArkretServer::spawn` builds
 //!     the live tree's binary on demand (via `cargo run` under the hood) and doesn't know how to
 //!     build a different revision. Need a `BuildSpec { rev, target_dir, features }` helper that:
 //!       1. Creates / reuses a `git worktree` under `cotest/.cache/` for the requested rev.
@@ -132,7 +132,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   let pg_schema = format!("ct17_{}", short_hash(&previous_tag));
     //   provision_pg_schema(&pg_schema).await?;
     //
-    //   let server_old = CokretServer::spawn_explicit_binary(
+    //   let server_old = ArkretServer::spawn_explicit_binary(
     //       n_minus_one,
     //       data_dir.path(),
     //       &[("DATABASE_URL", &pg_url_for(&pg_schema))],
@@ -151,7 +151,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   server_old.graceful_stop().await?;
     //
     //   // Step 5: spawn current-build soland against the SAME data dir / DB
-    //   let server_new = CokretServer::spawn_with_postgres_existing(
+    //   let server_new = ArkretServer::spawn_with_postgres_existing(
     //       "ct17-upgraded", data_dir.path(),
     //       &pg_url_for(&pg_schema),
     //   ).await?;
@@ -167,7 +167,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   let new_msg = send_message(&server_new, &alice, &realm_id,
     //                              "post-upgrade ping").await?;
     //   server_new.graceful_stop().await?;
-    //   let server_new2 = CokretServer::spawn_with_postgres_existing(
+    //   let server_new2 = ArkretServer::spawn_with_postgres_existing(
     //       "ct17-upgraded-restart", data_dir.path(),
     //       &pg_url_for(&pg_schema),
     //   ).await?;

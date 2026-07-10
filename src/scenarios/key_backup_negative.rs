@@ -11,7 +11,7 @@ use arkret_core::{
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{CokretServer, TestServerGroup, expect_json, expect_response};
+use crate::harness::{ArkretServer, TestServerGroup, expect_json, expect_response};
 
 const BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000d3";
 const DEVICE_A: &str = "ak:device:01975510-0000-7000-8000-0000000000a1";
@@ -97,7 +97,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     Ok(())
 }
 
-async fn reject_wrong_device_on_put(server: &CokretServer, token: &str, actor: &str) -> Result<()> {
+async fn reject_wrong_device_on_put(server: &ArkretServer, token: &str, actor: &str) -> Result<()> {
     let id = "ak:backup:01975510-0000-7000-8000-0000000000d4";
     let body = backup_body(actor, DEVICE_B, id)?;
     expect_backup_error(
@@ -113,7 +113,7 @@ async fn reject_wrong_device_on_put(server: &CokretServer, token: &str, actor: &
 }
 
 async fn reject_digest_mismatch_on_put(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     actor: &str,
 ) -> Result<()> {

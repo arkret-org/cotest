@@ -1,7 +1,7 @@
 //! CT-6 — 4-service joint bootstrap (soland + coauth + starid + teabay).
 //!
 //! Provides a single [`FourServiceStack`] entry point that:
-//!   1. Spawns `soland` (via the existing [`CokretServer::spawn_with_env`] machinery, which honours
+//!   1. Spawns `soland` (via the existing [`ArkretServer::spawn_with_env`] machinery, which honours
 //!      the pre-built sibling binary fast path).
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
 //!      + generated config). Wires soland -> coauth session-grant introspection via
@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::harness::CokretServer;
+use crate::harness::ArkretServer;
 use crate::scenarios::_helpers::coauth_bootstrap::{SpawnedCoauth, spawn_coauth_with_db};
 use crate::scenarios::_helpers::external_binary::{
     STARID_SPEC, SpawnedExternalProcess, TEABAY_SPEC, skip_reason, try_spawn,
@@ -81,7 +81,7 @@ pub struct FourServiceStack {
     pub coauth: Option<SpawnedCoauth>,
     /// soland (principal server) — always present (or the bootstrap returns
     /// `Err`). This is the "main" service the rest of the stack talks to.
-    pub soland: CokretServer,
+    pub soland: ArkretServer,
 }
 
 impl FourServiceStack {
@@ -171,7 +171,7 @@ async fn probe(client: &reqwest::Client, name: &str, url: &str) -> Result<()> {
 /// assumes a working soland).
 pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack> {
     // 1. coauth first — we need its base URL + introspection bearer to wire soland's env vars on
-    //    spawn. We MUST resolve those before `CokretServer::spawn_with_env` is called, otherwise
+    //    spawn. We MUST resolve those before `ArkretServer::spawn_with_env` is called, otherwise
     //    the principal server boots without the auth wiring and any test that uses `dev_login`
     //    outside of `SOLAND_DEVELOPMENT_MODE=1` would 401.
     //
@@ -238,13 +238,13 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         ));
     }
 
-    // CokretServer::spawn_with_env takes &[(&str, &str)] — borrow the owned
+    // ArkretServer::spawn_with_env takes &[(&str, &str)] — borrow the owned
     // strings before passing.
     let env_borrowed: Vec<(&str, &str)> = soland_env
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let soland = CokretServer::spawn_with_env(&config.name, &env_borrowed)
+    let soland = ArkretServer::spawn_with_env(&config.name, &env_borrowed)
         .await
         .context("four-service bootstrap: failed to spawn soland with wired env")?;
 

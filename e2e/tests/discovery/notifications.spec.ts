@@ -410,7 +410,7 @@ test.describe("notifications", () => {
           },
         ],
       },
-      { context: "set ck.push_rules" },
+      { context: "set ak.push_rules" },
     );
 
     const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;

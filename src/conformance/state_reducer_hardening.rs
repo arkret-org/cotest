@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_core::CellRef;
 use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use arkret_core::lattice::CellState;
-use arkret_core::state::{EMPTY_STATE_ROOT, compute_state_root};
+use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 

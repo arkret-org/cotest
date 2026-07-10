@@ -50,7 +50,7 @@ test.describe("workflow: kanban week-in-review", () => {
       // Phase A — kanban opens against a fresh Realm. Navigate with the
       // explicit realm_id so writes route to this Realm; plain `/kanban`
       // falls back to the hardcoded demo Realm the test user is not a
-      // member of, and every ck.strand.* event would 403.
+      // member of, and every ak.strand.* event would 403.
       const realmId = await patPage.createRealm({
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",

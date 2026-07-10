@@ -114,7 +114,7 @@ export type InviteDeliveryOutcome = {
 
 // ── Contact request / respond / list / tombstone. ──
 
-export async function requestContactCokret(
+export async function requestContactArkret(
   request: APIRequestContext,
   token: string,
   target: string,
@@ -150,7 +150,7 @@ export async function requestContactCokret(
   return { outcome, response };
 }
 
-export async function respondContactCokret(
+export async function respondContactArkret(
   request: APIRequestContext,
   token: string,
   opts: {
@@ -183,7 +183,7 @@ export async function respondContactCokret(
   );
 }
 
-export async function listContactsCokret(
+export async function listContactsArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
@@ -205,11 +205,11 @@ export async function contactRow(
   peer: string,
   opts: { server?: SolandKey } = {},
 ): Promise<ContactListRow | undefined> {
-  const rows = await listContactsCokret(request, token, opts);
+  const rows = await listContactsArkret(request, token, opts);
   return rows.find((row) => row.peer === peer);
 }
 
-export async function tombstoneContactCokret(
+export async function tombstoneContactArkret(
   request: APIRequestContext,
   token: string,
   contact: string,
@@ -247,7 +247,7 @@ export async function tombstoneContactCokret(
   );
 }
 
-export async function resolveDirectConversationCokret(
+export async function resolveDirectConversationArkret(
   request: APIRequestContext,
   token: string,
   peer: string,
@@ -269,7 +269,7 @@ export async function resolveDirectConversationCokret(
   );
 }
 
-export async function seedDirectConversationIdentityCokret(
+export async function seedDirectConversationIdentityArkret(
   request: APIRequestContext,
   token: string,
   user: JointUser,
@@ -278,9 +278,9 @@ export async function seedDirectConversationIdentityCokret(
   const psk = ed25519FixtureKey();
   const ssk = ed25519FixtureKey();
   const usk = ed25519FixtureKey();
-  const pskKid = `${user.did}#ck_principal_signing_v1`;
-  const sskKid = `${user.did}#ck_self_signing_v1`;
-  const uskKid = `${user.did}#ck_user_signing_v1`;
+  const pskKid = `${user.did}#ak_principal_signing_v1`;
+  const sskKid = `${user.did}#ak_self_signing_v1`;
+  const uskKid = `${user.did}#ak_user_signing_v1`;
   await submitFixtureDidDocument(request, user.did, pskKid, psk, opts);
 
   const trustDomain = await solandTrustDomain(request, opts);
@@ -537,7 +537,7 @@ export type InviteReceivePolicy = {
   };
 };
 
-export async function getInviteReceivePolicyCokret(
+export async function getInviteReceivePolicyArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
@@ -552,7 +552,7 @@ export async function getInviteReceivePolicyCokret(
   );
 }
 
-export async function setInviteReceivePolicyCokret(
+export async function setInviteReceivePolicyArkret(
   request: APIRequestContext,
   token: string,
   policy: InviteReceivePolicy,
@@ -717,7 +717,7 @@ export type AuthzInvite = {
   state?: string;
 };
 
-export async function listAuthzInvitesCokret(
+export async function listAuthzInvitesArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
@@ -737,7 +737,7 @@ export async function listAuthzInvitesCokret(
 }
 
 // Submit `ak.invite.accept` as the invitee to join the realm.
-export async function acceptInviteCokret(
+export async function acceptInviteArkret(
   request: APIRequestContext,
   token: string,
   args: { accepterDid: string; realmId: string; inviteId: string; server?: SolandKey },

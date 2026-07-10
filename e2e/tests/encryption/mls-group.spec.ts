@@ -212,7 +212,7 @@ async function registerWebvhPrincipal(
     service: [
       {
         id: `${placeholderDid}#soland`,
-        type: "CokretPrincipalServer",
+        type: "ArkretPrincipalServer",
         serviceEndpoint,
       },
     ],
@@ -275,7 +275,7 @@ async function registerWebvhPrincipal(
     psk,
     ssk,
     usk,
-    sskKid: `${did}#ck_self_signing_v1`,
+    sskKid: `${did}#ak_self_signing_v1`,
   };
 }
 
@@ -332,7 +332,7 @@ async function publishCrossSigning(
     key_format: "multibase",
   };
   const userSigningKey = {
-    kid: `${fixture.did}#ck_user_signing_v1`,
+    kid: `${fixture.did}#ak_user_signing_v1`,
     alg: "EdDSA",
     public_key: fixture.usk.publicKeyMultibase,
     key_format: "multibase",

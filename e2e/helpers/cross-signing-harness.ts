@@ -2,17 +2,17 @@
 //
 // Contract: arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md §5.1
 // (ak.cross_signing.publish — PSK→{SSK,USK} bindings) + §5.2 (per-device
-// cross_signing_binding, the SSK signature over the ck-device-trust-bind-v1
+// cross_signing_binding, the SSK signature over the ak-device-trust-bind-v1
 // canonical input).
 //
 // soland verifies these for real at event ingest:
 //   * validate_cross_signing_publish (routing/identity/cross_signing.rs) anchors
 //     the published PSK via the DID resolver, then checks the PSK→SSK and
-//     PSK→USK binding signatures over the §5.1 ck-cross-signing-bind-v1 input
+//     PSK→USK binding signatures over the §5.1 ak-cross-signing-bind-v1 input
 //     at the CAS-guarded generation.
 //   * validate_device_authorize_binding → check_device_cross_signing_binding
 //     verifies a ak.device.authorize's cross_signing_binding with the accepted
-//     SSK over the §5.2 ck-device-trust-bind-v1 input at the live generation.
+//     SSK over the §5.2 ak-device-trust-bind-v1 input at the live generation.
 //
 // The PSK is published under a self-contained `did:key:z…` verification method
 // so soland's DidKeyResolver (last resolver in the chain) anchors it without a
@@ -68,7 +68,7 @@ function signB64url(message: Buffer, key: CrossSigningKey): string {
 }
 
 /// Canonical signing input for a PSK→subordinate binding
-/// (`ck-cross-signing-bind-v1`, device-lifecycle.md §5.1). Byte-mirrors the SDK
+/// (`ak-cross-signing-bind-v1`, device-lifecycle.md §5.1). Byte-mirrors the SDK
 /// `canonical_cross_signing_binding_input`.
 ///
 /// 05-2 — exported so the cross-language golden-vector regression
@@ -100,7 +100,7 @@ export function crossSigningBindingInput(args: {
 }
 
 /// Canonical signing input for a per-device SSK→device binding
-/// (`ck-device-trust-bind-v1`, device-lifecycle.md §5.2). Byte-mirrors the SDK
+/// (`ak-device-trust-bind-v1`, device-lifecycle.md §5.2). Byte-mirrors the SDK
 /// `canonical_device_trust_binding_input`.
 ///
 /// 05-2 — exported for the cross-language golden-vector regression against the
@@ -265,7 +265,7 @@ export function buildCrossSigningPublishPayload(
 /// Build the `cross_signing_binding` object for a `ak.device.authorize` payload
 /// (device-lifecycle.md §5.2): the accepted SSK signs the device's
 /// `device_public_key`, `hpke_key` and canonical `algorithms` over the
-/// ck-device-trust-bind-v1 input.
+/// ak-device-trust-bind-v1 input.
 
 /// Canonical default algorithm set for test device records; matches the
 /// hpke-suite-registry default-MUST row plus the MLS group algorithm.
@@ -301,7 +301,7 @@ export function buildDeviceCrossSigningBinding(args: {
 
 /// Render a freshly-generated device verify key as the `z…` multibase form
 /// soland stores under `device_public_key` and re-exposes as a `did:key`.
-/// Build the ck-device-authorize-possession-v1 signature made by the device
+/// Build the ak-device-authorize-possession-v1 signature made by the device
 /// identity key, proving possession of `device_public_key`.
 export function buildDevicePossessionSignature(args: {
   identity: CrossSigningIdentity;

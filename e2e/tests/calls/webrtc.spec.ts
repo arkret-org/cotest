@@ -1,7 +1,7 @@
 // Calls — canonical wire surfaces (1:1 signaling + ICE config + TURN pseudonym).
 // Contract: e2e/scenarios/calls/webrtc.md
 // Spec refs:
-//   - crypto-media/webrtc-signaling.md §3 (ck.call.* capabilities)
+//   - crypto-media/webrtc-signaling.md §3 (ak.call.* capabilities)
 //   - webrtc-signaling.md §4-§4.2 (ICE config, pairwise pseudonym, mid-call refresh)
 //   - webrtc-signaling.md §5-§6 (signaling envelope, 1:1 payloads)
 //
@@ -270,7 +270,7 @@ test.describe("calls — canonical wire", () => {
     const aliceUsername = aliceTurn.username as string;
     const bobUsername = bobTurn.username as string;
 
-    // REST-style username = `<expiry-unix>:ck_pseudonym_call_<16hex>` (§4.1).
+    // REST-style username = `<expiry-unix>:ak_pseudonym_call_<16hex>` (§4.1).
     const aliceParsed = parseTurnUsername(aliceUsername);
     const bobParsed = parseTurnUsername(bobUsername);
     expect(aliceParsed.expiryUnix).toBe(
@@ -310,7 +310,7 @@ function parseTurnUsername(username: string): {
   expiryUnix: number;
   pseudonym: string;
 } {
-  const match = username.match(/^(\d+):(ck_pseudonym_call_[0-9a-f]{16})$/);
+  const match = username.match(/^(\d+):(ak_pseudonym_call_[0-9a-f]{16})$/);
   expect(match, `TURN username must be REST-style: ${username}`).not.toBeNull();
   return { expiryUnix: Number(match![1]), pseudonym: match![2] };
 }

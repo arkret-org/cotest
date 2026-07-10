@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 use tokio::task::JoinSet;
 
 use crate::harness::{
-    CokretServer, TestActorClient, dev_login, event_envelope, expect_json,
+    ArkretServer, TestActorClient, dev_login, event_envelope, expect_json,
     message_create_text_payload,
 };
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
@@ -45,7 +45,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let event = chaos_message_event();
     let operation_id = operation_id_from_event(&event)?;
 
-    let mut server = CokretServer::spawn_with_database_url(
+    let mut server = ArkretServer::spawn_with_database_url(
         TEST_NAME,
         &database.url,
         &[
@@ -81,7 +81,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     server.kill_immediately().await?;
     assert_midflight_post_was_cut(tasks).await?;
 
-    let server = CokretServer::spawn_with_database_url(
+    let server = ArkretServer::spawn_with_database_url(
         TEST_NAME,
         &database.url,
         &[("SOLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1")],

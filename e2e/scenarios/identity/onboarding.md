@@ -68,7 +68,7 @@
 9. 断言:
    - `id` = alice.did
    - `verificationMethod` 含 alice 的 inception key
-   - `service.CokretPrincipalServer.serviceEndpoint` = soland 的 base URL
+   - `service.ArkretPrincipalServer.serviceEndpoint` = soland 的 base URL
 10. 验证 history chain:GET `did.jsonl`,断言至少一个 entry,SCID 一致
 
 ### Phase D — bob 通过 OIDC 注册

@@ -25,8 +25,8 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import {
-  requestContactCokret,
-  respondContactCokret,
+  requestContactArkret,
+  respondContactArkret,
 } from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
@@ -119,10 +119,10 @@ test.describe("GDPR / audit / retention", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // bob and alice connect so bob's directory search can see alice pre-erase.
-    const { outcome } = await requestContactCokret(request, bobToken, alice.did, {
+    const { outcome } = await requestContactArkret(request, bobToken, alice.did, {
       requestedScopes: ["direct_message"],
     });
-    await respondContactCokret(request, aliceToken, {
+    await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
       requester: bob.did,
       action: "accept",

@@ -297,7 +297,7 @@ test.describe("consent grant", () => {
     request,
   }) => {
     // Live G2.T5 API smoke: soland has a consent-adjacent MIMI surface today.
-    // The general ck.consent.* cell reducer is still not implemented, so the
+    // The general ak.consent.* cell reducer is still not implemented, so the
     // full identity consent lifecycle remains fixme below.
     const alice = uniqueUser("g2t5-consent-api-alice");
     const bob = uniqueUser("g2t5-consent-api-bob");

@@ -162,11 +162,11 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                         "reason": "privacy_cleanup",
                     }),
                     &json!({
-                        "schema_accepts_ck_space_target_ref": true,
+                        "schema_accepts_ak_space_target_ref": true,
                         "rejects_malformed_space_target_ref": true,
                     }),
                     &json!({
-                        "schema_accepts_ck_space_target_ref": true,
+                        "schema_accepts_ak_space_target_ref": true,
                         "rejects_malformed_space_target_ref": true,
                     }),
                 );

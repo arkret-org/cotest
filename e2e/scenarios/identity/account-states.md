@@ -73,7 +73,7 @@
 - **E28.1 session cascade**:lock alice → 她在 device-1 / device-2 都被踢出
 - **E28.2 cross-server suspension**:alice 在 α 被 admin suspend → 这个状态如何同步给 β(spec §3 + sync/federation)
 - **E28.3 reactivate**:deactivated 是否能恢复?spec 说 deactivated 通常不可逆(除非走 admin 流程)
-- **E28.4 audit log**:每次状态转换写 `org.arkret.soland.account.state_change { from, to, actor, reason, timestamp }`(产品私有审计语义,不占用协议 `ck.` 前缀)
+- **E28.4 audit log**:每次状态转换写 `org.arkret.soland.account.state_change { from, to, actor, reason, timestamp }`(产品私有审计语义,不占用协议 `ak.` 前缀)
 - **E28.5 in-flight write 时遇 lock**:alice 正在发消息,触发 lock → 该消息可能落或可能 abort;spec 偏好 abort(safer)
 
 ## Implementation notes

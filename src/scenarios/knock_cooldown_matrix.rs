@@ -62,7 +62,7 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     // When ready: spawn soland, create Realm with knock policy, run the
     // 8-step matrix above. Skeleton sketch retained for the implementor:
     //
-    //   let server = CokretServer::spawn("knock-cooldown-matrix").await?;
+    //   let server = ArkretServer::spawn("knock-cooldown-matrix").await?;
     //   let alice = register_account(&server, "did:web:alice.example",
     //                                "@alice",
     // "ak:device:01904100-0000-7000-8000-0000000000a1").await?;   let bob   =

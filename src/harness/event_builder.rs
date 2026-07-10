@@ -13,13 +13,13 @@ use serde_json::{Value, json};
 
 use super::assertions::expect_json;
 use super::proof::refresh_event_proof;
-use super::server::CokretServer;
+use super::server::ArkretServer;
 use super::{
     NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
 };
 
 pub async fn register_account(
-    server: &CokretServer,
+    server: &ArkretServer,
     did: &str,
     handle: &str,
     device_id: &str,
@@ -33,7 +33,7 @@ pub async fn register_account(
 /// omits `handle`, so directory/handle assertions that expect a resolvable
 /// `localpart:host` must opt in here.
 pub async fn register_account_with_handle(
-    server: &CokretServer,
+    server: &ArkretServer,
     did: &str,
     display_handle: &str,
     published_handle: Option<&str>,
@@ -60,7 +60,7 @@ pub async fn register_account_with_handle(
     dev_login(server, did, &device_id).await
 }
 
-pub async fn dev_login(server: &CokretServer, actor: &str, device_id: &str) -> Result<String> {
+pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> Result<String> {
     let device_id = canonical_device_id(device_id);
     let login = expect_json(
         server
@@ -81,7 +81,7 @@ pub async fn dev_login(server: &CokretServer, actor: &str, device_id: &str) -> R
 }
 
 pub async fn create_realm(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     actor: &str,
     title: &str,
@@ -112,7 +112,7 @@ pub async fn create_realm(
 }
 
 pub async fn add_member(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     actor: &str,
     realm_id: &str,
@@ -132,7 +132,7 @@ pub async fn add_member(
 }
 
 pub async fn send_message(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     actor: &str,
     realm_id: &str,
@@ -153,7 +153,7 @@ pub async fn send_message(
 }
 
 pub async fn submit_event(
-    server: &CokretServer,
+    server: &ArkretServer,
     token: &str,
     actor: &str,
     realm_id: &str,

@@ -11,7 +11,7 @@
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §1 — MIMI Provider Facade 总览;Arkret 把外部 MIMI 网络当作一个外部 federation peer 看待
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §2 — Realm `federation_profile = "mimi_interop"` 字段语义;暴露 MIMI endpoint
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §3 — Room binding:Arkret Strand ↔ MIMI room 的双向映射;event ↔ Message 翻译
-- `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §4 — Content mapping:MIMI 标准 content type ↔ `ck.morph` content kind;未知类型 quarantine
+- `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §4 — Content mapping:MIMI 标准 content type ↔ `ak.morph` content kind;未知类型 quarantine
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §5 — Policy mapping:Arkret join_rule / history_visibility ↔ MIMI room policy
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §6 — Identity bridging:MIMI 用户 → pairwise DID;同一个 MIMI 身份在不同 Realm 中产生不同 pairwise DID
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §7 — E2EE 边界:MIMI 可能使用不同的 group encryption (MLS via IETF profile);transcript binding 或 downgrade 标记

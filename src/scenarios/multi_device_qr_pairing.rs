@@ -25,7 +25,7 @@
 //!
 //! 1. Create alice on a single soland with device-A. (The `TestActorBuilder` from CT-13 would make
 //!    this DRY across the three new scenarios; until it lands we use the existing
-//!    `CokretServer::register_client` helper.)
+//!    `ArkretServer::register_client` helper.)
 //!
 //! 2. Generate a fresh `ak:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
 //!    The QR payload itself is a inkson-side UI concern (`verify-device` strand); cotest
@@ -48,7 +48,7 @@
 //! 5. Wrap alice + a second principal (`bob`) into an E2EE Realm `R` so that "MLS Remove fanout"
 //!    has a non-trivial member set. device-B joins `R` via a Welcome → Commit roundtrip (today this
 //!    is also stubbed out in soland; MLS group state is not durable server-side per the `mls` grep
-//!    showing no `ck.mls.*` handlers).
+//!    showing no `ak.mls.*` handlers).
 //!
 //! 6. From device-A, revoke device-B by submitting `ak.device.revoke` into alice's principal
 //!    control Realm. Assert: a. the event is accepted and targets device-B. b. device-A still works

@@ -6,7 +6,7 @@
 // systems. In the joint-e2e harness, this mock plays the role of an
 // *external* organization's TSP endpoint: soland (or another local
 // service) bootstraps a TSP relationship against this mock, then exchanges
-// Arkret-over-TSP envelopes that carry `ck.*` operations across the
+// Arkret-over-TSP envelopes that carry `ak.*` operations across the
 // trust boundary.
 //
 // The mock fakes two stages of the TSP contract:
@@ -15,7 +15,7 @@
 //      VID/JWK so both sides have a verifiable counterparty record.
 //   2. Message ingest — bootstrapped peers POST signed envelopes; the
 //      mock records them into the inbox and, when the envelope carries a
-//      recognizable `ck.*` operation, fabricates a reply envelope into
+//      recognizable `ak.*` operation, fabricates a reply envelope into
 //      the matching peer's outbox so scenario specs can assert round
 //      trips through the trust boundary.
 //
@@ -259,7 +259,7 @@ const server = createServer(async (req, res) => {
     };
     receivedLog.record(envelope);
 
-    // If the payload carries a recognizable `ck.*` operation, fabricate
+    // If the payload carries a recognizable `ak.*` operation, fabricate
     // a reply envelope so callers can poll /tsp/outbox to assert the
     // round trip across the trust boundary.
     let reply = null;

@@ -6,7 +6,7 @@ applies the same pattern to Arkret.
 
 ## Concept Mapping
 
-- Complement deployment helpers map to `CokretServer` and `TestServerGroup`.
+- Complement deployment helpers map to `ArkretServer` and `TestServerGroup`.
   `cotest` now supports both host-spawned local processes and Docker-backed SUT
   instances under the same harness.
 - Complement client helpers map to `TestActorClient`, shared HTTP assertions,

@@ -159,7 +159,7 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
 
 // ─── VECT-AG-3 — controller_lifecycle (agent FSM) ──────────────────────────
 
-/// Minimal in-memory FSM mirroring the `ck.agent.{pause,resume,deactivate}`
+/// Minimal in-memory FSM mirroring the `ak.agent.{pause,resume,deactivate}`
 /// reducer contract: bottom = `reject`, deactivate is terminal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AgentState {

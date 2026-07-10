@@ -451,7 +451,7 @@ fn transcribe_authorised(has_transcribe_cap: bool) -> std::result::Result<(), &'
     }
 }
 
-/// Transcript artifacts MUST use the dedicated `ck-rtc-transcript-key/v1`
+/// Transcript artifacts MUST use the dedicated `ak-rtc-transcript-key/v1`
 /// label with a non-empty Context; reusing the SFrame / recording label or an
 /// empty Context fails closed with `transcription_artifact_pipeline_bypassed`.
 fn transcript_key_source_ok(

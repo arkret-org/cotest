@@ -232,7 +232,7 @@ limited to the selected profile's `required_coverage_profiles`, unless
 
 ## Startup and shutdown model
 
-- `CokretServer` is the single entrypoint for one SUT instance.
+- `ArkretServer` is the single entrypoint for one SUT instance.
 - `TestServerGroup` is the single entrypoint for multi-server scenarios.
 - In `process` mode, each server is a child `cargo run` process with its own
   temp blob root.

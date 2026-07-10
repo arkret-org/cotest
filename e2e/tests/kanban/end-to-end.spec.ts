@@ -219,7 +219,7 @@ test.describe("kanban end-to-end", () => {
       // realm_id so the route resolves to the freshly-created Realm (plain
       // `/kanban` falls back to the first preview, which on a fresh session
       // is the hardcoded demo Realm the test user is NOT a member of, and
-      // every ck.strand.* event would 403 with capability_denied).
+      // every ak.strand.* event would 403 with capability_denied).
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await alicePage.page.getByTestId("new-board-toggle").click();

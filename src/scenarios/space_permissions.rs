@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    CokretServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
+    ArkretServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
     expect_json, member_join_payload_value, message_create_text_payload, register_account,
     send_message, submit_event,
 };
@@ -112,7 +112,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 }
 
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
-    let server = CokretServer::spawn("space-visibility").await?;
+    let server = ArkretServer::spawn("space-visibility").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",

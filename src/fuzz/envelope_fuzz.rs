@@ -290,14 +290,14 @@ impl FuzzSnapshotChunkInput {
 /// chunker `Deserializer::deserialize` impl unwraps internally).
 pub fn fuzz_snapshot_chunk(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_core::SnapshotChunk>(data);
+        let _ = serde_json::from_slice::<arkret_state::SnapshotChunk>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzSnapshotChunkInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), SNAPSHOT_SCHEMA, |v| {
-        let _ = serde_json::from_value::<arkret_core::SnapshotChunk>(v.clone());
+        let _ = serde_json::from_value::<arkret_state::SnapshotChunk>(v.clone());
     })
 }
 

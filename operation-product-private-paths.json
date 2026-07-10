@@ -161,14 +161,14 @@
       "method": "GET",
       "path": "/_arkret/self/realms",
       "classification": "product-private",
-      "reason": "mockCokretApi.ts uses the literal \"/_arkret/self/realms/\" only as a startsWith() prefix to dispatch to the real /_arkret/self/realms/{realm_id}/spaces and /strands handlers; the bare prefix string is a router predicate, not an operation."
+      "reason": "mockArkretApi.ts uses the literal \"/_arkret/self/realms/\" only as a startsWith() prefix to dispatch to the real /_arkret/self/realms/{realm_id}/spaces and /strands handlers; the bare prefix string is a router predicate, not an operation."
     },
     {
       "source": "inkson",
       "method": "POST",
       "path": "/_arkret/self/circles/({wildcard}",
       "classification": "product-private",
-      "reason": "Malformed path template recovered from the mockCokretApi.ts regex /^\\/_arkret\\/self\\/circles\\/([^/]+)\\/(archive|restore|tombstone)$/ (the capture-group '(' leaks into the extracted template); the mock actually dispatches the registered circle archive/restore/tombstone operations."
+      "reason": "Malformed path template recovered from the mockArkretApi.ts regex /^\\/_arkret\\/self\\/circles\\/([^/]+)\\/(archive|restore|tombstone)$/ (the capture-group '(' leaks into the extracted template); the mock actually dispatches the registered circle archive/restore/tombstone operations."
     }
   ]
 }

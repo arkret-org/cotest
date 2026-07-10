@@ -218,7 +218,7 @@ test.describe("account onboarding", () => {
     ).toBeTruthy();
   });
 
-  test("alice's did:webvh resolves: SCID embedded in the DID, did.jsonl history chain, and a CokretPrincipalServer service endpoint", async ({
+  test("alice's did:webvh resolves: SCID embedded in the DID, did.jsonl history chain, and a ArkretPrincipalServer service endpoint", async ({
     request,
   }) => {
     // spec: identity-did.md §2.1, §3.4
@@ -235,7 +235,7 @@ test.describe("account onboarding", () => {
     const services = Array.isArray(document.service)
       ? document.service.filter(isRecord)
       : [];
-    const principalService = services.find((s) => s.type === "CokretPrincipalServer");
+    const principalService = services.find((s) => s.type === "ArkretPrincipalServer");
     expect(principalService, JSON.stringify(services)).toBeTruthy();
     expect(principalService?.serviceEndpoint).toBeTruthy();
     // At least one verificationMethod (the inception key).

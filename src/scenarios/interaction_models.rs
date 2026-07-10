@@ -4,12 +4,12 @@ use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    CokretServer, expect_json, expect_response, expect_status, message_redact_payload,
+    ArkretServer, expect_json, expect_response, expect_status, message_redact_payload,
     message_revise_text_payload,
 };
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
-    let server = CokretServer::spawn("interaction-messages").await?;
+    let server = ArkretServer::spawn("interaction-messages").await?;
     // Alice is the demo identity the server pre-seeds at boot; the builder is
     // for fresh accounts only.
     let alice = server

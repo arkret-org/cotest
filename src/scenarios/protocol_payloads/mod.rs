@@ -22,13 +22,13 @@
 //! - [`moderation`] — `/_arkret/self/moderation/report` queueing.
 //!
 //! No private cross-phase helpers exist — every phase function takes only
-//! `(&CokretServer, &str)` (or just `&CokretServer` when no auth is
+//! `(&ArkretServer, &str)` (or just `&ArkretServer` when no auth is
 //! required) so the orchestrator can read top-to-bottom as a sequence of
 //! protocol phases.
 
 use anyhow::Result;
 
-use crate::harness::{CokretServer, dev_login};
+use crate::harness::{ArkretServer, dev_login};
 
 mod backup_delete;
 mod blob;
@@ -39,7 +39,7 @@ mod moderation;
 mod push;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
-    let server = CokretServer::spawn("protocol-payloads").await?;
+    let server = ArkretServer::spawn("protocol-payloads").await?;
     let token = dev_login(
         &server,
         "did:web:alice.example",

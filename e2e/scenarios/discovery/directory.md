@@ -81,7 +81,7 @@
 ## Implementation notes
 
 - 多数 testid 已存在(directory.rs:`directory-contact-tools`、`contact-target-did-input`、`request-contact-button`、`accept-contact-button`、`list-contacts-button`、`directory-search-input`、`directory-search-button`、`actor-result`、`tab-actors`)
-- **soland 缺口**:`ak.profile.update`、`ck.presence` ephemeral、organization registry — 实现度未知
+- **soland 缺口**:`ak.profile.update`、`ak.presence` ephemeral、organization registry — 实现度未知
 
 ## 总耗时预估
 

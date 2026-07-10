@@ -3,7 +3,7 @@
 //! `TestActorBuilder` replaces the per-scenario boilerplate of:
 //!
 //! ```ignore
-//! let server = CokretServer::spawn("my-scenario").await?;
+//! let server = ArkretServer::spawn("my-scenario").await?;
 //! let alice = server.register_client("did:webvh:z6mkfixture:alice.example", "@alice", "ak:device:01904100-0000-7000-8000-0000000000a1").await?;
 //! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
@@ -26,7 +26,7 @@
 //!
 //! ## Design notes
 //!
-//! - The builder accepts a borrowed [`CokretServer`] rather than a higher `TestHarness` wrapper
+//! - The builder accepts a borrowed [`ArkretServer`] rather than a higher `TestHarness` wrapper
 //!   (which the cotest crate does not currently define). When a wrapper type is introduced the
 //!   builder can be retargeted without changing call sites — only the type bound moves.
 //! - The builder is intentionally `async`-free until `create()` so callers can inspect / mutate the
@@ -36,7 +36,7 @@ use std::fmt;
 
 use anyhow::{Context, Result};
 
-use crate::harness::{CokretServer, TestActorClient, fixture_webvh_did};
+use crate::harness::{ArkretServer, TestActorClient, fixture_webvh_did};
 
 /// Tracks the realms a scenario asked the builder to create as part of the
 /// fixture preamble. Each entry stores the original requested name and the
@@ -104,13 +104,13 @@ impl TestActor {
 
 /// Fluent builder for [`TestActor`].
 ///
-/// Holds a borrow of the [`CokretServer`] under test so multiple actors can
+/// Holds a borrow of the [`ArkretServer`] under test so multiple actors can
 /// be assembled against the same instance without re-cloning server-state. The
 /// builder is `#[must_use]` because building a spec without calling
 /// [`Self::create`] is almost always a mistake.
 #[must_use = "TestActorBuilder must end in `.create().await` to actually register the actor"]
 pub struct TestActorBuilder<'a> {
-    server: &'a CokretServer,
+    server: &'a ArkretServer,
     handle: String,
     did: Option<String>,
     primary_device: Option<String>,
@@ -124,7 +124,7 @@ impl<'a> TestActorBuilder<'a> {
     /// form (`@alice`) — both shapes appear in existing scenarios. The default
     /// DID is derived as `did:webvh:z6mkfixture:<bare-handle>.example` and the
     /// default primary device id as `dev_<bare-handle>`, both overridable.
-    pub fn new(server: &'a CokretServer, handle: &str) -> Self {
+    pub fn new(server: &'a ArkretServer, handle: &str) -> Self {
         let handle = handle.to_owned();
         Self {
             server,
@@ -223,7 +223,7 @@ impl<'a> TestActorBuilder<'a> {
 #[cfg(test)]
 mod tests {
     // These tests are pure builder-state checks; they intentionally do NOT
-    // call `create()` because that would require a live CokretServer.
+    // call `create()` because that would require a live ArkretServer.
     // Scenario-level coverage of `create()` lives in the migrated scenarios
     // (e.g. `tests/events_backfill.rs`).
 
@@ -233,10 +233,10 @@ mod tests {
 
         // Build the spec without driving create() so we can assert the
         // derivations the builder applies. We use a dummy server reference
-        // by leaking a never-spawned CokretServer through a builder method
+        // by leaking a never-spawned ArkretServer through a builder method
         // that does not touch it — `with_*` methods are all pure setters.
         //
-        // Note: we cannot construct a CokretServer in a unit test, so we
+        // Note: we cannot construct a ArkretServer in a unit test, so we
         // instead verify the derivation logic directly via the same helpers
         // create() uses.
         let raw = "@alice";

@@ -5,7 +5,7 @@ use arkret_core::canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{CokretServer, expect_api_error, expect_json, invite_create_payload};
+use crate::harness::{ArkretServer, expect_api_error, expect_json, invite_create_payload};
 
 /// Extract the `realm_id` string from a `create_realm` response, turning a
 /// missing/non-string field into a located error instead of a context-free
@@ -18,7 +18,7 @@ fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
 }
 
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
-    let server = CokretServer::spawn("directory-privacy").await?;
+    let server = ArkretServer::spawn("directory-privacy").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",

@@ -148,7 +148,7 @@ export async function registerCoauthPasswordAccount(
   if (!/^[a-z0-9_-]+$/.test(slug)) {
     throw new Error(`coauth test handle must be a bare localpart: ${slug}`);
   }
-  const password = opts.password ?? "CokretE2E!2026";
+  const password = opts.password ?? "ArkretE2E!2026";
   const email = `${slug}@example.test`;
   const displayName = `E2E ${slug}`;
   const base = `${coauthBase}/_coauth/account/auth/register`;

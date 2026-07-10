@@ -56,7 +56,7 @@
 //!
 //! Prerequisite blockers:
 //!
-//!   * **Persistent storage harness hook.** Same blocker as CT-16 and CT-17: `CokretServer::spawn`
+//!   * **Persistent storage harness hook.** Same blocker as CT-16 and CT-17: `ArkretServer::spawn`
 //!     doesn't plumb `DATABASE_URL` today. Without persistence, the soak data evaporates between
 //!     samples and the test measures only the in-memory hashmap, which has fundamentally different
 //!     scaling behaviour than the Pg-backed production path.
@@ -112,7 +112,7 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //   const ANCHOR_PROBE_INTERVAL: Duration = Duration::from_secs(30);
     //
     //   // Step 1: persistent soland
-    //   let server = CokretServer::spawn_with_postgres("soak").await?;
+    //   let server = ArkretServer::spawn_with_postgres("soak").await?;
     //
     //   // Step 2: setup actors + shared Realm
     //   let alice = register_account(&server, "did:web:alice.example",

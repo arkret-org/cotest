@@ -143,7 +143,7 @@ test.describe("multi-device pairing + revocation", () => {
   }) => {
     // spec: device-lifecycle.md §5.1 (ak.cross_signing.publish — PSK→{SSK,USK})
     // + §5.2 (per-device cross_signing_binding, the SSK signature over the
-    // ck-device-trust-bind-v1 canonical input).
+    // ak-device-trust-bind-v1 canonical input).
     //
     // This is NOT a dev-proof shortcut for the binding: soland's
     // validate_device_authorize_binding → check_device_cross_signing_binding
@@ -181,7 +181,7 @@ test.describe("multi-device pairing + revocation", () => {
     ).toContain(publish.status());
 
     // 2) Authorize Device 2 with a real SSK-signed cross_signing_binding over
-    //    the §5.2 ck-device-trust-bind-v1 input. soland verifies the binding at
+    //    the §5.2 ak-device-trust-bind-v1 input. soland verifies the binding at
     //    ingest against the just-accepted SSK at the live generation.
     const device2Id = typedId("device");
     const device2Key = deviceVerifyKeyMultibase();

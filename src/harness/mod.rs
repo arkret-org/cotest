@@ -1,7 +1,7 @@
 //! Complement-style black-box conformance harness for Arkret servers.
 //!
 //! This module is organized into focused submodules:
-//! - [`server`]: [`CokretServer`]/[`TestServerGroup`] process/Docker orchestration.
+//! - [`server`]: [`ArkretServer`]/[`TestServerGroup`] process/Docker orchestration.
 //! - [`client`]: [`TestActorClient`] and its request helpers.
 //! - [`assertions`]: HTTP assertion family and the recording/transcript machinery.
 //! - [`event_builder`]: token-based event constructors and account helpers.
@@ -38,7 +38,7 @@ pub(crate) use event_builder::{
 #[allow(unused_imports)]
 pub(crate) use proof::canonical_event_digest;
 pub use proof::{attach_ephemeral_proof, attach_ephemeral_proof_value, refresh_event_proof};
-pub use server::{CokretServer, TestServerGroup};
+pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
