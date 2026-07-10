@@ -9,7 +9,7 @@
 // derived `call_state` from the signal log. In the canonical model the
 // `POST /_arkret/self/ephemeral` relay is content-agnostic (it broadcasts the
 // verbatim signed envelope), and the call lifecycle lives in the durable
-// `ck.call.state` cell driven by `ck.call.state` events (call-state.md §4.2).
+// `ak.call.state` cell driven by `ak.call.state` events (call-state.md §4.2).
 // This spec therefore asserts (a) the signaling stream is relayed in seq order
 // with senders attributed, and (b) the durable lifecycle advances via
 // ak.call.state — the two planes the spec actually defines.

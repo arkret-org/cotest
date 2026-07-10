@@ -1,12 +1,12 @@
 //! Personal AI Agent provisioning -> pairing -> lifecycle, driven live against
-//! a spawned soland in development mode (CKP-0008, spec_section_11 live leg).
+//! a spawned soland in development mode (AKP-0008, spec_section_11 live leg).
 //!
 //! Exercises the dev-mode server-authored fan-out (architecture option B) end
 //! to end through the public agent HTTP surface:
-//!   1. `ck.self.agent.command.provision` -> `pending_runtime_key` + pairing.
-//!   2. `ck.gate.account.command.pair_agent_key` -> durable `ck.agent.key.authorize`, clears
+//!   1. `ak.self.agent.command.provision` -> `pending_runtime_key` + pairing.
+//!   2. `ak.gate.account.command.pair_agent_key` -> durable `ak.agent.key.authorize`, clears
 //!      `effective_after_first_authorized_key`, status -> `active`.
-//!   3. grant attach / detach -> durable `ck.capability.grant` / `ck.capability.revoke`.
+//!   3. grant attach / detach -> durable `ak.capability.grant` / `ak.capability.revoke`.
 //!   4. pause / resume / deactivate -> durable lifecycle events flip status.
 //!
 //! `CokretServer::spawn` builds / locates the sibling `soland` binary and runs
@@ -212,10 +212,10 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     .await?;
     assert_eq!(strand["status"], "accepted");
 
-    // CKP-0016 §5.2: every agent-originated Event carries an auditable
+    // AKP-0016 §5.2: every agent-originated Event carries an auditable
     // `agent_context` whose `authorization_ref` MUST resolve to an active
     // capability grant for the agent IN THE EVENT'S REALM, with an action
-    // covering the operation's canonical kind. Grant the agent `ck.message.create`
+    // covering the operation's canonical kind. Grant the agent `ak.message.create`
     // in the reply Realm so the reply's agent_context references a real grant.
     let agent_grant_id = "ak:grant:01999999-0000-7000-8000-0000000000c1";
     let agent_grant = submit_event(
@@ -551,9 +551,9 @@ async fn pair_agent_runtime_key(
             }
         }),
     };
-    // `agent_key_pair` drives `ck.gate.account.command.pair_agent_key`, bound to
+    // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
     // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the
-    // durable `ck.agent.key.authorize` event that clears `pending_runtime_key`.
+    // durable `ak.agent.key.authorize` event that clears `pending_runtime_key`.
     Ok(bearer_sdk_client(server, token)?
         .agent_key_pair(&body)
         .await?)
@@ -810,7 +810,7 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
             "one_time_use_consumed": false,
             "grant": {
                 // `SessionGrantIntrospectGrant.id` is a typed `GrantId`
-                // (`ck:grant:<uuidv7>`); a bare label fails SDK deserialization
+                // (`ak:grant:<uuidv7>`); a bare label fails SDK deserialization
                 // and soland reports the introspection response as invalid (503).
                 "id": "ak:grant:01964137-0000-7000-8000-000000000a01",
                 "issuer": "did:web:coauth.cotest.local",

@@ -1,6 +1,6 @@
 //! Cursor opaque vectors.
 //!
-//! `ck.vector.encoding.cursor_opaque.core.v1` covers the default stateful
+//! `ak.vector.encoding.cursor_opaque.core.v1` covers the default stateful
 //! body `{v, purpose, t, x, h}`.
 
 use anyhow::{Result, anyhow, bail};

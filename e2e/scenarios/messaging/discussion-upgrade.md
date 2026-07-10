@@ -46,7 +46,7 @@
 ### Phase C — 新消息路由到 discussion Strand
 
 8. alice 在 promoted discussion 输入新消息 `M11`
-9. inkson 客户端因为当前 composer 绑定 `F_discussion`，提交 `ck.message.create` 到 `F_discussion` 的 discussion track
+9. inkson 客户端因为当前 composer 绑定 `F_discussion`，提交 `ak.message.create` 到 `F_discussion` 的 discussion track
 10. 断言:`M11` 出现在 `F_discussion` timeline；不出现在 `F_public` 的原 discussion track
 11. `F_public` 详情的 Comments 区可展示一个 promoted-thread summary；展开后进入 `F_discussion`，老消息 `M1..M10` 仍留在 `F_public`
 
@@ -73,7 +73,7 @@
 
 ## Edge cases / sub-tests
 
-- **E21.1 Circle 不存在**:alice 把 `scope_circle_id` 指向不存在的 Circle → reducer 拒绝 `ck.strand.create` / `ck.strand.update`,reason `circle_not_found` 或 `circle_realm_mismatch`
+- **E21.1 Circle 不存在**:alice 把 `scope_circle_id` 指向不存在的 Circle → reducer 拒绝 `ak.strand.create` / `ak.strand.update`,reason `circle_not_found` 或 `circle_realm_mismatch`
 - **E21.2 scope rebind forbidden**:已存在的 `F_public` 不允许把 `scope_circle_id` 从 null 改成 `C_discussion`;必须创建新 Strand
 - **E21.3 relation 缺失**:存在 `F_discussion` 但没有 `confidential_discussion_of` relation 时，UI 不应把它展示为原 Strand 的 promoted discussion
 - **E21.4 E2EE Circle key 独立**:Realm 默认明文、Circle E2EE 时，`F_discussion` 消息必须加密；Realm 默认 E2EE、Circle E2EE 时，也必须使用 Circle scope 的 key material

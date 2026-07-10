@@ -4,7 +4,7 @@ Generated: 2026-05-27 — pairs with
 [`agent-profile-coverage.md`](agent-profile-coverage.md).
 
 `conformance-vectors.md` §11 (personal agent + sidecar) declares 9
-normative cross-server invariants introduced by CKP-0008 + CKP-0009.
+normative cross-server invariants introduced by AKP-0008 + AKP-0009.
 This page is the one-stop compliance attestation: for every §11 vector,
 the (a) cotest scenario module, (b) test entrypoint, and (c) gating output
 that proves compliance.
@@ -34,14 +34,14 @@ cargo test --workspace --test spec_section_11_scenarios
 
 | V    | Invariant                                                                                                | Observable that closes the gate                                            |
 |------|----------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
-| V-1  | `ck.self.agent.command.provision` → `ck.agent.pairing.create` → `ck.capability.grant` MUST land in order.             | Out-of-order replay is rejected with `precondition_failed`.                |
+| V-1  | `ak.self.agent.command.provision` → `ak.agent.pairing.create` → `ak.capability.grant` MUST land in order.             | Out-of-order replay is rejected with `precondition_failed`.                |
 | V-2  | After `expires_at` elapses, the agent session is auto-revoked.                                            | A `ak.session.grant_revoke{reason="pairing_expired"}` event is produced.   |
 | V-3  | Replaying a session_grant with the same nonce MUST be rejected.                                           | Reducer returns `already_exists` (idempotent close), not double-grant.     |
-| V-4  | Controller deactivate fans out: `ck.self.agent.deactivate` → `ck.agent.key.revoke` → `ck.capability.revoke`.   | Per-agent fan-out is deterministic and ordered.                            |
+| V-4  | Controller deactivate fans out: `ak.self.agent.deactivate` → `ak.agent.key.revoke` → `ak.capability.revoke`.   | Per-agent fan-out is deterministic and ordered.                            |
 | V-5  | Every act-on-behalf event carries `(executed_by, authorization_ref, actor_kind)`.                         | Validator rejects events missing any of the three fields.                  |
-| V-6  | `ck.self.agent.sidecar_thread.command.ensure(controller, agent)` MUST return the same `sidecar_circle_id` on retry.    | Two consecutive ensure() calls return byte-identical typed-ids.            |
-| V-7  | A non-controller cannot probe agent existence; not-found is indistinguishable from forbidden.             | `ck.directory.lookup{agent_principal}` returns identical shapes either way.|
-| V-8  | Capability grants have tri-state eligibility (`active` / `paused` / `revoked`); revocation drains cache.  | `ck.capability.cache.invalidate` is emitted on transition.                 |
+| V-6  | `ak.self.agent.sidecar_thread.command.ensure(controller, agent)` MUST return the same `sidecar_circle_id` on retry.    | Two consecutive ensure() calls return byte-identical typed-ids.            |
+| V-7  | A non-controller cannot probe agent existence; not-found is indistinguishable from forbidden.             | `ak.directory.lookup{agent_principal}` returns identical shapes either way.|
+| V-8  | Capability grants have tri-state eligibility (`active` / `paused` / `revoked`); revocation drains cache.  | `ak.capability.cache.invalidate` is emitted on transition.                 |
 | V-9  | Multi-agent publishes preserve per-event attribution (no cross-agent contamination).                      | Consumer reducer renders distinct author panes per event source.           |
 
 ## Gating output

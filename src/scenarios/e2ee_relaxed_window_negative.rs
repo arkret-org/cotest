@@ -1,16 +1,16 @@
-//! Round 2+3 / T09 — `ck.profile.e2ee_relaxed.v1` hard ceiling and
+//! Round 2+3 / T09 — `ak.profile.e2ee_relaxed.v1` hard ceiling and
 //! compliance-profile mutex.
 //!
 //! Spec (round 2+3 cleanup, T09):
 //!
-//! `ck.profile.e2ee_relaxed.v1` defines `absolute_hard_ceiling_ms =
+//! `ak.profile.e2ee_relaxed.v1` defines `absolute_hard_ceiling_ms =
 //! 300000` (5 minutes). The reducer MUST refuse:
 //!
 //!   * `relaxed_window_max_ms > 300000` → `relaxed_window_exceeds_ceiling`
 //!   * enabling `e2ee_relaxed.v1` while any of these compliance profiles are active on the same
 //!     Realm:
-//!       - `ck.profile.attested_audit.e2ee.v1`
-//!       - `ck.profile.disclosed_audit.e2ee.v1`
+//!       - `ak.profile.attested_audit.e2ee.v1`
+//!       - `ak.profile.disclosed_audit.e2ee.v1`
 //!     → `e2ee_relaxed_disallowed_in_compliance_profile`
 //!
 //! This module covers the two negative branches.

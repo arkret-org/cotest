@@ -7,10 +7,10 @@
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` +
 // `/_soland/self/calls/.../recording/start` stack is gone. Moderation now rides
-// `ck.call.signal{moderation}` on `POST /_arkret/self/ephemeral`, and the
-// kick/ban provenance lives in the durable `ck.call.state.removed_participants[]`
-// cell. The relay is content-agnostic and gates on `ck.call.signal.send` (§162);
-// the `ck.call.moderate` authorization for a moderation frame is a RECEIVER /
+// `ak.call.signal{moderation}` on `POST /_arkret/self/ephemeral`, and the
+// kick/ban provenance lives in the durable `ak.call.state.removed_participants[]`
+// cell. The relay is content-agnostic and gates on `ak.call.signal.send` (§162);
+// the `ak.call.moderate` authorization for a moderation frame is a RECEIVER /
 // reducer check (§3a: receiver and reducer MUST reject), pinned as a real
 // conformance vector (`run_moderator_kick_ban_vector`, step 1 →
 // call_moderation_unauthorised). The HTTP-observable moderation consequence is

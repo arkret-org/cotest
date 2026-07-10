@@ -1,8 +1,8 @@
-# Knock 自动解析路径(`ck.member.state{join, gate_proofs}`)
+# Knock 自动解析路径(`ak.member.state{join, gate_proofs}`)
 
 ## 目标
 
-spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且所有 gates 都 `auto_resolve=true`(claim_required + challenge_response)— applicant 直接提交 `ck.member.state{join}` 携带 `gate_proofs[]`,reducer 内联校验,无需 application + review。这是 spec §3.5 的快路径。
+spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且所有 gates 都 `auto_resolve=true`(claim_required + challenge_response)— applicant 直接提交 `ak.member.state{join}` 携带 `gate_proofs[]`,reducer 内联校验,无需 application + review。这是 spec §3.5 的快路径。
 
 ## Spec 锚点
 
@@ -45,7 +45,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 
 3. bob 向 claim-issuer 请求 VC `acme:employee` → 拿到 signed VC
 4. bob 向 captcha-provider 请求 challenge → 完成 → 拿到 signed proof
-5. bob 客户端组 `ck.member.state{ membership: "join", subject_did: bob.did, gate_proofs: [{ gate_id: "g-vc", claim_presentation: <VC> }, { gate_id: "g-captcha", challenge_proof: <proof> }] }`
+5. bob 客户端组 `ak.member.state{ membership: "join", subject_did: bob.did, gate_proofs: [{ gate_id: "g-vc", claim_presentation: <VC> }, { gate_id: "g-captcha", challenge_proof: <proof> }] }`
 6. 直接提交,**不**经过 application + review
 7. soland reducer:
    - 加载 join policy cell
@@ -64,7 +64,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 ### Phase D — Cooldown gate(独立 deny)
 
 13. alice 把 join policy 加一条 gate:`{ kind: "cooldown", min_interval_since_leave: "P30D" }`
-14. bob 主动 leave Realm:`ck.member.state{leave}`
+14. bob 主动 leave Realm:`ak.member.state{leave}`
 15. 立刻试重新 join:gate_proofs 仍正确,但 cooldown gate 命中
 16. 断言:reducer 拒,reason `cooldown_gate_blocking`,独立于 combinator(spec §3.3.1)
 

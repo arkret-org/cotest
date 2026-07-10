@@ -1,9 +1,9 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CKP-0007 §Capability Two-Tier AND;
+//! Live-stack integration test for AKP-0007 §Capability Two-Tier AND;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_capability_two_tier_and -- --ignored`).
 //!
-//! CKP-0007 evaluates a Circle write as
+//! AKP-0007 evaluates a Circle write as
 //!
 //!     allowed = grant_present(cap) AND (scope == null OR actor ∈ Circle.members)
 //!
@@ -14,14 +14,14 @@
 //! Scenario (Phase B scaffold):
 //!   1. Boot soland + coauth (coauth issues the cap grant).
 //!   2. Create a Realm + Circle. Actor Y is a Realm member but NOT a Circle member.
-//!   3. Grant Y `ck.circle.manage` via coauth's session-grant surface.
-//!   4. Y attempts `ck.circle.update` (e.g. patch the title) → MUST be rejected
+//!   3. Grant Y `ak.circle.manage` via coauth's session-grant surface.
+//!   4. Y attempts `ak.circle.update` (e.g. patch the title) → MUST be rejected
 //!      (`permission_denied` / membership half failed) despite the grant being present.
-//!   5. Add Y to the Circle (`ck.circle.member.state → active`); retry the update → MUST succeed
+//!   5. Add Y to the Circle (`ak.circle.member.state → active`); retry the update → MUST succeed
 //!      (both halves satisfied).
-//!   6. Revoke Y's `ck.circle.manage` grant while Y is still a Circle member; retry the update →
+//!   6. Revoke Y's `ak.circle.manage` grant while Y is still a Circle member; retry the update →
 //!      MUST be rejected (`permission_denied` / grant half failed).
-//!   7. Cross-check: `ck.circle.audit` (a strictly read-only cap) follows the same two-tier
+//!   7. Cross-check: `ak.circle.audit` (a strictly read-only cap) follows the same two-tier
 //!      evaluation — a member without the cap MUST be rejected; a non-member with the cap MUST be
 //!      rejected too.
 //!
@@ -39,13 +39,13 @@ use serial_test::serial;
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CKP-0007 (Circle capability two-tier AND)
+/// Issue: AKP-0007 (Circle capability two-tier AND)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CKP-0007 Circle capability two-tier AND — live soland + coauth stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "AKP-0007 Circle capability two-tier AND — live soland + coauth stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_write_requires_both_capability_grant_and_membership() -> Result<()> {
     // ── 0. SDK-level invariants: the cap actions we exercise live in
-    //       the canonical CKP-0007 allow-list. A spelling drift here
+    //       the canonical AKP-0007 allow-list. A spelling drift here
     //       would mask the live wire assertion.
     if CAP_ACTION_CIRCLE_MANAGE != "ak.circle.manage" {
         bail!(
@@ -74,8 +74,8 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
         .await
         .map_err(|e| anyhow!("stack health check failed: {e}"))?;
 
-    // ── 2. Register admin + actor Y. Admin holds `ck.circle.create` /
-    //       `ck.circle.member.manage` by default in development mode; Y
+    // ── 2. Register admin + actor Y. Admin holds `ak.circle.create` /
+    //       `ak.circle.member.manage` by default in development mode; Y
     //       starts with zero grants.
     let admin = stack
         .soland
@@ -150,9 +150,9 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CKP-0007): live-stack wiring for the two-tier capability \
+        "TODO(P5/AKP-0007): live-stack wiring for the two-tier capability \
          (grant ∧ membership) evaluation is scaffolded; finalise once soland \
-         publishes the `ck.circle.update` REST surface and coauth's \
+         publishes the `ak.circle.update` REST surface and coauth's \
          session-grant issue/revoke endpoints are reachable from cotest. \
          Expected assertions: \
          (i) cap-present + non-member → 403 `actor_not_in_circle`, \

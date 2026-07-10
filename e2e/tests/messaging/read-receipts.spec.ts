@@ -296,7 +296,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("disclosure=disabled");
   });
 
-  test("actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
+  test("actor-private read marker (ak.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
     request,
   }) => {
     // spec: read-receipts.md §3.1-§3.2 / §6.6 — ak.read_cursor.advance is an

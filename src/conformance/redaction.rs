@@ -210,7 +210,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-/// Vector `ck.vector.redaction.space_target_ref_schema.v1` (conformance §3.2.1).
+/// Vector `ak.vector.redaction.space_target_ref_schema.v1` (conformance §3.2.1).
 ///
 /// The redaction object-lifecycle payload schema MUST accept a `ak:space:*`
 /// `target_ref` and MUST reject a malformed space ref, so a Space cleanup is
@@ -254,7 +254,7 @@ struct PolicyScopeOutcome {
     actual: Value,
 }
 
-/// Vector `ck.vector.redaction.policy_scope.v1` (conformance §3.3).
+/// Vector `ak.vector.redaction.policy_scope.v1` (conformance §3.3).
 ///
 /// After message -> policy quarantine -> redaction, the projection MUST strip
 /// the redacted content while retaining audit evidence, MUST keep the timeline
@@ -374,10 +374,10 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
     Ok(Value::Array(projected))
 }
 
-/// Vector `ck.vector.redaction.hard_erasure_receipt.v1` (conformance §3.4).
+/// Vector `ak.vector.redaction.hard_erasure_receipt.v1` (conformance §3.4).
 ///
 /// Hard erasure retains a verification stub and a signed receipt that MUST
-/// conform to `ck.schema.erasure_receipt.v1`; the stub MUST NOT retain a
+/// conform to `ak.schema.erasure_receipt.v1`; the stub MUST NOT retain a
 /// standalone content hash of the erased plaintext (additionalProperties:false
 /// enforces this), and a `blocked_by_legal_hold` outcome MUST carry the legal
 /// hold evidence rather than being silently downgraded to a completed erasure.

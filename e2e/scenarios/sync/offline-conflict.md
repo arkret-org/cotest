@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的并发 `ck.realm.update` 不属于当前规范注册的 bottom producer,不得把它当作 `bottom_expose` 冲突来源。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的并发 `ak.realm.update` 不属于当前规范注册的 bottom producer,不得把它当作 `bottom_expose` 冲突来源。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
 
 ## Spec 锚点
 
@@ -47,7 +47,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ### Phase D — 并发 title update 不产生 bottom
 
-12. alice 和 bob 都在网,测试 harness 直接提交两条同 anchor basis 的 `ck.realm.update { patch.title }`
+12. alice 和 bob 都在网,测试 harness 直接提交两条同 anchor basis 的 `ak.realm.update { patch.title }`
 13. soland 接受/归并 Realm metadata 更新,但不得把 title patch 投影为 `ak.component.realm.organization.v1` 的 cas-register bottom
 14. 断言:`GET /_soland/admin/realms/<S>/bottom` 返回空数组
 
@@ -55,7 +55,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 15. 断言:inkson 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
 16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空,直到有标准 bottom producer 与 repair event kind 注册并被实现
-17. 备注:后续 CKP 注册 repair kind 后,本阶段再升级为提交标准 repair Move 并验证目标 cell 回到 active
+17. 备注:后续 AKP 注册 repair kind 后,本阶段再升级为提交标准 repair Move 并验证目标 cell 回到 active
 
 ### Phase F — Backfill via pull
 
@@ -71,8 +71,8 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ## Implementation notes
 
-- **soland 已落地**:`ck.realm.update` title patch 不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
-- **inkson 已落地**:Realm admin repair 区当前不 mint 未注册的 `ck.conflict.repair`,无 bottom 时保持只读空态。
+- **soland 已落地**:`ak.realm.update` title patch 不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
+- **inkson 已落地**:Realm admin repair 区当前不 mint 未注册的 `ak.conflict.repair`,无 bottom 时保持只读空态。
 - **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖并发 title update 的 non-bottom 语义与 read-only repair surface。
 - **剩余边界**:outbox capacity、标准 bottom producer、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。
 

@@ -1,9 +1,9 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CKP-0007 §Directory Visibility Tiering;
+//! Live-stack integration test for AKP-0007 §Directory Visibility Tiering;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_directory_visibility_tiering -- --ignored`).
 //!
-//! `Circle.directory_visibility` is a two-value enum (CKP-0007):
+//! `Circle.directory_visibility` is a two-value enum (AKP-0007):
 //!   - `Members`        — only Circle members see the Circle in any directory output; non-members
 //!     must NOT receive a redacted-present entry (anti-enumeration).
 //!   - `RealmMembers`   — any active Realm member sees an *opaque commitment* (no `title` /
@@ -42,9 +42,9 @@ use serial_test::serial;
 
 /// Gating: live soland + teabay stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CKP-0007 (Circle directory_visibility tiering)
+/// Issue: AKP-0007 (Circle directory_visibility tiering)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CKP-0007 Circle directory_visibility tiering — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "AKP-0007 Circle directory_visibility tiering — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     // ── 0. SDK-level invariant: the enum has the two expected variants
@@ -202,7 +202,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CKP-0007): live-stack wiring for Circle directory_visibility \
+        "TODO(P5/AKP-0007): live-stack wiring for Circle directory_visibility \
          tiering is scaffolded; finalise once soland publishes Circle creation \
          + member endpoints and teabay's `directory/circles` projection honours \
          the `Members` vs. `RealmMembers` enum. Expected assertions: \

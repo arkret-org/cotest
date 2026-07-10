@@ -1,5 +1,5 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CKP-0007 §Cross-Scope Relation
+//! Live-stack integration test for AKP-0007 §Cross-Scope Relation
 //! Anti-Enumeration; defaults to ignored — set `COTEST_LIVE_STACK=1` to
 //! enable (or invoke with
 //! `cargo test --test live_circle_cross_scope_relation_anti_enumeration -- --ignored`).
@@ -10,7 +10,7 @@
 //!        - F1: Realm-scoped *public* Strand (`scope_circle_id` unset).
 //!        - F2: Circle-scoped *private* Strand whose `scope_circle_id` binds to a Circle inside the
 //!          same Realm.
-//!   3. Establish `Relation::ConfidentialDiscussionOf` (F1 → F2). Per CKP-0007 spec, this is the
+//!   3. Establish `Relation::ConfidentialDiscussionOf` (F1 → F2). Per AKP-0007 spec, this is the
 //!      canonical cross-scope edge.
 //!   4. Query F1 from two client identities: a) `circle_member` — actor in the Circle: MUST see the
 //!      F1 → F2 edge with the `confidential_discussion_of` kind AND a presence hint (e.g.
@@ -37,9 +37,9 @@ use serial_test::serial;
 
 /// Gating: live soland + teabay stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CKP-0007 (Circle cross-scope Relation anti-enumeration)
+/// Issue: AKP-0007 (Circle cross-scope Relation anti-enumeration)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CKP-0007 Circle cross-scope Relation anti-enumeration — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "AKP-0007 Circle cross-scope Relation anti-enumeration — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Result<()> {
     // ── 0. SDK-level invariant: the relation kind serialises to the
@@ -163,7 +163,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CKP-0007): live-stack wiring for `confidential_discussion_of` \
+        "TODO(P5/AKP-0007): live-stack wiring for `confidential_discussion_of` \
          cross-scope anti-enumeration is scaffolded; finalise once soland \
          publishes Strand + Relation endpoints carrying scope_circle_id projection \
          tiers and teabay's directory projection honours Circle membership in \

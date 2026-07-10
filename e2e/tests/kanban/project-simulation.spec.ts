@@ -202,7 +202,7 @@ async function createBoardWithCard(
 // relation.md §5 — register a RelationProfile that tightens `assigned_to` to a
 // single active assignee per Strand (max_to_per_from=1) with the
 // deterministic_winner conflict policy. soland reads relation_profiles from the
-// active `ck.realm.policy_components` cell value
+// active `ak.realm.policy_components` cell value
 // (apply_relations.rs relation_profile_values → components.relation_profiles).
 async function registerSingleAssigneeProfile(
   request: APIRequestContext,
@@ -734,7 +734,7 @@ test.describe("project simulation", () => {
           relation_kind: "assigned_to",
         },
       }),
-      { context: "unassign bob (ck.relation.tombstone)" },
+      { context: "unassign bob (ak.relation.tombstone)" },
     );
 
     const unassigned = await readStrandRow(request, aliceToken, realmId, cardId);

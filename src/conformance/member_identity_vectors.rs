@@ -1,4 +1,4 @@
-//! `ck.member.identity.update` conformance vectors
+//! `ak.member.identity.update` conformance vectors
 //! (VECT-MID-1..7) + VECT-COT-8.
 //!
 //! Source artefacts:
@@ -8,7 +8,7 @@
 //!
 //! R3.2 wire-breaking changes pinned here:
 //!   * `MemberIdentity` no longer carries `primary_handle` / `handles[]`; handle lifecycle is
-//!     governed solely by `ck.schema.handle_claim.v1`. A payload that re-introduces those fields
+//!     governed solely by `ak.schema.handle_claim.v1`. A payload that re-introduces those fields
 //!     MUST schema-reject (VECT-COT-8 — reason `member_identity_handle_field_forbidden`).
 //!   * Payload field `identity_state_digest` is renamed to `identity_payload_digest` (carrier cache
 //!     key, [`IdentityPayloadCarrier::carrier_sha256`]).
@@ -144,7 +144,7 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
 
 // ── VECT-MID-1 ──────────────────────────────────────────────────────────────
 
-/// VECT-MID-1 — first `ck.member.identity.update` event for an actor in a
+/// VECT-MID-1 — first `ak.member.identity.update` event for an actor in a
 /// Realm: empty `replaces[]`, plaintext `identity_payload`,
 /// `identity_payload_digest` matches the canonical digest of the payload
 /// carrier.
@@ -571,7 +571,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
 
 // ── VECT-COT-8 ──────────────────────────────────────────────────────────────
 
-/// VECT-COT-8 — `ck.cotest_vector.member_identity.handle_field_forbidden.v1`.
+/// VECT-COT-8 — `ak.cotest_vector.member_identity.handle_field_forbidden.v1`.
 ///
 /// R3.2 removed `primary_handle` / `handles[]` from `MemberIdentity`.
 /// A payload that re-introduces either field MUST schema-reject. We pin
@@ -639,7 +639,7 @@ pub fn run_member_identity_handle_field_forbidden_vector() -> Result<()> {
 
 // ── Suite entry-point ──────────────────────────────────────────────────────
 
-/// Run the eight `ck.vector.member_identity.*` vectors (VECT-MID-1..7 +
+/// Run the eight `ak.vector.member_identity.*` vectors (VECT-MID-1..7 +
 /// VECT-COT-8).
 pub fn run_member_identity_vector_suite() -> Result<()> {
     if ALL_MEMBER_IDENTITY_VECTOR_IDS.len() != 8 {
@@ -660,7 +660,7 @@ pub fn run_member_identity_vector_suite() -> Result<()> {
 }
 
 /// Helper for live-integration tests — returns a Value MemberIdentity
-/// fixture suitable for serialising into a soland `ck.member.identity.update`
+/// fixture suitable for serialising into a soland `ak.member.identity.update`
 /// event payload.
 pub fn sample_member_identity_value(display_name: &str) -> Result<Value> {
     let identity = build_member_identity(display_name, "AAAA")?;

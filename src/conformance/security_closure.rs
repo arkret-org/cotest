@@ -221,7 +221,7 @@ impl SecurityClosureStep {
 /// Top-level sanity suite — wire shape closure over the fixture itself.
 ///
 /// Pins:
-/// * profile equals `ck.vector_group.privacy_security.v1`
+/// * profile equals `ak.vector_group.privacy_security.v1`
 /// * every required vector_id is present
 /// * every step exposes the full 6-field `runner{}` contract
 /// * `expected_state_transition.outcome` (when set) matches `expected.outcome` (mirrors the

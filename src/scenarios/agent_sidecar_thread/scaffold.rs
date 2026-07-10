@@ -2,7 +2,7 @@
 //!
 //! Pins:
 //!   1. `PROFILE_AGENT_SIDECAR_THREAD` is spelled exactly per registry
-//!      (`ck.profile.agent_sidecar_thread.v1`).
+//!      (`ak.profile.agent_sidecar_thread.v1`).
 //!   2. The home-policy constant carries the canonical value `context_realm_preferred` (B-F).
 //!   3. A sidecar circle is an ordinary Circle — its id round-trips through the SDK `CircleId`
 //!      validator (the dedicated `ak:sidecar_circle:` typed-id family is retired).
@@ -40,7 +40,7 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
     }
 
     // (4) The 3 sidecar actions form the canonical ensure/write/publish
-    //     trio (CKP-0009 §3 invariant 10).
+    //     trio (AKP-0009 §3 invariant 10).
     let trio = [
         CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
         CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,

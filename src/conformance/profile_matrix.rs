@@ -16,8 +16,8 @@ const PROFILE_LIST_FIELDS: &[&str] = &[
     "hash_extension_profiles",
     "signature_extension_profiles",
     // 2026-06: the spec's conformance-profiles.json added a
-    // `kem_extension_profiles` catalog group (e.g. `ck.profile.hpke.p256.v1`,
-    // `ck.profile.kem.hybrid_xwing.v1`). Without it the dependency-graph node
+    // `kem_extension_profiles` catalog group (e.g. `ak.profile.hpke.p256.v1`,
+    // `ak.profile.kem.hybrid_xwing.v1`). Without it the dependency-graph node
     // for those KEM profiles trips `not_declared_in_any_profile_catalog`.
     "kem_extension_profiles",
     "hardening_profiles",
@@ -134,7 +134,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("missing mls governance binding requirement block"))?;
     if !mls_binding
         .required_cells
-        .contains("ak:cell:ck.component.covered_seals.v1:<realm_id>")
+        .contains("ak:cell:ak.component.covered_seals.v1:<realm_id>")
     {
         bail!("mls governance binding requirement block missing covered_seals cell");
     }

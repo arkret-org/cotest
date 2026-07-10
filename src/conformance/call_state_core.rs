@@ -1,6 +1,6 @@
 //! Core call-state conformance vectors.
 //!
-//! Covers the six `ck.vector.call_state.*` vectors for participant binding
+//! Covers the six `ak.vector.call_state.*` vectors for participant binding
 //! admission and the base call lifecycle FSM. The fixture provides registry
 //! evidence; this runner exercises SDK signing / verification helpers and the
 //! core `Fsm` lattice directly.
@@ -277,7 +277,7 @@ pub fn run_participant_binding_invalid_vector() -> Result<()> {
 
 fn cell() -> CellRef {
     CellRef::new(
-        "ak:cell:ck.component.call.state.v1:ck.call.0196441c-0000-7000-8000-000000000000"
+        "ak:cell:ak.component.call.state.v1:ak.call.0196441c-0000-7000-8000-000000000000"
             .to_owned(),
     )
     .expect("fixture cell id should be valid")

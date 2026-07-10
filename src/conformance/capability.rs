@@ -487,7 +487,7 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
     }
 }
 
-/// Vector `ck.vector.capability.delegate_chain.v1` (conformance §4.2).
+/// Vector `ak.vector.capability.delegate_chain.v1` (conformance §4.2).
 ///
 /// A multi-level delegation chain authorizes only when every link is a valid
 /// delegation of the requested action AND every constraint (time, resource
@@ -612,7 +612,7 @@ fn message_event_authorized(
     granted && !revoked
 }
 
-/// Vector `ck.vector.capability.revoke_rollback.v1` (conformance §4.3).
+/// Vector `ak.vector.capability.revoke_rollback.v1` (conformance §4.3).
 ///
 /// With the revoke in effect the later write MUST be denied; rolling the
 /// revoke back MUST make the same event authorized in a forward recompute,
@@ -693,7 +693,7 @@ fn evaluate_revoke_rollback_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-/// Vector `ck.vector.capability.revoke_downstream_recheck.v1` (conformance
+/// Vector `ak.vector.capability.revoke_downstream_recheck.v1` (conformance
 /// §10.7).
 ///
 /// Revoking an upstream grant G MUST fail-close any pending event authorized
@@ -817,7 +817,7 @@ fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-/// Vector `ck.vector.auth.sensitive_field_handling.v1` (capability §field-access).
+/// Vector `ak.vector.auth.sensitive_field_handling.v1` (capability §field-access).
 ///
 /// A field-access constraint projects an actor's read view. Fields listed in
 /// `sensitive_fields` MUST be transformed per the effective `sensitive_handling`
@@ -1049,7 +1049,7 @@ struct BoundaryFixture {
     alphabet: Alphabet,
     /// Whether the fixture expects acceptance (`Allow`) or rejection
     /// (`Deny`). The evaluator below treats empty / control-char targets
-    /// as deny per CKP-0007 §4.2 "no anti-enumeration via blank handles".
+    /// as deny per AKP-0007 §4.2 "no anti-enumeration via blank handles".
     expected: Decision,
 }
 

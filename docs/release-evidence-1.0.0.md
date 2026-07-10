@@ -1,6 +1,6 @@
 # Release evidence — 1.0.0 (circle-rollout)
 
-Generated: 2026-05-27 — bundle for the CKP-0007 circle-rollout milestone.
+Generated: 2026-05-27 — bundle for the AKP-0007 circle-rollout milestone.
 
 > **Note**: `cotest` is `publish = false` and the milestone explicitly
 > bans `git tag` / `cargo publish` / `docker push` (`_todos_all.md` §0).

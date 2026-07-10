@@ -1,10 +1,10 @@
 //! Sidecar conformance vectors (§0.11 of `_before_todos.md`).
 //!
 //! 4 vectors:
-//!   - `ck.vector.sidecar.ensure_idempotent.v1`
-//!   - `ck.vector.sidecar.eligibility_states.v1`
-//!   - `ck.vector.sidecar.existence_privacy.v1`
-//!   - `ck.vector.sidecar.multi_agent_publish.v1`
+//!   - `ak.vector.sidecar.ensure_idempotent.v1`
+//!   - `ak.vector.sidecar.eligibility_states.v1`
+//!   - `ak.vector.sidecar.existence_privacy.v1`
+//!   - `ak.vector.sidecar.multi_agent_publish.v1`
 //!
 //! Wire-shape pins only. Live `POST /_arkret/self/agent-sidecar-threads:ensure`
 //! and the multi-agent fan-out reducer path land in soland P2-impl;
@@ -115,7 +115,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
 // ─── VECT-SC-3 — existence_privacy ─────────────────────────────────────────
 
 pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
-    // A caller without the `ck.self.agent.sidecar_thread.command.ensure` capability
+    // A caller without the `ak.self.agent.sidecar_thread.command.ensure` capability
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
     if REASON_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {

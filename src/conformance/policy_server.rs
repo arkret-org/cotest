@@ -60,7 +60,7 @@ fn receiver_accepts(current: &Value, bound_to: &Value, bound_digest: &str) -> Re
     Ok(true)
 }
 
-/// Vector `ck.vector.policy_server.request_digest_recompute.v1`
+/// Vector `ak.vector.policy_server.request_digest_recompute.v1`
 /// (conformance §15.4).
 fn evaluate_request_digest_recompute(case: &Value) -> Result<()> {
     let b1 = case
@@ -109,7 +109,7 @@ fn evaluate_request_digest_recompute(case: &Value) -> Result<()> {
     Ok(())
 }
 
-/// Vector `ck.vector.policy_server.decision_replay_rejected.v1`
+/// Vector `ak.vector.policy_server.decision_replay_rejected.v1`
 /// (conformance §15.3).
 fn evaluate_decision_replay_rejected(case: &Value) -> Result<()> {
     let case_a = case

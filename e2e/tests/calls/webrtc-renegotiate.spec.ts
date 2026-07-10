@@ -9,7 +9,7 @@
 //
 // Migrated off `/_soland/self/webrtc/sessions` + the non-spec `device_change`
 // signal type. The ICE config is fetched from `POST /_arkret/self/rtc/ice-config`
-// (no prior session needed); renegotiation rides `ck.call.signal{renegotiate}`.
+// (no prior session needed); renegotiation rides `ak.call.signal{renegotiate}`.
 
 import { expect, test } from "@playwright/test";
 import {

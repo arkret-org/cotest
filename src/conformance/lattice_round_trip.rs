@@ -710,7 +710,7 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
 
 // ──────────────────── Notary cell ────────────────────
 //
-// `ak:cell:ck.component.notary.v1:<realm_id>` is a cas_register holding the
+// `ak:cell:ak.component.notary.v1:<realm_id>` is a cas_register holding the
 // `NotaryValue` (single_did | threshold(k/n) | open_set | mixed). Each
 // happy-path test below confirms a single sealed Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
@@ -908,7 +908,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 // ──────────────────── MLS covered_frontier ────────────────────
 //
-// `ak:cell:ck.component.mls.covered_frontier.v1:<realm_id>` is an or_set of
+// `ak:cell:ak.component.mls.covered_frontier.v1:<realm_id>` is an or_set of
 // governance-frontier event refs each MLS commit attests to. Add-only
 // growth is the typical pattern; rotation that purges old refs is rare and
 // gated by capability. These tests confirm the lattice surfaces the union

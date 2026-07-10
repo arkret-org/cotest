@@ -181,7 +181,7 @@ export async function prepareRecoveryPrincipal(
   });
   expect(
     [200, 201],
-    `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+    `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
   ).toContain(publish.status());
 
   // 2) Self-authorize the dev-session device with a real SSK-signed
@@ -390,7 +390,7 @@ export async function restoreViaRecoveryUnlock(
   principal: RecoveryPrincipal,
   opts: { submitterToken?: string } = {},
 ): Promise<RecoveryUnlockResult> {
-  // The §15 step-3 control-stream events (ck.device.authorize +
+  // The §15 step-3 control-stream events (ak.device.authorize +
   // ak.device.list_update) MUST be submitted by a still-valid signer device.
   // Defaults to the principal's original device; callers running after that
   // device is revoked pass a peer device token via `submitterToken`.
@@ -591,6 +591,6 @@ export async function revokeDevice(
   });
   expect(
     [200, 201],
-    `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+    `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
   ).toContain(revoke.status());
 }

@@ -1,6 +1,6 @@
 //! P2F.4 — teabay MUST NOT index Circle membership.
 //!
-//! CKP-0007's normative privacy promise: a Circle is invisible to the
+//! AKP-0007's normative privacy promise: a Circle is invisible to the
 //! directory. Specifically, teabay's `directory_index` ingest pipeline
 //! MUST refuse to project any event whose `effective_scope` is a
 //! `Circle` variant, AND MUST NOT publish a Circle in any

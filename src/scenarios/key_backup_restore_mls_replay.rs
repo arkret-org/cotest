@@ -9,7 +9,7 @@
 //!       * `mls_history` — historical MLS group state, epoch key material, pending Welcome.
 //!     Cross-domain key reuse is FORBIDDEN; each domain has its own
 //!     salt + HKDF info + AEAD AAD.
-//!   - §7.2 "Backup Envelope" — `ck.schema.key_backup.v1`:
+//!   - §7.2 "Backup Envelope" — `ak.schema.key_backup.v1`:
 //!       * `encryption.kdf = argon2id` (memory_kib≥65536, iterations≥3, parallelism≥1 per soland
 //!         `_todos.md` E2E-KEY-BACKUP-1).
 //!       * `encryption.aead = xchacha20_poly1305`.
@@ -25,8 +25,8 @@
 //!          compat-restore).
 //!       3. client decrypts backup envelope.
 //!       4. client verifies key commitment.
-//!       5. client publishes `recover` or `ck.device.authorize`.
-//!       6. for E2EE Realms: pull MLS state, replay historical `ck.mls.commit` events with the
+//!       5. client publishes `recover` or `ak.device.authorize`.
+//!       6. for E2EE Realms: pull MLS state, replay historical `ak.mls.commit` events with the
 //!          recovered `mls_history_backup_key` to decrypt pre-loss epoch content.
 //!   - §7.4 (ownership and decryption proofs) — SSK proof binding fields: `challenge / audience /
 //!     origin / service_did / principal_id / key_id / expires_at / nonce`.
@@ -36,7 +36,7 @@
 //!
 //! 1. Boot soland; register alice with device-A.
 //! 2. Create an E2EE Realm `R` containing alice (+ optionally bob, to give Commit events
-//!    non-trivial proposals); send N=3 messages. Each message triggers a `ck.mls.commit` envelope
+//!    non-trivial proposals); send N=3 messages. Each message triggers a `ak.mls.commit` envelope
 //!    on the timeline; encrypted body is opaque to the server.
 //! 3. Mint a key backup envelope client-side:
 //!       * derive `kdf_key = argon2id(passphrase, salt, params)`.
@@ -50,7 +50,7 @@
 //!       * upload via `PUT /_arkret/self/keys/backups/{backup_id}` (current soland surface; see
 //!         `routing/identity/key_backup.rs`).
 //!     Validate the response is 200 with `ok=true`.
-//! 4. "Lose" device-A: revoke it by submitting `ck.device.revoke` from a sibling device (per CT-9
+//! 4. "Lose" device-A: revoke it by submitting `ak.device.revoke` from a sibling device (per CT-9
 //!    `cannot_self_revoke` invariant). Today we'd need a second authorized device to drive the
 //!    revoke, so the scaffold uses a direct event submission as a stand-in.
 //! 5. Onboard new device-B:
@@ -64,7 +64,7 @@
 //!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
 //!         ownership strand which is not yet wired.
 //! 6. device-B replays MLS history:
-//!       * `GET /_arkret/self/realms/{R}/timeline?since=...` pulls all `ck.mls.commit` events.
+//!       * `GET /_arkret/self/realms/{R}/timeline?since=...` pulls all `ak.mls.commit` events.
 //!       * with the recovered `mls_history_backup_key`, device-B derives the pre-loss epoch secret
 //!         and decrypts each message's ciphertext.
 //!     Assert: device-B reconstructs all 3 plaintexts that device-A
@@ -82,7 +82,7 @@
 //!   * **`DELETE /_arkret/self/keys/backups/{backup_id}` with SSK proof** — soland `_todos.md`
 //!     E2E-KEY-BACKUP-2 status is "needs SSK `payload=delete:backup_id:nonce` signature"; today
 //!     only session- token DELETE is enforced. Step 5e is partially blocked.
-//!   * **`mls_history_backup_key` semantics + `ck.mls.commit` reducer** — soland now HAS an MLS
+//!   * **`mls_history_backup_key` semantics + `ak.mls.commit` reducer** — soland now HAS an MLS
 //!     epoch projection (`soland/src/reducer/mls.rs`: `apply_group_genesis` / `apply_commit_epoch`
 //!     enforce the per-group commit-epoch chain, plus keypackage publish/claim and durable Welcome
 //!     enqueue). The server-side commit chain a replayer can walk therefore exists; what remains

@@ -66,12 +66,12 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
 
     assert_eq!(
         request_value.pointer(
-            "/messages/did:web:alice.example/ck:device:01904100-0000-7000-8000-00000000000a/kind"
+            "/messages/did:web:alice.example/ak:device:01904100-0000-7000-8000-00000000000a/kind"
         ),
         Some(&json!(REQUEST_KIND))
     );
     assert_eq!(
-        request_value.pointer("/messages/did:web:alice.example/ck:device:01904100-0000-7000-8000-00000000000a/content/secret_id"),
+        request_value.pointer("/messages/did:web:alice.example/ak:device:01904100-0000-7000-8000-00000000000a/content/secret_id"),
         Some(&json!(SECRET_ID))
     );
     assert!(request_value.get("type").is_none());

@@ -44,7 +44,7 @@ test.describe("audited E2EE", () => {
       const setup = await setupAuditedMessage(request, "s25-frank");
 
       const audit = await request.get(
-        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ak.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -102,7 +102,7 @@ test.describe("audited E2EE", () => {
       expect(JSON.stringify(routedEvents)).toContain(String(report.report_id));
 
       const accessed = await request.get(
-        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.audit.accessed`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ak.audit.accessed`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const accessedText = await accessed.text();
@@ -117,7 +117,7 @@ test.describe("audited E2EE", () => {
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-tamper");
       const audit = await request.get(
-        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ak.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();

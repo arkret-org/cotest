@@ -1,23 +1,23 @@
-//! CKP-0010 media-binding conformance vectors.
+//! AKP-0010 media-binding conformance vectors.
 //!
 //! 10 vectors covering [§0.11 of `_before_todos.md`]:
 //!
-//! - `ck.vector.media_binding.focus_selection_oldest_membership.v1`
-//! - `ck.vector.media_binding.session_focus_no_split_brain.v1`
-//! - `ck.vector.media_binding.token_exchange_minimal.v1`
-//! - `ck.vector.media_binding.token_issuer_unauthorised.v1`
-//! - `ck.vector.media_binding.participant_binding_required.v1`
-//! - `ck.vector.media_binding.unknown_type_fail_closed.v1`
-//! - `ck.vector.media_binding.e2ee_key_source.v1`
-//! - `ck.vector.media_binding.participant_identity_unrecognised.v1`
-//! - `ck.vector.media_binding.recording_artifact_via_arkret_blob.v1`
-//! - `ck.vector.media_binding.recording_exporter_label.v1`
+//! - `ak.vector.media_binding.focus_selection_oldest_membership.v1`
+//! - `ak.vector.media_binding.session_focus_no_split_brain.v1`
+//! - `ak.vector.media_binding.token_exchange_minimal.v1`
+//! - `ak.vector.media_binding.token_issuer_unauthorised.v1`
+//! - `ak.vector.media_binding.participant_binding_required.v1`
+//! - `ak.vector.media_binding.unknown_type_fail_closed.v1`
+//! - `ak.vector.media_binding.e2ee_key_source.v1`
+//! - `ak.vector.media_binding.participant_identity_unrecognised.v1`
+//! - `ak.vector.media_binding.recording_artifact_via_arkret_blob.v1`
+//! - `ak.vector.media_binding.recording_exporter_label.v1`
 //!
 //! These are SDK-pure wire-shape pins. They lock the spelling of the
 //! 10 new error codes (cotest mirrors `arkret_core`'s registry), the
 //! participant_binding scheme id, the 600s TTL ceiling, the
 //! oldest-membership focus-selection contract, and the
-//! `ck.profile.media_service_binding.v1` registry id so a downstream
+//! `ak.profile.media_service_binding.v1` registry id so a downstream
 //! soland / floria implementation regression hard-fails before reaching
 //! a live integration target. The live tokens themselves are issued
 //! server-side (R3.1 work — see scenarios under `tests/`).
@@ -39,7 +39,7 @@ use serde_json::{Value, json};
 use sha2::Sha256;
 
 /// Vector id pins. Hard-fails any future rename of the canonical
-/// `ck.vector.media_binding.*.v1` registry entries.
+/// `ak.vector.media_binding.*.v1` registry entries.
 pub const VECTOR_ID_FOCUS_SELECTION_OLDEST_MEMBERSHIP: &str =
     "ak.vector.media_binding.focus_selection_oldest_membership.v1";
 pub const VECTOR_ID_SESSION_FOCUS_NO_SPLIT_BRAIN: &str =
@@ -111,7 +111,7 @@ fn validate_media_binding_fixture_metadata() -> Result<()> {
     Ok(())
 }
 
-/// Known media-backend type tags from `ck.realm.media_service.foci[].type`.
+/// Known media-backend type tags from `ak.realm.media_service.foci[].type`.
 /// Mirrors `arkret_sdk::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
 /// minimal `arkret-core` dep slice.
@@ -188,7 +188,7 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
 
 // ─── VECT-MB-2 — session_focus_no_split_brain ──────────────────────────────
 
-/// Minimal write-once cell modelling the `ck.call.state.session_focus`
+/// Minimal write-once cell modelling the `ak.call.state.session_focus`
 /// cas-register. Second writer hits `session_focus_already_committed`;
 /// a local-only client whose chosen focus is unavailable surfaces
 /// `focus_unavailable_for_client` instead of silently downgrading.
@@ -286,7 +286,7 @@ pub fn run_token_issuer_unauthorised_vector() -> Result<()> {
         );
     }
 
-    // A rogue DID not anchored to `ck.realm.media_service.service_id`
+    // A rogue DID not anchored to `ak.realm.media_service.service_id`
     // MUST fail closed at the binding-validation stage. We model the
     // anchor lookup as a simple membership predicate; downstream servers
     // resolve this via the realm-state epoch.
@@ -311,7 +311,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
         );
     }
     // A response missing the `participant_binding` field, or one whose
-    // `scheme` is anything other than `ck.media.participant_binding.v1`,
+    // `scheme` is anything other than `ak.media.participant_binding.v1`,
     // is invalid. We pin both branches at the SDK constant layer; the
     // schema-validator integration target lands under R3.1.
     let valid_scheme = PARTICIPANT_BINDING_SCHEMA;
@@ -398,7 +398,7 @@ fn participant_binding_signing_input(
 ///   2. tampering with ANY one authoritative field breaks verification (the signature actually
 ///      covers the field, it is not merely compared);
 ///   3. the domain label is load-bearing — verifying the same `sig` under the ICE-config label
-///      (`ck.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected);
+///      (`ak.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected);
 ///   4. `service_signature.sig` over the identical input verifies with the same issuer key.
 fn run_participant_binding_eddsa_vector() -> Result<()> {
     // Fixed golden inputs.
@@ -720,7 +720,7 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
         );
     }
     // The backend MUST signal only identities that match an entry in
-    // `ck.call.state.participants[]`. Unknown identities fail closed
+    // `ak.call.state.participants[]`. Unknown identities fail closed
     // — clients MUST NOT trust them.
     let known: &[&str] = &["ak:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
     let unknown = "ak:rtc_participant:01999999-0000-7000-8000-deadbeefdead";

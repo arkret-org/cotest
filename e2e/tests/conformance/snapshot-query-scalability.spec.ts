@@ -10,7 +10,7 @@
 //   - conformance/conformance-vectors.md (vector loader pattern: same as the
 //     sibling encoding-vectors suite — `ck.vector.<domain>.<scenario>.v1`
 //     fixtures live in arkret-spec/spec/v1/artifacts/fixtures/)
-// Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ck.vector.snapshot.*.json,
+// Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ak.vector.snapshot.*.json,
 //           ak.vector.query.*.json, ak.vector.scalability.*.json
 //
 // Phases A-E exercise the test-only conformance endpoints under the

@@ -8,7 +8,7 @@
 
 - `models/realm-and-space.md` §3.4 — `history_visibility=joined`
 - `models/realm-and-space.md` §2.6 — Realm 创建者是 bootstrap owner
-- `models/events.md` — `ck.self.events.query.scan` / `ck.self.events.stream.subscribe`
+- `models/events.md` — `ak.self.events.query.scan` / `ak.self.events.stream.subscribe`
 
 ## 拓扑
 
@@ -24,8 +24,8 @@
 ## Steps
 
 1. Alice 通过 `POST /_arkret/self/events` 创建 public + `history_visibility=joined` Realm。
-2. Alice 写入 5 条 pre-join `ck.message.create`。
-3. Alice 提交 `ck.member.state{membership=join}` 让 Bob 加入。
+2. Alice 写入 5 条 pre-join `ak.message.create`。
+3. Alice 提交 `ak.member.state{membership=join}` 让 Bob 加入。
 4. Alice 写入 post-join 消息。
 5. Bob 调 `GET /_arkret/self/events?realms=<realm>`。
 6. 断言:Bob 只看到 post-join 消息,看不到 5 条 pre-join 消息。
@@ -41,5 +41,5 @@
 ## Implementation notes
 
 - 测试全程走 canonical `POST /_arkret/self/events`。
-- `ck.member.state` 用 `delivery_status=unroutable` 让 reducer 记录 joined_at,但不要求 DID delivery binding。
+- `ak.member.state` 用 `delivery_status=unroutable` 让 reducer 记录 joined_at,但不要求 DID delivery binding。
 - `@blocking-on: soland#history-visibility-read-path` 已在测试文件保留,作为曾经的服务端缺口标记。

@@ -123,7 +123,7 @@ async function addEncryptedDescription(
     body.includes("content_encryption_floor_violation"),
     `description ak.strand.update hit the content-encryption floor — client shipped plaintext to an encrypted realm: ${response.status()} ${body.slice(0, 500)}`,
   ).toBe(false);
-  expect(response.status(), `ck.strand.update should be accepted; body=${body.slice(0, 500)}`).toBeLessThan(400);
+  expect(response.status(), `ak.strand.update should be accepted; body=${body.slice(0, 500)}`).toBeLessThan(400);
   expect(
     (response.request().postData() ?? "").includes(description),
     "description leaked as plaintext into the ak.strand.update wire — realm not actually encrypted",

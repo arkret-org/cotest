@@ -3,15 +3,15 @@
 //
 // Spec references:
 //   arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md
-//     §5.1 (ck.agent.endpoint: agent_card_url / metadata_url / transport / auth)
+//     §5.1 (ak.agent.endpoint: agent_card_url / metadata_url / transport / auth)
 //     §6 step 4 (endpoint validation: DID Document service binding host pin)
 //     §11 (adapter registry: a2a / acp / mcp_bridge / http_custom)
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
-// harness wires it as the `endpoint_url` of a registered `ck.agent.endpoint`
+// harness wires it as the `endpoint_url` of a registered `ak.agent.endpoint`
 // so soland's outbound bridge (routing/events/agent_bridge.rs
 // ::forward_to_agent_endpoint) POSTs the invocation here and echoes the
-// response body back into the signed `ck.agent.interop_session.result`
+// response body back into the signed `ak.agent.interop_session.result`
 // envelope. This exercises the external HTTP handoff path end-to-end
 // without standing up a real A2A / ACP agent service.
 //

@@ -1,6 +1,6 @@
 //! §11.6 — sidecar Circle idempotent ensure.
 //!
-//! Calling `ck.self.agent.sidecar_thread.command.ensure` twice with the same
+//! Calling `ak.self.agent.sidecar_thread.command.ensure` twice with the same
 //! (controller, agent) pair MUST return the same `sidecar_circle_id`.
 //! The deterministic Circle key derivation is gated on the controller
 //! DID + agent_principal_id + an HKDF salt.

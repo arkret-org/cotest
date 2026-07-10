@@ -3,12 +3,12 @@
 // Spec: authz/capabilities.md §3 (grant + §3.1a issuer upper bound),
 //       §10 (delegation narrowing + §10.3 revoke propagation), §12 (revocation)
 //
-// Capabilities are event-minted: grants are `ck.capability.grant` events and
-// revocations `ck.capability.revoke` events submitted to /_arkret/self/events
+// Capabilities are event-minted: grants are `ak.capability.grant` events and
+// revocations `ak.capability.revoke` events submitted to /_arkret/self/events
 // and projected by the reducer. The only synchronous read surfaces are the
 // registered diagnostics endpoints POST /_arkret/self/authz/check
-// (ck.self.authz.query.check) and GET /_arkret/self/authz/effective-grants
-// (ck.self.authz.grants.query.effective). The former synchronous REST
+// (ak.self.authz.query.check) and GET /_arkret/self/authz/effective-grants
+// (ak.self.authz.grants.query.effective). The former synchronous REST
 // grant/revoke/audit surface (POST/DELETE /_arkret/self/authz/grants*,
 // GET /_soland/self/audit/events) was removed from the spec and MUST NOT be
 // reintroduced (SPEC-CR-020: zero new operations).
@@ -55,7 +55,7 @@ async function authzCheck(
   return { decision: body.decision, reasonCode: body.reason_code };
 }
 
-// Submit a `ck.capability.grant` envelope raw (no 200 assertion) so negative
+// Submit a `ak.capability.grant` envelope raw (no 200 assertion) so negative
 // cases can pin the reducer's fail-closed rejection.
 async function submitGrantRaw(
   request: APIRequestContext,

@@ -2,13 +2,13 @@
 //!
 //! 5 vectors covering the recording-retention / recording-result artifact /
 //! transcribe / moderation /
-//! P2P→SFU-upgrade additions to `ck.call.state` and `ck.call.summary`:
+//! P2P→SFU-upgrade additions to `ak.call.state` and `ak.call.summary`:
 //!
-//! - `ck.vector.call_state.recording_retention_lock.v1`
-//! - `ck.vector.call_state.recording_result_artifact_shape.v1`
-//! - `ck.vector.call_state.transcribe_lifecycle.v1`
-//! - `ck.vector.call_state.moderator_kick_ban.v1`
-//! - `ck.vector.call_state.p2p_to_sfu_upgrade.v1`
+//! - `ak.vector.call_state.recording_retention_lock.v1`
+//! - `ak.vector.call_state.recording_result_artifact_shape.v1`
+//! - `ak.vector.call_state.transcribe_lifecycle.v1`
+//! - `ak.vector.call_state.moderator_kick_ban.v1`
+//! - `ak.vector.call_state.p2p_to_sfu_upgrade.v1`
 //!
 //! These are SDK-pure wire-shape pins. They lock the spelling of the new
 //! reason codes (cotest mirrors the spec `error-code-registry.json`), the
@@ -114,7 +114,7 @@ const LABEL_RTC_FRAME_KEY: &str = "ak.rtc-frame-key/v1";
 const LABEL_RTC_RECORDING_KEY: &str = "ak.rtc-recording-key/v1";
 const LABEL_RTC_TRANSCRIPT_KEY: &str = "ak.rtc-transcript-key/v1";
 
-/// Terminal call states (`call-state.md` §4.2). `ck.call.summary` is gated on
+/// Terminal call states (`call-state.md` §4.2). `ak.call.summary` is gated on
 /// the call head being one of these.
 const TERMINAL_CALL_STATES: &[&str] = &["ended", "missed", "failed", "cancelled"];
 
@@ -442,7 +442,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
 
 // ─── §12.17 — transcribe_lifecycle ─────────────────────────────────────────
 
-/// Transcription requires the `ck.call.transcribe` capability.
+/// Transcription requires the `ak.call.transcribe` capability.
 fn transcribe_authorised(has_transcribe_cap: bool) -> std::result::Result<(), &'static str> {
     if has_transcribe_cap {
         Ok(())
@@ -566,7 +566,7 @@ struct RemovedParticipant {
     device_id: Option<&'static str>,
 }
 
-/// A moderator action requires `ck.call.moderate`.
+/// A moderator action requires `ak.call.moderate`.
 fn moderation_authorised(has_moderate_cap: bool) -> std::result::Result<(), &'static str> {
     if has_moderate_cap {
         Ok(())
@@ -662,7 +662,7 @@ fn is_terminal_call_state(state: &str) -> bool {
     TERMINAL_CALL_STATES.contains(&state)
 }
 
-/// `ck.call.summary` is accepted only when its `final_state` is terminal and
+/// `ak.call.summary` is accepted only when its `final_state` is terminal and
 /// matches the call head; otherwise `call_summary_invalid`.
 fn summary_accepted(final_state: &str) -> std::result::Result<(), &'static str> {
     if is_terminal_call_state(final_state) {

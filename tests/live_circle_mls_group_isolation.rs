@@ -1,12 +1,12 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CKP-0007 §MLS Group Isolation;
+//! Live-stack integration test for AKP-0007 §MLS Group Isolation;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_mls_group_isolation -- --ignored`).
 //!
 //! Scenario (Phase B scaffold):
 //!   1. Boot soland (via `FourServiceStack`; coauth/starid/teabay are best-effort optional but
 //!      soland is required).
-//!   2. Create a Realm — soland MUST bind a Realm-default MLS group at creation time (CKP-0007
+//!   2. Create a Realm — soland MUST bind a Realm-default MLS group at creation time (AKP-0007
 //!      §Realm.encryption_profile=mls_rfc9420).
 //!   3. Create a Circle in that Realm. Soland MUST bind a NEW MLS group to the Circle whose
 //!      `group_id` is distinct from the Realm's default group.
@@ -35,9 +35,9 @@ use serial_test::serial;
 
 /// Gating: live soland stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CKP-0007 (Circle / Realm-default MLS group isolation)
+/// Issue: AKP-0007 (Circle / Realm-default MLS group isolation)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CKP-0007 Circle / Realm-default MLS group isolation — live soland stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "AKP-0007 Circle / Realm-default MLS group isolation — live soland stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     // ── 0. SDK-level invariant: a freshly-constructed Circle declares
@@ -121,9 +121,9 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST /_arkret/self/realms                       (ck.realm.create) →
+    //         POST /_arkret/self/realms                       (ak.realm.create) →
     //              response carries `default_mls_group_ref`
-    //         POST /_arkret/self/realms/<rid>/circles         (ck.circle.create) →
+    //         POST /_arkret/self/realms/<rid>/circles         (ak.circle.create) →
     //              response carries Circle.mls_group_ref (distinct id)
     //         POST /_arkret/self/circles/<cid>/members        membership commit
     //              advances the Circle group's epoch (verify via GET on
@@ -150,10 +150,10 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CKP-0007): live-stack wiring for Circle / Realm-default MLS \
-         isolation is scaffolded; finalise once soland's CKP-0007 surface returns \
-         (a) `default_mls_group_ref` on `ck.realm.create` responses and \
-         (b) `mls_group_ref` on `ck.circle.create` / Circle projection. \
+        "TODO(P5/AKP-0007): live-stack wiring for Circle / Realm-default MLS \
+         isolation is scaffolded; finalise once soland's AKP-0007 surface returns \
+         (a) `default_mls_group_ref` on `ak.realm.create` responses and \
+         (b) `mls_group_ref` on `ak.circle.create` / Circle projection. \
          Expected assertions: \
          (a) Circle.mls_group_ref != Realm.default_mls_group_ref, \
          (b) Circle member-add advances Circle epoch by exactly 1 + leaves \

@@ -3,15 +3,15 @@
 //
 // This is the real-run replacement for the old `S8 circle member manage`
 // placeholder that was `test.skip`'d in contact-graph.spec.ts (soland now ships
-// the `/_arkret/self/circles/*` admin surface — CKP-0007).
+// the `/_arkret/self/circles/*` admin surface — AKP-0007).
 //
 // HTTP face: `/_arkret/self/circles` (now a normative Arkret surface — the
-// `ck.self.circle.*` operations are published in the arkret-spec OpenAPI
+// `ak.self.circle.*` operations are published in the arkret-spec OpenAPI
 // artifact, operation registry, and contract catalog; see helpers/circle-api.ts
 // header for the full reasoning. The legacy `/_soland` mirror was retired).
-// Spec refs: CKP-0007 — `ck.circle.*` data model, reducer invariant
+// Spec refs: AKP-0007 — `ck.circle.*` data model, reducer invariant
 // `Circle.members ⊆ Realm.members` (`circle_member_must_be_realm_member`), and
-// §8 `ck.circle.member.manage` capability for cross-actor adds.
+// §8 `ak.circle.member.manage` capability for cross-actor adds.
 //
 // Core property: the pulled actor does ZERO operations — admin's one-way add is
 // authoritative, no `accept` round-trip exists for Circle membership.
@@ -220,7 +220,7 @@ test.describe("circle membership (same principal server)", () => {
   });
 
   // S8 capability: a realm member who is NOT the owner and holds no
-  // `ck.circle.member.manage` capability tries to pull ANOTHER member into the
+  // `ak.circle.member.manage` capability tries to pull ANOTHER member into the
   // Circle -> 403 `circle_member_manage_capability_required`. carol and dave
   // are both `join` realm members so the strict-subset check passes and the
   // failure is purely the missing manage capability.
@@ -266,7 +266,7 @@ test.describe("circle membership (same principal server)", () => {
     });
 
     // carol (non-owner, no manage capability on the Circle) tries to pull dave
-    // in. The HTTP surface evaluates `ck.circle.member.manage` and fails
+    // in. The HTTP surface evaluates `ak.circle.member.manage` and fails
     // closed with 403 + the canonical wire code.
     const response = await addCircleMemberRaw(
       request,

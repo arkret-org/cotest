@@ -12,7 +12,7 @@
 // `GET /_arkret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
-// list-pagination cursor on `ck.self.events.query.scan`) and Phase D (generic
+// list-pagination cursor on `ak.self.events.query.scan`) and Phase D (generic
 // `Idempotency-Key` header path on POST /_arkret/self/events) are all live on
 // soland.
 //
@@ -331,7 +331,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
     "Phase D0: Event ID replay is idempotent and body drift returns duplicate_conflict",
     async ({ request }) => {
       // spec: api-conventions.md §6 (`event_id` idempotency path) and
-      //       §4.2 (`ck.self.events.command.submit` write surface).
+      //       §4.2 (`ak.self.events.command.submit` write surface).
       //
       // Matrix Complement's transaction replay coverage maps most directly to
       // Arkret's canonical Event ID replay: exact same Event is duplicate/no-op;
@@ -413,7 +413,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
       //
-      // The `ck.self.events.query.scan` list surface at GET /_arkret/self/events
+      // The `ak.self.events.query.scan` list surface at GET /_arkret/self/events
       // is the first list endpoint to reach the §7.1 wire shape exactly:
       // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
       const stamp = Date.now();

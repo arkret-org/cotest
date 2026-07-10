@@ -1,6 +1,6 @@
-//! P2F.3 — Circle member state machine (CKP-0007 §3.6).
+//! P2F.3 — Circle member state machine (AKP-0007 §3.6).
 //!
-//! CKP-0007 normative spec defines a 4-state Circle membership lifecycle —
+//! AKP-0007 normative spec defines a 4-state Circle membership lifecycle —
 //! `invited`, `active`, `left`, `banned` — together with the `none`
 //! pseudo-state for actors who never appeared. The SDK does not (yet)
 //! expose a typed `CircleMemberState` enum nor a `validate_transition`
@@ -34,7 +34,7 @@
 //!
 //! These match `spec/v1/proposals/0007-circle-primitive.md` §3.6 membership
 //! transition table. Each transition is also forced through a JSON wire
-//! round-trip on the canonical `ck.circle.member.state` payload to keep
+//! round-trip on the canonical `ak.circle.member.state` payload to keep
 //! the SDK wire shape stable.
 //!
 //! When `arkret-core` later grows a typed `CircleMemberState` enum, this
@@ -45,25 +45,25 @@ use anyhow::{Result, anyhow};
 use arkret_core::{CircleId, Did, RealmId};
 use serde_json::json;
 
-/// Canonical Circle member state names per CKP-0007 §3.6. Mirrors the
-/// `ck.circle.member.state` payload `membership` field enum.
+/// Canonical Circle member state names per AKP-0007 §3.6. Mirrors the
+/// `ak.circle.member.state` payload `membership` field enum.
 const STATES: &[&str] = &["invited", "active", "left", "banned"];
 
 /// `none` is a pseudo-state for an actor with no prior membership record.
 const NONE: &str = "none";
 
-/// `ck.circle.member.state` payload `join_rule` enum values that affect
+/// `ak.circle.member.state` payload `join_rule` enum values that affect
 /// what transitions are legal. The state machine only differs on
 /// `join_rule=open`.
 const JOIN_RULE_OPEN: &str = "open";
 const JOIN_RULE_INVITE: &str = "invite";
 
 /// Reducer-pure validator: returns Ok(()) iff `from → to` is a legal
-/// `ck.circle.member.state` transition under the given parent `join_rule`.
+/// `ak.circle.member.state` transition under the given parent `join_rule`.
 ///
 /// `from = "none"` denotes an actor who has never had a Circle membership
 /// row. Returns `Err(reason)` for illegal edges, where `reason` matches
-/// the spec's CKP-0007 §3.6 transition rationale.
+/// the spec's AKP-0007 §3.6 transition rationale.
 fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<()> {
     // Terminal-edge guard: `banned` is a hard wall against direct
     // promotion to `active`. Admin MUST un-ban (banned → left | invited)
@@ -72,7 +72,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Err(anyhow!(
             "illegal transition banned → active: admin MUST un-ban via \
              banned → {{left, invited}} before promotion to active \
-             (CKP-0007 §3.6)"
+             (AKP-0007 §3.6)"
         ));
     }
     // `none → active` requires `join_rule=open`; otherwise the actor MUST
@@ -81,7 +81,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Err(anyhow!(
             "illegal transition none → active with join_rule=`{join_rule}`: \
              only `join_rule=open` permits self-join without prior invite \
-             (CKP-0007 §3.6)"
+             (AKP-0007 §3.6)"
         ));
     }
     // Active actors cannot regress to `invited`; the spec table has no
@@ -89,7 +89,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
     if from == "active" && to == "invited" {
         return Err(anyhow!(
             "illegal transition active → invited: regression not in the \
-             CKP-0007 §3.6 transition table"
+             AKP-0007 §3.6 transition table"
         ));
     }
     // `left → active` directly is illegal: actor MUST be re-invited
@@ -100,7 +100,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Err(anyhow!(
             "illegal transition left → active with join_rule=`{join_rule}`: \
              actor MUST be re-invited (left → invited) before becoming \
-             active (CKP-0007 §3.6)"
+             active (AKP-0007 §3.6)"
         ));
     }
     // No-op: `from == to` is not a real transition; treat as illegal so
@@ -108,7 +108,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
     if from == to {
         return Err(anyhow!(
             "illegal transition {from} → {to}: self-loop is not a member.state \
-             transition (CKP-0007 §3.6)"
+             transition (AKP-0007 §3.6)"
         ));
     }
     // Catalogue the remaining (from, to) tuples that the spec table
@@ -131,7 +131,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Ok(());
     }
     Err(anyhow!(
-        "illegal transition {from} → {to}: not in the CKP-0007 §3.6 \
+        "illegal transition {from} → {to}: not in the AKP-0007 §3.6 \
          transition table"
     ))
 }
@@ -152,7 +152,7 @@ fn actor() -> Result<Did> {
         .map_err(|e| anyhow!("actor did: {e}"))
 }
 
-/// Build a `ck.circle.member.state` payload for the given `(actor, state)`
+/// Build a `ak.circle.member.state` payload for the given `(actor, state)`
 /// pair and JSON round-trip it through `serde_json::Value`. Returns the
 /// re-parsed payload; the membership string MUST survive serde unchanged.
 fn round_trip_member_payload(state: &str) -> Result<()> {

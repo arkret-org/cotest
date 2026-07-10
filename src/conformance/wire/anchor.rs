@@ -278,7 +278,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
         let name = required_str(vector, "name")?;
         let shape = required_str(vector, "shape")?;
         let cell_id = required_str(vector, "cell_id")?;
-        if !cell_id.starts_with("ak:cell:ck.component.anchorer.v1:") {
+        if !cell_id.starts_with("ak:cell:ak.component.anchorer.v1:") {
             bail!("vector {name} cell_id must be the anchorer.v1 cell, got {cell_id}");
         }
         match name {

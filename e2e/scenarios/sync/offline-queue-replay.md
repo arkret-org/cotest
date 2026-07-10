@@ -1,6 +1,6 @@
 # Offline queue replay
 
-当前 v1 full-client profile 要求客户端暴露 `offline_queue`、`conflict_records` 和 `pending_state`。inkson 在 `navigator.onLine=false` 时把 discussion compose 写入本地 outbox，保留 optimistic row，并在恢复联网后通过标准 `ck.message.create` 写路径 drain。排队条目使用稳定 `ak:message:` id，重放时应由 reducer 幂等折叠。
+当前 v1 full-client profile 要求客户端暴露 `offline_queue`、`conflict_records` 和 `pending_state`。inkson 在 `navigator.onLine=false` 时把 discussion compose 写入本地 outbox，保留 optimistic row，并在恢复联网后通过标准 `ak.message.create` 写路径 drain。排队条目使用稳定 `ak:message:` id，重放时应由 reducer 幂等折叠。
 
 ## Live 用例
 

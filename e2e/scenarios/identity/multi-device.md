@@ -12,10 +12,10 @@
 - `crypto-media/device-lifecycle.md` §2.1 — 5 步配对流程(QR + cross-signing)
 - `crypto-media/device-lifecycle.md` §2.2 — 设备撤销
 - `crypto-media/device-lifecycle.md` §5.1-§5.2 — cross-signing binding schema
-- `crypto-media/device-lifecycle.md` §6 — device list sync (`ck.device.list_update`)
+- `crypto-media/device-lifecycle.md` §6 — device list sync (`ak.device.list_update`)
 - `crypto-media/device-lifecycle.md` §7 — to-device message 队列 + 过期
 - `crypto-media/device-lifecycle.md` §9 — MLS KeyPackage 上传 + 撤销时的 MLS Remove
-- `identity/key-management.md` §5.0-§5.2 — `ck.device.authorize` / `ck.device.revoke`
+- `identity/key-management.md` §5.0-§5.2 — `ak.device.authorize` / `ak.device.revoke`
 
 ## 拓扑
 
@@ -37,11 +37,11 @@
 2. 开新 browser context = device-2,visits `/onboarding`
 3. device-2 选"Add to existing account",生成本地 device key,展示 QR(含 device-2 pubkey + 一次性 challenge)
 4. device-1 进 `/settings/devices` 选 "Add device" → scan QR(测试 harness 用 `page.evaluate` 模拟相机读取,直接把 QR payload 注入 device-1)
-5. device-1 验证 challenge → 用 SSK 签 `ck.device.authorize`,payload 含 device-2 pubkey + cross_signing_binding(spec §5.2)
+5. device-1 验证 challenge → 用 SSK 签 `ak.device.authorize`,payload 含 device-2 pubkey + cross_signing_binding(spec §5.2)
 6. device-1 把该事件 POST 到 soland 的 events API,落到 alice 的 principal control Realm
-7. device-2 拉 control Realm,看到 `ck.device.authorize` 含自己的 pubkey,接受
+7. device-2 拉 control Realm,看到 `ak.device.authorize` 含自己的 pubkey,接受
 8. device-2 拉 MLS welcome(若 alice 在 E2EE Realm)→ 加入现有 MLS group
-9. 断言:device-1 和 device-2 都进 `/settings/devices`,都看到对方在列表(`ck.device.list_update` 已同步)
+9. 断言:device-1 和 device-2 都进 `/settings/devices`,都看到对方在列表(`ak.device.list_update` 已同步)
 
 ### Phase B — 两台设备并发收发
 
@@ -54,10 +54,10 @@
 ### Phase C — Device 1 撤销 Device 2
 
 15. alice (device-1) 进 `/settings/devices`,点 device-2 旁的"Revoke"
-16. UI 二次确认 → device-1 用 SSK 签 `ck.device.revoke`,payload `{ revoked_device: device-2.id, revocation_time, reason: "user_initiated" }`
+16. UI 二次确认 → device-1 用 SSK 签 `ak.device.revoke`,payload `{ revoked_device: device-2.id, revocation_time, reason: "user_initiated" }`
 17. 提交到 soland events API
 18. soland reducer:
-    - 接受 `ck.device.revoke`
+    - 接受 `ak.device.revoke`
     - 把 device-2 从 alice 的 active device set 移除
     - `keys/query` 对 device-2 返回 `device_status=revoked`,并省略 `device_signing_key` / `hpke_key`
     - retire device-2 已发布但未消费的 ordinary 与 last-resort MLS KeyPackage,后续 claim 返回 `mls_keypackage_not_found`
@@ -106,7 +106,7 @@
 
 ## Implementation notes
 
-- **soland 已覆盖**:`ck.device.authorize` + `cross_signing_binding` 验签、`ck.device.revoke` auth gate、device-set projection、to-device grace drop、`keys/query` revoked 目录面、撤销时未消费 ordinary / last-resort MLS KeyPackage retire。
+- **soland 已覆盖**:`ak.device.authorize` + `cross_signing_binding` 验签、`ak.device.revoke` auth gate、device-set projection、to-device grace drop、`keys/query` revoked 目录面、撤销时未消费 ordinary / last-resort MLS KeyPackage retire。
 - **soland 剩余缺口**:完整 E2EE Realm MLS Remove fan-out:KeyPackage claim → Welcome → Commit Remove → epoch advance → revoked device 无法解密后续消息。该缺口保留为 `multi-device.spec.ts` 的 MLS fixme,不能用单纯 auth 拒绝替代。
 - **inkson 缺口**:`/settings/devices` 的 device 列表 + revoke 按钮;QR scan UI(本测试用 evaluate 注入,UI 缺口对测试不致命)
 - **harness**:模拟相机扫码用 `page.evaluate` 注入 QR payload 到 device-1 的 add-device input

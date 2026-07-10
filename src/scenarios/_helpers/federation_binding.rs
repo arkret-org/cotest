@@ -6,9 +6,9 @@
 //!
 //! * `reducer_profile_digest` — registry-derived canonical digest of the
 //!   `reducer-profile-registry.json` row for the profile soland declares in
-//!   `ck.peer.events.query.describe.supported_profiles` (`ck.profile.federation_minimal.v1`).
+//!   `ak.peer.events.query.describe.supported_profiles` (`ak.profile.federation_minimal.v1`).
 //!   Computed via [`crate::conformance::reducer_profile_digest`]; pinned by
-//!   `ck.vector.federation.reducer_profile_digest.v1`.
+//!   `ak.vector.federation.reducer_profile_digest.v1`.
 //! * `membership_frontier` / `delivery_binding_frontier` — `id[]` causal frontiers of the sender's
 //!   view. The harness acts as the origin peer of a fabricated realm whose entire causal history is
 //!   the submitted batch, so the frontier is the batch's head Event IDs (events not referenced by

@@ -23,8 +23,8 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         integration["dependencies"][0]["required_contract"],
         // This is soland's private integration manifest (`/_soland/*`), not a
         // spec-normative surface. soland declares the introspection dependency
-        // with the protocol-native contract id `ck.gate.account.session_grant.introspect`
-        // (cf. spec operation `ck.gate.account.command.introspect_session_grant`).
+        // with the protocol-native contract id `ak.gate.account.session_grant.introspect`
+        // (cf. spec operation `ak.gate.account.command.introspect_session_grant`).
         "ak.gate.account.session_grant.introspect"
     );
     assert_eq!(

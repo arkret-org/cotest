@@ -11,7 +11,7 @@
   "account_data_cases": {
     "positive": {
       "name": "realm_private_pin_pinned_true",
-      "key": "ak.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
+      "key": "ak.contacts.realm.ak:realm:0196b39d-0000-7000-8000-000000000101",
       "expect_valid": true,
       "payload": {
         "version": 1,
@@ -33,7 +33,7 @@
     },
     "negative": {
       "name": "realm_private_pin_subject_id_mismatch",
-      "key": "ak.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
+      "key": "ak.contacts.realm.ak:realm:0196b39d-0000-7000-8000-000000000101",
       "expect_valid": false,
       "expected_error": "realm_remark_subject_mismatch",
       "payload": {

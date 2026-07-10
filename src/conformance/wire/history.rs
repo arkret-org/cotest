@@ -11,7 +11,7 @@ use crate::conformance::{required_str, validate_profile};
 ///
 /// Spec: `data-structures/history-visibility.md` +
 /// `authz/event-auth-state-resolution.md`. The history_visibility cell
-/// (cas-register `ak:cell:ck.component.realm.history_visibility.v1:<realm_id>`)
+/// (cas-register `ak:cell:ak.component.realm.history_visibility.v1:<realm_id>`)
 /// holds one of {joined, invited, world_readable, shared}. The reducer
 /// projects the timeline differently per viewer based on
 /// (membership_state, history_visibility, event_origin_ts vs viewer_join_ts /

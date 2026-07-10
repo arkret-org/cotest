@@ -2,13 +2,13 @@
 
 ## 目标
 
-E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking 收据(`ck.moderation.franking_proof`),证明"该 ciphertext 在某时间点存在 + 来自某 sender";audit agent 可以在用户明确 audit_disclosure_policy 下,通过 attested ceremony 解密 + 写入 `ck.audit.accessed`。
+E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking 收据(`ak.moderation.franking_proof`),证明"该 ciphertext 在某时间点存在 + 来自某 sender";audit agent 可以在用户明确 audit_disclosure_policy 下,通过 attested ceremony 解密 + 写入 `ak.audit.accessed`。
 
 ## Spec 锚点
 
 - `crypto-media/audited-e2ee.md` §2 — 设计目标(可审 + 不破坏 forward secrecy)
 - `crypto-media/audited-e2ee.md` §3 — Audit agent 进入条件
-- `crypto-media/audited-e2ee.md` §4 — Franking schema + `ck.audit.accessed`
+- `crypto-media/audited-e2ee.md` §4 — Franking schema + `ak.audit.accessed`
 - `crypto-media/encryption-and-audit.md` §3 — Audited mode 集成
 - `governance/content-moderation.md` §3.4 — E2EE 举报 franking
 
@@ -37,8 +37,8 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 3. bob 发加密消息 `M1` 到 Realm `R_audit`
 4. soland Sync Service:
    - 接受 ciphertext + plaintext metadata
-   - 同时生成 `ck.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_did, timestamp }`,服务端 service DID 签
-5. 断言:`GET /_soland/admin/audit/events?realm_id=<R_audit>&kind=ck.moderation.franking_proof` 返回该 franking 记录
+   - 同时生成 `ak.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_did, timestamp }`,服务端 service DID 签
+5. 断言:`GET /_soland/admin/audit/events?realm_id=<R_audit>&kind=ak.moderation.franking_proof` 返回该 franking 记录
 6. 断言:franking record **不含** 明文消息内容,只含 ciphertext_digest
 
 ### Phase C — reporter 举报
@@ -54,14 +54,14 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 11. soland 校验 audit-agent 是 audit_disclosure_policy.agent_id → 允许
 12. audit-agent 调 MLS KeyPackage / out-of-band 拿到 epoch key(spec 留 mechanism;可能需要群组重新加 audit-agent 进 MLS)
 13. audit-agent 解密 `M1` 得到 plaintext
-14. **关键**:audit-agent 必须写 `ck.audit.accessed { auditor_did, target_ref, accessed_at, reason: "moderation_report" }`
+14. **关键**:audit-agent 必须写 `ak.audit.accessed { auditor_did, target_ref, accessed_at, reason: "moderation_report" }`
 15. 断言:audit log 含该 accessed record
 16. 断言:alice 进 `/realms/${realmId}/admin/audit` 看到这条 access entry
 
 ### Phase E — Audit-agent 私自访问被拒
 
 17. audit-agent 不在 audit_disclosure_policy 时(假设 alice 改了 policy),audit-agent 调同样的 endpoint → 拒,403
-18. 断言:soland 拒绝 + 写入 `ck.audit.rejected_access` 记录
+18. 断言:soland 拒绝 + 写入 `ak.audit.rejected_access` 记录
 
 ## Edge cases
 
@@ -72,10 +72,10 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 
 ## Implementation notes
 
-- **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `ck.message.create` 后自动追加 `ck.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/_soland/self/audit/franking/verify` 做 tamper 校验。
-- **2026-05-25 P2-045 local close**:soland `POST /_arkret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ck.audit.accessed` 记录写入 audit log。
-- **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`ck.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
-- **仍待后续**:policy revoke 后的 `ck.audit.rejected_access` 细化测试保留为 E25.3 fixme;inkson realm-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
+- **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `ak.message.create` 后自动追加 `ak.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/_soland/self/audit/franking/verify` 做 tamper 校验。
+- **2026-05-25 P2-045 local close**:soland `POST /_arkret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ak.audit.accessed` 记录写入 audit log。
+- **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`ak.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
+- **仍待后续**:policy revoke 后的 `ak.audit.rejected_access` 细化测试保留为 E25.3 fixme;inkson realm-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
 
 ## 总耗时预估
 

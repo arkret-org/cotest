@@ -1,4 +1,4 @@
-//! COT-ORG-03 — `ck.realm.organization` organization-side proof sign/verify
+//! COT-ORG-03 — `ak.realm.organization` organization-side proof sign/verify
 //! cycle (model B/C) regression gate.
 //!
 //! This is the positive counterpart to `realm_organization_statement_negative`.

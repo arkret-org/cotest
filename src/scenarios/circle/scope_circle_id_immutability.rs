@@ -1,6 +1,6 @@
 //! P2F.3 — `scope_circle_id` is reducer-immutable (`scope_rebind_forbidden`).
 //!
-//! Normative rule (CKP-0007 §3.4, paraphrased): rebinding `scope_circle_id`
+//! Normative rule (AKP-0007 §3.4, paraphrased): rebinding `scope_circle_id`
 //! is rejected by the reducer by default (`failed_precondition`
 //! `reason="scope_rebind_forbidden"`); a profile MAY allow it, but the update
 //! MUST then be an audit-paired high-risk update. All pre-existing Messages
@@ -10,7 +10,7 @@
 //! The companion scenario [`effective_scope_mismatch`] pins the
 //! *envelope-vs-payload* consistency check (same event, two declared
 //! scopes). This scenario instead pins the *prev-vs-next* check on the
-//! materialised object — i.e. two `ck.strand.update` events for the same
+//! materialised object — i.e. two `ak.strand.update` events for the same
 //! `entity_id` whose `scope_circle_id` values diverge MUST be rejected by
 //! `validate_no_scope_rebind(prev, next)` with the
 //! `scope_rebind_forbidden` reason code.
@@ -74,17 +74,17 @@ fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) ->
         (Some(a), Some(b)) if a.as_str() == b.as_str() => Ok(()),
         (None, Some(b)) => Err(anyhow!(
             "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
-             from Realm-default to circle_id={} forbidden (CKP-0007 §3.4)",
+             from Realm-default to circle_id={} forbidden (AKP-0007 §3.4)",
             b.as_str()
         )),
         (Some(a), None) => Err(anyhow!(
             "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
-             from circle_id={} to Realm-default forbidden (CKP-0007 §3.4)",
+             from circle_id={} to Realm-default forbidden (AKP-0007 §3.4)",
             a.as_str()
         )),
         (Some(a), Some(b)) => Err(anyhow!(
             "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
-             from circle_id={} to circle_id={} forbidden (CKP-0007 §3.4)",
+             from circle_id={} to circle_id={} forbidden (AKP-0007 §3.4)",
             a.as_str(),
             b.as_str()
         )),

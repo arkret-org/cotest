@@ -1,4 +1,4 @@
-//! COT-ORG-01 / COT-ORG-02 — `ck.realm.organization` (RealmOrganizationPayload)
+//! COT-ORG-01 / COT-ORG-02 — `ak.realm.organization` (RealmOrganizationPayload)
 //! payload + protocol-semantic regression gate.
 //!
 //! cotest is the "declared organization != verified organization" regression
@@ -6,7 +6,7 @@
 //! never re-implements the organization-side invariants:
 //!
 //!   * `arkret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
-//!     `ck.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
+//!     `ak.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
 //!     organization_ref }` shape).
 //!   * `arkret_core::models::verify_realm_organization_statement` enforces the issuer-role /
 //!     delegation / proof / validity-window / scope / revocation invariants, fail-closed.

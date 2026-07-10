@@ -228,7 +228,7 @@ fn private_account_data_keys_do_not_leak_raw_refs() {
 
     assert!(
         validate_private_account_data_key(
-            "ak.draft.v1:message:ck:message:01904100-0000-7000-8000-000000000001:main"
+            "ak.draft.v1:message:ak:message:01904100-0000-7000-8000-000000000001:main"
         )
         .is_err(),
         "raw typed refs in private account-data keys must be rejected"

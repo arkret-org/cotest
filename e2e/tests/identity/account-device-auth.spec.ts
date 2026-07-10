@@ -128,10 +128,10 @@ test.describe("account auth + device strand", () => {
     //
     // The refresh handler (coauth session_grant/refresh.rs) requires a device
     // holder proof. coauth now verifies that proof against the Principal
-    // Server's device signing-key DIRECTORY (the `ck.device.authorize`-projected
+    // Server's device signing-key DIRECTORY (the `ak.device.authorize`-projected
     // key surfaced at `/_soland/gate/account/device-signing-keys/query`), NOT the
     // principal DID document. So we first enrol the onboarding device's signing
-    // key (service_attested `ck.device.authorize`), then mint a holder proof
+    // key (service_attested `ak.device.authorize`), then mint a holder proof
     // signed by that key and rotate the grant — no re-OIDC, no DID-document
     // device-key projection required.
     const coauth = coauthBaseUrl();

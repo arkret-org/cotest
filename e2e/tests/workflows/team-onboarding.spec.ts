@@ -131,7 +131,7 @@ test.describe("workflow: team onboarding", () => {
 
       // Mei pins the welcome via the hover action on the message row. The
       // pinned-message bar at the top of the feed then surfaces it. Spec:
-      // models/pins.md (`ck.pin.add` shared event).
+      // models/pins.md (`ak.pin.add` shared event).
       const meiMessage = meiPage.timelineEvent(welcome);
       await expect(meiMessage).toBeVisible({ timeout: 30_000 });
       await meiMessage.hover();
@@ -147,7 +147,7 @@ test.describe("workflow: team onboarding", () => {
       await stepShot(meiPage.page, testInfo, "E1-mei-pinned");
 
       // Yuki keeps seeing the welcome at the top: the shared pin projects
-      // into Yuki's pinned bar once the `ck.pin.add` event syncs.
+      // into Yuki's pinned bar once the `ak.pin.add` event syncs.
       await yukiPage.gotoTimelineRealm(realmId);
       await expect(yukiPage.page.getByTestId("message-list")).toContainText(welcome, {
         timeout: 30_000,

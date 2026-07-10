@@ -68,7 +68,7 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
     //     `ak:agent_key:` / `ak:accountability_grant:` typed-id families
     //     are retired: `key_id` is a plain string (preferring the DID URL
     //     verification-method form) and the accountability grant is
-    //     referenced via its `ck.identity.accountability_grant` event id.
+    //     referenced via its `ak.identity.accountability_grant` event id.
     Did::new("did:web:agent.example".to_owned())
         .map_err(|e| anyhow!("agent principal DID construction: {e}"))?;
     let key_id = "did:web:agent.example#key-1";
@@ -93,7 +93,7 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
         ));
     }
 
-    // TODO(P4-impl): drive a real `ck.self.agent.command.provision` envelope through
+    // TODO(P4-impl): drive a real `ak.self.agent.command.provision` envelope through
     // the reducer (the controller-self capability binding + first agent
     // key authorize chain is server-side TODO per soland P2-impl).
 

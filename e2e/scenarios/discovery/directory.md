@@ -36,13 +36,13 @@
 
 4. alice 在 `/directory` 点 `directory-contact-tools`
 5. 填 `contact-target-did-input = bob.did`,点 "Request"
-6. inkson 提交 `ck.relation.create { relation_kind: "contact", source: alice.did, target: bob.did, fields: { status: "pending" } }`
+6. inkson 提交 `ak.relation.create { relation_kind: "contact", source: alice.did, target: bob.did, fields: { status: "pending" } }`
 7. 断言:contact_state 文本含 `pending`
 
 ### Phase C — bob 接受联系
 
 8. bob 进 `/directory`,在 contact tools 区填 `contact-requester-did-input = alice.did`,点 "Accept"
-9. inkson 提交 `ck.relation.update`,status = `accepted`
+9. inkson 提交 `ak.relation.update`,status = `accepted`
 10. 断言:bob 的 contact_state 含 `accepted`
 11. bob 点 "List contacts" → 看到 alice.did + count 1
 
@@ -54,7 +54,7 @@
 ### Phase E — bob 更新 profile
 
 14. bob 进 `/settings/profile`,改 display_name、bio、avatar
-15. inkson 提交 `ck.profile.update`
+15. inkson 提交 `ak.profile.update`
 16. alice 拉 `GET /_arkret/self/actors/<bob.did>/profile` → 看到新 profile
 17. 断言:在 directory 搜结果中显示 bob 的新 display_name
 
@@ -81,7 +81,7 @@
 ## Implementation notes
 
 - 多数 testid 已存在(directory.rs:`directory-contact-tools`、`contact-target-did-input`、`request-contact-button`、`accept-contact-button`、`list-contacts-button`、`directory-search-input`、`directory-search-button`、`actor-result`、`tab-actors`)
-- **soland 缺口**:`ck.profile.update`、`ck.presence` ephemeral、organization registry — 实现度未知
+- **soland 缺口**:`ak.profile.update`、`ck.presence` ephemeral、organization registry — 实现度未知
 
 ## 总耗时预估
 

@@ -461,8 +461,8 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-/// Vectors `ck.vector.directory.resolve_handle_failure_blinding.v1` and
-/// `ck.vector.directory.resolve_agent_selector_failure_blinding.v1`.
+/// Vectors `ak.vector.directory.resolve_handle_failure_blinding.v1` and
+/// `ak.vector.directory.resolve_agent_selector_failure_blinding.v1`.
 ///
 /// A directory resolve over a missing, hidden, or unauthorized target MUST be
 /// externally indistinguishable: identical HTTP status (404), identical error

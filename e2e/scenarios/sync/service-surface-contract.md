@@ -23,7 +23,7 @@
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ck.server.*` / `ck.events.*` / `ck.sync.*` 等)
-- `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ck.schema.service_describe.v1` wire schema
+- `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ak.schema.service_describe.v1` wire schema
 - `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
 - 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/arkret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
 
@@ -48,8 +48,8 @@
 
 - `alice` 已通过 `ensureRegistered` 在 soland 注册
 - `alice` 通过 `issueDevSession` 拿到 soland dev session token(coauth bearer 通常不必,因为 describe 是无认证 GET;但写路径需要 alice 的 soland token)
-- soland 的 `claimed_profiles` 至少含 `ck.profile.core_event_store.v1`(由 `soland/src/wire.rs` 默认写入)
-- coauth 的 `claimed_profiles` 至少含 `ck.profile.auth_server.v1` 或等价 auth-server profile;**MUST NOT** claim canonical identity registry / principal server profile(见 G3.C3)
+- soland 的 `claimed_profiles` 至少含 `ak.profile.core_event_store.v1`(由 `soland/src/wire.rs` 默认写入)
+- coauth 的 `claimed_profiles` 至少含 `ak.profile.auth_server.v1` 或等价 auth-server profile;**MUST NOT** claim canonical identity registry / principal server profile(见 G3.C3)
 - `development_mode=true` 时,两个服务的 `verified_profiles` MUST 为空数组(spec §3.0 第 2 条)
 
 ## Steps
@@ -66,12 +66,12 @@
    - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` 全部存在且是数组
    - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `cotest_verified`)
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
-   - `supported_operations` 至少含 `ck.server.query.describe` 与 `ck.self.events.command.submit`(spec §4.2 + service-api-schema §2.1 `/events POST`)
+   - `supported_operations` 至少含 `ak.server.query.describe` 与 `ak.self.events.command.submit`(spec §4.2 + service-api-schema §2.1 `/events POST`)
 3. `GET ${coauthBaseUrl()}/_arkret/describe`(仅当 `coauthBaseUrl()` 已配置)
 4. 断言:
    - HTTP 200,JSON
    - `service_type === "auth_server"`(spec §3 服务类型命名规则)
-   - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `ck.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
+   - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `ak.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
    - `auth_metadata.account_authority.gate_account_base` 是绝对 URL,且 `auth_metadata.methods[]` 非空(coauth 是 Account Authority)
    - 同样 §3.0 六个 claim-level 字段都存在
 5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `ak:trust_domain:` 前缀
@@ -138,7 +138,7 @@
 
 ### Phase E — Unsupported feature fail-closed(§5.1)
 
-31. 从 Phase A 的 describe 响应里取 `supported_features` 与 `implemented_features`,选一个**两者都不在**的 feature 标识(例如 `ck.feature.mimi_room_passthrough.v1` 在普通 dev soland 上不出现)
+31. 从 Phase A 的 describe 响应里取 `supported_features` 与 `implemented_features`,选一个**两者都不在**的 feature 标识(例如 `ak.feature.mimi_room_passthrough.v1` 在普通 dev soland 上不出现)
 32. 构造一个 `POST /_arkret/self/events` 请求,在 envelope 的 `requirements.features[]` 字段里声明依赖该 feature
 33. 断言:
     - HTTP 4xx

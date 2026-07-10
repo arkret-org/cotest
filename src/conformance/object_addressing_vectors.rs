@@ -1,8 +1,8 @@
-//! CKP-0011 shareable object-addressing + `ck.find.directory.query.resolve_target`
+//! AKP-0011 shareable object-addressing + `ak.find.directory.query.resolve_target`
 //! conformance vectors (OA-COT-1..4).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.1` (resolve_target +
-//! common directory response fields) + the CKP-0011 object-addressing grammar.
+//! common directory response fields) + the AKP-0011 object-addressing grammar.
 //!
 //! The vectors below are deterministic, pure unit checks against the SDK's
 //! object-addressing surface (`arkret_core::models::*`, re-exported from

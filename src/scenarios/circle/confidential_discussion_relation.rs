@@ -1,6 +1,6 @@
 //! P2F.3 — `Relation::ConfidentialDiscussionOf` two-Strand round-trip.
 //!
-//! CKP-0007 introduces a Relation between the broad-synthesis Strand and
+//! AKP-0007 introduces a Relation between the broad-synthesis Strand and
 //! the narrow-discussion Strand that lives in a Circle scope. This
 //! scenario pins:
 //!   - the `RelationKind::ConfidentialDiscussionOf` variant exists,

@@ -45,13 +45,13 @@ The current harness tracks the sibling `arkret-spec` checkout and includes:
 - **schema-validation-fixture runner** — positive and negative cases
   exercised against `schema_ref`.
 - **Round R4 literal-scanner rules** — bad DID method segments,
-  string-payload `ck.self.events.stream.subscribe` usage, `ck.cross_signing.publish`
+  string-payload `ak.self.events.stream.subscribe` usage, `ak.cross_signing.publish`
   without `expected_previous_generation`, and
   `compute_audit_policy_version_digest` calls with fewer than 4 arguments.
 - **Drift-validator allowlists extended** for the new capability action
-  `ck.morph.create`, the three new error codes
+  `ak.morph.create`, the three new error codes
   (`delivery_binding_stale` / `_handed_over` / `historical_only`), the
-  `ck:space:` id-kind in `object_ref`, and the new schema `$defs`
+  `ak:space:` id-kind in `object_ref`, and the new schema `$defs`
   (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
   `EventsFrontier*Response` variants, `PolicyCheck{Request,Response}`,
   `FederationServiceBindingRef`, `EventsSubmit{Batch,Federation}Request`,
@@ -473,4 +473,4 @@ The suite is organized by protocol and behavior, not milestone folders.
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
 > `_cotest_todos.md` in the parent `arkret/` directory for the
-> circle-rollout (CKP-0007) work item list and per-stage checkpoints.
+> circle-rollout (AKP-0007) work item list and per-stage checkpoints.

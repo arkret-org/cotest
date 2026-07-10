@@ -66,10 +66,10 @@
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `joined`
-   - seed_members = `[]`(本次不在创建阶段邀,改用空间管理面 invite 流程,这样能精确捕获 `ck.invite.create` 事件)
+   - seed_members = `[]`(本次不在创建阶段邀,改用空间管理面 invite 流程,这样能精确捕获 `ak.invite.create` 事件)
 2. 记录 `realmId`
 3. **alice** 进 `/realms/${realmId}/admin`,通过 `invite-member` 邀请 `bob.did`
-   - 在 α 侧产生 `ck.invite.create` Event,subject_did = bob.did
+   - 在 α 侧产生 `ak.invite.create` Event,subject_did = bob.did
 4. 断言:α 侧 `realm-admin-panel` 显示 `invited bob.did`
 
 ### Phase B — 联邦 push 把 invite 送到 β
@@ -94,8 +94,8 @@
 ### Phase C — bob@β 接受 invite
 
 10. **bob** 通过 β 的 inkson 加载;客户端检测到收到一个 invite (inkson 应该有 invite 列表 UI;如果没有,scenario 注释成需要 inkson 补 UI 或者通过 API call 走)
-11. bob 触发接受;β 上产生 `ck.invite.accept` Event,refs 指向 `ck.invite.create.event_id`
-12. β 主动把 `ck.invite.accept` push 到 α (反向 federation push)
+11. bob 触发接受;β 上产生 `ak.invite.accept` Event,refs 指向 `ak.invite.create.event_id`
+12. β 主动把 `ak.invite.accept` push 到 α (反向 federation push)
 13. α 校验后接受;α 上 reducer 收敛 bob 的 `membership=join`
 14. 断言:α 上 `/realms/${realmId}/admin` 的成员列表含 bob.did
 
@@ -123,7 +123,7 @@
 
 ### Phase G — Capability revoke fanout (sub-test E2.2)
 
-26. **alice** 在 α 撤销 `did:web:soland-beta.joint-e2e.local` 对该 Realm 的服务委托 (具体事件类型按 `ck.service.delegation` 或等价)
+26. **alice** 在 α 撤销 `did:web:soland-beta.joint-e2e.local` 对该 Realm 的服务委托 (具体事件类型按 `ak.service.delegation` 或等价)
 27. 撤销 fanout 推到 β (`§4.4`)
 28. **alice** 再发 `M_after_revoke = "post-revoke ${stamp}"`
 29. 断言:α **不再** 把该 event push 给 β;β 上 bob 看不到 `M_after_revoke`(spec §4.1 末尾:"撤销后的 service DID 不得继续接收非加密私有内容")
@@ -169,7 +169,7 @@
 
 - **已落地**:双 soland 拓扑、`peer events submit` / `peer events query` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
 - **仍待后续 GAP**:`reducer_profile_digest` 强校验、服务委托 revoke fanout。
-- **inkson invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `ck.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
+- **inkson invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `ak.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
 
 ## 总耗时预估
 

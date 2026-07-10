@@ -521,7 +521,7 @@ test.describe("contact graph (same principal server)", () => {
 
   // S8: realm member pulled into a Circle without consent. Now implemented and
   // run for real in `identity/circle-member.spec.ts` (soland ships the
-  // `/_arkret/self/circles/*` admin surface — CKP-0007). Kept here as a
+  // `/_arkret/self/circles/*` admin surface — AKP-0007). Kept here as a
   // pointer so the contact-graph table stays self-documenting.
   test("S8 circle member manage without consent", async ({ request }) => {
     test.skip(

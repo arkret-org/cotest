@@ -141,7 +141,7 @@ test.describe("multi-device pairing + revocation", () => {
   test("Device 1 publishes cross-signing keys, then signs ak.device.authorize for Device 2 with a real cross_signing_binding; soland ingest verifies the SSK signature and surfaces Device 2", async ({
     request,
   }) => {
-    // spec: device-lifecycle.md §5.1 (ck.cross_signing.publish — PSK→{SSK,USK})
+    // spec: device-lifecycle.md §5.1 (ak.cross_signing.publish — PSK→{SSK,USK})
     // + §5.2 (per-device cross_signing_binding, the SSK signature over the
     // ck-device-trust-bind-v1 canonical input).
     //
@@ -177,7 +177,7 @@ test.describe("multi-device pairing + revocation", () => {
     );
     expect(
       [200, 201],
-      `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+      `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
     ).toContain(publish.status());
 
     // 2) Authorize Device 2 with a real SSK-signed cross_signing_binding over
@@ -226,7 +226,7 @@ test.describe("multi-device pairing + revocation", () => {
     );
     expect(
       [200, 201],
-      `ck.device.authorize with valid cross_signing_binding returned ${authorize.status()}: ${await authorize.text()}`,
+      `ak.device.authorize with valid cross_signing_binding returned ${authorize.status()}: ${await authorize.text()}`,
     ).toContain(authorize.status());
 
     // The authorized device surfaces in alice's device-set projection.
@@ -476,7 +476,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
     expect(
       [200, 201],
-      `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+      `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
     ).toContain(revoke.status());
 
     // Device 2's subsequent signed write is rejected — the revoked device can
@@ -1106,7 +1106,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
     expect(
       [200, 201],
-      `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+      `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
     ).toContain(revoke.status());
 
     // After revocation Device 2's session is fail-closed at the auth gate, so
@@ -1175,7 +1175,7 @@ test.describe("multi-device pairing + revocation", () => {
     // Device-1 (an already-authorized sibling) must be `verified` in the device
     // inventory for soland to deliver a same-principal verification-bootstrap
     // to-device request to it (device_messages.rs: a fresh device may only send
-    // `ck.key.verification.*` to a verified same-principal target). A dev-login
+    // `ak.key.verification.*` to a verified same-principal target). A dev-login
     // founding device is enrolled `unverified`, so we first promote it to
     // verified through the real §5.1/§5.2 ingest path (the same cross-signing
     // publish + ak.device.authorize the suite already exercises above) before
@@ -1422,7 +1422,7 @@ test.describe("multi-device pairing + revocation", () => {
 });
 
 /// Promote `deviceId` to `verified` in the device inventory through the real
-/// §5.1/§5.2 ingest path (`ck.cross_signing.publish` + a `ck.device.authorize`
+/// §5.1/§5.2 ingest path (`ak.cross_signing.publish` + a `ak.device.authorize`
 /// carrying a genuine SSK-signed `cross_signing_binding`). soland's
 /// to-device delivery gate (device_messages.rs) requires the bootstrap target
 /// device to be verified, and a dev-login founding device enrolls `unverified`,
@@ -1450,7 +1450,7 @@ async function promoteDeviceToVerified(
   });
   expect(
     [200, 201],
-    `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+    `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
   ).toContain(publish.status());
 
   const deviceKey = deviceVerifyKeyMultibase();
@@ -1492,7 +1492,7 @@ async function promoteDeviceToVerified(
     });
   expect(
     [200, 201],
-    `ck.device.authorize (self-verify) returned ${authorize.status()}: ${await authorize.text()}`,
+    `ak.device.authorize (self-verify) returned ${authorize.status()}: ${await authorize.text()}`,
   ).toContain(authorize.status());
 
   // The device surfaces as authorized (status=active) in the projection.
@@ -1504,7 +1504,7 @@ async function promoteDeviceToVerified(
     .toBe("active");
 }
 
-/// Deliver a same-principal `ck.key.verification.request` pairing request to
+/// Deliver a same-principal `ak.key.verification.request` pairing request to
 /// every authorized sibling over the to-device queue (the API shape inkson's
 /// `pair-device-start-button` produces; driven directly here because that
 /// button reads the device-set projection's `status` field, which exposes
@@ -1519,7 +1519,7 @@ async function deliverPairingRequest(
 ): Promise<{ requestingDeviceId: string; pairingCode: string; newDevicePublicKey: string }> {
   const requestingDeviceId = typedId("device");
   const pairingCode = `${Date.now() % 1_000_000}`.padStart(6, "0");
-  const transactionId = `ck.key.verification.request:${requestingDeviceId}`;
+  const transactionId = `ak.key.verification.request:${requestingDeviceId}`;
   const newDeviceKey = deviceVerifyKeyMultibase();
   const newDevicePubkey = {
     kty: "OKP",
@@ -1616,7 +1616,7 @@ async function publishCrossSigningForUser(
   });
   expect(
     [200, 201],
-    `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+    `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
   ).toContain(publish.status());
   return identity;
 }
@@ -1671,7 +1671,7 @@ async function authorizeDeviceWithCrossSigning(
   );
   expect(
     [200, 201],
-    `ck.device.authorize returned ${authorize.status()}: ${await authorize.text()}`,
+    `ak.device.authorize returned ${authorize.status()}: ${await authorize.text()}`,
   ).toContain(authorize.status());
 }
 
@@ -1700,7 +1700,7 @@ async function revokeDeviceApi(
   });
   expect(
     [200, 201],
-    `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+    `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
   ).toContain(revoke.status());
   return eventId;
 }

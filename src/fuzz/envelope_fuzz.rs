@@ -250,7 +250,7 @@ impl FuzzSealInput {
 
 /// Fuzz the `Seal` wire shape. Uses both `from_slice` over the raw bytes
 /// and the artifact-backed `ANCHOR_SCHEMA` validator (SDK constant name;
-/// its value is the current `ck.schema.seal.v1`) to exercise both layers.
+/// its value is the current `ak.schema.seal.v1`) to exercise both layers.
 pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
         let _ = serde_json::from_slice::<arkret_core::Seal>(data);

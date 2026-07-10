@@ -1,4 +1,4 @@
-//! CKP-0007 Circle conformance scenarios (P2F.3).
+//! AKP-0007 Circle conformance scenarios (P2F.3).
 //!
 //! Each module exposes one async `..._run()` function that returns
 //! `Result<()>`. The scenarios deliberately drive the SDK types directly
@@ -21,12 +21,12 @@
 //!    (`circle_realm_mismatch` / `scope_rebind_forbidden` family).
 //! 5. [`confidential_discussion_relation`] `Relation::ConfidentialDiscussionOf` accepts a
 //!    two-Strand round-trip and rejects non-strand endpoints.
-//! 7. [`error_code_paths`] every CKP-0007 reason code is registered with the SDK and accepted by
+//! 7. [`error_code_paths`] every AKP-0007 reason code is registered with the SDK and accepted by
 //!    `is_known_error_code` / round-trippable.
 //!
 //! Phase A invariant scenarios (P2F.3.2):
 //!
-//!  8. [`member_state_machine`] Circle member state transition table from CKP-0007 Â§3.6 (legal
+//!  8. [`member_state_machine`] Circle member state transition table from AKP-0007 Â§3.6 (legal
 //!     `invited / active / left / banned` edges + illegal `banned â†’ active`, regression,
 //!     self-loop guards).
 //!  9. [`scope_circle_id_immutability`] `scope_circle_id` rebind across sequential states of the

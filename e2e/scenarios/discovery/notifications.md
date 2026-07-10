@@ -28,7 +28,7 @@
 ### Phase A — 显式 watch-all 通知
 
 1. alice createRealm,seedMembers=[bob];bob acceptInvite
-2. bob 对默认 discussion Strand 写入 `ck.strand.watch.set level=all`
+2. bob 对默认 discussion Strand 写入 `ak.strand.watch.set level=all`
 3. alice 发消息 `M1`
 4. 断言:bob 的 `/notifications` 显示 `M1` 通知;in-app badge unread=1
 
@@ -60,7 +60,7 @@
 19. 制造 N 条未读消息(alice 连发 5 条)
 20. bob 进 `/notifications`,点 "Mark all read"
 21. 断言:inkson 本地 unread badge 清零,所有通知行标 `read`;客户端按
-    `discovery/read-receipts.md` 提交 `ck.read_cursor.advance`,通知投影继续通过
+    `discovery/read-receipts.md` 提交 `ak.read_cursor.advance`,通知投影继续通过
     `GET /_arkret/self/account/subscribe?catchup=true` 读取
 
 ### Phase F — `evaluation_locus` 在 E2EE 中

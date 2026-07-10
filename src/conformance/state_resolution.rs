@@ -1071,7 +1071,7 @@ fn validate_threshold_forensic_attribution(vector: &Value, vector_name: &str) ->
     )
 }
 
-/// Vector `ck.vector.cba_lattice.open_set_concurrent_revocation_fail_closed.v1`.
+/// Vector `ak.vector.cba_lattice.open_set_concurrent_revocation_fail_closed.v1`.
 ///
 /// A DataEvent with a locally valid `seal_ref` MUST be re-evaluated against the
 /// joined multi-leaf control view of an open-set notary. When a concurrent
@@ -1166,7 +1166,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
     )
 }
 
-/// Vector `ck.vector.cba_lattice.conflict_recovery_move.v1`.
+/// Vector `ak.vector.cba_lattice.conflict_recovery_move.v1`.
 ///
 /// A `bottom=reject` control cell that has gone to bottom-by-conflict recovers
 /// ONLY through a sealed Control Move that carries a critical

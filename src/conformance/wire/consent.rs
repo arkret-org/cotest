@@ -15,7 +15,7 @@ use crate::conformance::{canonical_json, required_str, validate_profile};
 ///
 /// Spec: `identity/consent-model.md` + `authz/event-auth-state-resolution.md`
 /// (Move/Anchor/Lattice). Each grant Move adds a `(peer, scope)` tag to the
-/// holder-keyed or-set cell `ak:cell:ck.component.consent.grant.v1:<holder>`.
+/// holder-keyed or-set cell `ak:cell:ak.component.consent.grant.v1:<holder>`.
 /// Each revoke Move issues a causal `or_set_remove` against the prior grant
 /// Move's id. The cell join (active set) is the lookup surface for
 /// `consent_active` preconditions on downstream invite / message Moves.
@@ -83,7 +83,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("ak:cell:ck.component.consent.grant.v1:") {
+                        if !cell.starts_with("ak:cell:ak.component.consent.grant.v1:") {
                             bail!(
                                 "vector {name} grant effect cell must be the consent.grant.v1 cell, got {cell}"
                             );
@@ -121,7 +121,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     let mut removed_anything = false;
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("ak:cell:ck.component.consent.grant.v1:") {
+                        if !cell.starts_with("ak:cell:ak.component.consent.grant.v1:") {
                             bail!(
                                 "vector {name} revoke effect cell must be the consent.grant.v1 cell, got {cell}"
                             );
@@ -163,7 +163,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                 }
                 _ => {
-                    // Downstream Move (ck.invite.send / ak.message.send /
+                    // Downstream Move (ak.invite.send / ak.message.send /
                     // ak.call.invite ...) carrying a `consent_active`
                     // precondition. Resolve precondition against the
                     // consent.grant.v1 cell join.
@@ -183,7 +183,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                         let holder = required_str(pre, "holder")?;
                         let peer = required_str(pre, "peer")?;
                         let scope = required_str(pre, "scope")?;
-                        let cell = format!("ak:cell:ck.component.consent.grant.v1:{holder}");
+                        let cell = format!("ak:cell:ak.component.consent.grant.v1:{holder}");
                         let active_tags = or_set.get(&cell);
                         let resolved = active_tags
                             .map(|tags| {

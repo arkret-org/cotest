@@ -501,7 +501,7 @@ fn verify_self_pop(
     Ok(())
 }
 
-/// Reference model for the `ck.vector.session.bare_bearer_rejected_protected.v1`
+/// Reference model for the `ak.vector.session.bare_bearer_rejected_protected.v1`
 /// admission rule (api-conventions.md sender-constrained hardening): production
 /// current-v1 protected endpoints MUST reject bare `Authorization: Bearer`
 /// unless a sender-constrained proof (DPoP, RFC 9421 HTTP Message Signature,

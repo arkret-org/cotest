@@ -1,6 +1,6 @@
 # Key backup restore live path
 
-验证 T-P1-02 的可执行子集:soland 必须保存、隔离、校验、按 ownership proof 删除 `ck.schema.key_backup.v1` envelope;inkson 必须继续用真实 Argon2id + XChaCha20-Poly1305 做客户端备份加解密——用户侧唯一解密凭证是 24 词 Recovery Key(spec `identity/key-management.md` §3.3/§7.7;独立 vault passphrase UI 已删除,`passphrase_kdf` 仅作为 wire method 保留,§7.5.1),并能从 `late_recovery_original_event_id` 生成 late-recovery banner 数据。
+验证 T-P1-02 的可执行子集:soland 必须保存、隔离、校验、按 ownership proof 删除 `ak.schema.key_backup.v1` envelope;inkson 必须继续用真实 Argon2id + XChaCha20-Poly1305 做客户端备份加解密——用户侧唯一解密凭证是 24 词 Recovery Key(spec `identity/key-management.md` §3.3/§7.7;独立 vault passphrase UI 已删除,`passphrase_kdf` 仅作为 wire method 保留,§7.5.1),并能从 `late_recovery_original_event_id` 生成 late-recovery banner 数据。
 
 ## 范围
 

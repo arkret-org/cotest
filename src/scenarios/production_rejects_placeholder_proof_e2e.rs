@@ -81,7 +81,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     let url = proc.url("/_arkret/self/events");
 
     // Build an envelope that *looks* like a inkson `OperationBuilder::build()`
-    // output before T1.3 — a `ck.message.create` payload with the
+    // output before T1.3 — a `ak.message.create` payload with the
     // detached-JWS placeholder proof (`jws == "a..b"`). Production
     // soland's `validate_event_proofs` MUST reject this with
     // `dev_proof_in_production`. The `Bearer` header is intentionally

@@ -12,10 +12,10 @@ this grid against [`spec-section-11-compliance.md`](spec-section-11-compliance.m
 
 | ID  | Profile                                       | SDK module                                            | Test                                            |
 |-----|-----------------------------------------------|-------------------------------------------------------|-------------------------------------------------|
-| P-1 | `ck.profile.personal_agent_provisioning.v1`   | `cotest::scenarios::personal_agent_provisioning`      | `personal_agent_provisioning_profile`           |
-| P-2 | `ck.profile.agent_auth.v1`                    | `cotest::scenarios::agent_auth`                       | `agent_auth_profile`                            |
-| P-3 | `ck.profile.agent_delegation_policy.v1`       | `cotest::scenarios::agent_delegation_policy`          | `agent_delegation_policy_profile`               |
-| P-4 | `ck.profile.agent_sidecar_thread.v1`          | `cotest::scenarios::agent_sidecar_thread`             | `agent_sidecar_thread_profile`                  |
+| P-1 | `ak.profile.personal_agent_provisioning.v1`   | `cotest::scenarios::personal_agent_provisioning`      | `personal_agent_provisioning_profile`           |
+| P-2 | `ak.profile.agent_auth.v1`                    | `cotest::scenarios::agent_auth`                       | `agent_auth_profile`                            |
+| P-3 | `ak.profile.agent_delegation_policy.v1`       | `cotest::scenarios::agent_delegation_policy`          | `agent_delegation_policy_profile`               |
+| P-4 | `ak.profile.agent_sidecar_thread.v1`          | `cotest::scenarios::agent_sidecar_thread`             | `agent_sidecar_thread_profile`                  |
 
 ## §11 vectors
 
@@ -95,7 +95,7 @@ projection of the SDK-pure side.
 |---------|-------------------:|----------------:|----------------------------------------------------|
 | P-1     | 3                  | 3               | All three pass under `cargo test --workspace`.     |
 | P-2     | 5                  | 5               | V-3 (replay guard) is the high-risk gate.          |
-| P-3     | 5                  | 5               | V-5 + V-8 are CKP-0008 / §11 normative gates.      |
+| P-3     | 5                  | 5               | V-5 + V-8 are AKP-0008 / §11 normative gates.      |
 | P-4     | 4                  | 4               | V-6 idempotency is the key sidecar invariant.      |
 
 Total: 17 normative cells, 17 currently green; 0 deferred to live-stack.

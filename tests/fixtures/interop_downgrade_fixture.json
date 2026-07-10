@@ -27,7 +27,7 @@
       "expected": {
         "outcome": "pairwise_or_pending_invite",
         "identity_projection": "pairwise_or_pending_invite",
-        "projected_actor_id": "did:ck:pairwise:mimi-remote-example-alice",
+        "projected_actor_id": "did:ak:pairwise:mimi-remote-example-alice",
         "must_not_impersonate": "did:web:alice.example",
         "reason_code": "mimi_identifier_requires_holder_consent_or_claim"
       }

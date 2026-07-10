@@ -293,7 +293,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     // the cross-server MLS Welcome's `claim_envelope.signature` against alice's
     // device key (crypto-media/encryption-and-audit.md §6.04 device path:
     // requester_device_id → the requester's current accepted, unrevoked device
-    // projection). soland projects an accepted `ck.device.authorize` into a
+    // projection). soland projects an accepted `ak.device.authorize` into a
     // `verification_state="verified"` device row (project_device_authorize), so
     // the welcome's device-bound claim signature can be checked on server_b.
     let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
@@ -865,7 +865,7 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
     })
 }
 
-/// Typed `ck.device.authorize` bootstrap payload (inception_self_authorized):
+/// Typed `ak.device.authorize` bootstrap payload (inception_self_authorized):
 /// built on the SDK `DeviceAuthorizePayload` so a schema drift breaks the
 /// build here instead of surfacing as a server-side `schema_violation`.
 pub(crate) fn bootstrap_device_authorize_payload(

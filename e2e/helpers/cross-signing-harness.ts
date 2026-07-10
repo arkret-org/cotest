@@ -1,7 +1,7 @@
 // Cross-signing key-management harness for the device-lifecycle §5 ingest path.
 //
 // Contract: arkret-spec/spec/v1/zh/crypto-media/device-lifecycle.md §5.1
-// (ck.cross_signing.publish — PSK→{SSK,USK} bindings) + §5.2 (per-device
+// (ak.cross_signing.publish — PSK→{SSK,USK} bindings) + §5.2 (per-device
 // cross_signing_binding, the SSK signature over the ck-device-trust-bind-v1
 // canonical input).
 //
@@ -198,7 +198,7 @@ export function generateCrossSigningIdentity(args: {
   };
 }
 
-/// Build the `ck.cross_signing.publish` payload (device-lifecycle.md §5.1),
+/// Build the `ak.cross_signing.publish` payload (device-lifecycle.md §5.1),
 /// with real PSK→SSK and PSK→USK binding signatures. The shape mirrors the SDK
 /// `CrossSigningPublishContent` (the type soland deserializes at ingest).
 export function buildCrossSigningPublishPayload(
@@ -262,7 +262,7 @@ export function buildCrossSigningPublishPayload(
   };
 }
 
-/// Build the `cross_signing_binding` object for a `ck.device.authorize` payload
+/// Build the `cross_signing_binding` object for a `ak.device.authorize` payload
 /// (device-lifecycle.md §5.2): the accepted SSK signs the device's
 /// `device_public_key`, `hpke_key` and canonical `algorithms` over the
 /// ck-device-trust-bind-v1 input.

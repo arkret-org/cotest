@@ -3,7 +3,7 @@
 //! Pins the serde shape of [`arkret_core::EffectiveScope`] for both
 //! variants (`Realm` and `Circle`) and asserts that the Circle variant
 //! retains both `realm_id` and `circle_id` across a JSON round-trip — the
-//! envelope-vs-payload visibility binding required by CKP-0007.
+//! envelope-vs-payload visibility binding required by AKP-0007.
 
 use anyhow::{Result, anyhow};
 use arkret_core::{CircleId, EffectiveScope, RealmId};

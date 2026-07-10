@@ -9,7 +9,7 @@
 //
 // Cross-PS contact federation (spec contact-and-direct-conversation.md §2/§4.1):
 // the contact request/respond protocol face delivers signed `ck.contact.*`
-// facts to the target holder's home PS via `ck.peer.contacts.command.submit`
+// facts to the target holder's home PS via `ak.peer.contacts.command.submit`
 // (`POST /_arkret/peer/contacts`) over the durable federation outbox. The
 // requester addresses the remote target with `recipient_service_did`; the
 // responder addresses the remote requester with `requester_service_did`
@@ -338,13 +338,13 @@ test.describe("contact graph federation (α/β)", () => {
       .toBeTruthy();
   });
 
-  // Tombstone-fed: cross-PS contact tombstone federates a `ck.contact.tombstoned`
+  // Tombstone-fed: cross-PS contact tombstone federates a `ak.contact.tombstoned`
   // fact to the peer's home Principal Server.
   //
   // alice@α and bob@β first become accepted contacts (same federated handshake
   // as S1-fed). Then alice@α tombstones bob with block_peer=true and addresses
   // bob's home PS via peer_service_did=β. soland's contact_tombstone handler
-  // federates `ck.contact.tombstoned` over the durable outbox; β's
+  // federates `ak.contact.tombstoned` over the durable outbox; β's
   // peer_contacts_submit downgrades its mirrored alice row to `tombstoned`.
   // Spec contact-and-direct-conversation.md §2/§4.1.
   test("tombstone-fed cross-PS tombstone downgrades the peer's mirrored row to tombstoned", async ({
@@ -399,7 +399,7 @@ test.describe("contact graph federation (α/β)", () => {
     });
     expect(tomb.state).toBe("tombstoned");
 
-    // The `ck.contact.tombstoned` fact federates to β; bob@β's mirrored alice
+    // The `ak.contact.tombstoned` fact federates to β; bob@β's mirrored alice
     // row downgrades to `tombstoned` once the outbox dispatcher drains.
     await expect
       .poll(

@@ -6,17 +6,17 @@
 //!       * new device generates local Ed25519 device key + displays QR containing public key +
 //!         challenge nonce.
 //!       * primary device scans QR, verifies the to-device/SAS transcript, and issues a
-//!         `ck.device.authorize` event that binds the new device's `verify_key` to the principal
+//!         `ak.device.authorize` event that binds the new device's `verify_key` to the principal
 //!         via the SSK (`cross_signing_binding`).
-//!   - §5.2 "Device Trust Chain" — every `ck.device.authorize` event MUST carry a
+//!   - §5.2 "Device Trust Chain" — every `ak.device.authorize` event MUST carry a
 //!     `cross_signing_binding` field signed by the SSK over the canonical `(principal_id,
 //!     device_id, device_public_key, ssk_generation)` tuple. Devices without a valid binding MUST
 //!     be reported as `unverified`.
 //!   - §6 "Device List Sync" — any device add / revoke / signature update MUST produce a
-//!     `ck.device.list_update` event in the principal control stream. Clients MUST expose the
+//!     `ak.device.list_update` event in the principal control stream. Clients MUST expose the
 //!     device list delta via sync.
 //!   - §9 / `key-management.md` §5.2 (device revocation) — revocation:
-//!       * publish `ck.device.revoke` on the principal control stream.
+//!       * publish `ak.device.revoke` on the principal control stream.
 //!       * for every MLS group the revoked device participated in, issue an MLS `Remove` proposal +
 //!         commit so the device's epoch keys no longer decrypt new content.
 //!
@@ -33,9 +33,9 @@
 //!    spec note that "QR is the transport, not the trust primitive".
 //!
 //! 3. From device-A, generate the cross-signing key (SSK) if alice hasn't published one already,
-//!    then submit: a. `ck.cross_signing.publish` (if needed) — binds PSK → SSK. b.
-//!    `ck.device.cross_signing_binding` — the SSK signature over device-B's `verify_key`, packaged
-//!    per §5.1 canonical input. c. `ck.device.authorize` for device-B with the
+//!    then submit: a. `ak.cross_signing.publish` (if needed) — binds PSK → SSK. b.
+//!    `ak.device.cross_signing_binding` — the SSK signature over device-B's `verify_key`, packaged
+//!    per §5.1 canonical input. c. `ak.device.authorize` for device-B with the
 //!    `cross_signing_binding` field carrying the §5.2 signature.
 //!
 //!     The transport hook is the standard account gate device-pair command; the
@@ -50,14 +50,14 @@
 //!    is also stubbed out in soland; MLS group state is not durable server-side per the `mls` grep
 //!    showing no `ck.mls.*` handlers).
 //!
-//! 6. From device-A, revoke device-B by submitting `ck.device.revoke` into alice's principal
+//! 6. From device-A, revoke device-B by submitting `ak.device.revoke` into alice's principal
 //!    control Realm. Assert: a. the event is accepted and targets device-B. b. device-A still works
 //!    (its session is unaffected). c. device-B's bearer token returns 401 on account reads. d. For
-//!    the E2EE Realm `R` that alice + device-B were in: a `ck.mls.commit` event with a `Remove`
+//!    the E2EE Realm `R` that alice + device-B were in: a `ak.mls.commit` event with a `Remove`
 //!    proposal MUST appear in the Realm timeline within a bounded delay (per §9 + §6 device list
 //!    sync). Alice's sync should observe both:
-//!             * `ck.device.list_update` with device-B in `left[]`,
-//!             * `ck.mls.commit` with `proposals[].type == "remove"`.
+//!             * `ak.device.list_update` with device-B in `left[]`,
+//!             * `ak.mls.commit` with `proposals[].type == "remove"`.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Status — `#[ignore]`'d
@@ -70,7 +70,7 @@
 //!     a device `cross_signed`.
 //!   * **MLS state machine** — `grep mls` in soland turns up only
 //!     `routing/federation/move_anchor.rs` (anchor frontier) and `routing/interop/mimi.rs` (interop
-//!     shim). There is no server-side `ck.mls.commit` reducer, no MLS group state, and no
+//!     shim). There is no server-side `ak.mls.commit` reducer, no MLS group state, and no
 //!     Remove-proposal fanout on device revoke. Step 6d is fully unimplemented soland-side.
 //!   * **E2E-MULTI-DEV-1** (soland `_todos.md`) is the umbrella task that, when completed, unblocks
 //!     this scenario end-to-end.
@@ -242,7 +242,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   ).await?;
     //
     //   // 6d. MLS Remove fanout: alice's sync on `realm_id` MUST emit
-    //   //     `ck.mls.commit` with proposals[].type == "remove" within
+    //   //     `ak.mls.commit` with proposals[].type == "remove" within
     //   //     a bounded delay.
     //   eventually(|| async {
     //       let sync = alice.sync().await?;
@@ -279,8 +279,8 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
          E2E-MULTI-DEV-1: needs (a) account device projection, \
          (b) `cross_signing_binding` validation in the standard \
          pairing authorization path, (c) full MLS state machine + \
-         `ck.mls.commit` reducer with Remove-proposal fanout on \
-         `ck.device.revoke`, and (d) `ck.device.list_update` \
+         `ak.mls.commit` reducer with Remove-proposal fanout on \
+         `ak.device.revoke`, and (d) `ak.device.list_update` \
          emission per spec §6. The scaffolded test body above documents \
          every assertion in the implementer's terms. See module docs + \
          soland/_todos.md E2E-MULTI-DEV-1 + spec device-lifecycle.md \

@@ -20,7 +20,7 @@
 // the unsupported-transformation-rule hard reject; Phase B the additive arm
 // (no opt-in profile); Phase C the breaking/transformation opt-in profile gate
 // + schema_migration_breaking audit emission; Phase D the deterministic
-// transformation vectors (ck.vector.morph.*).
+// transformation vectors (ak.vector.morph.*).
 //
 // Phase E is a pure artifact schema probe (load morph-type-decision-table.json
 // and the migration profile block, assert structural invariants). No soland
@@ -363,7 +363,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     // Scope note: the capability conjunct is satisfied here because the Realm
     // owner (alice) is implicitly authorized. The full non-owner grant →
     // capability_denied → revoke cycle rides the event-minted capability
-    // surface (ck.capability.grant / revoke) that the authz/capability-chain
+    // surface (ak.capability.grant / revoke) that the authz/capability-chain
     // suite is still fixme'd on; the unsupported-rule hard reject below
     // exercises the other fail-closed branch of this reducer.
     const alice = uniqueUser("morph-migrate-c-alice");
@@ -622,14 +622,14 @@ async function submitSchemaMigrateRaw(
   // requirements.schema[] so the reducer's version-binding check is satisfied.
   const requirementsSchema = Array.from(new Set([...args.fromRefs, ...args.toRefs]));
   // morph.md §4.1 S3 — ak.morph.schema_migrate is gated by the high-tier
-  // capability action `ck.morph.schema_migrate`; the authorization is carried on
+  // capability action `ak.morph.schema_migrate`; the authorization is carried on
   // the envelope `refs[]` with role `authorized_by`, which MUST resolve to the
   // accepted Event that produced the authorizing grant (event-and-patch.md §2.2;
   // soland event_log/submit.rs rejects unresolved authorized_by refs with
   // dependency_missing, and event_log/sdk_projection.rs projects
   // refs[authorized_by][0] into the operation's authorization_ref). The payload
   // itself is closed
-  // (ck.schema.event_payload.v1#/$defs/morph_schema_migrate_payload,
+  // (ak.schema.event_payload.v1#/$defs/morph_schema_migrate_payload,
   // additionalProperties:false) and only declares morph_id / from_schema_refs /
   // to_schema_refs / compatibility_class / transformation_rules.
   //

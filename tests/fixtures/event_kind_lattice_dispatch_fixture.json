@@ -179,7 +179,7 @@
       "expected": {
         "outcome": "reject",
         "reason_code": "lattice_not_in_core_set",
-        "rationale": "lww-register / rga are extension-only lattices restricted to ui_affordance/content/draft/cosmetic cells via ck.profile.collaborative_text.v1. A reducer-input durable kind in the registry MUST NOT declare these as its lattice."
+        "rationale": "lww-register / rga are extension-only lattices restricted to ui_affordance/content/draft/cosmetic cells via ak.profile.collaborative_text.v1. A reducer-input durable kind in the registry MUST NOT declare these as its lattice."
       }
     },
     {

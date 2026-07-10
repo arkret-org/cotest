@@ -771,7 +771,7 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 }
 
 fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_seq: u64) -> Value {
-    let cell = format!("ak:cell:ck.component.realm.create.v1:{realm_id}");
+    let cell = format!("ak:cell:ak.component.realm.create.v1:{realm_id}");
     let payload = json!({
         "object": {
             "id": realm_id,
@@ -979,7 +979,7 @@ async fn inject_live_default_strand_id(
     };
     // soland does not auto-create a Strand on realm create and does not expose
     // `default_strand_id` on the realm lifecycle view; the realm's conversation
-    // Strand id is derived from the realm id (ck:realm:<uuid> -> ck:strand:<uuid>),
+    // Strand id is derived from the realm id (ak:realm:<uuid> -> ak:strand:<uuid>),
     // which is the same id the message/typing envelopes target.
     let _ = server;
     let strand_id = ctx.realm_id.replace("ak:realm:", "ak:strand:");
@@ -1197,15 +1197,15 @@ fn is_dynamic_key(key: &str) -> bool {
 
 fn normalize_string(value: &str) -> String {
     if value.starts_with("ak:space:") {
-        "<ck:space>".to_owned()
+        "<ak:space>".to_owned()
     } else if value.starts_with("ak:realm:") {
-        "<ck:realm>".to_owned()
+        "<ak:realm>".to_owned()
     } else if value.starts_with("ak:event:") {
-        "<ck:event>".to_owned()
+        "<ak:event>".to_owned()
     } else if value.starts_with("ak:operation:") {
-        "<ck:operation>".to_owned()
+        "<ak:operation>".to_owned()
     } else if value.starts_with("ak:backup:") {
-        "<ck:backup>".to_owned()
+        "<ak:backup>".to_owned()
     } else if value.starts_with("did:web:") {
         "<did:web>".to_owned()
     } else if value.starts_with("http://127.0.0.1:") {

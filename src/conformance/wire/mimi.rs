@@ -430,7 +430,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 // ak.strand.track.read_receipt_policy), track-level read-receipt
                 // overrides are not in v1. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
-                // independent Strand/Circle scope (Strand.scope_circle_id, CKP-0007)
+                // independent Strand/Circle scope (Strand.scope_circle_id, AKP-0007)
                 // whose own ak.realm.read_receipt_policy composes against the
                 // parent Realm policy via the same tighten-only rules.
                 let parent = policy

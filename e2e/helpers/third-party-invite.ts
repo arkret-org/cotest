@@ -78,7 +78,7 @@ function transcriptBytes(domain: string, transcript: unknown): Buffer {
 // `sha256:` + canonical_sha256({expires_at, invite_id, realm_id,
 // third_party_id}) — soland invite_record_digest. `expires_at` is the
 // rfc3339-seconds form stored on the invite cell, which for events submitted
-// through `ck.invite.third_party` is exactly the `expires_at` the test wrote.
+// through `ak.invite.third_party` is exactly the `expires_at` the test wrote.
 function inviteRecordDigest(cell: ThirdPartyInviteCell): string {
   return `sha256:${sha256CanonicalJson({
     expires_at: cell.expiresAt,
@@ -88,7 +88,7 @@ function inviteRecordDigest(cell: ThirdPartyInviteCell): string {
   })}`;
 }
 
-// Build a `ck.invite.third_party` payload whose `third_party_id` the test fully
+// Build a `ak.invite.third_party` payload whose `third_party_id` the test fully
 // controls (so the claim transcripts can be reconstructed byte-for-byte). The
 // commitment is `sha256:<hex>` over an opaque per-invite secret — the plaintext
 // 3PID never appears, satisfying the privacy invariant.
@@ -189,7 +189,7 @@ export function signBindingProof(args: {
   };
 }
 
-// Sign the `subject_proof` over `ck.invite.claim.subject_proof.v1` — semantics:
+// Sign the `subject_proof` over `ak.invite.claim.subject_proof.v1` — semantics:
 // "I agree to be bound by this exact binding_proof from this exact service".
 export function signSubjectProof(args: {
   cell: ThirdPartyInviteCell;
@@ -222,7 +222,7 @@ export function signSubjectProof(args: {
   };
 }
 
-// Build the full `ck.invite.claim` payload from a signed binding/subject pair.
+// Build the full `ak.invite.claim` payload from a signed binding/subject pair.
 export function buildClaimPayload(args: {
   cell: ThirdPartyInviteCell;
   subjectId: string;

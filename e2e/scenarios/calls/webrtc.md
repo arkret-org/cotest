@@ -11,9 +11,9 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 - `crypto-media/webrtc-signaling.md` §2 — 设计:ephemeral 信令 + media vs trust path
 - `crypto-media/call-state.md` §2 — Call modes(`p2p` / `sfu` / `mcu`)
 - `crypto-media/call-state.md` §3 — Call Morph(state、recording_policy)
-- `crypto-media/webrtc-signaling.md` §3 — Permissions(canonical `ck.call.*`:`ck.call.join`、`ck.call.signal.send`、`ck.call.screen_share`、`ck.call.record`、`ck.call.moderate` 等)
+- `crypto-media/webrtc-signaling.md` §3 — Permissions(canonical `ck.call.*`:`ak.call.join`、`ak.call.signal.send`、`ak.call.screen_share`、`ak.call.record`、`ak.call.moderate` 等)
 - `crypto-media/webrtc-signaling.md` §4-§4.1 — ICE Server Discovery(pairwise pseudonym + credential refresh)
-- `crypto-media/webrtc-signaling.md` §5 — Signaling envelope(`ck.call.signal`)
+- `crypto-media/webrtc-signaling.md` §5 — Signaling envelope(`ak.call.signal`)
 - `crypto-media/webrtc-signaling.md` §6 — 1:1 信令 payload(offer/answer/candidate/hangup)
 
 ## 拓扑
@@ -36,47 +36,47 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 1. alice 进 bob 的 contact / DM 视图,点 "Call"
 2. inkson 客户端:
    - 创建 Call Morph:`{ morph_type: "call", mode: "p2p", state: "ringing", participants: [alice.did, bob.did], recording_policy: "none" }`
-   - 提交 `ck.morph.create`
+   - 提交 `ak.morph.create`
    - 调 `POST /_arkret/self/rtc/ice-config?call_id=<callId>&device_id=<alice_dev>` 拿 ICE config:`{ stun_servers, turn_servers: [{ url, username: "pairwise-pseudonym", credential, expires_at }] }`(spec §6)
 3. alice 客户端用浏览器 RTCPeerConnection 创建 offer SDP
-4. inkson 发 `ck.call.signal`(ephemeral)`{ kind: "invite", offer_sdp, call_id, target: bob.did }`
+4. inkson 发 `ak.call.signal`(ephemeral)`{ kind: "invite", offer_sdp, call_id, target: bob.did }`
 5. soland Sync Service 路由该 signal 到 bob 的 to-device 队列
 6. bob inkson 收到 → UI 弹 "Incoming call from alice"(`incoming-call-toast` testid)
 7. bob 点 "Accept",创建 RTCPeerConnection 应答
-8. inkson 发 `ck.call.signal { kind: "answer", answer_sdp }`
-9. ICE candidates 多次 `ck.call.signal { kind: "candidate", candidate }` 双向交换
+8. inkson 发 `ak.call.signal { kind: "answer", answer_sdp }`
+9. ICE candidates 多次 `ak.call.signal { kind: "candidate", candidate }` 双向交换
 10. 媒体 channel 建立;Call Morph 状态 `ringing → connecting → active`
 11. 断言:alice/bob 两端的 UI 都进入 in-call 视图,`call-status-active` testid 可见,duration timer 开始
 
 ### Phase B — Mute + screen share
 
 12. alice 点 "Mute mic":本地 track.enabled = false
-13. inkson 发 `ck.call.signal { kind: "mute_state", muted: true }`(ephemeral)
+13. inkson 发 `ak.call.signal { kind: "mute_state", muted: true }`(ephemeral)
 14. 断言:bob 视图 alice 头像旁显示 muted icon
 15. alice 点 "Share screen":
     - 调 `getDisplayMedia()` 拿 screen track
     - addTrack 到 peer connection,renegotiate SDP
-    - 发 `ck.call.signal { kind: "media_state", screen_share: true }`
+    - 发 `ak.call.signal { kind: "media_state", screen_share: true }`
 16. 断言:bob 视图显示 alice 的 screen
 17. (Call Morph 的 `recording_policy = "none"` 应阻止后续 recording 尝试,见 Phase D)
 
 ### Phase C — Hangup
 
 18. alice 点 "Hang up"
-19. inkson 发 `ck.call.signal { kind: "hangup" }`
-20. 客户端 close peer connections,Call Morph 提交 `ck.morph.update { state: "ended", ended_at }`
+19. inkson 发 `ak.call.signal { kind: "hangup" }`
+20. 客户端 close peer connections,Call Morph 提交 `ak.morph.update { state: "ended", ended_at }`
 21. 断言:Call Morph state = ended,call duration 持久化
 
 ### Phase D — Group call(SFU + recording policy)
 
 22. alice 在 Realm `R_team` 中点 "Start group call"
 23. Call Morph:`{ mode: "sfu", state: "ringing", participants: [], recording_policy: "allow" }`
-24. bob、carol 收到 invite signal,先后加入(`ck.call.signal { kind: "focus_join" }`)
+24. bob、carol 收到 invite signal,先后加入(`ak.call.signal { kind: "focus_join" }`)
 25. SFU 媒体路径建立;三人都能听到看到对方
 26. carol 点 "Start recording"
 27. inkson 客户端:
     - 校验 carol 是否持 `call.record` capability(spec §5)
-    - 提交 `ck.call.recording.start`,随后用 `ck.call.state` 推进
+    - 提交 `ak.call.recording.start`,随后用 `ak.call.state` 推进
       `recording_state`
 28. soland 校验 `recording_policy = "allow"` + carol 的 capability → 接受
 29. 后端把 recording metadata 写入 Call Morph:`recording_started_by: carol.did`,`recording_blob_ref: <blob_id>`
@@ -119,12 +119,12 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ## Implementation notes
 
 - **spec wire**:通话信令走 `POST /_arkret/self/ephemeral` +
-  `ck.call.signal`;持久状态走 `ck.call.state` / `ck.call.recording.start`;
+  `ak.call.signal`;持久状态走 `ak.call.state` / `ak.call.recording.start`;
   媒体凭证走 `/_arkret/self/rtc/ice-config` 与 `/_arkret/self/rtc/token`。
   soland-private WebRTC / calls surfaces 已退役,本场景不得依赖。
-- **soland/cotest 覆盖**:服务端覆盖 ephemeral `ck.call.signal` 路由、TTL、
+- **soland/cotest 覆盖**:服务端覆盖 ephemeral `ak.call.signal` 路由、TTL、
   capability guard、self-device filtering、ban 后 token 拒绝、LiveKit token
-  claim;cotest 覆盖 `ck.call.signal` receiver vectors 与 `/_arkret/self/rtc/*`
+  claim;cotest 覆盖 `ak.call.signal` receiver vectors 与 `/_arkret/self/rtc/*`
   realtime policy guards。
 - **inkson 预期**:`/call` 的本地 renderer FSM 暴露
   `call-status-ringing`、`call-status-connecting`、`call-status-active`、

@@ -70,7 +70,7 @@ pub async fn create_circle_run() -> Result<()> {
         .ok_or_else(|| anyhow!("Circle JSON missing `schema` field"))?;
     if schema_field != "ak.schema.circle.v1" {
         return Err(anyhow!(
-            "Circle.schema MUST be `ck.schema.circle.v1`; got `{schema_field}`"
+            "Circle.schema MUST be `ak.schema.circle.v1`; got `{schema_field}`"
         ));
     }
     let parsed: Circle = serde_json::from_value(json).map_err(|e| anyhow!("parse: {e}"))?;

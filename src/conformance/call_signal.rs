@@ -1,4 +1,4 @@
-//! `ck.call.signal` receiver-side conformance vectors (webrtc-signaling.md §5.1).
+//! `ak.call.signal` receiver-side conformance vectors (webrtc-signaling.md §5.1).
 //!
 //! The retired soland WebRTC session stack enforced `seq` monotonicity and
 //! accepted non-spec signal types (`offer` / `ice` / `device_change`)
@@ -11,9 +11,9 @@
 //! genuinely verifiable, not a shape stub.
 //!
 //! Registered vector ids:
-//! - `ck.vector.call_signal.signal_type_enum.v1`
-//! - `ck.vector.call_signal.seq_monotonic.v1`
-//! - `ck.vector.call_signal.proof_detached_jws.v1`
+//! - `ak.vector.call_signal.signal_type_enum.v1`
+//! - `ak.vector.call_signal.seq_monotonic.v1`
+//! - `ak.vector.call_signal.proof_detached_jws.v1`
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{SecondsFormat, TimeZone, Utc};
@@ -137,7 +137,7 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
 
 // ─── VECT-CS-3 — proof_detached_jws (REAL ed25519 round-trip) ──────────────
 
-/// Build a `ck.call.signal` envelope + proof EXACTLY as the cotest e2e helper
+/// Build a `ak.call.signal` envelope + proof EXACTLY as the cotest e2e helper
 /// (`buildCallSignalEnvelope`) does — canonical `event_digest` over the
 /// envelope-without-proof, JWS transcript over the §5.1 binding object — sign
 /// with a real ed25519 key, then verify with the SDK's

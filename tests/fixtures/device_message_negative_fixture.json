@@ -4,7 +4,7 @@
   "comment": "A5 Round 24 — device message / key verification / key backup negative vectors. Spec authority: extensions/device-messages.md + crypto-media/encryption-and-audit.md (encrypted-envelope shape) + authz/event-auth-state-resolution.md §B-22 (strict key_ref violations on encrypted envelopes). The negative vectors below cover: (a) malformed encrypted-envelope key_ref (B-22 strict_key_ref violation: key_ref not present in trust set, or stale, or wrong-DID-namespace); (b) unauthorized sender — the sending device's `device.authorized` content.scopes does NOT include the device-message scope; (c) expired session_grant proof; (d) replay-window violation (same envelope_id seen within the dedup window). All vectors MUST reject closed; encrypted envelope is opaque ciphertext but the OUTER frame fields (sender_device_id, recipient_device_id, key_ref, envelope_id, hlc, session_grant_proof) are validated by the recipient before any decryption is attempted.",
   "encoder": {
     "envelope_shape": "{ envelope_id, sender_device_id, recipient_device_id, key_ref, hlc, session_grant_proof, ciphertext_b64 }",
-    "key_ref_form": "did:ck:dev:<device_id>#mls-leaf-<epoch>",
+    "key_ref_form": "did:ak:dev:<device_id>#mls-leaf-<epoch>",
     "session_grant_form": "{ scope, granted_at, expires_at, signature_b64 }",
     "replay_window_seconds": 300
   },
@@ -14,16 +14,16 @@
       "comment": "B-22 strict_key_ref: recipient's key_ref trust-set is built from the sender's most-recent device.authorized.cell active tags. If the envelope's key_ref does NOT appear in that trust-set (e.g. an attacker forged a signing key not yet authorized) the recipient MUST reject the envelope BEFORE attempting decryption. Reason: key_ref_not_authorized.",
       "envelope": {
         "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000001",
-        "sender_device_id": "did:ck:dev:dev_alice_01",
-        "recipient_device_id": "did:ck:dev:dev_bob_01",
-        "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-99999",
-        "hlc": "2026-05-09T12:00:00.000Z|01|did:ck:dev:dev_alice_01",
+        "sender_device_id": "did:ak:dev:dev_alice_01",
+        "recipient_device_id": "did:ak:dev:dev_bob_01",
+        "key_ref": "did:ak:dev:dev_alice_01#mls-leaf-99999",
+        "hlc": "2026-05-09T12:00:00.000Z|01|did:ak:dev:dev_alice_01",
         "session_grant_proof": null,
         "ciphertext_b64": "ZmFrZQ"
       },
       "trust_set_at_recv_time": [
-        "did:ck:dev:dev_alice_01#mls-leaf-7",
-        "did:ck:dev:dev_alice_01#mls-leaf-8"
+        "did:ak:dev:dev_alice_01#mls-leaf-7",
+        "did:ak:dev:dev_alice_01#mls-leaf-8"
       ],
       "expected": {
         "outcome": "reject",
@@ -37,10 +37,10 @@
       "comment": "B-22 strict_key_ref: key_ref's DID prefix MUST match sender_device_id's DID. An envelope claiming to be from Alice but signed under Bob's DID-namespace key MUST reject as cross-actor key reuse.",
       "envelope": {
         "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000002",
-        "sender_device_id": "did:ck:dev:dev_alice_01",
-        "recipient_device_id": "did:ck:dev:dev_bob_01",
-        "key_ref": "did:ck:dev:dev_carol_01#mls-leaf-7",
-        "hlc": "2026-05-09T12:00:00.000Z|02|did:ck:dev:dev_alice_01",
+        "sender_device_id": "did:ak:dev:dev_alice_01",
+        "recipient_device_id": "did:ak:dev:dev_bob_01",
+        "key_ref": "did:ak:dev:dev_carol_01#mls-leaf-7",
+        "hlc": "2026-05-09T12:00:00.000Z|02|did:ak:dev:dev_alice_01",
         "session_grant_proof": null,
         "ciphertext_b64": "ZmFrZQ"
       },
@@ -48,7 +48,7 @@
         "outcome": "reject",
         "reason_code": "key_ref_did_namespace_mismatch",
         "stage": "envelope_validation",
-        "rationale": "B-22: key_ref DID-prefix did:ck:dev:dev_carol_01 does NOT match sender_device_id did:ck:dev:dev_alice_01. Cross-actor key reuse forbidden."
+        "rationale": "B-22: key_ref DID-prefix did:ak:dev:dev_carol_01 does NOT match sender_device_id did:ak:dev:dev_alice_01. Cross-actor key reuse forbidden."
       }
     },
     {
@@ -56,10 +56,10 @@
       "comment": "Sender device's `device.authorized` content.scopes set does NOT include `device_messages.send`. Even though the envelope key_ref IS in trust set, the sending device is not authorized for this scope.",
       "envelope": {
         "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000003",
-        "sender_device_id": "did:ck:dev:dev_alice_01",
-        "recipient_device_id": "did:ck:dev:dev_bob_01",
-        "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-7",
-        "hlc": "2026-05-09T12:00:00.000Z|03|did:ck:dev:dev_alice_01",
+        "sender_device_id": "did:ak:dev:dev_alice_01",
+        "recipient_device_id": "did:ak:dev:dev_bob_01",
+        "key_ref": "did:ak:dev:dev_alice_01#mls-leaf-7",
+        "hlc": "2026-05-09T12:00:00.000Z|03|did:ak:dev:dev_alice_01",
         "session_grant_proof": {
           "scope": "device_messages.send",
           "granted_at": "2026-05-09T11:00:00.000Z",
@@ -70,7 +70,7 @@
       },
       "device_authorized_scopes": ["read_only"],
       "trust_set_at_recv_time": [
-        "did:ck:dev:dev_alice_01#mls-leaf-7"
+        "did:ak:dev:dev_alice_01#mls-leaf-7"
       ],
       "expected": {
         "outcome": "reject",
@@ -85,10 +85,10 @@
       "comment": "session_grant_proof.expires_at < now (recv_time). Recipient MUST reject expired grants pre-decryption.",
       "envelope": {
         "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000004",
-        "sender_device_id": "did:ck:dev:dev_alice_01",
-        "recipient_device_id": "did:ck:dev:dev_bob_01",
-        "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-7",
-        "hlc": "2026-05-09T12:00:00.000Z|04|did:ck:dev:dev_alice_01",
+        "sender_device_id": "did:ak:dev:dev_alice_01",
+        "recipient_device_id": "did:ak:dev:dev_bob_01",
+        "key_ref": "did:ak:dev:dev_alice_01#mls-leaf-7",
+        "hlc": "2026-05-09T12:00:00.000Z|04|did:ak:dev:dev_alice_01",
         "session_grant_proof": {
           "scope": "device_messages.send",
           "granted_at": "2026-05-08T08:00:00.000Z",
@@ -99,7 +99,7 @@
       },
       "device_authorized_scopes": ["device_messages.send"],
       "trust_set_at_recv_time": [
-        "did:ck:dev:dev_alice_01#mls-leaf-7"
+        "did:ak:dev:dev_alice_01#mls-leaf-7"
       ],
       "recv_time": "2026-05-09T12:00:00.000Z",
       "expected": {
@@ -114,10 +114,10 @@
       "comment": "Recipient maintains a dedup cache keyed by envelope_id within a replay window (300s default). A second envelope with the same envelope_id MUST reject; the first delivery is canonical.",
       "envelope": {
         "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000005",
-        "sender_device_id": "did:ck:dev:dev_alice_01",
-        "recipient_device_id": "did:ck:dev:dev_bob_01",
-        "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-7",
-        "hlc": "2026-05-09T12:00:00.000Z|05|did:ck:dev:dev_alice_01",
+        "sender_device_id": "did:ak:dev:dev_alice_01",
+        "recipient_device_id": "did:ak:dev:dev_bob_01",
+        "key_ref": "did:ak:dev:dev_alice_01#mls-leaf-7",
+        "hlc": "2026-05-09T12:00:00.000Z|05|did:ak:dev:dev_alice_01",
         "session_grant_proof": {
           "scope": "device_messages.send",
           "granted_at": "2026-05-09T11:00:00.000Z",
@@ -128,7 +128,7 @@
       },
       "device_authorized_scopes": ["device_messages.send"],
       "trust_set_at_recv_time": [
-        "did:ck:dev:dev_alice_01#mls-leaf-7"
+        "did:ak:dev:dev_alice_01#mls-leaf-7"
       ],
       "dedup_cache_seen": [
         "ak:envelope:01970e58-0a01-7a01-8a01-000000000005"
@@ -143,22 +143,22 @@
     },
     {
       "name": "key_ref_stale_b22_violation",
-      "comment": "B-22 strict_key_ref: key_ref points to a leaf that has been ROTATED OUT (no longer in trust_set; was revoked by a later ck.device.revoke Move). The envelope is technically signed but cryptographically stale — must reject.",
+      "comment": "B-22 strict_key_ref: key_ref points to a leaf that has been ROTATED OUT (no longer in trust_set; was revoked by a later ak.device.revoke Move). The envelope is technically signed but cryptographically stale — must reject.",
       "envelope": {
         "envelope_id": "ak:envelope:01970e58-0a01-7a01-8a01-000000000006",
-        "sender_device_id": "did:ck:dev:dev_alice_01",
-        "recipient_device_id": "did:ck:dev:dev_bob_01",
-        "key_ref": "did:ck:dev:dev_alice_01#mls-leaf-3",
-        "hlc": "2026-05-09T12:00:00.000Z|06|did:ck:dev:dev_alice_01",
+        "sender_device_id": "did:ak:dev:dev_alice_01",
+        "recipient_device_id": "did:ak:dev:dev_bob_01",
+        "key_ref": "did:ak:dev:dev_alice_01#mls-leaf-3",
+        "hlc": "2026-05-09T12:00:00.000Z|06|did:ak:dev:dev_alice_01",
         "session_grant_proof": null,
         "ciphertext_b64": "ZmFrZQ"
       },
       "trust_set_at_recv_time": [
-        "did:ck:dev:dev_alice_01#mls-leaf-7",
-        "did:ck:dev:dev_alice_01#mls-leaf-8"
+        "did:ak:dev:dev_alice_01#mls-leaf-7",
+        "did:ak:dev:dev_alice_01#mls-leaf-8"
       ],
       "rotated_out_keys": [
-        "did:ck:dev:dev_alice_01#mls-leaf-3"
+        "did:ak:dev:dev_alice_01#mls-leaf-3"
       ],
       "expected": {
         "outcome": "reject",

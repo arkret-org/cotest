@@ -3,7 +3,7 @@
 //! Every event executed by an agent on behalf of its controller MUST
 //! carry the triple (`executed_by`, `authorization_ref`, `actor_kind`).
 //!   - `executed_by` is the agent's DID.
-//!   - `authorization_ref` is the `EventId` of the controller's `ck.identity.accountability_grant`
+//!   - `authorization_ref` is the `EventId` of the controller's `ak.identity.accountability_grant`
 //!     event (the dedicated `ak:accountability_grant:` typed-id family is retired).
 //!   - `actor_kind` is the reducer-stamped `EnvelopeActorKind::Agent`.
 //!
@@ -40,7 +40,7 @@ pub async fn act_on_behalf_attribution_run() -> Result<()> {
             "authorization_ref must be the accountability-grant event's EventId"
         ));
     }
-    // TODO(P4-impl): drive a real `ck.message.create` envelope through
+    // TODO(P4-impl): drive a real `ak.message.create` envelope through
     // the SDK with the triple set; assert the reducer accepts it +
     // stamps `actor_kind=Agent` (rejecting any client-supplied value).
     Ok(())

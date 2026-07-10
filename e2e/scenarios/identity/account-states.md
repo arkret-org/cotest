@@ -25,7 +25,7 @@
 | 名字 | 角色 |
 |---|---|
 | alice | 主用户,各种状态转换的对象 |
-| admin | governance actor(`ck.account.suspend` capability) |
+| admin | governance actor(`ak.account.suspend` capability) |
 
 ## Steps
 

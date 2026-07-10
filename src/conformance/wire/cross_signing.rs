@@ -329,7 +329,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
     Ok(())
 }
 /// S4 — cross-signing reset hardening vectors. These are parser-level
-/// conformance guards for `ck.profile.cross_signing.reset.v1`: reset proof
+/// conformance guards for `ak.profile.cross_signing.reset.v1`: reset proof
 /// family, generation monotonicity, replay rejection, clock skew, and the
 /// successor publish recovery window.
 pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {

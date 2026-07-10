@@ -49,19 +49,19 @@
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `joined`
-   - `ck.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
+   - `ak.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
 2. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
 4. MIMI 互通暴露面走 spec 注册的协议面(SPEC-CR-020:零新增 operation,不存在 `/_arkret/self/realm/:id/federation/mimi/*` 端点):
    - 断言:`GET /_arkret/describe` 宣告 `mimi_interop` extension 支持
-   - 断言:`GET /_arkret/open/mimi/provider-directory`(`ck.open.mimi.query.provider_directory`)返回 200 的 MIMI provider feature profile
-   - room binding 通过 `POST /_arkret/open/mimi/strands/{strand_id}/update`(`ck.open.mimi.command.update_room`)以 `ck.mimi.room_binding` 建立,记录 `room_binding` 的 `mimi_room_uri`
+   - 断言:`GET /_arkret/open/mimi/provider-directory`(`ak.open.mimi.query.provider_directory`)返回 200 的 MIMI provider feature profile
+   - room binding 通过 `POST /_arkret/open/mimi/strands/{strand_id}/update`(`ak.open.mimi.command.update_room`)以 `ak.mimi.room_binding` 建立,记录 `room_binding` 的 `mimi_room_uri`
 
 ### Phase B — bob_mimi 经 MIMI federation 申请加入
 
 5. mimi_facade (mock) 接收一个来自外部 MIMI 网络的 "join request",目标是 alice 的 `room_binding_id`:
-   - facade 把它翻译为 Arkret 的 `ck.invite.request` (或 knock,取决于 Realm 的 join_rule),投递到 soland
-6. 断言:soland 收到 facade 投递的请求,产生 `ck.morph.federation_inbound = "mimi"` 事件,记录 `inbound_request_id`
+   - facade 把它翻译为 Arkret 的 `ak.invite.request` (或 knock,取决于 Realm 的 join_rule),投递到 soland
+6. 断言:soland 收到 facade 投递的请求,产生 `ak.morph.federation_inbound = "mimi"` 事件,记录 `inbound_request_id`
 7. alice 的 `/realm/${realmId}/admin` 看到 inbound request,标记来源 `mimi`
    - 断言:`federation-inbound-panel` 渲染,含 `mimi` 标签;`inbound-request-item` 数量 ≥ 1
 
@@ -72,8 +72,8 @@
 10. soland 验证 facade 返回的 identity 证明,通过 `extensions/mimi-interop` §6 的规则生成 pairwise DID:
     - DID = `did:pairwise:${realmId}/${hash(bob_mimi.mimi_handle, realmId.salt)}`
     - 同一个 bob_mimi 在不同 Realm 中得到不同的 pairwise DID(不可关联)
-11. 断言:approve 是事件面动作(不存在 `/_arkret/self/realm/:id/federation/mimi/approve` 端点)——alice 在 admin panel(inkson UI 或 `/_soland/` 产品面)执行 approve 后,事件面出现针对 pairwise DID 的 `ck.member.state{membership=join}` 事件,pairwise DID 符合 `did:pairwise:...` 形态
-12. 断言:bob_mimi 现在是 Realm `R` 的成员——通过 `/_arkret/self/events` 查询(`queryRealmEventsApi`)读取 `ck.member.state` 事件流,包含该 pairwise DID 且带 `mimi` 来源标记(不存在 `GET /_arkret/self/realm/:id/members` 端点)
+11. 断言:approve 是事件面动作(不存在 `/_arkret/self/realm/:id/federation/mimi/approve` 端点)——alice 在 admin panel(inkson UI 或 `/_soland/` 产品面)执行 approve 后,事件面出现针对 pairwise DID 的 `ak.member.state{membership=join}` 事件,pairwise DID 符合 `did:pairwise:...` 形态
+12. 断言:bob_mimi 现在是 Realm `R` 的成员——通过 `/_arkret/self/events` 查询(`queryRealmEventsApi`)读取 `ak.member.state` 事件流,包含该 pairwise DID 且带 `mimi` 来源标记(不存在 `GET /_arkret/self/realm/:id/members` 端点)
 
 ### Phase D — 双向消息 + content/policy mapping
 
@@ -81,10 +81,10 @@
     - 断言:`timeline` 出现 `M1`、`write-status` 文本含 `persisted`
 14. soland 通过 facade 把 `M1` 翻译为 MIMI event,投递到 MIMI 网络
     - 断言:facade mock 记录到一条 outbound MIMI event,内容含 `M1` 的文本
-    - 断言:soland 的 message 上有 `ck.morph.federation_outbound = "mimi"`、`mimi_event_id` 字段
+    - 断言:soland 的 message 上有 `ak.morph.federation_outbound = "mimi"`、`mimi_event_id` 字段
 15. mimi_facade mock 模拟 bob_mimi 在 MIMI 网络发一条消息 `MM2 = "bob_mimi greet ${stamp}"`,facade 把它翻译为 Arkret Message 投递到 soland
 16. 断言:alice 的 `/timeline/${realmId}` 在 30s 内出现 `MM2`,发送者显示为 bob_mimi 的 pairwise DID
-17. 断言:`MM2` 上有 `ck.morph.federation_inbound = "mimi"`、`mimi_origin_event_id` 字段
+17. 断言:`MM2` 上有 `ak.morph.federation_inbound = "mimi"`、`mimi_origin_event_id` 字段
 18. **alice** 回复 `MM2`,发 `M3 = "alice reply to bob_mimi ${stamp}"`
     - 断言:`M3` 渲染、`chat-reply-indicator` 指向 `MM2`
     - 断言:facade mock 记录到第二条 outbound MIMI event,reply 关系映射到 MIMI 的 `m.in_reply_to` 等价字段
@@ -100,7 +100,7 @@
 - 步骤 2 之后:`realmId` 形如 `ak:realm:...`,`federation_profile` 字段 = `mimi_interop`
 - 步骤 4:`/_arkret/describe` 宣告 mimi_interop;`/_arkret/open/mimi/provider-directory` 可达;Realm 与 MIMI room_binding 经 `/_arkret/open/mimi/strands/{strand_id}/update` 绑定
 - 步骤 6-7:facade 投递的 inbound request 在 alice 的 admin panel 中可见,标记 `mimi` 来源
-- 步骤 11-12:approve 之后生成 pairwise DID,事件面出现该 pairwise DID 的 `ck.member.state{membership=join}`,bob_mimi 成为 Realm 成员
+- 步骤 11-12:approve 之后生成 pairwise DID,事件面出现该 pairwise DID 的 `ak.member.state{membership=join}`,bob_mimi 成为 Realm 成员
 - 步骤 14:alice 发的 `M1` 被 facade 翻译为 outbound MIMI event
 - 步骤 16-17:bob_mimi 在 MIMI 网络发的消息经 facade 翻译为 Arkret Message,显示在 alice timeline
 - 步骤 18:reply 关系在 MIMI ↔ Arkret 双向保留
@@ -108,9 +108,9 @@
 
 ## Edge cases / sub-tests
 
-- **E5.1 MIMI endpoint 不可达 → federation fallback (本地停留)**:alice 发 `M1` 时 facade 不可达 (timeout / 5xx);消息应该正常存入 soland 本地、对 Arkret 成员可见,但不投递到 MIMI;消息上挂 `ck.morph.federation_outbound_status = "deferred"`,等 facade 恢复后重试
-- **E5.2 E2EE 在 MIMI 中的转换**:MIMI 可能使用不同的 group encryption (e.g., MLS via IETF profile);Arkret 的 E2EE message 进入 MIMI 时,要么有 transcript binding 桥(两套 group key 都能解密),要么留下明确的 `ck.morph.e2ee_downgrade = "mimi_bridge"` 标记;两种情况都不能静默泄露明文
-- **E5.3 content type 差异:unknown content kind quarantine**:bob_mimi 经 MIMI 发了一条 content type 是 Arkret 不支持的 (e.g., MIMI 特有的 `m.location.share.live`);facade 翻译时无法映射,该消息进入 soland 时被 quarantine,挂 `ck.morph.unknown_content_kind = "<mimi.type>"`;timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃也不是渲染原始 payload
+- **E5.1 MIMI endpoint 不可达 → federation fallback (本地停留)**:alice 发 `M1` 时 facade 不可达 (timeout / 5xx);消息应该正常存入 soland 本地、对 Arkret 成员可见,但不投递到 MIMI;消息上挂 `ak.morph.federation_outbound_status = "deferred"`,等 facade 恢复后重试
+- **E5.2 E2EE 在 MIMI 中的转换**:MIMI 可能使用不同的 group encryption (e.g., MLS via IETF profile);Arkret 的 E2EE message 进入 MIMI 时,要么有 transcript binding 桥(两套 group key 都能解密),要么留下明确的 `ak.morph.e2ee_downgrade = "mimi_bridge"` 标记;两种情况都不能静默泄露明文
+- **E5.3 content type 差异:unknown content kind quarantine**:bob_mimi 经 MIMI 发了一条 content type 是 Arkret 不支持的 (e.g., MIMI 特有的 `m.location.share.live`);facade 翻译时无法映射,该消息进入 soland 时被 quarantine,挂 `ak.morph.unknown_content_kind = "<mimi.type>"`;timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃也不是渲染原始 payload
 
 后两条建议拆成独立的小 spec(`extensions/mimi-federation.e2ee`、`extensions/mimi-federation.content`),保持主 scenario 紧凑。
 

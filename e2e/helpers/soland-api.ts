@@ -22,7 +22,7 @@ export type SignedEventEnvelopeArgs = {
   eventId?: string;
   schemaId?: string;
   /// Override the full `requirements.schema[]` binding. morph.md §4.1 S1/S2
-  /// requires schema-evolving events (ck.morph.schema_migrate /
+  /// requires schema-evolving events (ak.morph.schema_migrate /
   /// schema_refs-changing ak.morph.update) to bind the active Morph schema set
   /// (the union of from/to schema_refs) here, not just the payload schema id.
   requirementsSchema?: string[];
@@ -304,9 +304,9 @@ export async function addRealmMemberApi(
 
 // join-policy.md §3 — write the per-Realm `realm.join_policy` cell. soland
 // carries the candidate join policy inside the active
-// `ck.realm.policy_components` event under `components.join_policy`; the
+// `ak.realm.policy_components` event under `components.join_policy`; the
 // reducer projects it into
-// `ak:cell:ck.component.realm.policy_components.v1:<realm_id>` and reads the
+// `ak:cell:ak.component.realm.policy_components.v1:<realm_id>` and reads the
 // `join_policy` facet from there.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
@@ -337,7 +337,7 @@ export async function writeJoinPolicyApi(
   return digest;
 }
 
-// Grant a realm-scoped `ck.realm.join.review` capability to a subject. Used
+// Grant a realm-scoped `ak.realm.join.review` capability to a subject. Used
 // by the knock-application scenario to make a non-owner reviewer, whose
 // capability can later be revoked (join-policy.md §7.5 #3 re-check).
 export async function grantRealmReviewCapabilityApi(
@@ -451,7 +451,7 @@ export async function grantServiceDelegationApi(
   return grantId;
 }
 
-// Mint a realm-scoped `ck.capability.grant` event for an arbitrary action set
+// Mint a realm-scoped `ak.capability.grant` event for an arbitrary action set
 // and return BOTH the materialized grant id (`ak:grant:*`) and the carrying
 // event id (`ak:event:*`). event-and-patch.md §2.2: a high-tier write that
 // references its authorization via the envelope `refs[]` `authorized_by` role
@@ -475,7 +475,7 @@ export type CapabilityGrantEventArgs = {
   server?: SolandKey;
 };
 
-// Build (but do not submit) a signed `ck.capability.grant` envelope. Exposed
+// Build (but do not submit) a signed `ak.capability.grant` envelope. Exposed
 // separately from grantCapabilityEventApi so negative suites (delegation
 // widening, revoked-parent re-delegation, ...) can submit the same canonical
 // envelope shape raw and assert the reducer rejection instead of the 200 the
@@ -564,7 +564,7 @@ export async function revokeCapabilityApi(
   );
 }
 
-// join-policy.md §7.1 stage 1 — `ck.member.state{membership=knock}`. The
+// join-policy.md §7.1 stage 1 — `ak.member.state{membership=knock}`. The
 // knock Control Move carries no application body (spec §8 keeps free text out
 // of the public knock event).
 export async function submitKnockApi(
@@ -593,7 +593,7 @@ export async function submitKnockApi(
 }
 
 // join-policy.md §7.2 — `member.application` carried as a profile-private
-// `application` sub-object on the active `ck.member.state{knock}` event.
+// `application` sub-object on the active `ak.member.state{knock}` event.
 export async function submitApplicationApi(
   request: APIRequestContext,
   token: string,
@@ -637,7 +637,7 @@ export async function submitApplicationApi(
 }
 
 // join-policy.md §7.3 — `member.application.review`. The reviewer submits a
-// `ck.member.state` event targeting the applicant; `accept` keeps the
+// `ak.member.state` event targeting the applicant; `accept` keeps the
 // applicant in `knock` (the join is later authorised via ak.invite.create),
 // `reject` drives the applicant to `leave` and stamps cooldown_after_reject.
 export async function submitApplicationReviewApi(
@@ -726,7 +726,7 @@ export async function submitApplicationCancelApi(
   );
 }
 
-// join-policy.md §5 — auto-resolve join: `ck.member.state{membership=join}`
+// join-policy.md §5 — auto-resolve join: `ak.member.state{membership=join}`
 // carrying `gate_proofs[]`. The reducer validates the gates inline.
 export async function submitJoinWithProofsApi(
   request: APIRequestContext,
@@ -783,7 +783,7 @@ export async function submitLeaveApi(
   );
 }
 
-// join-policy.md §7.5 — `ck.invite.create` whose
+// join-policy.md §7.5 — `ak.invite.create` whose
 // `refs[role="join_authorised_by"]` binds to the review accept receipt.
 export async function submitInviteCreateApi(
   request: APIRequestContext,
@@ -1732,7 +1732,7 @@ const E2E_FIXTURES_ROOT = resolve(
 );
 
 // The reducer profile soland declares for its federation surface
-// (ck.peer.events.query.describe → supported_profiles), also the vector's profile.
+// (ak.peer.events.query.describe → supported_profiles), also the vector's profile.
 export const FEDERATION_REDUCER_PROFILE_ID = "ak.profile.federation_minimal.v1";
 
 const reducerProfileDigestCache = new Map<string, string>();
@@ -2174,7 +2174,7 @@ function sdkPrincipalControlRealmId(principalId: string): string {
 }
 
 /// 05-2 — SDK-authoritative PSK→SSK / PSK→USK `ck-cross-signing-bind-v1`
-/// canonical signing inputs (base64) for a full `ck.cross_signing.publish`
+/// canonical signing inputs (base64) for a full `ak.cross_signing.publish`
 /// payload, produced by `CrossSigningPublishContent::{self,user}_signing_binding_input`.
 /// The cross-language golden-vector regression asserts the TS byte-mirror in
 /// `cross-signing-harness.ts` reproduces these exact bytes.

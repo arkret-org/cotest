@@ -1,5 +1,5 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CKP-0007 §Tombstone / Cascade Lifecycle;
+//! Live-stack integration test for AKP-0007 §Tombstone / Cascade Lifecycle;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_tombstone_cascade -- --ignored`).
 //!
@@ -8,14 +8,14 @@
 //!   2. Create a Realm and a Circle inside that Realm.
 //!   3. Add two members to the Circle (strict subset of the Realm).
 //!   4. Create N child Strands whose `scope_circle_id` references the Circle.
-//!   5. Issue `ck.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
+//!   5. Issue `ak.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
 //!      the projection, b) any further write into the Circle is rejected with `failed_precondition`
 //!      / sub-reason `circle_not_active`, c) child Strand projections surface as unavailable
 //!      through the sync API (`history_visibility` clamped, deliverability flag cleared) per
-//!      CKP-0007 cascade rules, d) Circle members see the Circle in their client-side list as
+//!      AKP-0007 cascade rules, d) Circle members see the Circle in their client-side list as
 //!      `tombstoned` (not silently disappeared).
 //!   6. Repeat the exercise one level up: tombstone the parent Realm with a *fresh* Realm + Circle
-//!      and assert every Circle in that Realm is cascade-tombstoned (CKP-0007: Realm tombstone
+//!      and assert every Circle in that Realm is cascade-tombstoned (AKP-0007: Realm tombstone
 //!      implies Circle tombstone for every Circle whose `realm_id` matches).
 //!
 //! Gating mirrors `tests/soland_teabay_directory_sync.rs` / `full_stack_e2e.rs`:
@@ -37,9 +37,9 @@ use serial_test::serial;
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CKP-0007 (Circle tombstone cascade)
+/// Issue: AKP-0007 (Circle tombstone cascade)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CKP-0007 Circle tombstone cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "AKP-0007 Circle tombstone cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_circles() -> Result<()>
 {
@@ -67,7 +67,7 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
         .map_err(|e| anyhow!("stack health check failed: {e}"))?;
 
     // ── 2. Register actors and create a Realm + Circle ──────────────────
-    // soland's principal admin signer is responsible for `ck.realm.create`
+    // soland's principal admin signer is responsible for `ak.realm.create`
     // in development mode; alice + bob are the future Circle members.
     let admin = stack
         .soland
@@ -149,9 +149,9 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CKP-0007): live-stack wiring for Circle tombstone cascade is \
-         scaffolded; finalise once soland exposes `ck.realm.tombstone` and \
-         `ck.circle.tombstone` over the public REST surface. Expected assertions \
+        "TODO(P5/AKP-0007): live-stack wiring for Circle tombstone cascade is \
+         scaffolded; finalise once soland exposes `ak.realm.tombstone` and \
+         `ak.circle.tombstone` over the public REST surface. Expected assertions \
          (see doc comment): \
          (a) circle state→tombstoned visible in projection within {settle_ms}ms, \
          (b) follow-up writes rejected with reason `{reason}`, \

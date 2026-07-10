@@ -1,4 +1,4 @@
-// Knock auto-resolve path (ck.member.state{join, gate_proofs})
+// Knock auto-resolve path (ak.member.state{join, gate_proofs})
 // Contract: e2e/scenarios/spaces/knock-auto-resolve.md
 // Spec: governance/join-policy.md §5 (auto-resolve path), §3.1 gate types
 

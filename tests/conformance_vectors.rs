@@ -209,7 +209,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
     );
 }
 
-// ─── R3.3 / OA-COT-1..4 — CKP-0011 object addressing + resolve_target ─────
+// ─── R3.3 / OA-COT-1..4 — AKP-0011 object addressing + resolve_target ─────
 //
 // SDK-pure vectors over `arkret_core::models::*` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
@@ -241,7 +241,7 @@ fn test_oa_cot_5_share_resolve_open_live() {
     // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
     //   1. Author shares a strand as `web+arkret:realm/<r>/strand/<f>?via=<teabay>
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
-    //   2. Recipient POSTs `ck.find.directory.query.resolve_target { address, token }`.
+    //   2. Recipient POSTs `ak.find.directory.query.resolve_target { address, token }`.
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
     //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
     //      target_kind=strand, object_preview, join_rule, as_of, source_refs, via_services }`.
@@ -270,7 +270,7 @@ fn test_cot_1_handle_reassignment_full_strand_live() {
     //   3. coauth revokes H1 and issues H2 for S.
     //   4. roster member_display_state_digest changes (claim digest set folded);
     //      list_handles_for_subject drops H1, surfaces H2; inkson re-renders the mention to H2 with
-    //      no `ck.member.identity.update` forged.
+    //      no `ak.member.identity.update` forged.
     unreachable!("integration target gated on soland/coauth/inkson R3.2 P0 wiring");
 }
 
@@ -391,7 +391,7 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
     // VECT-MB-3 / VECT-MB-4 / VECT-MB-5. Soland issuer behavior is covered by
     // its http_api suite; this live cotest scenario still needs provisioning:
     //   - happy: 200 with backend_token + participant_binding, TTL ≤ 600s, issuer_kid anchored to
-    //     current `ck.realm.media_service.service_id`.
+    //     current `ak.realm.media_service.service_id`.
     //   - neg-issuer: rogue issuer kid → 401 token_issuer_unauthorised.
     //   - neg-focus:  off-focus token request → 422 focus_mismatch.
     //   - neg-ttl:    server-issued TTL > 600s → 422 participant_binding_invalid.
@@ -405,7 +405,7 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
 #[ignore = "R3.1: soland strict_reject reducer branch not yet implemented"]
 fn test_3_accountable_principals_strict_reject_profile_toggle() {
     // Live integration:
-    //   1. With `ck.profile.accountable_principals.strict_reject.v1` NOT advertised: actor-profile
+    //   1. With `ak.profile.accountable_principals.strict_reject.v1` NOT advertised: actor-profile
     //      create with unverified `accountable_principal_ids[]` → 200, server strips + audit logs.
     //   2. With the profile advertised: same envelope → 412 failed_precondition
     //      reason=accountability_grant_missing.
@@ -420,7 +420,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // primitives is exercised by `run_cursor_opaque_core_vector`. Here
     // we additionally assert that a stateless body is rejected by the
     // SDK's closed stateful cursor shape. Servers without
-    // `ck.profile.stateless_cursor.v1` have no compat path.
+    // `ak.profile.stateless_cursor.v1` have no compat path.
     use arkret_core::cursor::{Cursor, CursorPurpose};
 
     let stateless = serde_json::json!({
@@ -539,7 +539,7 @@ fn test_6_handle_homograph_script_mix_or_nfc_variant_reject() {
     unreachable!("integration target gated on starid / teabay P2-impl");
 }
 
-// ─── R3.1 / TEST-7 — `ck.member.identity.update` end-to-end ───────────────
+// ─── R3.1 / TEST-7 — `ak.member.identity.update` end-to-end ───────────────
 
 #[test]
 fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
@@ -561,7 +561,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     // R3.2: MemberIdentity discloses subject_id + display_profile only;
     // handle lifecycle (the retired `primary_handle` / `handles[]`) has
-    // moved to `ck.schema.handle_claim.v1`.
+    // moved to `ak.schema.handle_claim.v1`.
     let make_identity = |name: &str| -> Result<MemberIdentity> {
         Ok(MemberIdentity {
             schema: "ak.schema.member_identity.v1".to_owned(),
@@ -647,14 +647,14 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 #[ignore = "R3.1: soland MID reducer + ak.profile.update field-level delta wiring not yet implemented"]
 fn test_7_cx_member_identity_update_live() {
     // Live integration:
-    //   1. Actor publishes initial `ck.member.identity.update` event with MemberIdentity v1
+    //   1. Actor publishes initial `ak.member.identity.update` event with MemberIdentity v1
     //      (display_name="Alice").
     //   2. Actor publishes second event with `replaces[]` pointing at the first; payload carries
     //      MemberIdentity v2 with display_name="Alice (work)".
     //   3. Client `account.subscribe` frame surfaces a roster with only the second event in
     //      `identity_event_ids[]`.
-    //   4. `ck.profile.update` field-level delta MUST drive the v2 display_name onto the projected
-    //      profile; the `ck.profile.realm_override` profile MUST take precedence when set
+    //   4. `ak.profile.update` field-level delta MUST drive the v2 display_name onto the projected
+    //      profile; the `ak.profile.realm_override` profile MUST take precedence when set
     //      per-Space.
     unreachable!("integration target gated on soland MID reducer (R3.1)");
 }
@@ -762,7 +762,7 @@ fn test_8_handle_rename_round_trip_live() {
     //   1. Client builds invite for canonical handle `alice:acme.example`.
     //   2. soland reducer accepts member-add with `payload.handle = "alice:acme.example"` (NO
     //      `handle_uri` field).
-    //   3. teabay's `ck.find.directory.query.resolve_handle(handle=...)` accepts the canonical
+    //   3. teabay's `ak.find.directory.query.resolve_handle(handle=...)` accepts the canonical
     //      handle string in the request body and returns a candidate whose `handle` field is the
     //      same canonical wire form.
     //   4. coauth's handle-claim issuance + sync surface MUST NOT emit `handle_uri` anywhere on a

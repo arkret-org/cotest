@@ -4,18 +4,18 @@
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
 // harness configures soland's audit_disclosure_policy.audit_agent_principal_id to
 // match the mock's DID; soland then federates invites to the mock and
-// surfaces emitted `ck.audit.accessed` events back to admin views.
+// surfaces emitted `ak.audit.accessed` events back to admin views.
 //
 // Endpoints:
 //   GET  /_arkret/self/audit-agent/identity
 //     Returns { did, public_jwk, key_package? }. Soland reads this to
 //     bind audit_disclosure_policy.audit_agent_principal_id.
 //   POST /_arkret/self/audit-agent/events  { kind, event }
-//     Forward `ck.moderation.franking_proof` / `org.arkret.soland.audit.report` events to the
-//     mock. Auto-acknowledges by recording a generated `ck.audit.accessed`
+//     Forward `ak.moderation.franking_proof` / `org.arkret.soland.audit.report` events to the
+//     mock. Auto-acknowledges by recording a generated `ak.audit.accessed`
 //     envelope, fetchable via /inspect.
 //   POST /_arkret/self/audit-agent/invite { realm_id, invite, mls_key_package? }
-//     Acknowledge an invite. Returns a synthetic `ck.audit.accessed`
+//     Acknowledge an invite. Returns a synthetic `ak.audit.accessed`
 //     envelope signed by the agent.
 //   GET  /_arkret/self/audit-agent/inbox   → events received
 //   GET  /_arkret/self/audit-agent/accessed → ak.audit.accessed envelopes emitted

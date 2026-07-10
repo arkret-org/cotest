@@ -1,4 +1,4 @@
-// Discussion track upgrade to a Circle-scoped private Strand (CKP-0007).
+// Discussion track upgrade to a Circle-scoped private Strand (AKP-0007).
 // Contract: e2e/scenarios/messaging/discussion-upgrade.md
 // Spec refs:
 //   - models/strand-and-message.md §5, §5.1 (scope_circle_id on Strand)

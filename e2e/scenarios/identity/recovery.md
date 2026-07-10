@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的 Recovery Key 生成(备份自动上传)、跨设备使用 backup envelope 解密、新设备的 `ck.device.authorize` 写入、E2EE 历史消息解密。Recovery Key 是唯一的内容恢复用户凭证(spec §3.3/§7.7);独立 vault passphrase 凭证层已弃用(§7.5.1)。
+验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的 Recovery Key 生成(备份自动上传)、跨设备使用 backup envelope 解密、新设备的 `ak.device.authorize` 写入、E2EE 历史消息解密。Recovery Key 是唯一的内容恢复用户凭证(spec §3.3/§7.7);独立 vault passphrase 凭证层已弃用(§7.5.1)。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
@@ -68,7 +68,7 @@
     - 生成新 device key(本地)
     - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ 派生 recovery private key → HPKE open `recovery_public_key` envelope
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
-14. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
+14. 客户端签 `ak.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
 15. 提交到 soland;soland 校验 recovery policy → 接受
 16. 断言:device-2 上 `GET /_soland/self/account/me` 返回 alice.did,设备列表新增 device-2
 
@@ -93,13 +93,13 @@
 - **E8.2 篡改 ciphertext**:测试 harness 改 backup 的 1 byte → 客户端 digest 校验失败,MUST 拒绝
 - **E8.3 错 Recovery Key 重试限制**:连续 N 次 commitment 不匹配 → 客户端要求 cooldown(防止暴力)
 - **E8.4 threshold recovery (3 of 5 shares)**:alice 用恢复 shares 而非 24 词词串;3 个 share holder 各自签发响应,客户端拼凑出 recovery key → 解密 envelope。覆盖 `key-management.md §8`(门限是 recovery policy 层,§7.5.4)
-- **E8.5 trusted recovery service**:走第三方恢复服务(`ck.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
+- **E8.5 trusted recovery service**:走第三方恢复服务(`ak.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
 - **E8.6 Mixed-domain backup**:`mixed_secret_storage=true` only 允许在 `personal_node` profile;`high_assurance` 部署 MUST 拒(§7.1)
 - **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke(spec §5.2);Phase C 恢复仍然成功,但**新设备的 historical access 仍按当前 membership 评估**(`crypto-media/encryption-and-audit.md` §2.3.5/§2.4)
 
 ## Implementation notes
 
-- **soland 缺口**:recovery policy state machine、recovery proof(`ck.schema.recovery_session.v1`)与 `ck.device.authorize` 的端到端绑定仍未贯通;key-backup CRUD + series 链 + unlock-proof 门已实现。整条 scenario 的 device-authorize 段仍 fixme。
+- **soland 缺口**:recovery policy state machine、recovery proof(`ak.schema.recovery_session.v1`)与 `ak.device.authorize` 的端到端绑定仍未贯通;key-backup CRUD + series 链 + unlock-proof 门已实现。整条 scenario 的 device-authorize 段仍 fixme。
 - **inkson 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 先按 device authorization fail-closed,只有 active policy + backup 可用时才进入输入已有 24 词的 restore。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 

@@ -6,7 +6,7 @@
 // (coauth/crates/backend/src/handlers/arkret/session_grant/refresh.rs).
 //
 // The refresh / soft-logout-restore holder proof is signed by the device's
-// `ck.device.authorize`-authorized signing key. coauth verifies that proof by
+// `ak.device.authorize`-authorized signing key. coauth verifies that proof by
 // resolving the authorized device signing key from the Principal Server's device
 // directory (`POST /_soland/gate/account/device-signing-keys/query`), NOT from
 // the principal DID document. So a black-box harness must first enrol the device
@@ -14,7 +14,7 @@
 //
 // This module drives:
 //   1. enrolment — `POST {coauth}/_arkret/gate/account/device-enroll` returns a
-//      signed `service_attested` `ck.device.authorize`; submit it verbatim to
+//      signed `service_attested` `ak.device.authorize`; submit it verbatim to
 //      `POST {soland}/_arkret/self/events`. The onboarded principal's did:webvh
 //      document already designates coauth's enrollment authority (coauth mints it
 //      via `prepare_inception(enrollment_authority_did=...)`), so the binding is

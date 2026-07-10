@@ -26,8 +26,8 @@ pub async fn recovery_schemas_run() -> Result<()> {
     )
     .map_err(|e| anyhow!("RecoverySessionId: {e}"))?;
 
-    // TODO(P4-impl): once `ck.schema.recovery_policy.v1` and
-    // `ck.schema.recovery_receipt.v1` JSON Schemas land in
+    // TODO(P4-impl): once `ak.schema.recovery_policy.v1` and
+    // `ak.schema.recovery_receipt.v1` JSON Schemas land in
     // `crates/core/src/generated/`, parse a sample envelope of each
     // shape and assert validation passes / a deliberately malformed
     // sample fails.

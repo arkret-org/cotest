@@ -166,7 +166,7 @@ async function submitThirdPartyInvite(
   return outcome;
 }
 
-// Submit a `ck.invite.claim` directly to the reducer (the spec source of truth,
+// Submit a `ak.invite.claim` directly to the reducer (the spec source of truth,
 // third-party-invites.md §4.3).
 async function submitClaim(
   request: APIRequestContext,
@@ -192,7 +192,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("third-party invite", () => {
   // Shared Phase-A/B/C setup: alice creates an `invite` Realm, allowlists a
-  // did:key verification service, and submits a pending `ck.invite.third_party`
+  // did:key verification service, and submits a pending `ak.invite.third_party`
   // whose `third_party_id` the test controls so the claim transcripts can be
   // reconstructed byte-for-byte.
   async function setupPendingInvite(
@@ -269,7 +269,7 @@ test.describe("third-party invite", () => {
       );
       expect(
         outcome.rejected,
-        `ck.invite.third_party rejected: ${JSON.stringify(outcome.rejected)}`,
+        `ak.invite.third_party rejected: ${JSON.stringify(outcome.rejected)}`,
       ).toHaveLength(0);
       expect(outcome.accepted.length).toBeGreaterThan(0);
 

@@ -2,9 +2,9 @@
 //!
 //! When the controller principal is deactivated, every agent_principal
 //! it owns MUST cascade through:
-//!     1. `ck.self.agent.deactivate` per agent
-//!     2. `ck.agent.key.revoke` per outstanding agent_key
-//!     3. `ck.capability.revoke` per attached accountability_grant
+//!     1. `ak.self.agent.deactivate` per agent
+//!     2. `ak.agent.key.revoke` per outstanding agent_key
+//!     3. `ak.capability.revoke` per attached accountability_grant
 //!     4. runtime endpoint revocation (DID Document service entry removal)
 
 use anyhow::{Result, anyhow};

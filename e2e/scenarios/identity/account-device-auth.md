@@ -2,7 +2,7 @@
 
 ## 目标
 
-把 identity/onboarding(账户 onboarding)+ identity/multi-device(多设备)+ session grant 串起来:用户通过 OIDC 完成账户认证;coauth 颁 `ak.session.grant`(短期);新设备加入需要现有设备签发 `ck.device.authorize`;session 过期后通过 refresh 拿新 grant。
+把 identity/onboarding(账户 onboarding)+ identity/multi-device(多设备)+ session grant 串起来:用户通过 OIDC 完成账户认证;coauth 颁 `ak.session.grant`(短期);新设备加入需要现有设备签发 `ak.device.authorize`;session 过期后通过 refresh 拿新 grant。
 
 ## Spec 锚点
 
@@ -36,7 +36,7 @@
 
 6. alice device-2 进 `/onboarding`,选 "Add to existing account"
 7. device-2 生成本地 device key,渲染 QR(spec §2.1)
-8. device-1 扫码 → 签 `ck.device.authorize` 把 device-2 加入
+8. device-1 扫码 → 签 `ak.device.authorize` 把 device-2 加入
 9. coauth 给 device-2 颁专属 session grant
 10. 断言:device-2 能调 `/_soland/self/account/me`,返回相同 DID
 11. 断言:device-1 / device-2 在 `/settings/devices` 互见

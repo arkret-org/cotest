@@ -136,7 +136,7 @@ test.describe("transport negotiation", () => {
     //   v1 core interop surface (core implementations are not required to
     //   provide them) and §1/§2 lock v1 core interop to
     //   HTTP/JSON. There is no registered `websocket_frame` binding kind,
-    //   `ck.profile.binding.websocket.v1` profile, or `ck.transport.negotiate`
+    //   `ak.profile.binding.websocket.v1` profile, or `ak.transport.negotiate`
     //   operation in artifacts/registry — they are reserved extension slots only.
     //   Phase A's cross-server delivery is *also* blocked, but on an
     //   implementation gap, not the binding stack: soland's outbound dispatcher
@@ -382,9 +382,9 @@ test.describe("transport negotiation", () => {
   );
 
   test.fixme(
-    // @blocking-on: spec — depends on `ck.transport.negotiate` + a
+    // @blocking-on: spec — depends on `ak.transport.negotiate` + a
     //   `websocket_frame` binding, neither of which exists in v1. There is no
-    //   `ck.transport.negotiate` operation in artifacts/registry and no
+    //   `ak.transport.negotiate` operation in artifacts/registry and no
     //   registered WebSocket binding kind (transport-bindings.md §6: non-HTTP
     //   bindings are extension profiles that core implementations are not
     //   required to provide). The whole

@@ -190,7 +190,7 @@
       "input": {
         "request": {
           "method": "GET",
-          "url": "/_arkret/self/events?realms=ck:realm:01970e589d21-7000-8000-000000000001&access_token=secret",
+          "url": "/_arkret/self/events?realms=ak:realm:01970e589d21-7000-8000-000000000001&access_token=secret",
           "headers": {},
           "protected_endpoint": true
         }

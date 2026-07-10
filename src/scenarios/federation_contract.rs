@@ -489,7 +489,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     // idempotent — the duplicate is accepted as a no-op and the event is not
     // persisted twice (asserted below). The one-time realm-establishing events
     // (realm.create / policy / member binding) are not re-sent; re-delivering a
-    // `ck.realm.create` is a distinct create-uniqueness concern, not a
+    // `ak.realm.create` is a distinct create-uniqueness concern, not a
     // message-replay one. The replica delivery gate admits the push
     // (federation_replica_observer), and the message dedupes against its prior
     // persisted copy.
@@ -564,7 +564,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     assert!(invalid_push["accepted"].as_array().unwrap().is_empty());
     // An encrypted (`ciphertext`-bearing) federation DataEvent requires the
     // source peer's ServiceDescribe to advertise the MLS governance binding
-    // profile (`ck.profile.mls_governance_binding.full.v1`) — the receiver MUST
+    // profile (`ak.profile.mls_governance_binding.full.v1`) — the receiver MUST
     // NOT accept ciphertext it cannot bind to a supported governance profile
     // (crypto-media/encryption-and-audit.md §295). `remote.example` is a test
     // stand-in with no reachable describe, so the federation profile-intersection
@@ -653,7 +653,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     assert_eq!(created["status"], "accepted");
 
     // A routable member delivery_binding is only projected once the Realm
-    // declares a `ck.realm.delivery_binding_policy` admitting the binding's
+    // declares a `ak.realm.delivery_binding_policy` admitting the binding's
     // source + recipient (join-policy.md §5.1.3 — fail-closed, no DID-document
     // fallback). Without it the reducer rejects the routable join with
     // `delivery_binding_policy_unset` and no member is projected.

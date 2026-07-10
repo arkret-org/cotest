@@ -2,10 +2,10 @@
   "profile": "ak.profile.anchor_view_compaction_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_uuids.json"],
-  "comment": "Anchor compaction round-trip vectors per spec authz/event-auth-state-resolution.md §6 (Anchor DAG, effective_anchor_view, signed compaction). Each vector pins (a) a multi-leaf Anchor DAG input, (b) the expected effective_anchor_view (pure function over leaves), (c) a signed compaction Anchor that MUST be join-equivalent (state_root, frontier) to the multi-leaf view it replaces, and (d) the bottom diagnostics that MUST survive compaction (compaction is information-preserving for ⊥ cells). Anchor ids are content-addressed hex SHA-256 digests under the ck:anchor:sha256:<hex> special form.",
+  "comment": "Anchor compaction round-trip vectors per spec authz/event-auth-state-resolution.md §6 (Anchor DAG, effective_anchor_view, signed compaction). Each vector pins (a) a multi-leaf Anchor DAG input, (b) the expected effective_anchor_view (pure function over leaves), (c) a signed compaction Anchor that MUST be join-equivalent (state_root, frontier) to the multi-leaf view it replaces, and (d) the bottom diagnostics that MUST survive compaction (compaction is information-preserving for ⊥ cells). Anchor ids are content-addressed hex SHA-256 digests under the ak:anchor:sha256:<hex> special form.",
   "encoder": {
     "anchor_id": "ak:anchor:sha256:<sha256-hex>",
-    "frontier_canonical_form": "ascending lex sort of ck:anchor:... leaf ids in JSON array",
+    "frontier_canonical_form": "ascending lex sort of ak:anchor:... leaf ids in JSON array",
     "state_root_basis": "merkle-leaf hash over canonical (cell_id, lattice_join_value) pairs"
   },
   "vectors": [
@@ -84,7 +84,7 @@
           "state_root": "sha256:eee1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": [
                 "ak:event:01970e58-0000-7000-8000-000000000010",
@@ -112,7 +112,7 @@
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
               "ak:event:01970e58-0000-7000-8000-000000000010",
@@ -130,7 +130,7 @@
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
               "ak:event:01970e58-0000-7000-8000-000000000010",
@@ -157,7 +157,7 @@
           "state_root": "sha256:8a81111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ak:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": ["ak:event:01970e58-0000-7000-8000-000000000020"]
             }

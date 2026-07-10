@@ -39,7 +39,7 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
     `claimed_profiles` 4 条 self_claimed,`verified_profiles=[]`
   - `coauth/crates/backend/src/handlers/arkret.rs` (T6.3) —
     `claimed_profiles=Vec::new()` + `verified_profiles=Vec::new()`,coauth 不假 claim
-    `ck.profile.identity_registry.v1` (跟踪项 `_codex_test_gaps.md` G3.C3)
+    `ak.profile.identity_registry.v1` (跟踪项 `_codex_test_gaps.md` G3.C3)
 
 ## 拓扑
 
@@ -85,8 +85,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 ### Phase B — 未声明的标准 event kind fail-closed
 
 6. **harness** 从 `event-kind-registry.json` 挑一个 active durable 但 soland
-   claimed profile 不覆盖的 kind(候选 `ck.applet.transaction.v1` ↔
-   `ck.profile.applet_service.v1`,后者不在 soland claimed 列表)
+   claimed profile 不覆盖的 kind(候选 `ak.applet.transaction.v1` ↔
+   `ak.profile.applet_service.v1`,后者不在 soland claimed 列表)
 7. alice 注册 + dev-login
 8. `POST /_arkret/self/events` with a minimal Event envelope whose `kind` is `<unsupported_kind>`
    + Bearer token
@@ -125,8 +125,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
     profile_tiers.extension_profile_implementation`(并集 — `mimi_interop` 属 extension
     tier,不在 stable catalog 但在 `implementation_profiles` 中)
 19. 断言 `claimed_profiles[].profile_id` ⊆ `catalog_known`(零容忍 typo,例如
-    `ck.profile.principal-server.v1`)
-20. **不**把 `unsupported_profiles[]`(如 `ck.profile.soland_limited_server.v1`)纳入
+    `ak.profile.principal-server.v1`)
+20. **不**把 `unsupported_profiles[]`(如 `ak.profile.soland_limited_server.v1`)纳入
     检查 — 这类是 limitation descriptor,不是 conformance claim,也不必出现在 catalog
 
 ## Observable assertions
@@ -141,12 +141,12 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 - **E1 coauth 分区独立**:coauth 当前 `claimed_profiles=[]`、`verified_profiles=[]`
   (T6.3) — 子测试断言两个数组都为 `[]`,确保 coauth 没有 silent claim
-  `ck.profile.identity_registry.v1`(对应 G3.C3 跟踪项)
+  `ak.profile.identity_registry.v1`(对应 G3.C3 跟踪项)
 - **E2 verified_profiles entry shape**:一旦 cotest verifier 写入 `verified_profiles`,
   每条 entry MUST 携带 `cotest_run_id` / `artifact_digest` / `artifact_ref` /
   `cotest_issuer_did` / `signature` / `timestamp`;Phase A 的 entry-shape 断言提前钉住未来形态
 - **E3 `unsupported_profiles` 不参与 claim**:Phase E 验证
-  `ck.profile.soland_limited_server.v1` 等 limitation descriptor **不**在
+  `ak.profile.soland_limited_server.v1` 等 limitation descriptor **不**在
   `claimed_profiles` 中,且**不**要求出现在 catalog 中
 - **E4 catalog 自洽性**:`v1_profile_catalog ⊆ implementation_profiles`,作为 lint;
   不是 server 断言

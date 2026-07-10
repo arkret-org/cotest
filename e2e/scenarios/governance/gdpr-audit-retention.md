@@ -41,7 +41,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 8. alice 进 `/settings/account` → "Erase my account"
 9. 确认对话框 → 提交 `POST /_soland/self/account/erase`,可能要二次密码确认
-10. soland 返回 `state="erased"`，并在响应中带 `ck.schema.erasure_receipt.v1`
+10. soland 返回 `state="erased"`，并在响应中带 `ak.schema.erasure_receipt.v1`
 11. soland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
     - 删除 alice 的 E2EE secret material(SSK / USK / device keys → 安全销毁,后续无法解密)
@@ -59,7 +59,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase E — Audit log entries
 
 16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_soland/admin/audit/events?actor=alice.did`
-17. 断言:audit log 含 `org.arkret.soland.audit.exported`、`org.arkret.soland.audit.erasure_initiated`、`ck.audit.erasure_receipt`(前两者为产品私有审计语义,已去 `ck.` 前缀;`ck.audit.erasure_receipt` 为协议注册词汇)
+17. 断言:audit log 含 `org.arkret.soland.audit.exported`、`org.arkret.soland.audit.erasure_initiated`、`ak.audit.erasure_receipt`(前两者为产品私有审计语义,已去 `ck.` 前缀;`ak.audit.erasure_receipt` 为协议注册词汇)
 
 ### Phase F — Retention policy
 
@@ -78,7 +78,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ## Implementation notes
 
-- **soland**:retention_policy TTL sweeper 已 live;过期 timeline event 返回 `[expired]` tombstone,`event_id` / canonical history 保留不物理删除。跨服务器 erasure fan-out 和历史消息 tombstone 已由 `ck.audit.erasure_receipt` live 覆盖
+- **soland**:retention_policy TTL sweeper 已 live;过期 timeline event 返回 `[expired]` tombstone,`event_id` / canonical history 保留不物理删除。跨服务器 erasure fan-out 和历史消息 tombstone 已由 `ak.audit.erasure_receipt` live 覆盖
 - **inkson 缺口**:`/settings/account` 的 export / erase 按钮、确认对话框
 - **测试侧**:retention 时间快进通过 `/_soland/admin/retention/sweep` 的本地 admin/test surface 或旧 `created_at` fixture 覆盖
 

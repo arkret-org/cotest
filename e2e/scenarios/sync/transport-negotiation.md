@@ -10,7 +10,7 @@
 
 - `arkret-spec/spec/v1/zh/sync/transport-bindings.md` §2 — 分层:semantic operation vs transport binding;v1 core 锁定 HTTP/JSON
 - `arkret-spec/spec/v1/zh/sync/transport-bindings.md` §3 — Binding Requirements:认证、授权上下文、幂等、流式、错误、背压
-- `arkret-spec/spec/v1/zh/sync/transport-bindings.md` §4 — Canonical Operation IDs (federation push 复用 `ck.self.events.command.submit` + service_signature)
+- `arkret-spec/spec/v1/zh/sync/transport-bindings.md` §4 — Canonical Operation IDs (federation push 复用 `ak.self.events.command.submit` + service_signature)
 - `arkret-spec/spec/v1/zh/sync/service-http-binding.md` §3 — 通用认证 / RFC 9421 / 服务间签名要求
 - `arkret-spec/spec/v1/zh/sync/service-http-binding.md` §4 — 服务间 origin/destination service DID 绑定
 - `arkret-spec/spec/v1/zh/sync/service-http-binding.md` §5 — 错误 envelope、404 unrecognized_endpoint、405 method_not_allowed
@@ -41,14 +41,14 @@
 - 两个 soland 实例 `/health` 返回 200(通过 `hasDualSoland()` gate)
 - alice 在 soland_a 上 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 完成
 - bob 在 soland_b 上完成同样的注册 + dev session
-- 两侧 DID 文档暴露 `service` 数组,其中包含 `ck.profile.principal_server.v1` 条目和 `supported_bindings`(至少 `http_json`)
+- 两侧 DID 文档暴露 `service` 数组,其中包含 `ak.profile.principal_server.v1` 条目和 `supported_bindings`(至少 `http_json`)
 - alice 已经在 soland_a 上 createRealm,该 space 的 `service_binding_ref` 包含 soland_b 为允许的 federation peer
 
 ## Steps
 
 ### Phase A — HTTP binding baseline (RFC 9421 signed)
 
-1. **soland_a → soland_b**:测试 harness 触发 alice 在 server A 上对 bob 发 `ck.invite.create`(remote DID)
+1. **soland_a → soland_b**:测试 harness 触发 alice 在 server A 上对 bob 发 `ak.invite.create`(remote DID)
 2. 期望:soland_a 自动构造 federation push 请求
    - URL: `${SOLAND_B_PUBLIC_URL}/_arkret/peer/peer/events`
    - Method: `POST`
@@ -80,7 +80,7 @@
    - URL: `${SOLAND_B_PUBLIC_URL}/_arkret/peer/events stream binding`(`wss://` 在生产、`ws://` 在测试)
    - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ak.federation.v1`
    - 同时携带 RFC 9421 `Signature` 对 upgrade 请求的 covered components 签名(handshake 阶段)
-8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `ck.federation.v1` subprotocol
+8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `ak.federation.v1` subprotocol
 9. **soland_a** 通过 WebSocket 帧推送下一批 federation event(例如 alice 在 space 发的消息)
    - 每个帧 body 仍然是 canonical EventEnvelope;帧本身携带 `frame_signature`(per-frame service signature) 而非 per-request RFC 9421
 10. **soland_b** 验证 frame_signature → 入库 → bob 30s 内看到消息
@@ -89,7 +89,7 @@
 ### Phase C — TSP binding (optional extension)
 
 12. **soland_a** 在 `GET /_arkret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ak.profile.binding.tsp.v1"`)
-13. **soland_b** 选择 TSP — 通过 `ck.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
+13. **soland_b** 选择 TSP — 通过 `ak.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
 14. **soland_a** 通过 TSP node 向 soland_b 发送下一批事件
     - TSP envelope: outer wrapper 携带 sender/receiver VID(verifiable identifier),inner payload 是 canonical EventEnvelope
     - 不再需要 RFC 9421 — TSP envelope 自身 cryptographic binding 取代 HTTP 层签名
@@ -113,7 +113,7 @@
 - Phase A:POST `/_arkret/peer/peer/events` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
 - Phase A:bob 在 `/_arkret/self/account/subscribe` 的 `notifications.events` 看到 invite
 - Phase B:`GET /_arkret/describe` 含 `supported_bindings[].kind=websocket_frame`
-- Phase B:WebSocket upgrade 返回 101;subprotocol = `ck.federation.v1`
+- Phase B:WebSocket upgrade 返回 101;subprotocol = `ak.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息
 - Phase C(fixme):TSP binding 出现在 `supported_bindings` 中;TSP envelope 解封成功
 - Phase D:WebSocket 断后,server A 自动回退到 HTTP/JSON;bob 仍然在 30s 内收到下一个事件
@@ -137,7 +137,7 @@
   - 断言:多 hop 的端到端签名验证成功;任一层失败整批 reject
 
 - **E8.3 binding negotiation timeout**
-  - soland_a 通过 `ck.transport.negotiate` 请求升级到 WebSocket
+  - soland_a 通过 `ak.transport.negotiate` 请求升级到 WebSocket
   - 测试 harness 让 soland_b 在 30s 内不响应(`route.fulfill` 延迟 / 不响应)
   - 30s 后 soland_a MUST:
     1. 取消 negotiation 请求
@@ -152,7 +152,7 @@
   - TSP binding 完全未实现
   - HTTP RFC 9421 入站签名验证 partial(`federation.rs` 已有 stub,但完整 RFC 9421 components / `Content-Digest` / nonce / key rotation hint 路径未完成)
   - 出站签名生成不完整(`federation.rs:548-572` 出站 push 是 logs-only stub)
-  - `ck.transport.negotiate` operation 在 contract catalog 中作为 slot 保留,无运行时实现
+  - `ak.transport.negotiate` operation 在 contract catalog 中作为 slot 保留,无运行时实现
   - binding fallback chain 是 client-side 逻辑,目前 soland 没有 fallback state machine
 
 - **测试侧**:

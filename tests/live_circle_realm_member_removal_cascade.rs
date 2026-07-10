@@ -1,5 +1,5 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CKP-0007 §Membership Cascade;
+//! Live-stack integration test for AKP-0007 §Membership Cascade;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_realm_member_removal_cascade -- --ignored`).
 //!
@@ -8,16 +8,16 @@
 //!   2. Create a Realm and two Circles under it (`circle_alpha`, `circle_beta`). Both Circles share
 //!      the same Realm.
 //!   3. Register actor `X` and add X as a Realm member; also add X to both Circles
-//!      (`ck.circle.member.state → active`).
-//!   4. Admin issues `ck.realm.member.state → left` for actor X. Assert: a) X's Realm membership
+//!      (`ak.circle.member.state → active`).
+//!   4. Admin issues `ak.realm.member.state → left` for actor X. Assert: a) X's Realm membership
 //!      flips to `left` in soland's projection, b) X's membership in BOTH `circle_alpha` AND
-//!      `circle_beta` is auto-flipped to `left` (CKP-0007 strict-subset cascade: any Circle
+//!      `circle_beta` is auto-flipped to `left` (AKP-0007 strict-subset cascade: any Circle
 //!      membership is invalid when the actor leaves the parent Realm, so the reducer MUST emit
-//!      synthetic `ck.circle.member.state → left` events), c) each Circle's MLS group emits a
+//!      synthetic `ak.circle.member.state → left` events), c) each Circle's MLS group emits a
 //!      *remove proposal* + commit pair: verify the Circle's `mls_group_ref` epoch advanced (the
 //!      projection exposes the epoch number on `Circle.mls_group_ref` or via a sibling field once
 //!      P5 finalises), d) a sync request from an actor that IS still in the Circle no longer sees X
-//!      in the Circle's `ck.circle.members` projection.
+//!      in the Circle's `ak.circle.members` projection.
 //!
 //! Gating mirrors the existing `#[ignore]` live tests; the bootstrap is
 //! soft-skipped via a descriptive `bail!` when the stack cannot start.
@@ -33,9 +33,9 @@ use serial_test::serial;
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or pass `--ignored`) once the P5 stack is up.
-/// Issue: CKP-0007 (Realm-member-removal → Circle cascade)
+/// Issue: AKP-0007 (Realm-member-removal → Circle cascade)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CKP-0007 Realm-member-removal → Circle cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "AKP-0007 Realm-member-removal → Circle cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     // ── 0. SDK-level invariant: strict subset breaks the moment a Circle
@@ -146,8 +146,8 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     // ── 3. Drive the live wire: create Realm + 2 Circles, add X to both,
     //       then `realm.member.state → left` for X. The expected
     //       endpoints are:
-    //         POST /_arkret/self/realms                            (ck.realm.create)
-    //         POST /_arkret/self/realms/<rid>/circles              (ck.circle.create) x2
+    //         POST /_arkret/self/realms                            (ak.realm.create)
+    //         POST /_arkret/self/realms/<rid>/circles              (ak.circle.create) x2
     //         POST /_arkret/self/realms/<rid>/members              for alice + X (active)
     //         POST /_arkret/self/circles/<cid>/members             for X (active)  x2
     //         POST /_arkret/self/realms/<rid>/members/<x>/state    body {"state":"left"}
@@ -159,7 +159,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     //         d) GET /_arkret/self/circles/<alpha>             → mls_group_ref epoch ↑
     //         e) GET /_arkret/self/circles/<beta>              → mls_group_ref epoch ↑
     //         f) other-member sync stream contains the synthetic
-    //            `ck.circle.member.state` event with state=left for X
+    //            `ak.circle.member.state` event with state=left for X
     //            (eventually() with 10s timeout, 250ms cadence).
     let _ = admin
         .post("/_arkret/self/realms")
@@ -173,12 +173,12 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CKP-0007): live-stack wiring for Realm-member-left → Circle cascade \
-         is scaffolded; finalise once soland exposes the `ck.realm.member.state` \
-         and `ck.circle.member.state` projections + MLS epoch field. Expected \
+        "TODO(P5/AKP-0007): live-stack wiring for Realm-member-left → Circle cascade \
+         is scaffolded; finalise once soland exposes the `ak.realm.member.state` \
+         and `ak.circle.member.state` projections + MLS epoch field. Expected \
          assertions: (a) X.realm.state=left, (b/c) X.circle.alpha.state=left + \
          X.circle.beta.state=left within 5s, (d/e) MLS epoch advanced exactly once \
-         per Circle, (f) other members see synthetic `ck.circle.member.state→left` \
+         per Circle, (f) other members see synthetic `ak.circle.member.state→left` \
          event on the sync stream."
     );
 }

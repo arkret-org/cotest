@@ -9,7 +9,7 @@
 ## Spec 锚点
 
 - `identity/account-lifecycle.md` §2.1 — 服务账户与 Principal 绑定
-- `identity/account-lifecycle.md` §2.1.1 — `ck.account.create` 流程
+- `identity/account-lifecycle.md` §2.1.1 — `ak.account.create` 流程
 - `identity/identity-did.md` §2 — DID 主体 + 控制密钥
 - `identity/identity-did.md` §3.4 — `did:webvh` genesis entry
 - `identity/key-management.md` §5.0 — Inception key + control stream genesis
@@ -49,8 +49,8 @@
    - 生成 inception key
    - 写入 `did:webvh` entry 0 (SCID + updateKeys)
    - 创建 principal control Realm (`purpose="principal_control"`)
-   - 写入 `ck.device.authorize` 把第一台设备授权
-   - 发布 `ck.cross_signing.publish.v1` (PSK / SSK / USK)
+   - 写入 `ak.device.authorize` 把第一台设备授权
+   - 发布 `ak.cross_signing.publish.v1` (PSK / SSK / USK)
    - coauth 颁发首个 `ak.session.grant` (短期)
 5. inkson 收到 `{ did, session_credential, principal_control_realm_id }`,写入 localStorage
 
@@ -106,7 +106,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.profile.principal_control_realm.v1` profile、`ck.cross_signing.publish` event、`ck.device.authorize` bootstrap binding — 都是 MUST 但当前 soland 未实现。**整条 scenario 是 fixme territory**,等 control stream 落地。
+- **soland 缺口**:`ak.profile.principal_control_realm.v1` profile、`ak.cross_signing.publish` event、`ak.device.authorize` bootstrap binding — 都是 MUST 但当前 soland 未实现。**整条 scenario 是 fixme territory**,等 control stream 落地。
 - **inkson 缺口**:`/onboarding` 真路径不走 dev-login,需要补 passkey / OIDC button、verification 流程。
 - **coauth 缺口**:OIDC bridge handler 完整度需要审。
 - **harness 缺口**:mock IdP service、mock email service — `scripts/run-joint-e2e.ps1` 需要 `-StartMockIdp` / `-StartMockEmail` 开关。

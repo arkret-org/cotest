@@ -507,7 +507,7 @@ impl TestServerGroup {
     /// mutual peer mesh through start-time env. Without this, an inbound
     /// `/_arkret/peer/events` submission can never resolve the source peer's
     /// ServiceDescribe, so the federation profile gate falls back to
-    /// `federation_minimal` and rejects core kinds like `ck.message.create`.
+    /// `federation_minimal` and rejects core kinds like `ak.message.create`.
     ///
     /// The outbound dispatcher is disabled (`SOLAND_FEDERATION_OUTBOUND=0`)
     /// because federation scenarios drive cross-server delivery with explicit

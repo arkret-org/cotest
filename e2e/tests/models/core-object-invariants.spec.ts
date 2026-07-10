@@ -221,7 +221,7 @@ test.describe("core object invariants", () => {
   // soland's events submit surface now evaluates the generic
   // `preconditions[].head_eq` compare-and-swap before any effect lands
   // (reducer/projection_state.rs `check_move_preconditions`, wired into the
-  // submit preflight in event_log/submit.rs). A `ck.strand.update` Move
+  // submit preflight in event_log/submit.rs). A `ak.strand.update` Move
   // carrying a STALE `head_eq` predicate fails closed with
   // `failed_precondition` (HTTP 412) and applies NO patch; a FRESH predicate
   // matching the materialized head admits and applies. The strand fields
@@ -250,7 +250,7 @@ test.describe("core object invariants", () => {
         `core-invariants strand ${stamp}`,
         { status: "open" },
       );
-      const fieldsCell = `ak:cell:ck.component.strand.fields.v1:${strandId}`;
+      const fieldsCell = `ak:cell:ak.component.strand.fields.v1:${strandId}`;
 
       // A ak.strand.update carrying a STALE `head_eq` precondition (claims
       // status == "closed" when it is actually "open") MUST reject with
@@ -323,7 +323,7 @@ test.describe("core object invariants", () => {
   // because the kanban product UX relies on archiving a List hiding its
   // cards. Reversing that is a behavioural change owned by the kanban surface
   // (its own tests depend on the cascade) and is out of scope here.
-  // Separately, `ck.space.tombstone` does not yet enforce a
+  // Separately, `ak.space.tombstone` does not yet enforce a
   // `space_has_live_dependents` precondition (apply_space_container.rs only
   // checks the source lifecycle state → `space_already_terminal`), so the
   // live-dependents refusal is also not wired. Both halves require reducer

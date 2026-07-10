@@ -1,7 +1,7 @@
 //! P2F.3 — Circle effective history visibility takes the stricter of
-//! `(realm_floor, circle_setting)` (CKP-0007 §3.4).
+//! `(realm_floor, circle_setting)` (AKP-0007 §3.4).
 //!
-//! Normative rule (CKP-0007 §3.4, paraphrased): effective history
+//! Normative rule (AKP-0007 §3.4, paraphrased): effective history
 //! visibility is the stricter of the parent Realm policy floor and the
 //! Circle's `history_visibility`. A Circle MAY tighten the parent Realm's
 //! floor but MUST NOT loosen the parent Realm's privacy/compliance floor.
@@ -43,10 +43,10 @@ fn compute_effective_history_visibility(
     circle_setting: HistoryVisibility,
 ) -> Result<HistoryVisibility> {
     let r = strictness_rank(&realm_floor).ok_or_else(|| {
-        anyhow!("realm floor `restricted` is not in the linear floor space (CKP-0007 §3.4)")
+        anyhow!("realm floor `restricted` is not in the linear floor space (AKP-0007 §3.4)")
     })?;
     let c = strictness_rank(&circle_setting).ok_or_else(|| {
-        anyhow!("circle setting `restricted` is not in the linear floor space (CKP-0007 §3.4)")
+        anyhow!("circle setting `restricted` is not in the linear floor space (AKP-0007 §3.4)")
     })?;
     Ok(if r >= c { realm_floor } else { circle_setting })
 }
@@ -131,7 +131,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
     }
 
     // ── Pin wire shape: each variant serialises to the snake_case string
-    //    the spec uses on `ck.realm.policy` / `ck.circle.*` payloads.
+    //    the spec uses on `ak.realm.policy` / `ck.circle.*` payloads.
     for (variant, expected) in [
         (WorldReadable, "world_readable"),
         (Shared, "shared"),

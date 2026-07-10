@@ -27,7 +27,7 @@
 
 1. alice 完成 onboarding,初始 handle 由 `uniqueUser` 自动分配如 `@alice-s29-<uuid>`
 2. alice 进 `/settings/profile` → "Change handle",新 handle = `@alice-pretty`
-3. inkson 提交 `ck.handle.claim { handle: "@alice-pretty", actor: alice.did }`
+3. inkson 提交 `ak.handle.claim { handle: "@alice-pretty", actor: alice.did }`
 4. soland reducer 校验:
    - handle 格式合法
    - handle 未被占用
@@ -37,7 +37,7 @@
 
 ### Phase B — Handle 冲突
 
-7. mallory 试 `ck.handle.claim { handle: "@alice-pretty" }`
+7. mallory 试 `ak.handle.claim { handle: "@alice-pretty" }`
 8. soland reducer 拒,reason `handle_already_claimed`
 9. 断言:mallory 的 inkson UI 显示错误;profile.handle 未变
 
@@ -45,7 +45,7 @@
 
 10. alice 进 `/settings/profile` → "Transfer handle"
 11. 输入 target = bob.did
-12. inkson 提交 `ck.handle.transfer { handle, from: alice.did, to: bob.did }`,alice 签
+12. inkson 提交 `ak.handle.transfer { handle, from: alice.did, to: bob.did }`,alice 签
 13. soland reducer:
     - 校验 alice 是当前 holder
     - 把 handle 绑定改到 bob.did
@@ -56,7 +56,7 @@
 
 ### Phase D — Handle 释放后等待期
 
-17. alice 主动释放 handle(`ck.handle.release`)
+17. alice 主动释放 handle(`ak.handle.release`)
 18. spec 可能规定一个 grace period(如 30 天)防止 squat
 19. mallory 立刻 claim 该 handle → 拒,reason `handle_in_grace_period`
 20. 时间 stub 到 +31 天 → mallory claim 成功

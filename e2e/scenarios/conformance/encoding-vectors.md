@@ -70,7 +70,7 @@
 
 ### Phase A — Canonical JSON encoding (§1.3 / §1.4 / §1.5 / §1.5.1)
 
-1. **harness** 加载 `ck.vector.encoding.canonical_json.basic.v1`、`...nested.v1`
+1. **harness** 加载 `ak.vector.encoding.canonical_json.basic.v1`、`...nested.v1`
 2. 对每个 vector,`POST /_arkret/_conformance/encode` with `{ vector_id, input }`
 3. 断言:
    - `response.canonical_json` 与 `expected_canonical_json` 完全字节相等 (含字段排序、无空白)
@@ -81,12 +81,12 @@
 
 ### Phase B — Event digest + Signature binding (§1.6 / §1.7 / §1.8)
 
-7. **harness** 加载 `ck.vector.encoding.event_digest.v1`
+7. **harness** 加载 `ak.vector.encoding.event_digest.v1`
 8. `POST /_arkret/_conformance/encode` with §1.6 输入事件
 9. 断言:`canonical_json` / `digest` 与 spec §1.6 期望值一致
-10. **harness** 加载 `ck.vector.encoding.batch_receipt_digest.v1` (§1.7)
+10. **harness** 加载 `ak.vector.encoding.batch_receipt_digest.v1` (§1.7)
 11. `POST .../encode` 输入 batch receipt → 断言 receipt 的 canonical bytes / digest 一致
-12. **harness** 加载 `ck.vector.encoding.signature_binding.v1` (§1.8)
+12. **harness** 加载 `ak.vector.encoding.signature_binding.v1` (§1.8)
 13. `POST /_arkret/_conformance/sign` with `{ event, signing_key_ref: alice.dev_key }`
 14. 断言:
     - `canonical_bytes` 与 vector `expected_canonical_bytes` 一致
@@ -95,15 +95,15 @@
 
 ### Phase C — HLC timestamp ordering (§1.9 / §1.10)
 
-15. **harness** 加载 `ck.vector.encoding.hlc_order.v1`,内含一组并发 logical clocks
+15. **harness** 加载 `ak.vector.encoding.hlc_order.v1`,内含一组并发 logical clocks
 16. `POST /_arkret/_conformance/hlc-merge` with `{ clocks: [...] }`
 17. 断言:`response.ordered` 序列与 vector `expected_order` 完全相同 (包括 tie-break 时 actor_id 字典序)
-18. **harness** 加载 `ck.vector.encoding.hlc_logical_overflow.v1` (§1.10)
+18. **harness** 加载 `ak.vector.encoding.hlc_logical_overflow.v1` (§1.10)
 19. 断言:logical counter 溢出时端点返回明确错误码 (`hlc_logical_overflow`),不静默 wrap
 
 ### Phase D — Cursor stability across re-reduce (§1.11)
 
-20. **harness** 加载 `ck.vector.encoding.cursor_opaqueness.v1`,内含同一组 events 的两次 reduce 序列 (顺序不同,最终态相同)
+20. **harness** 加载 `ak.vector.encoding.cursor_opaqueness.v1`,内含同一组 events 的两次 reduce 序列 (顺序不同,最终态相同)
 21. `POST /_arkret/_conformance/cursor` with `{ events, reduce_round: 1 }` → cursor_A
 22. `POST .../cursor` with `{ events_shuffled, reduce_round: 2 }` → cursor_B
 23. 断言:
@@ -112,7 +112,7 @@
 
 ### Phase E — Encrypted envelope round-trip (§1.12)
 
-24. **harness** 加载 `ck.vector.encoding.encrypted_envelope_digest.v1`
+24. **harness** 加载 `ak.vector.encoding.encrypted_envelope_digest.v1`
 25. `POST /_arkret/_conformance/envelope` with `{ envelope: { mls_ciphertext, header, ... } }`
 26. 断言:
     - `response.canonical_bytes` 与 vector 一致 (header 字段排序后)
@@ -121,7 +121,7 @@
 
 ### Phase F — Redaction visibility matrix (§3.2 / §3.3 / §3.4 / §3.5)
 
-27. **harness** 加载 `ck.vector.redaction.field_retention.v1` (§3.2),内含一对 `(original_event, redaction_event)`
+27. **harness** 加载 `ak.vector.redaction.field_retention.v1` (§3.2),内含一对 `(original_event, redaction_event)`
 28. `POST /_arkret/_conformance/redact` with `{ event, redaction, viewer_did: alice.did }`
 29. 断言:`projected_event` 中保留字段集 = vector `expected_retained_fields_owner`,被剥离字段不出现(不是 set null,是 key 缺失)
 30. 再次 `POST .../redact` with `{ ..., viewer_did: guest.did }` (未授权读者)
@@ -151,7 +151,7 @@
 - **E9.2 unknown vector_id 优雅降级**:harness POST `{ vector_id: "ak.vector.encoding.bogus.v1", input: {...} }` → soland 端点返回 `unknown_vector_id` (HTTP 4xx),不应静默执行默认 canonicalizer 然后假装 pass
 - **E9.3 vector mismatch 时输出 diff**:在 spec §1.6 vector 输入里故意改一个字段值,断言 harness 报告中 `actual.digest !== expected.digest`,并把 `actual_canonical_json` 与 `expected_canonical_json` 同时写到 step screenshot / artifact,便于人工 diff
 - **E9.4 redaction 跨服务器一致**:把 §3 vector 同时 POST 给 soland-alpha 与 soland-beta (若 `hasDualSoland()` 为 true),两边投影必须 byte-equal — 这条只在 dual-soland topology 下跑,否则 skip
-- **E9.5 large vector 流式**:`ck.vector.encoding.event_digest.v1` 的输入 payload 超过 1MB 时,canonicalizer 也必须产出稳定 digest (避免 streaming buffer 边界 bug)
+- **E9.5 large vector 流式**:`ak.vector.encoding.event_digest.v1` 的输入 payload 超过 1MB 时,canonicalizer 也必须产出稳定 digest (避免 streaming buffer 边界 bug)
 
 后两条建议拆成独立的小 spec(`conformance/encoding-vectors.federation`、`conformance/encoding-vectors.large-payload`),保持主 scenario 紧凑。
 

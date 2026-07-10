@@ -1,5 +1,5 @@
 //! Phase 2 — `/_arkret/self/device_messages` send / duplicate / list / describe
-//! plus the `ck.key.verification.request` side channel.
+//! plus the `ak.key.verification.request` side channel.
 
 use anyhow::Result;
 use reqwest::StatusCode;

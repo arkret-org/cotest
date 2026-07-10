@@ -438,7 +438,7 @@ test.describe("kanban end-to-end", () => {
   }) => {
     // spec: common-fields.md §5.1 — writes on a non-active object MUST fail
     // with strand_not_active. Posting into a Card's discussion track after it
-    // is archived is a track mutation (ck.strand.tracks.update); soland gates
+    // is archived is a track mutation (ak.strand.tracks.update); soland gates
     // it on the parent Strand lifecycle in apply_objects/strand.rs
     // (check_strand_tracks_transition admission preflight + apply_strand_track_touch
     // reducer defence-in-depth), both returning strand_not_active.
@@ -459,7 +459,7 @@ test.describe("kanban end-to-end", () => {
       `Archived Card ${stamp}`,
     );
 
-    // Archive the Card (ck.strand.archive, target_ref). Accepted: the strand
+    // Archive the Card (ak.strand.archive, target_ref). Accepted: the strand
     // is Active before this transition.
     await submitSignedEventApi(
       request,
@@ -626,7 +626,7 @@ test.describe("kanban end-to-end", () => {
         .poll(
           async () => {
             const cellResp = await request.get(
-              `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ck.component.child_order.v1`,
+              `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ak.component.child_order.v1`,
               { headers: { authorization: `Bearer ${aliceToken}` } },
             );
             if (cellResp.status() !== 200) {
@@ -779,11 +779,11 @@ test.describe("kanban end-to-end", () => {
       const responseBody = await response.text();
       expect(
         responseBody.includes("content_encryption_floor_violation"),
-        `ck.strand.update for the description hit the content-encryption floor — the client shipped plaintext body to an encrypted Realm: ${response.status()} ${responseBody.slice(0, 500)}`,
+        `ak.strand.update for the description hit the content-encryption floor — the client shipped plaintext body to an encrypted Realm: ${response.status()} ${responseBody.slice(0, 500)}`,
       ).toBe(false);
       expect(
         response.status(),
-        `ck.strand.update should be accepted; body=${responseBody.slice(0, 500)}`,
+        `ak.strand.update should be accepted; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
       // Prove the write was actually ENCRYPTED, not a false-green on a
       // plaintext realm: the private description must not appear verbatim in

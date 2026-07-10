@@ -10,7 +10,7 @@ use crate::conformance::{required_str, validate_profile};
 /// M7 — MLS covered_frontier cell vectors (round 20).
 ///
 /// Stand-alone fixture (`tests/fixtures/mls_move_covered_frontier_fixture.json`)
-/// validating the or-set behaviour of `ck.component.mls.covered_frontier.v1`
+/// validating the or-set behaviour of `ak.component.mls.covered_frontier.v1`
 /// across MLS commit Moves, governance Moves, and rotation. Pins:
 ///
 /// * accumulate vector adds three ops where two share the same tag (idempotent re-add);
@@ -37,7 +37,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
         match name {
             "covered_frontier_accumulates_governance_refs_idempotent" => {
                 let cell_id = required_str(vector, "cell_id")?;
-                if !cell_id.starts_with("ak:cell:ck.component.mls.covered_frontier.v1:") {
+                if !cell_id.starts_with("ak:cell:ak.component.mls.covered_frontier.v1:") {
                     bail!("vector {name} cell_id wrong family: {cell_id}");
                 }
                 let ops = vector

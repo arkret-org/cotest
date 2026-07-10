@@ -106,7 +106,7 @@ fn fnv1a_48(input: &str) -> u64 {
     hash & 0x0000_ffff_ffff_ffff
 }
 
-/// Canonical `ck.member.state` join payload shared by the harness `add_member`
+/// Canonical `ak.member.state` join payload shared by the harness `add_member`
 /// helpers so the member.state default shape lives in one place.
 pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
     member_join_payload_value(realm_id, actor_id).expect("valid cotest member.join payload")
@@ -235,7 +235,7 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
         },
         "created_at": "2026-05-02T00:00:00Z",
     });
-    // Realm-level `sync_endpoints` (ck.schema.realm.v1#/properties/sync_endpoints):
+    // Realm-level `sync_endpoints` (ak.schema.realm.v1#/properties/sync_endpoints):
     // shared notary / sync / mirror / federation-peer service bindings. Passed
     // through verbatim so federation tests can authorise a peer service as a
     // `federation_peer` endpoint (member-delivery-binding.md §7 — orthogonal to

@@ -40,7 +40,7 @@ import {
 } from "../../helpers/session-grant-dpop";
 
 // The self endpoint exercised throughout: it is a read-only `viewer` projection
-// of the authenticated principal (ck.self.account.query.viewer), so a 200 here
+// of the authenticated principal (ak.self.account.query.viewer), so a 200 here
 // proves the inbound credential authenticated end-to-end.
 const VIEWER_PATH = "/_arkret/self/account/viewer";
 

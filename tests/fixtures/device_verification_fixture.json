@@ -4,10 +4,10 @@
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "D2 Round 24 — device verification strand vectors. Spec authority: crypto-media/device-verification.md. Three verification primitives: (a) cross-signing chain rooted at master key — each user has ONE master signing key (long-lived) that signs sub-keys for self-signing (per-device leaf sign) and user-signing (cross-user trust). (b) SAS (Short Authentication String) — Diffie-Hellman key exchange produces a short shared secret two parties compare to verify identity out-of-band. (c) Out-of-band emoji code — the SAS shared bytes map to an ordered list of emojis the two parties read/compare in person or over a trusted channel. The chain MUST validate at every link; SAS MUST agree on both sides; emoji codes MUST be deterministic from the shared secret bytes.",
   "encoder": {
-    "master_key_form": "did:ck:user:<actor>#master",
-    "self_signing_key_form": "did:ck:user:<actor>#self-signing",
-    "user_signing_key_form": "did:ck:user:<actor>#user-signing",
-    "device_leaf_form": "did:ck:dev:<device_id>#leaf",
+    "master_key_form": "did:ak:user:<actor>#master",
+    "self_signing_key_form": "did:ak:user:<actor>#self-signing",
+    "user_signing_key_form": "did:ak:user:<actor>#user-signing",
+    "device_leaf_form": "did:ak:dev:<device_id>#leaf",
     "sas_alg": "ECDH-X25519 + HKDF-SHA256 (8 bytes per emoji slot)",
     "emoji_alphabet_size": 64
   },
@@ -17,23 +17,23 @@
       "comment": "Canonical chain: master_key → self_signing_key → device_leaf. The master key signs the self-signing key; the self-signing key signs the device leaf key. Both signatures verify.",
       "actor_id": "did:web:alice.example",
       "master_key": {
-        "key_id": "did:ck:user:alice#master",
+        "key_id": "did:ak:user:alice#master",
         "alg": "ed25519",
         "public_b64": "TUFTVEVSX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "self_signing_key": {
-        "key_id": "did:ck:user:alice#self-signing",
+        "key_id": "did:ak:user:alice#self-signing",
         "alg": "ed25519",
         "public_b64": "U0VMRl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
-        "signed_by": "did:ck:user:alice#master",
+        "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX01BU1RFUl9TRUxGX1NJR04wMDAwMDAwMDAwMDA"
       },
       "device_leaf_keys": [
         {
-          "key_id": "did:ck:dev:dev_alice_01#leaf",
+          "key_id": "did:ak:dev:dev_alice_01#leaf",
           "alg": "ed25519",
           "public_b64": "TEVBRl9BTElDRV9ERVZfMDFfMDAwMDAwMDAwMDAwMDA",
-          "signed_by": "did:ck:user:alice#self-signing",
+          "signed_by": "did:ak:user:alice#self-signing",
           "signature_b64": "U0lHX1NFTEZfTEVBRl9BTElDRV9ERVZfMDEwMDAwMDA"
         }
       ],
@@ -49,17 +49,17 @@
       "actor_id": "did:web:alice.example",
       "trusted_did": "did:web:bob.example",
       "user_signing_key": {
-        "key_id": "did:ck:user:alice#user-signing",
+        "key_id": "did:ak:user:alice#user-signing",
         "alg": "ed25519",
         "public_b64": "VVNFUl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
-        "signed_by": "did:ck:user:alice#master",
+        "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX01BU1RFUl9VU0VSX1NJR04wMDAwMDAwMDAwMDA"
       },
       "trusted_user_master": {
-        "key_id": "did:ck:user:bob#master",
+        "key_id": "did:ak:user:bob#master",
         "alg": "ed25519",
         "public_b64": "TUFTVEVSX0JPQl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA",
-        "signed_by": "did:ck:user:alice#user-signing",
+        "signed_by": "did:ak:user:alice#user-signing",
         "signature_b64": "U0lHX1VTRVJfU0lHTl9NQVNURVJfQk9CMDAwMDAwMDA"
       },
       "expected": {
@@ -100,17 +100,17 @@
       "comment": "Negative-shape variant: the master key has been revoked (e.g. user lost it and rotated to a new master). Any chain rooted at the OLD master MUST reject; clients must follow the new master's chain.",
       "actor_id": "did:web:alice.example",
       "master_key": {
-        "key_id": "did:ck:user:alice#master",
+        "key_id": "did:ak:user:alice#master",
         "alg": "ed25519",
         "public_b64": "T0xEX01BU1RFUl9BTElDRV8wMDAwMDAwMDAwMDAwMDA",
         "revoked": true,
         "revoked_at": "2026-04-01T00:00:00Z"
       },
       "self_signing_key": {
-        "key_id": "did:ck:user:alice#self-signing",
+        "key_id": "did:ak:user:alice#self-signing",
         "alg": "ed25519",
         "public_b64": "U0VMRl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
-        "signed_by": "did:ck:user:alice#master",
+        "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX01BU1RFUl9TRUxGX1NJR04wMDAwMDAwMDAwMDA"
       },
       "expected": {

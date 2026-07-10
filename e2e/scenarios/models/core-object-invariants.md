@@ -6,7 +6,7 @@
 
 1. **公共字段完整性** — 任何 durable Event 与 Materialized Object 在 wire 上 MUST 携带 `common-fields.md` §3 列出的公共字段（`id` / typed prefix、`created_at`、actor 主体引用、`lifecycle_state` 等价物），不允许在 happy-path serializer 上"省略"以节省字节。
 2. **Patch precondition (CAS)** — 任何携带 `preconditions[].head_eq` 的 Move/patch 在 pre-state 与 actor 声明值不一致时 MUST `failed_precondition`，并且 **不得** 对目标 cell 执行 `effects[]`（不能"先写后报错"）。
-3. **Cascade / archive / delete** — Realm/Space lifecycle event 在 archive / tombstone / destroy 时 MUST 按 `realm-and-space.md` §2.5.1 / §3.4 的级联规则处理 child resource：`ck.space.archive` 不自动级联子 Space，`ck.space.tombstone` 在 live 子结构存在时 MUST `failed_precondition`，`ck.realm.destroy` 后 child Space 进入 `realm_destroyed_orphan` locked projection。
+3. **Cascade / archive / delete** — Realm/Space lifecycle event 在 archive / tombstone / destroy 时 MUST 按 `realm-and-space.md` §2.5.1 / §3.4 的级联规则处理 child resource：`ak.space.archive` 不自动级联子 Space，`ak.space.tombstone` 在 live 子结构存在时 MUST `failed_precondition`，`ak.realm.destroy` 后 child Space 进入 `realm_destroyed_orphan` locked projection。
 4. **Relation 基数** — 在已注册了 `max_to_per_from=1` 等基数约束的 `relation_kind`（典型：`has_default_view`、单负责人 `assigned_to`）上写入第二条同源 active edge 时，reducer MUST 关闭旧 edge 或返回 `failed_precondition`；同 `(realm_id, relation_kind, from_ref, to_ref)` 重复写入 MUST 幂等去重。
 5. **View projection fallback** — 请求一个 Space / Board 未显式声明的 View 时，server MUST 按 `views.md` §6 的派生规则返回**默认 view projection**（`kind="collection" + renderer="board"` 等响应族默认），而不是 404 — 让一个全新的 Space 在没有 user-defined View 时也能渲染。
 
@@ -20,7 +20,7 @@
 - `arkret-spec/spec/v1/zh/models/event-and-patch.md` §2.6 — `actor_seq` fork 约束（同 `(actor_id, actor_seq)` sibling fork 上限）
 - `arkret-spec/spec/v1/zh/models/event-and-patch.md` §4.2.3 / §4.2.4 / §4.2.5 — Patch selector 语义、redactable 字段保护、reducer-managed 字段保护、`preconditions[].head_eq` CAS 不匹配时 `failed_precondition`
 - `arkret-spec/spec/v1/zh/models/realm-and-space.md` §2.5 / §2.5.1 — Realm tombstone vs destroy；destroy 后 `realm_terminal_state` / child cascade / erasure receipt
-- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`ck.space.archive` 不级联子 Space、`ck.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`ak.space.archive` 不级联子 Space、`ak.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
 - `arkret-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
 - `arkret-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
 - `arkret-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → strand 派生，不依赖预先注册 View
@@ -62,7 +62,7 @@
    - `owner` — Space 的 owner DID，对应 spec `created_by` / actor 主体引用
    - `members` — 数组，至少含 `owner`
    - `deleted` — boolean，对应 spec `lifecycle_state`（`false` ⇒ 等价 `active`）
-4. **alice** 调 `GET /_arkret/self/events?realms=${realmId}&limit=20`，断言响应 `events[]` 至少有一条 `event_kind` 形如 `ck.space.*` 且 `payload.space_id == spaceId`（典型 `ck.space.create` / `ck.space.archive`），且每条 event 都携带：
+4. **alice** 调 `GET /_arkret/self/events?realms=${realmId}&limit=20`，断言响应 `events[]` 至少有一条 `event_kind` 形如 `ck.space.*` 且 `payload.space_id == spaceId`（典型 `ak.space.create` / `ak.space.archive`），且每条 event 都携带：
    - `event_id` — 对应 spec Event Envelope `event_id`
    - `created_at` — RFC 3339 timestamp，对应 spec `created_at`
    - `sender` — DID，对应 spec `actor_id`
@@ -71,35 +71,35 @@
 
 ### Phase B — Patch precondition CAS fail（fixme，需要 soland Move endpoint）
 
-6. **alice** 在 `spaceId` 内创建一个 Strand `F`（`POST /_arkret/self/realms/${realmId}/strands` 且 payload 指向 `spaceId`，或 `POST /_arkret/self/events` 提交 `ck.strand.create`），记录 `strandId` 与初始 `fields.status = "open"`。
-7. **alice** 发一个 `ck.strand.update` Move，`preconditions[].head_eq` 指向**陈旧**的 `prev_revision`（例如 `expected_revision: 0`，但服务端当前 revision 已经 ≥ 1，或者把 `fields.status` 的预期值故意写错为 `"closed"` 而当前态是 `"open"`）。
+6. **alice** 在 `spaceId` 内创建一个 Strand `F`（`POST /_arkret/self/realms/${realmId}/strands` 且 payload 指向 `spaceId`，或 `POST /_arkret/self/events` 提交 `ak.strand.create`），记录 `strandId` 与初始 `fields.status = "open"`。
+7. **alice** 发一个 `ak.strand.update` Move，`preconditions[].head_eq` 指向**陈旧**的 `prev_revision`（例如 `expected_revision: 0`，但服务端当前 revision 已经 ≥ 1，或者把 `fields.status` 的预期值故意写错为 `"closed"` 而当前态是 `"open"`）。
 8. 断言：HTTP 4xx + `error_code = "failed_precondition"` + `reason` 来自 spec §5.1 reason-code 表或 `event-and-patch.md` §4.2.4 reducer 失败枚举。
-9. 断言：再次 `GET /_arkret/self/realms/${realmId}/strands/${strandId}`，`fields.status` 仍然是步骤 6 写入的初值；任何 cell（`ck.component.strand.fields.v1` 等）的 head 都没有被该失败 Move 触动——验证 spec §2.2 "preconditions 与 effects 同步原子"。
+9. 断言：再次 `GET /_arkret/self/realms/${realmId}/strands/${strandId}`，`fields.status` 仍然是步骤 6 写入的初值；任何 cell（`ak.component.strand.fields.v1` 等）的 head 都没有被该失败 Move 触动——验证 spec §2.2 "preconditions 与 effects 同步原子"。
 
 ### Phase C — Cascade / archive / delete（fixme，需要 soland lifecycle reducer）
 
 10. **alice** 在 `spaceId` 下再建一个 child Space `S_child`（如果当前 soland 不支持嵌套 Space 拓扑，则改成在 `spaceId` 内创建一个 Strand `F_child` 作为 "live dependent" 的代理）。
-11. **alice** 提交 `ck.space.archive` 指向 `spaceId`，断言 HTTP 200。再调 `GET /_soland/self/spaces/${spaceId}`：
+11. **alice** 提交 `ak.space.archive` 指向 `spaceId`，断言 HTTP 200。再调 `GET /_soland/self/spaces/${spaceId}`：
     - 断言：`spaceId` 的 lifecycle 状态翻到 `archived`（wire 上当前是 `deleted=false` + 额外的 `state="archived"` 字段，或 soland 后续在 `SpaceLifecycleResponse` 中补充 `lifecycle_state`）
-    - 断言：child `S_child` / `F_child` **没有**自动跟随翻成 `archived`（spec §3.4 — `ck.space.archive` 不自动 archive child）
-12. **alice** 在 child 仍 live 的情况下提交 `ck.space.tombstone` 指向 `spaceId`：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "space_has_live_dependents"`（spec §3.4 错误码表）。
-13. **alice** 先 tombstone 掉所有 child，再 `ck.space.tombstone` 指向 `spaceId`：断言 HTTP 200 + state 翻到 `tombstoned`。
-14. 断言：tombstoned 之后再提交任何普通 write event（`ck.message.create` / `ck.strand.update`）MUST 返回 `realm_terminal_state` 或 `space_already_terminal`，且 audit log 中 tombstone event 自身仍然可读（hash chain stub 保留——spec §2.5.2）。
+    - 断言：child `S_child` / `F_child` **没有**自动跟随翻成 `archived`（spec §3.4 — `ak.space.archive` 不自动 archive child）
+12. **alice** 在 child 仍 live 的情况下提交 `ak.space.tombstone` 指向 `spaceId`：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "space_has_live_dependents"`（spec §3.4 错误码表）。
+13. **alice** 先 tombstone 掉所有 child，再 `ak.space.tombstone` 指向 `spaceId`：断言 HTTP 200 + state 翻到 `tombstoned`。
+14. 断言：tombstoned 之后再提交任何普通 write event（`ak.message.create` / `ak.strand.update`）MUST 返回 `realm_terminal_state` 或 `space_already_terminal`，且 audit log 中 tombstone event 自身仍然可读（hash chain stub 保留——spec §2.5.2）。
 
 ### Phase D — Relation cardinality（fixme，需要 soland relation reducer + cardinality check）
 
 15. **alice** 创建两个 View `V1` / `V2`（`POST /_arkret/self/realms/${realmId}/views`），都以 `spaceId` 作为 source Space。
-16. **alice** 提交第一条 `ck.relation.create` `relation_kind="has_default_view"`，`from_ref=spaceId`，`to_ref=V1.id`：断言 HTTP 201，关系 active。
-17. **alice** 提交第二条 `ck.relation.create` `relation_kind="has_default_view"`，`from_ref=spaceId`，`to_ref=V2.id`：spec §3.2 表 — `has_default_view` 基数为 `many_to_one`，"设置新默认 View MUST 关闭旧 active edge"。断言以下二者之一：
+16. **alice** 提交第一条 `ak.relation.create` `relation_kind="has_default_view"`，`from_ref=spaceId`，`to_ref=V1.id`：断言 HTTP 201，关系 active。
+17. **alice** 提交第二条 `ak.relation.create` `relation_kind="has_default_view"`，`from_ref=spaceId`，`to_ref=V2.id`：spec §3.2 表 — `has_default_view` 基数为 `many_to_one`，"设置新默认 View MUST 关闭旧 active edge"。断言以下二者之一：
     - 服务端接受，但 `V1.id` 那条 edge 自动翻成 `tombstone`（reducer 决定性关闭旧 winner）；或
     - 服务端拒绝并返回 `failed_precondition` + `reason = "relation_cardinality_violation"`（早期 reducer 选择 fail-closed）。
     - 测试断言"二选一"，但 MUST NOT 同时存在两条 active edge（这是基数违反，会让 board projection 出现非确定 default view）。
 18. **alice** 重复提交完全相同的 edge（同 `from_ref` / `to_ref` / `relation_kind`）：断言幂等——服务端要么 200 + 同一个 `relation_id`，要么 409，**MUST NOT** 创建第二条 active 副本（spec §3.2 末段 "未声明为 multi-edge 的 Relation MUST 由 reducer 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重"）。
-19. **alice** 提交一条跨 Realm 的 `ck.relation.create` `relation_kind="contains"`，`from_ref` 在 `spaceId` 而 `to_ref` 指向另一个 Realm 的 Strand：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "cross_space_structural_relation"`（spec §4.4）。
+19. **alice** 提交一条跨 Realm 的 `ak.relation.create` `relation_kind="contains"`，`from_ref` 在 `spaceId` 而 `to_ref` 指向另一个 Realm 的 Strand：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "cross_space_structural_relation"`（spec §4.4）。
 
 ### Phase E — View projection fallback（fixme，需要 soland board projection endpoint）
 
-20. **alice** 在新建的 `spaceId` 上请求一个"用户从未注册过"的 view：`GET /_soland/self/spaces/${spaceId}/views/projection?renderer=board`（或 `?kind=collection&renderer=board`）。这是一个全新 Space，没有调用过 `ck.view.create`，因此**不存在**任何 user-defined View 对象。
+20. **alice** 在新建的 `spaceId` 上请求一个"用户从未注册过"的 view：`GET /_soland/self/spaces/${spaceId}/views/projection?renderer=board`（或 `?kind=collection&renderer=board`）。这是一个全新 Space，没有调用过 `ak.view.create`，因此**不存在**任何 user-defined View 对象。
 21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionView`：
     - `kind = "collection"`
     - `renderer = "board"`
@@ -124,10 +124,10 @@
 
 ## Edge cases / sub-tests
 
-- **E_inv.1 reducer-managed 字段保护**：客户端尝试通过 `ck.patch.v1` 直接 `set` 一个 reducer-managed 字段（`id` / `schema` / `realm_id` / `created_by` / `created_at` / `state` / `state_changed_at`）—— reducer MUST 返回 `schema_violation` reason=`patch_path_reducer_managed`（spec §4.2.5）。
-- **E_inv.2 actor-supplied state_changed_at 被忽略**：客户端在 `ck.space.archive` 的 wire payload 中塞一个伪造的 `state_changed_at`（早于 Event 的 `created_at`），断言 reducer 写入的物化对象上的 `state_changed_at` 等于 Event 的 `created_at` / anchored_at，而**不是**客户端给的值（spec §5 normative 段）。
-- **E_inv.3 same-state self-transition 拒绝**：对 `state == "archived"` 的 Space 再发一次 `ck.space.archive`，MUST 返回 `space_not_active`（spec §5.1 "不允许 same-state self-transition"，不能当作 idempotent no-op）。
-- **E_inv.4 redactable 字段 `unset` 防御**：客户端通过 `ck.patch.v1` 把 `Message.content` 字段 `$op="unset"`——reducer MUST 返回 `schema_violation` reason=`patch_unset_redactable_field`（spec §4.2.4 redaction escape 防御）。
+- **E_inv.1 reducer-managed 字段保护**：客户端尝试通过 `ak.patch.v1` 直接 `set` 一个 reducer-managed 字段（`id` / `schema` / `realm_id` / `created_by` / `created_at` / `state` / `state_changed_at`）—— reducer MUST 返回 `schema_violation` reason=`patch_path_reducer_managed`（spec §4.2.5）。
+- **E_inv.2 actor-supplied state_changed_at 被忽略**：客户端在 `ak.space.archive` 的 wire payload 中塞一个伪造的 `state_changed_at`（早于 Event 的 `created_at`），断言 reducer 写入的物化对象上的 `state_changed_at` 等于 Event 的 `created_at` / anchored_at，而**不是**客户端给的值（spec §5 normative 段）。
+- **E_inv.3 same-state self-transition 拒绝**：对 `state == "archived"` 的 Space 再发一次 `ak.space.archive`，MUST 返回 `space_not_active`（spec §5.1 "不允许 same-state self-transition"，不能当作 idempotent no-op）。
+- **E_inv.4 redactable 字段 `unset` 防御**：客户端通过 `ak.patch.v1` 把 `Message.content` 字段 `$op="unset"`——reducer MUST 返回 `schema_violation` reason=`patch_unset_redactable_field`（spec §4.2.4 redaction escape 防御）。
 
 后四条建议拆成独立的小 spec（`models/core-object-invariants.2` 等），保持主 scenario 紧凑。
 
@@ -136,7 +136,7 @@
 - **soland 当前覆盖**：Phase A 的 `GET /_soland/self/spaces/{space_id}` 走 `SpaceLifecycleResponse`（`wire.rs`），实际 wire 字段是 `ok` / `space_id` / `owner` / `members` / `deleted`，**不**包含 `created_at` 与显式 `lifecycle_state`——这些字段从 events query (`/_arkret/self/events?realms=...`) 中匹配 `payload.space_id == spaceId` 的 event item 上读 `created_at` / `sender` / `event_kind` 三项，再加 `event_id`，凑齐 spec §3 公共字段语义的最低 4 项。后续若 soland 在 `SpaceLifecycleResponse` 中补 `created_at` / `state` 字段，Phase A 的 assertion 应直接迁移到 spaces endpoint，不再依赖 events query 兜底。
 - **soland gap**：Phase B 的 patch precondition 路径需要 soland 暴露通用 Move endpoint（带 `preconditions[].head_eq`）；当前只有零散的 cell 更新通道，未统一到 `ck.events` 提交路径。主流程标 `test.fixme`，并在 fixme body 中以 `request.post(...)` 形态 sketch 出预期调用。
 - **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
-- **soland gap**：Phase D Relation cardinality 检查需要 soland 实现 `ck.relation.create` reducer 与 `has_default_view` 基数表；当前 `routing/spaces/relation.rs` 存在但 cardinality enforcement 弱。整 phase 标 fixme。
+- **soland gap**：Phase D Relation cardinality 检查需要 soland 实现 `ak.relation.create` reducer 与 `has_default_view` 基数表；当前 `routing/spaces/relation.rs` 存在但 cardinality enforcement 弱。整 phase 标 fixme。
 - **soland gap**：Phase E `/_soland/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → strand 派生"的 path。整 phase 标 fixme。
 - **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()` 和现有 New Space 表单 helper、`ensureRegistered`、`issueDevSession`、`openUserPage`。Phase B–E 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。

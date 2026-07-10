@@ -1,15 +1,15 @@
-# WebRTC Media Token Exchange (CKP-0010)
+# WebRTC Media Token Exchange (AKP-0010)
 
-Verifies the `ck.realm.media_service` -> media token exchange path against a
+Verifies the `ak.realm.media_service` -> media token exchange path against a
 live soland instance.
 
 ## Setup
 
 1. Register Alice; create a public realm she owns.
-2. Project a `ck.realm.media_service` epoch with a single LiveKit focus
+2. Project a `ak.realm.media_service` epoch with a single LiveKit focus
    (`ak:focus:livekit-lhr`, `issuer_kid = did:web:media.example#media-token`,
    `e2ee_key_source = mls-exporter`).
-3. Commit the first durable `ck.call.state` for the call, including the
+3. Commit the first durable `ak.call.state` for the call, including the
    selected `session_focus`, and exchange signaling through
    `POST /_arkret/self/ephemeral` with `kind = "ak.call.signal"`; no
    legacy soland-private WebRTC session surface is used.

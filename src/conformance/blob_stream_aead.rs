@@ -1,6 +1,6 @@
 //! Blob streaming AEAD conformance vectors.
 //!
-//! Covers `ck.vector.blob.stream_aead_*` by exercising the SDK codec and the
+//! Covers `ak.vector.blob.stream_aead_*` by exercising the SDK codec and the
 //! canonical blob encrypted_attachment schema together.
 
 use anyhow::{Result, anyhow, bail};

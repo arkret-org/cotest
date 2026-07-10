@@ -3,19 +3,19 @@
 //! Spec (round 2+3 cleanup, T06 — Moderation appeal):
 //!
 //! Four new active event kinds:
-//!   * `ck.moderation.appeal.submit`
-//!   * `ck.moderation.appeal.review`
-//!   * `ck.moderation.appeal.decision`
-//!   * `ck.moderation.appeal.close`
+//!   * `ak.moderation.appeal.submit`
+//!   * `ak.moderation.appeal.review`
+//!   * `ak.moderation.appeal.decision`
+//!   * `ak.moderation.appeal.close`
 //!
-//! Schema: `ck.schema.moderation_appeal.v1`. Typed ID:
+//! Schema: `ak.schema.moderation_appeal.v1`. Typed ID:
 //! `ak:appeal:<uuidv7>`. Cell state machine:
 //!
 //!   `none → submitted → under_review → decided → closed`
 //!
 //! Normative invariants:
 //!   * reviewer DID MUST differ from the original decision issuer (`appeal_self_review_forbidden`)
-//!   * an `overturn` decision MUST be paired with a `ck.moderation.decision.lift` in the **same**
+//!   * an `overturn` decision MUST be paired with a `ak.moderation.decision.lift` in the **same**
 //!     Anchor batch (`appeal_overturn_missing_lift`)
 //!   * close fires automatically after the 30-day cool-off or when the submitter (or reviewer)
 //!     issues an explicit close

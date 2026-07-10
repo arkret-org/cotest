@@ -94,7 +94,7 @@ fn principal_control_realm(input: Value) -> Result<Value> {
     }))
 }
 
-/// 05-2 — deserialize a full `ck.cross_signing.publish` payload (the shape the
+/// 05-2 — deserialize a full `ak.cross_signing.publish` payload (the shape the
 /// TS `buildCrossSigningPublishPayload` helper emits) into the SDK's
 /// `CrossSigningPublishContent` and return the SDK-authoritative PSK→SSK and
 /// PSK→USK `ck-cross-signing-bind-v1` canonical signing inputs. The TS

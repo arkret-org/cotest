@@ -2,12 +2,12 @@
 
 ## 目标
 
-alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱;mock 邮件服务投递 invite token;bob 注册后用 `binding_proof` + `subject_proof` 提交 `ck.invite.claim`,reducer 校验后接收为成员。
+alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱;mock 邮件服务投递 invite token;bob 注册后用 `binding_proof` + `subject_proof` 提交 `ak.invite.claim`,reducer 校验后接收为成员。
 
 ## Spec 锚点
 
 - `sync/third-party-invites.md` §3 — invite 流程概览
-- `sync/third-party-invites.md` §3.1 — `ck.invite.third_party` event(token_commitment、verification_public_key、expires_at)
+- `sync/third-party-invites.md` §3.1 — `ak.invite.third_party` event(token_commitment、verification_public_key、expires_at)
 - `sync/third-party-invites.md` §4 — claim 流程(token、binding_proof、subject_proof)
 - `sync/third-party-invites.md` §4.1 — token commitment + binding proof 校验
 - `sync/third-party-invites.md` §4.2 — invite 转 invite_create 后正常 accept
@@ -39,7 +39,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
    - 生成 random `salt` + `token`
    - `token_commitment = sha256(salt || token)`
    - 生成临时 `verification_public_key`
-   - 提交 `ck.invite.third_party { realm_id, token_commitment, verification_public_key, expires_at: +7d }`
+   - 提交 `ak.invite.third_party { realm_id, token_commitment, verification_public_key, expires_at: +7d }`
 4. inkson 调 mock email service `POST /mock/email/verification/send` 把 `token` 通过邮件投递给 bob(out-of-band)
 5. 断言:`/realms/${realmId}/admin` 显示 `pending third-party invite to bob@example.com` (`pending-3pid-invite-row` testid)
 6. 断言:`token_commitment` 在事件链里,**plaintext email 不在事件链**(隐私 invariant)
@@ -51,16 +51,16 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 9. bob 客户端把 invite token 提交给 verification service `POST /mock/email/verification/claim { token, did: bob.did }`
 10. service 校验 token 新鲜性 + claim 数 → 原子消费 → 签 `binding_proof` 说"token holder 的 DID 是 bob"
 
-### Phase C — bob 提交 `ck.invite.claim`
+### Phase C — bob 提交 `ak.invite.claim`
 
-11. bob 客户端组 `ck.invite.claim { token_commitment, binding_proof, subject_proof (bob 签) }`
+11. bob 客户端组 `ak.invite.claim { token_commitment, binding_proof, subject_proof (bob 签) }`
 12. 提交到 soland
 13. reducer:
     - 匹配 `token_commitment`
     - 校验 `binding_proof` 是 verification service 签的、audience/expiry/nonce 都对
     - 校验 `subject_proof` 是 bob 的 DID key 签的
-    - 把 pending invite 转 `ck.invite.create` for bob
-14. bob 客户端再提交 `ck.invite.accept` → 加入成员
+    - 把 pending invite 转 `ak.invite.create` for bob
+14. bob 客户端再提交 `ak.invite.accept` → 加入成员
 15. 断言:`/realms/${realmId}/admin` 显示 bob 是 member;old pending row 消失
 16. 断言:bob 进 `/timeline/${realmId}` 看得到 alice 的消息(history_visibility 之内)
 
@@ -78,7 +78,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.invite.third_party`、`ck.invite.claim` event kinds;binding_proof 校验逻辑 — 整组 ✗
+- **soland 缺口**:`ak.invite.third_party`、`ak.invite.claim` event kinds;binding_proof 校验逻辑 — 整组 ✗
 - **harness 缺口**:mock email + verification service 必须新增(见本会话 mock services 改动)
 - **inkson 缺口**:Invite-by-email UI、pending 3PID invite 列表、Verification 等待 UI
 

@@ -1,4 +1,4 @@
-// Media-service binding (CKP-0010): ak.realm.media_service foci -> media token
+// Media-service binding (AKP-0010): ak.realm.media_service foci -> media token
 // exchange issues a LiveKit-shaped backend_token + participant_binding.
 // Contract: e2e/scenarios/calls/webrtc-media-token.md
 // Spec refs:
@@ -154,7 +154,7 @@ test.describe("media token exchange", () => {
       // WIRE NOTE (migration): the retired stack gated token exchange on a
       // pre-existing signaling session + participant row. The canonical issuer
       // (media-service-binding.md §6 / call-state.md §4.1) gates on realm
-      // membership + the `ck.call.join` capability + the durable ban set — NOT
+      // membership + the `ak.call.join` capability + the durable ban set — NOT
       // a prior participant row. So a member WITHOUT ak.call.join is refused
       // (capability_denied), and granting it admits them.
       const { alice, aliceToken, realmId, callId } = await setupMediaCall(request);

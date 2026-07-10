@@ -218,8 +218,8 @@ export async function tombstoneContactCokret(
     fullPeerRevoke?: boolean;
     blockPeer?: boolean;
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
-    // peer's home service DID so soland federates the `ck.contact.tombstoned`
-    // fact to the peer's Principal Server via `ck.peer.contacts.command.submit`.
+    // peer's home service DID so soland federates the `ak.contact.tombstoned`
+    // fact to the peer's Principal Server via `ak.peer.contacts.command.submit`.
     peerServiceDid?: string;
     server?: SolandKey;
   } = {},
@@ -575,7 +575,7 @@ export type IntroductionEvidence =
   | { kind: "explicit_address" }
   | { kind: "same_principal_server" };
 
-// Build a `ck.invite.create` invite event whose payload satisfies soland's
+// Build a `ak.invite.create` invite event whose payload satisfies soland's
 // invite-delivery consistency checks (src/routing/invites.rs
 // validate_invite_delivery_consistency + projection required fields):
 //   - kind == ak.invite.create
@@ -736,7 +736,7 @@ export async function listAuthzInvitesCokret(
   return body.invites ?? [];
 }
 
-// Submit `ck.invite.accept` as the invitee to join the realm.
+// Submit `ak.invite.accept` as the invitee to join the realm.
 export async function acceptInviteCokret(
   request: APIRequestContext,
   token: string,

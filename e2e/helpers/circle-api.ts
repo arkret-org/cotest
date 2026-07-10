@@ -1,15 +1,15 @@
 // Circle administration HTTP helpers (`/_arkret/self/circles/*`).
 //
 // Face note: Circle administration is now a NORMATIVE Arkret protocol surface.
-// The `ck.self.circle.*` operations (list/create/get/members/scope-rotate/
+// The `ak.self.circle.*` operations (list/create/get/members/scope-rotate/
 // archive/restore/tombstone) are published in the arkret-spec OpenAPI artifact
 // (`/_arkret/self/circles*`), the operation registry, and the contract catalog,
 // so soland mounts them under the `/_arkret` tree. (Previously these were
-// CKP-0014 §5 implementation-local DRAFT candidates served under
+// AKP-0014 §5 implementation-local DRAFT candidates served under
 // `/_soland/self/circles`; they have since been accepted into the normative
 // catalog, and the legacy `/_soland` mirror was retired.)
 //
-// The `ck.circle.*` data model itself is spec-canonical (CKP-0007); this HTTP
+// The `ck.circle.*` data model itself is spec-canonical (AKP-0007); this HTTP
 // surface is the convenience wrapper that builds the canonical operations and
 // routes them through the same reducer pipeline as wire events (so reducer
 // invariants like `circle_member_must_be_realm_member` fire identically).

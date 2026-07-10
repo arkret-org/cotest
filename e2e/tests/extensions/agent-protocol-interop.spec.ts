@@ -1,7 +1,7 @@
 // Agent Protocol Interop — external A2A/ACP handoff full chain
 // Contract: e2e/scenarios/extensions/agent-protocol-interop.md
 // Spec: extensions/agent-protocol-interop.md §4 (upgrade trigger), §5.1
-//       (ck.agent.endpoint), §5.2 (interop_session.start), §5.3
+//       (ak.agent.endpoint), §5.2 (interop_session.start), §5.3
 //       (interop_session.status throttle), §5.4 (interop_session.result +
 //       result_objects/artifacts/transcript hash), §6 step 4 (endpoint
 //       validation normative MUST), §7 (capability actions + constraint),
@@ -9,14 +9,14 @@
 //       §12 (failure codes).
 //
 // Naming note: the spec truth source + arkret_sdk use
-// `ck.agent.interop_session.*` (NOT the older `protocol_session.*` draft
+// `ak.agent.interop_session.*` (NOT the older `protocol_session.*` draft
 // term that earlier scaffolding referenced). All kinds below follow the
 // spec / SDK.
 //
 // soland status: agent_bridge.rs runs the full start -> status(working) ->
 // result(completed) fan-out with an Ed25519 `audit_binding`, an outbound
 // HTTP path (POST to a registered endpoint_url), and a fail-closed path.
-// `POST /_arkret/self/agents/discover` reflects the `ck.agent.endpoint`
+// `POST /_arkret/self/agents/discover` reflects the `ak.agent.endpoint`
 // projection (supported_protocols / agent_card_url / metadata_url). The
 // external runtime is represented by `mock-agent-runtime.mjs`
 // (`mockAgentRuntimeBaseUrl()`).
@@ -70,7 +70,7 @@ test.describe("agent protocol interop", () => {
     // Live probe — asserts two surface invariants:
     //   1. inkson's `/agents` route mounts and renders `agents-panel`.
     //   2. soland's `/_arkret/describe` responds 200, and its
-    //      `claimed_profiles` now includes `ck.profile.agent_runtime.v1`
+    //      `claimed_profiles` now includes `ak.profile.agent_runtime.v1`
     //      (the extension profile that backs this scenario).
     const stamp = Date.now();
     const describe = await request.get(`${solandBaseUrl()}/_arkret/describe`);
@@ -119,8 +119,8 @@ test.describe("agent protocol interop", () => {
   test("Phase A — agent endpoint discovery via ak.agent.endpoint + adapter registry", async ({
     request,
   }, testInfo) => {
-    // spec: §5.1 (ck.agent.endpoint declares per-endpoint protocol /
-    // agent_card_url / metadata_url), §7 (`ck.agent.protocol.discover`
+    // spec: §5.1 (ak.agent.endpoint declares per-endpoint protocol /
+    // agent_card_url / metadata_url), §7 (`ak.agent.protocol.discover`
     // capability), §11 (adapter registry: a2a / acp / mcp_bridge /
     // http_custom).
     const stamp = Date.now();
@@ -137,7 +137,7 @@ test.describe("agent protocol interop", () => {
     });
 
     // 1. Register the remote agent's external protocol endpoints via
-    //    `ck.agent.endpoint` (spec §5.1). Declares a2a + acp with distinct
+    //    `ak.agent.endpoint` (spec §5.1). Declares a2a + acp with distinct
     //    agent_card_url / metadata_url, plus a host-pinned endpoint_url
     //    that points at the mock runtime when available.
     const cardBase = mockAgentRuntimeBaseUrl() ?? "https://agent.example";
@@ -234,7 +234,7 @@ test.describe("agent protocol interop", () => {
     // spec: §5 (full event family), §5.3 (status enum + transitions),
     // §5.4 (result + audit_binding), §9 (audit modes), §13 (Arkret is the
     // durable audit layer). Drives the in-process echo bridge: submitting
-    // `ck.agent.interop_session.start` fans out status(working) +
+    // `ak.agent.interop_session.start` fans out status(working) +
     // result(completed) carrying the Ed25519 audit_binding.
     const stamp = Date.now();
     const alice = uniqueUser(`agent-handoff-alice-e-${stamp}`);
@@ -371,8 +371,8 @@ test.describe("agent protocol interop", () => {
     // constraint: allowed_endpoints / requires_human_approval), §8
     // (pre-start capability check). Drives the inkson /agents interop approval
     // modal: the human-approval gate MUST be acknowledged before the
-    // controller can confirm, and the resulting `ck.capability.grant`
-    // carries `actions=[ck.agent.interop_session.start]` with a single-valued
+    // controller can confirm, and the resulting `ak.capability.grant`
+    // carries `actions=[ak.agent.interop_session.start]` with a single-valued
     // `allowed_endpoints` pinned to the runtime base URL.
     const stamp = Date.now();
     const remoteAgent = uniqueUser(`agent-handoff-remote-b-${stamp}`);

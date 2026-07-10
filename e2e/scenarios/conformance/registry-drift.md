@@ -44,7 +44,7 @@
 ### Phase A — Removed event kinds hard-reject
 
 1. **harness** load `artifacts/migration/removed-event-kinds.json`,filter `entries[*].rejection_level === "hard_reject"`
-2. 对每个 `entry.id` (e.g. `ck.field.position.move`, `ck.realm.lifecycle.set`, `ck.space.policy`),构造一个最小合法 EventEnvelope:
+2. 对每个 `entry.id` (e.g. `ak.field.position.move`, `ak.realm.lifecycle.set`, `ak.space.policy`),构造一个最小合法 EventEnvelope:
    ```json
    { "kind": "<removed_id>", "actor_id": "<alice>", "realm_id": "<test_realm>", "payload": {} }
    ```

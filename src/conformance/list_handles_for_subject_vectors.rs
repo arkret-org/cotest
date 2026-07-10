@@ -1,12 +1,12 @@
-//! `ck.find.directory.query.list_handles_for_subject` conformance vectors (VECT-COT-3).
+//! `ak.find.directory.query.list_handles_for_subject` conformance vectors (VECT-COT-3).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.0` +
 //! `artifacts/schemas/list-handles-for-subject-response.schema.json`
-//! (`ck.schema.list_handles_for_subject_response.v1`).
+//! (`ak.schema.list_handles_for_subject_response.v1`).
 //!
 //! The operation is the inverse of `resolve_handle` (handle → subject):
 //! given a holder/principal DID it returns the current context-visible
-//! signed `ck.schema.handle_claim.v1` set. The response schema enforces
+//! signed `ak.schema.handle_claim.v1` set. The response schema enforces
 //! `claims[].subject == subject` (byte-equal); mismatches MUST drop or fail
 //! closed (exercised through
 //! [`DirectorySubjectHandleList::validate`]).

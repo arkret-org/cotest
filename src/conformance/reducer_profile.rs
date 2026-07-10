@@ -10,7 +10,7 @@
 //! reducer_profile_digest = "sha256:" || lowercase_hex(sha256(canonical_json(digest_input)))
 //! ```
 //!
-//! Registered conformance vector: `ck.vector.federation.reducer_profile_digest.v1`
+//! Registered conformance vector: `ak.vector.federation.reducer_profile_digest.v1`
 //! (`federation-fixture.json` cases `reducer_profile_digest_federation_minimal`
 //! and `reducer_profile_mismatch`; prose in `zh/conformance/conformance-vectors.md`
 //! §15.8). Receivers recompute with the same registry rule and byte-compare;
@@ -25,7 +25,7 @@ use super::{canonical_json, load_artifact_json, sha256_prefixed};
 const REDUCER_PROFILE_REGISTRY: &str = "registry/reducer-profile-registry.json";
 
 /// The reducer profile soland declares for its federation surface
-/// (`ck.peer.events.query.describe` → `supported_profiles`), and the profile pinned
+/// (`ak.peer.events.query.describe` → `supported_profiles`), and the profile pinned
 /// by the registered conformance vector.
 pub const FEDERATION_MINIMAL_PROFILE_ID: &str = "ak.profile.federation_minimal.v1";
 
@@ -88,9 +88,9 @@ mod tests {
     use super::*;
     use crate::conformance::{FederationFixture, load_fixture, looks_like_sha256_digest};
 
-    /// The computed digest for `ck.profile.federation_minimal.v1` MUST match
+    /// The computed digest for `ak.profile.federation_minimal.v1` MUST match
     /// the registered conformance vector
-    /// `ck.vector.federation.reducer_profile_digest.v1` expected value pinned
+    /// `ak.vector.federation.reducer_profile_digest.v1` expected value pinned
     /// in `federation-fixture.json` (case
     /// `reducer_profile_digest_federation_minimal`).
     #[test]

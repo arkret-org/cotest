@@ -12,7 +12,7 @@
 // `arkret_sdk::validate_signal_seq` / `CallSignalState`). So the relay delivers
 // every frame (including a rollback) verbatim with its `seq` intact, and the
 // receiver-side rollback rejection is pinned by the Rust conformance vector
-// `ck.vector.call_signal.seq_monotonic.v1` (src/conformance/call_signal.rs).
+// `ak.vector.call_signal.seq_monotonic.v1` (src/conformance/call_signal.rs).
 
 import { expect, test } from "@playwright/test";
 import {

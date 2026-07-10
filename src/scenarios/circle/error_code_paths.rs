@@ -1,8 +1,8 @@
-//! P2F.3 — every CKP-0007 reason code is reachable from `arkret-core`.
+//! P2F.3 — every AKP-0007 reason code is reachable from `arkret-core`.
 //!
-//! Eight of the nine CKP-0007 error codes are `failed_precondition` /
+//! Eight of the nine AKP-0007 error codes are `failed_precondition` /
 //! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)
-//! is a top-level wire error code introduced in CKP-0006 and re-used by the
+//! is a top-level wire error code introduced in AKP-0006 and re-used by the
 //! Circle delivery binding migration path. This scenario pins:
 //!
 //!   - the sub-reason set [`KNOWN_REASON_CODES_CKP_0007`] is exactly 10,
@@ -39,13 +39,13 @@ fn is_snake_case_lowercase(s: &str) -> bool {
 pub async fn error_code_paths_run() -> Result<()> {
     if KNOWN_REASON_CODES_CKP_0007.len() != 10 {
         return Err(anyhow!(
-            "CKP-0007 reason-code set MUST be exactly 10; got {} ({:?})",
+            "AKP-0007 reason-code set MUST be exactly 10; got {} ({:?})",
             KNOWN_REASON_CODES_CKP_0007.len(),
             KNOWN_REASON_CODES_CKP_0007
         ));
     }
 
-    // Spot-pin every CKP-0007 reason code spelling against the constant.
+    // Spot-pin every AKP-0007 reason code spelling against the constant.
     for (constant, expected) in [
         (REASON_CIRCLE_REALM_MISMATCH, "circle_realm_mismatch"),
         (REASON_CIRCLE_NOT_ACTIVE, "circle_not_active"),
@@ -81,12 +81,12 @@ pub async fn error_code_paths_run() -> Result<()> {
     ] {
         if constant != expected {
             return Err(anyhow!(
-                "CKP-0007 reason code spelling drifted: constant=`{constant}` expected=`{expected}`"
+                "AKP-0007 reason code spelling drifted: constant=`{constant}` expected=`{expected}`"
             ));
         }
         if !is_snake_case_lowercase(constant) {
             return Err(anyhow!(
-                "CKP-0007 reason code `{constant}` is not snake_case lowercase"
+                "AKP-0007 reason code `{constant}` is not snake_case lowercase"
             ));
         }
     }
@@ -108,7 +108,7 @@ pub async fn error_code_paths_run() -> Result<()> {
         }
     }
 
-    // Sixth CKP-0007 code is a top-level wire error.
+    // Sixth AKP-0007 code is a top-level wire error.
     if !is_known_error_code(ERROR_CODE_DELIVERY_BINDING_HANDED_OVER) {
         return Err(anyhow!(
             "ERROR_CODE_DELIVERY_BINDING_HANDED_OVER (`{ERROR_CODE_DELIVERY_BINDING_HANDED_OVER}`) \

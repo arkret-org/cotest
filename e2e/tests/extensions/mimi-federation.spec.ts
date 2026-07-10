@@ -35,7 +35,7 @@ test.describe("mimi federation", () => {
   // fixme-anchored until the server/client chain lands. All acceptance
   // surfaces are spec-registered: the MIMI protocol face is exactly
   // `/_arkret/open/mimi/*` (openapi catalog); realm/member introspection goes
-  // through the event plane (`ck.member.state` via `/_arkret/self/events`) or
+  // through the event plane (`ak.member.state` via `/_arkret/self/events`) or
   // the `/_soland/` product face — there is NO
   // `/_arkret/self/realm/:id/federation/mimi/*` and NO
   // `/_arkret/self/realm/:id/members` endpoint, and none may be invented
@@ -52,7 +52,7 @@ test.describe("mimi federation", () => {
       // Assert MIMI interop exposure via the registered protocol face:
       //   GET /_arkret/describe advertises the mimi_interop extension, and
       //   GET /_arkret/open/mimi/provider-directory
-      //   (ck.open.mimi.query.provider_directory) returns the provider
+      //   (ak.open.mimi.query.provider_directory) returns the provider
       //   feature profile. The room binding is established through
       //   POST /_arkret/open/mimi/strands/:id/update (see createBoundMimiRoom
       //   below for the already-live pattern).

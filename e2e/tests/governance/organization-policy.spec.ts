@@ -6,7 +6,7 @@
 //
 // cotest is the "declared owning organization != verified governance
 // relationship" regression gate. Protocol governance semantics derive ONLY from
-// an active, verified `ck.realm.organization` relationship statement
+// an active, verified `ak.realm.organization` relationship statement
 // (RealmOrganizationPayload) — never from `realm.create.owning_organizations[]`
 // alone, and never from the `_soland/self/organizations` local-deployment
 // surface.
@@ -39,7 +39,7 @@ type ControlScope =
   | "directory_listing";
 
 /**
- * Build a `ck.realm.organization` relationship statement payload
+ * Build a `ak.realm.organization` relationship statement payload
  * (RealmOrganizationPayload). Field order mirrors
  * event-payload.schema.json#/$defs/realm_organization_payload. The
  * organization-side `authorization` proof here is a fixture; soland verifies it
@@ -78,7 +78,7 @@ function realmOrganizationStatement(args: {
   return statement;
 }
 
-/** Submit a `ck.realm.organization` statement into Realm history (writer must
+/** Submit a `ak.realm.organization` statement into Realm history (writer must
  * hold ak.realm.admin). Returns the raw response for assertion. */
 async function submitOrganizationStatement(
   request: APIRequestContext,

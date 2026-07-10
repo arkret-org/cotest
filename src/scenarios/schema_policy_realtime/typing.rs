@@ -201,7 +201,7 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
     // projection, so confirm the Strand we just authored is visible there and
     // return its id. We deliberately do NOT require it to be the realm's
     // `default` Strand: soland only marks `is_default` once a Realm publishes a
-    // `ck.realm.set_default_strand` pointer, which this typing scenario neither
+    // `ak.realm.set_default_strand` pointer, which this typing scenario neither
     // needs nor exercises.
     let realm_path_id = encode_path_segment(realm_id);
     let strands = expect_json(

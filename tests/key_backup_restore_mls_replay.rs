@@ -5,7 +5,7 @@
 //! `key-management.md` §7.2. Device-A is "lost" (revoked). A new
 //! device-B onboards, claims the backup with an SSK proof, recovers
 //! `mls_history_backup_key`, and replays the historical
-//! `ck.mls.commit` chain to decrypt all 3 pre-loss messages.
+//! `ak.mls.commit` chain to decrypt all 3 pre-loss messages.
 //!
 //! See `cotest::scenarios::key_backup_restore_mls_replay` for the full
 //! walk-through and prerequisite blockers.

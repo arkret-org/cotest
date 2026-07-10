@@ -13,8 +13,8 @@
 //   submit reject path.
 //
 // coauth note: `coauth/crates/backend/src/handlers/arkret.rs` now self-claims
-//   `ck.profile.auth_server.v1` and intentionally does NOT claim
-//   `ck.profile.identity_registry.v1` / `ck.profile.principal_server.v1`. The
+//   `ak.profile.auth_server.v1` and intentionally does NOT claim
+//   `ak.profile.identity_registry.v1` / `ak.profile.principal_server.v1`. The
 //   coauth-specific partition test runs live when COTEST_COAUTH_BASE_URL is
 //   configured and skips cleanly in single-server topologies.
 //

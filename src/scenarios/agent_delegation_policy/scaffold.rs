@@ -5,10 +5,10 @@
 //! The sub-test here pins:
 //!   1. all 14 actions are present in `AGENT_CAPABILITY_ACTIONS`.
 //!   2. every action is well-formed (snake_case, no whitespace, dot- delimited, prefixed
-//!      `ck.agent.` or `ck.self.agent.`).
+//!      `ck.agent.` or `ak.self.agent.`).
 //!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
-//!   4. an accountability grant is referenced through its `ck.identity.accountability_grant` event
+//!   4. an accountability grant is referenced through its `ak.identity.accountability_grant` event
 //!      — the `accountability_grant_ref` is an `EventId` that round-trips through the SDK validator
 //!      (the dedicated `ak:accountability_grant:` typed-id family is retired).
 
@@ -43,7 +43,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
 
     // (2) Per-action well-formedness. Agent capability actions live under the
     // agent surface — either the bare `ck.agent.*` namespace or the
-    // account-scoped `ck.self.agent.*` trust segment (lifecycle actions such as
+    // account-scoped `ak.self.agent.*` trust segment (lifecycle actions such as
     // provision/pause/resume/deactivate and sidecar_thread.ensure).
     for action in AGENT_CAPABILITY_ACTIONS {
         if !(action.starts_with("ak.agent.") || action.starts_with("ak.self.agent.")) {
@@ -83,7 +83,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     }
 
     // (4) accountability grant reference well-formedness. The grant is the
-    //     `ck.identity.accountability_grant` event itself; downstream
+    //     `ak.identity.accountability_grant` event itself; downstream
     //     `accountability_grant_ref` / `authorization_ref` fields carry the
     //     grant event's `EventId`.
     if IDENTITY_ACCOUNTABILITY_GRANT != "ak.identity.accountability_grant" {
@@ -101,7 +101,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
 
     // TODO(P4-impl): walk a controller → agent grant attach + detach
     // through the reducer, verifying that each capability action
-    // produces a corresponding `ck.capability.grant` / `ck.capability.revoke`
+    // produces a corresponding `ak.capability.grant` / `ak.capability.revoke`
     // pair. Pending soland P2-impl reducer wiring + accountability_grant
     // projection.
 

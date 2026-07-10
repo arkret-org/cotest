@@ -344,7 +344,7 @@ fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
 // ── Round 4 / C3 — multi-server federation historical_only gates ───────────
 //
 // Non-ignored wire-shape gates for the
-// `ck.vector.federation.idempotency_after_key_revoke.v1` vector. They run
+// `ak.vector.federation.idempotency_after_key_revoke.v1` vector. They run
 // without a live soland / teabay and assert:
 //
 // 1. The cotest fixture loader picks up the C3 vector by id,

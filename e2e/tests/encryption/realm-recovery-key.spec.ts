@@ -4,7 +4,7 @@
 // Spec refs:
 //   - crypto-media/encryption-and-audit.md §2.10   (mls-exporter-aead-v1 scheme)
 //   - crypto-media/encryption-and-audit.md §2.10.1 (history_secret[N] / K_content[N])
-//   - crypto-media/encryption-and-audit.md §2.10.4 (ck.realm_key.share delivery)
+//   - crypto-media/encryption-and-audit.md §2.10.4 (ak.realm_key.share delivery)
 //   - crypto-media/encryption-and-audit.md §2.10.5 (retention + per-epoch FS)
 //   - crypto-media/encryption-and-audit.md §2.10.8 (RRK eager-at-commit seal + RYW + fallback re-share)
 //   - models/realm-and-space.md §2.3.1 (durability_policy)

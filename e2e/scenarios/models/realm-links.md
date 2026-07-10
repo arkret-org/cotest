@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 Realm 之间的显式 link graph 行为：alice 创建治理 Realm G 与团队 Realm T，T 通过 `ck.realm.link {link_kind: "governed_by", target: G.id}` 声明被 G 治理；G 在自身 `ck.realm.inheritance_policy` 中允许 T 继承一组收窄型 moderation policy；当 bob 在 T 中违规时，soland 在 T 的 effective policy projection 中 include 来自 G 的 inherited rule 并执行 moderation；alice 通过把 link `status` 置为 `rejected` 解除继承，T 的 policy 立即恢复独立形态（不再 inherit）。
+验证 Realm 之间的显式 link graph 行为：alice 创建治理 Realm G 与团队 Realm T，T 通过 `ak.realm.link {link_kind: "governed_by", target: G.id}` 声明被 G 治理；G 在自身 `ak.realm.inheritance_policy` 中允许 T 继承一组收窄型 moderation policy；当 bob 在 T 中违规时，soland 在 T 的 effective policy projection 中 include 来自 G 的 inherited rule 并执行 moderation；alice 通过把 link `status` 置为 `rejected` 解除继承，T 的 policy 立即恢复独立形态（不再 inherit）。
 
 不验证：Space hierarchy 跨 Realm 导航（见 spaces/hierarchy）、cross-realm membership 迁移（见 federation/realm-migration）、capability bundle 全量派生（spec §6 之外的扩展 profile）。
 
@@ -12,7 +12,7 @@
 - `arkret-spec/spec/v1/zh/models/realm-links.md` §3 — 标准 link kind 表（`governed_by` / `inherits_policy_from` / `confidential_extension_of` / `discoverable_from` 等）
 - `arkret-spec/spec/v1/zh/models/realm-links.md` §4 — Link 状态机（`active` / `rejected` / `tombstoned`，派生 `confirmed` / `unconfirmed_link`）
 - `arkret-spec/spec/v1/zh/models/realm-links.md` §5 — 禁止隐式级联清单（membership / capability / history / E2EE key / policy / notification …）
-- `arkret-spec/spec/v1/zh/models/realm-links.md` §6 — 显式继承（`ck.realm.inheritance_policy` opt-in，narrow-only，本地 deny 覆盖，`max_depth=1`）
+- `arkret-spec/spec/v1/zh/models/realm-links.md` §6 — 显式继承（`ak.realm.inheritance_policy` opt-in，narrow-only，本地 deny 覆盖，`max_depth=1`）
 
 ## 拓扑
 
@@ -26,7 +26,7 @@
 
 | 名字 | DID | 在 models/realm-links 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:webvh:z6mkfixture:alice-s1-<uuid>.example` | org admin；创建 governance Realm G 与 team Realm T，签 `ck.realm.link` Move | 测试开始前 |
+| alice | `did:webvh:z6mkfixture:alice-s1-<uuid>.example` | org admin；创建 governance Realm G 与 team Realm T，签 `ak.realm.link` Move | 测试开始前 |
 | bob | `did:webvh:z6mkfixture:bob-s1-<uuid>.example` | team member；在 T 中发违规消息，被 G 的 inherited policy 处理 | 测试开始前 |
 
 ## Pre-conditions
@@ -42,7 +42,7 @@
 1. **alice** 通过 `/setup` 创建 governance Realm `G`：
    - title = `"models/realm-links Gov Realm ${stamp}"`
    - realm_kind = `governance`（profile 标签；在没有专用 UI 时由测试直接调 soland API 创建）
-2. **alice** 在 G 中写一条 moderation policy（`ck.policy.moderation`），含 `banned_keywords = ["forbidden-word-${stamp}"]`，并在同一 Realm 内发 `ck.realm.inheritance_policy` 允许下游 `governed_by` 子 Realm 继承该 moderation rule（narrow-only）。
+2. **alice** 在 G 中写一条 moderation policy（`ak.policy.moderation`），含 `banned_keywords = ["forbidden-word-${stamp}"]`，并在同一 Realm 内发 `ak.realm.inheritance_policy` 允许下游 `governed_by` 子 Realm 继承该 moderation rule（narrow-only）。
 3. 断言：`realm-overview-panel` 显示 `realmId` 形如 `ak:realm:...`，记录 `govRealmId`；G 的 effective policy 中含 `banned_keywords` 且 `inheritable = true`。
 
 ### Phase B — 创建 team Realm T + 声明 governed_by link
@@ -50,7 +50,7 @@
 4. **alice** 通过 `/setup` 创建 team Realm `T`：
    - title = `"models/realm-links Team Realm ${stamp}"`
    - seed_members = `[bob.did]`
-5. **alice** 在 T 中发送 `ck.realm.link` Move：
+5. **alice** 在 T 中发送 `ak.realm.link` Move：
    ```json
    {
      "kind": "ak.realm.link",
@@ -62,7 +62,7 @@
      }
    }
    ```
-6. **alice** 在 T 中显式 opt-in：发 `ck.realm.inheritance_policy` 声明从 `govRealmId` 继承 `moderation.banned_keywords`（必须本地声明；只继承不会自动发生 — spec §6.1）。
+6. **alice** 在 T 中显式 opt-in：发 `ak.realm.inheritance_policy` 声明从 `govRealmId` 继承 `moderation.banned_keywords`（必须本地声明；只继承不会自动发生 — spec §6.1）。
 7. 断言：`realm-link-list` 显示一条 outbound `governed_by → govRealmId`，`edge_status = unconfirmed_link`（G 没有 reciprocal event，但 `governed_by` profile 不要求双方确认 → 测试侧根据 profile 容忍 `confirmed` 或 `active` 任一）；记录 `teamRealmId`。
 
 ### Phase C — T 的 effective policy projection include G 的 inherited rule
@@ -84,7 +84,7 @@
 
 ### Phase F — alice reject the link，T 的 policy 恢复独立
 
-16. **alice** 把 step 5 的 link 状态置为 `rejected`：发送一条新的 `ck.realm.link` Move（同 `target_realm_id` + `link_kind`，`status = "rejected"`）。spec §4 — `status` 是 link 的最终态字段，新事件覆盖旧 active link。
+16. **alice** 把 step 5 的 link 状态置为 `rejected`：发送一条新的 `ak.realm.link` Move（同 `target_realm_id` + `link_kind`，`status = "rejected"`）。spec §4 — `status` 是 link 的最终态字段，新事件覆盖旧 active link。
 17. 调 `GET /_arkret/self/realms/${teamRealmId}/policy/effective`：`moderation.banned_keywords` **不再** 含 `forbidden-word-${stamp}`；`derived_from` source list 为空。
 18. **bob** 重发同样的 `MV` 文本：`write-status` 含 `persisted`；timeline 出现正常 `timeline-event`。
 19. 断言：`realm-link-list` 中 step 5 的 link 显示 `edge_status = rejected`；T 的 inheritance_policy（step 6）虽仍 active，但 link 既然 rejected，derived policy 不再触发（spec §6.3 — 本地 deny / revoke / link reject 覆盖 inherited allow）。
@@ -109,7 +109,7 @@
 
 ## Implementation notes
 
-- inkson 当前没有 `ck.realm.link` 专用 UI；Phase B 的 step 5/6、Phase F 的 step 16 在 inkson 落地前需要直接调 soland 的 `POST /_arkret/self/realms/${realmId}/events`（或对应 Move endpoint）写 Move。这是已知 gap，主流程留 fixme。
+- inkson 当前没有 `ak.realm.link` 专用 UI；Phase B 的 step 5/6、Phase F 的 step 16 在 inkson 落地前需要直接调 soland 的 `POST /_arkret/self/realms/${realmId}/events`（或对应 Move endpoint）写 Move。这是已知 gap，主流程留 fixme。
 - `realm-link-list`、`realm-overview-panel`、`policy-hold-marker` 是计划中的 testid；inkson 实现时统一加。
 - effective policy projection (`/_arkret/self/realms/:id/policy/effective`) 也是 spec §6 的 derived 端点；soland 当前是否已经实现 link-aware 合并需要先确认 — Phase C 与 Phase E 在 soland 项目逻辑落地前会全员 fixme。
 - 不需要新 helper：`ensureRegistered` / `issueDevSession` / `openUserPage` 已覆盖 actor 准备；`request` (Playwright APIRequestContext) 直接打 soland 处理 Move 与 effective policy 查询。

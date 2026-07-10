@@ -185,7 +185,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "kind": "relation",
                 "id": relation_id,
                 "realm_id": realm_id,
-                "cell": format!("ak:cell:ck.component.relation.v1:{relation_id}")
+                "cell": format!("ak:cell:ak.component.relation.v1:{relation_id}")
             }),
             "capability_denied",
         ),
@@ -195,7 +195,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "kind": "morph",
                 "id": morph_id,
                 "realm_id": realm_id,
-                "cell": format!("ak:cell:ck.component.morph.v1:{morph_id}")
+                "cell": format!("ak:cell:ak.component.morph.v1:{morph_id}")
             }),
             "capability_denied",
         ),

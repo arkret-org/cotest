@@ -2,9 +2,9 @@
   "profile": "ak.profile.history_visibility_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B4 Round 25 — history-visibility scope vectors. Spec authority: data-structures/history-visibility.md + authz/event-auth-state-resolution.md. The history_visibility cell (cas-register, ck:cell:ck.component.realm.history_visibility.v1:<realm_id>) holds one of {joined, invited, world_readable, shared}. The reducer projects the timeline differently per viewer based on their (membership_state, history_visibility, event_origin_ts vs viewer_join_ts). 'joined' (default): only events at-or-after the viewer's last join_ts are visible. 'invited': events at-or-after the viewer's invite_ts are visible (allows pre-accept preview). 'world_readable': all events visible to anyone who can reach the cell, even non-members. 'shared': events from the moment the visibility setting first turned 'shared' onward are visible to non-members; events prior remain joined-scoped. Redacted events compose with visibility (see redaction_history_visibility_fixture for the cross-product); admin override uses the recovery_capability surface to expose audit-view of any single event_id regardless of viewer scope.",
+  "comment": "B4 Round 25 — history-visibility scope vectors. Spec authority: data-structures/history-visibility.md + authz/event-auth-state-resolution.md. The history_visibility cell (cas-register, ak:cell:ak.component.realm.history_visibility.v1:<realm_id>) holds one of {joined, invited, world_readable, shared}. The reducer projects the timeline differently per viewer based on their (membership_state, history_visibility, event_origin_ts vs viewer_join_ts). 'joined' (default): only events at-or-after the viewer's last join_ts are visible. 'invited': events at-or-after the viewer's invite_ts are visible (allows pre-accept preview). 'world_readable': all events visible to anyone who can reach the cell, even non-members. 'shared': events from the moment the visibility setting first turned 'shared' onward are visible to non-members; events prior remain joined-scoped. Redacted events compose with visibility (see redaction_history_visibility_fixture for the cross-product); admin override uses the recovery_capability surface to expose audit-view of any single event_id regardless of viewer scope.",
   "encoder": {
-    "history_visibility_cell": "ak:cell:ck.component.realm.history_visibility.v1:<realm_id>",
+    "history_visibility_cell": "ak:cell:ak.component.realm.history_visibility.v1:<realm_id>",
     "history_visibility_lattice": "cas_register",
     "history_visibility_values": ["world_readable", "shared", "joined", "invited"],
     "default_value": "joined",
@@ -135,7 +135,7 @@
     },
     {
       "name": "admin_override_recovery_capability_exposes_event",
-      "comment": "Admin holds ck.recovery.read.history.v1 capability. They request a single event_id even though viewer.join_ts > event.origin_ts (joined visibility would otherwise hide it). The override path returns the event under audit_view with explicit override_audit_log entry.",
+      "comment": "Admin holds ak.recovery.read.history.v1 capability. They request a single event_id even though viewer.join_ts > event.origin_ts (joined visibility would otherwise hide it). The override path returns the event under audit_view with explicit override_audit_log entry.",
       "history_visibility": "joined",
       "admin_override": {
         "admin_did": "did:web:admin.example",
@@ -222,7 +222,7 @@
     },
     {
       "name": "admin_override_audit_view_for_banned_member",
-      "comment": "Round 26 B4 余下 — admin holds ck.recovery.read.history.v1 and uses it to read a specific event for a banned member's investigation. The recovery_capability + audit_log requirement composes: admin sees the original via audit_view + audit_log is emitted. This is a second admin_override vector to cover the more complex investigation strand.",
+      "comment": "Round 26 B4 余下 — admin holds ak.recovery.read.history.v1 and uses it to read a specific event for a banned member's investigation. The recovery_capability + audit_log requirement composes: admin sees the original via audit_view + audit_log is emitted. This is a second admin_override vector to cover the more complex investigation strand.",
       "history_visibility": "joined",
       "admin_override": {
         "admin_did": "did:web:admin2.example",
@@ -271,7 +271,7 @@
     },
     {
       "name": "admin_override_without_capability_rejected",
-      "comment": "Caller claims admin override but does NOT hold ck.recovery.read.history.v1; the override request MUST be rejected with capability_not_held.",
+      "comment": "Caller claims admin override but does NOT hold ak.recovery.read.history.v1; the override request MUST be rejected with capability_not_held.",
       "history_visibility": "joined",
       "admin_override": {
         "admin_did": "did:web:mallory.example",

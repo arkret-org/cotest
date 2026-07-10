@@ -100,7 +100,7 @@
 
 ## Edge cases / sub-tests
 
-- **E1.1 idempotent invite**:alice 在 Phase C 之前对 carol 连发两次 invite,只产生一个 `ck.invite.create` 事件,后续 accept 仍能成功
+- **E1.1 idempotent invite**:alice 在 Phase C 之前对 carol 连发两次 invite,只产生一个 `ak.invite.create` 事件,后续 accept 仍能成功
 - **E1.2 history_visibility=shared**:同样的步骤改用 `shared` 而不是 `joined`,carol 应该看到 `M1/M2/M2'/tombstone`(`shared` 允许新成员读"应该共享的"历史) — spec §3.4 / §3.7
 - **E1.3 history_visibility=world_readable**:carol 在加入 Realm **之前**就能通过 `/timeline/${realmId}` 看到消息(在 spec 里 `world_readable` 允许未加入者读历史) — 这一条要小心,因为它跨过了 join_rule 的 gate
 - **E1.4 membership leave/rejoin**:bob 主动 `leave` 后不再出现在 Realm `members[]`,普通消息写入被拒绝;owner 重新提交 `join` 后,bob 可以再次写入同一 Realm

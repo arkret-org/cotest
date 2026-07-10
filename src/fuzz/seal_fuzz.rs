@@ -143,7 +143,7 @@ impl FuzzSealDeepInput {
 /// Drive a Seal envelope through:
 ///   1. `from_slice` on the raw fuzz bytes (catches wire parser panics);
 ///   2. Schema validator against `ANCHOR_SCHEMA` (SDK constant name; its value is the current
-///      `ck.schema.seal.v1`);
+///      `ak.schema.seal.v1`);
 ///   3. Typed `from_value::<Seal>` deserialization.
 pub fn fuzz_seal_deep(data: &[u8]) -> Result<(), String> {
     catch(|| {

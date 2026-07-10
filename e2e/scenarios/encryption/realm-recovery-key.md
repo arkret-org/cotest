@@ -4,8 +4,8 @@
 
 验证 `content_scheme=mls-exporter-aead-v1` 的 Realm 的**组织级历史持久性**:Realm 声明
 `durability_policy`(`org_recovery_key` 单点 / `threshold` k-of-n)后,推进 epoch 的
-`ck.mls.commit` 提交方在 eager 时序下为每个恢复方(RRK)发布 RRK-targeted
-`ck.realm_key.share`,把 per-epoch `history_secret` HPKE 封装给该恢复方的离线公钥;
+`ak.mls.commit` 提交方在 eager 时序下为每个恢复方(RRK)发布 RRK-targeted
+`ak.realm_key.share`,把 per-epoch `history_secret` HPKE 封装给该恢复方的离线公钥;
 当全体成员设备失效 / 全员离职后,组织用 RRK 私钥 HPKE-open 还原历史;无活成员时
 RRK 持有者临时上线把授权 epoch 区间 re-seal 给后加入者。
 
@@ -17,7 +17,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 
 - `crypto-media/encryption-and-audit.md` §2.10 — 可共享历史内容 scheme `mls-exporter-aead-v1`
 - `crypto-media/encryption-and-audit.md` §2.10.1 — `history_secret[N]` / `K_content[N]` 派生
-- `crypto-media/encryption-and-audit.md` §2.10.4 — `ck.realm_key.share` 历史密钥交付
+- `crypto-media/encryption-and-audit.md` §2.10.4 — `ak.realm_key.share` 历史密钥交付
 - `crypto-media/encryption-and-audit.md` §2.10.5 — 保留义务与 per-epoch FS 边界
 - `crypto-media/encryption-and-audit.md` §2.10.8 — RRK 持久化封存(eager-at-commit + RYW + 兜底 re-share)
 - `models/realm-and-space.md` §2.3.1 — `durability_policy`(mode / recovery_recipients / threshold)
@@ -48,9 +48,9 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
    独立于 `did_recovery` 域)。
 2. alice 建 Realm:`encryption_profile=mls_rfc9420`、`content_scheme=mls-exporter-aead-v1`、
    `durability_policy={mode:org_recovery_key, recovery_recipients:[org-rrk RRK]}`。
-3. alice 提交 `ck.mls.genesis`,推进若干 `ck.mls.commit`(epoch 1..N);每个 epoch alice+bob
+3. alice 提交 `ak.mls.genesis`,推进若干 `ak.mls.commit`(epoch 1..N);每个 epoch alice+bob
    产生 `mls-exporter-aead-v1` 加密内容。
-4. 每个 epoch commit accepted 后,封存方 eager 发布 RRK-targeted `ck.realm_key.share`
+4. 每个 epoch commit accepted 后,封存方 eager 发布 RRK-targeted `ak.realm_key.share`
    (`key_scope.from_epoch=to_epoch=N`,`recipient_principal_id=org-rrk`,`ciphertext`=封给 RRK 公钥),
    且在 RYW 落盘前 MUST NOT GC `history_secret[N]`。
 5. 模拟全员离开 / 设备失效(alice/bob leave + 设备 revoke)。
@@ -63,13 +63,13 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 1. 承接 Phase A(无活成员)。
 2. dave 后加入,发布 KeyPackage / 设备 HPKE 公钥;无活成员可 re-share。
 3. RRK 持有者临时上线,把授权 epoch 区间 `[from,to]` 的 `history_secret` 用 RRK 私钥 open 后,
-   re-seal(`ck.realm_key.share`)给 dave 的设备 HPKE 公钥。
+   re-seal(`ak.realm_key.share`)给 dave 的设备 HPKE 公钥。
 4. 断言:dave 安装 `history_secret` 后解出该区间历史,纳入 §2.3.5 late-recovery 状态机。
 
 ### Phase C — 诊断向量(负向)
 
 - **C1 `durability_scheme_incompatible`**:在 `content_scheme=mls-rfc9420`(或缺省)的 Realm 上
-  `ck.realm.policy_components` 写 `durability_policy.mode != none` → `failed_precondition`
+  `ak.realm.policy_components` 写 `durability_policy.mode != none` → `failed_precondition`
   reason=`durability_scheme_incompatible`(§2.3.1 / §2.10.8 适用条件)。
 - **C2 `durability_recovery_recipient_unverified`**:`recovery_recipients[].verification_method`
   解析不到 active `CokretRealmHistoryRecoveryKey` service entry(已撤销 / 未被 service entry 指定 /
@@ -83,7 +83,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 整套 scenario 当前全部 `test.fixme`,实跑依赖并行进行的 soland / inkson RRK 实现:
 
 - `@blocking-on rrk-soland` — `content_scheme` / `durability_policy` 投影、RRK-targeted
-  `ck.realm_key.share` 接受 + RYW、恢复读取面、3 个诊断向量的 reducer 拒绝路径
+  `ak.realm_key.share` 接受 + RYW、恢复读取面、3 个诊断向量的 reducer 拒绝路径
 - `@blocking-on rrk-inkson` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
   epoch 推进时的 eager 封存挂钩、披露横幅
 

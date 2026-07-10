@@ -357,7 +357,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-21 — Discovery profile (ck.profile.discovery.v1) advertise vs
+    /// Round-21 — Discovery profile (ak.profile.discovery.v1) advertise vs
     /// core/extension tier filtering, interop_bridge handling, and post-C16
     /// surface naming (blob_storage / realtime_media / moderation_reports).
     discovery_profile_fixture_suite_matches_reference_semantics,
@@ -621,7 +621,7 @@ conformance_test!(
     /// chime / floria / SDK implementations stay aligned on the allow /
     /// block lists for blind wakeup payloads (`push_target_id`,
     /// `wakeup_kind`, `push_hint`, counts; everything else forbidden;
-    /// no `did:` / `ck:` literal in any other slot).
+    /// no `did:` / `ak:` literal in any other slot).
     blind_payload_sanitizer_vectors,
     "blind_payload_sanitizer",
     cotest::conformance::run_blind_payload_sanitizer_suite,

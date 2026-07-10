@@ -45,8 +45,8 @@
 1. alice 进 `/setup`,新建 Realm,**关键字段**:`encryption_profile = "mls_rfc9420"`
 2. inkson 后台:
    - 生成 MLS group context、cipher suite(默认 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`)
-   - 写 `ck.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
-   - 写 `ck.realm.create` Move,关联 genesis
+   - 写 `ak.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
+   - 写 `ak.realm.create` Move,关联 genesis
 3. 断言:`/realms/${realmId}/admin/security` 显示 MLS 管理控件
 4. 断言:`GET /_arkret/self/realms/${realmId}` 返回 `encryption_profile = "mls_rfc9420"`
 
@@ -54,9 +54,9 @@
 
 5. alice 调用 `POST /_arkret/self/keys/keypackages/claim?actor=bob.did` → 拿到 bob 的 KeyPackage
 6. alice 客户端:
-   - 计算 `ck.mls.commit`:Add 提案(bob.leaf)
+   - 计算 `ak.mls.commit`:Add 提案(bob.leaf)
    - 派生新 epoch secrets
-   - 为 bob 生成 `ck.mls.welcome`(用 bob KeyPackage 的 InitKey 加密)
+   - 为 bob 生成 `ak.mls.welcome`(用 bob KeyPackage 的 InitKey 加密)
    - `governance_binding` 嵌入 `realm_policy_digest` + `membership_frontier` + `reducer_profile_digest`
 7. alice 提交 commit + welcome 到 soland;welcome 通过 durable Event 路由给 bob(spec §2.2.1)
 8. bob inkson 拉 sync → 解 welcome → 派生 epoch 1 secrets
@@ -74,7 +74,7 @@
 ### Phase D — carol 加入触发 epoch advance
 
 16. alice `POST /_arkret/self/keys/keypackages/claim?actor=carol.did`
-17. alice 客户端:`ck.mls.commit` Add carol;epoch 1 → epoch 2;新 application key
+17. alice 客户端:`ak.mls.commit` Add carol;epoch 1 → epoch 2;新 application key
 18. soland 接受 commit + welcome → carol 拉 welcome → 派生 epoch 2 secrets
 19. 断言:carol `/timeline/${realmId}` 可见;**但** carol 解 Phase C 的 `M_a` / `M_b`?
     - 看 `history_visibility`:joined → carol 看不到加入前的 `M_a/M_b`(spec §3.4 + §2.4.1 `decryption_pending` for pre-join)
@@ -84,7 +84,7 @@
 
 ### Phase E — Membership frontier ≠ MLS epoch → `epoch_update_required`
 
-23. alice 提交 `ck.member.state{ban}` 把 bob 踢出 — 这是 Realm governance 层动作
+23. alice 提交 `ak.member.state{ban}` 把 bob 踢出 — 这是 Realm governance 层动作
 24. governance frontier 前进;但 MLS commit 还没跟上
 25. alice 客户端在 `max_mls_commit_delay_ms`(默认 30s)内必须发起 MLS Remove + 新 commit
 26. 断言:在 alice 提交 Remove commit 之前的 30s 窗内,客户端 send 应进入 `epoch_update_required` 状态(timeline 显示"Waiting for encryption to set up...")
@@ -115,13 +115,13 @@
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
 - **E11.4 加入前已发消息 + history_visibility=shared**:把 Phase D 改用 `history_visibility=shared` — carol 加入后应当能解(spec §3.4 shared rule + §6 offline epoch retention)
 - **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 Realm 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端
-- **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发 `ck.realm.update` patch `encryption_profile` → soland 拒绝,wire code `realm_encryption_profile_create_locked`(spec realm-and-space.md §2.3;soland operations.rs `operation_touches_encryption_profile`)。防止把已加密 Realm 静默降级成明文。此前 soland 无单测、cotest 无端到端覆盖。
-- **E11.7 Circle encryption_profile create-locked**(fixme,blocking-on soland#circle-submit-validation-gap):在加密 Realm 下按 floor 建 Circle 后,`ck.circle.update` patch `encryption_profile`。**实测确认 gap**:soland 提交时**接受**(返回 200),因为 `operation_schema_for_kind` 无 circle arm → 提交时操作校验整段被跳过;create-lock 只在异步 reducer 兜底(状态安全但响应误导)。修后转 active:断言 wire code `circle_encryption_profile_create_locked`。
-- **E11.8 未就绪不得静默降级**(fixme,blocking-on inkson#mls-not-ready-write-guard):未收 welcome、未恢复账户密钥的同账户新设备尝试写私有内容 → 客户端必须呈现可恢复的"MLS 未就绪"提示并拒绝提交,**绝不**把明文 `ck.strand.update` 发给服务端(也不应触发 `content_encryption_floor_violation`)。需第二设备 rig + 实跑确认未就绪 UX 后从 fixme 升 active。
+- **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发 `ak.realm.update` patch `encryption_profile` → soland 拒绝,wire code `realm_encryption_profile_create_locked`(spec realm-and-space.md §2.3;soland operations.rs `operation_touches_encryption_profile`)。防止把已加密 Realm 静默降级成明文。此前 soland 无单测、cotest 无端到端覆盖。
+- **E11.7 Circle encryption_profile create-locked**(fixme,blocking-on soland#circle-submit-validation-gap):在加密 Realm 下按 floor 建 Circle 后,`ak.circle.update` patch `encryption_profile`。**实测确认 gap**:soland 提交时**接受**(返回 200),因为 `operation_schema_for_kind` 无 circle arm → 提交时操作校验整段被跳过;create-lock 只在异步 reducer 兜底(状态安全但响应误导)。修后转 active:断言 wire code `circle_encryption_profile_create_locked`。
+- **E11.8 未就绪不得静默降级**(fixme,blocking-on inkson#mls-not-ready-write-guard):未收 welcome、未恢复账户密钥的同账户新设备尝试写私有内容 → 客户端必须呈现可恢复的"MLS 未就绪"提示并拒绝提交,**绝不**把明文 `ak.strand.update` 发给服务端(也不应触发 `content_encryption_floor_violation`)。需第二设备 rig + 实跑确认未就绪 UX 后从 fixme 升 active。
 
 ## Implementation notes
 
-- **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`ck.mls.genesis`、KeyPackage claim CAS、durable `ck.mls.welcome` pending queue + 一次性 drain、`ck.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、加入后的 Bob 解密 Alice post-join timeline 密文且 raw event 不含明文、ban 后 inkson 显示 `epoch_update_required` 并禁用发送。
+- **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`ak.mls.genesis`、KeyPackage claim CAS、durable `ak.mls.welcome` pending queue + 一次性 drain、`ak.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、加入后的 Bob 解密 Alice post-join timeline 密文且 raw event 不含明文、ban 后 inkson 显示 `epoch_update_required` 并禁用发送。
 - **剩余缺口**:双向 E2EE 消息交换、carol pre-join history、并发 commit 的 `decryption_pending`、governance binding mismatch 的精确拒绝路径。
 - **测试侧难点**:断言"服务端只见 ciphertext"需要 soland 暴露一个 raw event endpoint;若没有,可以从 service log 抓 + grep
 

@@ -1,6 +1,6 @@
 //! Directory / anti-enumeration conformance scenarios (P2F.4).
 //!
-//! teabay is the v1 directory service. CKP-0007 hardens the boundary
+//! teabay is the v1 directory service. AKP-0007 hardens the boundary
 //! between teabay's public surface and the per-Circle private state on
 //! soland: Circle membership MUST NOT leak through directory queries,
 //! and the public surface MUST still defend against enumeration on

@@ -33,7 +33,7 @@ test.describe.configure({ mode: "serial" });
 
 // soland fans the actor-private read-cursor update out to the *other* devices
 // of the same actor through the to-device queue. A device polls
-// `account/subscribe` and observes the update as a `ck.read_cursor.update`
+// `account/subscribe` and observes the update as a `ak.read_cursor.update`
 // to-device envelope. Bounded sync window per scenarios/models §E10.1 (30s);
 // the local harness converges far faster, so a single catchup poll suffices.
 const READ_MARKER_UPDATE_KIND = "ak.read_cursor.update";
@@ -453,7 +453,7 @@ async function sendAndResolvePosition(
 }
 
 // Poll `account/subscribe` until the actor's to-device queue carries a
-// `ck.read_cursor.update` envelope for the given realm (optionally matching a
+// `ak.read_cursor.update` envelope for the given realm (optionally matching a
 // specific position). Bounded by the scenario's 30s sync window.
 async function pollToDeviceReadMarker(
   request: APIRequestContext,

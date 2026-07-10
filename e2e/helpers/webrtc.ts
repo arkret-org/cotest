@@ -93,7 +93,7 @@ export async function setupTwoPartyCallRealm(
 // ── Real device signer (ed25519 detached-JWS proof, webrtc-signaling.md §5.1) ─
 //
 // The retired soland stack accepted a placeholder `{actor, kid, sig:"cotest-
-// device-proof"}`. The spec `ck.call.signal` `proof` is a detached-JWS whose
+// device-proof"}`. The spec `ak.call.signal` `proof` is a detached-JWS whose
 // transcript signs the canonical binding object `{event_digest, actor_id,
 // verification_method, created_at}` (§5.1, byte-identical to the persistent
 // Event proof binding). This helper mints a REAL ed25519 keypair per
@@ -194,7 +194,7 @@ export function withBroadcastEphemeralProof(
 }
 
 /**
- * Build a real `ck.call.signal` ephemeral envelope (webrtc-signaling.md §5)
+ * Build a real `ak.call.signal` ephemeral envelope (webrtc-signaling.md §5)
  * with a genuine detached-JWS `proof` (§5.1). `event_digest` =
  * `sha256:` || hex(sha256(canonical_json(envelope_without_proof))); the JWS
  * transcript signs the canonical binding object.
@@ -273,8 +273,8 @@ export function buildCallSignalEnvelope(args: {
 //
 // The realm owner holds ALL realm-scoped actions by default (authz `reason:
 // "owner"`), so an owner can send call signals / join without an explicit
-// grant. A non-owner member only holds `ck.strand.read` / `ck.message.create`
-// by default and MUST be granted `ck.call.signal.send` / `ck.call.join`
+// grant. A non-owner member only holds `ak.strand.read` / `ak.message.create`
+// by default and MUST be granted `ak.call.signal.send` / `ak.call.join`
 // explicitly. Grants are owner-issued (`capabilities.md` §3 — the issuer MUST
 // hold the action; the owner does).
 
@@ -346,10 +346,10 @@ export async function grantCallCapability(
 
 // ── ak.call.state durable cell (call-state.md §4 / webrtc-signaling.md §3a) ───
 //
-// The media token issuer + ban gate read the durable `ck.call.state` cell.
-// Seeding it over HTTP submits a signed `ck.call.state` event; the
+// The media token issuer + ban gate read the durable `ak.call.state` cell.
+// Seeding it over HTTP submits a signed `ak.call.state` event; the
 // `apply_call_state` reducer projects it into
-// `ck.component.call.state.v1:{call_id}`.
+// `ak.component.call.state.v1:{call_id}`.
 
 export interface RemovedParticipant {
   actor_id: string;
@@ -413,7 +413,7 @@ export function newCallId(): string {
 // ── Ephemeral submit + subscribe read-back (canonical wire) ──────────────────
 
 /**
- * Submit a `ck.call.signal` envelope to `POST /_arkret/self/ephemeral`. Returns
+ * Submit a `ak.call.signal` envelope to `POST /_arkret/self/ephemeral`. Returns
  * the raw response so callers can assert both success and negative (e.g.
  * `capability_denied`) paths.
  */
@@ -429,7 +429,7 @@ export async function postCallSignalRaw(
 }
 
 /**
- * Submit a `ck.call.signal` and assert it is accepted + relayed. Returns the
+ * Submit a `ak.call.signal` and assert it is accepted + relayed. Returns the
  * `EphemeralSubmitOutcome` body.
  */
 export async function postCallSignal(
@@ -452,7 +452,7 @@ export async function postCallSignal(
 }
 
 /**
- * Read the verbatim relayed `ck.call.signal` envelopes a Realm member receives
+ * Read the verbatim relayed `ak.call.signal` envelopes a Realm member receives
  * via `GET /_arkret/self/account/subscribe`. Returns them oldest-first across
  * all matching realms.
  */
@@ -491,9 +491,9 @@ export async function expectCallSignalError(
 
 export { authHeaders };
 
-// ── Media-service binding (CKP-0010) — token exchange helpers ────────────────
+// ── Media-service binding (AKP-0010) — token exchange helpers ────────────────
 //
-// These back the `ck.realm.media_service` foci configuration and the
+// These back the `ak.realm.media_service` foci configuration and the
 // `POST /_arkret/self/rtc/token` media token exchange. The foci selection
 // follows the spec oldest-membership-wins rule (media-service-binding.md §5);
 // the issued LiveKit token is a standard 3-segment JWT so the harness can
@@ -512,7 +512,7 @@ export interface MediaFocusConfig {
 }
 
 /**
- * Project a `ck.realm.media_service` epoch onto the realm so the token issuer
+ * Project a `ak.realm.media_service` epoch onto the realm so the token issuer
  * can resolve `service_id`, `issuer_kids`, and `foci[]`. The `service_id` is
  * derived from each focus `issuer_kid` (`<service_id>#<key>`).
  */

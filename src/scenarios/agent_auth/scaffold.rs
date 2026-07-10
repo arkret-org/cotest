@@ -75,7 +75,7 @@ pub async fn agent_auth_run() -> Result<()> {
 
     // TODO(P4-impl): exercise the live `POST /_arkret/gate/account/agent-key-pair`
     // endpoint with a self_asserted runtime_attestation, then assert the
-    // emitted `ck.agent.key.authorize` event carries the runtime_attestation
+    // emitted `ak.agent.key.authorize` event carries the runtime_attestation
     // verbatim. Pending soland P2-impl reducer wiring.
 
     Ok(())

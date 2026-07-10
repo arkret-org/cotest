@@ -5,9 +5,9 @@
   "comment": "D1 Round 24 — MLS / E2EE basic protocol vectors. Spec authority: crypto-media/encryption-and-audit.md + extensions/mls-binding.md. Each MLS commit Move advances a group through epochs (RFC 9420 MLS protocol). Genesis Move creates epoch 0; subsequent commits join/leave members and advance to epoch N+1. covered_frontier or-set accumulates the governance refs each commit attests to. Encryption AAD digest pins the Move's ciphertext to the active group state — a bit-flip in any covered byte must produce a different digest, which the recipient verifies before decryption.",
   "encoder": {
     "mls_protocol": "RFC 9420 MLS",
-    "epoch_cell": "ak:cell:ck.component.mls.epoch.v1:<realm_id>",
-    "group_state_cell": "ak:cell:ck.component.mls.group_state.v1:<realm_id>",
-    "covered_frontier_cell": "ak:cell:ck.component.mls.covered_frontier.v1:<realm_id>",
+    "epoch_cell": "ak:cell:ak.component.mls.epoch.v1:<realm_id>",
+    "group_state_cell": "ak:cell:ak.component.mls.group_state.v1:<realm_id>",
+    "covered_frontier_cell": "ak:cell:ak.component.mls.covered_frontier.v1:<realm_id>",
     "epoch_lattice": "cas_register",
     "covered_frontier_lattice": "or_set",
     "aad_digest": "SHA-256 over canonical (move_id || epoch_id || tree_hash || covered_frontier_root)"
@@ -15,24 +15,24 @@
   "vectors": [
     {
       "name": "genesis_move_creates_epoch_zero",
-      "comment": "MLS group genesis: a creator Move (ck.mls.genesis) writes epoch=0, group_state=initial tree, covered_frontier=∅. The realm_id is fresh; no prior epoch exists; bottom mode is reject — but at genesis there is nothing to conflict with.",
+      "comment": "MLS group genesis: a creator Move (ak.mls.genesis) writes epoch=0, group_state=initial tree, covered_frontier=∅. The realm_id is fresh; no prior epoch exists; bottom mode is reject — but at genesis there is nothing to conflict with.",
       "realm_id": "ak:realm:01js0sp10000000000000000000",
       "kind": "ak.mls.genesis",
       "move_id": "ak:event:01970e58-0d01-7a01-8d01-000000000000",
       "creator_did": "did:web:alice.example",
       "effects": [
         {
-          "cell": "ak:cell:ck.component.mls.epoch.v1:ck.realm.01js0sp10000000000000000000",
+          "cell": "ak:cell:ak.component.mls.epoch.v1:ak.realm.01js0sp10000000000000000000",
           "op": "set",
           "value": {"epoch_id": 0}
         },
         {
-          "cell": "ak:cell:ck.component.mls.group_state.v1:ck.realm.01js0sp10000000000000000000",
+          "cell": "ak:cell:ak.component.mls.group_state.v1:ak.realm.01js0sp10000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "members": ["did:web:alice.example"]}
         },
         {
-          "cell": "ak:cell:ck.component.mls.covered_frontier.v1:ck.realm.01js0sp10000000000000000000",
+          "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp10000000000000000000",
           "op": "or_set_init",
           "value": []
         }
@@ -56,17 +56,17 @@
       "covered_frontier_attests_to": "ak:event:01970e58-0d02-7a02-8d02-000000000005",
       "effects": [
         {
-          "cell": "ak:cell:ck.component.mls.epoch.v1:ck.realm.01js0sp11000000000000000000",
+          "cell": "ak:cell:ak.component.mls.epoch.v1:ak.realm.01js0sp11000000000000000000",
           "op": "set",
           "value": {"epoch_id": 1}
         },
         {
-          "cell": "ak:cell:ck.component.mls.group_state.v1:ck.realm.01js0sp11000000000000000000",
+          "cell": "ak:cell:ak.component.mls.group_state.v1:ak.realm.01js0sp11000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA"}
         },
         {
-          "cell": "ak:cell:ck.component.mls.covered_frontier.v1:ck.realm.01js0sp11000000000000000000",
+          "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp11000000000000000000",
           "op": "or_set_add",
           "tag": "ak:event:01970e58-0d02-7a02-8d02-000000000005"
         }
@@ -90,17 +90,17 @@
       "prior_members": ["did:web:alice.example"],
       "effects": [
         {
-          "cell": "ak:cell:ck.component.mls.epoch.v1:ck.realm.01js0sp12000000000000000000",
+          "cell": "ak:cell:ak.component.mls.epoch.v1:ak.realm.01js0sp12000000000000000000",
           "op": "set",
           "value": {"epoch_id": 2}
         },
         {
-          "cell": "ak:cell:ck.component.mls.group_state.v1:ck.realm.01js0sp12000000000000000000",
+          "cell": "ak:cell:ak.component.mls.group_state.v1:ak.realm.01js0sp12000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "members": ["did:web:alice.example", "did:web:bob.example"]}
         },
         {
-          "cell": "ak:cell:ck.component.mls.covered_frontier.v1:ck.realm.01js0sp12000000000000000000",
+          "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp12000000000000000000",
           "op": "or_set_add",
           "tag": "ak:event:01970e58-0d03-7a03-8d03-000000000015"
         }
@@ -125,17 +125,17 @@
       "prior_members": ["did:web:alice.example", "did:web:bob.example"],
       "effects": [
         {
-          "cell": "ak:cell:ck.component.mls.epoch.v1:ck.realm.01js0sp13000000000000000000",
+          "cell": "ak:cell:ak.component.mls.epoch.v1:ak.realm.01js0sp13000000000000000000",
           "op": "set",
           "value": {"epoch_id": 3}
         },
         {
-          "cell": "ak:cell:ck.component.mls.group_state.v1:ck.realm.01js0sp13000000000000000000",
+          "cell": "ak:cell:ak.component.mls.group_state.v1:ak.realm.01js0sp13000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDA", "members": ["did:web:alice.example"]}
         },
         {
-          "cell": "ak:cell:ck.component.mls.covered_frontier.v1:ck.realm.01js0sp13000000000000000000",
+          "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp13000000000000000000",
           "op": "or_set_add",
           "tag": "ak:event:01970e58-0d04-7a04-8d04-000000000025"
         }

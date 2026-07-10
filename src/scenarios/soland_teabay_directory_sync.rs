@@ -4,7 +4,7 @@
 //!   - `arkret-spec/spec/v1/zh/discovery/discovery-directory.md` §2 — Directory Service ingest
 //!     contract; principal servers push actor / space announces, directory indexes them, search
 //!     queries return fresh fields within the ingest latency budget.
-//!   - `arkret-spec/spec/v1/zh/discovery/profiles-presence.md` §2 — `ck.profile.update`
+//!   - `arkret-spec/spec/v1/zh/discovery/profiles-presence.md` §2 — `ak.profile.update`
 //!     (display_name / bio / avatar_url) writes actor projection on the principal; the directory
 //!     MUST observe the new fields within the publish-to-search latency budget (target ≤ 30s for
 //!     the canonical "edit profile, then friend finds you" UX strand).

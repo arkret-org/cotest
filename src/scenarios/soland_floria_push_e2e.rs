@@ -5,7 +5,7 @@
 //!
 //! Goal:
 //!   1. Alice's chime-like client registers a push device with soland (the principal server) using
-//!      the standard `ck.edge.push.command.register_device` operation. soland forwards the
+//!      the standard `ak.edge.push.command.register_device` operation. soland forwards the
 //!      registration to floria (the push gateway) per the principal/push bridge contract.
 //!   2. A message-creation event in a Space alice is in triggers soland's notify rule.
 //!   3. Soland calls floria's `POST /_arkret/edge/push/notify` with a blind-wakeup envelope (no
@@ -74,7 +74,7 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     let floria_gateway_url = floria.base_url().to_owned();
 
     // 3. Spawn soland configured with floria as its outbound push gateway. Soland reads
-    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `ck.edge.push.command.notify` calls.
+    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `ak.edge.push.command.notify` calls.
     //    The helper keeps SOLAND_SPEC.extra_env and layers this per-run URL on top.
     let _soland = match try_spawn_with_extra_env(
         &SOLAND_SPEC,
@@ -96,7 +96,7 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     bail!(
         "TODO(CT-7): helper-level wiring is unblocked and live services were spawned \
          (floria={floria_gateway_url}, receiver={receiver_url}); finish the service API \
-         steps by (a) POSTing `ck.edge.push.command.register_device` for alice, \
+         steps by (a) POSTing `ak.edge.push.command.register_device` for alice, \
          (b) writing a bob→alice message event, (c) waiting on \
          `receiver.next_notification()` and asserting blind-wakeup invariants per §4.5: \
          - `notification.push_target_id` is a per-(principal,device,push_route) pseudonym \

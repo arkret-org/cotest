@@ -47,7 +47,7 @@ function uuidv7Like(): string {
 
 /**
  * Build a schema-conforming `secret_storage` key-backup envelope
- * (`ck.schema.key_backup.v1`) for `recipient_method=passphrase_kdf`. Every
+ * (`ak.schema.key_backup.v1`) for `recipient_method=passphrase_kdf`. Every
  * cross-field constraint soland's decode path enforces (hkdf_info,
  * aead_aad mirroring, signed_fields coverage, genesis series shape) is
  * satisfied so the test exercises the *profile* gate rather than tripping a
@@ -414,7 +414,7 @@ test.describe("account recovery", () => {
     request,
   }) => {
     // spec: key-management.md §7.1
-    // §7.1: only `ck.profile.personal_node.v1` MAY accept
+    // §7.1: only `ak.profile.personal_node.v1` MAY accept
     // `mixed_secret_storage=true`; the dedicated profile reason code was
     // dropped from the registry (spec C47), so soland now enforces the
     // mixed-storage discipline through the key-management decode path:

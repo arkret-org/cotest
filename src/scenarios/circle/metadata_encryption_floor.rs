@@ -1,7 +1,7 @@
 //! P2F.3 — Circle `metadata_encryption_floor` may only tighten the
-//! parent Realm's floor (CKP-0007 §3.4.1).
+//! parent Realm's floor (AKP-0007 §3.4.1).
 //!
-//! Normative rule (CKP-0007 §3.4.1, paraphrased): effective metadata floor
+//! Normative rule (AKP-0007 §3.4.1, paraphrased): effective metadata floor
 //! = max(parent Realm `metadata_encryption_floor`, Circle
 //! `metadata_encryption_floor` if present, Space
 //! `child_scope_policy.metadata_encryption_floor` if in placement context,
@@ -50,7 +50,7 @@ fn validate_metadata_floor_tightens(
             "reason={REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION}: \
              Circle metadata_encryption_floor={circle_floor:?} is laxer than \
              parent Realm metadata_encryption_floor={realm_floor:?}; Circle MAY \
-             only tighten the floor (CKP-0007 §3.4.1)"
+             only tighten the floor (AKP-0007 §3.4.1)"
         ))
     }
 }

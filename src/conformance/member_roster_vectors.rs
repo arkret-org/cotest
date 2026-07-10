@@ -306,7 +306,7 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
         if kind != "ak.member.identity.update" {
             bail!(
                 "VECT-ROST-3: identity_events[] MUST carry only \
-                 `ck.member.identity.update` events; got kind=`{kind}`"
+                 `ak.member.identity.update` events; got kind=`{kind}`"
             );
         }
     }

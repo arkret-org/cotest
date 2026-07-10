@@ -12,7 +12,7 @@
 //!      the teabay binary; falls back to the schema-level validator otherwise.
 //!   4. **soland member_add candidate validation** — the `member_add_with_candidate` audience/now
 //!      invariants from T3.5.
-//!   5. **inkson mock client send_message** — SDK-only: builds a `ck.message.create` Event Envelope
+//!   5. **inkson mock client send_message** — SDK-only: builds a `ak.message.create` Event Envelope
 //!      payload (no Dioxus app required).
 //!   6. **floria notify gateway blind-wakeup payload** — verifies the sanitizer rejects all
 //!      forbidden fields per `push-notifications.md` §4.5.
@@ -21,7 +21,7 @@
 //!   8. **rebind handover** — model T3.3 reducer state by mutating the candidate's
 //!      `member_delivery_binding.recipient_service_did` and asserting the local allow-list model
 //!      rejects it.
-//!   9. **revocation** — model a `ck.handle.revoke` event by expiring the candidate; the validator
+//!   9. **revocation** — model a `ak.handle.revoke` event by expiring the candidate; the validator
 //!      MUST refuse subsequent operations.
 //!
 //! ## Negative cases
@@ -129,7 +129,7 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
     let _alice =
         Did::new(ALICE_DID.to_owned()).context("starid MUST mint a parseable did:web for Alice")?;
-    // Build the rest of the candidate as if `ck.find.directory.query.resolve_handle`
+    // Build the rest of the candidate as if `ak.find.directory.query.resolve_handle`
     // returned it (T3.5 pattern).
     sample_candidate()
 }
@@ -191,7 +191,7 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
 
 // ── Step 3: teabay directory resolve_handle ────────────────────────────────
 
-/// teabay's `ck.find.directory.query.resolve_handle` (T3.4) filters candidates against
+/// teabay's `ak.find.directory.query.resolve_handle` (T3.4) filters candidates against
 /// the target Space's `allowed_recipient_services` and emits the same
 /// candidate shape we constructed above. At the SDK layer the validator is
 /// the same gate teabay re-runs on the wire — we exercise it with
@@ -222,7 +222,7 @@ fn step_3_teabay_resolve_handle(candidate: &MemberDeliveryBindingCandidate) -> R
 
 // ── Step 4: soland member_add candidate validation ─────────────────────────
 
-/// soland's `ck.member.state{join}` reducer (T3.3) re-runs the SDK validator
+/// soland's `ak.member.state{join}` reducer (T3.3) re-runs the SDK validator
 /// before persisting the new binding. We exercise the happy path here.
 fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
     let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
@@ -237,10 +237,10 @@ fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Resul
     Ok(())
 }
 
-// ── Step 5: inkson mock sends a `ck.message.create` envelope ───────────────
+// ── Step 5: inkson mock sends a `ak.message.create` envelope ───────────────
 
 /// We don't need to boot the Dioxus app to drive this — inkson's
-/// `OperationBuilder` emits a `ck.message.create` Event Envelope shape; we
+/// `OperationBuilder` emits a `ak.message.create` Event Envelope shape; we
 /// construct that shape directly and assert it is internally consistent
 /// (T3.5 pattern, mirroring the production envelope soland would accept).
 fn step_5_inkson_mock_send_message() -> Result<Value> {
@@ -398,7 +398,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
 
 // ── Step 9: revocation ─────────────────────────────────────────────────────
 
-/// A `ck.handle.revoke` event in coauth invalidates the handle row, which
+/// A `ak.handle.revoke` event in coauth invalidates the handle row, which
 /// at the SDK layer is modelled by the candidate's `expires_at` falling
 /// strictly into the past. Any subsequent `member_add` MUST refuse with
 /// `Expired`.
@@ -414,7 +414,7 @@ fn step_9_revocation(original: &MemberDeliveryBindingCandidate) -> Result<()> {
         ),
         Ok(()) => bail!(
             "T8.1 step 9: a revoked (expires_at in the past) candidate was \
-             accepted — `ck.handle.revoke` had no observable effect"
+             accepted — `ak.handle.revoke` had no observable effect"
         ),
     }
 }

@@ -743,7 +743,7 @@ export class JointUserPage {
   }
 
   // Accept a pending invite for this user. The standard v1 invite lifecycle is
-  // `ck.invite.create` followed by invitee-authored `ck.invite.accept`; soland
+  // `ak.invite.create` followed by invitee-authored `ak.invite.accept`; soland
   // then cascades the accepted invite into Realm membership.
   async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
@@ -1009,7 +1009,7 @@ export async function ensureRegistered(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  // Spec-canonical registration binding (`ck.gate.account.command.register`):
+  // Spec-canonical registration binding (`ak.gate.account.command.register`):
   // `POST /_arkret/gate/account/register` with `AccountRegisterRequestBody
   // {principal_id, display_name?, device_id?}`. The bare `handle` field is no
   // longer accepted (the first handle arrives via a signed handle claim,
@@ -1093,7 +1093,7 @@ export async function createDpopUserSessionForAccount(
   opts: {
     server?: SolandKey;
     coauthBase?: string;
-    // Skip the harness-side `ck.device.authorize`. Set this for browser MLS
+    // Skip the harness-side `ak.device.authorize`. Set this for browser MLS
     // sessions so inkson's own on-connect self-enrollment
     // (app/connect.rs enroll_current_session_device) becomes the sole device
     // authority — it enrolls the browser's REAL event-signer key, which is what

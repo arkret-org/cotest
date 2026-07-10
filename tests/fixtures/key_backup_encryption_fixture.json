@@ -2,7 +2,7 @@
   "profile": "ak.profile.key_backup_encryption_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and ck.schema.key_backup.v1. These are `passphrase_kdf` wire vectors: the client derives the backup root key locally from a KDF secret — since the Recovery-Key convergence (§3.3/§7.7) the user-facing secret is the 24-word Recovery Key, with a standalone vault passphrase kept only as the deprecated §7.5.1 compat layer; `passphrase_kdf` remains a legal wire recipient_method — and encrypts MLS history / secret-storage material before PUT /_arkret/self/keys/backups/{backup_id}. Server stores an opaque ck.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
+  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and ak.schema.key_backup.v1. These are `passphrase_kdf` wire vectors: the client derives the backup root key locally from a KDF secret — since the Recovery-Key convergence (§3.3/§7.7) the user-facing secret is the 24-word Recovery Key, with a standalone vault passphrase kept only as the deprecated §7.5.1 compat layer; `passphrase_kdf` remains a legal wire recipient_method — and encrypts MLS history / secret-storage material before PUT /_arkret/self/keys/backups/{backup_id}. Server stores an opaque ak.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
   "encoder": {
     "kdf": "Argon2id",
     "kdf_memory_kib_min": 65536,
@@ -42,13 +42,13 @@
     },
     {
       "name": "server_side_blob_storage_opaque",
-      "comment": "After client encrypts, the upload is ck.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
+      "comment": "After client encrypts, the upload is ak.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
       "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "blob_size_bytes": 4096,
       "server_treats_as_opaque": true,
       "server_decrypt_capable": false,
-      "stored_at": "GET /_arkret/self/keys/backups/ck:backup:01964137-0000-7000-8000-000000000000",
+      "stored_at": "GET /_arkret/self/keys/backups/ak:backup:01964137-0000-7000-8000-000000000000",
       "expected": {
         "outcome": "accept",
         "server_seen_plaintext": false,

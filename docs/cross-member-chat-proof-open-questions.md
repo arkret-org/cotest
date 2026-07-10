@@ -56,7 +56,7 @@
 ## 已确认的事实
 
 1. **soland 确实投递了消息。** 以 bob 身份查 `/_arkret/self/events?realms=` 含
-   alice 的 `ck.message.create`（`hasAliceMsg=true`）。非投递问题、非
+   alice 的 `ak.message.create`（`hasAliceMsg=true`）。非投递问题、非
    history_visibility 裁剪（消息是 bob 加入后发的）。
 
 2. **丢弃点 = 聊天 receiver-proof 门。**
@@ -86,7 +86,7 @@
 **权威结论(`crypto-media/device-lifecycle.md`):**
 - **§4 :114** 每个设备 MUST 有稳定 `device_id` 和**设备签名密钥**;
 - **§5.2 :296** `self_signing_key (SSK) ── signs ──► device.verify_key` —— 设备的 **verify
-  key**(即 `ck.device.authorize.payload.device_public_key`,per-device Ed25519)是签事件/
+  key**(即 `ak.device.authorize.payload.device_public_key`,per-device Ed25519)是签事件/
   消息 proof 的 key,SSK 只**交叉签名背书**这把 verify key;
 - **§8.2** 该 verify key 投影进设备验签公钥目录(receiver 就是从这里解析);
 - 与 **Matrix** 同构(per-device Ed25519 device/fingerprint key 签,cross-signing SSK 背书;
@@ -137,12 +137,12 @@ key 自入册(= 方向②)。残留子问 = inkson 内部到底哪条 signer 路
 - secure-store 升级 `app/mod.rs:463` 把 `device_id` **钉成 secure-store 的稳定值**
   (`load_device_id`),可能 ≠ harness enroll 用的**注入** `device_id`(`seed.deviceId`)。
 - 若漂移:harness 在 `device_A`(注入)下 enroll 了 key;inkson 消息 proof 的
-  `verification_method` 绑 `#ck:device:device_B`(稳定);receiver 按 proof 的 `device_B`
+  `verification_method` 绑 `#ak:device:device_B`(稳定);receiver 按 proof 的 `device_B`
   解析目录 key,拿到的**不是** harness 在 `device_A` 下 enroll 的那把 → 但实测是
   `sig_verify_failed`(Hit + 验签失败)而非 NegativeHit,说明 `device_B` 名下**确有**一把 key
   但与 proof 不匹配 → **待查:`device_B` 那把 key 从哪来、为何 ≠ proof key。**
 
-**下一步(定 B):** 在发 `ck.message.create` 处打印 ①`active_signer().public_key_multibase()`
+**下一步(定 B):** 在发 `ak.message.create` 处打印 ①`active_signer().public_key_multibase()`
 ②proof 的 `verification_method` 里的 device_id;并在 harness 侧打印 enroll 用的
 `device_id`+`device_public_key`;三者一比即真相大白。**这一步同时能证伪/证实 device_id 漂移。**
 
@@ -214,7 +214,7 @@ device verify key 自入册。** 前置阻塞 = 矛盾 C(自入册拿不到 gran
    一到、自入册一成,keypackage 即随之发出。
 2. **解矛盾 C 后移除 harness DPoP enroll:** 目录里就只剩 inkson 自入册的 device verify
    key = proof key → receiver-proof 验签通过 → 聊天绿。看板不受影响(无 proof 门)。
-3. **(理解性,非阻塞)解矛盾 B:** 在 inkson 发送 `ck.message.create` 处打印
+3. **(理解性,非阻塞)解矛盾 B:** 在 inkson 发送 `ak.message.create` 处打印
    `active_signer().public_key_multibase()`,确认它 = device verify(signing-seed)key,
    排除多路径激活把 signer 覆盖成 DPoP-seed 的隐患。
 4. **兜底(若 C 短期难解):** 浏览器启动后从 localStorage(compat tier

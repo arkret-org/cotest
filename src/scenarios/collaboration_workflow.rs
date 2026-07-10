@@ -209,8 +209,8 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     // Spec rename: the snapshot manifest's own identifier field is `id`
     // (`snapshot_ref` is only used at external reference positions).
     assert!(snapshot["id"].as_str().unwrap().starts_with("ak:snapshot:"));
-    // `ck.self.snapshot.query.manifest_head` returns the full signed
-    // `ck.schema.snapshot.v1` manifest whose frontier is
+    // `ak.self.snapshot.query.manifest_head` returns the full signed
+    // `ak.schema.snapshot.v1` manifest whose frontier is
     // {event_ids, timeline_hlc}.
     assert!(
         snapshot["frontier"]["event_ids"]

@@ -1,6 +1,6 @@
 //! Agent participation policy conformance vectors.
 //!
-//! Covers controller-scoped agent selector mentions and CKP-0010 participation
+//! Covers controller-scoped agent selector mentions and AKP-0010 participation
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
 use anyhow::{Result, anyhow, bail};

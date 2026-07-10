@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/identity/tsp-bootstrap.md
 // Spec refs:
 //   - identity/tsp-integration.md §2 (TSP applicability), §3 (VID/Endpoint/Relationship mapping)
-//   - §4 (ck.service.tsp endpoint declaration), §5 (Arkret over TSP rules)
+//   - §4 (ak.service.tsp endpoint declaration), §5 (Arkret over TSP rules)
 //   - §8 (Security requirements: VID verification, audit log fields)
 //
 // TSP is an interop *extension profile*; v1 core defaults to HTTPS JWE / MLS
@@ -85,7 +85,7 @@ async function bootstrapRelationship(
 }
 
 /**
- * Opportunistic assertion: soland MAY expose `ck.service.tsp` via a
+ * Opportunistic assertion: soland MAY expose `ak.service.tsp` via a
  * transports view (spec §3, DID method adapter SHOULD expose TSP support).
  * TSP is an extension profile, so a 404 is acceptable — we only assert the
  * positive shape when the surface is present.
@@ -146,7 +146,7 @@ test.describe("tsp bootstrap", () => {
     expect(bootstrap.endpoint_vid).toBe(bobExternVid);
     expect(bootstrap.endpoint_public_jwk).toBeTruthy();
 
-    // Phase C — wrap a Arkret `ck.invite.create` as a TSP application payload
+    // Phase C — wrap a Arkret `ak.invite.create` as a TSP application payload
     // (nested mode: the outer envelope's VID is pairwise; the inner Arkret
     // operation carries alice's real DID + event signature).
     const realmId = `ak:realm:${randomUUID()}`;

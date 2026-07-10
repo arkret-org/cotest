@@ -2,7 +2,7 @@
 
 ## 目标
 
-完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ck.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 24 词 Recovery Key(唯一内容恢复凭证,spec §3.3/§7.7)恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE Realm 收到的消息。
+完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ak.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 24 词 Recovery Key(唯一内容恢复凭证,spec §3.3/§7.7)恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE Realm 收到的消息。
 
 identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在**消息解密** 和 MLS epoch 重建,identity/recovery 更偏 device identity。
 
@@ -37,7 +37,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 ## Pre-conditions
 
 - alice 已 onboard,device-A 在 `R_e2ee` 中(epoch N)
-- device-A 是已授权 key-management 设备(存在 accepted `ck.device.authorize` / service-attested enrollment,device list 状态为 active);未授权 dev-login 设备 MUST NOT 生成新的 Recovery Key root
+- device-A 是已授权 key-management 设备(存在 accepted `ak.device.authorize` / service-attested enrollment,device list 状态为 active);未授权 dev-login 设备 MUST NOT 生成新的 Recovery Key root
 - bob 在 `R_e2ee` 中
 - alice 在 Phase A 生成的 24 词 Recovery Key 由测试捕获并跨 browser context 传递(UI 只显示一次)
 
@@ -56,7 +56,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 5. 断言:`GET /_arkret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
 6. UI 显示 recovery root 已配置;`mls_account_secret` 与自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
 > **§7.10 持续备份时序(inkson 实现语义)**:RK 已配置的账号上,任一加密写引发的
-> `ck.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
+> `ak.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
 > successor envelope PUT 上行;同 Realm 后续 commit 受 **5min min-interval** 合并补传。
 > 服务端可断言:同一 Realm 的连续上传 `series_id` 不变、`series_seq` 严格 +1、带
 > `supersedes`/`supersedes_digest`(每 Realm 单系列,不再堆平行 genesis)。
@@ -88,14 +88,14 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
     - 计算 commitment,与 backup 的 `key_commitment` 比对
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
     - commitment match → 用 derived_key 解 ciphertext → 拿回 SSK / USK / mls_history_backup_key
-15. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 USK 或 control signature)
+15. 客户端签 `ak.device.authorize` (包含 recovery proof,引用 USK 或 control signature)
 16. 提交到 soland;recovery policy 校验通过 → device-B 接入
 17. 断言:device-B `/settings/devices` 显示 alice 的 device 列表(可能含 device-A,看是否 revoke;此时未 revoke,所以 A 还在)
 
 ### Phase E — Device-B 从 MLS commit chain 重建 epoch keys + 解 bob 的消息
 
 18. device-B 拉 `R_e2ee` 的 sync:
-    - 自 epoch 0 起回放 `ck.mls.commit` 事件
+    - 自 epoch 0 起回放 `ak.mls.commit` 事件
     - 用 backup 提供的 `mls_history_backup_key` 派生历史 epoch secrets(spec §2.4 backfill)
     - 当前 epoch 应当 = device-A 离线时的 N(因为没有 commit advance)
 19. device-B 用 epoch N application key 解 `M1`,`M2`
@@ -139,7 +139,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list、bearer-only ciphertext read 拒绝(§7.7.1 unlock proof)、DELETE ownership proof,以及 inkson Argon2id + XChaCha20-Poly1305 seal/open round trip、wrong-Recovery-Key local reject(commitment)、24 词 BIP-39 输入校验、late-recovery banner helper。
 - **剩余缺口**:本 scenario 的完整"丢设备 → 新设备授权 → MLS commit chain backfill → 历史 E2EE 消息可解"仍未贯通;`key-backup.spec.ts` 保留这些全链路 fixme。
 - **2026-05-30 A1 live**:`key-backup.spec.ts` 覆盖同账号两个 fresh browser profile 的验收路径:device-A 创建 `mls_rfc9420` realm 并写历史 timeline 卡片、`MlsBackupPrompt` 自动生成 24 词 Recovery Key 并上传 `mls_account_secret` backup、device-B 空 profile 登录后出现 `MlsUnlockPrompt`、输入 24 词恢复、device-B 写入后 device-A 可见,同时收集 `keys/backups` PUT 和 subscribe/describe/events/MLS runtime 错误信号。
-- **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `ck.mls.commit` payload `schema_violation`,另一端能看到详情更新。
+- **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `ak.mls.commit` payload `schema_violation`,另一端能看到详情更新。
 - **harness**:Argon2id KDF 计算耗时 ~3s(intentional);测试要给足 timeout
 
 ## 风险

@@ -4,7 +4,7 @@
 //       event-payload.schema.json#/$defs/realm_organization_payload
 //
 // COT-ORG-04 — the directory / teabay verified-organization badge must derive
-// from the SAME active-verified `ck.realm.organization` relationship that drives
+// from the SAME active-verified `ak.realm.organization` relationship that drives
 // protocol governance (see governance/organization-policy.spec.ts), never from
 // `owning_organizations[]` declarations or the `_soland/self/organizations`
 // local mirror. These are `test.fixme` until SOL-ORG-06 / TBY-ORG-01..03 land

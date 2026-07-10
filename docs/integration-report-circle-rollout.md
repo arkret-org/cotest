@@ -105,19 +105,19 @@ the catalog against the live tree:
 ### 5.A cotest baseline drifts
 
 5 conformance fixture tests fail with pre-existing baseline drift,
-independent of CKP-0007 work:
+independent of AKP-0007 work:
 
 - `federation_fixture_suite_matches_reference_semantics` — unknown
   federation fixture case `http_message_signature_digest`
 - `event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics`
-  — `ck.circle.member.state` cell_subject must declare `field` or
+  — `ak.circle.member.state` cell_subject must declare `field` or
   `components[]`
 - `event_kind_payload_coverage_fixture_suite_matches_reference_semantics`
-  — `ck.component.device.authorized.v1` (group=or_set_families) absent in
-  live registry (renamed → `ck.component.device.authorization.v1`)
+  — `ak.component.device.authorized.v1` (group=or_set_families) absent in
+  live registry (renamed → `ak.component.device.authorization.v1`)
   rename
 - `schema_validation_suite_matches_reference_semantics` — pointer
-  `/properties/blob_ref` does not exist on `ck.schema.media_metadata.v1#thumbnails`
+  `/properties/blob_ref` does not exist on `ak.schema.media_metadata.v1#thumbnails`
 
 These were present at HEAD `e7abf7b` (P4 close) before P5 began. They are
 caused by spec rename collisions between the canonical registry artifacts

@@ -72,7 +72,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 7. alice (device-1) 进 `/timeline/${realmId}`,等到 `timeline-event` 至少含 M1/M2/M3
 8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 inkson 触发 read-position 上报
-9. 客户端提交 actor-private `ck.read_cursor.advance`,payload 使用 `ck.schema.read_cursor.v1`,
+9. 客户端提交 actor-private `ak.read_cursor.advance`,payload 使用 `ak.schema.read_cursor.v1`,
    含 `position.event_id = M2.event_id`、`position.hlc = M2.hlc` 和对应 `read_scope`
 10. 断言:`GET /_arkret/self/account/subscribe?catchup=true` 返回的 actor-private read cursor
     delta / notification projection 反映"M3 是未读、M1/M2 已读"
@@ -99,7 +99,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 ### Phase G — alice device-2 mark-all-read,device-1 在 sync 后归零
 
 20. alice (device-2) 在 inkson `/notifications` 点 "Mark all read",客户端提交最新
-    `ck.read_cursor.advance`
+    `ak.read_cursor.advance`
 21. 断言:device-2 本地 notification projection `unread_count = 0`,read cursor position 覆盖 Phase C
 22. 等待 to-device 同步窗口(测试上界 30s)
 23. 断言:device-1 `/_arkret/self/account/subscribe` 收到同一 read cursor position 后
@@ -133,7 +133,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Implementation notes
 
-- **soland gap(关键)**:read cursor 的 **to-device propagation** 当前未实现 — `ck.read_cursor.advance`
+- **soland gap(关键)**:read cursor 的 **to-device propagation** 当前未实现 — `ak.read_cursor.advance`
   在 alice 当前 device 上写 actor-private state OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
   Phase G 的 cross-device 断言会 fail。主流程标 `test.fixme`,内联注释说明 gap
 - **soland 现状**:notification projection 的读取面是

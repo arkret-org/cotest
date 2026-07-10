@@ -193,7 +193,7 @@ test.describe("consent grant", () => {
     request,
   }, testInfo) => {
     // alice asks bob (the holder) to grant her `message` consent via the
-    // `ck.consent.request` entry point; the resulting pending cell surfaces as
+    // `ak.consent.request` entry point; the resulting pending cell surfaces as
     // an outgoing-request row on alice's settings page.
     const bob = uniqueUser("consent-request-bob");
     await ensureRegistered(request, bob);
@@ -402,7 +402,7 @@ test.describe("consent grant", () => {
       "active",
     );
     expect(granted.cell_id).toBe(
-      `ak:cell:ck.component.consent.grant.v1:${consentId}`,
+      `ak:cell:ak.component.consent.grant.v1:${consentId}`,
     );
     expect(granted.grant_dots).toContain(grantDot);
     const stillPending = await requestContactApi(

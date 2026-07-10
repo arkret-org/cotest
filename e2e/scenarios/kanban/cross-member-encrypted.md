@@ -42,7 +42,7 @@
 1. alice 建**空** `encryption_profile=mls_rfc9420` 的 Realm。
 2. alice 邀请 bob;断言邀请状态含 `MLS Welcome queued`(KeyPackage 被 claim)。
 3. bob accept **加入**(此后内容才是 bob 可合法见+可解密的加入后内容)。
-4. alice **加入后**建 board + list + card(title 明文)+ 给 card 加**加密 description**(私有 `body`);断言 `ck.strand.update` 被接受且 description **不以明文出现在 wire**。
+4. alice **加入后**建 board + list + card(title 明文)+ 给 card 加**加密 description**(私有 `body`);断言 `ak.strand.update` 被接受且 description **不以明文出现在 wire**。
 5. **跨成员投递闸门**:以 bob 身份查 `/_arkret/self/events?realms=` 必含 board space id(隔离 soland 投递 vs inkson 投影)。
 6. bob 深链进 `/kanban/{realm}/board/{boardId}`;bootstrap **backfill realm 事件并 ingest 进 raw_operations**→board Space 投影进 switcher→路由/auto-select 选中→列表卡片渲染。
 7. **核心断言**:bob 打开卡片,`card-description-panel` 含 alice 的明文 description,且 `card-detail-body-locked` 计数为 0(真解密,非锁态)。
@@ -54,7 +54,7 @@
 ## 关键前置(harness/产品修复,均为让本场景真正跑通)
 
 - coauth debug seam 用**模型 B** 铸出的 `did:webvh:…:webvh:` principal DID 当 grant subject 并返回(designate `CokretDeviceEnrollmentAuthority`);harness 采用它当 `user.did`。
-- session setup 显式 device-enroll(coauth `/device-enroll`→提交 `ck.device.authorize`)让设备可发 MLS KeyPackage。
+- session setup 显式 device-enroll(coauth `/device-enroll`→提交 `ak.device.authorize`)让设备可发 MLS KeyPackage。
 - invitee 读加密内容前弹"Set up 24-word Recovery Key"必答模态,测试自动完成。
 - inkson kanban bootstrap:backfill 在 board-View 门之前跑,并把事件 ingest 进 `raw_operations`(跨成员 board/card 投影的真修)。
 

@@ -322,8 +322,8 @@ test.describe("realm links", () => {
       // via a realm link. The original sketch hit a non-existent
       // `/admin/members` endpoint with a fabricated
       // `capability_not_propagated_via_link` reason; soland enforces member
-      // bans through the canonical `ck.member.state{membership=ban}` event,
-      // gated on Realm ownership or a projected `ck.realm.admin` capability
+      // bans through the canonical `ak.member.state{membership=ban}` event,
+      // gated on Realm ownership or a projected `ak.realm.admin` capability
       // (routing/events/operations/policy.rs validate_member_state_policy).
       // alice owns G and links T --governed_by--> G, but holds no capability
       // in T — so her ban attempt against T fails closed, which IS the §5

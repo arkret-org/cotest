@@ -110,8 +110,8 @@ artifacts.
 CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
 small local feedback set, `release-gate` is the local milestone gate, and
 `full-nightly` runs all tests. Coverage is grouped by conformance profiles such
-as `ck.profile.core_event_store.v1`, `ck.profile.chat_mvp.v1`, and
-`ck.profile.principal_server_events_api.v1`. The runner emits `ci-profile.*`,
+as `ak.profile.core_event_store.v1`, `ak.profile.chat_mvp.v1`, and
+`ak.profile.principal_server_events_api.v1`. The runner emits `ci-profile.*`,
 `coverage-gate.*`, `release-gate.*`, `spec-sync-gate.*`, and
 `secret-scan.*` artifacts and can fail on coverage regressions with
 `-FailOnCoverageRegression`.
@@ -305,7 +305,7 @@ single-witness env vars and the quorum lists
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
 | `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/mock/email/verification/send` (with `ttl_seconds` + `body_html`), `/mock/email/verification/inbox?to=`, `/mock/email/verification/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
 | `mock-witness.mjs` | S9 did:webvh rotation | `/mock/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/mock/witness/policy`, `/mock/witness/health` test hook, `/inspect` |
-| `mock-audit-agent.mjs` | S25 audited E2EE / `ck.audit.accessed` | `/_arkret/self/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ck.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
+| `mock-audit-agent.mjs` | S25 audited E2EE / `ak.audit.accessed` | `/_arkret/self/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ak.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
 | `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_arkret/self/policy/check`, `/_arkret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
 | `mock-push-gateway.mjs` | notification push / blind wake | `/_arkret/edge/push/register-device`, `/_arkret/edge/push/notify`, `/mock/push/inbox`, `/scenarios`, `/jwks` |
 | `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_arkret/edge/applet/register`, `/_arkret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
@@ -462,11 +462,11 @@ gap-coverage gaps deferred to R4.
 
 | Spec section | Subject | cotest vector(s) | Stage |
 |---|---|---|---|
-| **§7 media binding** — `ck.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
+| **§7 media binding** — `ak.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
 | **§8 handles** — NFC normalization + UTS#39 confusable skeleton | Confusable handle rejected before rate-limit; mixed-script rejected | `e2e/handle/homograph_forbidden.rs`, `e2e/handle/mixed_script_rejects.rs`, `e2e/handle/nfc_round_trip.rs` | Active |
 | **§9 agent** — FSM (Active/Paused/Deactivated) + pairing | Pause/resume/deactivate transitions; pairing window expiry; proof verification | `e2e/agent/fsm_transitions.rs`, `e2e/agent/pairing_window_expires.rs`, `e2e/agent/pairing_proof_invalid.rs`, `e2e/agent/verification_method_principal_mismatch.rs` | Active |
-| **§9 agent** — actor-private event kinds | `ck.agent.draft.propose`, `ck.agent.action_request`, `ck.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
-| **§10 call.media** — token exchange | `ck.self.call.media.exchange.issue_token` round-trip; TTL gate; backend type enum reject | `e2e/call_media/token_exchange_round_trip.rs`, `e2e/call_media/token_ttl_exceeded.rs`, `e2e/call_media/unknown_focus_type_rejects.rs` | Active |
+| **§9 agent** — actor-private event kinds | `ak.agent.draft.propose`, `ak.agent.action_request`, `ak.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
+| **§10 call.media** — token exchange | `ak.self.call.media.exchange.issue_token` round-trip; TTL gate; backend type enum reject | `e2e/call_media/token_exchange_round_trip.rs`, `e2e/call_media/token_ttl_exceeded.rs`, `e2e/call_media/unknown_focus_type_rejects.rs` | Active |
 | **§10 call.media** — participant_binding | Canonical-bytes round-trip; issuer_kid validation; identity-string canonical form | `e2e/call_media/participant_binding_canonical.rs`, `e2e/call_media/token_issuer_unauthorised.rs`, `e2e/call_media/participant_identity_unrecognised.rs` | Active |
 | **§11 media binding** — focus/session commit invariants | `session_focus_already_committed` reject; `e2ee_key_source_unauthorised` reject | `e2e/call_media/session_focus_already_committed.rs`, `e2e/call_media/e2ee_key_source_unauthorised.rs` | Active (some stubbed — see below) |
 | **§13 recovery** — policy + receipt | Policy version monotonicity; receipt completeness; proof_kinds dispatch | `e2e/recovery/policy_round_trip.rs`, `e2e/recovery/receipt_emitted_on_complete.rs`, `e2e/recovery/policy_version_monotone.rs` | Active |

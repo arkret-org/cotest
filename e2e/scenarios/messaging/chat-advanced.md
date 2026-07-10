@@ -38,10 +38,10 @@
 ### Phase B — Reactions (OR-Set 收敛)
 
 3. alice 发 `M1 = "ship it?"`
-4. bob 对 `M1` 加 `👍` reaction → `ck.reaction.add`
-5. carol 对 `M1` 加 `👍` reaction(并发)→ 第二条 `ck.reaction.add`
+4. bob 对 `M1` 加 `👍` reaction → `ak.reaction.add`
+5. carol 对 `M1` 加 `👍` reaction(并发)→ 第二条 `ak.reaction.add`
 6. 断言:alice、bob、carol 视图都看到 `M1` 上有 2 个 `👍`(OR-Set 自然收敛)
-7. bob 撤销自己的 reaction → `ck.reaction.remove`
+7. bob 撤销自己的 reaction → `ak.reaction.remove`
 8. 断言:三方视图都看到剩 1 个 `👍`(carol 的)
 
 ### Phase C — Replies + thread
@@ -56,8 +56,8 @@
 
 14. alice 发 `M4 = "@bob please confirm"`
 15. inkson 客户端:
-    - 解析 `@bob` token,生成 `ck.relation.mention` payload
-    - 在 plain text Realm:`ck.message.create.payload.mentions = [bob.did]`
+    - 解析 `@bob` token,生成 `ak.relation.mention` payload
+    - 在 plain text Realm:`ak.message.create.payload.mentions = [bob.did]`
     - 在 E2EE Realm:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
 16. 断言:bob 收到 notification(检查 inkson 的 in-app notification panel,或测试侧调
     `GET /_arkret/self/account/subscribe?catchup=true` 查 bob 的 `notifications.events`)
@@ -70,7 +70,7 @@
     - `options = [{ id: "p", label: "Pizza" }, { id: "q", label: "Poutine" }]`
     - `max_selections = 1`,`closes_at = +1h`
 19. inkson `M5` 渲染投票按钮
-20. bob 点 "Pizza" → `ck.content.poll.response` event {poll_id: M5.event_id, choice: "p"}
+20. bob 点 "Pizza" → `ak.content.poll.response` event {poll_id: M5.event_id, choice: "p"}
 21. carol 点 "Poutine"
 22. alice 后改主意,先选 "Pizza" 再改 "Poutine"(只允许 1 个 active vote per actor)
 23. 断言:`M5` 卡片显示 `Pizza: 1, Poutine: 2`(alice 改后,Pizza 减 1 加给 Poutine)
@@ -112,7 +112,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.content.poll{,.response}`、`ck.relation.mention`、mention sidecar hash 路由、`ck.typing` / `ck.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
+- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、mention sidecar hash 路由、`ck.typing` / `ck.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
 - **inkson 缺口**:poll UI(`poll-option-button`、`poll-close-button`、`poll-vote-count`)、typing indicator、presence indicator — 这些 testid 未确认存在
 - **测试侧**:典型测 typing 需要"无 send" 状态;Playwright 用 `composer-input.fill()` 不 click send,等 N ms 然后查 alice 视图
 

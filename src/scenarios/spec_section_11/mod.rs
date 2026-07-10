@@ -1,7 +1,7 @@
 //! P4-B — `conformance-vectors.md` §11 (personal agent + sidecar).
 //!
 //! 9 new conformance vectors that cover the cross-server invariants
-//! introduced by CKP-0008 / CKP-0009. Each vector is a single
+//! introduced by AKP-0008 / AKP-0009. Each vector is a single
 //! happy-path scenario that exercises (a) the relevant soland endpoint
 //! (when live) and (b) the SDK envelope shape (always). Deep
 //! cryptographic assertions are marked `TODO(P4-impl)`.
@@ -17,12 +17,12 @@
 //!   3. [`session_grant_replay_guard`] — replay of a session_grant with the same nonce MUST be
 //!      rejected by the reducer's replay guard.
 //!   4. [`controller_deactivate_cascade`] — controller deactivate cascades to: (a)
-//!      `ck.self.agent.deactivate` (per agent), (b) `ck.agent.key.revoke`, (c)
-//!      `ck.capability.revoke`, and (d) runtime endpoint revocation. fan-out is deterministic.
+//!      `ak.self.agent.deactivate` (per agent), (b) `ak.agent.key.revoke`, (c)
+//!      `ak.capability.revoke`, and (d) runtime endpoint revocation. fan-out is deterministic.
 //!   5. [`act_on_behalf_attribution`] — every event executed by an agent on behalf of the
 //!      controller MUST carry (`executed_by`, `authorization_ref`, `actor_kind`).
 //!   6. [`sidecar_circle_idempotent_ensure`] — calling
-//!      `ck.self.agent.sidecar_thread.command.ensure` twice with the same (controller, agent) pair
+//!      `ak.self.agent.sidecar_thread.command.ensure` twice with the same (controller, agent) pair
 //!      MUST return the same `sidecar_circle_id`.
 //!   7. [`existence_privacy`] — a non-controller cannot probe for the existence of an
 //!      agent_principal; the answer is indistinguishable from a not-found scope.

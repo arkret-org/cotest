@@ -1,11 +1,11 @@
 //! Agent surface conformance vectors (§0.11 of `_before_todos.md`).
 //!
 //! 5 vectors:
-//!   - `ck.vector.agent.provision.v1`
-//!   - `ck.vector.agent.pairing_expiry.v1`
-//!   - `ck.vector.agent.controller_lifecycle.v1`
-//!   - `ck.vector.agent.act_on_behalf.v1`
-//!   - `ck.vector.agent.session_grant.replay.v1`
+//!   - `ak.vector.agent.provision.v1`
+//!   - `ak.vector.agent.pairing_expiry.v1`
+//!   - `ak.vector.agent.controller_lifecycle.v1`
+//!   - `ak.vector.agent.act_on_behalf.v1`
+//!   - `ak.vector.agent.session_grant.replay.v1`
 //!
 //! These are SDK-pure wire-shape pins. Live reducer paths (FSM bottom =
 //! reject, deactivate-terminal, session-grant agent-branch acceptance

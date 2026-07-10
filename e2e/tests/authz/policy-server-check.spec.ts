@@ -1,6 +1,6 @@
 // Pluggable policy decision service (realm-level external policy_server)
 // Contract: e2e/scenarios/authz/policy-server-check.md
-// Spec: authz/policy-server.md §2 (ck.realm.policy_server Move),
+// Spec: authz/policy-server.md §2 (ak.realm.policy_server Move),
 //        §3 (POST /_arkret/self/policy/check request/response contract),
 //        §4 (obligations + fail-closed default).
 //

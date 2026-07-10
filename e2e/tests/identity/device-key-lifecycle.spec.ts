@@ -392,7 +392,7 @@ async function addEncryptedDescription(
   const body = await response.text();
   expect(
     response.status(),
-    `ck.strand.update should be accepted; body=${body.slice(0, 500)}`,
+    `ak.strand.update should be accepted; body=${body.slice(0, 500)}`,
   ).toBeLessThan(400);
   expect(
     (response.request().postData() ?? "").includes(description),

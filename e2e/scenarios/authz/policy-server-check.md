@@ -8,7 +8,7 @@
 
 ## Spec 锚点
 
-- `arkret-spec/spec/v1/zh/authz/policy-server.md` §2 — Realm `ck.realm.policy_server` Move 形状与 endpoint 字段
+- `arkret-spec/spec/v1/zh/authz/policy-server.md` §2 — Realm `ak.realm.policy_server` Move 形状与 endpoint 字段
 - `arkret-spec/spec/v1/zh/authz/policy-server.md` §3 — `POST /_arkret/self/policy/check` request / response 契约,`{decision, reason, obligations[]}`
 - `arkret-spec/spec/v1/zh/authz/policy-server.md` §4 — obligation kinds (`log_event`、`require_step_up`、`mask_field`...) 与 fail-closed 默认
 - (附属) `arkret-spec/spec/v1/zh/authz/capabilities.md` §3 — 一次 cap-gated 操作的入口点(grant + policy_server 串行检查)
@@ -60,7 +60,7 @@
 
 4. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入规则:`{ default: { decision: "allow" } }`
 5. **alice** 通过 inkson `/realms/${realmId}/admin` 邀请 **bob**(invite-member → send-invite-button)
-6. soland 在执行 `ck.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
+6. soland 在执行 `ak.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
    - `actor_id = alice.did`
    - `action = "ak.invite.create"`
    - `resource = { kind: "realm", realm_id, target: bob.did }`
@@ -94,7 +94,7 @@
                          "fields": { "category": "policy_block", "severity": "info" } }] }
     ```
 17. **alice** 再次邀请(同 bob 或一个新 user 都行)
-18. soland 收到 deny + obligation,**先**执行 obligation(写一条 `kind = policy.deny` 的 audit log,target_action = `ck.invite.create`),**再**返回 `412`
+18. soland 收到 deny + obligation,**先**执行 obligation(写一条 `kind = policy.deny` 的 audit log,target_action = `ak.invite.create`),**再**返回 `412`
 19. 断言:
     - `GET /_soland/admin/audit/events?actor=${alice.did}&action=policy.deny` 返回至少一条 entry
     - 该 entry 的 `target.category = "policy_block"`、`target.severity = "info"`、`target.upstream_reason = "external_policy_blocks_user"`
@@ -103,7 +103,7 @@
 ### Phase E — Transcript 可验证
 
 21. 调 `${MOCK_POLICY_SERVER_PORT}/inspect`,取 `signed_transcript`(一段 mock-policy-server 用私钥签名的、本测试期间所有 check 的有序记录)
-22. 断言 transcript 的 `kinds` 至少包含本次测试用到的两类 (`ck.invite.create` 的 allow + deny);其 ed25519 签名通过 mock 公开的公钥验证成功
+22. 断言 transcript 的 `kinds` 至少包含本次测试用到的两类 (`ak.invite.create` 的 allow + deny);其 ed25519 签名通过 mock 公开的公钥验证成功
 23. 断言每条 transcript entry 含 `request_id`、`action`、`actor_id`、`decision`、`occurred_at` 五字段非空
 
 ## Observable assertions (合并清单)
@@ -118,7 +118,7 @@
 
 - **E3.1 policy server 超时 fail-closed**:通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入 `{ delay_ms: 9000 }`(超过 soland 的 policy check timeout,假设默认 2s);soland 应 fail-closed(`decision = deny`,reason `policy_timeout`),邀请被拒;`/inspect.checks` 可能为空(请求未到 mock)或带 partial 标记
 - **E3.2 多个 policy_source 优先级**:在 Realm policy server 之上,再给 alice 当 owner 的 org 配置一条组织级 policy server binding(指向同一 mock 的不同 path,如 `/_arkret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)。组织级 HTTP binding 需等 operation registry 注册后再 live 化。
-- **E3.3 cache_ttl 幂等**:`cache_ttl_seconds = 5` 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
+- **E3.3 cache_ttl 幂等**:`cache_ttl_seconds = 5` 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ak.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
 
 (E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)
 

@@ -79,7 +79,7 @@ async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-/// Build the `ck.schema.key_backup.v1` envelope including the §7.4.1
+/// Build the `ak.schema.key_backup.v1` envelope including the §7.4.1
 /// `auth_data` device-signature block (device key signs the canonical
 /// envelope minus `auth_data.signature`; `ssk_generation` binds the
 /// cross-signing generation).
@@ -251,7 +251,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
     Ok(())
 }
 
-/// Build a `ck.schema.key_backup_unlock_proof.v1` body value: a canonical
+/// Build a `ak.schema.key_backup_unlock_proof.v1` body value: a canonical
 /// JSON transcript bound to the stored envelope, signed by an Ed25519 device
 /// key whose `verification_method` resolves via `did:key`.
 ///
