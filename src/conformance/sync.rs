@@ -1,6 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
+use arkret_core::{
+    AccountSubscribeFrame, AccountSubscribeFrameKind, ErrorCode, EventsSubscribeFrame,
+    EventsSubscribeFrameKind, OP_ACCOUNT_SUBSCRIBE, OP_EVENTS_SUBSCRIBE, StreamTraceError,
+    StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
+};
 use serde_json::{Value, json};
 
 use super::{
@@ -17,6 +22,370 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_snapshot_frontier_recovery(&value)?;
     validate_snapshot_inclusion_challenge(&value)?;
     validate_e2ee_pending(&value)?;
+    run_stream_frame_sequence_vector()?;
+    Ok(())
+}
+
+const STREAM_FRAME_SEQUENCE_VECTOR_ID: &str = "ak.vector.sync.stream_frame_sequence.v1";
+
+#[derive(Clone, Copy, Debug)]
+enum StreamSurface {
+    Account,
+    Events,
+}
+
+impl StreamSurface {
+    const fn operation_id(self) -> &'static str {
+        match self {
+            Self::Account => OP_ACCOUNT_SUBSCRIBE,
+            Self::Events => OP_EVENTS_SUBSCRIBE,
+        }
+    }
+}
+
+enum EmittedStreamFrame {
+    Account(AccountSubscribeFrame),
+    Events(EventsSubscribeFrame),
+}
+
+impl StreamTraceFrame for EmittedStreamFrame {
+    fn trace_kind(&self) -> StreamTraceFrameKind {
+        match self {
+            Self::Account(frame) => frame.trace_kind(),
+            Self::Events(frame) => frame.trace_kind(),
+        }
+    }
+
+    fn trace_cursor(&self) -> Option<&str> {
+        match self {
+            Self::Account(frame) => frame.trace_cursor(),
+            Self::Events(frame) => frame.trace_cursor(),
+        }
+    }
+}
+
+fn exact_object_keys(value: &Value, expected: &[&str], context: &str) -> Result<()> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("{context} must be an object"))?;
+    let actual = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    let expected = expected.iter().copied().collect::<BTreeSet<_>>();
+    if actual != expected {
+        bail!("{context} fields must be exactly {expected:?}, got {actual:?}");
+    }
+    Ok(())
+}
+
+fn validate_stream_frame_shape(frame: &Value) -> Result<&str> {
+    let kind = value_field_str(frame, "kind")?;
+    let fields: &[&str] = match kind {
+        "delta" => &["cursor", "kind", "partial"],
+        "frontier" | "catchup_complete" => &["cursor", "kind"],
+        "heartbeat" | "unauthorized" => &["kind"],
+        "dropped" => &["cursor", "kind", "reconnect_after_ms"],
+        "resync_required" => &["kind", "reconnect_after_ms"],
+        other => bail!("unsupported stream trace frame kind {other}"),
+    };
+    exact_object_keys(frame, fields, "stream trace frame")?;
+    if kind == "delta" && frame.get("partial").and_then(Value::as_bool) != Some(false) {
+        bail!("stream trace baseline delta must set partial=false");
+    }
+    if matches!(kind, "delta" | "frontier" | "catchup_complete" | "dropped")
+        && frame
+            .get("cursor")
+            .and_then(Value::as_str)
+            .is_some_and(|cursor| cursor.trim().is_empty())
+    {
+        bail!("stream trace cursor must be non-empty when present");
+    }
+    Ok(kind)
+}
+
+fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStreamFrame> {
+    let kind = validate_stream_frame_shape(frame)?;
+    let cursor = frame.get("cursor").and_then(Value::as_str);
+    let reconnect_after_ms = frame.get("reconnect_after_ms").and_then(Value::as_u64);
+    Ok(match surface {
+        StreamSurface::Account => EmittedStreamFrame::Account(AccountSubscribeFrame {
+            kind: match kind {
+                "delta" => AccountSubscribeFrameKind::Delta,
+                "frontier" => AccountSubscribeFrameKind::Frontier,
+                "heartbeat" => AccountSubscribeFrameKind::Heartbeat,
+                "catchup_complete" => AccountSubscribeFrameKind::CatchupComplete,
+                "dropped" => AccountSubscribeFrameKind::Dropped,
+                "resync_required" => AccountSubscribeFrameKind::ResyncRequired,
+                "unauthorized" => AccountSubscribeFrameKind::Unauthorized,
+                _ => unreachable!("validated stream trace frame kind"),
+            },
+            cursor: cursor.map(ToOwned::to_owned),
+            realms: None,
+            to_device: None,
+            device_lists: None,
+            account_data: None,
+            presence: None,
+            notifications: None,
+            partial: frame.get("partial").and_then(Value::as_bool),
+            reason: None,
+            reconnect_after_ms,
+            extra: BTreeMap::new(),
+        }),
+        StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
+            kind: match kind {
+                "delta" => EventsSubscribeFrameKind::Event,
+                "frontier" => EventsSubscribeFrameKind::Frontier,
+                "heartbeat" => EventsSubscribeFrameKind::Heartbeat,
+                "catchup_complete" => EventsSubscribeFrameKind::CatchupComplete,
+                "dropped" => EventsSubscribeFrameKind::Dropped,
+                "resync_required" => EventsSubscribeFrameKind::ResyncRequired,
+                "unauthorized" => EventsSubscribeFrameKind::Unauthorized,
+                _ => unreachable!("validated stream trace frame kind"),
+            },
+            realm_id: None,
+            cursor: cursor
+                .map(|cursor| arkret_core::identifiers::Cursor::new(cursor.to_owned()))
+                .transpose()?,
+            payload: Value::Null,
+            reconnect_after_ms,
+        }),
+    })
+}
+
+fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFrame {
+    match surface {
+        StreamSurface::Account => EmittedStreamFrame::Account(AccountSubscribeFrame {
+            kind: AccountSubscribeFrameKind::Dropped,
+            cursor: None,
+            realms: None,
+            to_device: None,
+            device_lists: None,
+            account_data: None,
+            presence: None,
+            notifications: None,
+            partial: None,
+            reason: None,
+            reconnect_after_ms: None,
+            extra: BTreeMap::new(),
+        }),
+        StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
+            kind: EventsSubscribeFrameKind::Dropped,
+            realm_id: None,
+            cursor: None,
+            payload: Value::Null,
+            reconnect_after_ms: None,
+        }),
+    }
+}
+
+fn rejected_trace_observation(error: &StreamTraceError) -> Value {
+    json!({
+        "result": "reject",
+        "reason": error.error_code().as_str(),
+        "trace_violation": error.violation(),
+    })
+}
+
+fn run_stream_frame_case(surface: StreamSurface, case: &Value) -> Result<Value> {
+    exact_object_keys(
+        case,
+        &[
+            "expected",
+            "forbidden_frame",
+            "frames",
+            "initial_reconnect_cursor",
+            "name",
+            "request",
+            "required_frame",
+            "server_has_resume_cursor",
+        ]
+        .into_iter()
+        .filter(|field| case.get(*field).is_some())
+        .collect::<Vec<_>>(),
+        "stream frame sequence case",
+    )?;
+    let name = value_field_str(case, "name")?;
+    let request = required_field(case, "request")?;
+    exact_object_keys(request, &["catchup"], "stream frame sequence request")?;
+    let catchup = request
+        .get("catchup")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("stream frame sequence request catchup must be boolean"))?;
+    let initial_cursor = case
+        .get("initial_reconnect_cursor")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let expected = required_field(case, "expected")?;
+    let expected_fields = [
+        "catchup_complete_seen",
+        "reason",
+        "reconnect_after",
+        "reconnect_cursor_advanced",
+        "result",
+        "trace_violation",
+    ]
+    .into_iter()
+    .filter(|field| expected.get(*field).is_some())
+    .collect::<Vec<_>>();
+    exact_object_keys(expected, &expected_fields, "stream frame sequence expected")?;
+
+    if name == "missing_drop_cursor_uses_resync_required" {
+        if case
+            .get("server_has_resume_cursor")
+            .and_then(Value::as_bool)
+            != Some(false)
+        {
+            bail!("missing-drop-cursor case must model a server without a resume cursor");
+        }
+        let forbidden = required_field(case, "forbidden_frame")?;
+        exact_object_keys(forbidden, &["kind"], "forbidden cursorless dropped frame")?;
+        if value_field_str(forbidden, "kind")? != "dropped" {
+            bail!("forbidden frame must be cursorless dropped");
+        }
+        let mut forbidden_validator = StreamTraceValidator::new(catchup, initial_cursor.clone());
+        let error = forbidden_validator
+            .push(&emit_forbidden_cursorless_dropped(surface))
+            .expect_err("cursorless dropped must be rejected");
+        if error.error_code() != ErrorCode::SchemaViolation
+            || error.violation() != "dropped_missing_cursor"
+        {
+            bail!("cursorless dropped returned the wrong trace violation");
+        }
+
+        let required = required_field(case, "required_frame")?;
+        let mut validator = StreamTraceValidator::new(catchup, initial_cursor);
+        let update = validator.push(&emit_stream_frame(surface, required)?)?;
+        if !update.terminal || update.cursor_advanced || validator.reconnect_cursor().is_some() {
+            bail!("resync_required did not clear reconnect state without advancing a cursor");
+        }
+        validator.finish()?;
+        return Ok(json!({
+            "result": "resync",
+            "reconnect_cursor_advanced": update.cursor_advanced,
+        }));
+    }
+
+    let frames = value_array(
+        required_field(case, "frames")?,
+        "stream frame sequence frames",
+    )?;
+    let mut validator = StreamTraceValidator::new(catchup, initial_cursor);
+    let mut last_kind = None;
+    for frame in frames {
+        let emitted = emit_stream_frame(surface, frame)?;
+        let kind = emitted.trace_kind();
+        match validator.push(&emitted) {
+            Ok(update) => {
+                if matches!(
+                    kind,
+                    StreamTraceFrameKind::Heartbeat
+                        | StreamTraceFrameKind::ResyncRequired
+                        | StreamTraceFrameKind::Unauthorized
+                ) && update.cursor_advanced
+                {
+                    bail!("cursorless control frame advanced the reconnect cursor");
+                }
+                last_kind = Some(kind);
+            }
+            Err(error) => {
+                if error.error_code() != ErrorCode::SchemaViolation {
+                    bail!("stream trace rejection did not map to schema_violation");
+                }
+                let heartbeat = emit_stream_frame(surface, &json!({"kind": "heartbeat"}))?;
+                if validator.push(&heartbeat) != Err(StreamTraceError::TraceAlreadyRejected) {
+                    bail!("rejected stream trace accepted a subsequent frame");
+                }
+                return Ok(rejected_trace_observation(&error));
+            }
+        }
+    }
+    validator.finish()?;
+
+    let result = match last_kind {
+        Some(StreamTraceFrameKind::Dropped) => "reconnect",
+        Some(StreamTraceFrameKind::ResyncRequired) => "resync",
+        Some(StreamTraceFrameKind::Unauthorized) => "closed",
+        _ => "accept",
+    };
+    let mut observed = serde_json::Map::from_iter([("result".to_owned(), json!(result))]);
+    if expected.get("reconnect_after").is_some() {
+        observed.insert(
+            "reconnect_after".to_owned(),
+            validator
+                .reconnect_cursor()
+                .map_or(Value::Null, |cursor| json!(cursor)),
+        );
+    }
+    if expected.get("catchup_complete_seen").is_some() {
+        observed.insert(
+            "catchup_complete_seen".to_owned(),
+            json!(validator.catchup_complete_seen()),
+        );
+    }
+    Ok(Value::Object(observed))
+}
+
+pub fn run_stream_frame_sequence_vector() -> Result<()> {
+    let fixture = load_fixture_value("sync-fixture.json")?;
+    let vector = required_field(&fixture, "stream_frame_sequence")?;
+    exact_object_keys(
+        vector,
+        &["assertions", "cases", "operations", "runner", "vector_id"],
+        "stream frame sequence vector",
+    )?;
+    if value_field_str(vector, "vector_id")? != STREAM_FRAME_SEQUENCE_VECTOR_ID
+        || value_field_str(vector, "runner")?
+            != "cotest::conformance::sync::run_stream_frame_sequence_vector"
+    {
+        bail!("stream frame sequence vector registration drifted");
+    }
+    let operations = value_array(
+        required_field(vector, "operations")?,
+        "stream frame sequence operations",
+    )?;
+    let expected_operations = [OP_ACCOUNT_SUBSCRIBE, OP_EVENTS_SUBSCRIBE];
+    if operations.len() != expected_operations.len()
+        || !expected_operations.iter().all(|operation| {
+            operations
+                .iter()
+                .any(|entry| entry.as_str() == Some(*operation))
+        })
+    {
+        bail!("stream frame sequence vector must cover account and events subscribe operations");
+    }
+    let cases = value_array(
+        required_field(vector, "cases")?,
+        "stream frame sequence cases",
+    )?;
+    if cases.len() != 7 {
+        bail!("stream frame sequence vector must contain exactly 7 cases");
+    }
+
+    let mut executions = 0usize;
+    for surface in [StreamSurface::Account, StreamSurface::Events] {
+        for case in cases {
+            let name = value_field_str(case, "name")?;
+            let expected = required_field(case, "expected")?;
+            let observed = run_stream_frame_case(surface, case)?;
+            assert_expected_subset(name, expected, &observed)?;
+            record_vector_event(
+                &format!(
+                    "sync.stream_frame_sequence.{}.{}",
+                    surface.operation_id(),
+                    name
+                ),
+                &json!({
+                    "vector_id": STREAM_FRAME_SEQUENCE_VECTOR_ID,
+                    "operation_id": surface.operation_id(),
+                    "case": case,
+                }),
+                expected,
+                &observed,
+            );
+            executions += 1;
+        }
+    }
+    if executions != 14 {
+        bail!("stream frame sequence runner did not execute 7 cases on both operations");
+    }
     Ok(())
 }
 
@@ -406,4 +775,26 @@ fn validate_e2ee_pending(value: &Value) -> Result<()> {
         bail!("sync artifact no longer requires keeping pending E2EE entries");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_frame_sequence_runs_all_cases_on_both_operations() {
+        run_stream_frame_sequence_vector().unwrap();
+    }
+
+    #[test]
+    fn removed_stream_request_fields_are_rejected() {
+        let fixture = load_fixture_value("sync-fixture.json").unwrap();
+        let baseline = fixture.pointer("/stream_frame_sequence/cases/0").unwrap();
+        for field in ["include_history", "max_duration_ms", "heartbeat_ms"] {
+            let mut case = baseline.clone();
+            case["request"][field] = json!(1);
+            assert!(run_stream_frame_case(StreamSurface::Account, &case).is_err());
+            assert!(run_stream_frame_case(StreamSurface::Events, &case).is_err());
+        }
+    }
 }

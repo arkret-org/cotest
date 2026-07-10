@@ -287,7 +287,7 @@ pub use state_reducer_hardening::{
     run_state_root_incremental_vector, run_strand_tracks_update_atomic_vector,
 };
 pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
-pub use sync::run_sync_fixture_suite;
+pub use sync::{run_stream_frame_sequence_vector, run_sync_fixture_suite};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
     VectorRegistryGateStatus, build_vector_registry_gate_report,
