@@ -141,6 +141,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         .agent_provision(&arkret::AgentProvisionRequestBody {
             display_name: Some("Renewal Assistant".to_owned()),
             slug: "renewal".to_owned(),
+            avatar_blob_ref: None,
             requested_scope: None,
             accountability: Value::Null,
             pairing_ttl_ms: Some(1),
@@ -163,7 +164,10 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         renewed.pairing_request_id, prov.pairing_request_id,
         "renewed pairing_request_id must be fresh"
     );
-    assert!(renewed.pairing_code.is_some(), "renewed pairing_code present");
+    assert!(
+        renewed.pairing_code.is_some(),
+        "renewed pairing_code present"
+    );
     assert_ne!(
         renewed.pairing_code, prov.pairing_code,
         "renewed pairing_code must be fresh"
@@ -197,10 +201,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let refused = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
         .await;
-    assert!(
-        refused.is_err(),
-        "renewing an active agent must be refused"
-    );
+    assert!(refused.is_err(), "renewing an active agent must be refused");
     Ok(())
 }
 
@@ -218,6 +219,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         .agent_provision(&arkret::AgentProvisionRequestBody {
             display_name: Some("Status Poll Assistant".to_owned()),
             slug: "statuspoll".to_owned(),
+            avatar_blob_ref: None,
             requested_scope: None,
             accountability: Value::Null,
             pairing_ttl_ms: None,
@@ -641,6 +643,7 @@ async fn provision_and_pair_agent(
         .agent_provision(&arkret::AgentProvisionRequestBody {
             display_name: Some(display_name.to_owned()),
             slug: slug.to_owned(),
+            avatar_blob_ref: None,
             requested_scope: None,
             accountability: Value::Null,
             pairing_ttl_ms: None,

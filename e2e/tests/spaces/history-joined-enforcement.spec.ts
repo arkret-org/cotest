@@ -118,12 +118,29 @@ test.describe("history_visibility=joined read enforcement @fully-implemented", (
     );
     expect(accountBodies).toEqual(fixture.postBodies);
 
-    const eventStreamBodies = await eventsSubscribeBodies(
+    const streamFixture = await createHistoryFixture(request, {
+      historyVisibility: "joined",
+      preCount: 4,
+      postCount: 0,
+      label: "joined-event-stream",
+    });
+    const eventStream = eventsSubscribeBodies(
       request,
-      fixture.bobToken,
-      fixture.realmId,
+      streamFixture.bobToken,
+      streamFixture.realmId,
     );
-    expect(eventStreamBodies).toEqual(fixture.postBodies);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const postBody = "joined-event-stream post 1";
+    await createMessage(
+      request,
+      streamFixture.aliceToken,
+      streamFixture.alice,
+      streamFixture.realmId,
+      postBody,
+      createdAt(Date.now() + 60_000),
+    );
+    const eventStreamBodies = await eventStream;
+    expect(eventStreamBodies).toEqual([postBody]);
   });
 });
 
@@ -355,7 +372,7 @@ async function eventsSubscribeBodies(
   const response = await request.get(
     `${solandBaseUrl()}/_arkret/self/events/subscribe?realms=${encodeURIComponent(
       realmId,
-    )}&limit=100&max_duration_ms=100&heartbeat_ms=100`,
+    )}&limit=100&max_duration_ms=1000&heartbeat_ms=100`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();

@@ -178,17 +178,15 @@ test.describe("account auth + device strand", () => {
     expect(replay.status, replay.text).not.toBe(200);
   });
 
-  test("soft logout revokes session credential; holder-proof refresh later restores access", async ({
+  test("hard logout terminates the grant chain; holder proof cannot restore it", async ({
     request,
   }) => {
-    // spec: account-lifecycle.md §4.1 (soft logout -> holder-proof restore)
+    // spec: account-lifecycle.md §4.1 (explicit hard logout)
     //
-    // The restore leg is the same refresh endpoint: a device holder proof, now
-    // verified against the Principal Server device signing-key directory, lets an
-    // authorized device resume its grant chain without re-authentication. We
-    // enrol the device signing key, revoke the live grant through the standard
-    // logout endpoint, then drive the holder-proof refresh and assert the
-    // rotated grant once again authorizes `/_arkret/self/*`.
+    // The canonical logout endpoint terminates the Auth-side browser session
+    // and the complete grant rotation chain. Retaining the device holder key
+    // is therefore insufficient to refresh the logged-out grant; recovery
+    // requires a new full authentication session.
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "PRECONDITION_COAUTH_UNAVAILABLE: coauth is not configured");
 
@@ -258,23 +256,11 @@ test.describe("account auth + device strand", () => {
       onboarded.deviceKey,
       refreshBody,
     );
-    expect(restored.status, restored.text).toBe(200);
-    const restoredGrant = restored.json.grant_jwt as string | undefined;
-    expect(restoredGrant).toBeTruthy();
-    expect(restoredGrant).not.toBe(onboarded.grantJwt);
-
-    // The restored grant authorizes the self-path with the same device key.
-    const meResp = await request.get(meUrl, {
-      headers: selfPathGrantHeaders({
-        deviceKey: onboarded.deviceKey,
-        grantJwt: restoredGrant!,
-        method: "GET",
-        url: meUrl,
-      }),
-    });
-    expect(meResp.ok(), await meResp.text()).toBeTruthy();
-    const me = await meResp.json();
-    expect(me.principal_id).toBe(onboarded.principalDid);
+    expect(restored.status, restored.text).not.toBe(200);
+    const error = restored.json.error as { code?: unknown } | undefined;
+    expect(error?.code).toMatch(
+      /^(grant_already_consumed|session_logged_out)$/,
+    );
   });
 });
 

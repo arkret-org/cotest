@@ -12,8 +12,9 @@
       - An explicit -Grep argument fully overrides the smoke inclusion filter.
 
     joint-full (nightly / on-demand)
-      - Unfiltered: runs every spec discovered by Playwright. The placeholder
-        fixme tests are expected; they exit as skipped via test.fixme().
+      - Runs every regular joint spec discovered by Playwright. Provider-backed
+        @platform-live tests remain in the protected controlled lane. The
+        placeholder fixme tests are expected; they exit as skipped via test.fixme().
 
     Both profiles share the same service-startup, preflight, and reporting
     code paths. Only the Playwright invocation step branches on the profile.
@@ -2216,6 +2217,14 @@ try {
 
     if ($effectiveGrep) {
         $playwrightArgs += @("--grep", $effectiveGrep)
+    }
+    # Provider-backed live tests are a separate controlled lane: they require
+    # protected endpoints and credentials injected by controlled.yml. A normal
+    # joint run must not fail merely because those secrets are intentionally
+    # absent. An explicit grep for @platform-live remains the opt-in path and
+    # keeps the test's fail-closed precondition checks intact.
+    if (-not ($effectiveGrep -and $effectiveGrep.Contains("@platform-live"))) {
+        $playwrightArgs += @("--grep-invert", "@platform-live")
     }
     $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
     $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"

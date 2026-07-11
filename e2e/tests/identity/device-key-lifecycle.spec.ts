@@ -119,8 +119,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
 
       await test.step("soft refresh preserves the grant-binding key and device signer", async () => {
         const refreshStartIndex = grants.count();
-        await expireCurrentSessionGrantSoon(page, activeGrant.jwt, 60);
-        await page.reload({ waitUntil: "domcontentloaded" });
+        await reloadWithSessionGrantExpiringSoon(page, activeGrant.jwt, 60);
         await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
         await expect(page.getByTestId("login-panel")).toHaveCount(0);
 
@@ -270,13 +269,14 @@ function didKeyMultibase(did: string): string {
   return did.slice("did:key:".length);
 }
 
-async function expireCurrentSessionGrantSoon(
+async function reloadWithSessionGrantExpiringSoon(
   page: Page,
   expectedGrantJwt: string,
   secondsFromNow: number,
 ): Promise<void> {
-  await page.evaluate(
-    ({ expectedGrantJwt, secondsFromNow }) => {
+  const resultKey = `cotest.session-grant-expiry-override.${Date.now()}`;
+  await page.addInitScript(
+    ({ expectedGrantJwt, secondsFromNow, resultKey }) => {
       const expiresAt = new Date(Date.now() + secondsFromNow * 1000).toISOString();
       const storedAt = new Date().toISOString();
       let updated = 0;
@@ -303,12 +303,13 @@ async function expireCurrentSessionGrantSoon(
         window.localStorage.setItem(key, JSON.stringify(state));
         updated += 1;
       }
-      if (updated !== 1) {
-        throw new Error(`expected to update exactly one persisted grant, updated ${updated}`);
-      }
+      window.sessionStorage.setItem(resultKey, String(updated));
     },
-    { expectedGrantJwt, secondsFromNow },
+    { expectedGrantJwt, secondsFromNow, resultKey },
   );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const updated = await page.evaluate((key) => window.sessionStorage.getItem(key), resultKey);
+  expect(updated, "expected to update exactly one persisted grant before app bootstrap").toBe("1");
 }
 
 async function currentSettingsSignerDid(page: Page): Promise<string> {

@@ -182,6 +182,7 @@ test.describe("key backup + restore", () => {
       "a1-mls-restore-alice-a",
       account,
       coauth,
+      false,
     );
     if (!deviceAFlow) {
       assertJointStackNotRequired("A1 MLS restore device A login");
@@ -230,6 +231,7 @@ test.describe("key backup + restore", () => {
         "a1-mls-restore-alice-b",
         account,
         coauth,
+        false,
       );
       if (!deviceBFlow) {
         assertJointStackNotRequired("A1 MLS restore device B login");
