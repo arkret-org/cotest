@@ -93,7 +93,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let provisioned = expect_json(
         alice.post("/_arkret/self/agents").json(&json!({
             "display_name": "Planner",
-            "agent_slug": "planner"
+            "slug": "planner"
         })),
         StatusCode::CREATED,
     )

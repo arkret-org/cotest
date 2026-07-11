@@ -138,7 +138,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     let prov = controller
         .agent_provision(&arkret::AgentProvisionRequestBody {
             display_name: Some("Status Poll Assistant".to_owned()),
-            agent_slug: Some("statuspoll".to_owned()),
+            slug: "statuspoll".to_owned(),
             requested_scope: None,
             accountability: Value::Null,
             pairing_ttl_ms: None,
@@ -555,13 +555,13 @@ async fn provision_and_pair_agent(
     server: &ArkretServer,
     token: &str,
     display_name: &str,
-    agent_slug: &str,
+    slug: &str,
 ) -> Result<String> {
     let controller = bearer_sdk_client(server, token)?;
     let prov = controller
         .agent_provision(&arkret::AgentProvisionRequestBody {
             display_name: Some(display_name.to_owned()),
-            agent_slug: Some(agent_slug.to_owned()),
+            slug: slug.to_owned(),
             requested_scope: None,
             accountability: Value::Null,
             pairing_ttl_ms: None,
@@ -978,7 +978,7 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 "proof_kind": "agent_key_proof",
                 "scope_details": {
                     "agent_principal_id": subject,
-                    "controller_did": ALICE_DID,
+                    "controller_principal_id": ALICE_DID,
                     "resources": {
                         "realm_refs": ["*"],
                         "strand_refs": []
