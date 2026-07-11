@@ -44,6 +44,10 @@ pub const KEY_BACKUP_FIXTURE: &str = "key-backup-fixture.json";
 /// `event-payload.schema.json#/$defs/realm_organization_payload`).
 pub const REALM_ORGANIZATION_FIXTURE: &str = "realm-organization-fixture.json";
 
+pub const SDK_CONFORMANCE_CLAIM_FIXTURE: &str = "sdk-conformance-claim-fixture.json";
+
+pub const KEY_TRANSPARENCY_FIXTURE: &str = "key-transparency-fixture.json";
+
 /// Every spec fixture whose `schema_validation_cases` this runner executes:
 /// `(file_name, expected_profile, expected_suite)`. Extend this manifest when
 /// the spec ships a new schema-validation-shaped fixture instead of adding a
@@ -63,6 +67,16 @@ pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
         REALM_ORGANIZATION_FIXTURE,
         "ak.vector_group.privacy_security.v1",
         "realm_organization_conformance",
+    ),
+    (
+        SDK_CONFORMANCE_CLAIM_FIXTURE,
+        "ak.vector_group.schema_validation.v1",
+        "sdk_conformance_claim",
+    ),
+    (
+        KEY_TRANSPARENCY_FIXTURE,
+        "ak.profile.key_transparency.v1",
+        "key_transparency",
     ),
 ];
 
@@ -86,6 +100,10 @@ pub struct SchemaValidationCase {
     pub schema_ref: String,
     #[serde(default = "default_true")]
     pub expect_valid: bool,
+    #[serde(default)]
+    pub semantic_outcome: Option<String>,
+    #[serde(default)]
+    pub expected_reason_code: Option<String>,
     pub instance: Value,
 }
 
@@ -124,7 +142,49 @@ pub fn run_schema_validation_fixture_file(
             fixture.suite
         );
     }
-    run_cases(&fixture.schema_validation_cases)
+    run_cases(&fixture.schema_validation_cases)?;
+    run_semantic_cases(file_name, &fixture.schema_validation_cases)
+}
+
+fn run_semantic_cases(file_name: &str, cases: &[SchemaValidationCase]) -> Result<()> {
+    if file_name != SDK_CONFORMANCE_CLAIM_FIXTURE {
+        return Ok(());
+    }
+    for case in cases {
+        let claims = case
+            .instance
+            .get("clause_claims")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{} missing clause_claims[]", case.name))?;
+        let mut clause_ids = std::collections::BTreeSet::new();
+        let duplicate = claims.iter().any(|claim| {
+            claim
+                .get("clause_id")
+                .and_then(Value::as_str)
+                .is_some_and(|clause_id| !clause_ids.insert(clause_id))
+        });
+        match case.semantic_outcome.as_deref() {
+            Some("accept") if duplicate => {
+                bail!(
+                    "{} unexpectedly contains a duplicate clause claim",
+                    case.name
+                )
+            }
+            Some("reject") => {
+                if case.expected_reason_code.as_deref() == Some("duplicate_clause_claim")
+                    && !duplicate
+                {
+                    bail!(
+                        "{} expected duplicate_clause_claim but had no duplicate",
+                        case.name
+                    );
+                }
+            }
+            Some("accept") | None => {}
+            Some(outcome) => bail!("{} has unknown semantic_outcome {outcome}", case.name),
+        }
+    }
+    Ok(())
 }
 
 /// Run the supplied cases. Public for tests.

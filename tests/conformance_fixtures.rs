@@ -44,6 +44,24 @@ conformance_test!(
 );
 
 conformance_test!(
+    did_webvh_v1_adapter_suite_matches_reference_semantics,
+    "did_webvh_v1_adapter",
+    cotest::conformance::run_did_webvh_v1_adapter_fixture_suite,
+);
+
+conformance_test!(
+    operation_clause_registry_closes_universal_behavior,
+    "operation_clause_registry",
+    cotest::conformance::validate_operation_clause_registry,
+);
+
+conformance_test!(
+    scalability_limits_fixture_suite_matches_reference_semantics,
+    "scalability_limits",
+    cotest::conformance::run_scalability_limits_fixture_suite,
+);
+
+conformance_test!(
     /// Round 4 / A2 — security-closure-vectors runner contract.
     /// Confirms the 12 `ak.vector.*` ids are present and every step
     /// exposes the full `runner {given_state, operation, transcript,

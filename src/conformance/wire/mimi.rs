@@ -6,7 +6,9 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::{emit_vector, load_local_fixture};
-use crate::conformance::{load_fixture_value, required_str, validate_profile};
+use crate::conformance::{
+    fixture_runner_entrypoint, load_fixture_value, required_str, validate_profile,
+};
 
 const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
     "ak.vector.mimi.provider_directory_draft_pinning.v1",
@@ -26,7 +28,7 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
     if required_str(&fixture, "suite")? != "mimi_interop" {
         bail!("mimi interop fixture suite drifted");
     }
-    if required_str(&fixture, "runner")? != "cotest::conformance::mimi_interop" {
+    if fixture_runner_entrypoint(&fixture)? != "cotest::conformance::mimi_interop" {
         bail!("mimi interop fixture runner drifted");
     }
 

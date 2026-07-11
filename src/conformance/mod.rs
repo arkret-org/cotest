@@ -11,6 +11,7 @@ mod capability;
 mod coauth_lifecycle;
 mod cross_signing_binding_golden;
 mod cursor_vectors;
+mod did_webvh_v1;
 mod encoding;
 mod envelope;
 mod federation;
@@ -31,6 +32,7 @@ mod mention_rendering_vectors;
 #[cfg(test)]
 mod mock_vector_base;
 mod object_addressing_vectors;
+mod operation_clause_registry;
 mod operation_registry_gate;
 mod policy_server;
 mod primary_handle_vectors;
@@ -44,6 +46,7 @@ mod push_rule_core;
 mod redaction;
 mod reducer_profile;
 mod scaffold_gate;
+mod scalability_limits;
 mod schema_validation;
 mod schema_validation_fixture;
 mod security_closure;
@@ -125,6 +128,7 @@ pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector, run_cursor_vector_suite,
 };
+pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
 };
@@ -222,6 +226,7 @@ pub use object_addressing_vectors::{
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,
 };
+pub use operation_clause_registry::validate_operation_clause_registry;
 pub use operation_registry_gate::{
     OperationRegistryGateEntry, OperationRegistryGatePaths, OperationRegistryGateReport,
     OperationRegistryGateStatus, OperationSourceRoot, build_operation_registry_gate_report,
@@ -259,6 +264,7 @@ pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,
 };
+pub use scalability_limits::run_scalability_limits_fixture_suite;
 pub use schema_validation::run_schema_validation_suite;
 pub use schema_validation_fixture::{
     SCHEMA_VALIDATION_FIXTURE, SCHEMA_VALIDATION_PROFILE, SchemaValidationCase,
@@ -578,6 +584,15 @@ pub(crate) fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str>
         .get(field)
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("missing string field {field}"))
+}
+
+pub(crate) fn fixture_runner_entrypoint(value: &Value) -> Result<&str> {
+    value
+        .get("runner")
+        .and_then(Value::as_object)
+        .and_then(|runner| runner.get("entrypoint"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("fixture runner must be an object with string entrypoint"))
 }
 
 pub(crate) fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
