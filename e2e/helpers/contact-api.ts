@@ -64,6 +64,14 @@ export type DirectConversationSummary = {
   state: string;
 };
 
+export type ContactAgentProjection = {
+  agent_principal_id: string;
+  controller_principal_id: string;
+  display_name?: string;
+  agent_slug?: string;
+  direct_conversation?: DirectConversationSummary;
+};
+
 export type ContactListRow = {
   peer: string;
   state: ContactState;
@@ -76,6 +84,7 @@ export type ContactListRow = {
   effective_scopes?: string[];
   invite_consent_grant_ref?: string;
   direct_conversation?: DirectConversationSummary;
+  agents?: ContactAgentProjection[];
 };
 
 export type ContactRequestOutcome = {
