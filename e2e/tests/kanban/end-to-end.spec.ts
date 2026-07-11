@@ -29,6 +29,7 @@ import {
   issueDevSession,
   openDpopUserPage,
   openUserPage,
+  selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -565,10 +566,15 @@ test.describe("kanban end-to-end", () => {
   }, testInfo) => {
     // spec: realm-and-space.md Space-container rank projection basis
     const stamp = Date.now();
-    const alice = uniqueUser("kanban-order-alice");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(browser, request, "kanban-order-alice", {
+      prepareMlsDevice: false,
+    });
+    if (!aliceFlow) {
+      assertJointStackNotRequired("kanban order DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     const first = `First-${stamp}`;
     const second = `Second-${stamp}`;
@@ -627,7 +633,13 @@ test.describe("kanban end-to-end", () => {
           async () => {
             const cellResp = await request.get(
               `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ak.component.child_order.v1`,
-              { headers: { authorization: `Bearer ${aliceToken}` } },
+              {
+                headers: selfPathHeadersForDpopSession(
+                  aliceFlow.session,
+                  "GET",
+                  `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ak.component.child_order.v1`,
+                ),
+              },
             );
             if (cellResp.status() !== 200) {
               return false;

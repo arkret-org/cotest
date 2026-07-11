@@ -20,6 +20,7 @@ import {
   issueDevSession,
   openDpopUserPage,
   openUserPage,
+  selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 import { selectDxcOption } from "../../helpers/dxc-select";
@@ -258,19 +259,22 @@ test.describe("consent grant", () => {
     browser,
     request,
   }) => {
-    const alice = uniqueUser("p1-022-contact-new-alice");
-    const bob = uniqueUser("p1-022-contact-new-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "p1-022-contact-new-alice", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "p1-022-contact-new-bob", {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      assertJointStackNotRequired("contacts consent DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const bobPage = bobFlow.page;
 
     try {
       await requestContact(bobPage, alice.did, "message");
@@ -280,16 +284,25 @@ test.describe("consent grant", () => {
         .filter({ has: bobPage.page.locator(`[title="${escapedDid}"]`) });
       await expect(pendingRow).toBeVisible({ timeout: 30_000 });
       await expect(pendingRow).toHaveAttribute("data-state", /pending/);
-      await expectConsentCell(
-        request,
-        aliceToken,
-        alice.did,
-        bob.did,
-        "message",
-        "pending",
-      );
+      const cellUrl =
+        `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(alice.did)}` +
+        `?peer=${encodeURIComponent(bob.did)}&scope=message`;
+      const cell = await request.get(cellUrl, {
+        headers: selfPathHeadersForDpopSession(
+          aliceFlow.session,
+          "GET",
+          cellUrl,
+        ),
+      });
+      expect(cell.status()).toBe(200);
+      expect(await cell.json()).toMatchObject({
+        holder_did: alice.did,
+        peer_did: bob.did,
+        consent_scope: "direct_message",
+        state: "pending",
+      });
     } finally {
-      await bobPage.close();
+      await Promise.allSettled([bobPage.close(), aliceFlow.page.close()]);
     }
   });
 

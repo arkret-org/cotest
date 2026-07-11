@@ -23,8 +23,10 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -255,20 +257,22 @@ test.describe("project simulation", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s16-alice");
-    const bob = uniqueUser("s16-bob");
-    const carol = uniqueUser("s16-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
+    const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "s16-alice", { prepareMlsDevice: false }),
+      openDpopUserPage(browser, request, "s16-bob", { prepareMlsDevice: false }),
+      openDpopUserPage(browser, request, "s16-carol", { prepareMlsDevice: false }),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const carolToken = await issueDevSession(request, carol);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
+    if (!aliceFlow || !bobFlow || !carolFlow) {
+      assertJointStackNotRequired("project simulation DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const carol = carolFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    const carolPage = carolFlow.page;
 
     try {
       const realmId = await alicePage.createRealm({
