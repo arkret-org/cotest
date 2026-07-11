@@ -107,6 +107,7 @@ test.describe("key backup + restore", () => {
       "settings-recovery-alice",
       account,
       coauth,
+      false,
     );
     if (!deviceFlow) {
       assertJointStackNotRequired("key backup settings recovery browser login");
@@ -702,6 +703,7 @@ async function openDpopDeviceForAccount(
   prefix: string,
   account: CoauthPasswordAccount,
   coauth: string,
+  autoCompleteRecoveryKeySetup = true,
 ): Promise<{ page: JointUserPage; session: DpopUserSession } | undefined> {
   const session = await createDpopUserSessionForAccount(request, prefix, account, {
     coauthBase: coauth,
@@ -715,6 +717,7 @@ async function openDpopDeviceForAccount(
     dpopSeedB64url: session.dpopSeedB64url,
     grantId: session.grantId,
     grantAudience: session.grantAudience,
+    autoCompleteRecoveryKeySetup,
   });
   return { page, session };
 }

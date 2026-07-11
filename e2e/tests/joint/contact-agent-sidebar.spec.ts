@@ -51,7 +51,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         "data-peer",
         jointRealm.alice.did,
       );
-      await expect(aliceSelfGroup).toContainText("You");
+      await expect(aliceSelfGroup).toContainText("ME");
 
       // The Contacts sidebar is a chat surface: only agents that ever became
       // effective (active / paused) belong here. The freshly provisioned
