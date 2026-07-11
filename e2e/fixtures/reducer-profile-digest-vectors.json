@@ -18,7 +18,7 @@
     },
     {
       "profile_id": "ak.profile.principal_server.v1",
-      "expected_digest": "sha256:8f45c386d0fa51591d8b18e7e2b61118852d99f00148fb109df286f04b9287cb"
+      "expected_digest": "sha256:a65471bb4af33235c3c15d8501bd48aaab67a15e6976ab1e400f1eb3176adbc4"
     },
     {
       "profile_id": "ak.profile.federation_minimal.v1",

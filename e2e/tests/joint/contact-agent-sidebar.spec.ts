@@ -154,7 +154,7 @@ async function provisionPendingAgent(
     headers: selfPathHeadersForDpopSession(controller, "POST", url),
     data: {
       display_name: displayName,
-      agent_slug: agentSlug,
+      slug: agentSlug,
       requested_scope: {
         actions: ["ak.self.events.stream.subscribe"],
         resources: [

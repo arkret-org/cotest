@@ -433,7 +433,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     expect(audit!.payload.from_schema_refs).toEqual(fromRefs);
     expect(audit!.payload.to_schema_refs).toEqual(toRefs);
     expect(audit!.payload.compatibility_class).toBe("breaking");
-    expect(String(audit!.payload.capability_used)).toMatch(/ck\.morph\.schema[._]migrate/);
+    expect(String(audit!.payload.capability_used)).toMatch(/ak\.morph\.schema[._]migrate/);
     expect(audit!.payload.profile_ref).toBe(MIGRATION_PROFILE_ID);
 
     // 5. transformation with well-formed dialect rules accepted.

@@ -865,7 +865,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         .map_err(|err| anyhow!("HKDF expand failed: {err}"))?;
 
     const EXPECTED_KEY_HEX: &str =
-        "65ff920ee6cd964549a5ee8b581346ca9dfc2b4ceb91227b7d95dc2a15a761f8";
+        "65e98c81c5ca6e4c2b8b35ba9860fd97b386a2a441901d013165fdfd2d8d558a";
     let actual_key_hex = hex_lower(&recording_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(

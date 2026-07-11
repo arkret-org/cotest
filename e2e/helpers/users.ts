@@ -1340,17 +1340,24 @@ export async function openUser(
           "inkson.test.session_injection.v1",
           JSON.stringify(init.sessionInjection),
         );
+      } else if (init.sessionCredential) {
+        window.localStorage.setItem(
+          "inkson.test.session_credential_injection.v1",
+          init.sessionCredential,
+        );
       }
     },
     {
       config: {
         server_url: serverUrl,
+        principal_servers: [serverUrl],
         account_did: opts.neutralLoginConfig ? "" : user.did,
         device_id: opts.neutralLoginConfig ? "" : user.deviceId,
         session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
       },
       neutralLoginConfig: opts.neutralLoginConfig === true,
       sessionInjection,
+      sessionCredential,
     },
   );
   // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's
