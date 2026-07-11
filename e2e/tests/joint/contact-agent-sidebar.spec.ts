@@ -11,13 +11,13 @@ jointTest.describe.configure({ mode: "serial" });
 
 jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
   jointTest(
-    "pins self first, shows every own agent, and hides non-receiving contact agents",
+    "pins self first, hides never-effective own agents, and hides non-receiving contact agents",
     async ({ jointRealm, request }) => {
       jointTest.setTimeout(360_000);
       const stamp = Date.now();
       const displayName = `Contacts Assistant ${stamp}`;
       const slug = `contacts-${stamp.toString(36)}`;
-      const agent = await provisionPendingAgent(
+      await provisionPendingAgent(
         request,
         jointRealm.aliceSession,
         displayName,
@@ -52,22 +52,25 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         jointRealm.alice.did,
       );
       await expect(aliceSelfGroup).toContainText("You");
-      await expect(aliceSelfGroup).toContainText("Agents 1");
 
-      const ownAgentList = aliceSelfGroup.getByTestId("contact-sidebar-self-agents");
-      const ownAgentRow = ownAgentList
-        .getByTestId("contact-sidebar-agent-row")
-        .filter({ hasText: displayName });
-      await expect(ownAgentRow).toBeVisible({ timeout: 30_000 });
-      await expect(ownAgentRow).toHaveAttribute("data-agent", agent.agent_id);
-      await expect(ownAgentRow).toHaveAttribute("data-controller", jointRealm.alice.did);
-      await expect(ownAgentRow).toContainText("pending");
-      await expect(ownAgentRow).toBeEnabled();
-
-      await aliceSelfGroup.getByTestId("contact-sidebar-self-row").click();
-      await expect(ownAgentList).toBeHidden();
-      await aliceSelfGroup.getByTestId("contact-sidebar-self-row").click();
-      await expect(ownAgentRow).toBeVisible();
+      // The Contacts sidebar is a chat surface: only agents that ever became
+      // effective (active / paused) belong here. The freshly provisioned
+      // agent is still pending_runtime_key, so it must stay out of the
+      // sidebar and out of the Agents count pill until pairing completes;
+      // it remains manageable in Settings → My Agents. Wait for Bob's
+      // contact row first — contacts and own agents land from the same
+      // sidebar load, so this guards against asserting before data arrives.
+      await expect(
+        alicePage.locator(
+          `[data-testid="direct-conversation-row"][data-peer="${jointRealm.bob.did}"]`,
+        ),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(
+        aliceSelfGroup
+          .getByTestId("contact-sidebar-agent-row")
+          .filter({ hasText: displayName }),
+      ).toHaveCount(0);
+      await expect(aliceSelfGroup).not.toContainText("Agents");
 
       const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
