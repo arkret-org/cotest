@@ -20,9 +20,6 @@ pub fn run_interop_downgrade_fixture_suite() -> Result<()> {
     let mut covered_did_isolation = false;
     let mut covered_consent_gate = false;
     let mut covered_reachability = false;
-    let mut covered_external_marker = false;
-    let mut covered_a2a_default_closed = false;
-    let mut covered_acp_default_closed = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -48,20 +45,6 @@ pub fn run_interop_downgrade_fixture_suite() -> Result<()> {
                 validate_reachability_proof_forbidden(vector)?;
                 covered_reachability = true;
             }
-            "external_marker_inert" => {
-                validate_external_marker_inert(vector)?;
-                covered_external_marker = true;
-            }
-            "external_agent_handoff_default_closed" => {
-                validate_external_agent_handoff_default_closed(vector)?;
-                match protocol {
-                    "a2a" => covered_a2a_default_closed = true,
-                    "acp" => covered_acp_default_closed = true,
-                    other => {
-                        bail!("vector {name} default-closed protocol must be a2a/acp, got {other}")
-                    }
-                }
-            }
             other => bail!("vector {name} has unknown interop downgrade scenario {other}"),
         }
 
@@ -76,20 +59,14 @@ pub fn run_interop_downgrade_fixture_suite() -> Result<()> {
         );
     }
 
-    for protocol in ["mimi", "a2a", "acp"] {
+    for protocol in ["mimi"] {
         if !covered_protocols.contains(protocol) {
             bail!("interop downgrade fixture must cover protocol {protocol}");
         }
     }
-    if !(covered_did_isolation
-        && covered_consent_gate
-        && covered_reachability
-        && covered_external_marker
-        && covered_a2a_default_closed
-        && covered_acp_default_closed)
-    {
+    if !(covered_did_isolation && covered_consent_gate && covered_reachability) {
         bail!(
-            "interop downgrade fixture must cover DID isolation, consent gate, reachability proof prohibition, external marker inertness, and A2A/ACP default-closed handoff"
+            "interop downgrade fixture must cover DID isolation, consent gate, and reachability proof prohibition"
         );
     }
 
@@ -194,63 +171,6 @@ fn validate_reachability_proof_forbidden(vector: &Value) -> Result<()> {
         if contains_string_literal(response, &literal) {
             bail!("vector {name} response leaks forbidden literal {literal}");
         }
-    }
-    Ok(())
-}
-
-fn validate_external_marker_inert(vector: &Value) -> Result<()> {
-    let name = required_str(vector, "name")?;
-    let input = required_field(vector, "input")?;
-    let expected = required_field(vector, "expected")?;
-    if input.get("external_marker").is_none() {
-        bail!("vector {name} missing external_marker input");
-    }
-    if expected_outcome(vector, name)? != "reject" {
-        bail!("vector {name} external marker downgrade must reject without Arkret authority");
-    }
-    if expected.get("marker_authorizes").and_then(Value::as_bool) != Some(false) {
-        bail!("vector {name} external marker must not authorize");
-    }
-    if expected.get("session_started").and_then(Value::as_bool) != Some(false) {
-        bail!("vector {name} external marker must not start a session");
-    }
-    let authorized_by = expected
-        .get("authorized_by")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("vector {name} missing expected.authorized_by[]"))?;
-    if !authorized_by.is_empty() {
-        bail!("vector {name} must not put external markers in authorized_by");
-    }
-    require_reason(expected, name)?;
-    Ok(())
-}
-
-fn validate_external_agent_handoff_default_closed(vector: &Value) -> Result<()> {
-    let name = required_str(vector, "name")?;
-    let input = required_field(vector, "input")?;
-    let expected = required_field(vector, "expected")?;
-    if expected_outcome(vector, name)? != "reject" {
-        bail!("vector {name} default-closed handoff must reject");
-    }
-    if input
-        .pointer("/realm_policy/external_agent_handoff")
-        .and_then(Value::as_bool)
-        != Some(false)
-    {
-        bail!("vector {name} must pin realm_policy.external_agent_handoff=false");
-    }
-    let allowed = input
-        .pointer("/realm_policy/allowed_protocols")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("vector {name} missing allowed_protocols[]"))?;
-    if !allowed.is_empty() {
-        bail!("vector {name} default-closed policy must not allow protocols");
-    }
-    if expected.get("session_started").and_then(Value::as_bool) != Some(false) {
-        bail!("vector {name} default-closed handoff must not start a session");
-    }
-    if required_str(expected, "reason_code")? != "external_agent_handoff_disabled" {
-        bail!("vector {name} default-closed handoff reason_code drifted");
     }
     Ok(())
 }

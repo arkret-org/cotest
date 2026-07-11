@@ -49,7 +49,7 @@ const audienceDefault = process.env.MOCK_POLICY_SERVER_AUDIENCE ?? "soland";
 // Auto-generate the DID unless overridden, so each harness run gets a
 // unique policy-server identity (preventing test cross-contamination
 // across runs that share a persistent backing store).
-const serviceDid =
+const serviceId =
   process.env.MOCK_POLICY_SERVER_DID ??
   `did:web:policy-server.joint-e2e.local#${randomUUID().slice(0, 8)}`;
 
@@ -107,7 +107,7 @@ function signTranscript({ action, actor, target, decision, reason, obligations, 
   const header = { alg: "EdDSA", typ: "JWT", kid: "mock-policy-server-key-1" };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
-    iss: serviceDid,
+    iss: serviceId,
     aud: audience ?? audienceDefault,
     iat: now,
     exp: now + 600,
@@ -136,7 +136,7 @@ const server = createServer(async (req, res) => {
       service: "mock-policy-server",
       logs: [checksLog, scenariosLog],
       extra: {
-        service_did: serviceDid,
+        service_id: serviceId,
         public_jwk: publicJwk,
         default_decision: defaultDecision,
         rule_count: decisionRules.size,
@@ -294,6 +294,6 @@ const server = createServer(async (req, res) => {
 server.listen(port, "127.0.0.1", () => {
   const actual = server.address();
   console.error(
-    `[mock-policy-server] listening on http://127.0.0.1:${actual.port} (did=${serviceDid})`,
+    `[mock-policy-server] listening on http://127.0.0.1:${actual.port} (did=${serviceId})`,
   );
 });

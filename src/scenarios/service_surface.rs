@@ -63,9 +63,9 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     )
     .await?;
     assert!(
-        sync["service_did"]
+        sync["service_id"]
             .as_str()
-            .is_some_and(|service_did| !service_did.is_empty())
+            .is_some_and(|service_id| !service_id.is_empty())
     );
 
     let directory = expect_json(

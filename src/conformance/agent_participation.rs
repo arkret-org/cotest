@@ -171,7 +171,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         agent_slug: required_str(case, slug_field)?.to_owned(),
         subject: did_field(case, agent_field)?,
         issuer: Did::new("did:web:directory.acme.example".to_owned())?,
-        issuer_service_did: Some(Did::new("did:web:directory.acme.example".to_owned())?),
+        issuer_service_id: Some(Did::new("did:web:directory.acme.example".to_owned())?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
         audience: Some("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned()),
@@ -393,7 +393,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     };
     let outcome = AgentParticipationOutcome {
         ok: true,
-        agent_principal_id: "did:web:agents.acme.example:alice-summary".to_owned(),
+        agent_id: "did:web:agents.acme.example:alice-summary".to_owned(),
         entries: vec![entry.clone()],
     };
     if !outcome.ok || outcome.entries.len() != 1 {

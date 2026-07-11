@@ -62,14 +62,14 @@ param(
     [switch]$StartStarid,
     [string]$StaridBin,
     [string]$StaridBaseUrl,
-    [string]$StaridServiceDid = "did:webvh:z6mkfixture:starid.joint-e2e.local",
+    [string]$StaridServiceId = "did:webvh:z6mkfixture:starid.joint-e2e.local",
     [switch]$StartTeabay,
     [string]$TeabayBin,
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
-    [string]$TeabayServiceDid = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
-    [string]$SolandServiceDid = "did:webvh:z6mkfixture:soland.joint-e2e.local",
-    [string]$CoauthServiceDid = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
+    [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
+    [string]$SolandServiceId = "did:webvh:z6mkfixture:soland.joint-e2e.local",
+    [string]$CoauthServiceId = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
@@ -90,7 +90,7 @@ param(
     [switch]$KeepServices,
     [switch]$SkipPreflight,
     [switch]$DualSoland,
-    [string]$SolandBetaServiceDid = "did:webvh:z6mkfixture:soland-beta.joint-e2e.local",
+    [string]$SolandBetaServiceId = "did:webvh:z6mkfixture:soland-beta.joint-e2e.local",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -101,8 +101,6 @@ param(
     [string]$MockPushGatewayIss,
     [switch]$StartMockAppletRegistry,
     [string]$MockAppletRegistryDid,
-    [switch]$StartMockAgentRuntime,
-    [string]$MockAgentRuntimeDid,
     [switch]$StartMockTspEndpoint,
     [string]$MockTspEndpointVid,
     [switch]$StartMockMimiFacade,
@@ -129,7 +127,6 @@ if ($StartMocks) {
     $StartMockPolicyServer = $true
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
-    $StartMockAgentRuntime = $true
     $StartMockTspEndpoint = $true
     $StartMockMimiFacade = $true
     $StartMockClaimIssuer = $true
@@ -784,8 +781,8 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
-        [Parameter(Mandatory = $true)][string]$SolandServiceDid,
-        [Parameter(Mandatory = $true)][string]$CoauthServiceDid,
+        [Parameter(Mandatory = $true)][string]$SolandServiceId,
+        [Parameter(Mandatory = $true)][string]$CoauthServiceId,
         [Parameter(Mandatory = $true)][string]$OAuthIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
@@ -796,7 +793,7 @@ function New-CoauthJointConfig {
     $configPath = Join-Path $JointDir "coauth.yaml"
     $generateLog = Join-Path $JointDir "coauth-config-generate.log"
     # coauth (07-02 service-DID bootstrap flow) requires either an explicit
-    # arkret.service_did or the local-development `--dev` mode; the joint
+    # arkret.service_id or the local-development `--dev` mode; the joint
     # harness patches its own service DID afterwards, so --dev is correct here.
     $generateOutput = & $CoauthBinary config generate --dev 2>"$generateLog"
     if ($LASTEXITCODE -ne 0) {
@@ -817,8 +814,8 @@ function New-CoauthJointConfig {
         "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
-        "--soland-service-did", $SolandServiceDid,
-        "--coauth-service-did", $CoauthServiceDid,
+        "--soland-service-did", $SolandServiceId,
+        "--coauth-service-did", $CoauthServiceId,
         "--oauth-introspection-bearer", $OAuthIntrospectionBearer,
         "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
@@ -1409,12 +1406,6 @@ if ($StartMockAppletRegistry) {
     $mockAppletRegistryPort = Get-FreeTcpPort
     $mockAppletRegistryBaseUrl = "http://127.0.0.1:$mockAppletRegistryPort"
 }
-$mockAgentRuntimePort = $null
-$mockAgentRuntimeBaseUrl = $null
-if ($StartMockAgentRuntime) {
-    $mockAgentRuntimePort = Get-FreeTcpPort
-    $mockAgentRuntimeBaseUrl = "http://127.0.0.1:$mockAgentRuntimePort"
-}
 $mockTspEndpointPort = $null
 $mockTspEndpointBaseUrl = $null
 if ($StartMockTspEndpoint) {
@@ -1570,15 +1561,6 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
     }
-    if ($StartMockAgentRuntime) {
-        $envExpr = "`$env:MOCK_AGENT_RUNTIME_PORT='$mockAgentRuntimePort'"
-        if ($MockAgentRuntimeDid) {
-            $envExpr = "$envExpr; `$env:MOCK_AGENT_RUNTIME_DID=" + (Quote-PsLiteral $MockAgentRuntimeDid)
-        }
-        $mockAgentRuntimeCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-agent-runtime.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-agent-runtime" -Command $mockAgentRuntimeCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockAgentRuntimeBaseUrl/healthz" -TimeoutSeconds 30
-    }
     if ($StartMockTspEndpoint) {
         $envExpr = "`$env:MOCK_TSP_ENDPOINT_PORT='$mockTspEndpointPort'"
         if ($MockTspEndpointVid) {
@@ -1638,8 +1620,8 @@ try {
             -InksonBaseUrl $InksonBaseUrl `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
-            -SolandServiceDid $SolandServiceDid `
-            -CoauthServiceDid $CoauthServiceDid `
+            -SolandServiceId $SolandServiceId `
+            -CoauthServiceId $CoauthServiceId `
             -OAuthIntrospectionBearer $CoauthOAuthIntrospectionBearer `
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
@@ -1687,10 +1669,10 @@ try {
         $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $workspaceRoot
         $staridCmd = (
             "`$env:STARID_BIND='127.0.0.1:{0}'; " +
-            "`$env:STARID_SERVICE_DID={1}; " +
+            "`$env:STARID_SERVICE_ID={1}; " +
             "`$env:STARID_DEVELOPMENT_MODE='true'; " +
             "& {2}"
-        ) -f $staridPort, (Quote-PsLiteral $StaridServiceDid), (Quote-PsLiteral $staridBinary)
+        ) -f $staridPort, (Quote-PsLiteral $StaridServiceId), (Quote-PsLiteral $staridBinary)
         $managedServices.Add((Start-ManagedCommand -Name "starid" -Command $staridCmd -WorkingDirectory (Split-Path -Parent $staridBinary) -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($StaridBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
@@ -1708,7 +1690,7 @@ try {
         $teabayCmd = (
             "`$env:TEABAY_BIND='127.0.0.1:{0}'; " +
             "`$env:TEABAY_PUBLIC_BASE_URL={1}; " +
-            "`$env:TEABAY_SERVICE_DID={2}; " +
+            "`$env:TEABAY_SERVICE_ID={2}; " +
             "`$env:TEABAY_DEVELOPMENT_MODE='true'; " +
             "`$env:TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED='true'; " +
             "`$env:DATABASE_URL={3}; " +
@@ -1716,7 +1698,7 @@ try {
         ) -f `
             $teabayPort,
             (Quote-PsLiteral $TeabayBaseUrl),
-            (Quote-PsLiteral $TeabayServiceDid),
+            (Quote-PsLiteral $TeabayServiceId),
             (Quote-PsLiteral $teabayDb),
             (Quote-PsLiteral $teabayBinary)
         $managedServices.Add((Start-ManagedCommand -Name "teabay" -Command $teabayCmd -WorkingDirectory (Split-Path -Parent $teabayBinary) -LogDirectory $serviceLogDir))
@@ -1761,7 +1743,7 @@ try {
     function Build-SolandDockerEnvironment {
         param(
             [Parameter(Mandatory = $true)][string]$BaseUrl,
-            [Parameter(Mandatory = $true)][string]$ServiceDid,
+            [Parameter(Mandatory = $true)][string]$ServiceId,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
@@ -1778,7 +1760,7 @@ try {
             DATABASE_URL = ""
             SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
-            SOLAND_SERVICE_DID = $ServiceDid
+            SOLAND_SERVICE_ID = $ServiceId
             SOLAND_DEVELOPMENT_MODE = "true"
             SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             SOLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
@@ -1820,7 +1802,7 @@ try {
     function Build-SolandCommand {
         param(
             [Parameter(Mandatory = $true)][string]$BaseUrl,
-            [Parameter(Mandatory = $true)][string]$ServiceDid,
+            [Parameter(Mandatory = $true)][string]$ServiceId,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
             [Parameter(Mandatory = $true)][int]$Port,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
@@ -1856,7 +1838,7 @@ try {
             $rustLogForward +
             "`$env:DATABASE_URL=''; " +
             "`$env:SOLAND_PUBLIC_BASE_URL={0}; " +
-            "`$env:SOLAND_SERVICE_DID={1}; " +
+            "`$env:SOLAND_SERVICE_ID={1}; " +
             "`$env:SOLAND_DEVELOPMENT_MODE='true'; " +
             "`$env:SOLAND_CORS_ALLOW_ORIGIN={2}; " +
             "`$env:SOLAND_METRICS_BIND='127.0.0.1:{3}'; " +
@@ -1874,7 +1856,7 @@ try {
             "cargo run --manifest-path {10} -- --bind 127.0.0.1:{11}"
         ) -f `
             (Quote-PsLiteral $BaseUrl),
-            (Quote-PsLiteral $ServiceDid),
+            (Quote-PsLiteral $ServiceId),
             (Quote-PsLiteral $CorsAllowOrigin),
             $MetricsPort,
             (Quote-PsLiteral $ObjectsRoot),
@@ -1899,11 +1881,11 @@ try {
     $solandCorsAllowOrigin = if ($InksonBaseUrl) { $InksonBaseUrl } else { "http://127.0.0.1" }
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
-        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceDid" } else { "" }
+        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceId" } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
         $SolandCommand = Build-SolandCommand `
             -BaseUrl $SolandBaseUrl `
-            -ServiceDid $SolandServiceDid `
+            -ServiceId $SolandServiceId `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
             -Port $solandPort `
             -MetricsPort $solandMetricsPort `
@@ -1916,11 +1898,11 @@ try {
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
         $managedServices.Add((Start-ManagedCommand -Name $solandName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir))
     } elseif ($willStartDockerSoland) {
-        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceDid" } else { "" }
+        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceId" } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
         $solandDockerEnv = Build-SolandDockerEnvironment `
             -BaseUrl $SolandBaseUrl `
-            -ServiceDid $SolandServiceDid `
+            -ServiceId $SolandServiceId `
             -MetricsPort $solandMetricsPort `
             -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
             -CorsAllowOrigin $solandCorsAllowOrigin `
@@ -1944,11 +1926,11 @@ try {
         if ($SolandRuntime -eq "docker") {
             $solandBetaDockerEnv = Build-SolandDockerEnvironment `
                 -BaseUrl $solandBetaBaseUrl `
-                -ServiceDid $SolandBetaServiceDid `
+                -ServiceId $SolandBetaServiceId `
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
-                -FederationPeers "$SolandBaseUrl|$SolandServiceDid"
+                -FederationPeers "$SolandBaseUrl|$SolandServiceId"
             $managedServices.Add((Start-ManagedDockerSoland `
                         -Name "soland-beta" `
                         -Image $SolandImage `
@@ -1960,13 +1942,13 @@ try {
         } else {
             $solandBetaCommand = Build-SolandCommand `
                 -BaseUrl $solandBetaBaseUrl `
-                -ServiceDid $SolandBetaServiceDid `
+                -ServiceId $SolandBetaServiceId `
                 -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
                 -Port $solandBetaPort `
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFile $solandBetaTraceFile `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
-                -FederationPeers "$SolandBaseUrl|$SolandServiceDid"
+                -FederationPeers "$SolandBaseUrl|$SolandServiceId"
             $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         }
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
@@ -2046,7 +2028,7 @@ try {
     $env:COTEST_UI_SCREENSHOT_DIR = $screenshotDir
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
-    $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
+    $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
     if ($InksonBaseUrl) {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
@@ -2054,9 +2036,9 @@ try {
     }
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
-        $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
+        $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
-        $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
+        $env:COTEST_SOLAND_BETA_SERVICE_ID = $SolandBetaServiceId
         $env:COTEST_REQUIRE_DUAL_SOLAND = "1"
         if ($InksonBaseUrl) {
             $env:COTEST_INKSON_ALPHA_BASE_URL = $InksonBaseUrl
@@ -2070,16 +2052,16 @@ try {
         }
     } else {
         Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_DUAL_SOLAND -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue
     }
     if ($CoauthBaseUrl) {
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
-        $env:COTEST_COAUTH_SERVICE_DID = $CoauthServiceDid
+        $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
         # The OAuth client_id soland is configured to advertise (see
         # $solandCoauthEnv / SOLAND_OAUTH_CLIENT_ID). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
@@ -2098,24 +2080,24 @@ try {
         $env:COTEST_REAL_OIDC_LOGIN = "1"
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_COAUTH_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
     }
     if ($StaridBaseUrl) {
         $env:COTEST_STARID_BASE_URL = $StaridBaseUrl.TrimEnd("/")
-        $env:COTEST_STARID_SERVICE_DID = $StaridServiceDid
+        $env:COTEST_STARID_SERVICE_ID = $StaridServiceId
     } else {
         Remove-Item Env:COTEST_STARID_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_STARID_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_STARID_SERVICE_ID -ErrorAction SilentlyContinue
     }
     if ($TeabayBaseUrl) {
         $env:COTEST_TEABAY_BASE_URL = $TeabayBaseUrl.TrimEnd("/")
-        $env:COTEST_TEABAY_SERVICE_DID = $TeabayServiceDid
+        $env:COTEST_TEABAY_SERVICE_ID = $TeabayServiceId
     } else {
         Remove-Item Env:COTEST_TEABAY_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_TEABAY_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_TEABAY_SERVICE_ID -ErrorAction SilentlyContinue
     }
     if ($mockIdpBaseUrl) {
         $env:COTEST_MOCK_IDP_BASE_URL = $mockIdpBaseUrl
@@ -2176,17 +2158,6 @@ try {
     } else {
         Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_DID -ErrorAction SilentlyContinue
-    }
-    if ($mockAgentRuntimeBaseUrl) {
-        $env:COTEST_MOCK_AGENT_RUNTIME_BASE_URL = $mockAgentRuntimeBaseUrl
-        if ($MockAgentRuntimeDid) {
-            $env:COTEST_MOCK_AGENT_RUNTIME_DID = $MockAgentRuntimeDid
-        } else {
-            Remove-Item Env:COTEST_MOCK_AGENT_RUNTIME_DID -ErrorAction SilentlyContinue
-        }
-    } else {
-        Remove-Item Env:COTEST_MOCK_AGENT_RUNTIME_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_AGENT_RUNTIME_DID -ErrorAction SilentlyContinue
     }
     if ($mockTspEndpointBaseUrl) {
         $env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL = $mockTspEndpointBaseUrl
@@ -2704,9 +2675,9 @@ $summary = [pscustomobject]@{
     soland_runtime = $startedSolandRuntime
     soland_image = if ($startedSolandRuntime -eq "docker") { $SolandImage } else { $null }
     soland_base_url = $SolandBaseUrl
-    soland_service_did = $SolandServiceDid
+    soland_service_id = $SolandServiceId
     soland_beta_base_url = $solandBetaBaseUrl
-    soland_beta_service_did = if ($DualSoland) { $SolandBetaServiceDid } else { $null }
+    soland_beta_service_id = if ($DualSoland) { $SolandBetaServiceId } else { $null }
     dual_soland = [bool]$DualSoland
     inkson_alpha_base_url = if ($DualSoland) { $InksonBaseUrl } else { $null }
     inkson_beta_base_url = if ($DualSoland) { $inksonBetaBaseUrl } else { $null }
@@ -2722,13 +2693,13 @@ $summary = [pscustomobject]@{
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     inkson_base_url = $InksonBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
-    coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
+    coauth_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     coauth_config = $coauthConfigPath
     coauth_postgres_container = if ($ephemeralPostgres) { $ephemeralPostgres.ContainerName } else { $null }
     starid_base_url = if ($StaridBaseUrl) { $StaridBaseUrl } else { $null }
-    starid_service_did = if ($StaridBaseUrl) { $StaridServiceDid } else { $null }
+    starid_service_id = if ($StaridBaseUrl) { $StaridServiceId } else { $null }
     teabay_base_url = if ($TeabayBaseUrl) { $TeabayBaseUrl } else { $null }
-    teabay_service_did = if ($TeabayBaseUrl) { $TeabayServiceDid } else { $null }
+    teabay_service_id = if ($TeabayBaseUrl) { $TeabayServiceId } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
     coauth_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
     coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_arkret/gate/account/session-grants/introspect" } else { $null }
@@ -2766,9 +2737,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - soland_runtime: $($summary.soland_runtime)
 - soland_image: $($summary.soland_image)
 - soland_base_url: $($summary.soland_base_url)
-- soland_service_did: $($summary.soland_service_did)
+- soland_service_id: $($summary.soland_service_id)
 - soland_beta_base_url: $($summary.soland_beta_base_url)
-- soland_beta_service_did: $($summary.soland_beta_service_did)
+- soland_beta_service_id: $($summary.soland_beta_service_id)
 - dual_soland: $($summary.dual_soland)
 - inkson_alpha_base_url: $($summary.inkson_alpha_base_url)
 - inkson_beta_base_url: $($summary.inkson_beta_base_url)
@@ -2784,14 +2755,14 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_mimi_facade_did: $($summary.mock_mimi_facade_did)
 - inkson_base_url: $($summary.inkson_base_url)
 - coauth_base_url: $($summary.coauth_base_url)
-- coauth_service_did: $($summary.coauth_service_did)
+- coauth_service_id: $($summary.coauth_service_id)
 - coauth_config: $($summary.coauth_config)
 - coauth_oauth_introspection_url: $($summary.coauth_oauth_introspection_url)
 - coauth_session_grant_introspection_url: $($summary.coauth_session_grant_introspection_url)
 - starid_base_url: $($summary.starid_base_url)
-- starid_service_did: $($summary.starid_service_did)
+- starid_service_id: $($summary.starid_service_id)
 - teabay_base_url: $($summary.teabay_base_url)
-- teabay_service_did: $($summary.teabay_service_did)
+- teabay_service_id: $($summary.teabay_service_id)
 - screenshots: $($summary.screenshots)
 - visual_baselines: $($summary.visual_baselines)
 - diagnostics: $($summary.diagnostics)

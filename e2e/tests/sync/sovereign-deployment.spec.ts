@@ -4,7 +4,7 @@
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { solandBaseUrl, solandServiceDid, hasDualSoland, type SolandKey } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId, hasDualSoland, type SolandKey } from "../../helpers/env";
 
 test.describe.configure({ mode: "serial" });
 
@@ -21,7 +21,7 @@ test.describe("sovereign deployment", () => {
     const mainInfo = await getJson(request, "alpha", "/_soland/admin/deployment/info");
     expect(mainInfo.profile).toBe("sovereign_main");
     expect(mainInfo.trusted_enclaves).toEqual(
-      expect.arrayContaining([expect.objectContaining({ server_id: solandServiceDid("beta") })]),
+      expect.arrayContaining([expect.objectContaining({ server_id: solandServiceId("beta") })]),
     );
 
     const enclaveInfo = await getJson(request, "beta", "/_soland/admin/deployment/info");
@@ -47,7 +47,7 @@ test.describe("sovereign deployment", () => {
       `/_soland/self/realm/${encodeURIComponent(fixture.enclaveRealmId)}`,
     );
     expect(betaRealm.profile).toBe("enclave");
-    expect(betaRealm.hosted_on).toBe(solandServiceDid("beta"));
+    expect(betaRealm.hosted_on).toBe(solandServiceId("beta"));
 
     const bobStatus = await getJson(
       request,
@@ -214,19 +214,19 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
     upstream_available: true,
   });
   await postJson(request, "alpha", "/_soland/admin/deployment/register-enclave", {
-    server_id: solandServiceDid("beta"),
+    server_id: solandServiceId("beta"),
     base_url: solandBaseUrl("beta"),
     trust_chain: ["did:web:*.example.org"],
   });
   await postJson(request, "alpha", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
-    hosted_on: solandServiceDid("beta"),
+    hosted_on: solandServiceId("beta"),
     created_by: aliceDid,
     external_invite_policy: "allowed",
   });
   await postJson(request, "beta", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
-    hosted_on: solandServiceDid("beta"),
+    hosted_on: solandServiceId("beta"),
     created_by: aliceDid,
     external_invite_policy: "allowed",
   });

@@ -35,7 +35,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
-import { type SolandKey, solandServiceDid } from "./env";
+import { type SolandKey, solandServiceId } from "./env";
 import { base64url } from "./encoding";
 import { base64urlJsonRaw } from "./soland-api";
 
@@ -73,7 +73,7 @@ export type DpopBoundGrant = {
 
 export type MintDpopGrantOpts = {
   /// Audience the grant is bound to. MUST equal the target soland service DID,
-  /// because soland rejects a grant whose audience is not its own service_did.
+  /// because soland rejects a grant whose audience is not its own service_id.
   audience?: string;
   /// Scopes to bake into the grant. Defaults (applied server-side) carry the
   /// principal-server session.bind scope + a `urn:arkret:client:device:<id>`
@@ -282,7 +282,7 @@ export async function mintDpopBoundGrant(
   deviceKey: DpopDeviceKey,
   opts: MintDpopGrantOpts = {},
 ): Promise<DpopBoundGrant | undefined> {
-  const audience = opts.audience ?? solandServiceDid(opts.server);
+  const audience = opts.audience ?? solandServiceId(opts.server);
   const response = await request.post(
     `${coauthBase}/_coauth/account/test/debug/issue-dpop-grant`,
     {

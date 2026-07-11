@@ -44,7 +44,7 @@
         "epoch": 3,
         "body": {
           "proof_kinds": ["trusted_recovery_service"],
-          "service_did": "did:web:custodian.example",
+          "service_id": "did:web:custodian.example",
           "service_audience": "https://custodian.example"
         },
         "created_at": "2026-05-27T00:00:00Z"

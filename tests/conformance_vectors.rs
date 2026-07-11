@@ -721,14 +721,14 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         handle: invite_handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
-            recipient_service_did: principal.clone(),
+            recipient_service_id: principal.clone(),
             recipient_service_type: RecipientServiceType::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: None,
             policy_event_ref: None,
         },
-        issuer_service_did: principal,
+        issuer_service_id: principal,
         audience: "ak:realm:01904100-0000-7000-8000-test8audience".to_owned(),
         // Fixed RFC3339 constants — vectors are deterministic, not wall-clock.
         expires_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00Z")?

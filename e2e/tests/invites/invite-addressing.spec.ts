@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   canonicalTimestamp,
   sha256CanonicalJson,
@@ -11,11 +11,11 @@ import {
 
 test.describe("invite addressing", () => {
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
-    const recipientServiceDid = solandServiceDid();
+    const recipientServiceId = solandServiceId();
     const invitee = "did:web:cotest-invitee.example";
     const introductionEvidence = { kind: "explicit_address" };
     const inviteDeliveryTarget = {
-      recipient_service_did: recipientServiceDid,
+      recipient_service_id: recipientServiceId,
       recipient_service_type: "principal_server" as const,
     };
     const inviteEvent = signedEventEnvelope({
@@ -45,7 +45,7 @@ test.describe("invite addressing", () => {
       },
       {
         origin: "did:web:cotest-source.example",
-        destination: recipientServiceDid,
+        destination: recipientServiceId,
       },
     );
 
@@ -72,7 +72,7 @@ test.describe("invite addressing", () => {
     const locator = await ok.json();
     expect(locator.schema).toBe("ak.schema.principal_locator.v1");
     expect(locator.subject_id).toBe("did:web:locator-subject.example");
-    expect(locator.recipient_service_did).toBe(solandServiceDid());
+    expect(locator.recipient_service_id).toBe(solandServiceId());
     expect(locator.issued_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     expect(locator.expires_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     expect(locator.locator_ref_digest).toMatch(/^sha256:/);

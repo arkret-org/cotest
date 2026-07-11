@@ -307,7 +307,7 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
                     "notary_profile": "single_did",
                     "digest_algorithm": "sha256",
                     "plaintext_visible_services": [{
-                        "service_did": alice.service_did(),
+                        "service_id": alice.service_id(),
                         "service_type": "principal_server",
                         "data_classes": [
                             "message_content", "strand_content", "attachment_plaintext",

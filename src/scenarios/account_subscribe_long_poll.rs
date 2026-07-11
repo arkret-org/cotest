@@ -184,7 +184,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             "summary": "Joined History Sync Realm",
             "public": false,
             "history_visibility": "joined",
-            "plaintext_visible_services": [alice.service_did().to_owned()]
+            "plaintext_visible_services": [alice.service_id().to_owned()]
         }))
         .await?;
     let realm_id = created["realm_id"]
@@ -591,7 +591,7 @@ async fn create_invite_now(
         invite_create_payload(
             &invite_id,
             invitee.actor.as_str(),
-            invitee.service_did(),
+            invitee.service_id(),
             "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             expires_at,
         )?,

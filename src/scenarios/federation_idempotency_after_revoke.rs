@@ -4,7 +4,7 @@
 //! Spec (round 2+3 cleanup, T14):
 //!
 //! Federation idempotency cache entries MUST carry:
-//!   * `Source-Service-DID`
+//!   * `Source-Service-ID`
 //!   * `verification_method`
 //!   * `service_binding_ref`
 //!   * `origin_key_state_digest`

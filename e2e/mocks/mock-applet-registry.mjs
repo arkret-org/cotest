@@ -137,25 +137,25 @@ function signedPackage(body) {
       ? body.applet_id
       : typedId("applet");
   const createdAt = rfc3339Now();
-  const serviceDid =
-    body.service_did ?? `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
+  const serviceId =
+    body.service_id ?? `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
   const webhookAuth = body.webhook_auth ?? {
     type: "http_message_signature",
-    key_ref: `${serviceDid}#applet-service-key`,
+    key_ref: `${serviceId}#applet-service-key`,
     accepted_algs: ["EdDSA"],
   };
   const webhookPublicJwk = developmentAppletPublicJwk(webhookAuth.key_ref);
   const webhookPublicKeyMaterial = canonicalJson(webhookPublicJwk);
-  const serviceDidDocument = {
-    id: serviceDid,
+  const serviceIdDocument = {
+    id: serviceId,
     verificationMethod: {
       [webhookAuth.key_ref]: webhookPublicKeyMaterial,
     },
     updated: createdAt,
   };
   const registrationEpochEvidence = {
-    service_did: serviceDid,
-    did_document_digest: canonicalHash(serviceDidDocument),
+    service_id: serviceId,
+    did_document_digest: canonicalHash(serviceIdDocument),
     accepted_signing_keys: [
       {
         key_ref: webhookAuth.key_ref,
@@ -167,8 +167,8 @@ function signedPackage(body) {
     schema: "ak.schema.applet_package.v1",
     package_id: body.package_id ?? `package:${safe}:${uuidV7Like()}`,
     applet_id: appletId,
-    service_did: serviceDid,
-    controller_did: body.controller_did ?? registryDid,
+    service_id: serviceId,
+    controller_id: body.controller_id ?? registryDid,
     base_url: body.base_url ?? serverBaseUrl(),
     bot_actor_id: body.bot_actor_id ?? `did:web:bot-${safe}.joint-e2e.local`,
     claimed_profiles: ["ak.profile.applet_service.v1"],
@@ -222,7 +222,7 @@ function signedPackage(body) {
       body.registration_epoch ??
       canonicalHash({
         applet_id: appletId,
-        service_did: serviceDid,
+        service_id: serviceId,
         namespace: safe,
         created_at: createdAt,
       }),
@@ -259,7 +259,7 @@ function signedPackage(body) {
     applet_package: appletPackage,
     package_digest: packageDigest,
     signing_did: registryDid,
-    service_did_document: serviceDidDocument,
+    service_id_document: serviceIdDocument,
   };
 }
 

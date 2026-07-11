@@ -38,21 +38,21 @@ export function conformanceBaseUrl(key: SolandKey = "default"): string {
 // Service DIDs default to did:webvh (v1 core default service method,
 // identity-did.md); the fixture SCID form matches the spec conformance
 // vectors. did:web is reserved for explicit no-history / negative fixtures.
-export function solandServiceDid(key: SolandKey = "default"): string {
+export function solandServiceId(key: SolandKey = "default"): string {
   if (key === "alpha") {
     return (
-      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ??
+      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_ID") ??
       "did:webvh:z6mkfixture:soland-alpha.joint-e2e.local"
     );
   }
   if (key === "beta") {
     return (
-      optionalEnv("COTEST_SOLAND_BETA_SERVICE_DID") ??
+      optionalEnv("COTEST_SOLAND_BETA_SERVICE_ID") ??
       "did:webvh:z6mkfixture:soland-beta.joint-e2e.local"
     );
   }
   return (
-    optionalEnv("COTEST_SOLAND_SERVICE_DID") ?? "did:webvh:z6mkfixture:soland.joint-e2e.local"
+    optionalEnv("COTEST_SOLAND_SERVICE_ID") ?? "did:webvh:z6mkfixture:soland.joint-e2e.local"
   );
 }
 
@@ -90,8 +90,8 @@ export function coauthBaseUrl(): string | undefined {
   return optionalEnv("COTEST_COAUTH_BASE_URL")?.replace(/\/$/, "");
 }
 
-export function coauthServiceDid(): string {
-  return optionalEnv("COTEST_COAUTH_SERVICE_DID") ?? "did:webvh:z6mkfixture:coauth.joint-e2e.local";
+export function coauthServiceId(): string {
+  return optionalEnv("COTEST_COAUTH_SERVICE_ID") ?? "did:webvh:z6mkfixture:coauth.joint-e2e.local";
 }
 
 // The OAuth `client_id` soland is configured to advertise in
@@ -205,14 +205,6 @@ export function mockAppletRegistryBaseUrl(): string | undefined {
 
 export function mockAppletRegistryDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_DID");
-}
-
-export function mockAgentRuntimeBaseUrl(): string | undefined {
-  return optionalEnv("COTEST_MOCK_AGENT_RUNTIME_BASE_URL")?.replace(/\/$/, "");
-}
-
-export function mockAgentRuntimeDid(): string | undefined {
-  return optionalEnv("COTEST_MOCK_AGENT_RUNTIME_DID");
 }
 
 export function mockTspEndpointBaseUrl(): string | undefined {

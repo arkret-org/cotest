@@ -131,8 +131,8 @@ fn normalize_plaintext_visible_service(entry: &Value) -> Value {
         return entry.clone();
     }
     match entry.as_str() {
-        Some(service_did) => json!({
-            "service_did": service_did,
+        Some(service_id) => json!({
+            "service_id": service_id,
             "service_type": "principal_server",
             "data_classes": [
                 "message_content",
@@ -153,7 +153,7 @@ fn normalize_plaintext_visible_service(entry: &Value) -> Value {
     }
 }
 
-fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &Value) -> Value {
+fn realm_create_payload(actor: &str, service_id: &str, realm_id: &str, input: &Value) -> Value {
     let title = input
         .get("title")
         .and_then(Value::as_str)
@@ -194,7 +194,7 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
         .get("plaintext_visible_services")
         .cloned()
         .filter(Value::is_array)
-        .unwrap_or_else(|| json!([service_did]));
+        .unwrap_or_else(|| json!([service_id]));
     let plaintext_visible_services = Value::Array(
         plaintext_visible_services
             .as_array()

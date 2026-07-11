@@ -74,8 +74,8 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     assert_eq!(describe_a["service_type"], "principal_server");
     assert_eq!(describe_b["service_type"], "principal_server");
     assert_ne!(
-        server_a.service_did(),
-        server_b.service_did(),
+        server_a.service_id(),
+        server_b.service_id(),
         "two-node federation requires distinct service DIDs"
     );
 
@@ -94,7 +94,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // accepts an inbound event only when the actor's home trust domain equals the
     // asserted `source-trust-domain` (or the actor is already a known member).
     // A DID under an unrelated domain is rejected `capability_denied` on push.
-    let alice_did = format!("{}:alice-e2", server_a.service_did());
+    let alice_did = format!("{}:alice-e2", server_a.service_id());
     let actor_a = server_a
         .register_client(&alice_did, "@alice-e2", &device_alice)
         .await
@@ -109,12 +109,12 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         .create_realm_with(json!({
             "title": "e2-federation-two-node-realm",
             "plaintext_visible_services": [
-                server_a.service_did(),
-                server_b.service_did(),
+                server_a.service_id(),
+                server_b.service_id(),
             ],
             "sync_endpoints": [
                 {
-                    "did": server_a.service_did(),
+                    "did": server_a.service_id(),
                     "endpoint": server_a.base_url().as_str(),
                     "role": "federation_peer",
                     "service_type": "principal_server",
@@ -122,7 +122,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                     "visibility_scope": "plaintext_events",
                 },
                 {
-                    "did": server_b.service_did(),
+                    "did": server_b.service_id(),
                     "endpoint": server_b.base_url().as_str(),
                     "role": "federation_peer",
                     "service_type": "principal_server",
@@ -291,10 +291,10 @@ fn with_peer_headers_for_digest(
     destination: &crate::harness::ArkretServer,
     body_digest: Option<(String, String)>,
 ) -> Result<reqwest::RequestBuilder> {
-    let source_service_did = source.service_did();
-    let destination_service_did = destination.service_did();
-    let source_trust_domain = trust_domain_for(source_service_did);
-    let destination_trust_domain = trust_domain_for(destination_service_did);
+    let source_service_id = source.service_id();
+    let destination_service_id = destination.service_id();
+    let source_trust_domain = trust_domain_for(source_service_id);
+    let destination_trust_domain = trust_domain_for(destination_service_id);
 
     let parsed_url = Url::parse(target_url)?;
     let authority = parsed_url
@@ -309,7 +309,7 @@ fn with_peer_headers_for_digest(
 
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;
-    let keyid = format!("{source_service_did}#federation-fanout-key");
+    let keyid = format!("{source_service_id}#federation-fanout-key");
     let content_digest_param = if body_digest.is_some() {
         "\"content-digest\" "
     } else {
@@ -341,20 +341,20 @@ fn with_peer_headers_for_digest(
          \"@target-uri\": {target_uri}\n\
          \"@authority\": {authority}\n\
          {content_digest_line}\
-         \"source-service-did\": {source_service_did}\n\
-         \"destination-service-did\": {destination_service_did}\n\
+         \"source-service-did\": {source_service_id}\n\
+         \"destination-service-did\": {destination_service_id}\n\
          \"source-trust-domain\": {source_trust_domain}\n\
          \"destination-trust-domain\": {destination_trust_domain}\n\
          {request_digest_line}\
          \"@signature-params\": {signature_params}",
         method.to_ascii_uppercase()
     );
-    let signing_key = development_service_signing_key(source_service_did);
+    let signing_key = development_service_signing_key(source_service_id);
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
     let mut builder = builder
-        .header("Source-Service-DID", source_service_did)
-        .header("Destination-Service-DID", destination_service_did)
+        .header("Source-Service-ID", source_service_id)
+        .header("Destination-Service-ID", destination_service_id)
         .header("Source-Trust-Domain", source_trust_domain)
         .header("Destination-Trust-Domain", destination_trust_domain)
         .header("Signature-Input", format!("sig1={signature_params}"))
@@ -367,28 +367,28 @@ fn with_peer_headers_for_digest(
     Ok(builder)
 }
 
-fn development_service_signing_key(service_did: &str) -> arkret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_id: &str) -> arkret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
-    hasher.update(service_did.as_bytes());
+    hasher.update(service_id.as_bytes());
     let seed: [u8; 32] = hasher.finalize().into();
     signing_key_from_seed(&seed)
 }
 
-fn trust_domain_for(service_did: &str) -> String {
-    format!("ak:trust_domain:{}", did_host_from_service_did(service_did))
+fn trust_domain_for(service_id: &str) -> String {
+    format!("ak:trust_domain:{}", did_host_from_service_id(service_id))
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,
-/// mirroring soland's `trust_domain_from_service_did`.
+/// mirroring soland's `trust_domain_from_service_id`.
 ///
 /// For `did:webvh:<scid>:<host>[:...]` the host is the segment *after* the SCID,
 /// so the SCID must not leak into the trust domain (soland test
 /// `trust_domain_derives_webvh_host_not_scid`). `did:web:<host>[:...]` and the
 /// `did:key:` fallback are kept for the negative/no-history fixtures that still
 /// mint those forms.
-fn did_host_from_service_did(service_did: &str) -> String {
-    if let Some(rest) = service_did.strip_prefix("did:webvh:") {
+fn did_host_from_service_id(service_id: &str) -> String {
+    if let Some(rest) = service_id.strip_prefix("did:webvh:") {
         let mut parts = rest.split(':');
         let scid = parts.next().unwrap_or_default();
         if let Some(host) = parts.next() {
@@ -397,16 +397,16 @@ fn did_host_from_service_did(service_did: &str) -> String {
             }
         }
     }
-    if let Some(rest) = service_did.strip_prefix("did:web:") {
+    if let Some(rest) = service_id.strip_prefix("did:web:") {
         if let Some(host) = rest.split(':').next() {
             if !host.is_empty() {
                 return host.to_ascii_lowercase();
             }
         }
     }
-    service_did
+    service_id
         .strip_prefix("did:key:")
-        .unwrap_or(service_did)
+        .unwrap_or(service_id)
         .to_ascii_lowercase()
         .replace(':', ".")
 }

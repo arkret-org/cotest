@@ -1398,10 +1398,10 @@ mod tests {
 
     #[test]
     fn extracts_rust_format_paths() {
-        let line = r#"self.get_json(&format!("_arkret/self/agents/{agent_principal_id}"))"#;
+        let line = r#"self.get_json(&format!("_arkret/self/agents/{agent_id}"))"#;
         let literals = extract_string_literals(line);
         let paths = extract_path_candidates(&literals[0]);
-        assert_eq!(paths, vec!["/_arkret/self/agents/{agent_principal_id}"]);
+        assert_eq!(paths, vec!["/_arkret/self/agents/{agent_id}"]);
     }
 
     #[test]

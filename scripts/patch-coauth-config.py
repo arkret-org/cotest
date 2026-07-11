@@ -191,16 +191,16 @@ def main() -> int:
         "arkret:\n"
         "  principal_servers:\n"
         "  - name: soland\n"
-        f"    audience: {yaml_string(args.soland_service_did)}\n"
+        f"    audience: {yaml_string(args.soland_service_id)}\n"
         f"    endpoint: {yaml_string(soland_base)}\n"
-        f"    did: {yaml_string(args.soland_service_did)}\n"
+        f"    did: {yaml_string(args.soland_service_id)}\n"
         f"    oauth_introspection_bearer: {yaml_string(args.oauth_introspection_bearer)}\n"
         "    session_grant_introspection_bearer: "
         f"{yaml_string(args.session_grant_introspection_bearer)}\n"
         "    embedded_webvh_registration_bearer: "
         f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
-        f"  service_did: {yaml_string(args.coauth_service_did)}\n"
-        f"  issuer_did: {yaml_string(args.coauth_service_did)}\n"
+        f"  service_id: {yaml_string(args.coauth_service_id)}\n"
+        f"  issuer_did: {yaml_string(args.coauth_service_id)}\n"
         # coauth's service-DID bootstrap validation only admits did:web
         # service/issuer DIDs under the explicit personal-node no-history
         # profile; the joint harness runs did:web:*.joint-e2e.local fixtures.

@@ -180,7 +180,7 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
                 "federation_policy": "open",
                 "notary_profile": "single_did",
                 "digest_algorithm": "sha256",
-                "plaintext_visible_services": [alice.service_did()],
+                "plaintext_visible_services": [alice.service_id()],
                 "notary": {
                     "type": "single_did",
                     "did": &alice.actor,

@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 import {
   hasDualSoland,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import {
   acceptInviteApi,
@@ -301,11 +301,11 @@ test.describe("GDPR / audit / retention", () => {
           discoverability: "listed",
           history_visibility: "shared",
           invitees: [bob.did],
-          invitee_service_dids: { [bob.did]: solandServiceDid("beta") },
+          invitee_service_ids: { [bob.did]: solandServiceId("beta") },
           ownerDid: alice.did,
           plaintext_visible_services: [
-            solandServiceDid("alpha"),
-            solandServiceDid("beta"),
+            solandServiceId("alpha"),
+            solandServiceId("beta"),
           ],
         },
         { server: "alpha" },
@@ -359,7 +359,7 @@ test.describe("GDPR / audit / retention", () => {
       const remoteBefore = await queryPeerEventsApi(request, {
         server: "beta",
         actorDid: alice.did,
-        sourceDid: solandServiceDid("alpha"),
+        sourceDid: solandServiceId("alpha"),
         limit: 100,
       });
       const beforeJson = JSON.stringify(remoteBefore);
@@ -380,7 +380,7 @@ test.describe("GDPR / audit / retention", () => {
             const remoteAfter = await queryPeerEventsApi(request, {
               server: "beta",
               actorDid: alice.did,
-              sourceDid: solandServiceDid("alpha"),
+              sourceDid: solandServiceId("alpha"),
               limit: 100,
             });
             return JSON.stringify(remoteAfter);

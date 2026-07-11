@@ -27,7 +27,7 @@ import {
   coauthBaseUrl,
   coauthOidcClientId,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
@@ -129,7 +129,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     await ensureRegistered(request, user);
     const deviceKey = generateDpopDeviceKey();
     const grant = await mintDpopBoundGrant(request, coauth, user.did, user.deviceId, deviceKey, {
-      audience: solandServiceDid(),
+      audience: solandServiceId(),
     });
     if (!grant) {
       return undefined;

@@ -39,8 +39,8 @@ pub async fn agent_auth_run() -> Result<()> {
     // (c) agent_key_proof verification_method targets the agent
     //     principal — NOT the controller — so a single round-trip pinned
     //     here protects against the smuggle-controller-DID exploit.
-    let agent_principal_id = Did::new("did:web:agent.example".to_owned())
-        .map_err(|e| anyhow!("agent_principal_id: {e}"))?;
+    let agent_id =
+        Did::new("did:web:agent.example".to_owned()).map_err(|e| anyhow!("agent_id: {e}"))?;
     // Spec head: the typed `ak:agent_key:` id family is retired. `key_id`
     // is a plain string, preferring the DID URL verification-method form
     // (`<agent_principal_did>#<fragment>`).
@@ -52,10 +52,8 @@ pub async fn agent_auth_run() -> Result<()> {
             "verification_method must be a DID URL fragment, got `{verification_method}`"
         ));
     }
-    if verification_method.split('#').next() != Some(agent_principal_id.as_str()) {
-        return Err(anyhow!(
-            "verification_method DID must match agent_principal_id"
-        ));
+    if verification_method.split('#').next() != Some(agent_id.as_str()) {
+        return Err(anyhow!("verification_method DID must match agent_id"));
     }
 
     // (d) authz: the four actor-private agent capability actions stay

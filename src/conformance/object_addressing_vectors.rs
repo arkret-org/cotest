@@ -505,7 +505,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
         "join_candidates": [
             {
                 "realm_id": format!("ak:realm:{R}"),
-                "service_did": "did:web:relay.example",
+                "service_id": "did:web:relay.example",
                 "service_type": "principal_server",
                 "role": "primary",
                 "operations": ["ak.self.events.command.submit"],
@@ -523,7 +523,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             },
             {
                 "realm_id": format!("ak:realm:{R}"),
-                "service_did": "did:web:teabay.example",
+                "service_id": "did:web:teabay.example",
                 "service_type": "principal_server",
                 "role": "mirror",
                 "operations": ["ak.self.events.command.submit"],
@@ -563,7 +563,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let candidate_services: Vec<&str> = body
         .join_candidates
         .iter()
-        .map(|candidate| candidate.service_did.as_str())
+        .map(|candidate| candidate.service_id.as_str())
         .collect();
     if candidate_services != vec!["did:web:relay.example", "did:web:teabay.example"] {
         bail!("join_candidates common field MUST round-trip in order");

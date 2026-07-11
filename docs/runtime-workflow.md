@@ -78,7 +78,7 @@ The image contract is intentionally simple:
 
 - start `soland` as the entrypoint
 - listen on `SOLAND_BIND`
-- honor `SOLAND_PUBLIC_BASE_URL`, `SOLAND_SERVICE_DID`,
+- honor `SOLAND_PUBLIC_BASE_URL`, `SOLAND_SERVICE_ID`,
   `SOLAND_DEVELOPMENT_MODE`, and `SOLAND_BLOB_ROOT`
 - expose port `8008`
 

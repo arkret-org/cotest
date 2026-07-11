@@ -11,7 +11,6 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
-  mockAgentRuntimeBaseUrl,
   mockAppletRegistryBaseUrl,
   mockAuditAgentBaseUrl,
   mockEmailBaseUrl,
@@ -381,65 +380,14 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(body.applet_package.delegation_policy.enabled).toBe(false);
     expect(body.applet_package.e2ee_policy.enabled).toBe(false);
     expect(body.applet_package.proof.event_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(body.applet_package.registration_epoch_evidence.service_did).toBe(
-      body.applet_package.service_did,
+    expect(body.applet_package.registration_epoch_evidence.service_id).toBe(
+      body.applet_package.service_id,
     );
-    expect(body.service_did_document.id).toBe(body.applet_package.service_did);
+    expect(body.service_id_document.id).toBe(body.applet_package.service_id);
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");
   });
-
-  test("mock-agent-runtime: agent card, acp info, task invocation result", async ({
-    request,
-  }) => {
-    const baseUrl = mockAgentRuntimeBaseUrl();
-    test.skip(!baseUrl, "mock-agent-runtime not started for this run");
-
-    const health = await request.get(`${baseUrl}/healthz`);
-    expect(health.status()).toBe(200);
-    const healthBody = await health.json();
-    expect(healthBody.ok).toBe(true);
-    expect(typeof healthBody.did).toBe("string");
-
-    const card = await request.get(`${baseUrl}/.well-known/agent-card.json`);
-    expect(card.status()).toBe(200);
-    const cardBody = await card.json();
-    expect(cardBody.protocol).toBe("a2a");
-    expect(Array.isArray(cardBody.skills)).toBe(true);
-
-    const info = await request.get(`${baseUrl}/info`);
-    expect(info.status()).toBe(200);
-    expect((await info.json()).protocol).toBe("acp");
-
-    // Task invocation mirrors soland's outbound bridge body and returns a
-    // completed result carrying §5.4 result_objects / artifacts /
-    // external_transcript_digest + remote-agent attribution.
-    const sessionId = `ak:agent_interop_session:selftest-${Date.now()}`;
-    const task = await request.post(`${baseUrl}/v1/a2a/tasks`, {
-      data: {
-        session_id: sessionId,
-        counterparty_agent: healthBody.did,
-        params: { op: "synthesize", doc: "selftest" },
-      },
-    });
-    expect(task.status()).toBe(200);
-    const result = await task.json();
-    expect(result.status).toBe("completed");
-    expect(result.session_id).toBe(sessionId);
-    expect(result.attribution).toBe(healthBody.did);
-    expect(result.result_objects[0].object_type).toBe("strand");
-    expect(result.result_objects[0].object_ref).toMatch(/^ak:strand:/);
-    expect(result.artifacts[0].object_ref).toMatch(/^ak:morph:/);
-    expect(result.external_transcript_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-
-    // Rejection path: params.mock_reject → 403 (E1.1 remote_rejected).
-    const rejected = await request.post(`${baseUrl}/v1/a2a/tasks`, {
-      data: { session_id: sessionId, params: { mock_reject: true } },
-    });
-    expect(rejected.status()).toBe(403);
-  });
-
   test("mock-tsp-endpoint: relationship bootstrap, message ACK round-trip", async ({
     request,
   }) => {

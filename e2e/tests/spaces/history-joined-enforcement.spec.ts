@@ -3,7 +3,7 @@
 // @blocking-on: soland#history-visibility-read-path
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   authHeaders,
   accountSubscribeFramesApi,
@@ -210,7 +210,7 @@ async function createRealm(
   createdAtValue: string,
 ) {
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations([
-    solandServiceDid(),
+    solandServiceId(),
     "did:web:soland.local",
   ]);
   await submitSignedEventApi(

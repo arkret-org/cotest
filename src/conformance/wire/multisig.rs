@@ -267,7 +267,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
 /// invariant) + the soland `service_admin_signer` derivation.
 ///
 /// Validator pins:
-/// * positive vectors declare `seed_source` ∈ {configured, ephemeral, service_did_derived};
+/// * positive vectors declare `seed_source` ∈ {configured, ephemeral, service_id_derived};
 /// * canonical_body_sha256 is `sha256:<64-hex>` shape;
 /// * deterministic vectors declare outcome=deterministic_signature OR verify_ok /
 ///   payload_digest_matches / different_signatures;
@@ -277,7 +277,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("production_signing_fixture.json")?;
     validate_profile(&fixture, "ak.profile.production_signing_vectors.v1")?;
 
-    const VALID_SEED_SOURCES: &[&str] = &["configured", "ephemeral", "service_did_derived"];
+    const VALID_SEED_SOURCES: &[&str] = &["configured", "ephemeral", "service_id_derived"];
     const VALID_POSITIVE_OUTCOMES: &[&str] = &[
         "deterministic_signature",
         "non_deterministic_signature",
@@ -333,7 +333,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
         }
         match name {
             "configured_seed_produces_deterministic_signature"
-            | "service_did_derived_seed_is_deterministic_per_did" => {
+            | "service_id_derived_seed_is_deterministic_per_did" => {
                 if outcome != "deterministic_signature" {
                     bail!(
                         "vector {name} must declare outcome=deterministic_signature; got {outcome}"

@@ -34,7 +34,7 @@
 
 服务 actor:
 - soland_a 自身 service DID = `did:web:soland-alpha.joint-e2e.local`,所有 outbound 请求 MUST 以该 service DID 作为 RFC 9421 keyid 签名
-- soland_b 自身 service DID = `did:web:soland-beta.joint-e2e.local`,验证入站签名时按 `Source-Service-DID` header 解析 keyid
+- soland_b 自身 service DID = `did:web:soland-beta.joint-e2e.local`,验证入站签名时按 `Source-Service-ID` header 解析 keyid
 
 ## Pre-conditions
 
@@ -54,8 +54,8 @@
    - Method: `POST`
    - Headers:
      - `Content-Type: application/json`
-     - `Source-Service-DID: did:web:soland-alpha.joint-e2e.local`
-     - `Destination-Service-DID: did:web:soland-beta.joint-e2e.local`
+     - `Source-Service-ID: did:web:soland-alpha.joint-e2e.local`
+     - `Destination-Service-ID: did:web:soland-beta.joint-e2e.local`
      - `Signature-Input: sig1=("@method" "@target-uri" "content-digest" "source-service-did" "destination-service-did");created=<ts>;keyid="<alpha-key-id>";alg="ed25519"`
      - `Signature: sig1=:<base64>:`
      - `Content-Digest: sha-256=:<base64>:`
@@ -63,10 +63,10 @@
    - Body: canonical `EventEnvelope`(invite event)
 3. **soland_b** 收到请求,按 RFC 9421 验证:
    - 解析 `Signature-Input` 的 covered components
-   - 用 `Source-Service-DID` 解析 origin key (通过 `/.well-known/did.json`)
+   - 用 `Source-Service-ID` 解析 origin key (通过 `/.well-known/did.json`)
    - 验证 `Signature` 对 covered components 的签名
    - 验证 `Content-Digest` 与 body 一致
-   - 验证 `Destination-Service-DID` 是自身 DID
+   - 验证 `Destination-Service-ID` 是自身 DID
    - 验证 nonce / `created` ts 在窗口内(防 replay)
 4. 断言:`POST /_arkret/peer/peer/events` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
 5. 断言:bob 通过 `GET /_arkret/self/account/subscribe?catchup=true` 的 `notifications.events`
@@ -131,7 +131,7 @@
   - 拓扑:soland_a → relay (soland_c 或 mock relay) → soland_b
   - soland_a 对 relay 发 push,relay 不解开 EventEnvelope 的签名层,只用自己的 service signature 把请求转发给 soland_b
   - soland_b MUST 同时验证:
-    1. relay 的 RFC 9421 outer signature(`Source-Service-DID = relay`)
+    1. relay 的 RFC 9421 outer signature(`Source-Service-ID = relay`)
     2. EventEnvelope 内 origin actor(`alice@soland_a`)的事件签名
     3. relay 是否被 Realm policy 授权作为 service delegation
   - 断言:多 hop 的端到端签名验证成功;任一层失败整批 reject

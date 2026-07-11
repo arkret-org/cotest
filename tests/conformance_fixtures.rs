@@ -320,9 +320,9 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// T-CONF-INTEROP-DOWNGRADE — MIMI/A2A/ACP downgrade gates are live
+    /// T-CONF-INTEROP-DOWNGRADE — MIMI downgrade gates are live
     /// fixture checks, not ignored placeholders. Covers DID isolation,
-    /// consent-vs-capability separation, external marker inertness, and the
+    /// consent-vs-capability separation and the
     /// v1 ban on reachability proof revival.
     interop_downgrade_fixture_suite_matches_reference_semantics,
     "interop_downgrade_fixture",

@@ -45,8 +45,8 @@ const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_arkret_inbound";
 struct AppletTransactionReplayIdentity {
     operation_id: String,
     direction: String,
-    source_service_did: String,
-    destination_service_did: String,
+    source_service_id: String,
+    destination_service_id: String,
     idempotency_key: String,
 }
 
@@ -298,11 +298,11 @@ fn evaluate_applet_transaction(
         return Ok(json!({"decision": "reject", "reason": "http_signature_required"}));
     }
 
-    let source_header = required_str(transaction, "source_service_did_header")?;
-    let source_body = required_str(transaction, "source_service_did_body")?;
-    let destination_header = required_str(transaction, "destination_service_did_header")?;
-    let install_source = required_str_obj(active_install, "service_did")?;
-    let install_destination = required_str_obj(active_install, "destination_service_did")?;
+    let source_header = required_str(transaction, "source_service_id_header")?;
+    let source_body = required_str(transaction, "source_service_id_body")?;
+    let destination_header = required_str(transaction, "destination_service_id_header")?;
+    let install_source = required_str_obj(active_install, "service_id")?;
+    let install_destination = required_str_obj(active_install, "destination_service_id")?;
 
     if source_header != install_source {
         return Ok(json!({
@@ -442,8 +442,8 @@ fn source_signature_anchor_digest_for_transaction<'a>(
 
 fn applet_transaction_replay_identity(
     transaction: &Value,
-    source_service_did: &str,
-    destination_service_did: &str,
+    source_service_id: &str,
+    destination_service_id: &str,
     idempotency_key: &str,
 ) -> Result<AppletTransactionReplayIdentity> {
     Ok(AppletTransactionReplayIdentity {
@@ -457,8 +457,8 @@ fn applet_transaction_replay_identity(
             .and_then(Value::as_str)
             .unwrap_or(APPLET_TRANSACTION_DEFAULT_DIRECTION)
             .to_owned(),
-        source_service_did: source_service_did.to_owned(),
-        destination_service_did: destination_service_did.to_owned(),
+        source_service_id: source_service_id.to_owned(),
+        destination_service_id: destination_service_id.to_owned(),
         idempotency_key: idempotency_key.to_owned(),
     })
 }

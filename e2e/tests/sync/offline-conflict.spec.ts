@@ -22,7 +22,7 @@ import {
   submitSignedEventApi,
   typedId,
 } from "../../helpers/soland-api";
-import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { hasDualSoland, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -208,11 +208,11 @@ test.describe("offline sync + conflict repair", () => {
           discoverability: "listed",
           history_visibility: "shared",
           invitees: [bob.did],
-          invitee_service_dids: { [bob.did]: solandServiceDid("beta") },
+          invitee_service_ids: { [bob.did]: solandServiceId("beta") },
           ownerDid: alice.did,
           plaintext_visible_services: [
-            solandServiceDid("alpha"),
-            solandServiceDid("beta"),
+            solandServiceId("alpha"),
+            solandServiceId("beta"),
           ],
           federation_policy: "open",
         },
@@ -251,11 +251,11 @@ test.describe("offline sync + conflict repair", () => {
         },
       });
       await pushFederationEvents(request, [missingEvent], {
-        origin: solandServiceDid("alpha"),
-        destination: solandServiceDid("alpha"),
+        origin: solandServiceId("alpha"),
+        destination: solandServiceId("alpha"),
         server: "alpha",
         realmId,
-        idempotencyKey: `${solandServiceDid("alpha")}#cotest-offline-source`,
+        idempotencyKey: `${solandServiceId("alpha")}#cotest-offline-source`,
       });
       await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
@@ -281,7 +281,7 @@ test.describe("offline sync + conflict repair", () => {
       // and ingest it so bob's timeline catches up.
       const backfill = await queryPeerEventsApi(request, {
         server: "alpha",
-        sourceDid: solandServiceDid("beta"),
+        sourceDid: solandServiceId("beta"),
         realmId,
         limit: 100,
       });
@@ -292,11 +292,11 @@ test.describe("offline sync + conflict repair", () => {
         missingEvent.event_id,
       );
       const ingest = await pushFederationEvents(request, backfilledEvents, {
-        origin: solandServiceDid("alpha"),
-        destination: solandServiceDid("beta"),
+        origin: solandServiceId("alpha"),
+        destination: solandServiceId("beta"),
         server: "beta",
         realmId,
-        idempotencyKey: `${solandServiceDid("beta")}#cotest-offline-backfill`,
+        idempotencyKey: `${solandServiceId("beta")}#cotest-offline-backfill`,
       });
       expect(ingest.rejected ?? []).toEqual([]);
       expect(ingest.accepted).toContain(String(missingEvent.event_id));

@@ -11,7 +11,7 @@
 
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   canonicalJson,
   createRealmApi,
@@ -263,7 +263,7 @@ async function createBoundMimiRoom(
           realm_id: realmId,
           strand_id: strandId,
         },
-        hub_provider: solandServiceDid(),
+        hub_provider: solandServiceId(),
         local_provider_role: "hub",
         content_profile: "application/mimi-content",
         mls_group_id: `mls:${roomId}`,
@@ -277,7 +277,7 @@ async function createBoundMimiRoom(
       payload: opaquePayload(roomBinding, "application/vnd.arkret.mimi.room-binding+json"),
     },
     epoch: 1,
-    sender_actor_id: MIMI_SOURCE_SERVICE_DID,
+    sender_actor_id: MIMI_SOURCE_SERVICE_ID,
   };
   const update = await request.post(updateUrl, {
     headers: signedMimiHeaders({
@@ -334,7 +334,7 @@ async function postSignedMimiMessage(
 ) {
   const url = mimiMessagesUrl(roomId);
   const body = {
-    sender_actor_id: MIMI_SOURCE_SERVICE_DID,
+    sender_actor_id: MIMI_SOURCE_SERVICE_ID,
     device_id: MIMI_DEVICE_ID,
     mls_group_id: `mls:${roomId}`,
     epoch: 1,
@@ -350,7 +350,7 @@ async function postSignedMimiMessage(
   });
 }
 
-const MIMI_SOURCE_SERVICE_DID = "did:web:mimi.example";
+const MIMI_SOURCE_SERVICE_ID = "did:web:mimi.example";
 const MIMI_PROVIDER_ID = "mimi://mimi.example";
 const MIMI_DEVICE_ID = "ak:device:018f6f50-6a23-7abc-8def-0123456789ab";
 
@@ -382,7 +382,7 @@ function signedMimiHeaders(args: {
   const requestDigest = sha256Prefixed(canonicalBody);
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 300;
-  const keyid = `${MIMI_SOURCE_SERVICE_DID}#mimi-provider-key`;
+  const keyid = `${MIMI_SOURCE_SERVICE_ID}#mimi-provider-key`;
   const components = [
     "@method",
     "@target-uri",
@@ -397,15 +397,15 @@ function signedMimiHeaders(args: {
   const signatureParams =
     `(${components.map((component) => `"${component}"`).join(" ")});` +
     `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
-  const destinationServiceDid = solandServiceDid();
+  const destinationServiceId = solandServiceId();
   const signatureBase = [
     `"@method": POST`,
     `"@target-uri": ${args.targetUri}`,
     `"@authority": ${new URL(args.targetUri).host}`,
     `"content-digest": ${contentDigest}`,
     `"request-canonical-digest": ${requestDigest}`,
-    `"source-service-did": ${MIMI_SOURCE_SERVICE_DID}`,
-    `"destination-service-did": ${destinationServiceDid}`,
+    `"source-service-did": ${MIMI_SOURCE_SERVICE_ID}`,
+    `"destination-service-did": ${destinationServiceId}`,
     `"provider-id": ${MIMI_PROVIDER_ID}`,
     `"mimi-room-uri": ${args.roomUri}`,
     `"@signature-params": ${signatureParams}`,
@@ -419,8 +419,8 @@ function signedMimiHeaders(args: {
     "content-type": "application/json",
     "content-digest": contentDigest,
     "request-canonical-digest": requestDigest,
-    "source-service-did": MIMI_SOURCE_SERVICE_DID,
-    "destination-service-did": destinationServiceDid,
+    "source-service-did": MIMI_SOURCE_SERVICE_ID,
+    "destination-service-did": destinationServiceId,
     "provider-id": MIMI_PROVIDER_ID,
     "mimi-room-uri": args.roomUri,
     "signature-input": `sig1=${signatureParams}`,
@@ -446,17 +446,17 @@ function localMimiRoomUri(roomId: string): string {
 }
 
 function localMimiProviderId(): string {
-  const serviceDid = solandServiceDid();
-  if (serviceDid.startsWith("did:web:")) {
-    return `mimi://${serviceDid.slice("did:web:".length).replaceAll(":", "/")}`;
+  const serviceId = solandServiceId();
+  if (serviceId.startsWith("did:web:")) {
+    return `mimi://${serviceId.slice("did:web:".length).replaceAll(":", "/")}`;
   }
   // did:webvh:<scid>:<host>[:<path>...] — the HTTP authority starts after
   // the SCID segment.
-  const webvh = serviceDid.match(/^did:webvh:[^:]+:(.+)$/);
+  const webvh = serviceId.match(/^did:webvh:[^:]+:(.+)$/);
   if (webvh) {
     return `mimi://${webvh[1].replaceAll(":", "/")}`;
   }
-  return `mimi://${serviceDid.replaceAll(":", ".")}`;
+  return `mimi://${serviceId.replaceAll(":", ".")}`;
 }
 
 function sha256Prefixed(input: string | Buffer): string {

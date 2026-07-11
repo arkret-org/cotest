@@ -24,7 +24,7 @@ fn with_signed_federation_request(
     method: &str,
     target_url: &str,
     destination: &ArkretServer,
-    source_service_did: &str,
+    source_service_id: &str,
     body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
     let body_bytes = canonical_json_bytes(body)?;
@@ -36,7 +36,7 @@ fn with_signed_federation_request(
         method,
         target_url,
         destination,
-        source_service_did,
+        source_service_id,
         content_digest,
         request_canonical_digest,
     )
@@ -47,7 +47,7 @@ fn with_signed_federation_empty_request(
     method: &str,
     target_url: &str,
     destination: &ArkretServer,
-    source_service_did: &str,
+    source_service_id: &str,
 ) -> Result<reqwest::RequestBuilder> {
     let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = sha256_digest([]);
@@ -56,7 +56,7 @@ fn with_signed_federation_empty_request(
         method,
         target_url,
         destination,
-        source_service_did,
+        source_service_id,
         content_digest,
         request_canonical_digest,
     )
@@ -67,13 +67,13 @@ fn with_signed_federation_request_digests(
     method: &str,
     target_url: &str,
     destination: &ArkretServer,
-    source_service_did: &str,
+    source_service_id: &str,
     content_digest: String,
     request_canonical_digest: String,
 ) -> Result<reqwest::RequestBuilder> {
-    let source_trust_domain = trust_domain_from_service_did(source_service_did);
-    let destination_service_did = destination.service_did();
-    let destination_trust_domain = trust_domain_from_service_did(destination_service_did);
+    let source_trust_domain = trust_domain_from_service_id(source_service_id);
+    let destination_service_id = destination.service_id();
+    let destination_trust_domain = trust_domain_from_service_id(destination_service_id);
 
     let parsed_url = Url::parse(target_url)?;
     let authority = parsed_url
@@ -88,7 +88,7 @@ fn with_signed_federation_request_digests(
 
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;
-    let keyid = format!("{source_service_did}#federation-fanout-key");
+    let keyid = format!("{source_service_id}#federation-fanout-key");
     // Bodyless GET peer reads MUST NOT carry — nor bind in their signature —
     // the body-digest components: soland rejects `content-digest` /
     // `request-canonical-digest` headers AND a Signature-Input that lists those
@@ -116,8 +116,8 @@ fn with_signed_federation_request_digests(
              \"@target-uri\": {target_uri}\n\
              \"@authority\": {authority}\n\
              \"content-digest\": {content_digest}\n\
-             \"source-service-did\": {source_service_did}\n\
-             \"destination-service-did\": {destination_service_did}\n\
+             \"source-service-did\": {source_service_id}\n\
+             \"destination-service-did\": {destination_service_id}\n\
              \"source-trust-domain\": {source_trust_domain}\n\
              \"destination-trust-domain\": {destination_trust_domain}\n\
              \"request-canonical-digest\": {request_canonical_digest}\n\
@@ -129,20 +129,20 @@ fn with_signed_federation_request_digests(
             "\"@method\": {}\n\
              \"@target-uri\": {target_uri}\n\
              \"@authority\": {authority}\n\
-             \"source-service-did\": {source_service_did}\n\
-             \"destination-service-did\": {destination_service_did}\n\
+             \"source-service-did\": {source_service_id}\n\
+             \"destination-service-did\": {destination_service_id}\n\
              \"source-trust-domain\": {source_trust_domain}\n\
              \"destination-trust-domain\": {destination_trust_domain}\n\
              \"@signature-params\": {signature_params}",
             method.to_ascii_uppercase()
         )
     };
-    let signing_key = development_service_signing_key(source_service_did);
+    let signing_key = development_service_signing_key(source_service_id);
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
     let mut builder = builder
-        .header("Source-Service-DID", source_service_did)
-        .header("Destination-Service-DID", destination_service_did)
+        .header("Source-Service-ID", source_service_id)
+        .header("Destination-Service-ID", destination_service_id)
         .header("Source-Trust-Domain", source_trust_domain)
         .header("Destination-Trust-Domain", destination_trust_domain)
         .header("Signature-Input", format!("sig1={signature_params}"))
@@ -155,13 +155,13 @@ fn with_signed_federation_request_digests(
     Ok(builder)
 }
 
-fn trust_domain_from_service_did(service_did: &str) -> String {
-    // Mirror soland's `trust_domain_from_service_did`: for
+fn trust_domain_from_service_id(service_id: &str) -> String {
+    // Mirror soland's `trust_domain_from_service_id`: for
     // `did:webvh:<scid>:<host>[:...]` the trust domain is scoped to the host
     // segment *after* the SCID, so the SCID must not leak in (soland test
     // `trust_domain_derives_webvh_host_not_scid`). `did:web:` and `did:key:`
     // are kept for negative/no-history fixtures that still mint those forms.
-    if let Some(rest) = service_did.strip_prefix("did:webvh:") {
+    if let Some(rest) = service_id.strip_prefix("did:webvh:") {
         let mut parts = rest.split(':');
         let scid = parts.next().unwrap_or_default();
         if let Some(host) = parts.next() {
@@ -170,25 +170,25 @@ fn trust_domain_from_service_did(service_did: &str) -> String {
             }
         }
     }
-    if let Some(rest) = service_did.strip_prefix("did:web:") {
+    if let Some(rest) = service_id.strip_prefix("did:web:") {
         if let Some(host) = rest.split(':').next() {
             if !host.is_empty() {
                 return format!("ak:trust_domain:{}", host.to_ascii_lowercase());
             }
         }
     }
-    let scope = service_did
+    let scope = service_id
         .strip_prefix("did:key:")
-        .unwrap_or(service_did)
+        .unwrap_or(service_id)
         .to_ascii_lowercase()
         .replace(':', ".");
     format!("ak:trust_domain:{scope}")
 }
 
-fn development_service_signing_key(service_did: &str) -> arkret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_id: &str) -> arkret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
-    hasher.update(service_did.as_bytes());
+    hasher.update(service_id.as_bytes());
     let seed: [u8; 32] = hasher.finalize().into();
     signing_key_from_seed(&seed)
 }
@@ -250,16 +250,16 @@ fn signed_federation_event(
 }
 
 fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&str]) -> Value {
-    // Structured `plaintext_visible_services` entries (`{service_did,
+    // Structured `plaintext_visible_services` entries (`{service_id,
     // data_classes}`) are required for the receiving service to hold the
     // `message_content` plaintext class — bare DIDs only populate the legacy
     // id list and leave the typed data-class map empty, so a plaintext
     // (`encryption_profile: "none"`) federated message would be denied.
     let plaintext_visible_services = visible_services
         .iter()
-        .map(|service_did| {
+        .map(|service_id| {
             json!({
-                "service_did": service_did,
+                "service_id": service_id,
                 "service_type": "principal_server",
                 "data_classes": ["message_content"],
                 "purposes": ["federated_plaintext_delivery"],
@@ -273,7 +273,7 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
             "schema": "ak.schema.realm.v1",
             "title": "Federation Contract Realm",
             "summary": "federation contract fixture",
-            "trust_domain": trust_domain_from_service_did(creator),
+            "trust_domain": trust_domain_from_service_id(creator),
             "created_by": creator,
             "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
@@ -367,18 +367,18 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let replay_event_id = "ak:event:0196419b-0000-7000-8000-00000000f101";
     let invalid_event_id = "ak:event:0196419b-0000-7000-8000-00000000f102";
     let redaction_event_id = "ak:event:0196419b-0000-7000-8000-00000000f103";
-    let remote_service_did = "did:web:remote.example";
+    let remote_service_id = "did:web:remote.example";
 
     let realm_create = signed_federation_event(
         realm_create_event_id,
         "ak.realm.create",
         realm_id,
-        remote_service_did,
+        remote_service_id,
         1,
         federation_realm_payload(
             realm_id,
-            remote_service_did,
-            &[remote_service_did, server.service_did()],
+            remote_service_id,
+            &[remote_service_id, server.service_id()],
         ),
     )?;
     // The originating service is itself the Realm's delivery-bound member (its
@@ -389,25 +389,25 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         policy_event_id,
         "ak.realm.delivery_binding_policy",
         realm_id,
-        remote_service_did,
+        remote_service_id,
         2,
         json!({
             "realm_id": realm_id,
             "allow_binding_sources": ["explicit"],
-            "allowed_recipient_services": [remote_service_did]
+            "allowed_recipient_services": [remote_service_id]
         }),
     )?;
     let member_binding = signed_federation_event(
         member_event_id,
         "ak.member.state",
         realm_id,
-        remote_service_did,
+        remote_service_id,
         3,
         member_join_payload_with_delivery_binding(
             realm_id,
-            remote_service_did,
+            remote_service_id,
             json!({
-                "recipient_service_did": remote_service_did,
+                "recipient_service_id": remote_service_id,
                 "recipient_service_type": "principal_server",
                 "binding_scope": "realm",
                 "binding_source": "explicit",
@@ -421,7 +421,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         replay_event_id,
         "ak.message.create",
         realm_id,
-        remote_service_did,
+        remote_service_id,
         4,
         message_create_text_payload(realm_id, "from federation")?,
     )?;
@@ -443,7 +443,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &first_push_url,
             &server,
-            remote_service_did,
+            remote_service_id,
             &first_push_body,
         )?,
         StatusCode::OK,
@@ -460,7 +460,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &pulled_url,
             &server,
-            remote_service_did,
+            remote_service_id,
         )?,
         StatusCode::OK,
     )
@@ -477,7 +477,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &snapshot_head_url,
             &server,
-            remote_service_did,
+            remote_service_id,
         )?,
         StatusCode::NOT_IMPLEMENTED,
         "not_implemented",
@@ -500,7 +500,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &replay_url,
             &server,
-            remote_service_did,
+            remote_service_id,
             &replay_body,
         )?,
         StatusCode::OK,
@@ -516,7 +516,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &after_replay_pull_url,
             &server,
-            remote_service_did,
+            remote_service_id,
         )?,
         StatusCode::OK,
     )
@@ -536,7 +536,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         invalid_event_id,
         "ak.message.create",
         realm_id,
-        remote_service_did,
+        remote_service_id,
         5,
         json!({
             "encrypted": true,
@@ -555,7 +555,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &invalid_push_url,
             &server,
-            remote_service_did,
+            remote_service_id,
             &invalid_push_body,
         )?,
         StatusCode::OK,
@@ -579,7 +579,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         redaction_event_id,
         "ak.message.redact",
         realm_id,
-        remote_service_did,
+        remote_service_id,
         6,
         message_redact_payload(replay_event_id, None)?,
     )?;
@@ -595,7 +595,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &redaction_push_url,
             &server,
-            remote_service_did,
+            remote_service_id,
             &redaction_push_body,
         )?,
         StatusCode::OK,
@@ -614,7 +614,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &redacted_pull_url,
             &server,
-            remote_service_did,
+            remote_service_id,
         )?,
         StatusCode::OK,
     )
@@ -646,7 +646,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "did:web:alice.example",
         realm_id,
         "ak.realm.create",
-        federation_realm_payload(realm_id, "did:web:alice.example", &[server.service_did()]),
+        federation_realm_payload(realm_id, "did:web:alice.example", &[server.service_id()]),
         StatusCode::OK,
     )
     .await?;
@@ -666,7 +666,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         json!({
             "realm_id": realm_id,
             "allow_binding_sources": ["explicit"],
-            "allowed_recipient_services": [server.service_did()]
+            "allowed_recipient_services": [server.service_id()]
         }),
         StatusCode::OK,
     )
@@ -675,7 +675,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
 
     // Bind the local owner to this server: a federation push to a Realm the
     // receiver already hosts is gated on an effective member
-    // `delivery_binding.recipient_service_did = Destination-Service-DID`
+    // `delivery_binding.recipient_service_id = Destination-Service-ID`
     // (federation.md §4.1); absent it the receiver fails closed with
     // `delivery_binding_stale`. soland projects this member.state's own
     // event_id as the delivery-binding causal frontier ref, so capture it and
@@ -690,7 +690,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
             realm_id,
             "did:web:alice.example",
             json!({
-                "recipient_service_did": server.service_did(),
+                "recipient_service_id": server.service_id(),
                 "recipient_service_type": "principal_server",
                 "binding_scope": "realm",
                 "binding_source": "explicit",

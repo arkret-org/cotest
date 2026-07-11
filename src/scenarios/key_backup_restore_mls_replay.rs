@@ -29,7 +29,7 @@
 //!       6. for E2EE Realms: pull MLS state, replay historical `ak.mls.commit` events with the
 //!          recovered `mls_history_backup_key` to decrypt pre-loss epoch content.
 //!   - §7.4 (ownership and decryption proofs) — SSK proof binding fields: `challenge / audience /
-//!     origin / service_did / principal_id / key_id / expires_at / nonce`.
+//!     origin / service_id / principal_id / key_id / expires_at / nonce`.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Scenario walk-through

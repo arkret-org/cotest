@@ -8,7 +8,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
+import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import { base64url } from "./encoding";
 
 export type SignedEventEnvelopeArgs = {
@@ -140,11 +140,11 @@ export async function expectJsonOk<T = Record<string, unknown>>(
   return JSON.parse(text) as T;
 }
 
-export function plaintextVisibleServiceDeclarations(serviceDids: string[]) {
+export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
   return Array.from(
-    new Set(serviceDids.map((service) => service.trim()).filter(Boolean)),
-  ).map((serviceDid) => ({
-    service_did: serviceDid,
+    new Set(serviceIds.map((service) => service.trim()).filter(Boolean)),
+  ).map((serviceId) => ({
+    service_id: serviceId,
     service_type: "principal_server",
     data_classes: [
       "message_content",
@@ -182,7 +182,7 @@ export async function createRealmApi(
      * have no delivery target; callers exercising cross-server invite fanout
      * opt in here so the helper emits the canonical `ak.invite.create` event.
      */
-    invitee_service_dids?: Record<string, string>;
+    invitee_service_ids?: Record<string, string>;
     plaintext_visible_services?: string[];
     public?: boolean;
     federation_policy?: string;
@@ -198,13 +198,13 @@ export async function createRealmApi(
     data.ownerDid ?? (await currentActorDidApi(request, token, opts));
   const realmId = typedId("realm");
   const createdAt = canonicalTimestamp();
-  const plaintextVisibleServiceDids =
+  const plaintextVisibleServiceIds =
     data.plaintext_visible_services ??
     (data.encryption_profile === "mls_rfc9420"
       ? []
-      : [solandServiceDid(opts.server), "did:web:soland.local"]);
+      : [solandServiceId(opts.server), "did:web:soland.local"]);
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
-    plaintextVisibleServiceDids,
+    plaintextVisibleServiceIds,
   );
 
   await submitSignedEventApi(
@@ -274,8 +274,8 @@ export async function createRealmApi(
       { server: opts.server, context: `invite ${invitee}` },
     );
 
-    const recipientServiceDid = data.invitee_service_dids?.[invitee];
-    if (recipientServiceDid) {
+    const recipientServiceId = data.invitee_service_ids?.[invitee];
+    if (recipientServiceId) {
       const evidence = { kind: "explicit_address" };
       await submitSignedEventApi(
         request,
@@ -288,7 +288,7 @@ export async function createRealmApi(
             invite_id: typedId("invite"),
             invitee,
             invite_delivery_target: {
-              recipient_service_did: recipientServiceDid,
+              recipient_service_id: recipientServiceId,
               recipient_service_type: "principal_server",
             },
             introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
@@ -434,7 +434,7 @@ export async function grantServiceDelegationApi(
   args: {
     ownerDid: string;
     realmId: string;
-    subjectServiceDid: string;
+    subjectServiceId: string;
     action?: string;
     server?: SolandKey;
   },
@@ -448,7 +448,7 @@ export async function grantServiceDelegationApi(
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
-    subject: args.subjectServiceDid,
+    subject: args.subjectServiceId,
     actions: [action],
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
@@ -477,7 +477,7 @@ export async function grantServiceDelegationApi(
     }),
     {
       server: args.server,
-      context: `grant ${action} service delegation to ${args.subjectServiceDid}`,
+      context: `grant ${action} service delegation to ${args.subjectServiceId}`,
     },
   );
   return grantId;
@@ -846,7 +846,7 @@ export async function submitInviteCreateApi(
           invite_id: inviteId,
           invitee: subjectDid,
           invite_delivery_target: {
-            recipient_service_did: solandServiceDid(opts.server),
+            recipient_service_id: solandServiceId(opts.server),
           },
           introduction_evidence_digest: `sha256:${sha256CanonicalJson({ inviteId, subjectDid })}`,
           expires_at: expiresAt,
@@ -1586,7 +1586,7 @@ export async function rawPushFederationEvents(
     reducerProfileDigestOverride?: string;
   },
 ) {
-  const destination = opts.destination ?? solandServiceDid(opts.server);
+  const destination = opts.destination ?? solandServiceId(opts.server);
   const url = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
   const body = peerEventsSubmitBody(
     opts.realmId,
@@ -1612,7 +1612,7 @@ export type InviteDeliveryRequestBody = {
   invite_event: Record<string, unknown>;
   invite_address: {
     subject_id: string;
-    recipient_service_did: string;
+    recipient_service_id: string;
     recipient_service_type?: "principal_server";
   };
   introduction_evidence: Record<string, unknown>;
@@ -1646,7 +1646,7 @@ export async function rawSubmitPeerInviteDeliveryApi(
   },
 ) {
   const destination =
-    opts.destination ?? body.invite_address.recipient_service_did;
+    opts.destination ?? body.invite_address.recipient_service_id;
   const url = `${solandBaseUrl(opts.server)}/_arkret/peer/invites`;
   return await request.post(url, {
     data: canonicalJson(body),
@@ -1687,7 +1687,7 @@ export async function queryPeerEventsApi(
   const response = await request.get(targetUri, {
     headers: peerGetHeaders(
       opts.sourceDid,
-      solandServiceDid(opts.server),
+      solandServiceId(opts.server),
       targetUri,
     ),
   });
@@ -1708,7 +1708,7 @@ export async function peerEventFrontierApi(
   const response = await request.get(targetUri, {
     headers: peerGetHeaders(
       opts.sourceDid,
-      solandServiceDid(opts.server),
+      solandServiceId(opts.server),
       targetUri,
     ),
   });
@@ -1987,8 +1987,8 @@ function peerGetHeaders(
   destinationDid: string,
   targetUri: string,
 ): Record<string, string> {
-  const sourceTrustDomain = trustDomainFromServiceDid(sourceDid);
-  const destinationTrustDomain = trustDomainFromServiceDid(destinationDid);
+  const sourceTrustDomain = trustDomainFromServiceId(sourceDid);
+  const destinationTrustDomain = trustDomainFromServiceId(destinationDid);
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 300;
   const keyid = `${sourceDid}#federation-fanout-key`;
@@ -2031,8 +2031,8 @@ function signedFederationPushHeaders(
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
   const requestDigest = `sha256:${createHash("sha256").update(bodyBytes).digest("hex")}`;
-  const sourceTrustDomain = trustDomainFromServiceDid(sourceDid);
-  const destinationTrustDomain = trustDomainFromServiceDid(destinationDid);
+  const sourceTrustDomain = trustDomainFromServiceId(sourceDid);
+  const destinationTrustDomain = trustDomainFromServiceId(destinationDid);
   const nowSeconds = Math.floor(Date.now() / 1000);
   // When asked, push created/expires fully behind the accepted freshness
   // window (federation.md §3.2): expires < now and created beyond the ±30s
@@ -2091,8 +2091,8 @@ function eventProofMode(): EventProofMode {
 }
 
 // FIXTURE ONLY — publicly derivable, MUST NOT be trusted by any non-test code.
-// The private key is `sha256("soland:anchorer-ephemeral:" + serviceDid)`, so
-// anyone who knows the serviceDid can recompute it. This intentionally mirrors
+// The private key is `sha256("soland:anchorer-ephemeral:" + serviceId)`, so
+// anyone who knows the serviceId can recompute it. This intentionally mirrors
 // soland's *dev* anchorer-ephemeral derivation (soland: federation.rs /
 // state.rs) so the mock's federation signatures verify against a dev soland —
 // production soland MUST reject keys produced by this convention.
@@ -2100,10 +2100,10 @@ function eventProofMode(): EventProofMode {
 // Exported as the single source of truth for the dev actor/anchorer-ephemeral
 // key: circle-api.ts and webrtc.ts previously each re-derived this same
 // `sha256("soland:anchorer-ephemeral:" + did)` PKCS#8 ed25519 key.
-export function developmentServicePrivateKey(serviceDid: string) {
+export function developmentServicePrivateKey(serviceId: string) {
   const seed = createHash("sha256")
     .update("soland:anchorer-ephemeral:")
-    .update(serviceDid)
+    .update(serviceId)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
@@ -2114,10 +2114,10 @@ export function developmentServicePrivateKey(serviceDid: string) {
 }
 
 // FIXTURE ONLY: mirrors soland development_mode service HTTP signing keys.
-function developmentServiceHttpPrivateKey(serviceDid: string) {
+function developmentServiceHttpPrivateKey(serviceId: string) {
   const seed = createHash("sha256")
     .update("soland:notary-ephemeral:")
-    .update(serviceDid)
+    .update(serviceId)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
@@ -2127,17 +2127,17 @@ function developmentServiceHttpPrivateKey(serviceDid: string) {
   });
 }
 
-function trustDomainFromServiceDid(serviceDid: string): string {
-  const webHost = serviceDid.startsWith("did:web:")
-    ? serviceDid.slice("did:web:".length).split(":")[0]
+function trustDomainFromServiceId(serviceId: string): string {
+  const webHost = serviceId.startsWith("did:web:")
+    ? serviceId.slice("did:web:".length).split(":")[0]
     : undefined;
-  const webvhHost = serviceDid.startsWith("did:webvh:")
-    ? serviceDid.slice("did:webvh:".length).split(":")[1]
+  const webvhHost = serviceId.startsWith("did:webvh:")
+    ? serviceId.slice("did:webvh:".length).split(":")[1]
     : undefined;
-  const keyScope = serviceDid.startsWith("did:key:")
-    ? serviceDid.slice("did:key:".length)
+  const keyScope = serviceId.startsWith("did:key:")
+    ? serviceId.slice("did:key:".length)
     : undefined;
-  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceDid;
+  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceId;
   const scope = rawScope
     .split(/%3a/i)[0]
     .replace(/\.+$/, "")

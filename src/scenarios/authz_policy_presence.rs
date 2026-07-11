@@ -500,7 +500,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "action": "ak.message.create",
                 "actor_id": "did:web:alice.example",
                 "source": {
-                    "service_did": "did:web:soland.cotest.local",
+                    "service_id": "did:web:soland.cotest.local",
                     "service_type": "principal_server",
                     "signed_transport": true
                 }
@@ -529,7 +529,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "action": "ak.realm.destroy",
                 "actor_id": "did:web:alice.example",
                 "source": {
-                    "service_did": "did:web:soland.cotest.local",
+                    "service_id": "did:web:soland.cotest.local",
                     "service_type": "principal_server",
                     "signed_transport": true
                 }
@@ -554,7 +554,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 // `schema_violation` (422) before any semantic policy validation.
                 "actor_id": "alice",
                 "source": {
-                    "service_did": "did:web:soland.cotest.local",
+                    "service_id": "did:web:soland.cotest.local",
                     "service_type": "principal_server",
                     "signed_transport": true
                 }

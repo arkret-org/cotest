@@ -70,7 +70,7 @@
       },
       "describe": {
         "service": "teabay",
-        "service_did": "did:web:teabay.example",
+        "service_id": "did:web:teabay.example",
         "discovery_profiles": [
           "ak.profile.directory_service.v1"
         ],

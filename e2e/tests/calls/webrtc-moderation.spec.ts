@@ -35,8 +35,8 @@ import {
   type MediaFocusConfig,
 } from "../../helpers/webrtc";
 
-const SERVICE_DID = "did:web:media.example";
-const ISSUER_KID = `${SERVICE_DID}#media-token`;
+const SERVICE_ID = "did:web:media.example";
+const ISSUER_KID = `${SERVICE_ID}#media-token`;
 const LIVEKIT_FOCUS: MediaFocusConfig = {
   focus_id: "ak:focus:livekit-lhr",
   type: "livekit",
@@ -206,7 +206,7 @@ test.describe("call moderation (spec wire)", () => {
       aliceToken,
       realmId,
       alice.did,
-      SERVICE_DID,
+      SERVICE_ID,
       [LIVEKIT_FOCUS],
     );
     // bob needs ak.call.join to exchange a token before the ban.

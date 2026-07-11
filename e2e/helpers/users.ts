@@ -15,7 +15,7 @@ import {
   diagnosticsRoot,
   type SolandKey,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "./env";
 import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
@@ -1122,7 +1122,7 @@ export async function createDpopUserSessionForAccount(
   }
   const seed = uniqueUser(prefix);
   const deviceKey = generateDpopDeviceKey();
-  const audience = solandServiceDid(opts.server);
+  const audience = solandServiceId(opts.server);
   const grant = await mintDpopBoundGrant(
     request,
     coauth,

@@ -25,7 +25,7 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
         StatusCode::OK,
     )
     .await?;
-    assert_ne!(server_a.service_did(), server_b.service_did());
+    assert_ne!(server_a.service_id(), server_b.service_id());
     assert_eq!(describe_a["service_type"], "principal_server");
     assert_eq!(describe_b["service_type"], "principal_server");
 

@@ -525,7 +525,7 @@ export async function configureMediaService(
   token: string,
   realmId: string,
   ownerDid: string,
-  serviceDid: string,
+  serviceId: string,
   foci: MediaFocusConfig[],
 ): Promise<void> {
   await submitSignedEventApi(
@@ -537,7 +537,7 @@ export async function configureMediaService(
       kind: "ak.realm.media_service",
       payload: {
         media_service: {
-          service_id: serviceDid,
+          service_id: serviceId,
           foci,
         },
       },

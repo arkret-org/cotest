@@ -126,7 +126,7 @@ async function allowlistVerificationService(
   token: string,
   ownerDid: string,
   realmId: string,
-  serviceDid: string,
+  serviceId: string,
 ) {
   await submitSignedEventApi(
     request,
@@ -137,11 +137,11 @@ async function allowlistVerificationService(
       kind: "ak.realm.policy_components",
       payload: {
         value: {
-          third_party_invite_verification_services: [serviceDid],
+          third_party_invite_verification_services: [serviceId],
         },
       },
     }),
-    { context: `allowlist verification service ${serviceDid}` },
+    { context: `allowlist verification service ${serviceId}` },
   );
 }
 
@@ -367,7 +367,7 @@ test.describe("third-party invite", () => {
       const subjectProof = signSubjectProof({
         cell: ctx.cell,
         subject: ctx.bobIdentity,
-        verificationServiceDid: ctx.verificationService.did,
+        verificationServiceId: ctx.verificationService.did,
         bindingProof,
         claimNonce,
       });
@@ -442,7 +442,7 @@ test.describe("third-party invite", () => {
       const subjectProof = signSubjectProof({
         cell: ctx.cell,
         subject: ctx.bobIdentity,
-        verificationServiceDid: ctx.verificationService.did,
+        verificationServiceId: ctx.verificationService.did,
         bindingProof,
         claimNonce,
       });
@@ -499,7 +499,7 @@ test.describe("third-party invite", () => {
       const subjectProof = signSubjectProof({
         cell: ctx.cell,
         subject: malloryIdentity,
-        verificationServiceDid: ctx.verificationService.did,
+        verificationServiceId: ctx.verificationService.did,
         bindingProof,
         claimNonce,
       });
@@ -553,7 +553,7 @@ test.describe("third-party invite", () => {
       const firstSubject = signSubjectProof({
         cell: ctx.cell,
         subject: ctx.bobIdentity,
-        verificationServiceDid: ctx.verificationService.did,
+        verificationServiceId: ctx.verificationService.did,
         bindingProof: firstBinding,
         claimNonce: firstNonce,
       });
@@ -588,7 +588,7 @@ test.describe("third-party invite", () => {
       const secondSubject = signSubjectProof({
         cell: ctx.cell,
         subject: ctx.bobIdentity,
-        verificationServiceDid: ctx.verificationService.did,
+        verificationServiceId: ctx.verificationService.did,
         bindingProof: secondBinding,
         claimNonce: secondNonce,
       });

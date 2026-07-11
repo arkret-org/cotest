@@ -130,7 +130,7 @@ fn member_delivery_binding() -> DeliveryBindingHint {
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     DeliveryBindingHint {
-        recipient_service_did: Did::new("did:web:rs.example".to_owned()).unwrap(),
+        recipient_service_id: Did::new("did:web:rs.example".to_owned()).unwrap(),
         recipient_service_type: RecipientServiceType::PrincipalServer,
         binding_source: HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: modes,

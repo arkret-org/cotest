@@ -390,7 +390,7 @@ async fn create_blob_access_realm(
         BLOB_REALM_ID,
         &alice.actor,
         "Blob Access Space",
-        alice.service_did(),
+        alice.service_id(),
     )?;
     let create = expect_json(
         alice.post("/_arkret/self/events").json(&realm_create),
@@ -423,7 +423,7 @@ fn signed_realm_create_event(
     realm_id: &str,
     actor_id: &str,
     title: &str,
-    service_did: &str,
+    service_id: &str,
 ) -> Result<Value> {
     let payload = json!({
         "object": {
@@ -442,7 +442,7 @@ fn signed_realm_create_event(
             "federation_policy": "open",
             "notary_profile": "single_did",
             "digest_algorithm": "sha256",
-            "plaintext_visible_services": [service_did],
+            "plaintext_visible_services": [service_id],
             "notary": {
                 "type": "single_did",
                 "did": actor_id,

@@ -89,13 +89,13 @@ pub async fn create_realm(
     let realm_id = next_typed_id("realm");
     let payload = realm_create_payload(
         actor,
-        server.service_did(),
+        server.service_id(),
         &realm_id,
         &json!({
             "title": title,
             "summary": title,
             "public": false,
-            "plaintext_visible_services": [server.service_did()]
+            "plaintext_visible_services": [server.service_id()]
         }),
     );
     submit_event(
@@ -444,7 +444,7 @@ pub(crate) fn member_transition_payload(
 pub(crate) fn invite_create_payload(
     invite_id: &str,
     invitee: &str,
-    recipient_service_did: &str,
+    recipient_service_id: &str,
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
@@ -452,8 +452,8 @@ pub(crate) fn invite_create_payload(
         InviteId::new(invite_id.to_owned()).map_err(|err| anyhow!("invalid invite_id: {err}"))?,
         Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee did: {err}"))?,
         InviteDeliveryTarget::principal_server(
-            Did::new(recipient_service_did.to_owned())
-                .map_err(|err| anyhow!("invalid recipient_service_did: {err}"))?,
+            Did::new(recipient_service_id.to_owned())
+                .map_err(|err| anyhow!("invalid recipient_service_id: {err}"))?,
         ),
         Hash::new(introduction_evidence_digest.into())
             .map_err(|err| anyhow!("invalid introduction_evidence_digest: {err}"))?,
@@ -480,7 +480,7 @@ fn member_payload(
         delivery_status,
         delivery_binding,
         gate_proofs: Vec::new(),
-        via_service_dids: Vec::new(),
+        via_service_ids: Vec::new(),
         reason,
         invite_ref,
     }

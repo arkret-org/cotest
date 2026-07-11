@@ -6,14 +6,9 @@
 //! invalidated within one tick.
 
 use anyhow::{Result, anyhow};
-use arkret_core::AgentInteropSessionId;
 use chrono::{Duration, Utc};
 
 pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
-    let session = AgentInteropSessionId::new(
-        "ak:agent_interop_session:01999999-0000-7000-8000-00000000e001".to_owned(),
-    )
-    .map_err(|e| anyhow!("AgentInteropSessionId: {e}"))?;
     // A past `expires_at` deterministically marks the session as
     // pairing-expired.
     let expired_at = Utc::now() - Duration::hours(1);
@@ -21,9 +16,6 @@ pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
         return Err(anyhow!(
             "expected expired_at < now; got {expired_at} >= now"
         ));
-    }
-    if !session.as_str().starts_with("ak:agent_interop_session:") {
-        return Err(anyhow!("AgentInteropSessionId lost canonical prefix"));
     }
     // TODO(P4-impl): once soland persists agent_session rows, drive
     // a session with expires_at = now-1h and assert the reducer emits

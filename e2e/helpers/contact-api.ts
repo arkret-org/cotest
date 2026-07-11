@@ -22,7 +22,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
+import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   authHeaders,
   b64url,
@@ -65,8 +65,8 @@ export type DirectConversationSummary = {
 };
 
 export type ContactAgentProjection = {
-  agent_principal_id: string;
-  controller_principal_id: string;
+  agent_id: string;
+  controller_id: string;
   display_name?: string;
   agent_slug?: string;
   direct_conversation?: DirectConversationSummary;
@@ -132,7 +132,7 @@ export async function requestContactArkret(
     message?: string;
     idempotencyKey?: string;
     server?: SolandKey;
-    recipientServiceDid?: string;
+    recipientServiceId?: string;
     /**
      * Introduction evidence is required for a cross-Principal-Server
      * request.  The recipient's default policy quarantines
@@ -153,8 +153,8 @@ export async function requestContactArkret(
         ...(opts.idempotencyKey !== undefined
           ? { idempotency_key: opts.idempotencyKey }
           : {}),
-        ...(opts.recipientServiceDid !== undefined
-          ? { recipient_service_did: opts.recipientServiceDid }
+        ...(opts.recipientServiceId !== undefined
+          ? { recipient_service_id: opts.recipientServiceId }
           : {}),
         ...(opts.introductionEvidence !== undefined
           ? { introduction_evidence: opts.introductionEvidence }
@@ -211,7 +211,7 @@ export async function respondContactArkret(
     action: "accept" | "reject";
     grantedScopes?: string[];
     server?: SolandKey;
-    requesterServiceDid?: string;
+    requesterServiceId?: string;
   },
 ): Promise<ContactRespondOutcome> {
   const response = await request.post(
@@ -223,8 +223,8 @@ export async function respondContactArkret(
         requester: opts.requester,
         action: opts.action,
         ...(opts.grantedScopes ? { granted_scopes: opts.grantedScopes } : {}),
-        ...(opts.requesterServiceDid !== undefined
-          ? { requester_service_did: opts.requesterServiceDid }
+        ...(opts.requesterServiceId !== undefined
+          ? { requester_service_id: opts.requesterServiceId }
           : {}),
       },
     },
@@ -272,7 +272,7 @@ export async function tombstoneContactArkret(
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
     // peer's home service DID so soland federates the `ak.contact.tombstoned`
     // fact to the peer's Principal Server via `ak.peer.contacts.command.submit`.
-    peerServiceDid?: string;
+    peerServiceId?: string;
     server?: SolandKey;
   } = {},
 ): Promise<ContactTombstoneOutcome> {
@@ -287,8 +287,8 @@ export async function tombstoneContactArkret(
           ? { full_peer_revoke: opts.fullPeerRevoke }
           : {}),
         ...(opts.blockPeer !== undefined ? { block_peer: opts.blockPeer } : {}),
-        ...(opts.peerServiceDid !== undefined
-          ? { peer_service_did: opts.peerServiceDid }
+        ...(opts.peerServiceId !== undefined
+          ? { peer_service_id: opts.peerServiceId }
           : {}),
       },
     },
@@ -632,14 +632,14 @@ export type IntroductionEvidence =
 // validate_invite_delivery_consistency + projection required fields):
 //   - kind == ak.invite.create
 //   - payload.invitee == invite_address.subject_id
-//   - payload.invite_delivery_target.recipient_service_did == recipient svc
+//   - payload.invite_delivery_target.recipient_service_id == recipient svc
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))
 //   - payload carries invite_id + expires_at (schema-required for invite.create)
 export function buildInviteCreateEvent(args: {
   inviterDid: string;
   realmId: string;
   inviteeDid: string;
-  recipientServiceDid: string;
+  recipientServiceId: string;
   evidence: IntroductionEvidence;
   inviteId?: string;
   expiresAt?: string;
@@ -660,7 +660,7 @@ export function buildInviteCreateEvent(args: {
       invite_id: inviteId,
       invitee: args.inviteeDid,
       invite_delivery_target: {
-        recipient_service_did: args.recipientServiceDid,
+        recipient_service_id: args.recipientServiceId,
         recipient_service_type: "principal_server",
       },
       introduction_evidence_digest: evidenceDigest,
@@ -685,7 +685,7 @@ export async function deliverInviteWithConsentGrant(
     idempotencyKey?: string;
   },
 ): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
-  const recipientServiceDid = solandServiceDid(args.recipientServer);
+  const recipientServiceId = solandServiceId(args.recipientServer);
   const evidence: IntroductionEvidence = {
     kind: "consent_grant",
     consent_grant_ref: args.consentGrantRef,
@@ -694,7 +694,7 @@ export async function deliverInviteWithConsentGrant(
     inviterDid: args.inviterDid,
     realmId: args.realmId,
     inviteeDid: args.inviteeDid,
-    recipientServiceDid,
+    recipientServiceId,
     evidence,
   });
   const body: InviteDeliveryRequestBody = {
@@ -702,7 +702,7 @@ export async function deliverInviteWithConsentGrant(
     invite_event: event,
     invite_address: {
       subject_id: args.inviteeDid,
-      recipient_service_did: recipientServiceDid,
+      recipient_service_id: recipientServiceId,
       recipient_service_type: "principal_server",
     },
     introduction_evidence: evidence,
@@ -710,8 +710,8 @@ export async function deliverInviteWithConsentGrant(
       args.idempotencyKey ?? `cotest-contact-graph:${inviteId}`,
   };
   const outcome = (await submitPeerInviteDeliveryApi(request, body, {
-    origin: solandServiceDid(args.originServer),
-    destination: recipientServiceDid,
+    origin: solandServiceId(args.originServer),
+    destination: recipientServiceId,
     server: args.recipientServer,
   })) as unknown as InviteDeliveryOutcome;
   return { outcome, inviteId };
@@ -730,13 +730,13 @@ export async function deliverInviteExplicitAddress(
     idempotencyKey?: string;
   },
 ): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
-  const recipientServiceDid = solandServiceDid(args.recipientServer);
+  const recipientServiceId = solandServiceId(args.recipientServer);
   const evidence: IntroductionEvidence = { kind: "explicit_address" };
   const { event, inviteId } = buildInviteCreateEvent({
     inviterDid: args.inviterDid,
     realmId: args.realmId,
     inviteeDid: args.inviteeDid,
-    recipientServiceDid,
+    recipientServiceId,
     evidence,
   });
   const body: InviteDeliveryRequestBody = {
@@ -744,7 +744,7 @@ export async function deliverInviteExplicitAddress(
     invite_event: event,
     invite_address: {
       subject_id: args.inviteeDid,
-      recipient_service_did: recipientServiceDid,
+      recipient_service_id: recipientServiceId,
       recipient_service_type: "principal_server",
     },
     introduction_evidence: evidence,
@@ -752,8 +752,8 @@ export async function deliverInviteExplicitAddress(
       args.idempotencyKey ?? `cotest-contact-graph-explicit:${inviteId}`,
   };
   const outcome = (await submitPeerInviteDeliveryApi(request, body, {
-    origin: solandServiceDid(args.originServer),
-    destination: recipientServiceDid,
+    origin: solandServiceId(args.originServer),
+    destination: recipientServiceId,
     server: args.recipientServer,
   })) as unknown as InviteDeliveryOutcome;
   return { outcome, inviteId };

@@ -5,7 +5,6 @@
   "source_refs": [
     "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#10-identifiers-and-consent",
     "arkret-spec/spec/v1/zh/extensions/mimi-interop.md#12-conformance",
-    "arkret-spec/spec/v1/zh/extensions/agent-protocol-interop.md",
     "arkret-spec/spec/v1/zh/sync/sovereign-deployment.md#3-2-sovereign-baseline"
   ],
   "vectors": [
@@ -104,86 +103,6 @@
         "forbidden_literals": [
           "mimi://remote.example/users/alice"
         ]
-      }
-    },
-    {
-      "name": "external_marker_is_not_authorization",
-      "scenario": "external_marker_inert",
-      "protocol": "a2a",
-      "also_applies_to": [
-        "mimi",
-        "acp"
-      ],
-      "execution": {
-        "ignored": false,
-        "fixme": false
-      },
-      "input": {
-        "operation_id": "ak.agent.interop_session.start",
-        "external_marker": {
-          "kind": "external_interop",
-          "protocol": "a2a",
-          "remote_task_id": "task-remote-7"
-        },
-        "arkret_capability_refs": [],
-        "realm_policy_ref": null
-      },
-      "expected": {
-        "outcome": "reject",
-        "reason_code": "arkret_capability_required",
-        "marker_authorizes": false,
-        "session_started": false,
-        "authorized_by": []
-      }
-    },
-    {
-      "name": "a2a_handoff_default_closed",
-      "scenario": "external_agent_handoff_default_closed",
-      "protocol": "a2a",
-      "execution": {
-        "ignored": false,
-        "fixme": false
-      },
-      "input": {
-        "operation_id": "ak.agent.interop_session.start",
-        "transport": "a2a",
-        "realm_policy": {
-          "external_agent_handoff": false,
-          "allowed_protocols": []
-        },
-        "capability_refs": [
-          "ak:capability:0196419b-0000-7000-8000-00000000c001"
-        ]
-      },
-      "expected": {
-        "outcome": "reject",
-        "reason_code": "external_agent_handoff_disabled",
-        "session_started": false
-      }
-    },
-    {
-      "name": "acp_handoff_default_closed",
-      "scenario": "external_agent_handoff_default_closed",
-      "protocol": "acp",
-      "execution": {
-        "ignored": false,
-        "fixme": false
-      },
-      "input": {
-        "operation_id": "ak.agent.interop_session.start",
-        "transport": "acp",
-        "realm_policy": {
-          "external_agent_handoff": false,
-          "allowed_protocols": []
-        },
-        "capability_refs": [
-          "ak:capability:0196419b-0000-7000-8000-00000000c002"
-        ]
-      },
-      "expected": {
-        "outcome": "reject",
-        "reason_code": "external_agent_handoff_disabled",
-        "session_started": false
       }
     }
   ]

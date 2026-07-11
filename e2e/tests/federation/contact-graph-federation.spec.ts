@@ -11,8 +11,8 @@
 // the contact request/respond protocol face delivers signed `ak.contact.*`
 // facts to the target holder's home PS via `ak.peer.contacts.command.submit`
 // (`POST /_arkret/peer/contacts`) over the durable federation outbox. The
-// requester addresses the remote target with `recipient_service_did`; the
-// responder addresses the remote requester with `requester_service_did`
+// requester addresses the remote target with `recipient_service_id`; the
+// responder addresses the remote requester with `requester_service_id`
 // (principal DIDs do not embed their home PS).
 //
 // What ALSO crosses a PS boundary is the consent_grant-evidence invite delivery
@@ -24,7 +24,7 @@ import {
   assertDualSolandNotRequired,
   hasDualSoland,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import {
   authHeaders,
@@ -61,9 +61,9 @@ test.beforeEach(() => {
 test.describe("contact graph federation (α/β)", () => {
   // S1-fed: cross-PS add friend (alice@α <-> bob@β), full positive handshake.
   //
-  // alice@α requests bob@β with recipient_service_did=β -> the signed
+  // alice@α requests bob@β with recipient_service_id=β -> the signed
   // ak.contact.requested fact federates to β over the outbox -> bob@β sees
-  // pending_incoming -> bob accepts with requester_service_did=α -> the
+  // pending_incoming -> bob accepts with requester_service_id=α -> the
   // ak.contact.accepted fact federates back to α -> alice@α sees accepted +
   // invite_consent_grant_ref (bob -> alice invite grant projected on α).
   test("S1-fed cross-PS add friend federates request + accept and converges both sides", async ({
@@ -90,7 +90,7 @@ test.describe("contact graph federation (α/β)", () => {
       {
         requestedScopes: ["invite"],
         server: "alpha",
-        recipientServiceDid: solandServiceDid("beta"),
+        recipientServiceId: solandServiceId("beta"),
         introductionEvidence: {
           kind: "locator_ref",
           principal_locator: bobLocator,
@@ -121,7 +121,7 @@ test.describe("contact graph federation (α/β)", () => {
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
-      requesterServiceDid: solandServiceDid("alpha"),
+      requesterServiceId: solandServiceId("alpha"),
     });
     expect(respondOutcome.state).toBe("accepted");
 
@@ -180,7 +180,7 @@ test.describe("contact graph federation (α/β)", () => {
     const { outcome } = await requestContactArkret(request, aliceToken, bob.did, {
       requestedScopes: ["direct_message"],
       server: "alpha",
-      recipientServiceDid: solandServiceDid("beta"),
+      recipientServiceId: solandServiceId("beta"),
       introductionEvidence: {
         kind: "locator_ref",
         principal_locator: bobLocator,
@@ -200,7 +200,7 @@ test.describe("contact graph federation (α/β)", () => {
       action: "accept",
       grantedScopes: ["direct_message"],
       server: "beta",
-      requesterServiceDid: solandServiceDid("alpha"),
+      requesterServiceId: solandServiceId("alpha"),
     });
     // α converges to accepted once the accept fact federates back.
     await expect
@@ -357,7 +357,7 @@ test.describe("contact graph federation (α/β)", () => {
   //
   // alice@α and bob@β first become accepted contacts (same federated handshake
   // as S1-fed). Then alice@α tombstones bob with block_peer=true and addresses
-  // bob's home PS via peer_service_did=β. soland's contact_tombstone handler
+  // bob's home PS via peer_service_id=β. soland's contact_tombstone handler
   // federates `ak.contact.tombstoned` over the durable outbox; β's
   // peer_contacts_submit downgrades its mirrored alice row to `tombstoned`.
   // Spec contact-and-direct-conversation.md §2/§4.1.
@@ -379,7 +379,7 @@ test.describe("contact graph federation (α/β)", () => {
     const { outcome } = await requestContactArkret(request, aliceToken, bob.did, {
       requestedScopes: ["invite"],
       server: "alpha",
-      recipientServiceDid: solandServiceDid("beta"),
+      recipientServiceId: solandServiceId("beta"),
       introductionEvidence: {
         kind: "locator_ref",
         principal_locator: bobLocator,
@@ -399,7 +399,7 @@ test.describe("contact graph federation (α/β)", () => {
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
-      requesterServiceDid: solandServiceDid("alpha"),
+      requesterServiceId: solandServiceId("alpha"),
     });
     await expect
       .poll(
@@ -413,7 +413,7 @@ test.describe("contact graph federation (α/β)", () => {
     // alice@α tombstones bob, addressing bob's home PS (β) and hard-blocking.
     const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
       blockPeer: true,
-      peerServiceDid: solandServiceDid("beta"),
+      peerServiceId: solandServiceId("beta"),
       server: "alpha",
     });
     expect(tomb.state).toBe("tombstoned");

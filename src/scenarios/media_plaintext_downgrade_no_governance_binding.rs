@@ -87,7 +87,7 @@ fn honest_media_decrypt_policy_value() -> Result<MediaDecryptPolicyValue> {
     Ok(MediaDecryptPolicyValue {
         media_service_decrypts: true,
         plaintext_visible_services: vec![MediaPlaintextService {
-            service_did: Did::new("did:web:sfu.example".to_owned())
+            service_id: Did::new("did:web:sfu.example".to_owned())
                 .map_err(|e| anyhow!("sfu service did: {e}"))?,
         }],
     })

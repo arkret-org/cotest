@@ -135,7 +135,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     const body = await resp.json();
 
     // §17 — canonical ServiceDescribe required fields
-    expect(body.service_did, "service_did").toBeTruthy();
+    expect(body.service_id, "service_id").toBeTruthy();
     expect(body.trust_domain, "trust_domain").toMatch(/^ak:trust_domain:/);
     expect(body.service_type, "service_type").toBe("principal_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");

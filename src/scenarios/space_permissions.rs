@@ -58,7 +58,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                         "default_join_rule": "invite",
                         "history_visibility": "shared",
                         "encryption_profile": "none",
-                        "plaintext_visible_services": [server.service_did()],
+                        "plaintext_visible_services": [server.service_id()],
                         "security_class": "standard",
                         "federation_policy": "restricted",
                         "notary_profile": "single_did",
@@ -132,7 +132,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             "summary": "Private Space",
             "discoverability": "invite_only",
             "history_visibility": "shared",
-            "plaintext_visible_services": [server.service_did()]
+            "plaintext_visible_services": [server.service_id()]
         }))
         .await?;
     let realm_id = created["realm_id"]

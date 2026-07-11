@@ -6,7 +6,7 @@
     "signer": "Ed25519MoveSigner",
     "alg": "EdDSA",
     "wire_form": "MoveSignature{alg: EdDSA, jws: <header>..<sig>, payload_digest: sha256:<hex>}",
-    "seed_source_kinds": ["configured", "ephemeral", "service_did_derived"]
+    "seed_source_kinds": ["configured", "ephemeral", "service_id_derived"]
   },
   "vectors": [
     {
@@ -22,16 +22,16 @@
       }
     },
     {
-      "name": "service_did_derived_seed_is_deterministic_per_did",
-      "seed_source": "service_did_derived",
-      "seed_kind": "sha256_of_service_did",
+      "name": "service_id_derived_seed_is_deterministic_per_did",
+      "seed_source": "service_id_derived",
+      "seed_kind": "sha256_of_service_id",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#admin-key",
-      "service_did": "did:web:hub.example",
+      "service_id": "did:web:hub.example",
       "canonical_body_sha256": "sha256:0202020202020202020202020202020202020202020202020202020202020202",
       "expected": {
         "outcome": "deterministic_signature",
-        "rationale": "soland's service_admin_signer derives seed = sha256('soland:service-signer:' + service_did). Pure function of service_did ⇒ same admin Move signature every boot for the same service identity (dev-mode replay safety; production swaps for HSM)."
+        "rationale": "soland's service_admin_signer derives seed = sha256('soland:service-signer:' + service_id). Pure function of service_id ⇒ same admin Move signature every boot for the same service identity (dev-mode replay safety; production swaps for HSM)."
       }
     },
     {

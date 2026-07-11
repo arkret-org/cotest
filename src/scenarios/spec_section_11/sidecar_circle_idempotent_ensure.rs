@@ -3,7 +3,7 @@
 //! Calling `ak.self.agent.sidecar_thread.command.ensure` twice with the same
 //! (controller, agent) pair MUST return the same `sidecar_circle_id`.
 //! The deterministic Circle key derivation is gated on the controller
-//! DID + agent_principal_id + an HKDF salt.
+//! DID + agent_id + an HKDF salt.
 
 use anyhow::{Result, anyhow};
 use arkret_core::CircleId;
@@ -12,8 +12,8 @@ use sha2::Sha256;
 
 /// Deterministic sidecar id derivation. Mirrors the reducer's
 /// "controller_agent_circle_key" derivation under spec head 37ce729.
-fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<String> {
-    let info = format!("cotest-sidecar|{controller_did}|{agent_principal_id}");
+fn derive_sidecar_id(controller_id: &str, agent_id: &str) -> Result<String> {
+    let info = format!("cotest-sidecar|{controller_id}|{agent_id}");
     let hk = Hkdf::<Sha256>::new(Some(b"ak.cotest-sidecar-derive-v1"), info.as_bytes());
     let mut okm = [0u8; 16];
     hk.expand(b"sidecar_circle_id", &mut okm)
@@ -37,11 +37,11 @@ fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<S
 }
 
 pub async fn sidecar_circle_idempotent_ensure_run() -> Result<()> {
-    let controller_did = "did:web:controller.example.com";
-    let agent_principal_id = "did:web:agent-one.example.com";
+    let controller_id = "did:web:controller.example.com";
+    let agent_id = "did:web:agent-one.example.com";
 
-    let first = derive_sidecar_id(controller_did, agent_principal_id)?;
-    let second = derive_sidecar_id(controller_did, agent_principal_id)?;
+    let first = derive_sidecar_id(controller_id, agent_id)?;
+    let second = derive_sidecar_id(controller_id, agent_id)?;
     if first != second {
         return Err(anyhow!(
             "sidecar id derivation is non-deterministic: first={first} second={second}"
@@ -52,7 +52,7 @@ pub async fn sidecar_circle_idempotent_ensure_run() -> Result<()> {
 
     // Different agent → different sidecar.
     let other_agent = "did:web:agent-two.example.com";
-    let other = derive_sidecar_id(controller_did, other_agent)?;
+    let other = derive_sidecar_id(controller_id, other_agent)?;
     if other == first {
         return Err(anyhow!(
             "two distinct agents collided to the same sidecar_circle_id"

@@ -16,7 +16,7 @@
 // minted DID is a resolvable did:webvh and the grant works on `/_arkret/self/*`.
 
 import { expect, type APIRequestContext } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
+import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
@@ -145,7 +145,7 @@ export async function loginPrincipalViaCoauth(
 ): Promise<OnboardedPrincipal> {
   const deviceId = opts.deviceId ?? uniqueUser(prefix).deviceId;
   const deviceKey = generateDpopDeviceKey();
-  const audience = solandServiceDid(opts.server);
+  const audience = solandServiceId(opts.server);
   const loginUrl = `${coauthBase}/_coauth/account/auth/login`;
   const login = await request.post(loginUrl, {
     headers: kickoffDpopHeaders({ deviceKey, method: "POST", url: loginUrl }),

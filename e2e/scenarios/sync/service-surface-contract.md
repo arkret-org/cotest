@@ -59,7 +59,7 @@
 1. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
 2. 断言:
    - HTTP 200,`Content-Type: application/json`
-   - body 含 spec §3 必填字段:`service_did`、`trust_domain`、`service_type`、`protocol_version`、`supported_profiles`、`supported_operations`、`supported_bindings`(数组,不是单数 `binding`)、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
+   - body 含 spec §3 必填字段:`service_id`、`trust_domain`、`service_type`、`protocol_version`、`supported_profiles`、`supported_operations`、`supported_bindings`(数组,不是单数 `binding`)、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
    - `service_type === "principal_server"`(soland 是 principal server,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
    - `supported_bindings[0].kind === "http_json"`、`supported_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价

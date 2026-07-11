@@ -59,7 +59,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         .getByTestId("contact-sidebar-agent-row")
         .filter({ hasText: displayName });
       await expect(ownAgentRow).toBeVisible({ timeout: 30_000 });
-      await expect(ownAgentRow).toHaveAttribute("data-agent", agent.agent_principal_id);
+      await expect(ownAgentRow).toHaveAttribute("data-agent", agent.agent_id);
       await expect(ownAgentRow).toHaveAttribute("data-controller", jointRealm.alice.did);
       await expect(ownAgentRow).toContainText("pending");
       await expect(ownAgentRow).toBeEnabled();
@@ -71,8 +71,8 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 
       const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
-        agent_principal_id: `did:web:agents.joint-e2e.local:${stamp}`,
-        controller_principal_id: jointRealm.alice.did,
+        agent_id: `did:web:agents.joint-e2e.local:${stamp}`,
+        controller_id: jointRealm.alice.did,
         display_name: `Alice Allowed Agent ${stamp}`,
         agent_slug: `allowed-${stamp.toString(36)}`,
         direct_conversation: {
@@ -138,7 +138,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 });
 
 type ProvisionedAgent = {
-  agent_principal_id: string;
+  agent_id: string;
   pairing_request_id: string;
   expires_at: string;
 };
@@ -171,7 +171,7 @@ async function provisionPendingAgent(
   const responseText = await response.text();
   expect(response.status(), responseText).toBe(201);
   const body = JSON.parse(responseText) as ProvisionedAgent;
-  expect(body.agent_principal_id).toMatch(/^did:/);
+  expect(body.agent_id).toMatch(/^did:/);
   expect(body.pairing_request_id).toBeTruthy();
   return body;
 }

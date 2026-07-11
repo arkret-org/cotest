@@ -95,7 +95,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .as_str()
             .unwrap()
             // soland signs the ICE config with the service's notary key
-            // (`<service_did>#notary-key`); the spec allows any `#<key-id>`
+            // (`<service_id>#notary-key`); the spec allows any `#<key-id>`
             // fragment (ice-config-response.schema.json `kid`).
             .ends_with("#notary-key")
     );

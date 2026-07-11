@@ -98,7 +98,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             invite_create_payload(
                 "ak:invite:0196419b-0000-7000-8000-000000000202",
                 bob.actor.as_str(),
-                server.service_did(),
+                server.service_id(),
                 canonical_sha256(&introduction_evidence)?,
                 invite_expires_at,
             )?,

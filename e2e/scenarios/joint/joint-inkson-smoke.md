@@ -13,7 +13,7 @@ coauth processes, including cross-principal chat projections.
 4. Alice sends a plaintext message through real soland.
 5. Alice sees the message in the inkson timeline UI.
 6. Register a third DPoP principal, add it to Alice's Realm, and project it as
-   Alice's agent through `ak.agent.endpoint` plus selector mention metadata.
+   Alice's agent through selector mention metadata.
 7. The agent posts a visible reply in the Realm discussion.
 8. Alice opens the Inkson member panel: her controller row is first, carries
    `ME`, reports one agent, and expands to the agent row.

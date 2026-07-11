@@ -316,7 +316,7 @@ pub const STARID_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     bind_env: "STARID_BIND",
     bind_arg: None,
     extra_env: &[
-        ("STARID_SERVICE_DID", "did:web:starid.cotest.local"),
+        ("STARID_SERVICE_ID", "did:web:starid.cotest.local"),
         ("STARID_DEVELOPMENT_MODE", "true"),
     ],
     extra_args: &[],
@@ -351,7 +351,7 @@ pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     bind_arg: None,
     extra_env: &[
         ("TEABAY_PUBLIC_BASE_URL", "http://teabay.cotest.local"),
-        ("TEABAY_SERVICE_DID", "did:web:teabay.cotest.local"),
+        ("TEABAY_SERVICE_ID", "did:web:teabay.cotest.local"),
         ("TEABAY_DEVELOPMENT_MODE", "true"),
         ("TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED", "true"),
     ],

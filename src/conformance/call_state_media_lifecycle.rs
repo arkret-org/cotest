@@ -247,7 +247,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
                 call_id: call_id(),
                 focus_id: "fra-1".to_owned(),
                 recording_id: "rtc-recording-019a7360-0000-7000-8000-000000000002".to_owned(),
-                media_service_did: Did::new("did:web:recorder.example").unwrap(),
+                media_service_id: Did::new("did:web:recorder.example").unwrap(),
                 recording_start_event_id: start_event_id(),
             },
             ciphertext_digest: hash('b'),
@@ -497,7 +497,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         "call_id",
         "focus_id",
         "recording_id",
-        "media_service_did",
+        "media_service_id",
         "transcript_start_event_id",
     ];
     transcript_key_source_ok(LABEL_RTC_TRANSCRIPT_KEY, &transcript_context)

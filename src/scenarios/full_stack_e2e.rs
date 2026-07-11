@@ -19,7 +19,7 @@
 //!   7. **chime mock receives blind wakeup** — in-process HTTPS sink modelled on the
 //!      `soland_floria_push_e2e` mock receiver; verifies it can accept a sanitized payload.
 //!   8. **rebind handover** — model T3.3 reducer state by mutating the candidate's
-//!      `member_delivery_binding.recipient_service_did` and asserting the local allow-list model
+//!      `member_delivery_binding.recipient_service_id` and asserting the local allow-list model
 //!      rejects it.
 //!   9. **revocation** — model a `ak.handle.revoke` event by expiring the candidate; the validator
 //!      MUST refuse subsequent operations.
@@ -142,7 +142,7 @@ fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
 ///  - canonical handle is `<localpart>:<domain>` (R3.1 wire rename)
 ///  - `acct:` only appears in `handle_aliases[]`
 ///  - `expires_at` is in the future (coauth's 5-minute TTL ceiling)
-///  - `member_delivery_binding.recipient_service_did` matches the issuer
+///  - `member_delivery_binding.recipient_service_id` matches the issuer
 fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
     let canonical = candidate.handle.canonical();
     let mut colon_parts = canonical.split(':');
@@ -180,11 +180,11 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
     }
     if candidate
         .member_delivery_binding
-        .recipient_service_did
+        .recipient_service_id
         .as_str()
         != PRINCIPAL_DID
     {
-        bail!("T8.1 step 2: member_delivery_binding.recipient_service_did drifted");
+        bail!("T8.1 step 2: member_delivery_binding.recipient_service_id drifted");
     }
     Ok(())
 }
@@ -295,7 +295,7 @@ fn step_6_floria_blind_payload(_inbound: &Value) -> Result<Value> {
     // pushkin / OS push provider. The sanitizer treats this object as
     // both wrapper and notification — both layers MUST be free of `did:` /
     // `ak:` literals and any forbidden correlation key. The push wrapper's
-    // routing metadata (`destination_service_did`, `operation_id`) is
+    // routing metadata (`destination_service_id`, `operation_id`) is
     // attached at the soland→floria hop and stripped before egress; what
     // reaches the provider is the wakeup-only object below.
     let payload = json!({
@@ -375,12 +375,12 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
 // ── Step 8: rebind handover ────────────────────────────────────────────────
 
 /// soland's delivery_binding_policy reducer (T3.3) refuses a rebind to a
-/// recipient_service_did the Space does not allow. The candidate now
+/// recipient_service_id the Space does not allow. The candidate now
 /// single-sources that recipient under `member_delivery_binding`, so this
 /// step models the reducer allow-list instead of an SDK outer/inner mismatch.
 fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<()> {
     let mut handover = original.clone();
-    handover.member_delivery_binding.recipient_service_did =
+    handover.member_delivery_binding.recipient_service_id =
         Did::new(REBOUND_PRINCIPAL_DID.to_owned())?;
     handover.validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))?;
 
@@ -388,7 +388,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
     if allowed.contains(
         &handover
             .member_delivery_binding
-            .recipient_service_did
+            .recipient_service_id
             .as_str(),
     ) {
         bail!("T8.1 step 8: rebound recipient unexpectedly passed allow-list");
@@ -648,7 +648,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
-            recipient_service_did: principal.clone(),
+            recipient_service_id: principal.clone(),
             recipient_service_type: RecipientServiceType::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
@@ -657,7 +657,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             ),
             policy_event_ref: Some("ak:event:0196419b-0000-7000-8000-policyref001".to_owned()),
         },
-        issuer_service_did: principal,
+        issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),
         expires_at: future_expiry(ChronoDuration::minutes(5)),
         issued_at: Some(Utc::now()),

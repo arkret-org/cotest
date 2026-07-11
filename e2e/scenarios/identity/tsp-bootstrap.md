@@ -4,7 +4,7 @@
 
 验证跨 VID 体系(`did:webvh` / `did:web` / `did:webs`)的 Trust Spanning Protocol 接入路径:内部 Arkret 用户 `alice` (`did:webvh`) 与外部组织 `bob_extern` (`did:web`) 通过各自 DID Document 上声明的 `ak.service.tsp` endpoint,完成 TSP relationship bootstrap (公钥交换、VID 验证、relationship id 建立);随后 alice 用 TSP envelope 包装一个 Arkret operation (`ak.invite.create`) 发给 bob_extern;bob_extern 验证 TSP authenticity + 解出内层 Arkret payload + 用 Arkret event signature 二次校验,然后通过反向 TSP 通道回 `ak.member.state{join}`;整个过程中 metadata 通过 nested message 对中间 relay 不可见。
 
-不验证:Arkret v1 core 的 HTTPS JWE / MLS DM transport(默认路径,已被 messaging/triad-collaboration 等覆盖)、KERI AID 解析(本 scenario 只覆盖 did:webvh/did:web/did:webs 三种 VID)、Realm 内 E2EE epoch 演化(crypto-media/mls 系列)、TSP routed mode 的 multi-hop intermediary 链路(后续 federation/tsp-routed scenario)、agent protocol handoff 后的 ACP/A2A 协商(tsp 只负责认证,后续 agents/protocol-handoff)。
+不验证:Arkret v1 core 的 HTTPS JWE / MLS DM transport(默认路径,已被 messaging/triad-collaboration 等覆盖)、KERI AID 解析(本 scenario 只覆盖 did:webvh/did:web/did:webs 三种 VID)、Realm 内 E2EE epoch 演化(crypto-media/mls 系列)、TSP routed mode 的 multi-hop intermediary 链路(后续 federation/tsp-routed scenario)。
 
 ## Spec 锚点
 

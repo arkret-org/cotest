@@ -21,7 +21,7 @@
 // "dev-bearer still works" cases need neither and run against soland directly.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { coauthBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { coauthBaseUrl, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -132,14 +132,14 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       account.actorDid,
       account.deviceId,
       deviceKey,
-      { audience: solandServiceDid() },
+      { audience: solandServiceId() },
     );
     if (!grant) {
       return undefined;
     }
     // Sanity: the grant the AA minted is bound to OUR device key.
     expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
-    expect(grant.audience).toBe(solandServiceDid());
+    expect(grant.audience).toBe(solandServiceId());
     expect(grant.principalDid).toMatch(/^did:webvh:/);
     return {
       ...account,

@@ -151,15 +151,15 @@
 
 1. **双 soland 启动**:
    - 当前 script 只起一个 soland。需要参数化:`-SolandInstances 2` 或新加参数 `-Soland2Manifest`、`-Soland2BaseUrl`
-   - 每个 soland 自己的 service DID、自己的 service_did 配置、自己的 objects root 目录
+   - 每个 soland 自己的 service DID、自己的 service_id 配置、自己的 objects root 目录
    - coauth 的 `arkret.principal_servers[]` 配置要包含两个 soland 的 entry
 2. **soland 之间的联邦发现**:
    - 需要 soland 支持 "已知 federation peers" 配置(看 soland 实现是 env var 还是 config)
    - 或者 soland 通过 DID Document `service.ArkretPrincipalServer` 自动发现
    - **依赖 soland**:这条 scenario 在 soland 不能联邦的情况下无法跑
 3. **环境变量**给测试用:
-   - `COTEST_SOLAND_ALPHA_BASE_URL` / `COTEST_SOLAND_ALPHA_SERVICE_DID`
-   - `COTEST_SOLAND_BETA_BASE_URL` / `COTEST_SOLAND_BETA_SERVICE_DID`
+   - `COTEST_SOLAND_ALPHA_BASE_URL` / `COTEST_SOLAND_ALPHA_SERVICE_ID`
+   - `COTEST_SOLAND_BETA_BASE_URL` / `COTEST_SOLAND_BETA_SERVICE_ID`
 4. **新 helper**:
    - `openUserPage(browser, user, { server: "alpha" | "beta" })` — 在指定 soland 上注册并打开 inkson
    - 当前 inkson 通过 `inkson.config.v1.server_url` 决定连哪个 soland,所以只要切 server_url 就能实现

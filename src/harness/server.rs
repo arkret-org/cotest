@@ -23,7 +23,7 @@ use super::{canonical_device_id, fixture_webvh_did};
 pub struct ArkretServer {
     handle: SutHandle,
     base_url: Url,
-    service_did: String,
+    service_id: String,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
     _port_reservations: Vec<ReservedPort>,
@@ -120,7 +120,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let service_did = fixture_webvh_did(&format!("{name}.cotest.local"));
+        let service_id = fixture_webvh_did(&format!("{name}.cotest.local"));
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -134,7 +134,7 @@ impl ArkretServer {
             .arg(&bind)
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SOLAND_SERVICE_DID", &service_did)
+            .env("SOLAND_SERVICE_ID", &service_id)
             .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
@@ -165,7 +165,7 @@ impl ArkretServer {
         Ok(Self {
             handle: SutHandle::Local(child),
             base_url,
-            service_did,
+            service_id,
             blob_root: Some(blob_root),
             log_path,
             _port_reservations: vec![port, metrics_port],
@@ -192,7 +192,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let service_did = fixture_webvh_did(&format!("{name}.cotest.local"));
+        let service_id = fixture_webvh_did(&format!("{name}.cotest.local"));
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -212,7 +212,7 @@ impl ArkretServer {
             .arg(&bind)
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SOLAND_SERVICE_DID", &service_did)
+            .env("SOLAND_SERVICE_ID", &service_id)
             .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
@@ -238,7 +238,7 @@ impl ArkretServer {
         Ok(Self {
             handle: SutHandle::Local(child),
             base_url,
-            service_did,
+            service_id,
             blob_root: Some(blob_root),
             log_path,
             _port_reservations: vec![port, metrics_port],
@@ -254,7 +254,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let service_did = fixture_webvh_did(&format!("{name}.cotest.local"));
+        let service_id = fixture_webvh_did(&format!("{name}.cotest.local"));
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -294,7 +294,7 @@ impl ArkretServer {
             .arg("--env")
             .arg(format!("SOLAND_PUBLIC_BASE_URL={public_base_url}"))
             .arg("--env")
-            .arg(format!("SOLAND_SERVICE_DID={service_did}"))
+            .arg(format!("SOLAND_SERVICE_ID={service_id}"))
             .arg("--env")
             .arg("SOLAND_DEVELOPMENT_MODE=1")
             .arg("--env")
@@ -328,7 +328,7 @@ impl ArkretServer {
         Ok(Self {
             handle: SutHandle::Docker { container_name },
             base_url,
-            service_did,
+            service_id,
             blob_root: None,
             log_path,
             _port_reservations: vec![host_port],
@@ -339,8 +339,8 @@ impl ArkretServer {
         self.base_url.clone()
     }
 
-    pub fn service_did(&self) -> &str {
-        &self.service_did
+    pub fn service_id(&self) -> &str {
+        &self.service_id
     }
 
     pub fn http(&self) -> HttpClient {
@@ -438,7 +438,7 @@ impl ArkretServer {
             http: self.http(),
             sdk,
             base_url: self.base_url(),
-            service_did: self.service_did.clone(),
+            service_id: self.service_id.clone(),
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             token,

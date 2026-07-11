@@ -93,7 +93,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "actor_id": bob.actor,
             "realm_id": realm_id,
             "source": {
-                "service_did": "did:web:soland.cotest.local",
+                "service_id": "did:web:soland.cotest.local",
                 "service_type": "principal_server",
                 "signed_transport": true
             }
@@ -142,7 +142,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "actor_id": bob.actor,
             "realm_id": realm_id,
             "source": {
-                "service_did": "did:web:soland.cotest.local",
+                "service_id": "did:web:soland.cotest.local",
                 "service_type": "principal_server",
                 "signed_transport": true
             }

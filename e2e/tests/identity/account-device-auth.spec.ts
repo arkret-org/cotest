@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { coauthBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { coauthBaseUrl, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   loginPrincipalViaCoauth,
   onboardPrincipalViaCoauth,
@@ -50,7 +50,7 @@ test.describe("account auth + device strand", () => {
     test.skip(!coauth, "coauth not started for this run");
 
     const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "ad-alice");
-    expect(onboarded.grantAudience).toBe(solandServiceDid());
+    expect(onboarded.grantAudience).toBe(solandServiceId());
     // Short-term: the SDK caps grants well under a day; assert a bounded TTL.
     const grantTtlMs = grantExpiryMs(onboarded.grantJwt) - Date.now();
     expect(grantTtlMs).toBeGreaterThan(0);

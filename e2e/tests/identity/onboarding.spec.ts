@@ -9,10 +9,10 @@
 import { expect, test } from "@playwright/test";
 import {
   coauthBaseUrl,
-  coauthServiceDid,
+  coauthServiceId,
   mockEmailBaseUrl,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import {
   ensureRegistered,
@@ -85,12 +85,12 @@ test.describe("account onboarding", () => {
     expect(serviceDescribe.status()).toBe(200);
     const service = await serviceDescribe.json();
     expect(service.supported_operations).toContain("ak.gate.account.command.issue_session_grant");
-    expect(service.auth_metadata?.issuer_did).toBe(coauthServiceDid());
+    expect(service.auth_metadata?.issuer_did).toBe(coauthServiceId());
     expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth!).origin);
     expect(service.auth_metadata?.account_authority?.gate_account_base).toBe(
       `${coauth}/_arkret/gate/account`,
     );
-    expect(JSON.stringify(service.auth_metadata)).not.toContain(solandServiceDid());
+    expect(JSON.stringify(service.auth_metadata)).not.toContain(solandServiceId());
 
     const start = await request.post(`${coauth}/_coauth/account/auth/register/webvh/start`, {
       data: {
@@ -143,7 +143,7 @@ test.describe("account onboarding", () => {
       }, { timeout: 60_000 });
       await page.page.getByTestId("start-server-login-button").click();
       const current = new URL((await authorizeRequest).url());
-      expect(current.searchParams.get("resource")).toBe(solandServiceDid());
+      expect(current.searchParams.get("resource")).toBe(solandServiceId());
       expect(current.searchParams.get("response_type")).toBe("code");
       expect(current.searchParams.get("code_challenge")).toBeTruthy();
       // Regression guard (inkson fix/authorize-device-scope): the authorize
@@ -192,7 +192,7 @@ test.describe("account onboarding", () => {
 
     const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "s7-alice");
     expect(onboarded.principalDid).toMatch(/^did:webvh:/);
-    expect(onboarded.grantAudience).toBe(solandServiceDid());
+    expect(onboarded.grantAudience).toBe(solandServiceId());
 
     // The short-term grant authenticates a `/_arkret/self/*` call with a
     // per-request DPoP proof bound to the device key it was minted for.

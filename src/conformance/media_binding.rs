@@ -772,7 +772,7 @@ fn recording_context(
     call_id: &str,
     focus_id: &str,
     recording_id: &str,
-    media_service_did: &str,
+    media_service_id: &str,
     recording_start_event_id: &str,
 ) -> Result<Vec<u8>> {
     arkret_core::canonical::canonical_json_bytes(&json!({
@@ -780,7 +780,7 @@ fn recording_context(
         "call_id": call_id,
         "focus_id": focus_id,
         "recording_id": recording_id,
-        "media_service_did": media_service_did,
+        "media_service_id": media_service_id,
         "recording_start_event_id": recording_start_event_id,
     }))
     .map_err(|err| anyhow!("recording exporter Context JCS encoding failed: {err}"))
@@ -837,7 +837,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         "call_id",
         "focus_id",
         "recording_id",
-        "media_service_did",
+        "media_service_id",
         "recording_start_event_id",
     ];
     if fields.len() != required_fields.len() {

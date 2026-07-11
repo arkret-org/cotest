@@ -39,7 +39,7 @@
 //   ✗ Binding fallback chain state machine — presupposes the above bindings
 
 import { expect, test } from "@playwright/test";
-import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { hasDualSoland, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   makeFederationEvent,
@@ -104,8 +104,8 @@ test.describe("transport negotiation", () => {
 
     if (alphaDescribe.ok()) {
       const alphaBody = await alphaDescribe.json();
-      // service_did MUST be present; supported_bindings SHOULD include http_json.
-      expect(typeof alphaBody.service_did).toBe("string");
+      // service_id MUST be present; supported_bindings SHOULD include http_json.
+      expect(typeof alphaBody.service_id).toBe("string");
       if (Array.isArray(alphaBody.supported_bindings)) {
         const kinds = alphaBody.supported_bindings.map((b: { kind: string }) => b.kind);
         expect(kinds).toContain("http_json");
@@ -161,7 +161,7 @@ test.describe("transport negotiation", () => {
       // Phase A — HTTP baseline (RFC 9421 signed POST):
       //   1. alice@α issues ak.invite.create targeting bob's DID on β
       //   2. soland_a constructs POST ${SOLAND_B}/_arkret/peer/events with:
-      //        - Source-Service-DID / Destination-Service-DID headers
+      //        - Source-Service-ID / Destination-Service-ID headers
       //        - Signature-Input covering (@method @target-uri content-digest
       //          source-service-did destination-service-did)
       //        - Signature header (ed25519 over canonical signature base)
@@ -218,8 +218,8 @@ test.describe("transport negotiation", () => {
       try {
         // Phase A — sanity-record alpha/beta service DIDs so failure dumps are
         // useful when the binding work lands.
-        expect(solandServiceDid("alpha")).toMatch(/^did:/);
-        expect(solandServiceDid("beta")).toMatch(/^did:/);
+        expect(solandServiceId("alpha")).toMatch(/^did:/);
+        expect(solandServiceId("beta")).toMatch(/^did:/);
 
         const realmId = await alicePage.createRealm({
           title: `S8 Transport ${stamp}`,
@@ -271,8 +271,8 @@ test.describe("transport negotiation", () => {
       });
 
     const pushOpts = {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       server: "beta" as const,
       realmId,
     };
@@ -282,7 +282,7 @@ test.describe("transport negotiation", () => {
     const expired = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [buildEvent("expired")], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceDid("alpha")}#cotest-e81-expired`,
+        idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-expired`,
         expireSignature: true,
       }),
     );
@@ -292,7 +292,7 @@ test.describe("transport negotiation", () => {
     const tampered = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [buildEvent("tampered")], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceDid("alpha")}#cotest-e81-tampered`,
+        idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-tampered`,
         tamperSignature: true,
       }),
     );
@@ -325,7 +325,7 @@ test.describe("transport negotiation", () => {
     const reSigned = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [buildEvent("resigned")], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceDid("alpha")}#cotest-e81-resigned`,
+        idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-resigned`,
       }),
     );
     const passedAuth =
@@ -367,7 +367,7 @@ test.describe("transport negotiation", () => {
       //   1. Topology: soland_a → relay (third soland or mock) → soland_b
       //   2. Relay receives α's signed POST, does NOT decode the inner
       //      EventEnvelope signature; wraps with its own service signature
-      //      (Source-Service-DID = relay) and forwards to β
+      //      (Source-Service-ID = relay) and forwards to β
       //   3. β MUST verify:
       //      a. Relay's RFC 9421 outer signature (against relay's DID document)
       //      b. Inner EventEnvelope's origin actor signature (alice@α)

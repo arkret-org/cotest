@@ -9,7 +9,7 @@
 //!   2. teabay (T3.4) hosts `ak.find.directory.query.resolve_handle(intent="member_add")` and
 //!      filters candidates against the target Realm's `allowed_recipient_services`.
 //!   3. soland (T3.3) projects `ak.realm.delivery_binding_policy` and the `ak.member.state{join}`
-//!      reducer rejects bindings whose `recipient_service_did` is not in the policy allow-list.
+//!      reducer rejects bindings whose `recipient_service_id` is not in the policy allow-list.
 //!   4. The SDK (T3.1) ships `MemberDeliveryBindingCandidate` and
 //!      `Realm::member_add_with_candidate` as the sanctioned builder-side entry point: the
 //!      candidate is re-validated against `audience = target_realm_id` + `now` before any operation
@@ -91,7 +91,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_expired().context("T3.5 negative — candidate expired")?;
     negative_case_audience_mismatch().context("T3.5 negative — audience != target Realm")?;
     negative_case_service_not_allowed()
-        .context("T3.5 negative — recipient_service_did not in Realm allow-list")?;
+        .context("T3.5 negative — recipient_service_id not in Realm allow-list")?;
     negative_case_acct_canonical_rejected().context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
@@ -166,16 +166,16 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
     // The recipient route is single-sourced through member_delivery_binding.
     if candidate
         .member_delivery_binding
-        .recipient_service_did
+        .recipient_service_id
         .as_str()
         != PRINCIPAL_DID
     {
         bail!(
-            "T3.5 happy path: member_delivery_binding.recipient_service_did \
+            "T3.5 happy path: member_delivery_binding.recipient_service_id \
              must remain the principal service; got {}",
             candidate
                 .member_delivery_binding
-                .recipient_service_did
+                .recipient_service_id
                 .as_str()
         );
     }
@@ -281,7 +281,7 @@ fn negative_case_audience_mismatch() -> Result<()> {
     }
 }
 
-/// `service_not_allowed` — the candidate's `recipient_service_did` is not in
+/// `service_not_allowed` — the candidate's `recipient_service_id` is not in
 /// the target Realm's `allowed_recipient_services`. This is the soland
 /// (T3.3) reducer gate (`recipient_service_not_allowed`). The SDK candidate
 /// validator itself does not own the Realm's policy cell; the candidate now
@@ -292,7 +292,7 @@ fn negative_case_audience_mismatch() -> Result<()> {
 /// rely on.
 fn negative_case_service_not_allowed() -> Result<()> {
     let mut candidate = sample_candidate()?;
-    candidate.member_delivery_binding.recipient_service_did =
+    candidate.member_delivery_binding.recipient_service_id =
         Did::new(OTHER_PRINCIPAL_DID.to_owned())?;
     candidate.validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))?;
 
@@ -300,7 +300,7 @@ fn negative_case_service_not_allowed() -> Result<()> {
     if allowed.contains(
         &candidate
             .member_delivery_binding
-            .recipient_service_did
+            .recipient_service_id
             .as_str(),
     ) {
         bail!("T3.5 service_not_allowed: rogue recipient unexpectedly passed allow-list");
@@ -497,7 +497,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
-            recipient_service_did: principal.clone(),
+            recipient_service_id: principal.clone(),
             recipient_service_type: RecipientServiceType::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
@@ -506,7 +506,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             ),
             policy_event_ref: Some("ak:event:01890000-0000-7000-8000-policyref001".to_owned()),
         },
-        issuer_service_did: principal,
+        issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),
         expires_at: future_expiry(ChronoDuration::minutes(5)),
         issued_at: Some(Utc::now()),

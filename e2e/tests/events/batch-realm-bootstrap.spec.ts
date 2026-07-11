@@ -3,7 +3,7 @@
 // membership materialization.
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
@@ -44,7 +44,7 @@ test.describe.fixme("events submit batch Realm bootstrap", () => {
     const realmId = typedId("realm");
     const createdAt = canonicalTimestamp();
     const plaintextVisibleServices = plaintextVisibleServiceDeclarations([
-      solandServiceDid(),
+      solandServiceId(),
       "did:web:soland.local",
     ]);
     const createEnvelope = signedEventEnvelope({

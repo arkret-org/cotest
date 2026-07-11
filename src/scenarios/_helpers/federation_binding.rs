@@ -72,7 +72,7 @@ pub fn peer_service_binding_ref(
 /// which only holds while the receiver has no prior member binding to be stale
 /// against (federation.md §4.1: a push that first establishes the Realm has no
 /// local binding). Once the receiver already hosts a member whose effective
-/// `delivery_binding.recipient_service_did = Destination-Service-DID`, the
+/// `delivery_binding.recipient_service_id = Destination-Service-ID`, the
 /// sender MUST instead assert that member's delivery-binding causal frontier
 /// (reachable in the receiver's Realm view), or the receiver fails closed with
 /// `delivery_binding_stale`.
@@ -119,7 +119,7 @@ pub fn peer_events_submit_body(
 
 /// Like [`peer_events_submit_body`] but asserts an explicit
 /// `delivery_binding_frontier` — the receiver-reachable causal frontier of the
-/// member whose `delivery_binding.recipient_service_did` equals the destination
+/// member whose `delivery_binding.recipient_service_id` equals the destination
 /// service (federation.md §4.1). Use when pushing to a Realm the receiver
 /// already hosts a delivery-bound member for.
 pub fn peer_events_submit_body_with_delivery_frontier(

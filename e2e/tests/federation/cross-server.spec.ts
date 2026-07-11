@@ -27,7 +27,7 @@ import {
   assertDualSolandNotRequired,
   hasDualSoland,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -153,22 +153,22 @@ function unsignedPeerGetHeaders(
   return {
     "source-service-did": sourceDid,
     "destination-service-did": destinationDid,
-    "source-trust-domain": trustDomainFromServiceDid(sourceDid),
-    "destination-trust-domain": trustDomainFromServiceDid(destinationDid),
+    "source-trust-domain": trustDomainFromServiceId(sourceDid),
+    "destination-trust-domain": trustDomainFromServiceId(destinationDid),
   };
 }
 
-function trustDomainFromServiceDid(serviceDid: string): string {
-  const webHost = serviceDid.startsWith("did:web:")
-    ? serviceDid.slice("did:web:".length).split(":")[0]
+function trustDomainFromServiceId(serviceId: string): string {
+  const webHost = serviceId.startsWith("did:web:")
+    ? serviceId.slice("did:web:".length).split(":")[0]
     : undefined;
-  const webvhHost = serviceDid.startsWith("did:webvh:")
-    ? serviceDid.slice("did:webvh:".length).split(":")[1]
+  const webvhHost = serviceId.startsWith("did:webvh:")
+    ? serviceId.slice("did:webvh:".length).split(":")[1]
     : undefined;
-  const keyScope = serviceDid.startsWith("did:key:")
-    ? serviceDid.slice("did:key:".length)
+  const keyScope = serviceId.startsWith("did:key:")
+    ? serviceId.slice("did:key:".length)
     : undefined;
-  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceDid;
+  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceId;
   const scope = rawScope
     .split(/%3a/i)[0]
     .replace(/\.+$/, "")
@@ -207,8 +207,8 @@ test.describe("cross-server federation", () => {
       `${solandBaseUrl("beta")}/_arkret/peer/events?limit=1`,
       {
         headers: unsignedPeerGetHeaders(
-          solandServiceDid("alpha"),
-          solandServiceDid("beta"),
+          solandServiceId("alpha"),
+          solandServiceId("beta"),
         ),
       },
     );
@@ -351,21 +351,21 @@ test.describe("cross-server federation", () => {
     });
 
     const push = await pushFederationEvents(request, [inviteEvent], {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       server: "beta",
       realmId,
-      idempotencyKey: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
+      idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-smoke`,
     });
     expect(push.accepted).toContain(inviteEvent.event_id);
     expect(push.rejected ?? []).toEqual([]);
 
     const replay = await pushFederationEvents(request, [inviteEvent], {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       server: "beta",
       realmId,
-      idempotencyKey: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
+      idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-smoke`,
     });
     expect(replay.accepted).toContain(inviteEvent.event_id);
     expect(replay.rejected ?? []).toEqual([]);
@@ -480,11 +480,11 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_visibility: "shared",
         invitees: [bob.did],
-        invitee_service_dids: { [bob.did]: solandServiceDid("beta") },
+        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
         plaintext_visible_services: [
-          solandServiceDid("alpha"),
-          solandServiceDid("beta"),
+          solandServiceId("alpha"),
+          solandServiceId("beta"),
         ],
       },
       { server: "alpha" },
@@ -543,11 +543,11 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_visibility: "shared",
         invitees: [bob.did],
-        invitee_service_dids: { [bob.did]: solandServiceDid("beta") },
+        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
         plaintext_visible_services: [
-          solandServiceDid("alpha"),
-          solandServiceDid("beta"),
+          solandServiceId("alpha"),
+          solandServiceId("beta"),
         ],
         federation_policy: "open",
       },
@@ -588,11 +588,11 @@ test.describe("cross-server federation", () => {
     });
 
     await pushFederationEvents(request, [missingEvent], {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("alpha"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("alpha"),
       server: "alpha",
       realmId,
-      idempotencyKey: `${solandServiceDid("alpha")}#cotest-partition-source`,
+      idempotencyKey: `${solandServiceId("alpha")}#cotest-partition-source`,
     });
     await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
@@ -618,7 +618,7 @@ test.describe("cross-server federation", () => {
 
     const backfill = await queryPeerEventsApi(request, {
       server: "alpha",
-      sourceDid: solandServiceDid("beta"),
+      sourceDid: solandServiceId("beta"),
       realmId,
       limit: 100,
     });
@@ -629,11 +629,11 @@ test.describe("cross-server federation", () => {
       missingEvent.event_id,
     );
     const ingest = await pushFederationEvents(request, backfilledEvents, {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       server: "beta",
       realmId,
-      idempotencyKey: `${solandServiceDid("beta")}#cotest-peer-query-recovery`,
+      idempotencyKey: `${solandServiceId("beta")}#cotest-peer-query-recovery`,
     });
     expect(ingest.rejected ?? []).toEqual([]);
     expect(ingest.accepted).toContain(
@@ -675,11 +675,11 @@ test.describe("cross-server federation", () => {
       },
     });
     const response = await rawPushFederationEvents(request, [event], {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       server: "beta",
       realmId,
-      idempotencyKey: `${solandServiceDid("alpha")}#cotest-reducer-profile-mismatch`,
+      idempotencyKey: `${solandServiceId("alpha")}#cotest-reducer-profile-mismatch`,
       // Well-formed sha256:<hex> that cannot equal β's registry-derived
       // digest for ak.profile.federation_minimal.v1.
       reducerProfileDigestOverride: `sha256:${"9".repeat(64)}`,
@@ -734,11 +734,11 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_visibility: "shared",
         invitees: [bob.did],
-        invitee_service_dids: { [bob.did]: solandServiceDid("beta") },
+        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
         plaintext_visible_services: [
-          solandServiceDid("alpha"),
-          solandServiceDid("beta"),
+          solandServiceId("alpha"),
+          solandServiceId("beta"),
         ],
       },
       { server: "alpha" },
@@ -765,7 +765,7 @@ test.describe("cross-server federation", () => {
     const grantId = await grantServiceDelegationApi(request, aliceToken, {
       ownerDid: alice.did,
       realmId,
-      subjectServiceDid: solandServiceDid("beta"),
+      subjectServiceId: solandServiceId("beta"),
     });
     const beforeBody = `before revoke ${stamp}`;
     await sendMessageApi(request, aliceToken, realmId, beforeBody, {
@@ -835,11 +835,11 @@ test.describe("cross-server federation", () => {
       },
     });
     const response = await rawPushFederationEvents(request, [event], {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       server: "beta",
       realmId,
-      idempotencyKey: `${solandServiceDid("alpha")}#cotest-rfc9421-negative`,
+      idempotencyKey: `${solandServiceId("alpha")}#cotest-rfc9421-negative`,
       tamperSignature: true,
     });
     const text = await response.text();

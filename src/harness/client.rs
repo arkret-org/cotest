@@ -15,7 +15,7 @@ pub struct TestActorClient {
     pub(super) http: HttpClient,
     pub(super) sdk: SdkClient,
     pub(super) base_url: Url,
-    pub(super) service_did: String,
+    pub(super) service_id: String,
     pub actor: String,
     pub device_id: String,
     pub token: String,
@@ -26,8 +26,8 @@ impl TestActorClient {
         self.sdk.clone()
     }
 
-    pub fn service_did(&self) -> &str {
-        &self.service_did
+    pub fn service_id(&self) -> &str {
+        &self.service_id
     }
 
     pub fn url(&self, path: &str) -> String {
@@ -59,7 +59,7 @@ impl TestActorClient {
                 "title": title,
                 "summary": title,
                 "public": false,
-                "plaintext_visible_services": [self.service_did.clone()]
+                "plaintext_visible_services": [self.service_id.clone()]
             }))
             .await?;
         created["realm_id"]
@@ -74,7 +74,7 @@ impl TestActorClient {
             .and_then(Value::as_str)
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| next_typed_id("realm"));
-        let payload = realm_create_payload(&self.actor, &self.service_did, &realm_id, &body);
+        let payload = realm_create_payload(&self.actor, &self.service_id, &realm_id, &body);
         let event_response = self
             .submit_event(&realm_id, "ak.realm.create", payload)
             .await?;

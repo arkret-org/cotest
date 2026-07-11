@@ -15,7 +15,7 @@ import { expect, test } from "@playwright/test";
 import {
   mockAuditAgentBaseUrl,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import {
   addRealmMemberApi,
@@ -143,7 +143,7 @@ test.describe("encrypted attachments", () => {
     expect(body.upload_receipt.blob_ref).toBe(body.blob_ref);
     expect(body.upload_receipt.content_digest).toBe(ciphertextDigest);
     expect(body.upload_receipt.size_bytes).toBe(ciphertext.length);
-    expect(body.upload_receipt.issuer_service_did).toMatch(/^did:/);
+    expect(body.upload_receipt.issuer_service_id).toMatch(/^did:/);
     expect(body.upload_receipt.signature).toBeTruthy();
     expect(JSON.stringify(body.upload_receipt)).not.toContain("cat.png");
     expect(JSON.stringify(body.upload_receipt)).not.toContain("image/png");
@@ -288,7 +288,7 @@ test.describe("encrypted attachments", () => {
         device_id: bob.deviceId,
         mls_group_id_digest: sha256HexDigest(`mls-group-${realmId}`),
       },
-      received_by: solandServiceDid(),
+      received_by: solandServiceId(),
       received_at: new Date().toISOString(),
       replay_nonce: Buffer.from(randomUUID()).toString("base64url"),
       signature: "mock-attested-franking-signature",

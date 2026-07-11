@@ -64,7 +64,6 @@ Totals: 67 scenarios / 67 specs / 269 verified / 399 promised / 130 fixme / 25 s
 | encryption/key-backup-restore | 7 | 7 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/mls-group | 6 | 11 | 54.5% | 5 | 0 | mixed | yes |  |
 | events/batch-realm-bootstrap | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
-| extensions/agent-protocol-interop | 1 | 6 | 16.7% | 5 | 0 | mixed | yes |  |
 | extensions/applet-bridge | 4 | 4 | 100.0% | 0 | 1 | live-only | yes |  |
 | extensions/mimi-federation | 2 | 4 | 50.0% | 2 | 0 | mixed | yes |  |
 | federation/cross-server | 8 | 10 | 80.0% | 2 | 1 | mixed | yes |  |

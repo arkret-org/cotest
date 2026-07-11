@@ -144,14 +144,14 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
             pairing_ttl_ms: None,
         })
         .await?;
-    let agent_did = prov.agent_principal_id.to_string();
+    let agent_did = prov.agent_id.to_string();
     let status_body = arkret::models::AgentRuntimeApprovalStatusRequestBody {
         pairing_request_id: prov.pairing_request_id.clone(),
         pairing_code: prov
             .pairing_code
             .clone()
             .ok_or_else(|| anyhow!("pairing_code missing"))?,
-        agent_principal_id: prov.agent_principal_id.clone(),
+        agent_id: prov.agent_id.clone(),
     };
 
     // 1. Open pairing, nothing submitted yet: pending without an approval_request_id or any
@@ -250,7 +250,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         ],
     )
     .await?;
-    mock.set_service_did(server.service_did().to_owned());
+    mock.set_service_id(server.service_id().to_owned());
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
 
     let realm_id = create_realm(&server, &token, ALICE_DID, "Agent reply live e2e").await?;
@@ -567,7 +567,7 @@ async fn provision_and_pair_agent(
             pairing_ttl_ms: None,
         })
         .await?;
-    let agent_did = prov.agent_principal_id.to_string();
+    let agent_did = prov.agent_id.to_string();
     assert!(prov.pairing_code.is_some(), "pairing_code present");
     assert_eq!(
         agent_status(server, token, &agent_did).await?,
@@ -599,15 +599,15 @@ fn runtime_key_request_builder<'a>(
         .pairing_code
         .clone()
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
-    let service_did = arkret::Did::new(server.service_did().to_owned())?;
+    let service_id = arkret::Did::new(server.service_id().to_owned())?;
     let proof_expires_at =
         chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
     Ok(arkret::agent::RuntimeKeyRequestBuilder::new(
         signing_key,
         arkret::AgentPairingBootstrap {
             arkret_base_url: server.base_url().to_string(),
-            service_did,
-            agent_principal_id: provisioned.agent_principal_id.clone(),
+            service_id,
+            agent_id: provisioned.agent_id.clone(),
             pairing_request_id: provisioned.pairing_request_id.clone(),
             pairing_code,
             pairing_expires_at: provisioned.expires_at,
@@ -636,7 +636,7 @@ async fn pair_agent_runtime_key(
     token: &str,
     provisioned: &arkret::AgentProvisionOutcome,
 ) -> Result<arkret::AgentKeyPairOutcome> {
-    let agent_did = provisioned.agent_principal_id.to_string();
+    let agent_did = provisioned.agent_id.to_string();
     let pairing_request_id = provisioned.pairing_request_id.as_str();
     let pairing_code = provisioned
         .pairing_code
@@ -645,7 +645,7 @@ async fn pair_agent_runtime_key(
     let pairing_expires_at = provisioned
         .expires_at
         .to_rfc3339_opts(SecondsFormat::Millis, true);
-    let agent_id = provisioned.agent_principal_id.clone();
+    let agent_id = provisioned.agent_id.clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
     let signing_key = runtime_signing_key();
@@ -660,13 +660,13 @@ async fn pair_agent_runtime_key(
         pairing_request_id,
         pairing_code,
         &pairing_expires_at,
-        server.service_did(),
+        server.service_id(),
     )?;
     let authorize_event = json!({
         "kind": "ak.agent.key.authorize",
         "actor_id": ALICE_DID,
         "payload": {
-            "agent_principal_id": agent_did,
+            "agent_id": agent_did,
             "key_id": "ak:agent_key:01999999000070008000000000000001",
             "verification_method": verification_method,
             "public_key_digest": runtime_public_key_digest.as_str(),
@@ -682,7 +682,7 @@ async fn pair_agent_runtime_key(
                 "resources": [{"kind": "realm", "realm_id": "*"}],
                 "constraints": []
             },
-            "audience": [server.service_did()],
+            "audience": [server.service_id()],
             "issued_at": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
             "expires_at": "2999-01-01T00:00:00Z",
             "approval_evidence": {
@@ -707,7 +707,7 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
     let status = list
         .agents
         .iter()
-        .find(|agent| agent.agent_principal_id.as_str() == agent_did)
+        .find(|agent| agent.agent_id.as_str() == agent_did)
         .map(|agent| {
             serde_json::to_value(agent.status)
                 .ok()
@@ -840,7 +840,7 @@ fn jwk_thumbprint_ed25519(x: &str) -> String {
 struct AgentIntrospectionState {
     active: Arc<AtomicBool>,
     request_count: Arc<AtomicUsize>,
-    service_did: Arc<Mutex<String>>,
+    service_id: Arc<Mutex<String>>,
     subject: Arc<Mutex<Option<String>>>,
     cnf_jkt: String,
     session_public_key: String,
@@ -850,25 +850,25 @@ struct MockIntrospection {
     url: String,
     active: Arc<AtomicBool>,
     request_count: Arc<AtomicUsize>,
-    service_did: Arc<Mutex<String>>,
+    service_id: Arc<Mutex<String>>,
     subject: Arc<Mutex<Option<String>>>,
     _server: MockServer,
 }
 
 impl MockIntrospection {
     async fn spawn(
-        service_did: String,
+        service_id: String,
         cnf_jkt: String,
         session_public_key: String,
     ) -> Result<Self> {
         let active = Arc::new(AtomicBool::new(true));
         let request_count = Arc::new(AtomicUsize::new(0));
-        let service_did = Arc::new(Mutex::new(service_did));
+        let service_id = Arc::new(Mutex::new(service_id));
         let subject = Arc::new(Mutex::new(None));
         let state = AgentIntrospectionState {
             active: Arc::clone(&active),
             request_count: Arc::clone(&request_count),
-            service_did: Arc::clone(&service_did),
+            service_id: Arc::clone(&service_id),
             subject: Arc::clone(&subject),
             cnf_jkt,
             session_public_key,
@@ -882,7 +882,7 @@ impl MockIntrospection {
             url,
             active,
             request_count,
-            service_did,
+            service_id,
             subject,
             _server: server,
         })
@@ -896,9 +896,9 @@ impl MockIntrospection {
         self.request_count.load(Ordering::SeqCst)
     }
 
-    fn set_service_did(&self, service_did: String) {
-        if let Ok(mut guard) = self.service_did.lock() {
-            *guard = service_did;
+    fn set_service_id(&self, service_id: String) {
+        if let Ok(mut guard) = self.service_id.lock() {
+            *guard = service_id;
         }
     }
 
@@ -938,8 +938,8 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
     }
     let _body: Value = req.parse_json().await.unwrap_or_else(|_| json!({}));
 
-    let service_did = state
-        .service_did
+    let service_id = state
+        .service_id
         .lock()
         .map(|guard| guard.clone())
         .unwrap_or_else(|_| "did:web:agent-live-e2e.cotest.local".to_owned());
@@ -963,7 +963,7 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 "issuer": "did:web:coauth.cotest.local",
                 "subject": subject,
                 "service_account_id": "agent-live-e2e-account",
-                "audience": service_did,
+                "audience": service_id,
                 "scopes": [
                     "ak.self.events.stream.subscribe",
                     "ak.self.events.query.scan",
@@ -977,8 +977,8 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 "cnf_jkt": state.cnf_jkt,
                 "proof_kind": "agent_key_proof",
                 "scope_details": {
-                    "agent_principal_id": subject,
-                    "controller_principal_id": ALICE_DID,
+                    "agent_id": subject,
+                    "controller_id": ALICE_DID,
                     "resources": {
                         "realm_refs": ["*"],
                         "strand_refs": []

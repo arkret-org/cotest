@@ -103,7 +103,7 @@ struct CaseResult {
 struct TemplateContext {
     alice_did: String,
     alice_token: String,
-    service_did: String,
+    service_id: String,
     realm_id: String,
     space_id: String,
 }
@@ -132,7 +132,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token,
-        service_did: server.service_did().to_owned(),
+        service_id: server.service_id().to_owned(),
         realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
         space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
@@ -204,7 +204,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
-        service_did: "did:web:soland.mock-parity-smoke.local".to_owned(),
+        service_id: "did:web:soland.mock-parity-smoke.local".to_owned(),
         realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
         space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
@@ -225,7 +225,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
-        service_did: "did:web:soland.mock-parity-gate.local".to_owned(),
+        service_id: "did:web:soland.mock-parity-gate.local".to_owned(),
         realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
         space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
@@ -765,7 +765,7 @@ fn render_value(value: &Value, ctx: &TemplateContext) -> Value {
 fn render_str(value: &str, ctx: &TemplateContext) -> String {
     value
         .replace("${alice_did}", &ctx.alice_did)
-        .replace("${service_did}", &ctx.service_did)
+        .replace("${service_id}", &ctx.service_id)
         .replace("${realm_id}", &ctx.realm_id)
         .replace("${space_id}", &ctx.space_id)
 }

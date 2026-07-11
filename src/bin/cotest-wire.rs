@@ -185,10 +185,10 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
     canonical::canonical_sha256(&event).context("hash event digest payload")
 }
 
-fn development_event_signing_key(service_did: &str) -> SigningKey {
+fn development_event_signing_key(service_id: &str) -> SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:anchorer-ephemeral:");
-    hasher.update(service_did.as_bytes());
+    hasher.update(service_id.as_bytes());
     let seed: [u8; 32] = hasher.finalize().into();
     SigningKey::from_bytes(&seed)
 }

@@ -14,7 +14,7 @@ import {
   hasDualSoland,
   optionalEnv,
   solandBaseUrl,
-  solandServiceDid,
+  solandServiceId,
 } from "../../helpers/env";
 import {
   createRealmApi,
@@ -54,8 +54,8 @@ test.describe("federation security hardening", () => {
       },
     });
     const response = await rawPushFederationEvents(request, [op], {
-      origin: solandServiceDid("alpha"),
-      destination: solandServiceDid("beta"),
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
       realmId,
       server: "beta",
     });
@@ -81,7 +81,7 @@ test.describe("federation security hardening", () => {
       {
         title: "denylisted outbound",
         public: false,
-        plaintext_visible_services: [solandServiceDid("alpha"), solandServiceDid("beta")],
+        plaintext_visible_services: [solandServiceId("alpha"), solandServiceId("beta")],
       },
       { server: "alpha" },
     );

@@ -37,7 +37,7 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 3. bob 发加密消息 `M1` 到 Realm `R_audit`
 4. soland Sync Service:
    - 接受 ciphertext + plaintext metadata
-   - 同时生成 `ak.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_did, timestamp }`,服务端 service DID 签
+   - 同时生成 `ak.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_id, timestamp }`,服务端 service DID 签
 5. 断言:`GET /_soland/admin/audit/events?realm_id=<R_audit>&kind=ak.moderation.franking_proof` 返回该 franking 记录
 6. 断言:franking record **不含** 明文消息内容,只含 ciphertext_digest
 

@@ -114,7 +114,7 @@ export function buildThirdPartyInvitePayload(args: {
     token_commitment: args.tokenCommitment,
     token_salt_id: args.tokenSaltId ?? "salt-3pid-e2e-001",
     token_entropy_bits: 128,
-    verification_service_did: args.verificationService.did,
+    verification_service_id: args.verificationService.did,
     verification_public_key: args.verificationService.verificationMethod,
     max_claims: 1,
   };
@@ -152,7 +152,7 @@ export function buildThirdPartyInvitePayload(args: {
 // Sign the `binding_proof` exactly as soland reconstructs it: the unsigned proof
 // object (no `signature`/`sig`) wrapped in the domain-separated transcript that
 // binds invite_id / realm_id / subject_id / token_commitment / claim_nonce /
-// invite_digest / verification_service_did.
+// invite_digest / verification_service_id.
 export function signBindingProof(args: {
   cell: ThirdPartyInviteCell;
   verificationService: DidKeyIdentity;
@@ -161,7 +161,7 @@ export function signBindingProof(args: {
   bindingExpiresAt: string;
 }): Record<string, unknown> {
   const unsigned = {
-    verification_service_did: args.verificationService.did,
+    verification_service_id: args.verificationService.did,
     verification_method: args.verificationService.verificationMethod,
     subject_id: args.subjectId,
     realm_id: args.cell.realmId,
@@ -178,7 +178,7 @@ export function signBindingProof(args: {
     realm_id: args.cell.realmId,
     subject_id: args.subjectId,
     token_commitment: args.cell.tokenCommitment,
-    verification_service_did: args.verificationService.did,
+    verification_service_id: args.verificationService.did,
   });
   return {
     ...unsigned,
@@ -194,7 +194,7 @@ export function signBindingProof(args: {
 export function signSubjectProof(args: {
   cell: ThirdPartyInviteCell;
   subject: DidKeyIdentity;
-  verificationServiceDid: string;
+  verificationServiceId: string;
   bindingProof: Record<string, unknown>;
   claimNonce: string;
 }): Record<string, unknown> {
@@ -207,7 +207,7 @@ export function signSubjectProof(args: {
     realm_id: args.cell.realmId,
     subject_id: args.subject.did,
     token_commitment: args.cell.tokenCommitment,
-    verification_service_did: args.verificationServiceDid,
+    verification_service_id: args.verificationServiceId,
   });
   return {
     verification_method: args.subject.verificationMethod,

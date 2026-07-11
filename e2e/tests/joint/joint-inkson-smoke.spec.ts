@@ -84,19 +84,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       },
       actorSeq,
     );
-    await submitSignedEvent(
-      request,
-      jointRealm.aliceSession,
-      jointRealm.alice.did,
-      jointRealm.alicePage.serverUrl,
-      jointRealm.realmId,
-      "ak.agent.endpoint",
-      {
-        agent_id: agentId,
-        endpoints: [{ protocol: "http_custom", url: "https://agent.invalid/rpc" }],
-      },
-      actorSeq + 1,
-    );
     const controllerMessageId = `ak:message:${uuidV7()}`;
     await submitSignedEvent(
       request,
@@ -125,7 +112,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
           ],
         },
       },
-      actorSeq + 2,
+      actorSeq + 1,
     );
     await submitSignedEvent(
       request,
@@ -154,7 +141,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     });
     const group = jointRealm.alicePage.page
       .locator(
-        `[data-testid="participant-agent-group"][data-controller-did="${jointRealm.alice.did}"]`,
+        `[data-testid="participant-agent-group"][data-controller-id="${jointRealm.alice.did}"]`,
       )
       .first();
     await expect(group).toBeVisible({ timeout: 30_000 });
