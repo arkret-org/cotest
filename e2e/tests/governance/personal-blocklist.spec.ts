@@ -530,16 +530,29 @@ async function blocklistStoredOpaque(
     return false;
   }
   const content = (blocklist.content ?? {}) as Record<string, unknown>;
-  const marker = (content.client_side_conformance ?? {}) as Record<
-    string,
-    unknown
-  >;
+  return isEncryptedAccountDataCarrier(content);
+}
+
+function isEncryptedAccountDataCarrier(
+  content: Record<string, unknown>,
+): boolean {
+  const aad = (content.aad ?? {}) as Record<string, unknown>;
   return (
-    marker.encrypted_account_data === true &&
-    typeof marker.payload_digest === "string" &&
-    /^sha256:[0-9a-f]{64}$/.test(marker.payload_digest) &&
+    content.schema === "ak.schema.account_data_encrypted_value.v1" &&
+    content.version === "1.0" &&
+    content.aead_profile === "ak.aead.xchacha20_poly1305.v1" &&
+    typeof content.key_ref === "string" &&
+    /^sha256:[0-9a-f]{64}$/.test(content.key_ref) &&
+    typeof content.aad_digest === "string" &&
+    /^sha256:[0-9a-f]{64}$/.test(content.aad_digest) &&
+    aad.schema === "ak.schema.account_data_encrypted_value.v1" &&
+    aad.data_type === BLOCKLIST_DATA_TYPE &&
     typeof content.ciphertext === "string" &&
-    content.ciphertext.length > 0
+    content.ciphertext.length > 0 &&
+    typeof content.ciphertext_digest === "string" &&
+    /^sha256:[0-9a-f]{64}$/.test(content.ciphertext_digest) &&
+    typeof content.nonce === "string" &&
+    content.nonce.length > 0
   );
 }
 
@@ -561,7 +574,7 @@ async function blocklistClearedOrTombstoned(
     return false;
   }
   const content = (blocklist.content ?? {}) as Record<string, unknown>;
-  return content.tombstone === true;
+  return content.tombstone === true || isEncryptedAccountDataCarrier(content);
 }
 
 async function blocklistAccountDataEntry(
