@@ -56,7 +56,7 @@
      - `Content-Type: application/json`
      - `Source-Service-ID: did:web:soland-alpha.joint-e2e.local`
      - `Destination-Service-ID: did:web:soland-beta.joint-e2e.local`
-     - `Signature-Input: sig1=("@method" "@target-uri" "content-digest" "source-service-did" "destination-service-did");created=<ts>;keyid="<alpha-key-id>";alg="ed25519"`
+     - `Signature-Input: sig1=("@method" "@target-uri" "content-digest" "source-service-id" "destination-service-id");created=<ts>;keyid="<alpha-key-id>";alg="ed25519"`
      - `Signature: sig1=:<base64>:`
      - `Content-Digest: sha-256=:<base64>:`
      - `Idempotency-Key: <uuid>`

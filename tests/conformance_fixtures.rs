@@ -395,7 +395,7 @@ conformance_test!(
 
 conformance_test!(
     /// Round-22 — AnchorerWorker production signing path (Ed25519MoveSigner):
-    /// configured/service-DID-derived seed produces deterministic JWS, ephemeral
+    /// configured/service ID-derived seed produces deterministic JWS, ephemeral
     /// seed produces non-deterministic, different seeds produce different
     /// signatures, signature verifies via verify_ed25519_move_signature with the
     /// signer-derived verifying key.

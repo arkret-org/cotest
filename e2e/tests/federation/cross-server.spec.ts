@@ -151,8 +151,8 @@ function unsignedPeerGetHeaders(
   destinationDid: string,
 ): Record<string, string> {
   return {
-    "source-service-did": sourceDid,
-    "destination-service-did": destinationDid,
+    "source-service-id": sourceDid,
+    "destination-service-id": destinationDid,
     "source-trust-domain": trustDomainFromServiceId(sourceDid),
     "destination-trust-domain": trustDomainFromServiceId(destinationDid),
   };

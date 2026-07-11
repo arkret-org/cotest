@@ -22,7 +22,7 @@
 //     asserts that uniform-failure contract.
 //   ✓ RFC 9421 INBOUND relay hop: the canonical /_arkret/peer/* rail
 //     (verify_inbound_peer_http_signature) authenticates purely on the
-//     federation trust headers — origin IS the source-service-did header, so
+//     federation trust headers — origin IS the source-service-id header, so
 //     there is NO relay-inner signature hop. Two-layer relay verification
 //     (verify_relay_inner_signature) lives only on the private
 //     /_soland/peer/federation/* rail (dev-only, NOT an interop entry point),
@@ -163,7 +163,7 @@ test.describe("transport negotiation", () => {
       //   2. soland_a constructs POST ${SOLAND_B}/_arkret/peer/events with:
       //        - Source-Service-ID / Destination-Service-ID headers
       //        - Signature-Input covering (@method @target-uri content-digest
-      //          source-service-did destination-service-did)
+      //          source-service-id destination-service-id)
       //        - Signature header (ed25519 over canonical signature base)
       //        - Content-Digest header
       //        - Idempotency-Key
@@ -340,7 +340,7 @@ test.describe("transport negotiation", () => {
     // @blocking-on: spec single-track convergence — the canonical interop rail
     //   POST /_arkret/peer/events (verify_inbound_peer_http_signature) does NOT
     //   carry a relay-inner hop: per federation.md §4.0 the origin IS the
-    //   `source-service-did` header and relay delegation is expressed via
+    //   `source-service-id` header and relay delegation is expressed via
     //   service_binding_ref / service delegation, not a nested HTTP signature.
     //   soland's two-layer relay verification (signature.rs::
     //   verify_relay_inner_signature) lives ONLY on the private

@@ -98,14 +98,14 @@ fn with_signed_federation_request_digests(
     let signature_params = if bind_body_digests {
         format!(
             "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
-             \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+             \"source-service-id\" \"destination-service-id\" \"source-trust-domain\" \
              \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
              expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
         )
     } else {
         format!(
             "(\"@method\" \"@target-uri\" \"@authority\" \
-             \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+             \"source-service-id\" \"destination-service-id\" \"source-trust-domain\" \
              \"destination-trust-domain\");created={created};\
              expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
         )
@@ -116,8 +116,8 @@ fn with_signed_federation_request_digests(
              \"@target-uri\": {target_uri}\n\
              \"@authority\": {authority}\n\
              \"content-digest\": {content_digest}\n\
-             \"source-service-did\": {source_service_id}\n\
-             \"destination-service-did\": {destination_service_id}\n\
+             \"source-service-id\": {source_service_id}\n\
+             \"destination-service-id\": {destination_service_id}\n\
              \"source-trust-domain\": {source_trust_domain}\n\
              \"destination-trust-domain\": {destination_trust_domain}\n\
              \"request-canonical-digest\": {request_canonical_digest}\n\
@@ -129,8 +129,8 @@ fn with_signed_federation_request_digests(
             "\"@method\": {}\n\
              \"@target-uri\": {target_uri}\n\
              \"@authority\": {authority}\n\
-             \"source-service-did\": {source_service_id}\n\
-             \"destination-service-did\": {destination_service_id}\n\
+             \"source-service-id\": {source_service_id}\n\
+             \"destination-service-id\": {destination_service_id}\n\
              \"source-trust-domain\": {source_trust_domain}\n\
              \"destination-trust-domain\": {destination_trust_domain}\n\
              \"@signature-params\": {signature_params}",

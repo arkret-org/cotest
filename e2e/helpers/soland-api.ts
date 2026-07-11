@@ -1993,15 +1993,15 @@ function peerGetHeaders(
   const expires = created + 300;
   const keyid = `${sourceDid}#federation-fanout-key`;
   const signatureParams =
-    `("@method" "@target-uri" "@authority" "source-service-did" ` +
-    `"destination-service-did" "source-trust-domain" "destination-trust-domain");` +
+    `("@method" "@target-uri" "@authority" "source-service-id" ` +
+    `"destination-service-id" "source-trust-domain" "destination-trust-domain");` +
     `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
     `"@method": GET`,
     `"@target-uri": ${targetUri}`,
     `"@authority": ${new URL(targetUri).host}`,
-    `"source-service-did": ${sourceDid}`,
-    `"destination-service-did": ${destinationDid}`,
+    `"source-service-id": ${sourceDid}`,
+    `"destination-service-id": ${destinationDid}`,
     `"source-trust-domain": ${sourceTrustDomain}`,
     `"destination-trust-domain": ${destinationTrustDomain}`,
     `"@signature-params": ${signatureParams}`,
@@ -2012,8 +2012,8 @@ function peerGetHeaders(
     developmentServiceHttpPrivateKey(sourceDid),
   );
   return {
-    "source-service-did": sourceDid,
-    "destination-service-did": destinationDid,
+    "source-service-id": sourceDid,
+    "destination-service-id": destinationDid,
     "source-trust-domain": sourceTrustDomain,
     "destination-trust-domain": destinationTrustDomain,
     "signature-input": `sig1=${signatureParams}`,
@@ -2042,16 +2042,16 @@ function signedFederationPushHeaders(
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
   const keyid = `${sourceDid}#federation-fanout-key`;
   const signatureParams =
-    `("@method" "@target-uri" "@authority" "content-digest" "source-service-did" ` +
-    `"destination-service-did" "source-trust-domain" "destination-trust-domain" ` +
+    `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
+    `"destination-service-id" "source-trust-domain" "destination-trust-domain" ` +
     `"request-canonical-digest");created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
     `"@method": POST`,
     `"@target-uri": ${targetUri}`,
     `"@authority": ${new URL(targetUri).host}`,
     `"content-digest": ${contentDigest}`,
-    `"source-service-did": ${sourceDid}`,
-    `"destination-service-did": ${destinationDid}`,
+    `"source-service-id": ${sourceDid}`,
+    `"destination-service-id": ${destinationDid}`,
     `"source-trust-domain": ${sourceTrustDomain}`,
     `"destination-trust-domain": ${destinationTrustDomain}`,
     `"request-canonical-digest": ${requestDigest}`,
@@ -2066,8 +2066,8 @@ function signedFederationPushHeaders(
     "content-type": "application/json",
     "content-digest": contentDigest,
     "request-canonical-digest": requestDigest,
-    "source-service-did": sourceDid,
-    "destination-service-did": destinationDid,
+    "source-service-id": sourceDid,
+    "destination-service-id": destinationDid,
     "source-trust-domain": sourceTrustDomain,
     "destination-trust-domain": destinationTrustDomain,
     "signature-input": `sig1=${signatureParams}`,

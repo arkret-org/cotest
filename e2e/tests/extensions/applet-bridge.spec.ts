@@ -583,7 +583,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         "Idempotency-Key": `inbound-badsig-${stamp}`,
         "Content-Digest": "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
         "Signature-Input":
-          'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-did" "destination-service-did" "idempotency-key");created=1700000000;expires=1700000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
+          'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-id" "destination-service-id" "idempotency-key");created=1700000000;expires=1700000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
         Signature: "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
       },
       data: transactionPushBody({ stamp }),
@@ -641,15 +641,15 @@ function signedAppletTransactionHeaders(args: {
   const keyid = `${args.sourceServiceId}#applet-service-key`;
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" ` +
-    `"source-service-did" "destination-service-did" "idempotency-key");` +
+    `"source-service-id" "destination-service-id" "idempotency-key");` +
     `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
     `"@method": POST`,
     `"@target-uri": ${args.targetUri}`,
     `"@authority": ${new URL(args.targetUri).host}`,
     `"content-digest": ${contentDigest}`,
-    `"source-service-did": ${args.sourceServiceId}`,
-    `"destination-service-did": ${args.destinationServiceId}`,
+    `"source-service-id": ${args.sourceServiceId}`,
+    `"destination-service-id": ${args.destinationServiceId}`,
     `"idempotency-key": ${args.idempotencyKey}`,
     `"@signature-params": ${signatureParams}`,
   ].join("\n");
@@ -660,8 +660,8 @@ function signedAppletTransactionHeaders(args: {
   );
   return {
     "content-digest": contentDigest,
-    "source-service-did": args.sourceServiceId,
-    "destination-service-did": args.destinationServiceId,
+    "source-service-id": args.sourceServiceId,
+    "destination-service-id": args.destinationServiceId,
     "idempotency-key": args.idempotencyKey,
     "signature-input": `sig1=${signatureParams}`,
     signature: `sig1=:${signature.toString("base64")}:`,

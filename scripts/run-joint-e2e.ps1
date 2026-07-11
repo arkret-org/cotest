@@ -792,7 +792,7 @@ function New-CoauthJointConfig {
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
     $configPath = Join-Path $JointDir "coauth.yaml"
     $generateLog = Join-Path $JointDir "coauth-config-generate.log"
-    # coauth (07-02 service-DID bootstrap flow) requires either an explicit
+    # coauth (07-02 service ID bootstrap flow) requires either an explicit
     # arkret.service_id or the local-development `--dev` mode; the joint
     # harness patches its own service DID afterwards, so --dev is correct here.
     $generateOutput = & $CoauthBinary config generate --dev 2>"$generateLog"
@@ -814,8 +814,8 @@ function New-CoauthJointConfig {
         "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
-        "--soland-service-did", $SolandServiceId,
-        "--coauth-service-did", $CoauthServiceId,
+        "--soland-service-id", $SolandServiceId,
+        "--coauth-service-id", $CoauthServiceId,
         "--oauth-introspection-bearer", $OAuthIntrospectionBearer,
         "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer

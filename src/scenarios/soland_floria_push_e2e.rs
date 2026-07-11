@@ -20,7 +20,7 @@
 //! checkout or `FLORIA_BIN` env override), a real `soland` binary configured
 //! with `SOLAND_PUSH_GATEWAY_URL` pointing at the spawned floria, a templated
 //! floria config whose `custom` pushkin URL points at the in-process mock
-//! receiver, and matching service-DID + signing-key plumbing between the two.
+//! receiver, and matching service ID + signing-key plumbing between the two.
 //! That dependency surface is intentionally opt-in: CI runners without the
 //! binaries get a clean ignore; local developers exercising the bridge run
 //! `cargo test --test soland_floria_push_e2e -- --ignored`.

@@ -151,7 +151,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/soland-objects"
           SOLAND_DEVELOPMENT_MODE=1 \
           SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
-          SOLAND_SERVICE_DID="did:webvh:z6mkfixture:soland.integration-ci.local" \
+          SOLAND_SERVICE_ID="did:webvh:z6mkfixture:soland.integration-ci.local" \
           SOLAND_METRICS_BIND="127.0.0.1:9008" \
           SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
           SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
@@ -175,9 +175,9 @@ jobs:
         working-directory: cotest/e2e
         env:
           COTEST_SOLAND_ALPHA_BASE_URL: http://127.0.0.1:8011
-          COTEST_SOLAND_ALPHA_SERVICE_DID: did:webvh:z6mkfixture:soland-alpha.security-ci.local
+          COTEST_SOLAND_ALPHA_SERVICE_ID: did:webvh:z6mkfixture:soland-alpha.security-ci.local
           COTEST_SOLAND_BETA_BASE_URL: http://127.0.0.1:8012
-          COTEST_SOLAND_BETA_SERVICE_DID: did:webvh:z6mkfixture:soland-beta.security-ci.local
+          COTEST_SOLAND_BETA_SERVICE_ID: did:webvh:z6mkfixture:soland-beta.security-ci.local
           COTEST_EXPECT_FEDERATION_DENYLIST: "1"
           COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED: "1"
           COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e
@@ -189,14 +189,14 @@ jobs:
             local bind="$2"
             local metrics_bind="$3"
             local base_url="$4"
-            local service_did="$5"
+            local service_id="$5"
             local peer_url="$6"
             local peer_did="$7"
             local objects_root="$RUNNER_TEMP/${name}-objects"
             mkdir -p "$objects_root"
             SOLAND_DEVELOPMENT_MODE=1 \
             SOLAND_PUBLIC_BASE_URL="$base_url" \
-            SOLAND_SERVICE_DID="$service_did" \
+            SOLAND_SERVICE_ID="$service_id" \
             SOLAND_METRICS_BIND="$metrics_bind" \
             SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
             SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
@@ -214,17 +214,17 @@ jobs:
             "127.0.0.1:8011" \
             "127.0.0.1:9011" \
             "$COTEST_SOLAND_ALPHA_BASE_URL" \
-            "$COTEST_SOLAND_ALPHA_SERVICE_DID" \
+            "$COTEST_SOLAND_ALPHA_SERVICE_ID" \
             "$COTEST_SOLAND_BETA_BASE_URL" \
-            "$COTEST_SOLAND_BETA_SERVICE_DID")
+            "$COTEST_SOLAND_BETA_SERVICE_ID")
           beta_pid=$(start_soland \
             "soland-beta-security" \
             "127.0.0.1:8012" \
             "127.0.0.1:9012" \
             "$COTEST_SOLAND_BETA_BASE_URL" \
-            "$COTEST_SOLAND_BETA_SERVICE_DID" \
+            "$COTEST_SOLAND_BETA_SERVICE_ID" \
             "$COTEST_SOLAND_ALPHA_BASE_URL" \
-            "$COTEST_SOLAND_ALPHA_SERVICE_DID")
+            "$COTEST_SOLAND_ALPHA_SERVICE_ID")
           cleanup() {
             set +e
             kill "$alpha_pid" "$beta_pid" 2>/dev/null

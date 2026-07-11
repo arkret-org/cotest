@@ -38,7 +38,7 @@ pub async fn agent_auth_run() -> Result<()> {
 
     // (c) agent_key_proof verification_method targets the agent
     //     principal — NOT the controller — so a single round-trip pinned
-    //     here protects against the smuggle-controller-DID exploit.
+    //     here protects against the smuggle-controller ID exploit.
     let agent_id =
         Did::new("did:web:agent.example".to_owned()).map_err(|e| anyhow!("agent_id: {e}"))?;
     // Spec head: the typed `ak:agent_key:` id family is retired. `key_id`

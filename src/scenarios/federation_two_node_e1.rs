@@ -322,7 +322,7 @@ fn with_peer_headers_for_digest(
     };
     let signature_params = format!(
         "(\"@method\" \"@target-uri\" \"@authority\" {content_digest_param}\
-         \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+         \"source-service-id\" \"destination-service-id\" \"source-trust-domain\" \
          \"destination-trust-domain\"{request_digest_param});created={created};\
          expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
     );
@@ -341,8 +341,8 @@ fn with_peer_headers_for_digest(
          \"@target-uri\": {target_uri}\n\
          \"@authority\": {authority}\n\
          {content_digest_line}\
-         \"source-service-did\": {source_service_id}\n\
-         \"destination-service-did\": {destination_service_id}\n\
+         \"source-service-id\": {source_service_id}\n\
+         \"destination-service-id\": {destination_service_id}\n\
          \"source-trust-domain\": {source_trust_domain}\n\
          \"destination-trust-domain\": {destination_trust_domain}\n\
          {request_digest_line}\

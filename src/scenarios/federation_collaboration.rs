@@ -1082,8 +1082,8 @@ fn with_federation_trust_headers_empty(
     let expires = created + 300;
     let keyid = format!("{source_service_id}#federation-fanout-key");
     let signature_params = format!(
-        "(\"@method\" \"@target-uri\" \"@authority\" \"source-service-did\" \
-         \"destination-service-did\" \"source-trust-domain\" \
+        "(\"@method\" \"@target-uri\" \"@authority\" \"source-service-id\" \
+         \"destination-service-id\" \"source-trust-domain\" \
          \"destination-trust-domain\");created={created};\
          expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
     );
@@ -1091,8 +1091,8 @@ fn with_federation_trust_headers_empty(
         "\"@method\": {}\n\
          \"@target-uri\": {target_uri}\n\
          \"@authority\": {authority}\n\
-         \"source-service-did\": {source_service_id}\n\
-         \"destination-service-did\": {destination_service_id}\n\
+         \"source-service-id\": {source_service_id}\n\
+         \"destination-service-id\": {destination_service_id}\n\
          \"source-trust-domain\": {source_trust_domain}\n\
          \"destination-trust-domain\": {destination_trust_domain}\n\
          \"@signature-params\": {signature_params}",
@@ -1140,7 +1140,7 @@ fn with_federation_trust_headers_for_digest(
     let keyid = format!("{source_service_id}#federation-fanout-key");
     let signature_params = format!(
         "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
-         \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+         \"source-service-id\" \"destination-service-id\" \"source-trust-domain\" \
          \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
          expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
     );
@@ -1149,8 +1149,8 @@ fn with_federation_trust_headers_for_digest(
          \"@target-uri\": {target_uri}\n\
          \"@authority\": {authority}\n\
          \"content-digest\": {content_digest}\n\
-         \"source-service-did\": {source_service_id}\n\
-         \"destination-service-did\": {destination_service_id}\n\
+         \"source-service-id\": {source_service_id}\n\
+         \"destination-service-id\": {destination_service_id}\n\
          \"source-trust-domain\": {source_trust_domain}\n\
          \"destination-trust-domain\": {destination_trust_domain}\n\
          \"request-canonical-digest\": {request_canonical_digest}\n\

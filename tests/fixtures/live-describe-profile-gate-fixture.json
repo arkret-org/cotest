@@ -57,7 +57,7 @@
         },
         "auth_modes": [
           "http-message-signature",
-          "service-did"
+          "service-id"
         ]
       }
     },
