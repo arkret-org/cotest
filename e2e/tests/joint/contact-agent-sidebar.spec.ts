@@ -85,25 +85,28 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // The live API assertion above owns the permission/filtering contract.
       // This one-response overlay isolates Inkson's positive nested-row and
       // navigation behavior without fabricating server state in a database.
-      await bobPage.route("**/_arkret/self/contacts*", async (route) => {
-        if (route.request().method() !== "GET") {
-          await route.continue();
-          return;
-        }
-        const upstream = await route.fetch();
-        const body = (await upstream.json()) as {
-          contacts?: Array<Record<string, unknown>>;
-        };
-        const contacts = (body.contacts ?? []).map((row) =>
-          row.peer === jointRealm.alice.did
-            ? { ...row, agents: [allowedAgent] }
-            : row,
-        );
-        await route.fulfill({
-          response: upstream,
-          json: { ...body, contacts },
-        });
-      });
+      await bobPage.route(
+        ({ pathname }) => pathname === "/_arkret/self/contacts",
+        async (route) => {
+          if (route.request().method() !== "GET") {
+            await route.continue();
+            return;
+          }
+          const upstream = await route.fetch();
+          const body = (await upstream.json()) as {
+            contacts?: Array<Record<string, unknown>>;
+          };
+          const contacts = (body.contacts ?? []).map((row) =>
+            row.peer === jointRealm.alice.did
+              ? { ...row, agents: [allowedAgent] }
+              : row,
+          );
+          await route.fulfill({
+            response: upstream,
+            json: { ...body, contacts },
+          });
+        },
+      );
       await bobPage.getByTestId("realm-sidebar-tab-direct").click();
       const bobGroups = bobPage.locator(".contact-sidebar-group");
       await expect(bobGroups.first()).toHaveAttribute(

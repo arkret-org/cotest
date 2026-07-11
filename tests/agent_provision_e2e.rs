@@ -30,7 +30,7 @@ use cotest::harness::{
     ArkretServer, add_member, create_realm, event_envelope, register_account, submit_event,
 };
 use cotest::scenarios::_helpers::mock_http::{self, MockServer};
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};

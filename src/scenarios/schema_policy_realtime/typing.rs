@@ -105,18 +105,27 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     );
 
     // `ak.push_rules` is private account_data: soland requires the content to be
-    // a client-side-encrypted carrier (the plaintext rules never leave the
-    // client). cotest cannot run real E2EE, so it submits the spec
-    // `client_side_conformance` marker that attests the client encrypted the
-    // payload; the zero-knowledge account_data store round-trips the carrier
-    // opaquely.
+    // a schema-valid encrypted envelope (the plaintext rules never leave the
+    // client). This contract test uses opaque ciphertext with complete MLS/AAD
+    // metadata; the zero-knowledge account_data store round-trips it unchanged.
     let push_rules_carrier = json!({
-        "client_side_conformance": {
-            "encrypted_account_data": true,
-            "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        },
+        "scheme": "mls-rfc9420",
+        "version": "1.0",
+        "group_id": "cotestPushRules",
+        "epoch": 1,
         "content_type": "application/vnd.arkret.account-data+json",
-        "ciphertext": "opaque-client-envelope"
+        "ciphertext": "b3BhcXVlLXB1c2gtcnVsZXM",
+        "aad_visibility_event_id": "hidden",
+        "aad": {
+            "realm_id": realm_id,
+            "event_kind": "ak.account_data.set"
+        },
+        "key_ref": {
+            "algorithm": "MLS",
+            "group_state_ref": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "aad_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     });
     let rules_written = bob
         .submit_event(
@@ -136,8 +145,8 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let listed_rules =
         account_data_entry(&listed_sync, "ak.push_rules").expect("ak.push_rules account_data row");
     assert_eq!(
-        listed_rules["content"]["client_side_conformance"]["encrypted_account_data"], true,
-        "push_rules must round-trip as an encrypted-account-data conformance marker: {listed_rules}"
+        listed_rules["content"]["scheme"], "mls-rfc9420",
+        "push_rules must round-trip as an encrypted account-data envelope: {listed_rules}"
     );
 
     let deleted_rules = bob
