@@ -125,6 +125,85 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     Ok(())
 }
 
+/// `ak.self.agent.command.renew_pairing` (decision 0007): an expired pairing
+/// renews IN PLACE on the same agent principal. The renewed handle is fresh
+/// and single-use, the dead handle stays permanently unresolvable, and the
+/// renewed pairing completes to `active` without provisioning a replacement.
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn agent_pairing_renewal_e2e() -> Result<()> {
+    let server = ArkretServer::spawn("agent-pairing-renewal-e2e").await?;
+    let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    let controller = bearer_sdk_client(&server, &token)?;
+
+    // Provision with a 1 ms pairing window so the handle is already dead.
+    let prov = controller
+        .agent_provision(&arkret::AgentProvisionRequestBody {
+            display_name: Some("Renewal Assistant".to_owned()),
+            slug: "renewal".to_owned(),
+            requested_scope: None,
+            accountability: Value::Null,
+            pairing_ttl_ms: Some(1),
+        })
+        .await?;
+    let agent_did = prov.agent_id.to_string();
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    // Lazy expiry flips the projected status on first observation.
+    assert_eq!(
+        agent_status(&server, &token, &agent_did).await?,
+        "pairing_expired"
+    );
+
+    // Renewal: same principal, fresh handle, status back to pending.
+    let renewed = controller
+        .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
+        .await?;
+    assert_eq!(renewed.agent_id.to_string(), agent_did, "same principal");
+    assert_ne!(
+        renewed.pairing_request_id, prov.pairing_request_id,
+        "renewed pairing_request_id must be fresh"
+    );
+    assert!(renewed.pairing_code.is_some(), "renewed pairing_code present");
+    assert_ne!(
+        renewed.pairing_code, prov.pairing_code,
+        "renewed pairing_code must be fresh"
+    );
+    assert_eq!(
+        agent_status(&server, &token, &agent_did).await?,
+        "pending_runtime_key"
+    );
+
+    // The dead handle must stay unresolvable: pairing with the ORIGINAL
+    // provision tuple fails even though the agent is pending again.
+    let stale = pair_agent_runtime_key(&server, &token, &prov).await;
+    assert!(
+        stale.is_err(),
+        "pairing with the expired handle must fail after renewal"
+    );
+    assert_eq!(
+        agent_status(&server, &token, &agent_did).await?,
+        "pending_runtime_key"
+    );
+
+    // The renewed handle completes pairing to active on the same principal.
+    let pair = pair_agent_runtime_key(&server, &token, &renewed).await?;
+    assert!(
+        !pair.authorized_event_ref.as_str().is_empty(),
+        "authorized_event_ref present"
+    );
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+
+    // Renewal after activation is refused — rotate the key instead.
+    let refused = controller
+        .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
+        .await;
+    assert!(
+        refused.is_err(),
+        "renewing an active agent must be refused"
+    );
+    Ok(())
+}
+
 /// AKP-0008 runtime-side approval status poll
 /// (`ak.open.agent_pairing.query.runtime_key_request_status`): the runtime
 /// learns the controller decision after submitting a runtime key request
