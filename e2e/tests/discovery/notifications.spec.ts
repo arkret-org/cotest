@@ -24,10 +24,11 @@ import {
   issueDevSession,
   openDpopUserPage,
   openDpopUserPageForAccount,
+  selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 import { selectDxcOption } from "../../helpers/dxc-select";
-import { coauthBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
@@ -192,29 +193,53 @@ test.describe("notifications", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     // spec: push-notifications.md §3.2 do-not-disturb preference.
     const stamp = Date.now();
-    const [aliceSession, bobSession] = await Promise.all([
+    const coauth = coauthBaseUrl();
+    if (!coauth) {
+      assertJointStackNotRequired("notifications dnd browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bobAccount = await registerCoauthPasswordAccount(request, coauth, {
+      password: "1amTester!",
+    });
+    const [aliceSession, bobDeviceASession] = await Promise.all([
       openDpopUserPage(browser, request, `s23-dnd-alice-${stamp}`),
-      openDpopUserPage(browser, request, `s23-dnd-bob-${stamp}`),
+      openDpopUserPageForAccount(
+        browser,
+        request,
+        `s23-dnd-bob-${stamp}-device-a`,
+        bobAccount,
+        {
+          prepareMlsDevice: false,
+          autoCompleteRecoveryKeySetup: false,
+        },
+      ),
     ]);
-    if (!aliceSession || !bobSession) {
+    if (!aliceSession || !bobDeviceASession) {
       assertJointStackNotRequired("notifications dnd browser login");
       test.skip(true, "coauth DPoP session-grant login is unavailable");
       return;
     }
     const alice = aliceSession.user;
     const alicePage = aliceSession.page;
-    const bob = bobSession.user;
-    const bobPage = bobSession.page;
+    const bob = bobDeviceASession.user;
+    const bobDeviceA = bobDeviceASession.page;
     const aliceToken = await issueDevSession(request, alice);
     const suppressedSuffix = `DND suppressed ${stamp}`;
     const resumedSuffix = `DND resumed ${stamp}`;
     const apiActorSeq = 8_000_000_000_000_000 + (stamp % 100_000);
     let suppressedMsg = "";
     let resumedMsg = "";
+    let bobDeviceB: typeof bobDeviceA | undefined;
 
     try {
+      await bobDeviceA.gotoHome();
+      const recoveryKey = await bobDeviceA.configureRecoveryKey();
+      expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+
       const realmId = await alicePage.createRealm({
         title: `S23 DND ${stamp}`,
         discoverability: "listed",
@@ -222,71 +247,129 @@ test.describe("notifications", () => {
         encryptionProfile: "none",
         seedMembers: [bob.did],
       });
-      await bobPage.acceptInvite(realmId);
+      await bobDeviceA.acceptInvite(realmId);
 
-      await bobPage.page.goto("/notifications/settings", {
+      await bobDeviceA.page.goto("/notifications/settings", {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobPage.page.getByTestId("notification-settings-panel"),
+        bobDeviceA.page.getByTestId("notification-settings-panel"),
       ).toBeVisible({
         timeout: 30_000,
       });
-      await bobPage.completeRecoveryKeySetupIfPrompted();
-      await bobPage.checkWithPassivePromptRetry(
-        bobPage.page.getByTestId("dnd-enabled-toggle"),
+      await bobDeviceA.checkWithPassivePromptRetry(
+        bobDeviceA.page.getByTestId("dnd-enabled-toggle"),
       );
-      await selectDxcOption(bobPage.page.getByTestId("dnd-mode-select"), "now");
-      await bobPage.clickWithPassivePromptRetry(
-        bobPage.page.getByTestId("save-notification-settings-button"),
+      await selectDxcOption(
+        bobDeviceA.page.getByTestId("dnd-mode-select"),
+        "now",
+      );
+      await bobDeviceA.clickWithPassivePromptRetry(
+        bobDeviceA.page.getByTestId("save-notification-settings-button"),
       );
       await expect(
-        bobPage.page.getByTestId("notification-settings-status"),
+        bobDeviceA.page.getByTestId("notification-settings-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
+
+      const accountDataUrl = `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent("ak.dnd_schedule")}`;
+      let storedDnd: Record<string, unknown> = {};
+      await expect
+        .poll(
+          async () => {
+            const response = await request.get(accountDataUrl, {
+              headers: selfPathHeadersForDpopSession(
+                bobDeviceASession.session,
+                "GET",
+                accountDataUrl,
+              ),
+            });
+            if (!response.ok()) return `http-${response.status()}`;
+            storedDnd = await response.json();
+            return isEncryptedDndAccountData(storedDnd.content);
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+      const storedWire = JSON.stringify(storedDnd);
+      expect(storedWire).not.toContain('"enabled":true');
+      expect(storedWire).not.toContain('"mode":"now"');
+      expect(storedWire).not.toContain('"dnd"');
+
+      const bobDeviceBSession = await openDpopUserPageForAccount(
+        browser,
+        request,
+        `s23-dnd-bob-${stamp}-device-b`,
+        bobAccount,
+        {
+          prepareMlsDevice: false,
+          autoCompleteRecoveryKeySetup: false,
+        },
+      );
+      expect(bobDeviceBSession, "same-account device B login").toBeTruthy();
+      if (!bobDeviceBSession) throw new Error("device B login is unavailable");
+      expect(bobDeviceBSession.user.did).toBe(bob.did);
+      expect(bobDeviceBSession.user.deviceId).not.toBe(
+        bobDeviceASession.user.deviceId,
+      );
+      bobDeviceB = bobDeviceBSession.page;
+      await bobDeviceB.gotoHome();
+      await expect(bobDeviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
+        timeout: 90_000,
+      });
+      await bobDeviceB.unlockMlsAccountSecret(recoveryKey);
+      await bobDeviceB.page.goto("/notifications/settings", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        bobDeviceB.page.getByTestId("dnd-enabled-toggle"),
+      ).toBeChecked({ timeout: 30_000 });
 
       suppressedMsg = suppressedSuffix;
       await sendMessageApi(request, aliceToken, realmId, suppressedMsg, {
         mentions: [bob.did],
         actorSeq: apiActorSeq,
       });
-      await bobPage.page.goto("/notifications", {
+      await bobDeviceB.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobPage.page
+        bobDeviceB.page
           .getByTestId("notification-item")
           .filter({ hasText: suppressedMsg }),
       ).toHaveCount(0);
 
-      await bobPage.page.goto("/notifications/settings", {
+      await bobDeviceB.page.goto("/notifications/settings", {
         waitUntil: "domcontentloaded",
       });
-      await bobPage.completeRecoveryKeySetupIfPrompted();
-      await bobPage.uncheckWithPassivePromptRetry(
-        bobPage.page.getByTestId("dnd-enabled-toggle"),
+      await bobDeviceB.uncheckWithPassivePromptRetry(
+        bobDeviceB.page.getByTestId("dnd-enabled-toggle"),
       );
-      await bobPage.clickWithPassivePromptRetry(
-        bobPage.page.getByTestId("save-notification-settings-button"),
+      await bobDeviceB.clickWithPassivePromptRetry(
+        bobDeviceB.page.getByTestId("save-notification-settings-button"),
       );
       await expect(
-        bobPage.page.getByTestId("notification-settings-status"),
+        bobDeviceB.page.getByTestId("notification-settings-status"),
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
       resumedMsg = resumedSuffix;
       await sendMessageApi(request, aliceToken, realmId, resumedMsg, {
         mentions: [bob.did],
         actorSeq: apiActorSeq + 1,
       });
-      await bobPage.page.goto("/notifications", {
+      await bobDeviceB.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobPage.page
+        bobDeviceB.page
           .getByTestId("notification-item")
           .filter({ hasText: resumedMsg }),
       ).toBeVisible({ timeout: 30_000 });
-      await stepShot(bobPage.page, testInfo, "dnd-resumed");
+      await stepShot(bobDeviceB.page, testInfo, "dnd-resumed-device-b");
     } finally {
-      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        bobDeviceB?.close(),
+        bobDeviceA.close(),
+        alicePage.close(),
+      ]);
     }
   });
 
@@ -583,6 +666,21 @@ function notificationEventsFromDelta(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isEncryptedDndAccountData(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.aad)) return false;
+  return (
+    value.schema === "ak.schema.account_data_encrypted_value.v1" &&
+    value.version === "1.0" &&
+    value.aead_profile === "ak.aead.xchacha20_poly1305.v1" &&
+    value.aad.schema === "ak.schema.account_data_encrypted_value.v1" &&
+    value.aad.data_type === "ak.dnd_schedule" &&
+    typeof value.ciphertext === "string" &&
+    value.ciphertext.length > 0 &&
+    typeof value.nonce === "string" &&
+    value.nonce.length > 0
+  );
 }
 
 function encryptedEnvelope(

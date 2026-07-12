@@ -577,6 +577,68 @@ export class JointUserPage {
     return keyReadable ? recoveryKey : undefined;
   }
 
+  async unlockMlsAccountSecret(recoveryKey: string): Promise<void> {
+    const unlockPrompt = this.page
+      .locator(
+        '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+      )
+      .last();
+    await expect(unlockPrompt).toBeVisible({ timeout: 90_000 });
+
+    const showRecoveryKey = this.page.getByTestId(
+      "mls-unlock-show-recovery-key",
+    );
+    if (await showRecoveryKey.isVisible().catch(() => false)) {
+      await showRecoveryKey.click();
+    }
+    await this.page.getByTestId("mls-unlock-passphrase").fill(recoveryKey);
+    await this.page.getByTestId("mls-unlock-submit").click();
+    await expect(unlockPrompt).not.toBeVisible({ timeout: 120_000 });
+  }
+
+  async configureRecoveryKey(): Promise<string> {
+    const promptedKey = await this.completeRecoveryKeySetupIfPrompted(2_000);
+    if (promptedKey) return promptedKey;
+
+    await this.page.goto("/settings/recovery", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(this.page.getByTestId("recovery-key-section")).toBeVisible({
+      timeout: 120_000,
+    });
+    const settingsPromptKey =
+      await this.completeRecoveryKeySetupIfPrompted(5_000);
+    if (settingsPromptKey) return settingsPromptKey;
+
+    await this.page.getByTestId("recovery-key-regenerate").click();
+    const generatedPromptKey =
+      await this.completeRecoveryKeySetupIfPrompted(5_000);
+    if (generatedPromptKey) return generatedPromptKey;
+
+    const currentKey = this.page.getByTestId("recovery-key-current");
+    let recoveryKey = "";
+    await expect
+      .poll(
+        async () => {
+          recoveryKey = ((await currentKey.textContent()) ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          return recoveryKey.split(/\s+/).filter(Boolean).length;
+        },
+        { timeout: 120_000 },
+      )
+      .toBe(24);
+    await this.page
+      .getByTestId("recovery-key-confirm-input")
+      .fill(recoveryKey);
+    await this.page.getByTestId("recovery-key-clear-live").click();
+    await expect(this.page.getByTestId("recovery-key-status")).toContainText(
+      /(?:backup is on the server|encrypted history (?:is|are) backed up|Recovery Key confirmed)/i,
+      { timeout: 30_000 },
+    );
+    return recoveryKey;
+  }
+
   async acknowledgeRecommendedEncryptionPromptIfVisible(
     timeoutMs = 5_000,
   ): Promise<boolean> {
@@ -1224,6 +1286,7 @@ export async function openDpopUserPageForAccount(
     coauthBase?: string;
     prepareMlsDevice?: boolean;
     skipDeviceEnrollment?: boolean;
+    autoCompleteRecoveryKeySetup?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   const session = await createDpopUserSessionForAccount(
@@ -1244,6 +1307,7 @@ async function openDpopUserPageFromSession(
   opts: {
     server?: SolandKey;
     prepareMlsDevice?: boolean;
+    autoCompleteRecoveryKeySetup?: boolean;
   },
 ): Promise<DpopUserPageSession | undefined> {
   if (!session) {
@@ -1255,6 +1319,7 @@ async function openDpopUserPageFromSession(
     dpopSeedB64url: session.dpopSeedB64url,
     grantId: session.grantId,
     grantAudience: session.grantAudience,
+    autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
   if (opts.prepareMlsDevice !== false) {
     await page.gotoHome();
