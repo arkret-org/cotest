@@ -1,8 +1,10 @@
 //! Agent surface conformance vectors (§0.11 of `_before_todos.md`).
 //!
-//! 6 vectors:
+//! 8 vectors:
 //!   - `ak.vector.agent.provision.v1`
 //!   - `ak.vector.agent.pairing_expiry.v1`
+//!   - `ak.vector.agent.repairing_supersede.v1`
+//!   - `ak.vector.agent.longevity_no_expiry.v1`
 //!   - `ak.vector.agent.controller_lifecycle.v1`
 //!   - `ak.vector.agent.act_on_behalf.v1`
 //!   - `ak.vector.agent.session_grant.replay.v1`
@@ -17,21 +19,24 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::error::{
-    REASON_ACCOUNTABILITY_GRANT_MISSING, REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED,
-    REASON_APPROVAL_ALREADY_CONSUMED, REASON_APPROVAL_NONCE_REUSED, REASON_PAIRING_REQUEST_EXPIRED,
-    REASON_PROOF_INVALID, REASON_SIDECAR_CREATE_DENIED,
+    REASON_ACCOUNTABILITY_GRANT_MISSING, REASON_AGENT_DEACTIVATED,
+    REASON_AGENT_KEY_AUTHORIZATION_EXPIRED, REASON_AGENT_PAUSED, REASON_APPROVAL_ALREADY_CONSUMED,
+    REASON_APPROVAL_NONCE_REUSED, REASON_PAIRING_REQUEST_EXPIRED, REASON_PROOF_INVALID,
+    REASON_SIDECAR_CREATE_DENIED, REASON_SUPERSEDED_BY_REPAIRING,
     REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
 };
 use arkret_core::{
     AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, ErrorEnvelope,
     OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT, OP_AGENT_DEACTIVATE, OP_AGENT_GET,
     OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
-    OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY, OP_AGENT_SIDECAR_THREAD_ENSURE,
+    OP_AGENT_PROVISION, OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
 use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
 pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ak.vector.agent.pairing_expiry.v1";
+pub const VECTOR_ID_AGENT_REPAIRING_SUPERSEDE: &str = "ak.vector.agent.repairing_supersede.v1";
+pub const VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY: &str = "ak.vector.agent.longevity_no_expiry.v1";
 pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ak.vector.agent.controller_lifecycle.v1";
 pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "ak.vector.agent.act_on_behalf.v1";
 pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "ak.vector.agent.session_grant.replay.v1";
@@ -41,6 +46,8 @@ pub const VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED: &str =
 pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
     VECTOR_ID_AGENT_PAIRING_EXPIRY,
+    VECTOR_ID_AGENT_REPAIRING_SUPERSEDE,
+    VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY,
     VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE,
     VECTOR_ID_AGENT_ACT_ON_BEHALF,
     VECTOR_ID_AGENT_SESSION_GRANT_REPLAY,
@@ -161,6 +168,128 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
     Ok(())
 }
 
+// ─── VECT-AG-2b — repairing_supersede ──────────────────────────────────────
+
+/// Minimal model of the renew-pairing state gate + supersede filter
+/// (key-management.md §3.6.1): every non-terminal status may re-open pairing;
+/// only bootstrap re-opens change status; pair completion supersedes every
+/// prior key except the freshly authorized one.
+fn renew_pairing_gate(status: &str) -> std::result::Result<&'static str, &'static str> {
+    match status {
+        "pending_runtime_key" | "pairing_expired" => Ok("bootstrap_reopen"),
+        "active" | "paused" => Ok("runtime_replacement"),
+        "deactivated" => Err(REASON_AGENT_DEACTIVATED),
+        _ => Err("reject"),
+    }
+}
+
+pub fn run_agent_repairing_supersede_vector() -> Result<()> {
+    if OP_AGENT_RENEW_PAIRING != "ak.self.agent.command.renew_pairing" {
+        bail!("OP_AGENT_RENEW_PAIRING spelling drifted: {OP_AGENT_RENEW_PAIRING}");
+    }
+    if REASON_SUPERSEDED_BY_REPAIRING != "superseded_by_repairing" {
+        bail!("REASON_SUPERSEDED_BY_REPAIRING spelling drifted: {REASON_SUPERSEDED_BY_REPAIRING}");
+    }
+    // Gate: every non-terminal status renews; deactivated is terminal.
+    for (status, expected) in [
+        ("pending_runtime_key", "bootstrap_reopen"),
+        ("pairing_expired", "bootstrap_reopen"),
+        ("active", "runtime_replacement"),
+        ("paused", "runtime_replacement"),
+    ] {
+        match renew_pairing_gate(status) {
+            Ok(mode) if mode == expected => {}
+            other => bail!("renew gate for `{status}` yielded {other:?}, expected {expected}"),
+        }
+    }
+    if renew_pairing_gate("deactivated") != Err(REASON_AGENT_DEACTIVATED) {
+        bail!("renewing a deactivated agent must fail with agent_deactivated");
+    }
+    // Runtime replacement is not a state transition: the FSM has no edge for
+    // it, so the status set is unchanged by opening a handle.
+    // Supersede filter: every prior key except the freshly authorized one is
+    // revoked; re-authorizing the SAME key id is the same-key
+    // re-authorization override and revokes nothing.
+    let prior: BTreeSet<&str> = ["key-1", "key-2"].into();
+    let superseded: BTreeSet<&str> = prior
+        .iter()
+        .copied()
+        .filter(|key| *key != "key-3")
+        .collect();
+    if superseded != prior {
+        bail!("a fresh key id must supersede every prior key");
+    }
+    let same_key: BTreeSet<&str> = prior
+        .iter()
+        .copied()
+        .filter(|key| *key != "key-1")
+        .collect();
+    if same_key.contains("key-1") || same_key.len() != 1 {
+        bail!("re-authorizing an existing key id must not revoke it");
+    }
+    Ok(())
+}
+
+// ─── VECT-AG-2c — longevity_no_expiry ──────────────────────────────────────
+
+pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
+    if REASON_AGENT_KEY_AUTHORIZATION_EXPIRED != "agent_key_authorization_expired" {
+        bail!(
+            "REASON_AGENT_KEY_AUTHORIZATION_EXPIRED spelling drifted: {REASON_AGENT_KEY_AUTHORIZATION_EXPIRED}"
+        );
+    }
+    // `agent_key_authorize_payload.expires_at` is optional on wire: absent
+    // means non-expiring, revocation-governed (key-management.md §3.6.1).
+    let payload = serde_json::json!({
+        "agent_id": "did:web:agent.example",
+        "key_id": "ak:agent_key:0199000000007000800000000000aa01",
+        "verification_method": "did:web:agent.example#runtime-key-1",
+        "accountable_principal_id": "did:web:alice.example",
+        "agent_key_scope": {
+            "actions": ["ak.event.read"],
+            "resources": [{"kind": "realm", "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001"}]
+        },
+        "audience": ["did:web:soland.example"],
+        "issued_at": "2026-07-12T00:00:00Z",
+        "approval_evidence": {
+            "kind": "approval_event",
+            "ref": "ak:event:01990000-0000-7000-8000-000000000001"
+        }
+    });
+    let decoded: arkret_core::AgentKeyAuthorizePayload = serde_json::from_value(payload)
+        .map_err(|error| anyhow!("non-expiring authorize payload must decode: {error}"))?;
+    if decoded.expires_at.is_some() {
+        bail!("absent expires_at must decode as None");
+    }
+    let encoded = serde_json::to_value(&decoded)
+        .map_err(|error| anyhow!("authorize payload must re-encode: {error}"))?;
+    if encoded.get("expires_at").is_some() {
+        bail!("None expires_at must stay absent on wire (no null / sentinel)");
+    }
+    // `accountability_grant.expires_at` is optional the same way.
+    let grant = serde_json::json!({
+        "issuer": "did:web:alice.example",
+        "subject": "did:web:agent.example",
+        "accountability_scope": "agent_operator",
+        "not_before": "2026-07-12T00:00:00Z",
+        "grant_status": "active",
+        "proof": {
+            "kind": "detached_jws",
+            "alg": "EdDSA",
+            "verification_method": "did:web:alice.example#key-1",
+            "event_digest": format!("sha256:{}", "0".repeat(64)),
+            "created_at": "2026-07-12T00:00:00Z",
+            "jws": "eyJhbGciOiJFZERTQSJ9..sig"
+        }
+    });
+    let decoded: arkret_core::AccountabilityGrantPayload = serde_json::from_value(grant)
+        .map_err(|error| anyhow!("non-expiring accountability grant must decode: {error}"))?;
+    if decoded.expires_at.is_some() {
+        bail!("absent accountability expires_at must decode as None");
+    }
+    Ok(())
+}
+
 // ─── VECT-AG-3 — controller_lifecycle (agent FSM) ──────────────────────────
 
 /// Minimal in-memory FSM mirroring the `ak.agent.{pause,resume,deactivate}`
@@ -193,7 +322,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         OP_AGENT_DEACTIVATE,
         OP_AGENT_LIST,
         OP_AGENT_GET,
-        OP_AGENT_ROTATE_KEY,
+        OP_AGENT_RENEW_PAIRING,
         OP_AGENT_GRANT_ATTACH,
         OP_AGENT_GRANT_DETACH,
         OP_AGENT_SIDECAR_THREAD_ENSURE,
@@ -789,17 +918,19 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 6 agent vectors.
+/// Suite entry point — runs all 8 agent vectors.
 pub fn run_agent_vector_suite() -> Result<()> {
     validate_agent_vectors_fixture_metadata()?;
-    if ALL_AGENT_VECTOR_IDS.len() != 6 {
+    if ALL_AGENT_VECTOR_IDS.len() != 8 {
         bail!(
-            "expected 6 agent vector ids, got {}",
+            "expected 8 agent vector ids, got {}",
             ALL_AGENT_VECTOR_IDS.len()
         );
     }
     run_agent_provision_vector()?;
     run_agent_pairing_expiry_vector()?;
+    run_agent_repairing_supersede_vector()?;
+    run_agent_longevity_no_expiry_vector()?;
     run_agent_controller_lifecycle_vector()?;
     run_agent_act_on_behalf_vector()?;
     run_agent_session_grant_replay_vector()?;
@@ -812,7 +943,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_six_agent_vectors_run_clean() {
+    fn all_agent_vectors_run_clean() {
         run_agent_vector_suite().unwrap();
     }
 

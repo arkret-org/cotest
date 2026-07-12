@@ -8,20 +8,22 @@ use anyhow::{Result, anyhow};
 use arkret_core::{
     CAP_ACTION_AGENT_PROVISION, Did, EventId, OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_DEACTIVATE,
     OP_AGENT_GET, OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
-    OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY, OP_AGENT_SIDECAR_THREAD_ENSURE,
+    OP_AGENT_PROVISION, OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
 
 /// The 11 personal-agent endpoint operation IDs registered in
-/// `operation-registry.json` and mounted under soland `agents.rs`.
+/// `operation-registry.json` and mounted under soland `agents.rs`. Key
+/// rotation is expressed through runtime replacement re-pairing
+/// (`renew_pairing`), not a dedicated rotate operation.
 const PERSONAL_AGENT_OPERATIONS: &[&str] = &[
     OP_ACCOUNT_AGENT_KEY_PAIR,
     OP_AGENT_PROVISION,
+    OP_AGENT_RENEW_PAIRING,
     OP_AGENT_LIST,
     OP_AGENT_GET,
     OP_AGENT_PAUSE,
     OP_AGENT_RESUME,
     OP_AGENT_DEACTIVATE,
-    OP_AGENT_ROTATE_KEY,
     OP_AGENT_GRANT_ATTACH,
     OP_AGENT_GRANT_DETACH,
     OP_AGENT_SIDECAR_THREAD_ENSURE,

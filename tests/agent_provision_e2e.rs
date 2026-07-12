@@ -197,11 +197,70 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     );
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
-    // Renewal after activation is refused — rotate the key instead.
-    let refused = controller
+    // Runtime replacement re-pairing (key-management §3.6.1): renewing an
+    // ACTIVE agent is allowed, is NOT a state transition, and never touches
+    // existing keys or grants until the new pairing completes.
+    let replacement = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
-        .await;
-    assert!(refused.is_err(), "renewing an active agent must be refused");
+        .await?;
+    assert_eq!(
+        replacement.agent_id.to_string(),
+        agent_did,
+        "same principal"
+    );
+    assert_ne!(
+        replacement.pairing_request_id, renewed.pairing_request_id,
+        "replacement pairing_request_id must be fresh"
+    );
+    assert_eq!(
+        agent_status(&server, &token, &agent_did).await?,
+        "active",
+        "replacement re-pairing must not change agent status"
+    );
+
+    // A dead handle stays unresolvable and previously-keyed agents never
+    // fall back to pairing_expired.
+    let stale = pair_agent_runtime_key(&server, &token, &renewed).await;
+    assert!(
+        stale.is_err(),
+        "pairing with the superseded handle must fail"
+    );
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+
+    // Completing the replacement pairing with a DISTINCT runtime key keeps
+    // the agent active and supersedes the prior key in the same accepted
+    // fan-out (reason=superseded_by_repairing).
+    let replaced =
+        pair_agent_runtime_key_as(&server, &token, &replacement, "runtime-key-2").await?;
+    assert!(
+        !replaced.authorized_event_ref.as_str().is_empty(),
+        "replacement authorized_event_ref present"
+    );
+    assert_ne!(
+        replaced.authorized_event_ref, pair.authorized_event_ref,
+        "replacement authorization is a fresh event"
+    );
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+
+    // Replacement handle expiry has zero side effects: open a 1 ms handle,
+    // let it die, and the agent stays active (never pairing_expired).
+    let short_lived = controller
+        .agent_renew_pairing(
+            &agent_did,
+            &arkret::AgentRenewPairingRequestBody {
+                pairing_ttl_ms: Some(1),
+            },
+        )
+        .await?;
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    assert_eq!(
+        agent_status(&server, &token, &agent_did).await?,
+        "active",
+        "an expired replacement handle must not touch agent state"
+    );
+    let expired = pair_agent_runtime_key_as(&server, &token, &short_lived, "runtime-key-3").await;
+    assert!(expired.is_err(), "expired replacement handle must be dead");
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     Ok(())
 }
 
@@ -718,6 +777,18 @@ async fn pair_agent_runtime_key(
     token: &str,
     provisioned: &arkret::AgentProvisionOutcome,
 ) -> Result<arkret::AgentKeyPairOutcome> {
+    pair_agent_runtime_key_as(server, token, provisioned, "runtime-key-1").await
+}
+
+/// [`pair_agent_runtime_key`] with an explicit verification-method fragment.
+/// Runtime replacement re-pairing uses a distinct fragment so the new key is
+/// a distinct key id and the pair completion supersedes the old one.
+async fn pair_agent_runtime_key_as(
+    server: &ArkretServer,
+    token: &str,
+    provisioned: &arkret::AgentProvisionOutcome,
+    fragment: &str,
+) -> Result<arkret::AgentKeyPairOutcome> {
     let agent_did = provisioned.agent_id.to_string();
     let pairing_request_id = provisioned.pairing_request_id.as_str();
     let pairing_code = provisioned
@@ -731,8 +802,9 @@ async fn pair_agent_runtime_key(
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
     let signing_key = runtime_signing_key();
-    let builder = runtime_key_request_builder(server, provisioned, &signing_key)?;
-    let verification_method = format!("{agent_did}#runtime-key-1");
+    let verification_method = format!("{agent_did}#{fragment}");
+    let builder = runtime_key_request_builder(server, provisioned, &signing_key)?
+        .verification_method(verification_method.clone());
     let runtime_public_key_digest = builder.public_key_digest()?;
     let pairing_binding_digest = arkret::agent_key_pairing_request_binding_digest(
         &controller_id,
