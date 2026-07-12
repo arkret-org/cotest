@@ -16,10 +16,10 @@
 //! This module covers the two negative branches.
 
 use anyhow::{Result, anyhow};
-use arkret_core::schema::embedded_error_code_identifiers;
 use arkret_core::{
     REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE, REASON_RELAXED_WINDOW_EXCEEDS_CEILING,
 };
+use arkret_schema::embedded_error_code_identifiers;
 
 pub const ABSOLUTE_HARD_CEILING_MS: u64 = 300_000;
 

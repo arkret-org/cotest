@@ -25,10 +25,10 @@
 //! Anchor batch → close.
 
 use anyhow::{Result, anyhow};
-use arkret_core::schema::embedded_error_code_identifiers;
 use arkret_core::{
     REASON_APPEAL_OVERTURN_MISSING_LIFT, REASON_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
 };
+use arkret_schema::embedded_error_code_identifiers;
 
 pub const APPEAL_KIND_SUBMIT: &str = "ak.moderation.appeal.submit";
 pub const APPEAL_KIND_REVIEW: &str = "ak.moderation.appeal.review";

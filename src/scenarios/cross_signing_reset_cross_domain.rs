@@ -22,11 +22,11 @@
 //!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::schema::embedded_error_code_identifiers;
 use arkret_core::{
     EventId, REASON_CROSS_DOMAIN_REPLAY_REJECTED, REASON_RESET_EVENT_ID_MISMATCH,
     TypedTrustDomainId,
 };
+use arkret_schema::embedded_error_code_identifiers;
 
 pub const EXPECTED_CROSS_DOMAIN_REPLAY: &str = "cross_domain_replay_rejected";
 pub const EXPECTED_RESET_EVENT_ID_MISMATCH: &str = "reset_event_id_mismatch";

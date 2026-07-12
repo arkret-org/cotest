@@ -29,8 +29,8 @@
 //! and must be tracked separately on the coverage dashboard.
 
 use anyhow::{Result, anyhow};
-use arkret_core::schema::embedded_error_code_identifiers;
 use arkret_core::{REASON_BLOB_REDACTED, REASON_LEGAL_HOLD_ACTIVE};
+use arkret_schema::embedded_error_code_identifiers;
 
 pub const EXPECTED_LEGAL_HOLD: &str = "legal_hold_active";
 pub const EXPECTED_BLOB_REDACTED: &str = "blob_redacted";

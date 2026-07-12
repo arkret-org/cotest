@@ -32,10 +32,10 @@ use arkret_core::models::{
     MediaDecryptPolicyValue, MediaPlaintextService, derive_media_decrypt_metadata_digest,
     verify_media_decrypt_metadata,
 };
-use arkret_core::schema::embedded_error_code_identifiers;
 use arkret_core::{
     Did, REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, REASON_MLS_GOVERNANCE_BINDING_STALE,
 };
+use arkret_schema::embedded_error_code_identifiers;
 
 pub const EXPECTED_MLS_GOVERNANCE_BINDING_STALE: &str = "mls_governance_binding_stale";
 pub const EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED: &str =

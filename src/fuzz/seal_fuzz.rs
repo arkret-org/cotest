@@ -12,7 +12,8 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use arkret_core::{ANCHOR_SCHEMA, schema};
+use arkret_core::ANCHOR_SCHEMA;
+use arkret_schema as schema;
 use serde_json::{Value, json};
 
 fn registry() -> arkret_core::ProtocolSchemaRegistry {

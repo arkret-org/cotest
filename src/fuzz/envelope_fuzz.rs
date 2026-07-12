@@ -15,7 +15,8 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use arkret_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, ProtocolSchemaRegistry, SNAPSHOT_SCHEMA, schema};
+use arkret_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, SNAPSHOT_SCHEMA};
+use arkret_schema::{self as schema, ProtocolSchemaRegistry};
 use serde::Serialize;
 use serde_json::{Value, json};
 
