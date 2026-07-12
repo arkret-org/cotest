@@ -158,7 +158,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                 "realm_id": realm_id,
                 "read_scope": {
                     "kind": "thread",
-                    "ref": thread_root_ref
+                    "container_ref": thread_root_ref
                 },
                 "position": {
                     "event_id": sent["event_id"],
@@ -191,7 +191,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         marker_events.iter().any(|event| {
             event["event_id"] == marker_event_id
                 && event["payload"]["position"]["event_id"] == sent["event_id"]
-                && event["payload"]["read_scope"]["ref"] == thread_root_ref
+                && event["payload"]["read_scope"]["container_ref"] == thread_root_ref
                 && event["payload"]["read_scope"]["kind"] == "thread"
         }),
         "events query did not include accepted read cursor marker: {markers}"

@@ -897,7 +897,7 @@ async fn pair_agent_runtime_key_as(
             "expires_at": "2999-01-01T00:00:00Z",
             "approval_evidence": {
                 "kind": "approval_event",
-                "ref": "ak:event:01999999-0000-7000-8000-000000000001",
+                "evidence_ref": "ak:event:01999999-0000-7000-8000-000000000001",
                 "request_canonical_digest": pairing_binding_digest.as_str(),
                 "approved_by": ALICE_DID
             }
