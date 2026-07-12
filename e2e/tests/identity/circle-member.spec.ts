@@ -51,7 +51,7 @@ test.describe("circle membership (same principal server)", () => {
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
     ]);
-    const [aliceToken] = await Promise.all([
+    const [aliceToken, bobToken] = await Promise.all([
       issueDevSession(request, alice),
       // bob registers + has a session but never USES it for circle ops; the
       // whole point is the pull needs no action from bob.
@@ -71,10 +71,20 @@ test.describe("circle membership (same principal server)", () => {
       realmId,
       title: `S8 circle ${Date.now()}`,
       joinRule: "invite",
+      directoryVisibility: "realm_members",
     });
     expect(circle.circle_id).toMatch(/^ak:circle:/);
     expect(circle.realm_id).toBe(realmId);
     expect(circle.state).toBe("active");
+
+    const bobDirectoryView = await getCircleArkret(
+      request,
+      bobToken,
+      circle.circle_id,
+    );
+    expect(bobDirectoryView.members).toEqual([]);
+    expect(bobDirectoryView.member_count).toBeUndefined();
+    expect(bobDirectoryView.viewer_membership).toBeUndefined();
 
     // Circle-local management is not inherited from Realm ownership. Alice
     // explicitly grants herself member management for this Circle, joins so she

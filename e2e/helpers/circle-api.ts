@@ -32,8 +32,14 @@ import {
 export type CircleOutcome = {
   circle_id: string;
   realm_id: string;
+  profile_ref?: string;
   title: string;
   summary?: string;
+  display: {
+    short_name: string;
+    color_token: string;
+    symbol: { glyph: string } | { emoji: string };
+  };
   directory_visibility: string;
   join_rule: string;
   history_visibility: string;
@@ -41,6 +47,8 @@ export type CircleOutcome = {
   mls_group_ref?: string;
   state: string;
   members: string[];
+  member_count?: number;
+  viewer_membership?: CircleMembership;
   created_by: string;
   created_at: string;
   updated_by?: string;
@@ -190,6 +198,7 @@ export async function createCircleArkret(
     realmId: string;
     title: string;
     joinRule?: string;
+    directoryVisibility?: string;
     summary?: string;
     server?: SolandKey;
   },
@@ -202,6 +211,9 @@ export async function createCircleArkret(
         realm_id: args.realmId,
         title: args.title,
         ...(args.joinRule !== undefined ? { join_rule: args.joinRule } : {}),
+        ...(args.directoryVisibility !== undefined
+          ? { directory_visibility: args.directoryVisibility }
+          : {}),
         ...(args.summary !== undefined ? { summary: args.summary } : {}),
       },
     },

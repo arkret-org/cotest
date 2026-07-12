@@ -54,8 +54,64 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         provision_and_pair_agent(&server, &token, "Summary Assistant", "summary").await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
-    // 3. grant attach/detach must materialize into the authz projection.
+    advance_event_sequence(
+        ALICE_DID,
+        "ak:realm:01999999-0000-7000-8000-000000000000",
+        32,
+    );
+    let realm_id = create_realm(&server, &token, ALICE_DID, "Sidecar profile projection").await?;
+    let strand_id = realm_id.replace("ak:realm:", "ak:strand:");
+    let strand = submit_event(
+        &server,
+        &token,
+        ALICE_DID,
+        &realm_id,
+        "ak.strand.create",
+        json!({
+            "object": {
+                "id": strand_id,
+                "schema": "ak.schema.strand.v1",
+                "realm_id": realm_id,
+                "tracks": {"discussion": {"enabled": true, "is_primary": true}},
+                "created_by": ALICE_DID,
+                "created_at": "2026-05-02T00:00:00Z",
+                "metadata": {"title": "Sidecar context"}
+            }
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(strand["status"], "accepted");
+
     let controller = bearer_sdk_client(&server, &token)?;
+    let sidecar = controller
+        .agent_sidecar_thread_ensure(&arkret::AgentSidecarThreadEnsureRequestBody {
+            controller_id: arkret::Did::new(ALICE_DID)?,
+            addressed_agent_ids: Vec::new(),
+            context_ref: arkret::AgentSidecarContextRef::strand(
+                arkret::RealmId::new(realm_id.clone())?,
+                arkret::StrandId::new(strand_id)?,
+            ),
+        })
+        .await?;
+    assert!(sidecar.ok, "live Sidecar ensure must succeed");
+    expect_sdk_api_error(
+        controller
+            .circle_get(sidecar.private_circle_id.as_str())
+            .await,
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )?;
+    let ordinary_circles = controller.circle_list(&realm_id).await?;
+    assert!(
+        ordinary_circles
+            .circles
+            .iter()
+            .all(|circle| circle.circle_id != sidecar.private_circle_id),
+        "ordinary Circle list must not enumerate Sidecar-profile Circles"
+    );
+
+    // 3. grant attach/detach must materialize into the authz projection.
     let attach = controller
         .agent_grant_attach(
             &agent_did,
