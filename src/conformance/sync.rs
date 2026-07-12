@@ -125,9 +125,8 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
             presence: None,
             notifications: None,
             partial: frame.get("partial").and_then(Value::as_bool),
-            reason: None,
+            priority: None,
             reconnect_after_ms,
-            extra: BTreeMap::new(),
         }),
         StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
             kind: match kind {
@@ -162,9 +161,8 @@ fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFra
             presence: None,
             notifications: None,
             partial: None,
-            reason: None,
+            priority: None,
             reconnect_after_ms: None,
-            extra: BTreeMap::new(),
         }),
         StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
             kind: EventsSubscribeFrameKind::Dropped,
