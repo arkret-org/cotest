@@ -1,5 +1,6 @@
 mod agent_participation;
 mod agent_vectors;
+mod audit_release;
 mod auth_session_proof;
 mod blind_payload;
 mod blob_stream_aead;
@@ -88,6 +89,12 @@ pub use agent_vectors::{
     run_agent_pairing_expiry_vector, run_agent_provision_vector,
     run_agent_repairing_supersede_vector, run_agent_session_grant_replay_vector,
     run_agent_vector_suite, validate_agent_human_approval_http_response,
+};
+pub use audit_release::{
+    ALL_AUDIT_RELEASE_VECTOR_IDS, run_audit_release_vector_suite,
+    run_binding_and_authorization_gate_vector, run_binding_fsm_vector,
+    run_close_release_concurrency_vector, run_release_recipient_binding_vector,
+    run_release_window_vector, run_ryw_before_output_vector, run_session_fsm_vector,
 };
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
