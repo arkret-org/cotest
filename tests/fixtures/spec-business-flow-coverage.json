@@ -850,7 +850,7 @@
           ]
         },
         {
-          "operation_id": "ak.self.agent.command.rotate_key",
+          "operation_id": "ak.self.agent.command.renew_pairing",
           "surfaces": [
             "agent_runtime"
           ]

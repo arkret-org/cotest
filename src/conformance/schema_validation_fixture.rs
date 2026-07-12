@@ -163,10 +163,17 @@ fn run_semantic_cases(file_name: &str, cases: &[SchemaValidationCase]) -> Result
                 .and_then(Value::as_str)
                 .is_some_and(|clause_id| !clause_ids.insert(clause_id))
         });
+        // Accept-class outcomes. `accept_after_digest_revision_and_signature_verification`
+        // is the signed, artifact-bound accept: its non-zero digest / spec_revision
+        // and proof-signature preconditions are enforced at the schema layer (the
+        // `expect_valid` pass in `run_cases`), so at the semantic layer it shares the
+        // plain `accept` invariant — no duplicate clause claim.
         match case.semantic_outcome.as_deref() {
-            Some("accept") if duplicate => {
+            Some(outcome @ ("accept" | "accept_after_digest_revision_and_signature_verification"))
+                if duplicate =>
+            {
                 bail!(
-                    "{} unexpectedly contains a duplicate clause claim",
+                    "{} ({outcome}) unexpectedly contains a duplicate clause claim",
                     case.name
                 )
             }
@@ -180,7 +187,7 @@ fn run_semantic_cases(file_name: &str, cases: &[SchemaValidationCase]) -> Result
                     );
                 }
             }
-            Some("accept") | None => {}
+            Some("accept" | "accept_after_digest_revision_and_signature_verification") | None => {}
             Some(outcome) => bail!("{} has unknown semantic_outcome {outcome}", case.name),
         }
     }

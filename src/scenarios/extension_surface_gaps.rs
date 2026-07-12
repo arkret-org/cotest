@@ -76,7 +76,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         "ak.self.agent.command.pause",
         "ak.self.agent.command.resume",
         "ak.self.agent.command.deactivate",
-        "ak.self.agent.command.rotate_key",
+        "ak.self.agent.command.renew_pairing",
         "ak.self.agent.grant.command.attach",
         "ak.self.agent.grant.resource.delete",
         "ak.self.agent.sidecar_thread.command.ensure",

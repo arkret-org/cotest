@@ -65,6 +65,8 @@
     ],
     "fsm_families": [
       "ak.component.agent.status.v1",
+      "ak.component.audit.binding.v1",
+      "ak.component.audit.session.v1",
       "ak.component.call.state.v1",
       "ak.component.member.state.v1",
       "ak.component.moderation.appeal.v1",
@@ -72,6 +74,7 @@
     ],
     "ordered_log_families": [
       "ak.component.account.status.v1",
+      "ak.component.audit.release.v1",
       "ak.component.circle.create.v1",
       "ak.component.contact.fact_log.v1",
       "ak.component.cross_signing.reset.v1",

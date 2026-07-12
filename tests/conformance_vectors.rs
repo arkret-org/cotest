@@ -70,8 +70,9 @@ fn call_state_media_lifecycle_vector_suite_runs_clean() {
 #[test]
 fn agent_vector_suite_runs_clean() {
     run_agent_vector_suite().expect("agent vectors must pass");
-    // VECT-AG-1..5 plus the human-approval-required error-details vector.
-    assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 6);
+    // VECT-AG-1..5, the runtime-replacement supersede and longevity-no-expiry
+    // vectors, plus the human-approval-required error-details vector.
+    assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 8);
 }
 
 // ─── P0 / VECT-SC-1..4 — sidecar vectors ───────────────────────────────────
