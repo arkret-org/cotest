@@ -394,7 +394,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
 
     let stub = json!({
         "stub_schema": "ak.schema.erasure_verification_stub.v1",
-        "subject": {"kind": "event", "ref": original_event_id},
+        "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
         "completed_at": "2026-04-29T00:00:00Z",
@@ -424,7 +424,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "schema": "ak.schema.erasure_receipt.v1",
         "receipt_id": receipt_id,
         "issuer": "did:web:erasure.example.com",
-        "subject": {"kind": "event", "ref": original_event_id},
+        "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "outcome": "completed",
         "erased_classes": ["canonical_payload_bytes", "derived_plaintext"],
@@ -449,7 +449,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
 
     let tampered_stub = json!({
         "stub_schema": "ak.schema.erasure_verification_stub.v1",
-        "subject": {"kind": "event", "ref": "ak:event:01970e58-0004-7000-8000-0000000000ff"},
+        "subject": {"kind": "event", "subject_ref": "ak:event:01970e58-0004-7000-8000-0000000000ff"},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
         "completed_at": "2026-04-29T00:00:00Z",

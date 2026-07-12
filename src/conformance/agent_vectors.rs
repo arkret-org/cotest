@@ -253,7 +253,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "issued_at": "2026-07-12T00:00:00Z",
         "approval_evidence": {
             "kind": "approval_event",
-            "ref": "ak:event:01990000-0000-7000-8000-000000000001"
+            "evidence_ref": "ak:event:01990000-0000-7000-8000-000000000001"
         }
     });
     let decoded: arkret_core::AgentKeyAuthorizePayload = serde_json::from_value(payload)
