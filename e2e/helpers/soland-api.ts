@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { createHash, createPrivateKey, randomBytes, sign } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  hkdfSync,
+  randomBytes,
+  sign,
+} from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +14,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
+import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import { base64url } from "./encoding";
 
@@ -1171,7 +1178,7 @@ export async function putAccountDataViaEventApi(
   opts: { server?: SolandKey; context?: string } = {},
 ) {
   const payloadBody = privateAccountDataKeys.has(key)
-    ? encryptedAccountDataMarker(key, body)
+    ? encryptedAccountDataValue(actorDid, key, body)
     : body;
   return await submitSignedEventApi(
     request,
@@ -1200,22 +1207,51 @@ const privateAccountDataKeys = new Set([
   "ak.push_rules",
 ]);
 
-function encryptedAccountDataMarker(
+function encryptedAccountDataValue(
+  actorDid: string,
   dataType: string,
   content: Record<string, unknown>,
 ): Record<string, unknown> {
-  const payloadDigest = `sha256:${sha256CanonicalJson({
+  const schema = "ak.schema.account_data_encrypted_value.v1";
+  const version = "1.0";
+  const accountSecret = randomBytes(32);
+  const keyInfo = Buffer.from(
+    canonicalJson({ schema, actor_id: actorDid, data_type: dataType }),
+    "utf8",
+  );
+  const key = Buffer.from(
+    hkdfSync(
+      "sha256",
+      accountSecret,
+      Buffer.from("arkret-account-data-value-hkdf-v1", "utf8"),
+      keyInfo,
+      32,
+    ),
+  );
+  const aad = {
+    schema,
+    version,
+    actor_id: actorDid,
     data_type: dataType,
-    content,
-  })}`;
+  };
+  const aadBytes = Buffer.from(canonicalJson(aad), "utf8");
+  const plaintext = Buffer.from(canonicalJson(content), "utf8");
+  const nonce = randomBytes(24);
+  const ciphertext = Buffer.from(
+    xchacha20poly1305(key, nonce, aadBytes).encrypt(plaintext),
+  );
+  const digest = (bytes: Uint8Array) =>
+    `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
   return {
-    client_side_conformance: {
-      encrypted_account_data: true,
-      profile_id: "ak.profile.e2ee_client.v1",
-      payload_digest: payloadDigest,
-    },
-    content_type: "application/vnd.arkret.account-data+json",
-    ciphertext: `opaque-client-account-data:${payloadDigest.slice("sha256:".length)}`,
+    schema,
+    version,
+    aead_profile: "ak.aead.xchacha20_poly1305.v1",
+    key_ref: digest(key),
+    nonce: base64url(nonce),
+    ciphertext: base64url(ciphertext),
+    aad,
+    aad_digest: digest(aadBytes),
+    ciphertext_digest: digest(ciphertext),
   };
 }
 

@@ -60,7 +60,7 @@
 ### Phase D — client 提交 account_data blocklist event
 
 8. alice 的 inkson client 应该把这次 block 持久化为 soland 的 actor-private account_data event:
-   - 调用:`POST /_arkret/self/events`,提交 `ak.account_data.set`,payload `{ key: "ak.account.blocklist", owner: alice.did, body: <encrypted account_data carrier or client_side_conformance marker>, updated_at: <ts> }`
+   - 调用:`POST /_arkret/self/events`,提交 `ak.account_data.set`,payload `{ key: "ak.account.blocklist", owner: alice.did, body: <ak.schema.account_data_encrypted_value.v1 envelope>, updated_at: <ts> }`
    - 断言 (HTTP 层):events submit 返回 `status=accepted`
    - 断言 (跨设备 sync):`GET /_arkret/self/account/subscribe?catchup=true` 的 `account_data.events` 返回不透明 carrier / marker, 且不包含 bob DID 明文
    - 备注:这是 actor-private — 只对 alice 自己的 device 同步,bob 拿不到
