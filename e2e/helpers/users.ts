@@ -767,7 +767,9 @@ export class JointUserPage {
       timeout: 30_000,
     });
     const text = await strand.innerText();
-    const match = text.match(/created (ak:realm:[^\s]+)/);
+    const match = text.match(
+      /created (ak:realm:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i,
+    );
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];
   }

@@ -39,6 +39,7 @@ param(
     [string]$InksonBetaBaseUrl,
     [string]$CoauthBaseUrl,
     [string]$SolandCommand,
+    [string]$SolandBin,
     [ValidateSet("process", "docker")]
     [string]$SolandRuntime = "process",
     [string]$SolandImage = "cotest-soland:latest",
@@ -88,6 +89,7 @@ param(
     [int]$StartupTimeoutSeconds = 900,
     [switch]$SkipNpmInstall,
     [switch]$SkipBrowserInstall,
+    [switch]$SkipBuild,
     [switch]$KeepServices,
     [switch]$SkipPreflight,
     [switch]$PreflightOnly,
@@ -246,10 +248,14 @@ function Get-RepositoryBuildInputState {
     }
     $head = ($headOutput -join "").Trim()
 
-    $commitTimeOutput = @(Invoke-NativeCapture -FilePath $git -Arguments @(
-            "-C", $resolvedRepository, "log", "-1", "--format=%cI", "--",
-            "Cargo.toml", "Cargo.lock", "build.rs", "crates", "src", "migrations"
-        ))
+    $buildInputPaths = @(
+        "Cargo.toml", "Cargo.lock", "build.rs", "Dioxus.toml", "crates", "src",
+        "migrations", "assets", "public"
+    )
+    $commitArguments = @(
+        "-C", $resolvedRepository, "log", "-1", "--format=%cI", "--"
+    ) + $buildInputPaths
+    $commitTimeOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $commitArguments)
     if ($LASTEXITCODE -ne 0 -or $commitTimeOutput.Count -eq 0) {
         throw "Unable to resolve build-input commit time for $resolvedRepository"
     }
@@ -258,17 +264,18 @@ function Get-RepositoryBuildInputState {
         [System.Globalization.CultureInfo]::InvariantCulture
     ).UtcDateTime
 
-    $trackedOutput = @(Invoke-NativeCapture -FilePath $git -Arguments @(
-            "-C", $resolvedRepository, "ls-files", "--",
-            "Cargo.toml", "Cargo.lock", "build.rs", "crates", "src", "migrations"
-        ))
+    $trackedArguments = @("-C", $resolvedRepository, "ls-files", "--") + $buildInputPaths
+    $trackedOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $trackedArguments)
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to enumerate build inputs for $resolvedRepository"
     }
 
     $latestInputTime = [DateTime]::MinValue
     $latestInputPath = $null
-    $buildExtensions = @(".rs", ".toml", ".lock", ".sql", ".proto", ".json")
+    $buildExtensions = @(
+        ".rs", ".toml", ".lock", ".sql", ".proto", ".json", ".html", ".css",
+        ".js", ".ts", ".svg", ".png", ".webp"
+    )
     foreach ($relativePath in $trackedOutput) {
         if (-not $relativePath) {
             continue
@@ -334,6 +341,31 @@ function Add-BinaryFreshnessPreflight {
     }
     catch {
         Add-PreflightResult $Results $Name "fail" $_.Exception.Message
+    }
+}
+
+function Get-ArtifactFreshness {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArtifactPath,
+        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots
+    )
+
+    if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf)) {
+        return [pscustomobject]@{ Fresh = $false; Detail = "artifact missing: $ArtifactPath" }
+    }
+    try {
+        $states = @(
+            foreach ($repositoryRoot in $RepositoryRoots) {
+                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $ArtifactPath
+            }
+        )
+        $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
+        return [pscustomobject]@{
+            Fresh = $newest.BinaryTimeUtc -ge $newest.RequiredTimeUtc
+            Detail = "artifact=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); input=$($newest.RequiredBy)"
+        }
+    } catch {
+        return [pscustomobject]@{ Fresh = $false; Detail = $_.Exception.Message }
     }
 }
 
@@ -442,6 +474,7 @@ function Invoke-JointE2ePreflight {
         [string]$TeabayDatabaseUrl,
         [string]$SolandBaseUrl,
         [string]$SolandCommand,
+        [string]$SolandBin,
         [bool]$WillStartDefaultSoland = $false,
         [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
         [string]$SolandImage,
@@ -449,6 +482,7 @@ function Invoke-JointE2ePreflight {
         [string]$InksonBaseUrl,
         [string]$InksonCommand,
         [bool]$WillStartDefaultInkson = $false,
+        [string]$InksonStaticIndex,
         [string]$JsonPath,
         [string]$MarkdownPath
     )
@@ -535,12 +569,19 @@ function Invoke-JointE2ePreflight {
         if ($SolandRuntime -eq "docker") {
             Add-PreflightResult $results "soland runtime" "pass" "docker"
         } else {
-            $cargo = Find-CommandPath @("cargo.exe", "cargo")
-            if ($cargo) {
-                $version = (& $cargo --version 2>&1) -join "`n"
-                Add-PreflightResult $results "cargo" "pass" "$cargo $version"
-            } else {
-                Add-PreflightResult $results "cargo" "fail" "cargo is required to start the default soland command"
+            try {
+                $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $WorkspaceRoot
+                Add-PreflightResult $results "soland binary" "pass" $solandBinary
+                Add-BinaryFreshnessPreflight `
+                    -Results $results `
+                    -Name "soland binary freshness" `
+                    -BinaryPath $solandBinary `
+                    -RepositoryRoots @(
+                        (Join-Path $WorkspaceRoot "soland"),
+                        (Join-Path $WorkspaceRoot "arkret-rust-sdk")
+                    )
+            } catch {
+                Add-PreflightResult $results "soland binary" "fail" $_.Exception.Message
             }
         }
     }
@@ -567,12 +608,10 @@ function Invoke-JointE2ePreflight {
     }
 
     if ($WillStartDefaultInkson -or (-not $InksonBaseUrl -and -not $InksonCommand)) {
-        $dx = Find-CommandPath @("dx.exe", "dx")
-        if ($dx) {
-            $version = (& $dx --version 2>&1) -join "`n"
-            Add-PreflightResult $results "dioxus cli" "pass" "$dx $version"
+        if ($InksonStaticIndex -and (Test-Path -LiteralPath $InksonStaticIndex -PathType Leaf)) {
+            Add-PreflightResult $results "inkson web bundle" "pass" $InksonStaticIndex
         } else {
-            Add-PreflightResult $results "dioxus cli" "fail" "dx is required to start the default inkson web server"
+            Add-PreflightResult $results "inkson web bundle" "fail" "cached bundle missing; rerun without -SkipBuild"
         }
     }
 
@@ -766,6 +805,28 @@ function Quote-PsLiteral {
     return "'" + ($Value -replace "'", "''") + "'"
 }
 
+function Write-DotEnvFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Values
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $Values.GetEnumerator()) {
+        $escaped = ([string]$entry.Value).
+            Replace('\', '\\').
+            Replace('"', '\"').
+            Replace("`r", '\r').
+            Replace("`n", '\n')
+        $lines.Add("$($entry.Key)=`"$escaped`"")
+    }
+    [System.IO.File]::WriteAllLines(
+        $Path,
+        $lines,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
+
 $script:ContainerHostGatewayIpv4 = $null
 
 function Get-ContainerHostGatewayIpv4 {
@@ -843,6 +904,26 @@ function Resolve-CoauthBinary {
     }
 
     throw "Unable to find coauth binary. Build coauth first or pass -CoauthBin."
+}
+
+function Resolve-SolandBinary {
+    param(
+        [string]$ExplicitPath,
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot
+    )
+
+    $candidates = @()
+    if ($ExplicitPath) { $candidates += $ExplicitPath }
+    if ($env:SOLAND_BIN) { $candidates += $env:SOLAND_BIN }
+    $candidates += (Join-Path $WorkspaceRoot "soland\target\debug\soland.exe")
+    $candidates += (Join-Path $WorkspaceRoot "soland\target\release\soland.exe")
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+    throw "Unable to find soland binary. Build soland first or pass -SolandBin."
 }
 
 function Resolve-StaridBinary {
@@ -1008,7 +1089,7 @@ function Invoke-CoauthMigrations {
     )
 
     $migrateLog = Join-Path $LogDirectory "coauth-migrate.log"
-    $migrateOutput = & $CoauthBinary database migrate -c $ConfigPath 2>&1
+    $migrateOutput = & $CoauthBinary database migrate -c $ConfigPath --no-env-overrides 2>&1
     $migrateOutput | Set-Content -Path $migrateLog -Encoding UTF8
     if ($LASTEXITCODE -ne 0) {
         throw "coauth database migrate failed; see $migrateLog"
@@ -1023,7 +1104,7 @@ function Invoke-CoauthConfigSync {
     )
 
     $syncLog = Join-Path $LogDirectory "coauth-config-sync.log"
-    $syncOutput = & $CoauthBinary config sync -c $ConfigPath 2>&1
+    $syncOutput = & $CoauthBinary config sync -c $ConfigPath --no-env-overrides 2>&1
     $syncOutput | Set-Content -Path $syncLog -Encoding UTF8
     if ($LASTEXITCODE -ne 0) {
         throw "coauth config sync failed; see $syncLog"
@@ -1467,7 +1548,7 @@ function Invoke-RunnerSelfTest {
             -BinaryPath $binaryPath `
             -RepositoryRoots @($repositoryRoot)
         if ($freshResults.Count -ne 1 -or $freshResults[0].status -ne "pass") {
-            throw "fresh binary self-test did not pass"
+            throw "fresh binary self-test did not pass: $($freshResults | ConvertTo-Json -Compress)"
         }
 
         $exitedProcess = Start-Process `
@@ -1800,6 +1881,7 @@ $startedAt = Get-Date
 $generatedSolandCommand = $false
 $generatedInksonCommand = $false
 $willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
+$willStartDefaultInkson = (-not $SkipInkson -and -not $InksonCommand -and $null -ne $inksonPort)
 $willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($DualSoland -and $null -ne $solandBetaPort)))
 $startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
 $coauthConfigPath = $null
@@ -1808,6 +1890,8 @@ $preflightJson = Join-Path $jointDir "preflight.json"
 $preflightMd = Join-Path $jointDir "preflight.md"
 $managedServiceFailuresJson = Join-Path $jointDir "managed-service-failures.json"
 $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
+$inksonStaticRoot = Join-Path $InksonRoot "target\dx\inkson\debug\web\public"
+$inksonStaticIndex = Join-Path $inksonStaticRoot "index.html"
 $playwrightProjects = Resolve-PlaywrightProjects `
     -RunProfile $RunProfile `
     -PlaywrightProject $PlaywrightProject `
@@ -1833,6 +1917,68 @@ try {
         Invoke-SolandImageBuild @imageBuildArgs
     }
 
+    $preparationTasks = New-Object System.Collections.Generic.List[object]
+    $preparationTimings = New-Object System.Collections.Generic.List[object]
+    if (-not $SkipBuild -and $willStartDefaultSoland -and $SolandRuntime -eq "process" -and -not $SolandBin -and -not $env:SOLAND_BIN) {
+        $defaultSolandBinary = Join-Path $workspaceRoot "soland\target\debug\soland.exe"
+        $freshness = Get-ArtifactFreshness `
+            -ArtifactPath $defaultSolandBinary `
+            -RepositoryRoots @(
+                (Join-Path $workspaceRoot "soland"),
+                (Join-Path $workspaceRoot "arkret-rust-sdk")
+            )
+        if (-not $freshness.Fresh) {
+            Write-Host "Preparing soland binary: $($freshness.Detail)"
+            $started = Get-Date
+            $service = Start-ManagedCommand `
+                -Name "prepare-soland" `
+                -Command ("cargo build --manifest-path {0} --bin soland" -f (Quote-PsLiteral $SutManifest)) `
+                -WorkingDirectory (Split-Path -Parent $SutManifest) `
+                -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "soland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
+        }
+    }
+
+    if (-not $SkipBuild -and $willStartDefaultInkson) {
+        $inksonFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $inksonStaticIndex `
+            -RepositoryRoots @(
+                $InksonRoot,
+                (Join-Path $workspaceRoot "arkret-rust-sdk"),
+                (Join-Path $workspaceRoot "garth"),
+                (Join-Path $workspaceRoot "chime"),
+                (Join-Path $workspaceRoot "yoface")
+            )
+        if (-not $inksonFreshness.Fresh) {
+            Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
+            $started = Get-Date
+            $buildCommand = Add-DioxusNoDownloadsEnvironment `
+                -Command "dx build --platform web --features experimental-agents,wasm-localstorage-secrets-test" `
+                -ProjectRoot $InksonRoot
+            $service = Start-ManagedCommand `
+                -Name "prepare-inkson" `
+                -Command $buildCommand `
+                -WorkingDirectory $InksonRoot `
+                -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; Service = $service; Started = $started; Artifact = $inksonStaticIndex })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "inkson"; status = "cache-hit"; duration_seconds = 0; detail = $inksonFreshness.Detail })
+        }
+    }
+
+    foreach ($task in $preparationTasks) {
+        $task.Service.Process.WaitForExit()
+        $task.Service.Process.Refresh()
+        $duration = [Math]::Round(((Get-Date) - $task.Started).TotalSeconds, 3)
+        if ($task.Service.Process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $task.Artifact -PathType Leaf)) {
+            throw "preparing $($task.Name) failed; see $($task.Service.Stdout) and $($task.Service.Stderr)"
+        }
+        $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = "built"; duration_seconds = $duration; detail = $task.Artifact })
+    }
+    $preparationTimings | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8
+
     if (-not $SkipPreflight) {
         Invoke-JointE2ePreflight `
             -RepoRoot $repoRoot `
@@ -1850,13 +1996,15 @@ try {
             -TeabayDatabaseUrl $TeabayDatabaseUrl `
             -SolandBaseUrl $SolandBaseUrl `
             -SolandCommand $SolandCommand `
+            -SolandBin $SolandBin `
             -WillStartDefaultSoland $willStartDefaultSoland `
             -SolandRuntime $SolandRuntime `
             -SolandImage $SolandImage `
             -WillStartDockerSoland $willStartDockerSoland `
             -InksonBaseUrl $InksonBaseUrl `
             -InksonCommand $InksonCommand `
-            -WillStartDefaultInkson (-not $SkipInkson -and -not $InksonCommand -and $null -ne $inksonPort) `
+            -WillStartDefaultInkson $willStartDefaultInkson `
+            -InksonStaticIndex $inksonStaticIndex `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
     }
@@ -2013,7 +2161,7 @@ try {
         # closed on that one too and demands `COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP`;
         # without it coauth panics on boot ("password-bootstrap scaffold is for dev/test
         # only") and the whole joint suite never starts.
-        $CoauthCommand = "`$env:COAUTH_ENABLE_TEST_ENDPOINTS='1'; `$env:COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS='1'; `$env:COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP='1'; & {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        $CoauthCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
@@ -2027,7 +2175,7 @@ try {
         Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
     }
 
-    # CT-6: starid (DID resolver) - env-driven, no external deps. Spawned
+    # CT-6: starid (DID resolver) - no external deps. Spawned
     # before soland so soland's SOLAND_STARID_WEBVH_RESOLVER_URL points at a
     # live listener from the first request onwards.
     if ($StartStarid) {
@@ -2036,12 +2184,15 @@ try {
             $staridPort = $staridUri.Port
         }
         $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $workspaceRoot
-        $staridCmd = (
-            "`$env:STARID_BIND='127.0.0.1:{0}'; " +
-            "`$env:STARID_SERVICE_ID={1}; " +
-            "`$env:STARID_DEVELOPMENT_MODE='true'; " +
-            "& {2}"
-        ) -f $staridPort, (Quote-PsLiteral $StaridServiceId), (Quote-PsLiteral $staridBinary)
+        $staridConfigPath = Join-Path $jointDir "starid.env"
+        Write-DotEnvFile -Path $staridConfigPath -Values ([ordered]@{
+                STARID_SERVICE_ID = $StaridServiceId
+                STARID_DEVELOPMENT_MODE = "true"
+            })
+        $staridCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
+            (Quote-PsLiteral $staridBinary),
+            (Quote-PsLiteral $staridConfigPath),
+            $staridPort
         $managedServices.Add((Start-ManagedCommand -Name "starid" -Command $staridCmd -WorkingDirectory (Split-Path -Parent $staridBinary) -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($StaridBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
@@ -2056,57 +2207,20 @@ try {
         }
         $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $workspaceRoot
         $teabayDb = if ($TeabayDatabaseUrl) { $TeabayDatabaseUrl } else { $env:DATABASE_URL }
-        $teabayCmd = (
-            "`$env:TEABAY_BIND='127.0.0.1:{0}'; " +
-            "`$env:TEABAY_PUBLIC_BASE_URL={1}; " +
-            "`$env:TEABAY_SERVICE_ID={2}; " +
-            "`$env:TEABAY_DEVELOPMENT_MODE='true'; " +
-            "`$env:TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED='true'; " +
-            "`$env:DATABASE_URL={3}; " +
-            "& {4}"
-        ) -f `
-            $teabayPort,
-            (Quote-PsLiteral $TeabayBaseUrl),
-            (Quote-PsLiteral $TeabayServiceId),
-            (Quote-PsLiteral $teabayDb),
-            (Quote-PsLiteral $teabayBinary)
+        $teabayConfigPath = Join-Path $jointDir "teabay.env"
+        Write-DotEnvFile -Path $teabayConfigPath -Values ([ordered]@{
+                DATABASE_URL = $teabayDb
+                TEABAY_PUBLIC_BASE_URL = $TeabayBaseUrl
+                TEABAY_SERVICE_ID = $TeabayServiceId
+                TEABAY_DEVELOPMENT_MODE = "true"
+                TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED = "true"
+            })
+        $teabayCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
+            (Quote-PsLiteral $teabayBinary),
+            (Quote-PsLiteral $teabayConfigPath),
+            $teabayPort
         $managedServices.Add((Start-ManagedCommand -Name "teabay" -Command $teabayCmd -WorkingDirectory (Split-Path -Parent $teabayBinary) -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($TeabayBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
-    }
-
-    $solandCoauthEnv = ""
-    if ($CoauthBaseUrl) {
-        $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
-        $solandCoauthEnv = (
-            "`$env:SOLAND_ACCOUNT_AUTHORITY_URL={0}; " +
-            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={1}; " +
-            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={2}; " +
-            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={3}; " +
-            "`$env:SOLAND_OAUTH_CLIENT_ID={4}; "
-        ) -f `
-            (Quote-PsLiteral $coauthTrimmed),
-            (Quote-PsLiteral "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"),
-            (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
-            (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer),
-            (Quote-PsLiteral $CoauthOAuthClientId)
-    }
-
-    # CT-6: wire soland -> starid (DID resolver) + soland -> teabay
-    # (directory announce). Each block is no-op when its service is not
-    # part of the joint stack.
-    $solandStaridEnv = ""
-    if ($StaridBaseUrl) {
-        $solandStaridEnv = (
-            "`$env:SOLAND_DID_RESOLVER_ALLOW_METHODS='did:webvh,did:key'; " +
-            "`$env:SOLAND_STARID_WEBVH_RESOLVER_URL={0}; "
-        ) -f (Quote-PsLiteral $StaridBaseUrl)
-    }
-    $solandTeabayEnv = ""
-    if ($TeabayBaseUrl) {
-        $teabayTrimmed = $TeabayBaseUrl.TrimEnd("/")
-        $solandTeabayEnv = (
-            "`$env:SOLAND_DIRECTORY_ANNOUNCE_URL={0}; "
-        ) -f (Quote-PsLiteral "$teabayTrimmed/_arkret/find/directory/announce")
     }
 
     function Build-SolandDockerEnvironment {
@@ -2171,6 +2285,8 @@ try {
 
     function Build-SolandCommand {
         param(
+            [Parameter(Mandatory = $true)][string]$BinaryPath,
+            [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
             [Parameter(Mandatory = $true)][string]$ServiceId,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
@@ -2180,115 +2296,67 @@ try {
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
             [string]$FederationPeers = ""
         )
-        $federationEnv = ""
+        $rustLog = if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) { $env:RUST_LOG } else { "info" }
+        $values = [ordered]@{
+            RUST_LOG = $rustLog
+            DATABASE_URL = ""
+            SOLAND_PUBLIC_BASE_URL = $BaseUrl
+            SOLAND_SERVICE_ID = $ServiceId
+            SOLAND_DEVELOPMENT_MODE = "true"
+            SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
+            SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
+            SOLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
+            SOLAND_OBJECT_STORAGE_BACKEND = "filesystem"
+            SOLAND_OBJECT_STORAGE_LOCAL_ROOT = $ObjectsRoot
+            SOLAND_LOG_FILE = $LogFile
+            SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
+            SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
+            SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
+            SOLAND_CANDIDATE_JOIN_POLICY = "true"
+        }
+        if ($CoauthBaseUrl) {
+            $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
+            $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
+            $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
+            $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
+            $values.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
+            $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
+        }
+        if ($StaridBaseUrl) {
+            $values.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:webvh,did:key"
+            $values.SOLAND_STARID_WEBVH_RESOLVER_URL = $StaridBaseUrl
+        }
+        if ($TeabayBaseUrl) {
+            $values.SOLAND_DIRECTORY_ANNOUNCE_URL = "$($TeabayBaseUrl.TrimEnd('/'))/_arkret/find/directory/announce"
+        }
         if ($FederationPeers) {
-            $federationEnv = (
-                "`$env:SOLAND_FEDERATION_POLICY='Mesh'; " +
-                "`$env:SOLAND_FEDERATION_PEERS={0}; "
-            ) -f (Quote-PsLiteral $FederationPeers)
+            $values.SOLAND_FEDERATION_POLICY = "Mesh"
+            $values.SOLAND_FEDERATION_PEERS = $FederationPeers
         }
-        # Forward the harness's RUST_LOG into the soland child so the runner
-        # can drive verbose tracing on demand (e.g. when debugging a specific
-        # projection path) without editing this file. The value is baked
-        # into the spawned PowerShell command string so it survives whatever
-        # env handling `Start-Process` applies.
-        #
-        # Default RUST_LOG to `info` so the soland-side tracing file
-        # (SOLAND_LOG_FILE below) actually contains the
-        # `tracing::info!(...)` events service code emits. Without an
-        # explicit filter, `EnvFilter::from_default_env()` falls back to
-        # OFF and the file is just startup metadata.
-        $rustLogForward = ""
-        if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) {
-            $rustLogForward = "`$env:RUST_LOG=" + (Quote-PsLiteral $env:RUST_LOG) + "; "
-        } else {
-            $rustLogForward = "`$env:RUST_LOG='info'; "
-        }
-        return (
-            $rustLogForward +
-            "`$env:DATABASE_URL=''; " +
-            "`$env:SOLAND_PUBLIC_BASE_URL={0}; " +
-            "`$env:SOLAND_SERVICE_ID={1}; " +
-            "`$env:SOLAND_DEVELOPMENT_MODE='true'; " +
-            "`$env:SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS='true'; " +
-            "`$env:SOLAND_CORS_ALLOW_ORIGIN={2}; " +
-            "`$env:SOLAND_METRICS_BIND='127.0.0.1:{3}'; " +
-            "`$env:SOLAND_OBJECT_STORAGE_BACKEND='filesystem'; " +
-            "`$env:SOLAND_OBJECT_STORAGE_LOCAL_ROOT={4}; " +
-            "`$env:SOLAND_LOG_FILE={5}; " +
-            "`$env:SOLAND_LIVEKIT_API_KEY='did:web:media.example#media-token'; " +
-            "`$env:SOLAND_LIVEKIT_API_SECRET='joint-e2e-livekit-secret'; " +
-            "`$env:SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS='$WebvhDegradedNoWitnessMaxSecs'; " +
-            "`$env:SOLAND_CANDIDATE_JOIN_POLICY='true'; " +
-            "{6}" +
-            "{7}" +
-            "{8}" +
-            "{9}" +
-            "cargo run --manifest-path {10} -- --bind 127.0.0.1:{11}"
-        ) -f `
-            (Quote-PsLiteral $BaseUrl),
-            (Quote-PsLiteral $ServiceId),
-            (Quote-PsLiteral $CorsAllowOrigin),
-            $MetricsPort,
-            (Quote-PsLiteral $ObjectsRoot),
-            (Quote-PsLiteral $LogFile),
-            $solandCoauthEnv,
-            $solandStaridEnv,
-            $solandTeabayEnv,
-            $federationEnv,
-            (Quote-PsLiteral $SutManifest),
+        Write-DotEnvFile -Path $ConfigPath -Values $values
+        return "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
+            (Quote-PsLiteral $BinaryPath),
+            (Quote-PsLiteral $ConfigPath),
             $Port
     }
 
     # Per-instance tracing files. Windows fully-buffers stdout when
-    # `Start-Process -RedirectStandardOutput` is chained through
-    # `cargo run`, so the soland.stdout.log captured by the harness ends up
-    # holding only cargo's build output. The `SOLAND_LOG_FILE` path is a
-    # second, durable sink soland writes through a non-blocking
+    # `Start-Process -RedirectStandardOutput` may buffer service output on
+    # Windows. The `SOLAND_LOG_FILE` path is a second, durable sink soland
+    # writes through a non-blocking
     # tracing-appender (see soland/src/main.rs `init_tracing`). This is the
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
     $solandCorsAllowOrigin = if ($InksonBaseUrl) { $InksonBaseUrl } else { "http://127.0.0.1" }
-    if ($RunProfile -eq "joint-full") {
-        # Several full-suite specs execute focused Rust tests from Playwright.
-        # Warm their native test binaries before starting soland/inkson so a
-        # cold build is not charged to a browser-test timeout and, on Windows,
-        # does not contend with the long-lived `cargo run` target lock.
-        Write-Host "Warming native Rust test binaries used by joint-full..."
-        $solandRoot = Split-Path -Parent $SutManifest
-        $outboxTarget = Join-Path $solandRoot "target\cotest-federation-outbox"
-        $hadCargoTargetDir = Test-Path Env:CARGO_TARGET_DIR
-        $previousCargoTargetDir = $env:CARGO_TARGET_DIR
-        try {
-            $env:CARGO_TARGET_DIR = $outboxTarget
-            & cargo test --manifest-path $SutManifest --test federation_outbox --no-run
-            if ($LASTEXITCODE -ne 0) {
-                throw "failed to warm soland federation_outbox test binary"
-            }
-        }
-        finally {
-            if ($hadCargoTargetDir) {
-                $env:CARGO_TARGET_DIR = $previousCargoTargetDir
-            } else {
-                Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-            }
-        }
-
-        & cargo test --manifest-path (Join-Path $InksonRoot "Cargo.toml") --lib --no-run
-        if ($LASTEXITCODE -ne 0) {
-            throw "failed to warm inkson native library tests"
-        }
-        & cargo test --manifest-path (Join-Path $InksonRoot "Cargo.toml") --lib --no-run --features experimental-agents
-        if ($LASTEXITCODE -ne 0) {
-            throw "failed to warm inkson experimental-agents native library tests"
-        }
-    }
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
+        $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $workspaceRoot
         $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceId" } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
         $SolandCommand = Build-SolandCommand `
+            -BinaryPath $solandBinary `
+            -ConfigPath (Join-Path $jointDir "soland.env") `
             -BaseUrl $SolandBaseUrl `
             -ServiceId $SolandServiceId `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
@@ -2346,6 +2414,8 @@ try {
                         -Environment $solandBetaDockerEnv))
         } else {
             $solandBetaCommand = Build-SolandCommand `
+                -BinaryPath $solandBinary `
+                -ConfigPath (Join-Path $jointDir "soland-beta.env") `
                 -BaseUrl $solandBetaBaseUrl `
                 -ServiceId $SolandBetaServiceId `
                 -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
@@ -2363,9 +2433,10 @@ try {
     $inksonBetaService = $null
     $generatedInksonBetaCommand = $false
     if (-not $SkipInkson -and -not $InksonCommand -and $inksonPort) {
-        $InksonCommand = Add-DioxusNoDownloadsEnvironment `
-            -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonPort --open false --hot-reload false --watch false --features experimental-agents,wasm-localstorage-secrets-test" `
-            -ProjectRoot $InksonRoot
+        $InksonCommand = "node {0} {1} {2} 127.0.0.1" -f `
+            (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
+            (Quote-PsLiteral $inksonStaticRoot),
+            $inksonPort
         $generatedInksonCommand = $true
     }
     if ($InksonCommand) {
@@ -2375,16 +2446,16 @@ try {
     }
     if (-not $SkipInkson) {
         Wait-HttpReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        if ($generatedInksonCommand -and $inksonService) {
-            Wait-LogContains -Path $inksonService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedInksonCommand) {
             Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
     if (-not $SkipInkson -and $DualSoland -and $inksonBetaBaseUrl -and $inksonBetaBaseUrl -ne $InksonBaseUrl) {
         if (-not $InksonBetaCommand -and $inksonBetaPort) {
-            $InksonBetaCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx serve --platform web --addr 127.0.0.1 --port $inksonBetaPort --open false --hot-reload false --watch false --features experimental-agents,wasm-localstorage-secrets-test" `
-                -ProjectRoot $InksonRoot
+            $InksonBetaCommand = "node {0} {1} {2} 127.0.0.1" -f `
+                (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
+                (Quote-PsLiteral $inksonStaticRoot),
+                $inksonBetaPort
             $generatedInksonBetaCommand = $true
         }
         if ($InksonBetaCommand) {
@@ -2392,8 +2463,7 @@ try {
             $managedServices.Add($inksonBetaService)
         }
         Wait-HttpReady -Url $inksonBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        if ($generatedInksonBetaCommand -and $inksonBetaService) {
-            Wait-LogContains -Path $inksonBetaService.Stdout -Pattern @("Build completed successfully", "Client build completed successfully") -FailPattern @("Build failed", "could not compile") -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedInksonBetaCommand) {
             Wait-DioxusAppReady -Url $inksonBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
@@ -2469,7 +2539,7 @@ try {
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
         # The OAuth client_id soland is configured to advertise (see
-        # $solandCoauthEnv / SOLAND_OAUTH_CLIENT_ID). Surfaced to e2e so
+        # SOLAND_OAUTH_CLIENT_ID in the generated soland config). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
         $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
         # Anti-false-green: coauth is up, so the crown-jewel cross-member paths

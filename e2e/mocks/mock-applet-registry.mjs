@@ -232,14 +232,23 @@ function signedPackage(body) {
   if (body.widget) {
     packageBase.widget = body.widget;
   }
-  const packageDigest = canonicalHash(packageBase);
+  // The evidence is required on input so the Principal Server can validate
+  // the service DID epoch, but AppletPackage deliberately excludes it from
+  // serialization and therefore from both canonical package transcripts.
+  const canonicalPackageBase = { ...packageBase };
+  delete canonicalPackageBase.registration_epoch_evidence;
+  const packageDigest = canonicalHash(canonicalPackageBase);
+  const sealedForSignature = {
+    ...canonicalPackageBase,
+    package_digest: packageDigest,
+  };
   const sealed = { ...packageBase, package_digest: packageDigest };
-  const payloadDigest = canonicalHash(sealed);
+  const payloadDigest = canonicalHash(sealedForSignature);
   // Detached JWS per RFC 7515 appendix F, matching the SDK contract
   // (arkret-rust-sdk signatures/proof.rs): wire form is `header..signature`
   // with an empty payload segment, signed over `header.BASE64URL(payload)`.
   const jwsHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
-  const signingInput = `${jwsHeader}.${Buffer.from(canonicalJson(sealed), "utf8").toString("base64url")}`;
+  const signingInput = `${jwsHeader}.${Buffer.from(canonicalJson(sealedForSignature), "utf8").toString("base64url")}`;
   const signature = sign(null, Buffer.from(signingInput, "utf8"), privateKey).toString(
     "base64url",
   );

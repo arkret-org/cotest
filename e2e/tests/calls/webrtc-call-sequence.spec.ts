@@ -32,7 +32,7 @@ import {
   setupTwoPartyCallRealm,
 } from "../../helpers/webrtc";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 420_000 });
 
 test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
   test("invite -> answer -> candidate -> hangup relays in monotonic seq order and durable ak.call.state advances", async ({

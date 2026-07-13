@@ -5,11 +5,7 @@
 //   - crypto-media/encryption-and-audit.md §2.3.1 (key_ref MLS)
 //   - crypto-media/audited-e2ee.md §3-§4 (franking, ak.audit.accessed)
 
-import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import path from "node:path";
-import { promisify } from "node:util";
 
 import { expect, test } from "@playwright/test";
 import {
@@ -32,12 +28,6 @@ import {
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
-
-const execFileAsync = promisify(execFile);
-const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
-const INKSON_MANIFEST = findSiblingManifest("inkson");
-const INKSON_CWD = path.dirname(INKSON_MANIFEST);
-const CARGO_TEST_TIMEOUT_MS = 600_000;
 
 test.describe.configure({ mode: "serial" });
 
@@ -193,11 +183,6 @@ test.describe("encrypted attachments", () => {
     );
     expect(missing.status()).toBe(malloryDownload.status());
     expect(wireErrCode(await missing.json())).toBe("not_found");
-  });
-
-  test("inkson encrypts E12.2 thumbnails as separate client-side ciphertext assets", async () => {
-    test.setTimeout(CARGO_TEST_TIMEOUT_MS + 60_000);
-    await runInksonLibTest("blob::tests::thumbnail_is_always_whole_file_and_independent");
   });
 
   test("E12.4 audited E2EE: ak.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
@@ -383,42 +368,4 @@ function encryptedAttachmentEnvelope(
 
 function sha256Digest(bytes: Buffer): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
-
-async function runInksonLibTest(filter: string): Promise<void> {
-  const { stdout, stderr } = await execFileAsync(
-    CARGO_BIN,
-    [
-      "test",
-      "--manifest-path",
-      INKSON_MANIFEST,
-      "--lib",
-      filter,
-      "--features",
-      "experimental-agents",
-      "--",
-      "--nocapture",
-    ],
-    {
-      cwd: INKSON_CWD,
-      timeout: CARGO_TEST_TIMEOUT_MS,
-      maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, CARGO_TERM_COLOR: "never" },
-    },
-  );
-  const output = `${stdout}\n${stderr}`;
-  expect(output).toContain(`test ${filter} ... ok`);
-  expect(output).toContain("test result: ok");
-}
-
-function findSiblingManifest(crateName: string): string {
-  const candidates = [
-    path.resolve(process.cwd(), "..", crateName, "Cargo.toml"),
-    path.resolve(process.cwd(), "..", "..", crateName, "Cargo.toml"),
-  ];
-  const found = candidates.find((candidate) => existsSync(candidate));
-  if (!found) {
-    throw new Error(`Unable to locate sibling ${crateName}/Cargo.toml from ${process.cwd()}`);
-  }
-  return found;
 }

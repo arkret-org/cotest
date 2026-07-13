@@ -61,6 +61,8 @@ The current harness tracks the sibling `arkret-spec` checkout and includes:
 See [docs/test-strategy.md](./docs/test-strategy.md) and
 [docs/complement-map.md](./docs/complement-map.md) for the harness plan and
 Complement mapping.
+Server startup precedence and hermetic joint-test configuration are documented
+in [docs/server-config-contract.md](./docs/server-config-contract.md).
 
 ## Quick Start
 

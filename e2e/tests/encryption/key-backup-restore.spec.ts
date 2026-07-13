@@ -1,11 +1,7 @@
 // Key backup restore live path
 // Contract: e2e/scenarios/encryption/key-backup-restore.md
 
-import { execFile } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import path from "node:path";
-import { promisify } from "node:util";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
@@ -17,12 +13,6 @@ import {
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
-
-const execFileAsync = promisify(execFile);
-const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
-const INKSON_MANIFEST = findSiblingManifest("inkson");
-const INKSON_CWD = path.dirname(INKSON_MANIFEST);
-const CARGO_TEST_TIMEOUT_MS = 600_000;
 
 test.describe.configure({ mode: "serial" });
 
@@ -177,17 +167,6 @@ test.describe("key backup restore live path", () => {
     expect(JSON.stringify(await list.json())).not.toContain(backupId);
   });
 
-  test("inkson crypto and late-recovery banner helpers stay live", async () => {
-    test.setTimeout(CARGO_TEST_TIMEOUT_MS * 2);
-    // Recovery-Key convergence: the vault-passphrase helpers are gone; the
-    // live client contract is the seal/open vault primitives (fed by the
-    // 24-word Recovery Key), the commitment-based wrong-key reject, and the
-    // BIP-39 24-word input normalization gate.
-    await runInksonLibTest("recovery_crypto::tests::seal_open_round_trip");
-    await runInksonLibTest("recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment");
-    await runInksonLibTest("recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys");
-    await runInksonLibTest("late_recovery::tests::from_audit_policy_access_carries_late_recovery_original_event_id");
-  });
 });
 
 async function registeredSession(request: APIRequestContext, prefix: string) {
@@ -348,41 +327,4 @@ function sha256Ref(value: string): string {
 
 function deleteProof(actorDid: string, backupId: string): string {
   return `dev-ssk-delete:v1:${actorDid}:${backupId}`;
-}
-
-async function runInksonLibTest(filter: string): Promise<void> {
-  const { stdout, stderr } = await execFileAsync(
-    CARGO_BIN,
-    [
-      "test",
-      "--manifest-path",
-      INKSON_MANIFEST,
-      "--lib",
-      filter,
-      "--",
-      "--exact",
-      "--nocapture",
-    ],
-    {
-      cwd: INKSON_CWD,
-      timeout: CARGO_TEST_TIMEOUT_MS,
-      maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, CARGO_TERM_COLOR: "never" },
-    },
-  );
-  const output = `${stdout}\n${stderr}`;
-  expect(output).toContain(`test ${filter} ... ok`);
-  expect(output).toContain("test result: ok");
-}
-
-function findSiblingManifest(crateName: string): string {
-  const candidates = [
-    path.resolve(process.cwd(), "..", crateName, "Cargo.toml"),
-    path.resolve(process.cwd(), "..", "..", crateName, "Cargo.toml"),
-  ];
-  const found = candidates.find((candidate) => existsSync(candidate));
-  if (!found) {
-    throw new Error(`Unable to locate sibling ${crateName}/Cargo.toml from ${process.cwd()}`);
-  }
-  return found;
 }

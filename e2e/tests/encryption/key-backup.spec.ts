@@ -7,10 +7,6 @@
 //     continuous backup)
 //   - crypto-media/device-lifecycle.md §12-§12.1 (key backup durable form + API)
 
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   expect,
@@ -612,81 +608,7 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test("E13.1 wrong Recovery Key: invalid 24-word input rejected at normalization; valid-but-wrong words rejected at key_commitment stage; no GET issued to server (avoids oracle)", async () => {
-    test.setTimeout(CARGO_TEST_TIMEOUT_MS + 60_000);
-    // spec: key-management.md §7.2 / §7.7
-    // The recovery-key error paths are pure client crypto: normalization
-    // rejects a non-BIP-39 / wrong-length 24-word input before any network
-    // call, and the `key_commitment` stage (open_vault) rejects a valid-but-
-    // wrong Recovery Key locally — the recovering client derives its KEK and
-    // compares the recomputed commitment to the envelope's `key_commitment`,
-    // so a wrong key fails fast WITHOUT a server GET (no decryption oracle).
-    await runInksonLibTest(
-      "recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys",
-    );
-    await runInksonLibTest(
-      "recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment",
-    );
-    await runInksonLibTest(
-      "key_backup::tests::recovery_vault_round_trips_through_open",
-    );
-  });
-
-  test("E13.2 tampered ciphertext: digest mismatch → client refuses to decrypt", async () => {
-    test.setTimeout(CARGO_TEST_TIMEOUT_MS + 60_000);
-    // spec: key-management.md §7.2 — `ciphertext_digest` covers the ciphertext
-    // bytes; the client recomputes it on open and refuses to decrypt a
-    // substituted / tampered ciphertext, locally and without a server GET.
-    await runInksonLibTest(
-      "key_backup::tests::open_refuses_tampered_ciphertext_via_digest_mismatch",
-    );
-  });
 });
-
-const execFileAsync = promisify(execFile);
-const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
-const INKSON_MANIFEST = findSiblingManifest("inkson");
-const INKSON_CWD = path.dirname(INKSON_MANIFEST);
-const CARGO_TEST_TIMEOUT_MS = 600_000;
-
-async function runInksonLibTest(filter: string): Promise<void> {
-  const { stdout, stderr } = await execFileAsync(
-    CARGO_BIN,
-    [
-      "test",
-      "--manifest-path",
-      INKSON_MANIFEST,
-      "--lib",
-      filter,
-      "--",
-      "--exact",
-      "--nocapture",
-    ],
-    {
-      cwd: INKSON_CWD,
-      timeout: CARGO_TEST_TIMEOUT_MS,
-      maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, CARGO_TERM_COLOR: "never" },
-    },
-  );
-  const output = `${stdout}\n${stderr}`;
-  expect(output).toContain(`test ${filter} ... ok`);
-  expect(output).toContain("test result: ok");
-}
-
-function findSiblingManifest(crateName: string): string {
-  const candidates = [
-    path.resolve(process.cwd(), "..", crateName, "Cargo.toml"),
-    path.resolve(process.cwd(), "..", "..", crateName, "Cargo.toml"),
-  ];
-  const found = candidates.find((candidate) => existsSync(candidate));
-  if (!found) {
-    throw new Error(
-      `Unable to locate sibling ${crateName}/Cargo.toml from ${process.cwd()}`,
-    );
-  }
-  return found;
-}
 
 type KeyBackupPut = {
   url: string;

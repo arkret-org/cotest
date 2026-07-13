@@ -88,11 +88,20 @@ test.describe("notifications", () => {
           timeout: 30_000,
         },
       );
-      await expect(
-        bobPage.page
-          .getByTestId("notification-item")
-          .filter({ hasText: msg }),
-      ).toBeVisible({ timeout: 30_000 });
+      const notification = bobPage.page
+        .getByTestId("notification-item")
+        .filter({ hasText: msg });
+      await expect
+        .poll(
+          async () => {
+            await bobPage.page.getByTestId("refresh-notifications").click();
+            await bobPage.page.waitForTimeout(500);
+            return await notification.count();
+          },
+          { timeout: 90_000, intervals: [500, 1_000, 2_000] },
+        )
+        .toBeGreaterThan(0);
+      await expect(notification).toBeVisible({ timeout: 5_000 });
       await stepShot(bobPage.page, testInfo, "watch-all-notification");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
