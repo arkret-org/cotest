@@ -252,10 +252,6 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             .any(|event| event["event_id"] == pre_join_event_id),
         "joined-history invitee MUST NOT receive pre-join timeline events: {bob_baseline}"
     );
-    assert!(
-        !sync_notifications_contain_invite(&bob_baseline, &invite_id),
-        "accepted invite notification MUST NOT remain in Bob full sync: {bob_baseline}"
-    );
     eventually(
         "accepted invite is hidden after Bob joins",
         Duration::from_secs(5),
@@ -456,12 +452,6 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     )
     .await?;
 
-    let bob_sync = bob_client.sync().await?;
-    assert!(
-        !sync_notifications_contain_invite(&bob_sync, &invite_id),
-        "cancelled invite notification MUST NOT remain in Bob full sync: {bob_sync}"
-    );
-
     Ok(())
 }
 
@@ -550,16 +540,6 @@ fn timeline_events<'a>(sync: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>
     sync["realms"][realm_id]["timeline"]["events"]
         .as_array()
         .ok_or_else(|| anyhow!("sync response missing realm timeline events: {sync}"))
-}
-
-fn sync_notifications_contain_invite(sync: &Value, invite_id: &str) -> bool {
-    sync["notifications"]
-        .as_array()
-        .is_some_and(|notifications| {
-            notifications
-                .iter()
-                .any(|notification| notification["invite_id"] == invite_id)
-        })
 }
 
 async fn send_message_now(

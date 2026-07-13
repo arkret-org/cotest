@@ -276,7 +276,7 @@ test.describe("private read marker", () => {
     expect(realmMarkers[0].position).toEqual(second);
   });
 
-  test("E10.2 E2EE Realm notification redaction: account subscribe exposes only notification metadata (source_event_id, actor_id, ts, encrypted:true); message body stays sealed until the client decrypts locally", async ({
+  test("E10.2 E2EE Realm message data never enters the account approval notification stream", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -299,8 +299,9 @@ test.describe("private read marker", () => {
     });
     await acceptInviteViaApi(request, aliceToken, alice.did, realmId);
 
-    // bob sends an encrypted message that mentions alice. The notification
-    // projection is derived for alice; in an E2EE Realm the body stays sealed.
+    // bob sends an encrypted message that mentions alice. Message notifications
+    // are derived locally from the timeline; the account notification stream is
+    // closed to Agent runtime approvals.
     const secretBody = `TOP-SECRET-${stamp}`;
     const encryptedEvent = await sendEncryptedMentionMessage(
       request,
@@ -311,24 +312,17 @@ test.describe("private read marker", () => {
       secretBody,
     );
 
-    const delta = await pollAccountNotification(request, aliceToken, encryptedEvent);
-    const notification = (delta.notifications.events as Array<Record<string, unknown>>).find(
-      (event) => event.source_event_id === encryptedEvent,
-    );
-    expect(notification, `notification for ${encryptedEvent}`).toBeTruthy();
-
-    // Metadata IS exposed: source event, sender, timestamp, encrypted flag.
-    expect(notification!.source_event_id).toBe(encryptedEvent);
-    expect(notification!.actor_id).toBe(bob.did);
-    expect(typeof notification!.timestamp).toBe("string");
-    expect((notification!.timestamp as string).length).toBeGreaterThan(0);
-    expect(notification!.encrypted).toBe(true);
-    expect(notification!.local_decrypted).toBe(false);
-
-    // The sealed plaintext MUST NOT leak through the notification projection.
-    expect(notification!.body ?? null).toBeNull();
-    expect(notification!.preview ?? null).toBeNull();
-    expect(JSON.stringify(notification)).not.toContain(secretBody);
+    const delta = await accountSubscribeDeltaApi(request, aliceToken, {
+      timeoutMs: 10_000,
+    });
+    const notifications = (delta.notifications ?? {}) as {
+      items?: Array<Record<string, unknown>>;
+    };
+    const items = Array.isArray(notifications.items) ? notifications.items : [];
+    expect(items.every((item) => item.type === "agent")).toBe(true);
+    const serialized = JSON.stringify(notifications);
+    expect(serialized).not.toContain(encryptedEvent);
+    expect(serialized).not.toContain(secretBody);
   });
 
   test("E10.3 Circle-scoped private Strand read marker is isolated from Realm-default Strand marker (same realm_id, different read_scope)", async ({
@@ -495,31 +489,6 @@ async function pollToDeviceReadMarker(
   throw new Error(
     `pollToDeviceReadMarker: no ${READ_MARKER_UPDATE_KIND} for ${realmId} within sync window` +
       (opts.expectPosition ? ` matching ${opts.expectPosition.event_id}` : ""),
-  );
-}
-
-// Poll `account/subscribe` until the notification projection carries the
-// notification for `sourceEventId`.
-async function pollAccountNotification(
-  request: APIRequestContext,
-  token: string,
-  sourceEventId: string,
-): Promise<{ notifications: { events: Array<Record<string, unknown>> } }> {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const delta = await accountSubscribeDeltaApi(request, token, {
-      timeoutMs: 10_000,
-    });
-    const notifications = (delta.notifications ?? {}) as {
-      events?: Array<Record<string, unknown>>;
-    };
-    const events = Array.isArray(notifications.events) ? notifications.events : [];
-    if (events.some((event) => event.source_event_id === sourceEventId)) {
-      return { notifications: { events } };
-    }
-  }
-  throw new Error(
-    `pollAccountNotification: no notification for ${sourceEventId} within sync window`,
   );
 }
 

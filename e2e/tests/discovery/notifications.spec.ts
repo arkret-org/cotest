@@ -406,20 +406,9 @@ test.describe("notifications", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     const msg = `mark all read notification ${stamp}`;
-    const sent = await sendMessageApi(request, aliceToken, realmId, msg, {
+    await sendMessageApi(request, aliceToken, realmId, msg, {
       mentions: [bob.did],
     });
-    const beforeDelta = await accountSubscribeDeltaApi(request, bobToken);
-    const beforeItem = notificationEventsFromDelta(beforeDelta).find(
-      (candidate) => candidate.source_event_id === sent.event_id,
-    );
-    expect(beforeItem, "account subscribe notification before mark-all").toEqual(
-      expect.objectContaining({
-        source_event_id: sent.event_id,
-        state: "unread",
-        read: false,
-      }),
-    );
 
     const bobPage = bobSession.page;
     try {
@@ -519,19 +508,13 @@ test.describe("notifications", () => {
     });
 
     const body = await accountSubscribeDeltaApi(request, bobToken);
-    const item = notificationEventsFromDelta(body).find(
-      (candidate) => candidate.source_event_id === encrypted.event_id,
-    );
-    expect(item, "blind wake notification for encrypted message").toBeTruthy();
-    if (!item) throw new Error("blind wake notification missing for encrypted message");
-    expect(item.encrypted).toBe(true);
-    expect(item.local_decrypted).toBe(false);
-    expect(item.actor_id).toBe(alice.did);
-    expect(item.realm_id).toBe(realmId);
-    expect(item.notification_type).toBe("mention");
-    expect(item.body).toBeUndefined();
-    expect(item.preview).toBeUndefined();
-    const wire = JSON.stringify(item);
+    const notifications = isRecord(body.notifications) ? body.notifications : {};
+    const items = Array.isArray(notifications.items)
+      ? notifications.items.filter(isRecord)
+      : [];
+    expect(items.every((item) => item.type === "agent")).toBe(true);
+    const wire = JSON.stringify(notifications);
+    expect(wire).not.toContain(encrypted.event_id);
     expect(wire).not.toContain(plaintext);
     expect(wire).not.toContain("sealed-keyword");
     expect(wire).not.toContain(sidecarHash);
@@ -643,25 +626,6 @@ test.describe("notifications", () => {
 
 function mentionSidecarHash(realmId: string, did: string): string {
   return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
-
-function notificationEventsFromDelta(
-  delta: Record<string, unknown>,
-): Array<Record<string, unknown>> {
-  const notifications = delta.notifications;
-  if (Array.isArray(notifications)) {
-    return notifications.filter(isRecord);
-  }
-  if (!isRecord(notifications)) {
-    return [];
-  }
-  for (const key of ["events", "items"]) {
-    const values = notifications[key];
-    if (Array.isArray(values)) {
-      return values.filter(isRecord);
-    }
-  }
-  return [];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

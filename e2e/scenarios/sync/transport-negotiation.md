@@ -69,7 +69,7 @@
    - 验证 `Destination-Service-ID` 是自身 DID
    - 验证 nonce / `created` ts 在窗口内(防 replay)
 4. 断言:`POST /_arkret/peer/peer/events` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
-5. 断言:bob 通过 `GET /_arkret/self/account/subscribe?catchup=true` 的 `notifications.events`
+5. 断言:bob 通过 `GET /_arkret/self/authz/invites` 的 invite projection
    在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
 ### Phase B — WebSocket upgrade (negotiate via ak.transport.negotiate)
@@ -111,7 +111,7 @@
 ## Observable assertions (合并清单)
 
 - Phase A:POST `/_arkret/peer/peer/events` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
-- Phase A:bob 在 `/_arkret/self/account/subscribe` 的 `notifications.events` 看到 invite
+- Phase A:bob 在 `/_arkret/self/authz/invites` 看到 invite
 - Phase B:`GET /_arkret/describe` 含 `supported_bindings[].kind=websocket_frame`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ak.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息

@@ -17,7 +17,7 @@
 //! matrix, replay-cache) land in soland P2-impl; this suite hard-fails
 //! on any registry-side drift today.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::error::{
@@ -29,9 +29,10 @@ use arkret_core::error::{
 };
 use arkret_core::{
     AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, Did, ErrorEnvelope,
-    OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT, OP_AGENT_DEACTIVATE, OP_AGENT_GET,
-    OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
-    OP_AGENT_PROVISION, OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
+    NotificationDelta, NotificationDeltaAction, OP_ACCOUNT_AGENT_KEY_PAIR,
+    OP_ACCOUNT_ISSUE_SESSION_GRANT, OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH,
+    OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE, OP_AGENT_PROVISION,
+    OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
 use serde_json::Value;
 
@@ -253,6 +254,59 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     )?;
     if different == binding {
         bail!("different runtime key was not classified as a binding conflict");
+    }
+
+    let delta = |action: &str| -> Result<NotificationDelta> {
+        let data = if action == "remove" {
+            serde_json::json!({
+                "kind": "agent_runtime_approval",
+                "reason": "approved"
+            })
+        } else {
+            serde_json::json!({
+                "kind": "agent_runtime_approval",
+                "approval_request_id": "agent_runtime_approval:01964137-0000-7000-8000-000000000000",
+                "agent_id": "did:webvh:z6mkagent:agent.example",
+                "requested_at": "2026-07-13T10:00:00Z",
+                "expires_at": "2026-07-13T10:15:00Z"
+            })
+        };
+        Ok(serde_json::from_value(serde_json::json!({
+            "id": "ak:notification:01964137-0000-7000-8000-000000000001",
+            "type": "agent",
+            "action": action,
+            "data": data
+        }))?)
+    };
+    let mut account_a = BTreeMap::<String, NotificationDelta>::new();
+    let account_b = BTreeMap::<String, NotificationDelta>::new();
+    for action in ["add", "update"] {
+        let item = delta(action)?;
+        account_a.insert(item.id.as_str().to_owned(), item);
+    }
+    if account_a.len() != 1
+        || account_a.values().next().map(|item| item.action)
+            != Some(NotificationDeltaAction::Update)
+        || !account_b.is_empty()
+    {
+        bail!("account-scoped add/update projection did not converge or leaked across accounts");
+    }
+    let removed = delta("remove")?;
+    account_a.remove(removed.id.as_str());
+    if !account_a.is_empty() {
+        bail!("remove projection did not converge after a missed wake");
+    }
+    account_a.insert("stale".to_owned(), delta("add")?);
+    let authoritative_baseline_ids = BTreeSet::<String>::new();
+    account_a.retain(|id, _| authoritative_baseline_ids.contains(id));
+    if !account_a.is_empty() {
+        bail!("initial baseline did not remove a stale open approval");
+    }
+    let mut pending_binding = Some(binding.as_str());
+    let first_consumer = pending_binding.take();
+    let second_consumer = pending_binding.take();
+    if first_consumer.is_none() || second_consumer.is_some() {
+        bail!("multi-device approval race consumed the pairing handle more than once");
     }
     Ok(())
 }

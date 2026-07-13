@@ -59,8 +59,7 @@
     - 解析 `@bob` token,生成 `ak.relation.mention` payload
     - 在 plain text Realm:`ak.message.create.payload.mentions = [bob.did]`
     - 在 E2EE Realm:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
-16. 断言:bob 收到 notification(检查 inkson 的 in-app notification panel,或测试侧调
-    `GET /_arkret/self/account/subscribe?catchup=true` 查 bob 的 `notifications.events`)
+16. 断言:bob 收到由 account timeline 本地派生的 notification(检查 inkson 的 in-app notification panel)
 17. 断言:carol **没**收到 mention 通知(她没被点名)
 
 ### Phase E — Poll
