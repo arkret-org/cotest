@@ -71,6 +71,7 @@ param(
     [string]$TeabayDatabaseUrl,
     [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
     [string]$SolandServiceId = "did:webvh:z6mkfixture:soland.joint-e2e.local",
+    [string]$SolandNotarySigningKey,
     [string]$CoauthServiceId = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
@@ -96,6 +97,7 @@ param(
     [switch]$RunnerSelfTest,
     [switch]$DualSoland,
     [string]$SolandBetaServiceId = "did:webvh:z6mkfixture:soland-beta.joint-e2e.local",
+    [string]$SolandBetaNotarySigningKey,
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -2230,6 +2232,7 @@ try {
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
+            [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
 
@@ -2280,6 +2283,9 @@ try {
                 $map.SOLAND_FEDERATION_PEERS = "$(Convert-ToContainerReachableUrl $parts[0])|$($parts[1])"
             }
         }
+        if ($NotarySigningKey) {
+            $map.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
+        }
         return $map
     }
 
@@ -2294,6 +2300,7 @@ try {
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFile,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
+            [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
         $rustLog = if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) { $env:RUST_LOG } else { "info" }
@@ -2333,6 +2340,9 @@ try {
             $values.SOLAND_FEDERATION_POLICY = "Mesh"
             $values.SOLAND_FEDERATION_PEERS = $FederationPeers
         }
+        if ($NotarySigningKey) {
+            $values.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
+        }
         Write-DotEnvFile -Path $ConfigPath -Values $values
         return "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
             (Quote-PsLiteral $BinaryPath),
@@ -2364,6 +2374,7 @@ try {
             -MetricsPort $solandMetricsPort `
             -LogFile $solandTraceFile `
             -CorsAllowOrigin $solandCorsAllowOrigin `
+            -NotarySigningKey $SolandNotarySigningKey `
             -FederationPeers $alphaPeer
     }
     if ($SolandCommand) {
@@ -2379,6 +2390,7 @@ try {
             -MetricsPort $solandMetricsPort `
             -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
             -CorsAllowOrigin $solandCorsAllowOrigin `
+            -NotarySigningKey $SolandNotarySigningKey `
             -FederationPeers $alphaPeer
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
         $managedServices.Add((Start-ManagedDockerSoland `
@@ -2403,6 +2415,7 @@ try {
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
+                -NotarySigningKey $SolandBetaNotarySigningKey `
                 -FederationPeers "$SolandBaseUrl|$SolandServiceId"
             $managedServices.Add((Start-ManagedDockerSoland `
                         -Name "soland-beta" `
@@ -2423,6 +2436,7 @@ try {
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFile $solandBetaTraceFile `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
+                -NotarySigningKey $SolandBetaNotarySigningKey `
                 -FederationPeers "$SolandBaseUrl|$SolandServiceId"
             $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         }
