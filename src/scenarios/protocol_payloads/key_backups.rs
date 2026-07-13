@@ -125,6 +125,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
                 backup_version: "kb_1".to_owned(),
                 created_at,
                 item_types: vec!["mls_group_state".to_owned()],
+                managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
                 extra: BTreeMap::new(),
@@ -134,6 +135,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
         contents: vec![KeyBackupContentItem {
             item_type: "mls_group_state".to_owned(),
             realm_id: None,
+            managed_principal_binding: None,
             mls_group_id: Some("group_default".to_owned()),
             epoch: Some(0),
             first_event_id: None,

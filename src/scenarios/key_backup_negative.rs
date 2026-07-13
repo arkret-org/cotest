@@ -174,6 +174,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
                 backup_version: "kb_1".to_owned(),
                 created_at,
                 item_types: vec!["mls_group_state".to_owned()],
+                managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
                 extra: BTreeMap::new(),
@@ -183,6 +184,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
         contents: vec![KeyBackupContentItem {
             item_type: "mls_group_state".to_owned(),
             realm_id: None,
+            managed_principal_binding: None,
             mls_group_id: Some("group_d3".to_owned()),
             epoch: Some(0),
             first_event_id: None,

@@ -208,6 +208,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 backup_version: "kb_1".to_owned(),
                 created_at,
                 item_types: vec!["recovery_secret".to_owned()],
+                managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
                 extra: BTreeMap::new(),
@@ -217,6 +218,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
         contents: vec![KeyBackupContentItem {
             item_type: "recovery_secret".to_owned(),
             realm_id: None,
+            managed_principal_binding: None,
             mls_group_id: None,
             epoch: None,
             first_event_id: None,
