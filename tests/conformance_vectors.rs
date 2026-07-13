@@ -752,6 +752,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             audience: Some(Audience::Single(
                 "ak:realm:01904100-0000-7000-8000-test8audience".to_owned(),
             )),
+            proof_purpose: None,
             jws: "test8.real.shaped.jws".to_owned(),
         })?],
         claim_digest: None,

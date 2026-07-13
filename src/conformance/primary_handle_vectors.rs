@@ -503,6 +503,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
         created_at: at(2026, 5, 26),
         domain: None,
         audience: None,
+        proof_purpose: None,
         jws: "hint.only.shape".to_owned(),
     }];
     let after = claim_digest(&hinted).map_err(|e| anyhow!("claim_digest hinted: {e}"))?;

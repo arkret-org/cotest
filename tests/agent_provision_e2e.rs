@@ -117,9 +117,36 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         .agent_grant_attach(
             &agent_did,
             &arkret::AgentGrantAttachRequestBody {
-                grant: json!({
-                    "actions": ["ak.event.read"]
-                }),
+                grant: arkret::CapabilityGrant {
+                    id: arkret::GrantId::new("ak:grant:01964137-0000-7000-8000-000000000010")?,
+                    schema: "ak.schema.capability.v1".to_owned(),
+                    realm_id: Some(arkret::RealmId::new(realm_id.clone())?),
+                    issuer: arkret::Did::new(ALICE_DID)?,
+                    subject: arkret::CapabilitySubject::Did(arkret::Did::new(agent_did.clone())?),
+                    actions: vec!["ak.event.read".to_owned()],
+                    resources: vec![json!({"kind": "realm", "realm_id": realm_id})],
+                    constraints: Vec::new(),
+                    parent_grant_id: None,
+                    issued_at: Utc::now(),
+                    not_before: None,
+                    expires_at: None,
+                    effective_after_first_authorized_key: None,
+                    updated_by: None,
+                    updated_at: None,
+                    revoked_by: None,
+                    revoked_at: None,
+                    proofs: vec![arkret::PayloadProof {
+                        kind: "detached_jws".to_owned(),
+                        alg: "EdDSA".to_owned(),
+                        verification_method: format!("{ALICE_DID}#cotest"),
+                        payload_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+                        created_at: Utc::now(),
+                        domain: None,
+                        audience: None,
+                        proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
+                        jws: "header..signature".to_owned(),
+                    }],
+                },
             },
         )
         .await?;
@@ -789,14 +816,56 @@ fn runtime_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[13_u8; 32])
 }
 
-fn runtime_key_request_builder<'a>(
+trait PairingOutcome {
+    fn agent_id(&self) -> &arkret::Did;
+    fn principal_control_realm_id(&self) -> &arkret::RealmId;
+    fn controller_authorization_ref(&self) -> &str;
+    fn pairing_request_id(&self) -> &str;
+    fn pairing_code(&self) -> Option<&str>;
+    fn expires_at(&self) -> chrono::DateTime<Utc>;
+}
+
+macro_rules! impl_pairing_outcome {
+    ($type:ty) => {
+        impl PairingOutcome for $type {
+            fn agent_id(&self) -> &arkret::Did {
+                &self.agent_id
+            }
+
+            fn principal_control_realm_id(&self) -> &arkret::RealmId {
+                &self.principal_control_realm_id
+            }
+
+            fn controller_authorization_ref(&self) -> &str {
+                &self.controller_authorization_ref
+            }
+
+            fn pairing_request_id(&self) -> &str {
+                &self.pairing_request_id
+            }
+
+            fn pairing_code(&self) -> Option<&str> {
+                self.pairing_code.as_deref()
+            }
+
+            fn expires_at(&self) -> chrono::DateTime<Utc> {
+                self.expires_at
+            }
+        }
+    };
+}
+
+impl_pairing_outcome!(arkret::AgentProvisionOutcome);
+impl_pairing_outcome!(arkret::AgentRenewPairingOutcome);
+
+fn runtime_key_request_builder<'a, P: PairingOutcome>(
     server: &ArkretServer,
-    provisioned: &arkret::AgentProvisionOutcome,
+    provisioned: &P,
     signing_key: &'a SigningKey,
 ) -> Result<arkret::agent::RuntimeKeyRequestBuilder<'a>> {
     let pairing_code = provisioned
-        .pairing_code
-        .clone()
+        .pairing_code()
+        .map(str::to_owned)
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
     let service_id = arkret::Did::new(server.service_id().to_owned())?;
     let proof_expires_at =
@@ -806,10 +875,10 @@ fn runtime_key_request_builder<'a>(
         arkret::AgentPairingBootstrap {
             arkret_base_url: server.base_url().to_string(),
             service_id,
-            agent_id: provisioned.agent_id.clone(),
-            pairing_request_id: provisioned.pairing_request_id.clone(),
+            agent_id: provisioned.agent_id().clone(),
+            pairing_request_id: provisioned.pairing_request_id().to_owned(),
             pairing_code,
-            pairing_expires_at: provisioned.expires_at,
+            pairing_expires_at: provisioned.expires_at(),
         },
     )
     .proof_expires_at(proof_expires_at))
@@ -818,9 +887,9 @@ fn runtime_key_request_builder<'a>(
 /// Build the open `agent_runtime_approval_request_body` a runtime submits to
 /// `POST /_arkret/open/agent-pairing/runtime-key-requests`, from the same key
 /// material as [`pair_agent_runtime_key`].
-fn build_runtime_approval_request(
+fn build_runtime_approval_request<P: PairingOutcome>(
     server: &ArkretServer,
-    provisioned: &arkret::AgentProvisionOutcome,
+    provisioned: &P,
 ) -> Result<arkret::AgentRuntimeApprovalRequestBody> {
     let signing_key = runtime_signing_key();
     Ok(
@@ -830,10 +899,10 @@ fn build_runtime_approval_request(
     )
 }
 
-async fn pair_agent_runtime_key(
+async fn pair_agent_runtime_key<P: PairingOutcome>(
     server: &ArkretServer,
     token: &str,
-    provisioned: &arkret::AgentProvisionOutcome,
+    provisioned: &P,
 ) -> Result<arkret::AgentKeyPairOutcome> {
     pair_agent_runtime_key_as(server, token, provisioned, "runtime-key-1").await
 }
@@ -841,22 +910,21 @@ async fn pair_agent_runtime_key(
 /// [`pair_agent_runtime_key`] with an explicit verification-method fragment.
 /// Runtime replacement re-pairing uses a distinct fragment so the new key is
 /// a distinct key id and the pair completion supersedes the old one.
-async fn pair_agent_runtime_key_as(
+async fn pair_agent_runtime_key_as<P: PairingOutcome>(
     server: &ArkretServer,
     token: &str,
-    provisioned: &arkret::AgentProvisionOutcome,
+    provisioned: &P,
     fragment: &str,
 ) -> Result<arkret::AgentKeyPairOutcome> {
-    let agent_did = provisioned.agent_id.to_string();
-    let pairing_request_id = provisioned.pairing_request_id.as_str();
+    let agent_did = provisioned.agent_id().to_string();
+    let pairing_request_id = provisioned.pairing_request_id();
     let pairing_code = provisioned
-        .pairing_code
-        .as_deref()
+        .pairing_code()
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
     let pairing_expires_at = provisioned
-        .expires_at
+        .expires_at()
         .to_rfc3339_opts(SecondsFormat::Millis, true);
-    let agent_id = provisioned.agent_id.clone();
+    let agent_id = provisioned.agent_id().clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
     let signing_key = runtime_signing_key();
@@ -874,37 +942,58 @@ async fn pair_agent_runtime_key_as(
         &pairing_expires_at,
         server.service_id(),
     )?;
-    let authorize_event = json!({
-        "kind": "ak.agent.key.authorize",
-        "actor_id": ALICE_DID,
-        "payload": {
-            "agent_id": agent_did,
-            "key_id": "ak:agent_key:01999999000070008000000000000001",
-            "verification_method": verification_method,
-            "public_key_digest": runtime_public_key_digest.as_str(),
-            "accountable_principal_id": ALICE_DID,
-            "agent_key_scope": {
-                "actions": [
-                    "ak.self.events.stream.subscribe",
-                    "ak.self.events.query.scan",
-                    "ak.self.events.command.submit",
-                    "ak.event.read",
-                    "ak.message.create"
-                ],
-                "resources": [{"kind": "realm", "realm_id": "*"}],
-                "constraints": []
-            },
-            "audience": [server.service_id()],
-            "issued_at": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-            "expires_at": "2999-01-01T00:00:00Z",
-            "approval_evidence": {
-                "kind": "approval_event",
-                "evidence_ref": "ak:event:01999999-0000-7000-8000-000000000001",
-                "request_canonical_digest": pairing_binding_digest.as_str(),
-                "approved_by": ALICE_DID
-            }
-        }
-    });
+    let actions = [
+        "ak.self.events.stream.subscribe",
+        "ak.self.events.query.scan",
+        "ak.self.events.command.submit",
+        "ak.event.read",
+        "ak.message.create",
+    ];
+    let authorize_payload = arkret::AgentKeyAuthorizePayload {
+        agent_id: agent_id.clone(),
+        key_id: verification_method.clone(),
+        verification_method: verification_method.clone(),
+        public_key_digest: Some(runtime_public_key_digest),
+        accountable_principal_id: controller_id.clone(),
+        agent_key_scope: arkret::AgentKeyScope {
+            actions: actions.iter().map(|action| (*action).to_owned()).collect(),
+            resources: actions
+                .iter()
+                .map(|operation| arkret::AgentKeyScopeResource {
+                    kind: arkret::AgentKeyScopeResourceKind::Operation,
+                    realm_id: None,
+                    resource_ref: None,
+                    operation: Some((*operation).to_owned()),
+                    service_id: None,
+                })
+                .collect(),
+            constraints: Vec::new(),
+        },
+        audience: vec![server.service_id().to_owned()],
+        issued_at: Utc::now(),
+        expires_at: Some(
+            chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00Z")?.with_timezone(&Utc),
+        ),
+        approval_evidence: arkret::AgentKeyApprovalEvidence {
+            kind: arkret::AgentKeyApprovalEvidenceKind::ApprovalEvent,
+            evidence_ref: Some("ak:event:01999999-0000-7000-8000-000000000001".to_owned()),
+            request_canonical_digest: Some(pairing_binding_digest),
+            pairing_request_id: None,
+            approved_by: Some(controller_id.clone()),
+        },
+        supersedes: Vec::new(),
+        revocation_check_ref: None,
+        runtime_attestation: None,
+    };
+    let authorize_event = arkret::agent::build_agent_key_authorize_event(
+        &authorize_payload,
+        provisioned.principal_control_realm_id().clone(),
+        agent_id,
+        controller_id,
+        provisioned.controller_authorization_ref(),
+        1,
+        arkret::Hlc::new("01970e589d21-0000-a13f9c2e")?,
+    )?;
     let body = builder.build_key_pair_request(authorize_event)?.body;
     // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
     // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the

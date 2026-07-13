@@ -685,6 +685,7 @@ fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Va
         created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00Z")?.with_timezone(&Utc),
         domain: None,
         audience: Some(Audience::Single(audience.to_owned())),
+        proof_purpose: None,
         jws: jws.to_owned(),
     };
     Ok(serde_json::to_value(proof)?)
