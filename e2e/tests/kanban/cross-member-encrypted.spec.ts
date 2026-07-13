@@ -48,6 +48,108 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+type E2eeStorageEvidence = {
+  secureEntryKeys: string[];
+  localStorageE2eeKeys: string[];
+  localStoragePlaintextMatches: string[];
+  indexedDbPlaintextMatches: string[];
+  encryptedSecureEntryCount: number;
+  wrappingKeyExtractable: boolean | null;
+};
+
+// Inspect only the raw persistence representation. This deliberately does not
+// decrypt the secure entry: the acceptance boundary is that localStorage has no
+// E2EE mirror, IndexedDB contains only IV+ciphertext records, and its wrapping
+// CryptoKey remains non-extractable.
+async function readE2eeStorageEvidence(
+  page: Page,
+  plaintextMarkers: string[],
+): Promise<E2eeStorageEvidence> {
+  return page.evaluate(async (markers) => {
+    const prefix = "inkson.e2ee_plaintext_cache.v1.";
+    const localStorageKeys: string[] = [];
+    const localStorageValues: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key) continue;
+      localStorageKeys.push(key);
+      localStorageValues.push(window.localStorage.getItem(key) ?? "");
+    }
+
+    const requestResult = (request: IDBRequest): Promise<unknown> =>
+      new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
+      });
+    const openRequest = window.indexedDB.open("inkson.secret.inkson", 1);
+    const db = (await requestResult(openRequest)) as IDBDatabase;
+    try {
+      const entriesTx = db.transaction("entries", "readonly");
+      const entries = entriesTx.objectStore("entries");
+      const [keysResult, valuesResult] = await Promise.all([
+        requestResult(entries.getAllKeys()),
+        requestResult(entries.getAll()),
+      ]);
+      const keys = (keysResult as IDBValidKey[]).map(String);
+      const values = valuesResult as Array<{ iv?: unknown; ct?: unknown }>;
+      const secureEntryIndexes = keys
+        .map((key, index) => (key.startsWith(prefix) ? index : -1))
+        .filter((index) => index >= 0);
+      const toBytes = (value: unknown): Uint8Array => {
+        if (value instanceof Uint8Array) return value;
+        if (value instanceof ArrayBuffer) return new Uint8Array(value);
+        return new Uint8Array();
+      };
+      const rawIndexedDbText = values
+        .flatMap((value) => [toBytes(value.iv), toBytes(value.ct)])
+        .map((bytes) => new TextDecoder().decode(bytes))
+        .join("\n");
+      const encryptedSecureEntryCount = secureEntryIndexes.filter((index) => {
+        const value = values[index];
+        return toBytes(value?.iv).byteLength === 12 && toBytes(value?.ct).byteLength > 16;
+      }).length;
+
+      const wrappingTx = db.transaction("wrapping_keys", "readonly");
+      const wrappingKey = (await requestResult(
+        wrappingTx.objectStore("wrapping_keys").get("primary"),
+      )) as CryptoKey | undefined;
+
+      return {
+        secureEntryKeys: secureEntryIndexes.map((index) => keys[index]),
+        localStorageE2eeKeys: localStorageKeys.filter((key) => key.includes(prefix)),
+        localStoragePlaintextMatches: markers.filter((marker) =>
+          localStorageValues.some((value) => value.includes(marker)),
+        ),
+        indexedDbPlaintextMatches: markers.filter((marker) => rawIndexedDbText.includes(marker)),
+        encryptedSecureEntryCount,
+        wrappingKeyExtractable:
+          typeof wrappingKey?.extractable === "boolean" ? wrappingKey.extractable : null,
+      };
+    } finally {
+      db.close();
+    }
+  }, plaintextMarkers);
+}
+
+async function assertE2eeStorageIsHardened(page: Page, plaintextMarkers: string[]): Promise<void> {
+  await expect
+    .poll(() => readE2eeStorageEvidence(page, plaintextMarkers), {
+      timeout: 30_000,
+      intervals: [250, 500, 1_000],
+      message: "account-scoped E2EE secure cache never reached IndexedDB",
+    })
+    .toMatchObject({
+      localStorageE2eeKeys: [],
+      localStoragePlaintextMatches: [],
+      indexedDbPlaintextMatches: [],
+      wrappingKeyExtractable: false,
+    });
+
+  const persisted = await readE2eeStorageEvidence(page, plaintextMarkers);
+  expect(persisted.secureEntryKeys).toHaveLength(1);
+  expect(persisted.encryptedSecureEntryCount).toBe(1);
+}
+
 // Build an encrypted board + one list + one card (title only) and return the
 // board's ak:space: id so the invitee can deep-link straight to it. Mirrors the
 // proven flow in kanban/end-to-end.spec.ts and mls-group.spec.ts.
@@ -261,6 +363,69 @@ async function openReaderBoard(
 }
 
 test.describe("cross-member encrypted kanban", () => {
+  test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+
+    const stamp = Date.now();
+    const creatorSession = await createDpopUserSession(request, "e2ee-cache-creator", {
+      skipDeviceEnrollment: true,
+    });
+    if (!creatorSession) {
+      assertJointStackNotRequired(
+        "E2EE secure-cache browser acceptance requires coauth DPoP session-grant login",
+      );
+      test.skip(true, "coauth DPoP session-grant login is required for MLS encryption");
+      return;
+    }
+
+    const creator = await openUserPage(browser, creatorSession.user, {
+      grantJwt: creatorSession.grantJwt,
+      dpopSeedB64url: creatorSession.dpopSeedB64url,
+      grantId: creatorSession.grantId,
+      grantAudience: creatorSession.grantAudience,
+    });
+    const boardTitle = `Secure cache board ${stamp}`;
+    const listTitle = `Secure cache list ${stamp}`;
+    const cardTitle = `Secure cache card ${stamp}`;
+    const privateDescription = `Secure cache private description ${stamp}`;
+
+    try {
+      await creator.gotoHome();
+      await creator.completeRecoveryKeySetupIfPrompted();
+      await creator.acknowledgeRecommendedEncryptionPromptIfVisible();
+
+      const realmId = await creator.createRealm({
+        title: `Secure cache realm ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+      });
+      const boardId = await buildEncryptedBoardListCard(
+        creator.page,
+        realmId,
+        boardTitle,
+        listTitle,
+        cardTitle,
+      );
+      await addEncryptedDescription(creator.page, cardTitle, privateDescription);
+
+      await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
+      await stepShot(creator.page, testInfo, "A-secure-cache-before-reload");
+
+      await creator.page.reload({ waitUntil: "domcontentloaded" });
+      await readyReaderBoard(creator, boardId);
+      await assertCardDecrypts(creator, cardTitle, privateDescription);
+      await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
+      await stepShot(creator.page, testInfo, "B-secure-cache-after-reload");
+    } finally {
+      await creator.close();
+    }
+  });
+
   test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice", async ({
     browser,
     request,
@@ -390,6 +555,7 @@ test.describe("cross-member encrypted kanban", () => {
       //    card content.
       await openReaderBoard(bobPage, realmId, boardId);
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+      await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
       await stepShot(bobPage.page, testInfo, "B-bob-decrypted-card");
 
       // 5) Reload survival: the decrypted card must not flash-then-vanish when
@@ -397,6 +563,7 @@ test.describe("cross-member encrypted kanban", () => {
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await readyReaderBoard(bobPage, boardId);
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+      await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
       await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
 
       // 6) Reverse direction: bob adds his own card; it must project back to

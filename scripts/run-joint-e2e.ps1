@@ -766,6 +766,27 @@ function Quote-PsLiteral {
     return "'" + ($Value -replace "'", "''") + "'"
 }
 
+$script:ContainerHostGatewayIpv4 = $null
+
+function Get-ContainerHostGatewayIpv4 {
+    if ($script:ContainerHostGatewayIpv4) {
+        return $script:ContainerHostGatewayIpv4
+    }
+    if ($SolandRuntime -ne "docker" -or -not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+    $resolved = & docker run --rm --entrypoint getent `
+        --add-host "host.docker.internal:host-gateway" `
+        $SolandImage ahostsv4 host.docker.internal 2>$null
+    foreach ($line in @($resolved)) {
+        if ($line -match '^\s*(\d{1,3}(?:\.\d{1,3}){3})\s') {
+            $script:ContainerHostGatewayIpv4 = $Matches[1]
+            return $script:ContainerHostGatewayIpv4
+        }
+    }
+    return $null
+}
+
 function Convert-ToContainerReachableUrl {
     param([AllowNull()][string]$Url)
 
@@ -782,7 +803,8 @@ function Convert-ToContainerReachableUrl {
     }
 
     $builder = [System.UriBuilder]::new($uri)
-    $builder.Host = "host.docker.internal"
+    $containerHostIpv4 = Get-ContainerHostGatewayIpv4
+    $builder.Host = if ($containerHostIpv4) { $containerHostIpv4 } else { "host.docker.internal" }
     return $builder.Uri.AbsoluteUri.TrimEnd("/")
 }
 
@@ -2109,6 +2131,7 @@ try {
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
             SOLAND_SERVICE_ID = $ServiceId
             SOLAND_DEVELOPMENT_MODE = "true"
+            SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             SOLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
             SOLAND_OBJECT_STORAGE_BACKEND = "filesystem"
@@ -2187,6 +2210,7 @@ try {
             "`$env:SOLAND_PUBLIC_BASE_URL={0}; " +
             "`$env:SOLAND_SERVICE_ID={1}; " +
             "`$env:SOLAND_DEVELOPMENT_MODE='true'; " +
+            "`$env:SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS='true'; " +
             "`$env:SOLAND_CORS_ALLOW_ORIGIN={2}; " +
             "`$env:SOLAND_METRICS_BIND='127.0.0.1:{3}'; " +
             "`$env:SOLAND_OBJECT_STORAGE_BACKEND='filesystem'; " +

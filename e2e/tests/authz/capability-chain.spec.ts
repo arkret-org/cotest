@@ -105,8 +105,10 @@ async function setupOwnerRealm(request: APIRequestContext, label: string) {
     ensureRegistered(request, carol),
   ]);
   const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
-  const carolToken = await issueDevSession(request, carol);
+  const [bobToken, carolToken] = await Promise.all([
+    issueDevSession(request, bob),
+    issueDevSession(request, carol),
+  ]);
   const realmId = await createRealmApi(request, aliceToken, {
     title: `cap ${label} ${Date.now()}`,
     discoverability: "listed",
