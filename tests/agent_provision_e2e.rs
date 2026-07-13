@@ -19,6 +19,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use arkret_core::{Error as ArkretError, EventsSubscribeFrameKind};
@@ -355,6 +356,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     let status = controller
         .agent_runtime_approval_status(&status_body)
         .await?;
+    assert_eq!(status.retry_after, Some(Duration::from_secs(1)));
     assert_eq!(
         status.status,
         arkret::models::AgentStatus::PendingRuntimeKey

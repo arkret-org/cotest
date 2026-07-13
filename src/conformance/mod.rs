@@ -87,8 +87,9 @@ pub use agent_participation::{
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
     run_agent_human_approval_required_vector, run_agent_longevity_no_expiry_vector,
-    run_agent_pairing_expiry_vector, run_agent_provision_vector,
-    run_agent_repairing_supersede_vector, run_agent_session_grant_replay_vector,
+    run_agent_managed_pcr_separation_vector, run_agent_pairing_expiry_vector,
+    run_agent_provision_vector, run_agent_repairing_supersede_vector,
+    run_agent_runtime_key_binding_vector, run_agent_session_grant_replay_vector,
     run_agent_vector_suite, validate_agent_human_approval_http_response,
 };
 pub use arkret_private_kdf_and_durability::run_arkret_private_kdf_and_durability_suite;

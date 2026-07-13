@@ -1,8 +1,10 @@
 //! Agent surface conformance vectors (§0.11 of `_before_todos.md`).
 //!
-//! 8 vectors:
+//! 10 vectors:
 //!   - `ak.vector.agent.provision.v1`
 //!   - `ak.vector.agent.pairing_expiry.v1`
+//!   - `ak.vector.agent.runtime_key_binding.v1`
+//!   - `ak.vector.agent.managed_pcr_separation.v1`
 //!   - `ak.vector.agent.repairing_supersede.v1`
 //!   - `ak.vector.agent.longevity_no_expiry.v1`
 //!   - `ak.vector.agent.controller_lifecycle.v1`
@@ -26,7 +28,7 @@ use arkret_core::error::{
     REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
 };
 use arkret_core::{
-    AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, ErrorEnvelope,
+    AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, Did, ErrorEnvelope,
     OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT, OP_AGENT_DEACTIVATE, OP_AGENT_GET,
     OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
     OP_AGENT_PROVISION, OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
@@ -35,6 +37,9 @@ use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
 pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ak.vector.agent.pairing_expiry.v1";
+pub const VECTOR_ID_AGENT_RUNTIME_KEY_BINDING: &str = "ak.vector.agent.runtime_key_binding.v1";
+pub const VECTOR_ID_AGENT_MANAGED_PCR_SEPARATION: &str =
+    "ak.vector.agent.managed_pcr_separation.v1";
 pub const VECTOR_ID_AGENT_REPAIRING_SUPERSEDE: &str = "ak.vector.agent.repairing_supersede.v1";
 pub const VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY: &str = "ak.vector.agent.longevity_no_expiry.v1";
 pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ak.vector.agent.controller_lifecycle.v1";
@@ -46,6 +51,8 @@ pub const VECTOR_ID_AGENT_HUMAN_APPROVAL_REQUIRED: &str =
 pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
     VECTOR_ID_AGENT_PAIRING_EXPIRY,
+    VECTOR_ID_AGENT_RUNTIME_KEY_BINDING,
+    VECTOR_ID_AGENT_MANAGED_PCR_SEPARATION,
     VECTOR_ID_AGENT_REPAIRING_SUPERSEDE,
     VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY,
     VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE,
@@ -169,6 +176,125 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
 }
 
 // ─── VECT-AG-2b — repairing_supersede ──────────────────────────────────────
+
+pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
+    let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
+    let case = fixture["cases"]
+        .as_array()
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("vector_id").and_then(Value::as_str)
+                    == Some(VECTOR_ID_AGENT_RUNTIME_KEY_BINDING)
+            })
+        })
+        .ok_or_else(|| anyhow!("runtime-key-binding vector case missing"))?;
+    let agent_id = Did::new("did:webvh:z6mkagent:agent.example")?;
+    let public_key = case
+        .get("source_public_key")
+        .ok_or_else(|| anyhow!("runtime-key-binding source_public_key missing"))?;
+    let attestation = case
+        .get("source_runtime_attestation")
+        .filter(|value| !value.is_null());
+    let public_digest = arkret_core::agent_runtime_public_key_digest(public_key)?;
+    let attestation_digest = arkret_core::agent_runtime_attestation_digest(attestation)?;
+    let binding = arkret_core::agent_runtime_key_binding_digest(
+        &agent_id,
+        "pairing_request:01964137-0000-7000-8000-000000000000",
+        "did:webvh:z6mkagent:agent.example#runtime-1",
+        public_key,
+        attestation,
+    )?;
+    for (actual, expected_key) in [
+        (public_digest.as_str(), "expected_public_key_digest"),
+        (attestation_digest.as_str(), "expected_attestation_digest"),
+        (binding.as_str(), "expected_binding_digest"),
+    ] {
+        if case.get(expected_key).and_then(Value::as_str) != Some(actual) {
+            bail!("runtime-key-binding {expected_key} drifted: {actual}");
+        }
+    }
+    let canonical = serde_json::json!({
+        "agent_id": agent_id,
+        "attestation_digest": attestation_digest,
+        "kind": "ak.agent.runtime_key_binding.v1",
+        "pairing_request_id": "pairing_request:01964137-0000-7000-8000-000000000000",
+        "public_key_digest": public_digest,
+        "verification_method": "did:webvh:z6mkagent:agent.example#runtime-1",
+    });
+    let canonical = String::from_utf8(arkret_core::canonical::canonical_json_bytes(&canonical)?)?;
+    if case.get("canonical_binding_json").and_then(Value::as_str) != Some(canonical.as_str()) {
+        bail!("runtime-key-binding canonical JSON drifted");
+    }
+
+    let first_ids = (
+        "approval-1",
+        "ak:notification:01964137-0000-7000-8000-000000000001",
+    );
+    let retry_ids = if binding.as_str() == case["expected_binding_digest"].as_str().unwrap() {
+        first_ids
+    } else {
+        bail!("same binding retry was classified as a conflict")
+    };
+    if retry_ids != first_ids {
+        bail!("same binding retry changed stable projection ids");
+    }
+    let different_key = serde_json::json!({
+        "alg": "EdDSA",
+        "key": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "kid": "runtime-1",
+        "kty": "OKP"
+    });
+    let different = arkret_core::agent_runtime_key_binding_digest(
+        &agent_id,
+        "pairing_request:01964137-0000-7000-8000-000000000000",
+        "did:webvh:z6mkagent:agent.example#runtime-1",
+        &different_key,
+        None,
+    )?;
+    if different == binding {
+        bail!("different runtime key was not classified as a binding conflict");
+    }
+    Ok(())
+}
+
+pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
+    let agent = "did:webvh:z6mkagent:agent.example";
+    let controller = "did:webvh:z6mkcontroller:controller.example";
+    let agent_pcr = "ak:realm:01964137-0000-7000-8000-000000000020";
+    let controller_pcr = "ak:realm:01964137-0000-7000-8000-000000000021";
+    if agent_pcr == controller_pcr {
+        bail!("managed Agent reused the controller PCR");
+    }
+    let genesis = serde_json::json!({
+        "created_by": agent,
+        "notary": {"type": "single_did", "did": agent},
+        "purpose": "principal_control",
+        "encryption_profile": "e2ee_required",
+        "event_encryption_floor": "e2ee_required"
+    });
+    if genesis["created_by"] != agent
+        || genesis["notary"]["did"] != agent
+        || genesis["purpose"] != "principal_control"
+        || genesis["encryption_profile"] != "e2ee_required"
+        || genesis["event_encryption_floor"] != "e2ee_required"
+    {
+        bail!("managed Agent PCR genesis boundary drifted");
+    }
+    let authored = serde_json::json!({
+        "actor_id": agent,
+        "executed_by": controller,
+        "authorization_ref": "ak:event:01964137-0000-7000-8000-000000000022"
+    });
+    if authored["actor_id"] != agent
+        || authored["executed_by"] != controller
+        || authored["authorization_ref"]
+            .as_str()
+            .is_none_or(str::is_empty)
+    {
+        bail!("managed-controller authoring boundary drifted");
+    }
+    Ok(())
+}
 
 /// Minimal model of the renew-pairing state gate + supersede filter
 /// (key-management.md §3.6.1): every non-terminal status may re-open pairing;
@@ -918,10 +1044,10 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 8 agent vectors.
+/// Suite entry point — runs all 10 agent vectors.
 pub fn run_agent_vector_suite() -> Result<()> {
     validate_agent_vectors_fixture_metadata()?;
-    if ALL_AGENT_VECTOR_IDS.len() != 8 {
+    if ALL_AGENT_VECTOR_IDS.len() != 10 {
         bail!(
             "expected 8 agent vector ids, got {}",
             ALL_AGENT_VECTOR_IDS.len()
@@ -929,6 +1055,8 @@ pub fn run_agent_vector_suite() -> Result<()> {
     }
     run_agent_provision_vector()?;
     run_agent_pairing_expiry_vector()?;
+    run_agent_runtime_key_binding_vector()?;
+    run_agent_managed_pcr_separation_vector()?;
     run_agent_repairing_supersede_vector()?;
     run_agent_longevity_no_expiry_vector()?;
     run_agent_controller_lifecycle_vector()?;

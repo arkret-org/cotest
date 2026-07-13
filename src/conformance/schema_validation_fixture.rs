@@ -169,9 +169,9 @@ fn run_semantic_cases(file_name: &str, cases: &[SchemaValidationCase]) -> Result
         // `expect_valid` pass in `run_cases`), so at the semantic layer it shares the
         // plain `accept` invariant — no duplicate clause claim.
         match case.semantic_outcome.as_deref() {
-            Some(outcome @ ("accept" | "accept_after_digest_revision_and_signature_verification"))
-                if duplicate =>
-            {
+            Some(
+                outcome @ ("accept" | "accept_after_digest_revision_and_signature_verification"),
+            ) if duplicate => {
                 bail!(
                     "{} ({outcome}) unexpectedly contains a duplicate clause claim",
                     case.name
