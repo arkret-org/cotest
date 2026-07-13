@@ -239,6 +239,8 @@ Recommended local run:
 .\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1 -PreflightOnly -StartCoauth -CoauthPostgresUrl <dsn>
+.\scripts\run-joint-e2e.ps1 -RunnerSelfTest
 .\scripts\run-cotest.ps1 -Profile dual-soland
 .\scripts\run-joint-e2e.ps1 -StartMockMimiFacade -Grep "mock-mimi-facade"
 ```
@@ -250,12 +252,23 @@ The runner performs a preflight before starting services: Node/npm/npx,
 Playwright config/package/browser registry, default cargo/dx startup tools,
 Docker daemon/image availability when `-SolandRuntime docker` is used, and
 Docker/coauth/PostgreSQL image availability when `-StartCoauth` is used.
+Prebuilt Coauth, Starid, and Teabay binaries must be at least as new as the
+tracked Rust/build inputs in their repository and `arkret-rust-sdk` dependency;
+stale binaries fail before any service starts. `-PreflightOnly` runs these
+checks without starting the stack. `-RunnerSelfTest` exercises stale/fresh
+classification and managed-process exit reporting without starting the stack.
 The preflight is written to `preflight.json` and `preflight.md`.
 
-`joint-smoke` currently runs the desktop smoke matrix. `joint-full` runs
-desktop Chrome, mobile Chrome, and visual Chrome projects in the same artifact
-run. Release gate integration calls the joint smoke through the Chromium
+`joint-smoke` and `joint-full` currently run the Chrome project; scenario tags
+and profiles select the coverage after the separate mobile/visual smoke projects
+were retired. Release gate integration calls the joint smoke through the Chrome
 project so CI can use Playwright-managed browser installation.
+
+At the end of a run, the harness checks every managed process and container
+before cleanup. An early exit forces the run to fail and is reported once in
+`managed-service-failures.json` and `managed-service-failures.md`, including the
+service name, exit code, and log paths. This distinguishes an infrastructure
+crash from the downstream Playwright `ECONNREFUSED` failures it may cause.
 
 `joint-smoke` defaults to `--grep @fully-implemented` so fixme-tagged
 placeholders pending server-side feature work do not block the smoke

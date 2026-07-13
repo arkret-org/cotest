@@ -90,6 +90,8 @@ param(
     [switch]$SkipBrowserInstall,
     [switch]$KeepServices,
     [switch]$SkipPreflight,
+    [switch]$PreflightOnly,
+    [switch]$RunnerSelfTest,
     [switch]$DualSoland,
     [string]$SolandBetaServiceId = "did:webvh:z6mkfixture:soland-beta.joint-e2e.local",
     [switch]$StartMockIdp,
@@ -146,6 +148,10 @@ if ($MockWitnessExtraDids.Count -gt 0) {
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ($PreflightOnly -and $SkipPreflight) {
+    throw "-PreflightOnly cannot be combined with -SkipPreflight"
+}
 
 function Resolve-PlaywrightProjects {
     param(
@@ -216,6 +222,118 @@ function Invoke-NativeCapture {
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
+function Get-RepositoryBuildInputState {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$BinaryPath
+    )
+
+    $resolvedRepository = (Resolve-Path $RepositoryRoot).Path
+    $resolvedBinary = (Resolve-Path $BinaryPath).Path
+    $git = Find-CommandPath @("git.exe", "git")
+    if (-not $git) {
+        throw "git is required to validate binary freshness"
+    }
+
+    $headOutput = @(Invoke-NativeCapture -FilePath $git -Arguments @(
+            "-C", $resolvedRepository, "rev-parse", "HEAD"
+        ))
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to resolve repository HEAD for ${resolvedRepository}: $($headOutput -join ' ')"
+    }
+    $head = ($headOutput -join "").Trim()
+
+    $commitTimeOutput = @(Invoke-NativeCapture -FilePath $git -Arguments @(
+            "-C", $resolvedRepository, "log", "-1", "--format=%cI", "--",
+            "Cargo.toml", "Cargo.lock", "build.rs", "crates", "src", "migrations"
+        ))
+    if ($LASTEXITCODE -ne 0 -or $commitTimeOutput.Count -eq 0) {
+        throw "Unable to resolve build-input commit time for $resolvedRepository"
+    }
+    $commitTime = [DateTimeOffset]::Parse(
+        ($commitTimeOutput -join "").Trim(),
+        [System.Globalization.CultureInfo]::InvariantCulture
+    ).UtcDateTime
+
+    $trackedOutput = @(Invoke-NativeCapture -FilePath $git -Arguments @(
+            "-C", $resolvedRepository, "ls-files", "--",
+            "Cargo.toml", "Cargo.lock", "build.rs", "crates", "src", "migrations"
+        ))
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to enumerate build inputs for $resolvedRepository"
+    }
+
+    $latestInputTime = [DateTime]::MinValue
+    $latestInputPath = $null
+    $buildExtensions = @(".rs", ".toml", ".lock", ".sql", ".proto", ".json")
+    foreach ($relativePath in $trackedOutput) {
+        if (-not $relativePath) {
+            continue
+        }
+        $fullPath = Join-Path $resolvedRepository ([string]$relativePath)
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+            continue
+        }
+        $extension = [System.IO.Path]::GetExtension($fullPath).ToLowerInvariant()
+        if ($buildExtensions -notcontains $extension -and
+            [System.IO.Path]::GetFileName($fullPath) -ne "build.rs") {
+            continue
+        }
+        $writeTime = (Get-Item -LiteralPath $fullPath).LastWriteTimeUtc
+        if ($writeTime -gt $latestInputTime) {
+            $latestInputTime = $writeTime
+            $latestInputPath = [string]$relativePath
+        }
+    }
+
+    $requiredTime = $commitTime
+    $requiredBy = "HEAD build-input commit"
+    if ($latestInputTime -gt $requiredTime) {
+        $requiredTime = $latestInputTime
+        $requiredBy = $latestInputPath
+    }
+
+    [pscustomobject]@{
+        RepositoryRoot = $resolvedRepository
+        RepositoryName = Split-Path -Leaf $resolvedRepository
+        Head = $head
+        RequiredTimeUtc = $requiredTime
+        RequiredBy = $requiredBy
+        BinaryPath = $resolvedBinary
+        BinaryTimeUtc = (Get-Item -LiteralPath $resolvedBinary).LastWriteTimeUtc
+    }
+}
+
+function Add-BinaryFreshnessPreflight {
+    param(
+        [Parameter(Mandatory = $true)]$Results,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$BinaryPath,
+        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots
+    )
+
+    try {
+        $states = @(
+            foreach ($repositoryRoot in $RepositoryRoots) {
+                Get-RepositoryBuildInputState `
+                    -RepositoryRoot $repositoryRoot `
+                    -BinaryPath $BinaryPath
+            }
+        )
+        $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
+        $shortHead = if ($newest.Head.Length -gt 12) { $newest.Head.Substring(0, 12) } else { $newest.Head }
+        $detail = "binary=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); head=$shortHead; input=$($newest.RequiredBy)"
+        if ($newest.BinaryTimeUtc -lt $newest.RequiredTimeUtc) {
+            Add-PreflightResult $Results $Name "fail" "stale binary; $detail"
+        } else {
+            Add-PreflightResult $Results $Name "pass" $detail
+        }
+    }
+    catch {
+        Add-PreflightResult $Results $Name "fail" $_.Exception.Message
     }
 }
 
@@ -462,6 +580,14 @@ function Invoke-JointE2ePreflight {
         try {
             $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $WorkspaceRoot
             Add-PreflightResult $results "starid binary" "pass" $staridBinary
+            Add-BinaryFreshnessPreflight `
+                -Results $results `
+                -Name "starid binary freshness" `
+                -BinaryPath $staridBinary `
+                -RepositoryRoots @(
+                    (Join-Path $WorkspaceRoot "starid"),
+                    (Join-Path $WorkspaceRoot "arkret-rust-sdk")
+                )
         } catch {
             Add-PreflightResult $results "starid binary" "fail" $_.Exception.Message
         }
@@ -471,6 +597,14 @@ function Invoke-JointE2ePreflight {
         try {
             $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $WorkspaceRoot
             Add-PreflightResult $results "teabay binary" "pass" $teabayBinary
+            Add-BinaryFreshnessPreflight `
+                -Results $results `
+                -Name "teabay binary freshness" `
+                -BinaryPath $teabayBinary `
+                -RepositoryRoots @(
+                    (Join-Path $WorkspaceRoot "teabay"),
+                    (Join-Path $WorkspaceRoot "arkret-rust-sdk")
+                )
         } catch {
             Add-PreflightResult $results "teabay binary" "fail" $_.Exception.Message
         }
@@ -486,6 +620,14 @@ function Invoke-JointE2ePreflight {
         try {
             $coauthBinary = Resolve-CoauthBinary -ExplicitPath $CoauthBin -WorkspaceRoot $WorkspaceRoot
             Add-PreflightResult $results "coauth binary" "pass" $coauthBinary
+            Add-BinaryFreshnessPreflight `
+                -Results $results `
+                -Name "coauth binary freshness" `
+                -BinaryPath $coauthBinary `
+                -RepositoryRoots @(
+                    (Join-Path $WorkspaceRoot "coauth"),
+                    (Join-Path $WorkspaceRoot "arkret-rust-sdk")
+                )
         } catch {
             Add-PreflightResult $results "coauth binary" "fail" $_.Exception.Message
         }
@@ -1165,6 +1307,80 @@ function Stop-ManagedCommand {
     }
 }
 
+function Get-ManagedServiceFailures {
+    param([Parameter(Mandatory = $true)]$Services)
+
+    $failures = New-Object System.Collections.Generic.List[object]
+    foreach ($service in $Services) {
+        if ($service.Kind -eq "docker") {
+            $stateOutput = @(Invoke-NativeCapture -FilePath "docker" -Arguments @(
+                    "inspect", "--format", "{{.State.Running}}|{{.State.ExitCode}}", $service.ContainerName
+                ))
+            $inspectExitCode = $LASTEXITCODE
+            $state = ($stateOutput -join "").Trim()
+            if ($inspectExitCode -ne 0) {
+                $failures.Add([pscustomobject]@{
+                        name = $service.Name
+                        kind = $service.Kind
+                        exit_code = $null
+                        detail = "container missing or inspect failed: $state"
+                        stdout = $service.Stdout
+                        stderr = $service.Stderr
+                    }) | Out-Null
+                continue
+            }
+            $parts = $state -split "\|", 2
+            if ($parts[0] -ne "true") {
+                $failures.Add([pscustomobject]@{
+                        name = $service.Name
+                        kind = $service.Kind
+                        exit_code = if ($parts.Count -gt 1) { [int]$parts[1] } else { $null }
+                        detail = "container exited before test completion"
+                        stdout = $service.Stdout
+                        stderr = $service.Stderr
+                    }) | Out-Null
+            }
+            continue
+        }
+
+        $service.Process.Refresh()
+        if ($service.Process.HasExited) {
+            $service.Process.WaitForExit()
+            $failures.Add([pscustomobject]@{
+                    name = $service.Name
+                    kind = $service.Kind
+                    exit_code = $service.Process.ExitCode
+                    detail = "process exited before test completion"
+                    stdout = $service.Stdout
+                    stderr = $service.Stderr
+                }) | Out-Null
+        }
+    }
+    return $failures.ToArray()
+}
+
+function Write-ManagedServiceFailureReport {
+    param(
+        [Parameter(Mandatory = $true)]$Failures,
+        [Parameter(Mandatory = $true)][string]$JsonPath,
+        [Parameter(Mandatory = $true)][string]$MarkdownPath
+    )
+
+    ConvertTo-Json -InputObject @($Failures) -Depth 4 |
+        Set-Content -Path $JsonPath -Encoding UTF8
+
+    $lines = @("# managed service failures", "")
+    if (@($Failures).Count -eq 0) {
+        $lines += "- none"
+    } else {
+        foreach ($failure in $Failures) {
+            $exitCode = if ($null -eq $failure.exit_code) { "unknown" } else { [string]$failure.exit_code }
+            $lines += "- $($failure.name) ($($failure.kind)): exit=$exitCode; $($failure.detail); stdout=$($failure.stdout); stderr=$($failure.stderr)"
+        }
+    }
+    $lines | Set-Content -Path $MarkdownPath -Encoding UTF8
+}
+
 function Stop-ProcessTree {
     param([Parameter(Mandatory = $true)][int]$ProcessId)
 
@@ -1173,6 +1389,98 @@ function Stop-ProcessTree {
         Stop-ProcessTree -ProcessId $child.ProcessId
     }
     Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+function Invoke-RunnerSelfTest {
+    $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $tempRoot = Join-Path $tempBase "cotest-runner-self-test-$PID"
+    $null = New-Item -ItemType Directory -Path $tempRoot -Force
+    $binaryPath = Join-Path $tempRoot "fixture.exe"
+    $null = New-Item -ItemType File -Path $binaryPath -Force
+    $runningProcess = $null
+
+    try {
+        (Get-Item -LiteralPath $binaryPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddYears(-10)
+        $staleResults = New-Object System.Collections.Generic.List[object]
+        Add-BinaryFreshnessPreflight `
+            -Results $staleResults `
+            -Name "fixture freshness" `
+            -BinaryPath $binaryPath `
+            -RepositoryRoots @($repositoryRoot)
+        if ($staleResults.Count -ne 1 -or $staleResults[0].status -ne "fail") {
+            throw "stale binary self-test did not fail"
+        }
+
+        (Get-Item -LiteralPath $binaryPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddDays(1)
+        $freshResults = New-Object System.Collections.Generic.List[object]
+        Add-BinaryFreshnessPreflight `
+            -Results $freshResults `
+            -Name "fixture freshness" `
+            -BinaryPath $binaryPath `
+            -RepositoryRoots @($repositoryRoot)
+        if ($freshResults.Count -ne 1 -or $freshResults[0].status -ne "pass") {
+            throw "fresh binary self-test did not pass"
+        }
+
+        $exitedProcess = Start-Process `
+            -FilePath "powershell" `
+            -ArgumentList @("-NoProfile", "-Command", "exit 23") `
+            -WindowStyle Hidden `
+            -PassThru
+        $exitedProcess.WaitForExit()
+        $exitedService = [pscustomobject]@{
+            Kind = "process"
+            Name = "self-test-exited"
+            Process = $exitedProcess
+            Stdout = Join-Path $tempRoot "exited.stdout.log"
+            Stderr = Join-Path $tempRoot "exited.stderr.log"
+        }
+        $failures = @(Get-ManagedServiceFailures -Services @($exitedService))
+        if ($failures.Count -ne 1 -or $failures[0].exit_code -ne 23) {
+            throw "managed service exit self-test did not preserve exit code 23"
+        }
+
+        $failureJson = Join-Path $tempRoot "managed-service-failures.json"
+        $failureMarkdown = Join-Path $tempRoot "managed-service-failures.md"
+        Write-ManagedServiceFailureReport `
+            -Failures $failures `
+            -JsonPath $failureJson `
+            -MarkdownPath $failureMarkdown
+        $reported = @(Get-Content -Raw -LiteralPath $failureJson | ConvertFrom-Json)
+        if ($reported.Count -ne 1 -or $reported[0].name -ne "self-test-exited" -or
+            $reported[0].exit_code -ne 23) {
+            throw "managed service failure report self-test failed"
+        }
+
+        $runningProcess = Start-Process `
+            -FilePath "powershell" `
+            -ArgumentList @("-NoProfile", "-Command", "Start-Sleep -Seconds 30") `
+            -WindowStyle Hidden `
+            -PassThru
+        $runningService = [pscustomobject]@{
+            Kind = "process"
+            Name = "self-test-running"
+            Process = $runningProcess
+            Stdout = Join-Path $tempRoot "running.stdout.log"
+            Stderr = Join-Path $tempRoot "running.stderr.log"
+        }
+        if (@(Get-ManagedServiceFailures -Services @($runningService)).Count -ne 0) {
+            throw "running managed service was incorrectly classified as failed"
+        }
+
+        Write-Host "Joint E2E runner self-test passed."
+    }
+    finally {
+        if ($runningProcess -and -not $runningProcess.HasExited) {
+            Stop-Process -Id $runningProcess.Id -Force -ErrorAction SilentlyContinue
+            $runningProcess.WaitForExit()
+        }
+        $resolvedTempRoot = [System.IO.Path]::GetFullPath($tempRoot)
+        if ($resolvedTempRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $resolvedTempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Copy-ToLatest {
@@ -1192,6 +1500,11 @@ function Copy-ToLatest {
         Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
     }
     Copy-Item -Path $RunJointDir -Destination $LatestJointDir -Recurse -Force
+}
+
+if ($RunnerSelfTest) {
+    Invoke-RunnerSelfTest
+    exit 0
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -1433,6 +1746,7 @@ if ($StartMockChallengeProvider) {
 }
 
 $managedServices = New-Object System.Collections.Generic.List[object]
+$managedServiceFailures = @()
 $ephemeralPostgres = $null
 $exitCode = 1
 $startedAt = Get-Date
@@ -1445,6 +1759,8 @@ $coauthConfigPath = $null
 $e2eRoot = Join-Path $repoRoot "e2e"
 $preflightJson = Join-Path $jointDir "preflight.json"
 $preflightMd = Join-Path $jointDir "preflight.md"
+$managedServiceFailuresJson = Join-Path $jointDir "managed-service-failures.json"
+$managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
 $playwrightProjects = Resolve-PlaywrightProjects `
     -RunProfile $RunProfile `
     -PlaywrightProject $PlaywrightProject `
@@ -1496,6 +1812,11 @@ try {
             -WillStartDefaultInkson (-not $SkipInkson -and -not $InksonCommand -and $null -ne $inksonPort) `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
+    }
+
+    if ($PreflightOnly) {
+        Write-Host "Preflight completed; no services were started."
+        exit 0
     }
 
     # Start mock services first so coauth/soland configurations can reference them.
@@ -2252,6 +2573,17 @@ try {
     }
 }
 finally {
+    $managedServiceFailures = @(Get-ManagedServiceFailures -Services $managedServices)
+    Write-ManagedServiceFailureReport `
+        -Failures $managedServiceFailures `
+        -JsonPath $managedServiceFailuresJson `
+        -MarkdownPath $managedServiceFailuresMd
+    if ($managedServiceFailures.Count -gt 0) {
+        $exitCode = 1
+        foreach ($failure in $managedServiceFailures) {
+            Write-Warning "Managed service '$($failure.name)' exited before test completion; see $managedServiceFailuresMd"
+        }
+    }
     if (-not $KeepServices) {
         for ($index = $managedServices.Count - 1; $index -ge 0; $index--) {
             Stop-ManagedCommand -Service $managedServices[$index]
@@ -2726,6 +3058,9 @@ $summary = [pscustomobject]@{
     scenarios_report = $scenariosReport
     service_gaps_report = $serviceGapsReport
     service_traces_report = $serviceTracesReport
+    managed_service_failure_count = $managedServiceFailures.Count
+    managed_service_failures_json = $managedServiceFailuresJson
+    managed_service_failures_report = $managedServiceFailuresMd
     gap_todos = $gapTodosPath
     fixme_promotion_checklist = $fixmeChecklistPath
     services = $serviceLogDir
@@ -2786,6 +3121,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - scenarios_report: $($summary.scenarios_report)
 - service_gaps_report: $($summary.service_gaps_report)
 - service_traces_report: $($summary.service_traces_report)
+- managed_service_failure_count: $($summary.managed_service_failure_count)
+- managed_service_failures_json: $($summary.managed_service_failures_json)
+- managed_service_failures_report: $($summary.managed_service_failures_report)
 - gap_todos: $($summary.gap_todos)
 - fixme_promotion_checklist: $($summary.fixme_promotion_checklist)
 - services: $($summary.services)
