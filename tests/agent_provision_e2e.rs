@@ -17,21 +17,37 @@
 //! DPoP-bound `agent_key_proof` session grant and backing soland with a local
 //! introspection service.
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use arkret_core::{Error as ArkretError, EventsSubscribeFrameKind};
+use arkret_core::{
+    BackupClass, BackupId, BackupSeriesId, DeviceAuthorizePayload, DeviceCrossSigningBinding,
+    DeviceId, DeviceOrPrincipalRef, Did, Error as ArkretError, EventsFrontierAccountClientState,
+    EventsFrontierView, EventsSubscribeFrameKind, KeyBackup, KeyBackupAead, KeyBackupAuthData,
+    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
+    KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, ManagedFrontierRef, ManagedPrincipalBinding, PolicyId,
+    RecoveryKeyEntry, RecoveryPolicy, RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
+    SignatureMaterial, TypedTrustDomainId, canonical, ed25519_pubkey_to_did_key_multibase,
+    principal_control_realm_id,
+};
+use arkret_crypto::{
+    CrossSigningBinding, CrossSigningKeyRecord, CrossSigningPublishContent, DeviceTrustBinding,
+    SignedCrossSigningKey,
+};
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::{SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
-    ArkretServer, add_member, create_realm, event_envelope, register_account, submit_event,
+    ArkretServer, add_member, create_realm, event_envelope, eventually, expect_json,
+    refresh_event_proof, register_account, submit_event,
 };
 use cotest::scenarios::_helpers::mock_http::{self, MockServer};
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
@@ -39,16 +55,34 @@ use serde_json::{Value, json};
 use serial_test::serial;
 use sha2::{Digest, Sha256};
 
-const ALICE_DID: &str = "did:web:cotest-agent-alice.example";
+const ALICE_DID: &str = "did:key:z6MktojHN9D8obak7C9wjpTzCRrdE5zC6cxt5ANUFnQskgbs";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a901";
 const AGENT_SESSION_GRANT: &str = "cotest.agent.session.grant";
 const INTROSPECTION_BEARER: &str = "cotest-introspection-bearer";
+const TRUST_DOMAIN: &str = "ak:trust_domain:soland.local";
+const RECOVERY_POLICY_SIGNATURE_TYPE: &str = "ak.identity.recovery_policy.signature.v1";
+const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 9] = [
+    "schema",
+    "policy_id",
+    "principal_id",
+    "version",
+    "trust_domain",
+    "allowed_proof_kinds",
+    "supersedes",
+    "issued_at",
+    "expires_at",
+];
+const TEST_DEVICE_ALGORITHMS: [&str; 2] = ["ak.hpke_x25519_aead_chacha20poly1305.v1", "ak.mls.v1"];
+const TEST_DEVICE_HPKE_KEY: &str = "z6LSCotestAgentDeviceHpkeKey";
+const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901";
+static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     let server = ArkretServer::spawn("agent-provision-e2e").await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    prepare_agent_controller_recovery(&server, &token).await?;
 
     // 1-2. provision -> pending_runtime_key + pairing material -> active.
     let agent_did =
@@ -218,6 +252,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 async fn agent_pairing_renewal_e2e() -> Result<()> {
     let server = ArkretServer::spawn("agent-pairing-renewal-e2e").await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    prepare_agent_controller_recovery(&server, &token).await?;
     let controller = bearer_sdk_client(&server, &token)?;
 
     // Provision with a 1 ms pairing window so the handle is already dead.
@@ -357,6 +392,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
 async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     let server = ArkretServer::spawn("agent-approval-status-e2e").await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    prepare_agent_controller_recovery(&server, &token).await?;
     let controller = bearer_sdk_client(&server, &token)?;
     let prov = controller
         .agent_provision(&arkret::AgentProvisionRequestBody {
@@ -477,6 +513,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     .await?;
     mock.set_service_id(server.service_id().to_owned());
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    prepare_agent_controller_recovery(&server, &token).await?;
 
     let realm_id = create_realm(&server, &token, ALICE_DID, "Agent reply live e2e").await?;
     let agent_did = provision_and_pair_agent(&server, &token, "Reply Assistant", "reply").await?;
@@ -776,6 +813,661 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     Ok(())
 }
 
+async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -> Result<()> {
+    let principal_id = Did::new(ALICE_DID.to_owned())?;
+    let device_id = DeviceId::new(ALICE_DEVICE.to_owned())?;
+    let control_realm_id = principal_control_realm_id(&principal_id);
+    let trust_domain = TypedTrustDomainId::new(TRUST_DOMAIN.to_owned())?;
+
+    let psk = SigningKey::from_bytes(&[21_u8; 32]);
+    let ssk = SigningKey::from_bytes(&[22_u8; 32]);
+    let usk = SigningKey::from_bytes(&[23_u8; 32]);
+    let device_key = SigningKey::from_bytes(&[24_u8; 32]);
+    let psk_kid = ALICE_DID.to_owned();
+    let ssk_kid = format!("{ALICE_DID}#cotest-ssk");
+    let usk_kid = format!("{ALICE_DID}#cotest-usk");
+
+    let key_record = |kid: String, key: &SigningKey| CrossSigningKeyRecord {
+        kid,
+        alg: "EdDSA".to_owned(),
+        public_key: ed25519_pubkey_to_did_key_multibase(key.verifying_key().as_bytes()),
+        key_format: "multibase".to_owned(),
+    };
+    let mut cross_signing = CrossSigningPublishContent {
+        principal_id: principal_id.clone(),
+        trust_domain: trust_domain.clone(),
+        principal_signing_key: key_record(psk_kid.clone(), &psk),
+        self_signing_key: SignedCrossSigningKey {
+            key: key_record(ssk_kid.clone(), &ssk),
+            binding: CrossSigningBinding {
+                verification_method: psk_kid.clone(),
+                alg: "EdDSA".to_owned(),
+                signature: String::new(),
+            },
+        },
+        user_signing_key: SignedCrossSigningKey {
+            key: key_record(usk_kid, &usk),
+            binding: CrossSigningBinding {
+                verification_method: psk_kid,
+                alg: "EdDSA".to_owned(),
+                signature: String::new(),
+            },
+        },
+        expected_previous_generation: 0,
+        generation: 1,
+        issued_at: canonical_now(),
+    };
+    cross_signing.self_signing_key.binding.signature =
+        sign_ed25519_b64url(&psk, &cross_signing.self_signing_binding_input()?);
+    cross_signing.user_signing_key.binding.signature =
+        sign_ed25519_b64url(&psk, &cross_signing.user_signing_binding_input()?);
+    submit_event(
+        server,
+        token,
+        ALICE_DID,
+        control_realm_id.as_str(),
+        "ak.cross_signing.publish",
+        serde_json::to_value(&cross_signing)?,
+        StatusCode::OK,
+    )
+    .await?;
+
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
+    let algorithms = TEST_DEVICE_ALGORITHMS.map(str::to_owned).to_vec();
+    let cross_signing_binding = DeviceCrossSigningBinding {
+        verification_method: json!(ssk_kid),
+        alg: "EdDSA".to_owned(),
+        ssk_generation: 1,
+        signature: sign_ed25519_b64url(
+            &ssk,
+            &DeviceTrustBinding::canonical_input(
+                &principal_id,
+                &device_id,
+                &device_public_key,
+                TEST_DEVICE_HPKE_KEY,
+                &algorithms,
+                1,
+            )?,
+        ),
+    };
+    let mut device_authorize = DeviceAuthorizePayload {
+        principal_id: principal_id.clone(),
+        device_id: ALICE_DEVICE.to_owned(),
+        device_public_key,
+        hpke_key: TEST_DEVICE_HPKE_KEY.to_owned(),
+        algorithms,
+        device_key_algorithm: Some("EdDSA".to_owned()),
+        authorized_by: DeviceOrPrincipalRef::DeviceId(device_id),
+        scopes: None,
+        not_before: canonical_now(),
+        expires_at: None,
+        device_signature: Some(SignatureMaterial::NonEmptyString("pending".to_owned())),
+        proof: None,
+        cross_signing_binding: Some(cross_signing_binding),
+        bootstrap_binding: None,
+        enrollment_authority_binding: None,
+        recovery_session_id: None,
+    };
+    device_authorize.device_signature =
+        Some(SignatureMaterial::NonEmptyString(sign_ed25519_b64url(
+            &device_key,
+            &device_authorize.device_possession_signature_input()?,
+        )));
+    submit_event(
+        server,
+        token,
+        ALICE_DID,
+        control_realm_id.as_str(),
+        "ak.device.authorize",
+        serde_json::to_value(&device_authorize)?,
+        StatusCode::OK,
+    )
+    .await?;
+
+    eventually(
+        "controller device authorization projection",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || async {
+            let response = server
+                .http()
+                .get(server.url("/_arkret/self/account/viewer"))
+                .bearer_auth(token)
+                .send()
+                .await?;
+            if response.status() != StatusCode::OK {
+                return Err(anyhow!("account viewer returned {}", response.status()));
+            }
+            let body: Value = response.json().await?;
+            let active = body["devices"].as_array().is_some_and(|devices| {
+                devices.iter().any(|device| {
+                    device["device_id"] == ALICE_DEVICE && device["status"] == "active"
+                })
+            });
+            if active {
+                Ok(())
+            } else {
+                Err(anyhow!("controller device is not active yet: {body}"))
+            }
+        },
+    )
+    .await?;
+
+    let issued_at = canonical_now();
+    let signed_fields = RECOVERY_POLICY_SIGNED_FIELDS.map(str::to_owned).to_vec();
+    let recovery_verification_method = recovery_verification_method();
+    let mut policy = RecoveryPolicy {
+        schema: "ak.schema.recovery_policy.v1".to_owned(),
+        policy_id: PolicyId::new(RECOVERY_POLICY_ID.to_owned())?,
+        principal_id,
+        version: 1,
+        supersedes: None,
+        trust_domain,
+        allowed_proof_kinds: vec![RecoveryProofKind::RecoveryUnlock],
+        threshold: None,
+        device_quorum: None,
+        trusted_recovery_services: None,
+        recovery_keys: Some(vec![RecoveryKeyEntry {
+            verification_method: recovery_verification_method,
+            alg: "Ed25519".to_owned(),
+            not_before: issued_at - TimeDelta::minutes(1),
+            expires_at: issued_at + TimeDelta::days(365),
+            revoked_at: None,
+        }]),
+        approval_requirement: None,
+        audit: None,
+        issued_at,
+        not_before: None,
+        expires_at: Some(issued_at + TimeDelta::days(365)),
+        auth_data: RecoveryPolicyAuthData {
+            verification_method: format!("{ALICE_DID}#{ALICE_DEVICE}"),
+            signature_algorithm: "Ed25519".to_owned(),
+            signature: "pending".to_owned(),
+            signed_fields: signed_fields.clone(),
+        },
+        extra: BTreeMap::new(),
+    };
+    let policy_value = serde_json::to_value(&policy)?;
+    let signed_payload = RECOVERY_POLICY_SIGNED_FIELDS
+        .into_iter()
+        .map(|field| {
+            policy_value
+                .get(field)
+                .cloned()
+                .map(|value| (field.to_owned(), value))
+                .ok_or_else(|| anyhow!("recovery policy missing signed field {field}"))
+        })
+        .collect::<Result<serde_json::Map<String, Value>>>()?;
+    let transcript = json!({
+        "type": RECOVERY_POLICY_SIGNATURE_TYPE,
+        "signed_fields": signed_fields,
+        "payload": signed_payload,
+    });
+    policy.auth_data.signature =
+        sign_ed25519_b64url(&device_key, &canonical::canonical_json_bytes(&transcript)?);
+
+    let response = server
+        .http()
+        .post(server.url("/_arkret/root/identity/recovery-policy"))
+        .bearer_auth(token)
+        .json(&policy)
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    if !matches!(status, StatusCode::OK | StatusCode::CREATED) {
+        return Err(anyhow!("recovery policy publish returned {status}: {body}"));
+    }
+    Ok(())
+}
+
+fn sign_ed25519_b64url(key: &SigningKey, input: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(key.sign(input).to_bytes())
+}
+
+fn recovery_verification_method() -> String {
+    let recovery_key = SigningKey::from_bytes(&[25_u8; 32]);
+    let multibase = ed25519_pubkey_to_did_key_multibase(recovery_key.verifying_key().as_bytes());
+    format!("did:key:{multibase}#{multibase}")
+}
+
+fn canonical_now() -> DateTime<Utc> {
+    Utc::now()
+        .with_nanosecond(0)
+        .expect("zero nanoseconds are valid")
+}
+
+async fn submit_delegated_agent_event(
+    server: &ArkretServer,
+    token: &str,
+    agent_id: &str,
+    realm_id: &str,
+    authorization_ref: &str,
+    kind: &str,
+    payload: Value,
+) -> Result<String> {
+    let mut event = event_envelope(agent_id, realm_id, kind, payload);
+    event["executed_by"] = json!(ALICE_DID);
+    event["authorization_ref"] = json!(authorization_ref);
+    event["proofs"][0]["verification_method"] = json!(format!("{ALICE_DID}#cotest"));
+    refresh_event_proof(&mut event);
+    let event_id = event["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("delegated event_id missing"))?
+        .to_owned();
+    let body = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .json(&event),
+        StatusCode::OK,
+    )
+    .await?;
+    if body["status"] != "accepted" {
+        return Err(anyhow!("delegated {kind} was not accepted: {body}"));
+    }
+    Ok(event_id)
+}
+
+async fn managed_agent_frontier(
+    server: &ArkretServer,
+    token: &str,
+    realm_id: &str,
+) -> Result<Option<arkret_core::RealmSealFrontierView>> {
+    let response = server
+        .http()
+        .get(server.url(&format!(
+            "/_arkret/self/events/frontier?realm_id={realm_id}"
+        )))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if response.status() == StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    let status = response.status();
+    let body = response.text().await?;
+    if status != StatusCode::OK {
+        return Err(anyhow!("managed Agent frontier returned {status}: {body}"));
+    }
+    let state: EventsFrontierAccountClientState = serde_json::from_str(&body)?;
+    match state.frontier {
+        EventsFrontierView::RealmSealView(frontier) => Ok(Some(frontier)),
+        EventsFrontierView::Actor(_) => Err(anyhow!("managed Agent frontier returned actor view")),
+    }
+}
+
+async fn ensure_agent_pcr_mls<P: PairingOutcome>(
+    server: &ArkretServer,
+    token: &str,
+    provisioned: &P,
+) -> Result<(arkret_core::RealmSealFrontierView, String)> {
+    let agent_id = provisioned.agent_id().as_str();
+    let realm_id = provisioned.principal_control_realm_id().as_str();
+    let group_id = format!("ak:mls_group:{}", realm_id.trim_start_matches("ak:realm:"));
+    let stale_seal_ref = bearer_sdk_client(server, token)?
+        .agent_get(agent_id)
+        .await?
+        .key_state
+        .and_then(|state| match state.pcr_recovery {
+            arkret::AgentPcrRecoveryState::Stale {
+                managed_frontier_ref,
+                ..
+            } => Some(managed_frontier_ref.seal_ref),
+            _ => None,
+        });
+    if managed_agent_frontier(server, token, realm_id)
+        .await?
+        .is_none()
+    {
+        let realm_create_event_id = submit_delegated_agent_event(
+            server,
+            token,
+            agent_id,
+            realm_id,
+            provisioned.controller_authorization_ref(),
+            "ak.realm.create",
+            json!({
+                "object": {
+                    "id": realm_id,
+                    "schema": "ak.schema.realm.v1",
+                    "title": "Managed Agent Principal Control Realm",
+                    "summary": "Controller-managed E2EE continuity for a Native Personal Agent",
+                    "created_by": agent_id,
+                    "trust_domain": TRUST_DOMAIN,
+                    "schema_refs": [
+                        "ak.schema.realm.v1",
+                        "ak.profile.principal_control_realm.v1"
+                    ],
+                    "fields": {"purpose": "principal_control"},
+                    "default_discoverability": "invite_only",
+                    "default_join_rule": "invite",
+                    "history_visibility": "restricted",
+                    "history_sharing_policy": {
+                        "version": 1,
+                        "default_key_share": "deny",
+                        "pre_join_history": "deny",
+                        "allowed_key_sources": ["key_backup"],
+                        "allowed_receiver_states": ["active_member"],
+                        "audit": {
+                            "share_audit_event_required": true,
+                            "access_audit_required": true
+                        }
+                    },
+                    "encryption_profile": "mls_rfc9420",
+                    "content_encryption_floor": "e2ee_required",
+                    "metadata_encryption_floor": "e2ee_required",
+                    "plaintext_visible_services": [],
+                    "security_class": "high_assurance",
+                    "federation_policy": "restricted",
+                    "notary_profile": "single_did",
+                    "digest_algorithm": "sha256",
+                    "notary": {
+                        "type": "single_did",
+                        "did": agent_id,
+                        "recovery_members": [ALICE_DID],
+                        "controller_organization": ALICE_DID,
+                        "recovery_controller_organizations": [ALICE_DID]
+                    },
+                    "created_at": "2026-05-02T00:00:00Z"
+                }
+            }),
+        )
+        .await?;
+        submit_delegated_agent_event(
+            server,
+            token,
+            agent_id,
+            realm_id,
+            provisioned.controller_authorization_ref(),
+            "ak.mls.genesis",
+            json!({
+                "mls_group_id": group_id,
+                "effective_scope": {"kind": "realm", "realm_id": realm_id},
+                "epoch": 0,
+                "creator_principal_id": agent_id,
+                "creator_device_id": ALICE_DEVICE,
+                "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+                "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+                "governance_binding": {
+                    "binding_version": 1,
+                    "encoding_profile": "cbor-deterministic-rfc8949-v1",
+                    "realm_id": realm_id,
+                    "effective_scope": {"kind": "realm", "realm_id": realm_id},
+                    "mls_group_id": group_id,
+                    "previous_epoch": 0,
+                    "next_epoch": 0,
+                    "membership_frontier": [realm_create_event_id],
+                    "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "capability_root": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+                    "discussion_metadata_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+                    "binding_profile": "ak.profile.mls_governance_binding.full.v1",
+                    "reducer_profile": "ak.reducer.v1"
+                },
+                "created_at": "2026-05-02T00:00:01Z"
+            }),
+        )
+        .await?;
+    }
+    eventually(
+        "managed Agent PCR Seal coverage",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || {
+            let stale_seal_ref = stale_seal_ref.clone();
+            async move {
+                let frontier = managed_agent_frontier(server, token, realm_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("managed Agent PCR has no Seal"))?;
+                if frontier.control_event_set_root.as_str()
+                    == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                {
+                    return Err(anyhow!("managed Agent PCR still has an empty Genesis Seal"));
+                }
+                if stale_seal_ref.as_deref() == Some(frontier.seal_id.as_str()) {
+                    return Err(anyhow!("managed Agent PCR Seal has not advanced yet"));
+                }
+                Ok(())
+            }
+        },
+    )
+    .await?;
+    let frontier = managed_agent_frontier(server, token, realm_id)
+        .await?
+        .ok_or_else(|| anyhow!("managed Agent PCR has no Seal after MLS genesis"))?;
+    Ok((frontier, group_id))
+}
+
+async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
+    server: &ArkretServer,
+    token: &str,
+    provisioned: &P,
+) -> Result<()> {
+    let (frontier, group_id) = ensure_agent_pcr_mls(server, token, provisioned).await?;
+    let sequence = NEXT_AGENT_BACKUP.fetch_add(1, Ordering::Relaxed);
+    let backup_id = BackupId::new(format!("ak:backup:019a0000-0000-7000-8000-{sequence:012x}"))?;
+    let series_id = BackupSeriesId::new(format!(
+        "ak:backup_series:019a0000-0000-7000-8001-{sequence:012x}"
+    ))?;
+    let managed_frontier_ref = ManagedFrontierRef {
+        frontier_digest: frontier.control_event_set_root.clone(),
+        seal_ref: frontier.seal_id.as_str().to_owned(),
+        mls_epoch: 0,
+    };
+    let binding = ManagedPrincipalBinding {
+        managed_principal_id: provisioned.agent_id().clone(),
+        controller_id: Did::new(ALICE_DID.to_owned())?,
+        principal_control_realm_id: provisioned.principal_control_realm_id().clone(),
+        authorization_ref: provisioned.controller_authorization_ref().to_owned(),
+        managed_frontier_ref,
+    };
+    let created_at = canonical_now();
+    let recipient_key_ref = recovery_verification_method();
+    let device_key = SigningKey::from_bytes(&[24_u8; 32]);
+    let device_multibase =
+        ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
+    let signed_fields = [
+        "backup_id",
+        "actor_id",
+        "backup_class",
+        "backup_version",
+        "series_id",
+        "series_seq",
+        "encryption",
+        "domain_separation",
+        "contents",
+        "ciphertext_digest",
+        "frontier_ref",
+        "recovery_policy_ref",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    let mut backup = KeyBackup {
+        backup_id: backup_id.clone(),
+        actor_id: Did::new(ALICE_DID.to_owned())?,
+        device_id: Some(DeviceId::new(ALICE_DEVICE.to_owned())?),
+        backup_class: BackupClass::MlsHistory,
+        mixed_secret_storage: false,
+        backup_version: "kb_1".to_owned(),
+        created_at,
+        updated_at: None,
+        expires_at: None,
+        encryption: KeyBackupEncryption {
+            recipient_method: KeyBackupRecipientMethod::RecoveryPublicKey,
+            recipient_key_ref: Some(recipient_key_ref.clone()),
+            kdf: None,
+            aead: KeyBackupAead {
+                name: "chacha20_poly1305".to_owned(),
+                aead_profile: Some("ak.aead.chacha20_poly1305.v1".to_owned()),
+                nonce_salt: None,
+                nonce: None,
+                enc: Some("Y290ZXN0LW1hbmFnZWQtYWdlbnQtcGNy".to_owned()),
+                extra: BTreeMap::new(),
+            },
+            key_commitment: None,
+            hpke_suite: None,
+            extra: BTreeMap::new(),
+        },
+        domain_separation: KeyBackupDomainSeparation {
+            hkdf_info: "arkret-key-backup/mls_history/managed_agent_pcr/v1".to_owned(),
+            subdomain: "managed_agent_pcr".to_owned(),
+            aead_aad: KeyBackupDomainSeparationAad {
+                schema: "ak.schema.key_backup.v1".to_owned(),
+                actor_id: Did::new(ALICE_DID.to_owned())?,
+                device_id: ALICE_DEVICE.to_owned(),
+                backup_class: BackupClass::MlsHistory,
+                backup_version: "kb_1".to_owned(),
+                created_at,
+                item_types: vec!["mls_group_state".to_owned()],
+                managed_principal_bindings: vec![binding.clone()],
+                recipient_method: Some(KeyBackupRecipientMethod::RecoveryPublicKey),
+                recipient_key_ref: Some(recipient_key_ref.clone()),
+                extra: BTreeMap::new(),
+            },
+            extra: BTreeMap::new(),
+        },
+        contents: vec![KeyBackupContentItem {
+            item_type: "mls_group_state".to_owned(),
+            realm_id: Some(provisioned.principal_control_realm_id().clone()),
+            managed_principal_binding: Some(binding),
+            mls_group_id: Some(group_id),
+            epoch: Some(0),
+            first_event_id: None,
+            last_event_id: None,
+            secret_id: None,
+            secret_version: None,
+            extra: BTreeMap::new(),
+        }],
+        ciphertext: "Y290ZXN0LW1hbmFnZWQtYWdlbnQtcGNyLXN0YXRl".to_owned(),
+        ciphertext_digest:
+            "sha256:2108421084217842908421084210842121084210842178429084210842108421".to_owned(),
+        plaintext_commitment: None,
+        auth_data: Some(KeyBackupAuthData {
+            device_id: DeviceId::new(ALICE_DEVICE.to_owned())?,
+            verification_method: format!("did:key:{device_multibase}#{device_multibase}"),
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: String::new(),
+            ssk_generation: Some(1),
+            device_authorize_event_id: None,
+            signed_fields,
+            extra: BTreeMap::new(),
+        }),
+        retention: None,
+        series_id: series_id.clone(),
+        series_seq: 0,
+        supersedes: None,
+        supersedes_digest: None,
+        frontier_ref: Some(KeyBackupFrontierRef {
+            frontier_digest: frontier.control_event_set_root.clone(),
+            seal_ref: Some(frontier.seal_id.as_str().to_owned()),
+            ssk_generation: Some(1),
+        }),
+        recovery_policy_ref: Some(RecoveryPolicyRef {
+            policy_id: PolicyId::new(RECOVERY_POLICY_ID.to_owned())?,
+            policy_version: 1,
+        }),
+        extra: BTreeMap::new(),
+    };
+    let mut unsigned = serde_json::to_value(&backup)?;
+    unsigned["auth_data"]
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("key backup auth_data did not serialize as an object"))?
+        .remove("signature");
+    backup
+        .auth_data
+        .as_mut()
+        .expect("auth_data present")
+        .signature = sign_ed25519_b64url(&device_key, &canonical::canonical_json_bytes(&unsigned)?);
+    let put = expect_json(
+        server
+            .http()
+            .put(server.url(&format!(
+                "/_arkret/self/keys/backups/{}",
+                backup_id.as_str()
+            )))
+            .bearer_auth(token)
+            .json(&backup),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(put["status"], "accepted");
+
+    let mut active_series = json!({
+        "schema": "ak.schema.key_backup_active_series.v1",
+        "actor_id": ALICE_DID,
+        "backup_class": "mls_history",
+        "active_series_id": series_id,
+        "series_pointer_version": 1,
+        "previous_series_ids": [],
+        "frontier_ref": {
+            "frontier_digest": frontier.control_event_set_root,
+            "seal_ref": frontier.seal_id,
+            "ssk_generation": 1
+        },
+        "issued_at": canonical_now(),
+        "auth_data": {
+            "verification_method": format!("did:key:{device_multibase}#{device_multibase}"),
+            "signature_algorithm": "Ed25519",
+            "signature": "pending",
+            "signed_fields": [
+                "schema",
+                "actor_id",
+                "backup_class",
+                "active_series_id",
+                "series_pointer_version",
+                "previous_series_ids",
+                "frontier_ref",
+                "issued_at"
+            ],
+            "ssk_generation": 1
+        }
+    });
+    let mut unsigned_active_series = active_series.clone();
+    unsigned_active_series["auth_data"]
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("active series auth_data did not serialize as an object"))?
+        .remove("signature");
+    active_series["auth_data"]["signature"] = Value::String(sign_ed25519_b64url(
+        &device_key,
+        &canonical::canonical_json_bytes(&unsigned_active_series)?,
+    ));
+    submit_event(
+        server,
+        token,
+        ALICE_DID,
+        principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?).as_str(),
+        "ak.key_backup.active_series",
+        active_series,
+        StatusCode::OK,
+    )
+    .await?;
+    eventually(
+        "managed Agent PCR recovery projection",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || async {
+            let recovery = bearer_sdk_client(server, token)?
+                .agent_get(provisioned.agent_id().as_str())
+                .await?
+                .key_state
+                .ok_or_else(|| anyhow!("managed Agent key_state is missing"))?
+                .pcr_recovery;
+            if !matches!(recovery, arkret::AgentPcrRecoveryState::Ready { .. }) {
+                return Err(anyhow!(
+                    "managed Agent PCR recovery is not ready: {recovery:?}"
+                ));
+            }
+            Ok(())
+        },
+    )
+    .await?;
+    Ok(())
+}
+
 async fn provision_and_pair_agent(
     server: &ArkretServer,
     token: &str,
@@ -814,6 +1506,15 @@ async fn provision_and_pair_agent(
 /// spec-shape OKP public key JWK.
 fn runtime_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[13_u8; 32])
+}
+
+fn runtime_signing_key_for_fragment(fragment: &str) -> SigningKey {
+    match fragment {
+        "runtime-key-1" => runtime_signing_key(),
+        "runtime-key-2" => SigningKey::from_bytes(&[14_u8; 32]),
+        "runtime-key-3" => SigningKey::from_bytes(&[15_u8; 32]),
+        _ => SigningKey::from_bytes(&[16_u8; 32]),
+    }
 }
 
 trait PairingOutcome {
@@ -894,6 +1595,7 @@ fn build_runtime_approval_request<P: PairingOutcome>(
     let signing_key = runtime_signing_key();
     Ok(
         runtime_key_request_builder(server, provisioned, &signing_key)?
+            .verification_method(format!("{}#runtime-key-1", provisioned.agent_id()))
             .build_approval_request()?
             .body,
     )
@@ -927,10 +1629,15 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
     let agent_id = provisioned.agent_id().clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
-    let signing_key = runtime_signing_key();
+    prepare_agent_pcr_recovery(server, token, provisioned).await?;
+    let signing_key = runtime_signing_key_for_fragment(fragment);
     let verification_method = format!("{agent_did}#{fragment}");
     let builder = runtime_key_request_builder(server, provisioned, &signing_key)?
         .verification_method(verification_method.clone());
+    let approval_request = builder.build_approval_request()?.body;
+    bearer_sdk_client(server, token)?
+        .agent_runtime_approval_request(&approval_request)
+        .await?;
     let runtime_public_key_digest = builder.public_key_digest()?;
     let pairing_binding_digest = arkret::agent_key_pairing_request_binding_digest(
         &controller_id,
@@ -970,18 +1677,32 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
             constraints: Vec::new(),
         },
         audience: vec![server.service_id().to_owned()],
-        issued_at: Utc::now(),
+        issued_at: canonical_now(),
         expires_at: Some(
             chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00Z")?.with_timezone(&Utc),
         ),
         approval_evidence: arkret::AgentKeyApprovalEvidence {
-            kind: arkret::AgentKeyApprovalEvidenceKind::ApprovalEvent,
-            evidence_ref: Some("ak:event:01999999-0000-7000-8000-000000000001".to_owned()),
+            kind: arkret::AgentKeyApprovalEvidenceKind::PairingRequest,
+            evidence_ref: None,
             request_canonical_digest: Some(pairing_binding_digest),
-            pairing_request_id: None,
+            pairing_request_id: Some(pairing_request_id.to_owned()),
             approved_by: Some(controller_id.clone()),
         },
-        supersedes: Vec::new(),
+        supersedes: bearer_sdk_client(server, token)?
+            .agent_get(agent_did.as_str())
+            .await?
+            .key_state
+            .map(|state| {
+                state
+                    .active_authorizations
+                    .into_iter()
+                    .map(|authorization| arkret::AgentKeySupersession {
+                        key_id: authorization.key_id,
+                        authorized_event_ref: authorization.authorized_event_ref,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         revocation_check_ref: None,
         runtime_attestation: None,
     };
