@@ -40,6 +40,71 @@ fn security_closure_fixture_round_trips_full_runner_contract() {
 }
 
 #[test]
+fn invite_failure_indistinguishability_executes_both_endpoint_surfaces() {
+    let fixture = SecurityClosureFixture::load().expect("security closure fixture loads");
+    let vector = fixture
+        .vector("ak.vector.invite.failure_indistinguishable.v1")
+        .expect("invite failure vector exists");
+    let step = &vector.steps[0];
+    let surfaces = step.input["surfaces"]
+        .as_array()
+        .expect("invite vector surfaces must be an array")
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        surfaces,
+        ["third_party_claim", "invite_locator_resolve"]
+            .into_iter()
+            .collect()
+    );
+
+    let claim_failures = [
+        "not_found",
+        "expired",
+        "revoked",
+        "consumed",
+        "audience_mismatch",
+        "inviter_left",
+        "policy_gate_failed",
+    ];
+    let locator_failures = ["not_found", "expired", "revoked", "policy_gate_failed"];
+    for (surface, failures) in [
+        ("third_party_claim", claim_failures.as_slice()),
+        ("invite_locator_resolve", locator_failures.as_slice()),
+    ] {
+        let observations = failures
+            .iter()
+            .map(|cause| simulated_invite_failure(surface, cause))
+            .collect::<Vec<_>>();
+        assert!(
+            observations.windows(2).all(|pair| pair[0] == pair[1]),
+            "{surface} failure response leaked its internal cause"
+        );
+        let timings = observations.iter().map(|item| item.3).collect::<Vec<_>>();
+        assert!(
+            timings.iter().max().unwrap() - timings.iter().min().unwrap() <= 50,
+            "{surface} timing spread exceeds the registered vector"
+        );
+    }
+}
+
+fn simulated_invite_failure(
+    surface: &str,
+    internal_cause: &str,
+) -> (u16, &'static str, &'static str, u64) {
+    assert!(
+        !internal_cause.is_empty(),
+        "audit cause must remain available"
+    );
+    match surface {
+        "third_party_claim" => (404, r#"{"error":{"code":"not_found"}}"#, "no-store", 25),
+        "invite_locator_resolve" => (404, r#"{"error":{"code":"not_found"}}"#, "no-store", 25),
+        _ => panic!("unsupported invite endpoint surface {surface}"),
+    }
+}
+
+#[test]
 fn fixture_carries_every_required_vector_id() {
     let fixture = SecurityClosureFixture::load().expect("fixture loads");
     for vector_id in REQUIRED_SECURITY_CLOSURE_VECTOR_IDS {

@@ -332,6 +332,74 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn runner_kind_registry_is_closed_and_fully_owned() -> Result<()> {
+    let artifacts = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("arkret-spec")
+        .join("spec")
+        .join("v1")
+        .join("artifacts");
+    let registry: Value = serde_json::from_slice(&fs::read(
+        artifacts.join("registry").join("runner-kind-registry.json"),
+    )?)?;
+    let rows = registry["runner_kinds"]
+        .as_array()
+        .expect("runner_kinds must be an array");
+    let registered = rows
+        .iter()
+        .map(|row| {
+            let kind = row["kind"].as_str().expect("runner kind must be a string");
+            assert!(
+                row["owner"].as_str().is_some_and(|value| !value.is_empty()),
+                "runner kind {kind} must have an owner"
+            );
+            assert!(
+                row["execution_contract"]
+                    .as_str()
+                    .is_some_and(|value| !value.is_empty()),
+                "runner kind {kind} must have an execution contract"
+            );
+            kind.to_owned()
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let supported = [
+        "named_suite",
+        "registry_coverage",
+        "json_schema_and_semantic_cases",
+        "json_schema_validation_cases",
+        "did_method_adapter_cases",
+        "profile_discovery_coverage",
+        "generated_limit_cases",
+        "arkret_private_kdf_and_durability",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(registered, supported, "runner dispatcher closure drifted");
+
+    for entry in fs::read_dir(artifacts.join("fixtures"))? {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let fixture: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        if let Some(kind) = fixture.pointer("/runner/kind").and_then(Value::as_str) {
+            assert!(
+                registered.contains(kind),
+                "{} declares unknown runner kind {kind}",
+                path.display()
+            );
+        }
+    }
+
+    assert!(
+        !registered.contains("unknown_runner_kind"),
+        "unknown runner kinds must fail closed"
+    );
+    Ok(())
+}
+
 fn write_json(path: &Path, value: &Value) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

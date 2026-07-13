@@ -279,7 +279,6 @@ enum MiniKeypackageState {
     Claimed,
     Consumed,
     Revoked,
-    Rotated,
 }
 
 impl MiniKeypackageState {
@@ -289,7 +288,6 @@ impl MiniKeypackageState {
             Self::Claimed => "claimed",
             Self::Consumed => "consumed",
             Self::Revoked => "revoked",
-            Self::Rotated => "rotated",
         }
     }
 }
@@ -411,15 +409,9 @@ impl MiniKeypackage {
                 &self.keypackage_ref,
                 ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED,
             )),
-            (
-                _,
-                MiniKeypackageState::Revoked
-                | MiniKeypackageState::Rotated
-                | MiniKeypackageState::Consumed,
-            ) => Ok(consume_failure_outcome_value(
-                &self.keypackage_ref,
-                ERROR_CODE_KEYPACKAGE_UNKNOWN,
-            )),
+            (_, MiniKeypackageState::Revoked | MiniKeypackageState::Consumed) => Ok(
+                consume_failure_outcome_value(&self.keypackage_ref, ERROR_CODE_KEYPACKAGE_UNKNOWN),
+            ),
             (false, MiniKeypackageState::Published) => Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
                 ERROR_CODE_KEYPACKAGE_UNKNOWN,
@@ -478,7 +470,7 @@ fn rotate_last_resort(
     if !old.last_resort {
         bail!("rotation target is not last-resort");
     }
-    old.state = MiniKeypackageState::Rotated;
+    old.state = MiniKeypackageState::Revoked;
     let commits = old
         .joined_groups
         .iter()
@@ -723,7 +715,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
         })
         .ok_or_else(|| anyhow!("old package missing after rotation"))?;
     if old.state.as_str() != expected_str(vector, "old_state")? {
-        bail!("old last-resort package was not marked rotated");
+        bail!("old last-resort package was not revoked after rotation");
     }
     if commits.len() as u64 != expected_u64(vector, "self_update_commits")? {
         bail!("rotation did not emit one MLS self-update per joined group");

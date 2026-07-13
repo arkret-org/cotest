@@ -61,6 +61,8 @@ arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
 hkdf = {workspace = true}
+hmac = {workspace = true}
+hex = {workspace = true}
 hpke-rs = {workspace = true}
 hpke-rs-crypto = {workspace = true}
 hpke-rs-rust-crypto = {workspace = true}
@@ -72,6 +74,7 @@ serde_json = {workspace = true}
 serde_yaml_ng = {workspace = true}
 sha2 = {workspace = true}
 tempfile = {workspace = true}
+unicode-normalization = {workspace = true}
 testcontainers = {workspace = true,optional = true}
 tokio = {workspace = true,features = ["macros", "process", "rt-multi-thread", "time"]}
 tracing = {workspace = true}
@@ -107,6 +110,8 @@ arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures"}
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"
+hmac = "0.13.0"
+hex = "0.4.3"
 hpke-rs = "0.6"
 hpke-rs-crypto = "0.6"
 hpke-rs-rust-crypto = "0.6"
@@ -120,6 +125,7 @@ serde_yaml_ng = "0.10.0"
 serial_test = "3.5.0"
 sha2 = "0.11.0"
 tempfile = "3.27.0"
+unicode-normalization = "0.1.25"
 testcontainers = "0.27"
 tokio = "1.52.3"
 tracing = "0.1.44"

@@ -36,6 +36,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    arkret_private_kdf_and_durability_executes_registered_vectors,
+    "arkret_private_kdf_and_durability",
+    cotest::conformance::run_arkret_private_kdf_and_durability_suite,
+);
+
+conformance_test!(
     /// Round 4 / A2 — schema-validation-fixture positive + negative cases
     /// run against the schema referenced by `schema_ref`. Drift hard-fails.
     schema_validation_fixture_suite_matches_reference_semantics,

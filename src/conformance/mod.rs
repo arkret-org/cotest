@@ -1,5 +1,6 @@
 mod agent_participation;
 mod agent_vectors;
+mod arkret_private_kdf_and_durability;
 mod audit_release;
 mod auth_session_proof;
 mod blind_payload;
@@ -90,6 +91,7 @@ pub use agent_vectors::{
     run_agent_repairing_supersede_vector, run_agent_session_grant_replay_vector,
     run_agent_vector_suite, validate_agent_human_approval_http_response,
 };
+pub use arkret_private_kdf_and_durability::run_arkret_private_kdf_and_durability_suite;
 pub use audit_release::{
     ALL_AUDIT_RELEASE_VECTOR_IDS, run_audit_release_vector_suite,
     run_binding_and_authorization_gate_vector, run_binding_fsm_vector,
