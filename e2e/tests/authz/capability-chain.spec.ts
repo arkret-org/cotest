@@ -105,23 +105,29 @@ async function setupOwnerRealm(request: APIRequestContext, label: string) {
     ensureRegistered(request, carol),
   ]);
   const aliceToken = await issueDevSession(request, alice);
-  const bobToken = await issueDevSession(request, bob);
+  const [bobToken, carolToken] = await Promise.all([
+    issueDevSession(request, bob),
+    issueDevSession(request, carol),
+  ]);
   const realmId = await createRealmApi(request, aliceToken, {
     title: `cap ${label} ${Date.now()}`,
     discoverability: "listed",
   });
   await addRealmMemberApi(request, aliceToken, realmId, bob.did);
   await addRealmMemberApi(request, aliceToken, realmId, carol.did);
-  return { alice, bob, carol, aliceToken, bobToken, realmId };
+  return { alice, bob, carol, aliceToken, bobToken, carolToken, realmId };
 }
 
 test.describe("capability chain (event wire)", () => {
   test("§3 grant lifecycle: bob is denied before the grant and allowed after alice mints ak.capability.grant; effective-grants surfaces it", async ({
     request,
   }) => {
-    const { alice, bob, aliceToken, realmId } = await setupOwnerRealm(request, "grant");
+    const { alice, bob, aliceToken, bobToken, realmId } = await setupOwnerRealm(
+      request,
+      "grant",
+    );
 
-    const before = await authzCheck(request, aliceToken, {
+    const before = await authzCheck(request, bobToken, {
       actorDid: bob.did,
       action: "ak.message.create",
       realmId,
@@ -136,7 +142,7 @@ test.describe("capability chain (event wire)", () => {
       expiresAt: plusSeconds(3600),
     });
 
-    const after = await authzCheck(request, aliceToken, {
+    const after = await authzCheck(request, bobToken, {
       actorDid: bob.did,
       action: "ak.message.create",
       realmId,
@@ -158,10 +164,8 @@ test.describe("capability chain (event wire)", () => {
   test("§10 narrowing delegation: bob re-grants to carol with a subset window via parent_grant_id; carol's check passes through the chain", async ({
     request,
   }) => {
-    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
-      request,
-      "delegate",
-    );
+    const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
+      await setupOwnerRealm(request, "delegate");
 
     const parent = await grantCapabilityEventApi(request, aliceToken, {
       ownerDid: alice.did,
@@ -181,7 +185,7 @@ test.describe("capability chain (event wire)", () => {
       parentGrantId: parent.grantId,
     });
 
-    const carolCheck = await authzCheck(request, aliceToken, {
+    const carolCheck = await authzCheck(request, carolToken, {
       actorDid: carol.did,
       action: "ak.message.create",
       realmId,
@@ -192,10 +196,8 @@ test.describe("capability chain (event wire)", () => {
   test("§10.1/§3.1a over-action delegation fails closed: bob cannot re-grant an action bob does not hold", async ({
     request,
   }) => {
-    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
-      request,
-      "overaction",
-    );
+    const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
+      await setupOwnerRealm(request, "overaction");
 
     const parent = await grantCapabilityEventApi(request, aliceToken, {
       ownerDid: alice.did,
@@ -218,7 +220,7 @@ test.describe("capability chain (event wire)", () => {
     });
     expectGrantRejected(overAction, ["grant_exceeds_issuer_authority"]);
 
-    const carolCheck = await authzCheck(request, aliceToken, {
+    const carolCheck = await authzCheck(request, carolToken, {
       actorDid: carol.did,
       action: "ak.moderation.decision",
       realmId,
@@ -229,10 +231,8 @@ test.describe("capability chain (event wire)", () => {
   test("§10.1 expiry widening fails closed: the child grant cannot outlive the parent grant", async ({
     request,
   }) => {
-    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
-      request,
-      "overexpire",
-    );
+    const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
+      await setupOwnerRealm(request, "overexpire");
 
     const parent = await grantCapabilityEventApi(request, aliceToken, {
       ownerDid: alice.did,
@@ -257,7 +257,7 @@ test.describe("capability chain (event wire)", () => {
       "grant_exceeds_issuer_authority",
     ]);
 
-    const carolCheck = await authzCheck(request, aliceToken, {
+    const carolCheck = await authzCheck(request, carolToken, {
       actorDid: carol.did,
       action: "ak.message.create",
       realmId,
@@ -268,10 +268,8 @@ test.describe("capability chain (event wire)", () => {
   test("§12/§10.3 revoke cascade: revoking the parent grant invalidates the delegated child and blocks re-delegation from the revoked parent", async ({
     request,
   }) => {
-    const { alice, bob, carol, aliceToken, bobToken, realmId } = await setupOwnerRealm(
-      request,
-      "revoke",
-    );
+    const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
+      await setupOwnerRealm(request, "revoke");
 
     const parent = await grantCapabilityEventApi(request, aliceToken, {
       ownerDid: alice.did,
@@ -292,7 +290,7 @@ test.describe("capability chain (event wire)", () => {
     // Sanity: both allowed before the revoke.
     expect(
       (
-        await authzCheck(request, aliceToken, {
+        await authzCheck(request, bobToken, {
           actorDid: bob.did,
           action: "ak.message.create",
           realmId,
@@ -310,13 +308,13 @@ test.describe("capability chain (event wire)", () => {
 
     // §10.3: every derived child grant MUST be invalid in the revoke's causal
     // future — both checks fail closed.
-    const bobAfter = await authzCheck(request, aliceToken, {
+    const bobAfter = await authzCheck(request, bobToken, {
       actorDid: bob.did,
       action: "ak.message.create",
       realmId,
     });
     expect(bobAfter.decision).toBe("hard_deny");
-    const carolAfter = await authzCheck(request, aliceToken, {
+    const carolAfter = await authzCheck(request, carolToken, {
       actorDid: carol.did,
       action: "ak.message.create",
       realmId,
