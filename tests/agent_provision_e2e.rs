@@ -17,9 +17,9 @@
 //! DPoP-bound `agent_key_proof` session grant and backing soland with a local
 //! introspection service.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
@@ -76,6 +76,8 @@ const TEST_DEVICE_ALGORITHMS: [&str; 2] = ["ak.hpke_x25519_aead_chacha20poly1305
 const TEST_DEVICE_HPKE_KEY: &str = "z6LSCotestAgentDeviceHpkeKey";
 const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901";
 static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
+static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, (u64, Vec<String>)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
@@ -185,7 +187,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         )
         .await?;
     let grant_id = attach.grant_id.to_string();
-    let effective_after_attach = effective_grants(&server, &token, &agent_did).await?;
+    let effective_after_attach = effective_grants(&server, &token, &realm_id, &agent_did).await?;
     assert!(
         grant_exists_in(&effective_after_attach, &grant_id),
         "attached grant must appear in effective grants: {effective_after_attach}"
@@ -194,7 +196,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     let grant_id = arkret::GrantId::new(grant_id)?;
     let detach = controller.agent_grant_detach(&agent_did, &grant_id).await?;
     assert!(detach.ok, "grant detach must succeed");
-    let effective_after_detach = effective_grants(&server, &token, &agent_did).await?;
+    let effective_after_detach = effective_grants(&server, &token, &realm_id, &agent_did).await?;
     assert!(
         !grant_exists_in(&effective_after_detach, grant_id.as_str()),
         "detached grant must disappear from effective grants: {effective_after_detach}"
@@ -471,8 +473,9 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         Some(pair.authorized_event_ref.as_str())
     );
     let signing_key = runtime_signing_key();
-    let builder = runtime_key_request_builder(&server, &prov, &signing_key)?;
     let verification_method = format!("{agent_did}#runtime-key-1");
+    let builder = runtime_key_request_builder(&server, &prov, &signing_key)?
+        .verification_method(verification_method.clone());
     assert_eq!(
         status.authorized_verification_method.as_deref(),
         Some(verification_method.as_str())
@@ -1099,6 +1102,35 @@ async fn managed_agent_frontier(
     }
 }
 
+async fn managed_agent_actor_seq(
+    server: &ArkretServer,
+    token: &str,
+    agent_id: &str,
+) -> Result<u64> {
+    let response = server
+        .http()
+        .get(server.url(&format!(
+            "/_arkret/self/events/frontier?actor_id={agent_id}"
+        )))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    if status != StatusCode::OK {
+        return Err(anyhow!(
+            "managed Agent actor frontier returned {status}: {body}"
+        ));
+    }
+    let state: EventsFrontierAccountClientState = serde_json::from_str(&body)?;
+    match state.frontier {
+        EventsFrontierView::Actor(frontier) => Ok(frontier.actor_seq),
+        EventsFrontierView::RealmSealView(_) => {
+            Err(anyhow!("managed Agent actor frontier returned Realm view"))
+        }
+    }
+}
+
 async fn ensure_agent_pcr_mls<P: PairingOutcome>(
     server: &ArkretServer,
     token: &str,
@@ -1252,6 +1284,14 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     let series_id = BackupSeriesId::new(format!(
         "ak:backup_series:019a0000-0000-7000-8001-{sequence:012x}"
     ))?;
+    let pointer_key = format!("{}|{}", server.base_url(), provisioned.agent_id());
+    let (series_pointer_version, previous_series_ids) = {
+        let pointers = AGENT_BACKUP_POINTERS.lock().expect("backup pointer lock");
+        pointers
+            .get(&pointer_key)
+            .map(|(version, series_ids)| (version + 1, series_ids.clone()))
+            .unwrap_or_else(|| (1, Vec::new()))
+    };
     let managed_frontier_ref = ManagedFrontierRef {
         frontier_digest: frontier.control_event_set_root.clone(),
         seal_ref: frontier.seal_id.as_str().to_owned(),
@@ -1401,8 +1441,8 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         "actor_id": ALICE_DID,
         "backup_class": "mls_history",
         "active_series_id": series_id,
-        "series_pointer_version": 1,
-        "previous_series_ids": [],
+        "series_pointer_version": series_pointer_version,
+        "previous_series_ids": previous_series_ids,
         "frontier_ref": {
             "frontier_digest": frontier.control_event_set_root,
             "seal_ref": frontier.seal_id,
@@ -1465,6 +1505,15 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         },
     )
     .await?;
+    AGENT_BACKUP_POINTERS
+        .lock()
+        .expect("backup pointer lock")
+        .entry(pointer_key)
+        .and_modify(|(version, series_ids)| {
+            *version = series_pointer_version;
+            series_ids.push(series_id.to_string());
+        })
+        .or_insert_with(|| (series_pointer_version, vec![series_id.to_string()]));
     Ok(())
 }
 
@@ -1706,14 +1755,28 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
         revocation_check_ref: None,
         runtime_attestation: None,
     };
-    let authorize_event = arkret::agent::build_agent_key_authorize_event(
+    let controller_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        [21_u8; 32],
+        controller_id.clone(),
+        format!("{ALICE_DID}#cotest"),
+    );
+    let actor_seq = managed_agent_actor_seq(server, token, agent_did.as_str()).await? + 1;
+    let mut authorize_event = arkret::agent::build_agent_key_authorize_event(
         &authorize_payload,
         provisioned.principal_control_realm_id().clone(),
         agent_id,
         controller_id,
         provisioned.controller_authorization_ref(),
-        1,
-        arkret::Hlc::new("01970e589d21-0000-a13f9c2e")?,
+        actor_seq,
+        arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
+    )?;
+    authorize_event.created_at = canonical_now();
+    authorize_event.proofs.clear();
+    arkret::signatures::sign_event(
+        &mut authorize_event,
+        &controller_signer,
+        &format!("{ALICE_DID}#cotest"),
+        arkret::signatures::SignEventOptions::new().with_created_at(canonical_now()),
     )?;
     let body = builder.build_key_pair_request(authorize_event)?.body;
     // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
@@ -1740,18 +1803,17 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
     Ok(status)
 }
 
-async fn effective_grants(server: &ArkretServer, token: &str, agent_did: &str) -> Result<Value> {
-    // The dev-mode agent grant is authored into the controller's
-    // principal-control Realm (soland `ensure_self_realm`). soland only lets a
-    // caller read a non-self subject's effective grants for a Realm the caller
-    // owns (anti-enumeration); a bare `subject` query defaults to realm `*` and
-    // is denied. Scope the query to the controller's principal-control Realm,
-    // which the controller owns and where the agent grant lives.
-    let control_realm = arkret_core::principal_control_realm_id(
-        &arkret::Did::new(ALICE_DID.to_owned()).map_err(|e| anyhow!("alice did invalid: {e}"))?,
-    );
+async fn effective_grants(
+    server: &ArkretServer,
+    token: &str,
+    realm_id: &str,
+    agent_did: &str,
+) -> Result<Value> {
+    // A controller may inspect a managed Agent's grants only within a Realm
+    // it owns. Query the Realm named by the attached grant; grant attachment
+    // deliberately preserves the caller-supplied governed Realm.
     let effective = bearer_sdk_client(server, token)?
-        .authz_effective_grants(control_realm.as_str(), agent_did, None)
+        .authz_effective_grants(realm_id, agent_did, None)
         .await?;
     Ok(serde_json::to_value(effective)?)
 }

@@ -569,7 +569,7 @@ async function postReceipt(
 
 type ReadCursorAdvanceBody = {
   realm_id: string;
-  read_scope: { kind: string; ref?: string; track_name?: string };
+  read_scope: { kind: string; object_ref?: string; track_name?: string };
   position: { event_id: string; hlc: string };
 };
 
@@ -577,7 +577,7 @@ type ReadCursorMarker = {
   realm_id: string;
   actor_id: string;
   device_id: string;
-  read_scope: { kind: string; ref?: string; track_name?: string };
+  read_scope: { kind: string; object_ref?: string; track_name?: string };
   position: { event_id: string; hlc: string };
   updated_at: string;
 };

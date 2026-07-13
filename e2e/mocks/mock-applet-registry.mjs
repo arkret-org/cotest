@@ -205,7 +205,7 @@ function signedPackage(body) {
     limits: body.limits ?? {
       max_transaction_events: 100,
       max_payload_bytes: 65536,
-      rate_limit_hint: "test",
+      rate_limit_per_minute: 60,
     },
     ghost_policy: body.ghost_policy ?? {
       enabled: true,

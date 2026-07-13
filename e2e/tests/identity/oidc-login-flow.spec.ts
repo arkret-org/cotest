@@ -87,7 +87,9 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     // Open inkson with no session token so it lands on the login panel; the
     // injected account_did/device_id are placeholders overridden by the OIDC
     // callback identity.
-    const jointPage = await openUserPage(browser, uniqueUser("oidc-login"));
+    const jointPage = await openUserPage(browser, uniqueUser("oidc-login"), {
+      neutralLoginConfig: true,
+    });
     const page = jointPage.page;
     try {
       // 2. First login (new user).
@@ -131,7 +133,9 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     }
 
     const account = await registerCoauthPasswordAccount(request, coauth!);
-    const jointPage = await openUserPage(browser, uniqueUser("oidc-login-bad"));
+    const jointPage = await openUserPage(browser, uniqueUser("oidc-login-bad"), {
+      neutralLoginConfig: true,
+    });
     const page = jointPage.page;
     try {
       await jointPage.gotoLogin();

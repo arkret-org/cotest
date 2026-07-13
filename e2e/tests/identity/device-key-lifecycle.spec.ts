@@ -275,41 +275,25 @@ async function reloadWithSessionGrantExpiringSoon(
   secondsFromNow: number,
 ): Promise<void> {
   const resultKey = `cotest.session-grant-expiry-override.${Date.now()}`;
-  await page.addInitScript(
+  await page.evaluate(
     ({ expectedGrantJwt, secondsFromNow, resultKey }) => {
-      const expiresAt = new Date(Date.now() + secondsFromNow * 1000).toISOString();
-      const storedAt = new Date().toISOString();
-      let updated = 0;
-      for (let index = 0; index < window.localStorage.length; index += 1) {
-        const key = window.localStorage.key(index);
-        if (!key?.startsWith("inkson.local_state.v1.account.")) {
-          continue;
-        }
-        const raw = window.localStorage.getItem(key);
-        if (!raw) {
-          continue;
-        }
-        let state: { session_grant?: { grant_jwt?: string; grant_expires_at?: string; stored_at?: string } };
-        try {
-          state = JSON.parse(raw);
-        } catch {
-          continue;
-        }
-        if (state.session_grant?.grant_jwt !== expectedGrantJwt) {
-          continue;
-        }
-        state.session_grant.grant_expires_at = expiresAt;
-        state.session_grant.stored_at = storedAt;
-        window.localStorage.setItem(key, JSON.stringify(state));
-        updated += 1;
-      }
-      window.sessionStorage.setItem(resultKey, String(updated));
+      window.localStorage.setItem(
+        "inkson.test.session_grant_expiry_override.v1",
+        JSON.stringify({
+          expected_grant_jwt: expectedGrantJwt,
+          seconds_from_now: secondsFromNow,
+          result_key: resultKey,
+        }),
+      );
     },
     { expectedGrantJwt, secondsFromNow, resultKey },
   );
   await page.reload({ waitUntil: "domcontentloaded" });
-  const updated = await page.evaluate((key) => window.sessionStorage.getItem(key), resultKey);
-  expect(updated, "expected to update exactly one persisted grant before app bootstrap").toBe("1");
+  await expect
+    .poll(() => page.evaluate((key) => window.sessionStorage.getItem(key), resultKey), {
+      timeout: 30_000,
+    })
+    .toBe("1");
 }
 
 async function currentSettingsSignerDid(page: Page): Promise<string> {

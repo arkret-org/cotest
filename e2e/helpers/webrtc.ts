@@ -212,7 +212,11 @@ export function buildCallSignalEnvelope(args: {
 }): Record<string, unknown> {
   const signer = deviceSigner(args.actorDid, args.deviceId);
   const sentAt = args.sentAt ?? new Date();
-  const expiresAt = new Date(sentAt.getTime() + (args.lifetimeMs ?? 30_000));
+  // Joint-full runs multiple workers and a complete signaling exchange can
+  // legitimately take longer than 30 seconds under compile/CI load. Keep the
+  // fixture below the protocol's five-minute hard ceiling while leaving a
+  // full minute for clock and scheduling skew.
+  const expiresAt = new Date(sentAt.getTime() + (args.lifetimeMs ?? 240_000));
   const createdAt = canonicalTimestamp(sentAt);
 
   const envelope: Record<string, unknown> = {

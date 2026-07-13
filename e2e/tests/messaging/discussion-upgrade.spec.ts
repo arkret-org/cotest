@@ -239,7 +239,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
             actor_id: fixture.bob.did,
             read_scope: {
               kind: "strand",
-              ref: promoted.privateStrandId,
+              object_ref: promoted.privateStrandId,
               track_name: "discussion",
             },
             event_id: privateMessage.event_id,

@@ -1031,6 +1031,31 @@ function Wait-HttpReady {
     throw "Timed out waiting for $Url. Last error: $lastError"
 }
 
+function Assert-CoauthDpopGrantSeamReady {
+    param([Parameter(Mandatory = $true)][string]$BaseUrl)
+
+    $url = "$($BaseUrl.TrimEnd('/'))/_coauth/account/test/debug/issue-dpop-grant"
+    try {
+        # An empty object is intentionally invalid. Any non-404 HTTP response
+        # proves the debug-only route is registered; the joint tests create the
+        # valid account/device-bound request later.
+        Invoke-WebRequest `
+            -Uri $url `
+            -Method Post `
+            -ContentType "application/json" `
+            -Body "{}" `
+            -UseBasicParsing `
+            -TimeoutSec 5 `
+            -ErrorAction Stop | Out-Null
+    } catch {
+        $response = $_.Exception.Response
+        if ($response -and [int]$response.StatusCode -ne 404) {
+            return
+        }
+        throw "Coauth DPoP grant seam is unavailable at $url. Joint-full requires a debug coauth binary built with the cotest endpoint; release binaries return 404."
+    }
+}
+
 function Wait-LogContains {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -2201,6 +2226,40 @@ try {
     # paths against the runner.
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
     $solandCorsAllowOrigin = if ($InksonBaseUrl) { $InksonBaseUrl } else { "http://127.0.0.1" }
+    if ($RunProfile -eq "joint-full") {
+        # Several full-suite specs execute focused Rust tests from Playwright.
+        # Warm their native test binaries before starting soland/inkson so a
+        # cold build is not charged to a browser-test timeout and, on Windows,
+        # does not contend with the long-lived `cargo run` target lock.
+        Write-Host "Warming native Rust test binaries used by joint-full..."
+        $solandRoot = Split-Path -Parent $SutManifest
+        $outboxTarget = Join-Path $solandRoot "target\cotest-federation-outbox"
+        $hadCargoTargetDir = Test-Path Env:CARGO_TARGET_DIR
+        $previousCargoTargetDir = $env:CARGO_TARGET_DIR
+        try {
+            $env:CARGO_TARGET_DIR = $outboxTarget
+            & cargo test --manifest-path $SutManifest --test federation_outbox --no-run
+            if ($LASTEXITCODE -ne 0) {
+                throw "failed to warm soland federation_outbox test binary"
+            }
+        }
+        finally {
+            if ($hadCargoTargetDir) {
+                $env:CARGO_TARGET_DIR = $previousCargoTargetDir
+            } else {
+                Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+            }
+        }
+
+        & cargo test --manifest-path (Join-Path $InksonRoot "Cargo.toml") --lib --no-run
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to warm inkson native library tests"
+        }
+        & cargo test --manifest-path (Join-Path $InksonRoot "Cargo.toml") --lib --no-run --features experimental-agents
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to warm inkson experimental-agents native library tests"
+        }
+    }
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
         $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceId" } else { "" }
@@ -2382,6 +2441,7 @@ try {
         Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue
     }
     if ($CoauthBaseUrl) {
+        Assert-CoauthDpopGrantSeamReady -BaseUrl $CoauthBaseUrl
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
         # The OAuth client_id soland is configured to advertise (see

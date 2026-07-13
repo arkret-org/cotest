@@ -186,6 +186,7 @@ test.describe("policy server check", () => {
       ensureRegistered(request, bob),
     ]);
     const aliceToken = await issueDevSession(request, alice);
+    const bobToken = await issueDevSession(request, bob);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 policy config ${stamp}`,
       discoverability: "listed",
@@ -229,7 +230,7 @@ test.describe("policy server check", () => {
     expect(fetched.policy_server_url).toBe(policyServerUrl);
 
     const denied = await request.post(`${solandBaseUrl()}/_arkret/self/authz/check`, {
-      headers: authHeaders(aliceToken),
+      headers: authHeaders(bobToken),
       data: {
         actor_id: bob.did,
         action: "ak.message.create",

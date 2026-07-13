@@ -28,7 +28,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
     let denied_before_grant = expect_json(
-        alice.post("/_arkret/self/authz/check").json(&json!({
+        bob.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ak.realm.admin",
             "resource": {
@@ -110,7 +110,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     let allowed_after_grant = expect_json(
-        alice.post("/_arkret/self/authz/check").json(&json!({
+        bob.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ak.realm.admin",
             "resource": {
@@ -201,7 +201,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         ),
     ];
     for (action, resource, reason_code) in negative_checks {
-        expect_authz_check_hard_deny(&alice, &bob.actor, action, resource, reason_code).await?;
+        expect_authz_check_hard_deny(&bob, &bob.actor, action, resource, reason_code).await?;
     }
 
     let revoked_manage = submit_event(
@@ -217,7 +217,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(revoked_manage["status"], "accepted");
 
     let denied_after_revoke = expect_json(
-        alice.post("/_arkret/self/authz/check").json(&json!({
+        bob.post("/_arkret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ak.realm.admin",
             "resource": {

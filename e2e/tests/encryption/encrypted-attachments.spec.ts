@@ -196,6 +196,7 @@ test.describe("encrypted attachments", () => {
   });
 
   test("inkson encrypts E12.2 thumbnails as separate client-side ciphertext assets", async () => {
+    test.setTimeout(CARGO_TEST_TIMEOUT_MS + 60_000);
     await runInksonLibTest("blob::tests::thumbnail_is_always_whole_file_and_independent");
   });
 

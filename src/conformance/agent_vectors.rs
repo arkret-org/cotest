@@ -1103,7 +1103,7 @@ pub fn run_agent_vector_suite() -> Result<()> {
     validate_agent_vectors_fixture_metadata()?;
     if ALL_AGENT_VECTOR_IDS.len() != 10 {
         bail!(
-            "expected 8 agent vector ids, got {}",
+            "expected 10 agent vector ids, got {}",
             ALL_AGENT_VECTOR_IDS.len()
         );
     }

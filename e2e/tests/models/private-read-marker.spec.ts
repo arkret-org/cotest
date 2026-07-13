@@ -370,7 +370,7 @@ test.describe("private read marker", () => {
       headers: auth,
       data: {
         realm_id: realmId,
-        read_scope: { kind: "circle", ref: circleId },
+        read_scope: { kind: "circle", object_ref: circleId },
         position: mPrivate,
       },
     });
@@ -384,13 +384,14 @@ test.describe("private read marker", () => {
     );
     expect(list.status()).toBe(200);
     const markers = (await list.json()).markers as Array<{
-      read_scope: { kind: string; ref?: string };
+      read_scope: { kind: string; object_ref?: string };
       position: { event_id: string; hlc: string };
     }>;
 
     const realmMarker = markers.find((marker) => marker.read_scope.kind === "realm");
     const circleMarker = markers.find(
-      (marker) => marker.read_scope.kind === "circle" && marker.read_scope.ref === circleId,
+      (marker) =>
+        marker.read_scope.kind === "circle" && marker.read_scope.object_ref === circleId,
     );
     expect(realmMarker, "realm-default marker").toBeTruthy();
     expect(circleMarker, "circle-scoped marker").toBeTruthy();

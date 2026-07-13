@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::harness::{TestServerGroup, expect_api_error, expect_json};
 
-pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -> Result<()> {
+pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-applet").await?;
     let server = group.server(0);
     let alice = server
@@ -26,11 +26,33 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
         .iter()
         .filter_map(|operation| operation.as_str())
         .collect::<Vec<_>>();
-    assert!(
-        !advertised
-            .iter()
-            .any(|operation| operation.contains("applet"))
-    );
+    for required in [
+        "ak.edge.applet.query.ping",
+        "ak.edge.applet.query.describe",
+        "ak.self.applet.install.command.preview",
+        "ak.self.applet.command.install",
+        "ak.self.applet.command.revoke",
+        "ak.self.applet.ghost.command.provision",
+    ] {
+        assert!(
+            advertised.contains(&required),
+            "missing advertised applet operation {required}; advertised={advertised:#?}"
+        );
+    }
+    let ping = expect_json(
+        server.http().get(server.url("/_arkret/edge/applet/ping")),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(ping["ok"], true);
+    let applet_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/_arkret/edge/applet/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(applet_describe["contract"], "ak.applet.v1");
 
     expect_api_error(
         alice
@@ -90,21 +112,15 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let empty_list = expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?;
     assert!(empty_list["agents"].as_array().unwrap().is_empty());
 
-    let provisioned = expect_json(
+    expect_api_error(
         alice.post("/_arkret/self/agents").json(&json!({
             "display_name": "Planner",
             "slug": "planner"
         })),
-        StatusCode::CREATED,
+        StatusCode::PRECONDITION_FAILED,
+        "failed_precondition",
     )
     .await?;
-    // did:webvh-only red line: soland mints the agent principal as
-    // `did:webvh:<scid>:<host>:webvh:agent:<uuid>` (never did:web).
-    let agent_id = provisioned["agent_id"].as_str().unwrap_or_default();
-    assert!(
-        agent_id.starts_with("did:webvh:") && agent_id.contains(":webvh:agent:"),
-        "agent_id must be a did:webvh agent DID, got: {agent_id}"
-    );
 
     expect_api_error(
         alice

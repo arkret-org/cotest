@@ -85,6 +85,7 @@
       "ak.component.strand.discussion.timeline.v1"
     ],
     "mv_register_families": [
+      "ak.component.agent.selector_claim.v1",
       "ak.component.mimi.room_binding.v1",
       "ak.component.profile.create.v1",
       "ak.component.view.create.v1",

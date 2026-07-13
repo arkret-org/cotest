@@ -129,7 +129,10 @@ test.describe("history_visibility=joined read enforcement @fully-implemented", (
       streamFixture.bobToken,
       streamFixture.realmId,
     );
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    // The request fixture resolves only after the NDJSON stream closes, so
+    // leave enough time for the server-side subscriber to register under the
+    // four-worker joint-suite load before publishing the probe event.
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     const postBody = "joined-event-stream post 1";
     await createMessage(
       request,
@@ -372,7 +375,7 @@ async function eventsSubscribeBodies(
   const response = await request.get(
     `${solandBaseUrl()}/_arkret/self/events/subscribe?realms=${encodeURIComponent(
       realmId,
-    )}&limit=100&max_duration_ms=1000&heartbeat_ms=100`,
+    )}&limit=100&max_duration_ms=3000&heartbeat_ms=100`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();

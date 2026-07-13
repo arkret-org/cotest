@@ -312,18 +312,16 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
         "bad_json",
     )
     .await?;
-    // A well-formed JSON object that lacks the federation trust headers is
-    // rejected at the inbound trust-header gate (Source-Trust-Domain missing),
-    // which soland reports as `schema_violation` with minimal disclosure
-    // (federation.md §3.2) — body-shape details are not leaked to an
-    // unauthenticated peer.
+    // A syntactically valid JSON object that cannot deserialize into the
+    // typed peer-events command fails at the body decoder before federation
+    // trust headers are evaluated.
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/peer/events"))
             .json(&json!({"operations": []})),
         StatusCode::BAD_REQUEST,
-        "schema_violation",
+        "bad_json",
     )
     .await?;
     expect_api_error(

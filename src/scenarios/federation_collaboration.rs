@@ -722,6 +722,8 @@ fn mls_governance_binding(realm_id: &str, previous_epoch: u64, next_epoch: u64) 
         "next_epoch": next_epoch,
         "membership_frontier": [E2EE_BOB_JOIN_EVENT_ID],
         "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "capability_root": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "discussion_metadata_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "binding_profile": "ak.profile.mls_governance_binding.full.v1",
         "reducer_profile": "ak.reducer.v1"
     })
