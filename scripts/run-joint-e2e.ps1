@@ -1960,7 +1960,7 @@ try {
             Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
             $started = Get-Date
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx build --platform web --features experimental-agents,wasm-localstorage-secrets-test" `
+                -Command "dx build --platform web --features 'experimental-agents wasm-localstorage-secrets-test'" `
                 -ProjectRoot $InksonRoot
             $service = Start-ManagedCommand `
                 -Name "prepare-inkson" `
