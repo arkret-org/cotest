@@ -701,9 +701,8 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     use std::collections::BTreeSet;
 
     use arkret_core::{
-        Audience, CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle,
-        HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate, PayloadProof,
-        RecipientServiceType,
+        Audience, CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, EventId, Handle,
+        HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate, Proof, RecipientServiceType,
     };
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
@@ -734,16 +733,16 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         // Fixed RFC3339 constants — vectors are deterministic, not wall-clock.
         expires_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00Z")?
             .with_timezone(&chrono::Utc),
-        issued_at: Some(
-            chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
-                .with_timezone(&chrono::Utc),
-        ),
-        source_refs: vec!["ak:event:01904100-0000-7000-8000-test8source01".to_owned()],
-        proofs: vec![serde_json::to_value(PayloadProof {
+        issued_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
+            .with_timezone(&chrono::Utc),
+        source_refs: vec![EventId::new(
+            "ak:event:01904100-0000-7000-8000-000000000001",
+        )?],
+        proofs: vec![Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
             verification_method: "did:web:principal.acme.example#key-1".to_owned(),
-            payload_digest: Hash::new(
+            event_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",
             )?,
             created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
@@ -752,9 +751,8 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             audience: Some(Audience::Single(
                 "ak:realm:01904100-0000-7000-8000-test8audience".to_owned(),
             )),
-            proof_purpose: None,
             jws: "test8.real.shaped.jws".to_owned(),
-        })?],
+        }],
         claim_digest: None,
         intent: CandidateIntent::MemberAdd,
     };

@@ -24,7 +24,7 @@ use arkret_core::models::{
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
     SignatureMaterial, realm_organization_statement_signing_bytes,
 };
-use arkret_core::{Did, RealmId};
+use arkret_core::{Did, DidUrl, NonEmptyString, RealmId};
 use arkret_signatures::realm_organization_statement_sign;
 use chrono::{DateTime, TimeZone, Utc};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
@@ -66,12 +66,12 @@ fn active_statement() -> RealmOrganizationPayload {
         authorization: RealmOrganizationAuthorization {
             issuer: Did::new(ORG_DID.to_owned()).unwrap(),
             issuer_role: RealmOrganizationIssuerRole::OrganizationDid,
-            verification_method: ORG_VERIFICATION_METHOD.to_owned(),
+            verification_method: DidUrl::new(ORG_VERIFICATION_METHOD).unwrap(),
             delegation_ref: None,
             executed_by: None,
             signed_at: now(),
             // Placeholder; replaced by the signer.
-            proof: SignatureMaterial::NonEmptyString("placeholder".to_owned()),
+            proof: SignatureMaterial::NonEmptyString(NonEmptyString::new("placeholder").unwrap()),
         },
     }
 }
