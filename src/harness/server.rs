@@ -9,16 +9,20 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
+use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_http_client::{Auth, Client as SdkClient};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::Value;
+use sha2::{Digest as _, Sha256};
 use url::Url;
 
 use super::assertions::expect_json;
+use super::canonical_device_id;
 use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_handle};
-use super::{canonical_device_id, fixture_webvh_did};
 
 pub struct ArkretServer {
     handle: SutHandle,
@@ -44,6 +48,18 @@ enum SutHandle {
 enum SutRuntimeMode {
     Process,
     Docker,
+}
+
+fn test_service_identity(name: &str) -> (String, String) {
+    let digest = Sha256::digest(format!("cotest:notary:{name}").as_bytes());
+    let mut seed = [0_u8; 32];
+    seed.copy_from_slice(&digest);
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
+    let key_multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
+    (
+        format!("did:key:{key_multibase}"),
+        BASE64_STANDARD.encode(seed),
+    )
 }
 
 impl ArkretServer {
@@ -120,7 +136,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let service_id = fixture_webvh_did(&format!("{name}.cotest.local"));
+        let (service_id, notary_signing_key) = test_service_identity(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -135,6 +151,7 @@ impl ArkretServer {
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
             .env("SOLAND_SERVICE_ID", &service_id)
+            .env("SOLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
             .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
@@ -192,7 +209,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let service_id = fixture_webvh_did(&format!("{name}.cotest.local"));
+        let (service_id, notary_signing_key) = test_service_identity(name);
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -213,6 +230,7 @@ impl ArkretServer {
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
             .env("SOLAND_SERVICE_ID", &service_id)
+            .env("SOLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
             .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
@@ -254,7 +272,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let service_id = fixture_webvh_did(&format!("{name}.cotest.local"));
+        let (service_id, notary_signing_key) = test_service_identity(name);
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -295,6 +313,8 @@ impl ArkretServer {
             .arg(format!("SOLAND_PUBLIC_BASE_URL={public_base_url}"))
             .arg("--env")
             .arg(format!("SOLAND_SERVICE_ID={service_id}"))
+            .arg("--env")
+            .arg(format!("SOLAND_NOTARY_SIGNING_KEY={}", notary_signing_key))
             .arg("--env")
             .arg("SOLAND_DEVELOPMENT_MODE=1")
             .arg("--env")
@@ -531,7 +551,7 @@ impl TestServerGroup {
             let node_name = format!("{name}-{index}");
             let port = reserve_port()?;
             let metrics = reserve_port()?;
-            let did = fixture_webvh_did(&format!("{node_name}.cotest.local"));
+            let (did, _) = test_service_identity(&node_name);
             let url = format!("http://127.0.0.1:{}", port.port());
             pending.push(Pending {
                 name: node_name,

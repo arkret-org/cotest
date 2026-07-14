@@ -17,9 +17,10 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
-  openUserPage,
+  openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -49,6 +50,19 @@ type AppletRegistration = {
   capability_grant_refs: string[];
 };
 
+function capabilityGrantRefForAction(
+  registration: AppletRegistration,
+  approvedActions: string[],
+  action: string,
+): string {
+  const actions = Array.from(new Set(approvedActions)).sort();
+  const index = actions.indexOf(action);
+  expect(index, `approved Applet action ${action}`).toBeGreaterThanOrEqual(0);
+  const grantRef = registration.capability_grant_refs[index];
+  expect(grantRef, `capability grant for ${action}`).toMatch(/^ak:grant:/);
+  return grantRef;
+}
+
 test.describe("applet bridge", () => {
   test("applet package installs, bot joins space, ghost actor relays external messages with accountability chain", async ({
     browser,
@@ -56,10 +70,16 @@ test.describe("applet bridge", () => {
   }) => {
     const registryBase = requireMockAppletRegistry();
     const stamp = Date.now();
-    const alice = uniqueUser(`applet-alice-${stamp}`);
-    await ensureRegistered(request, alice);
+    const aliceFlow = await openDpopUserPage(browser, request, `applet-alice-${stamp}`, {
+      prepareMlsDevice: false,
+    });
+    if (!aliceFlow) {
+      assertJointStackNotRequired("applet bridge UI setup");
+      test.skip(true, "joint stack is not available");
+      return;
+    }
+    const { page: alicePage, user: alice } = aliceFlow;
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await createRealmApi(request, aliceToken, {
@@ -83,6 +103,11 @@ test.describe("applet bridge", () => {
       expect(registration.status).toBe("installed");
       expect(registration.bot_actor_id).toMatch(/^did:web:bot-bridge-demo-/);
       expect(registration.portal_realm_id).toBe(realmId);
+      const messageGrantRef = capabilityGrantRefForAction(
+        registration,
+        signed.applet_package.requested_scopes,
+        "ak.message.create",
+      );
 
       await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_id);
       const accept = await request.post(
@@ -92,22 +117,43 @@ test.describe("applet bridge", () => {
       expect(accept.status()).toBe(200);
       expect((await accept.json()).status).toBe("joined");
 
+      const externalUser = { id: "ext-user-X", display_name: "External X" };
+      const provision = await request.post(`${registryBase}/external-event`, {
+        headers: authHeaders(aliceToken),
+        data: {
+          soland_base_url: solandBaseUrl(),
+          destination_service_id: solandServiceId(),
+          applet_id: registration.applet_id,
+          realm_id: realmId,
+          authorization_ref: messageGrantRef,
+          external_user: externalUser,
+          payload: { kind: "provision" },
+        },
+      });
+      const provisionText = await provision.text();
+      expect(provision.status(), provisionText).toBe(200);
+      const provisionBody = JSON.parse(provisionText);
+      const ghostActorDid = String(provisionBody.ghost_actor_id);
+      expect(ghostActorDid).toMatch(/^did:web:ghost-/);
+      await addRealmMemberApi(request, aliceToken, realmId, ghostActorDid);
+
       const text = `hi from outside ${stamp}`;
       const external = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken),
         data: {
           soland_base_url: solandBaseUrl(),
+          destination_service_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
-          external_user: { id: "ext-user-X", display_name: "External X" },
+          authorization_ref: messageGrantRef,
+          external_user: externalUser,
           payload: { kind: "message", text },
         },
       });
       const externalText = await external.text();
       expect(external.status(), externalText).toBe(200);
       const externalBody = JSON.parse(externalText);
-      const ghostActorDid = String(externalBody.ghost_actor_id);
-      expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
+      expect(String(externalBody.ghost_actor_id)).toBe(ghostActorDid);
       expect(String(externalBody.message_id)).toMatch(/^ak:message:/);
 
       const events = await queryRealmEventsApi(request, aliceToken, realmId);
@@ -148,14 +194,16 @@ test.describe("applet bridge", () => {
         headers: authHeaders(aliceToken),
         data: {
           soland_base_url: solandBaseUrl(),
+          destination_service_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
-          external_user: { id: "ext-user-X", display_name: "External X" },
+          authorization_ref: messageGrantRef,
+          external_user: externalUser,
           payload: { kind: "message", text: afterRevokeText },
         },
       });
       expect([403, 409]).toContain(afterRevoke.status());
-      expect(wireErrCode(await afterRevoke.json())).toBe("applet_revoked");
+      expect(wireErrCode(await afterRevoke.json())).toBe("applet_registration_unauthorized");
       expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(
         afterRevokeText,
       );
