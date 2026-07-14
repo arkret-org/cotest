@@ -70,8 +70,8 @@ param(
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
     [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
-    [string]$SolandServiceId = "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN",
-    [string]$SolandNotarySigningKey = "Iawpld/ca+lGnAU+03cMpCESmVIH6OMxwfo7NLqdf5c=",
+    [string]$SolandServiceId = "did:key:z6MkhctUcGzdTWV4B6TYMiG1JzkeyveTpRrvG2p1Unxt1qDg",
+    [string]$SolandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
     [string]$CoauthServiceId = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
@@ -96,8 +96,8 @@ param(
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [switch]$DualSoland,
-    [string]$SolandBetaServiceId = "did:key:z6MkmqW95R1r59eyRAdtpLdgXFHKuuNSjWwBdkZE3HCrz8Si",
-    [string]$SolandBetaNotarySigningKey = "OQb/cI67vMlcbHGgjp2kmDkqLL1yZAxStQkytdnPbXc=",
+    [string]$SolandBetaServiceId = "did:key:z6MknTBH9mbtdQBt78xgnUC6sdgYashbRxTucg5UJZHkF36D",
+    [string]$SolandBetaNotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -374,6 +374,20 @@ function Get-ArtifactFreshness {
     }
 }
 
+function Test-BinaryContainsAsciiMarker {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Marker
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $false
+    }
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+    return $text.Contains($Marker)
+}
+
 function Resolve-PlaywrightCliInvocation {
     param([Parameter(Mandatory = $true)][string]$E2eRoot)
 
@@ -615,6 +629,12 @@ function Invoke-JointE2ePreflight {
     if ($WillStartDefaultInkson -or (-not $InksonBaseUrl -and -not $InksonCommand)) {
         if ($InksonStaticIndex -and (Test-Path -LiteralPath $InksonStaticIndex -PathType Leaf)) {
             Add-PreflightResult $results "inkson web bundle" "pass" $InksonStaticIndex
+            $inksonWasm = Join-Path (Split-Path -Parent $InksonStaticIndex) "wasm\inkson_bg.wasm"
+            if (Test-BinaryContainsAsciiMarker -Path $inksonWasm -Marker "inkson.test.session_injection.v1") {
+                Add-PreflightResult $results "inkson test-session feature" "pass" $inksonWasm
+            } else {
+                Add-PreflightResult $results "inkson test-session feature" "fail" "cached Wasm lacks wasm-localstorage-secrets-test marker; rerun without -SkipBuild"
+            }
         } else {
             Add-PreflightResult $results "inkson web bundle" "fail" "cached bundle missing; rerun without -SkipBuild"
         }
@@ -1947,6 +1967,7 @@ try {
     }
 
     if (-not $SkipBuild -and $willStartDefaultInkson) {
+        $inksonWasm = Join-Path $inksonStaticRoot "wasm\inkson_bg.wasm"
         $inksonFreshness = Get-ArtifactFreshness `
             -ArtifactPath $inksonStaticIndex `
             -RepositoryRoots @(
@@ -1956,11 +1977,14 @@ try {
                 (Join-Path $workspaceRoot "chime"),
                 (Join-Path $workspaceRoot "yoface")
             )
-        if (-not $inksonFreshness.Fresh) {
+        $inksonTestFeaturePresent = Test-BinaryContainsAsciiMarker `
+            -Path $inksonWasm `
+            -Marker "inkson.test.session_injection.v1"
+        if (-not $inksonFreshness.Fresh -or -not $inksonTestFeaturePresent) {
             Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
             $started = Get-Date
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx build --platform web --features 'experimental-agents wasm-localstorage-secrets-test'" `
+                -Command "dx build --platform web --features experimental-agents,wasm-localstorage-secrets-test" `
                 -ProjectRoot $InksonRoot
             $service = Start-ManagedCommand `
                 -Name "prepare-inkson" `
@@ -2268,6 +2292,7 @@ try {
             SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_CANDIDATE_JOIN_POLICY = "true"
+            SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
         if ($CoauthBaseUrl) {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
@@ -2275,7 +2300,6 @@ try {
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
-            $map.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($StaridBaseUrl) {
@@ -2330,13 +2354,13 @@ try {
             SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_CANDIDATE_JOIN_POLICY = "true"
+            SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
         if ($CoauthBaseUrl) {
             $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
-            $values.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($StaridBaseUrl) {
@@ -2528,7 +2552,14 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
-    $env:COTEST_SOLAND_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
+    if ($SolandNotarySigningKey) {
+        # The peer-surface fixtures must sign as the configured service
+        # identity. A deterministic development key is only correct when the
+        # managed Soland instance also uses that fallback.
+        $env:COTEST_SOLAND_SERVICE_SIGNING_KEY = $SolandNotarySigningKey
+    } else {
+        Remove-Item Env:COTEST_SOLAND_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
+    }
     if ($InksonBaseUrl) {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
@@ -2537,10 +2568,13 @@ try {
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
         $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
-        $env:COTEST_SOLAND_ALPHA_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_ID = $SolandBetaServiceId
-        $env:COTEST_SOLAND_BETA_NOTARY_SIGNING_KEY = $SolandBetaNotarySigningKey
+        if ($SolandBetaNotarySigningKey) {
+            $env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY = $SolandBetaNotarySigningKey
+        } else {
+            Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
+        }
         $env:COTEST_REQUIRE_DUAL_SOLAND = "1"
         if ($InksonBaseUrl) {
             $env:COTEST_INKSON_ALPHA_BASE_URL = $InksonBaseUrl
@@ -2555,10 +2589,9 @@ try {
     } else {
         Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_ID -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_ALPHA_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_ID -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_BETA_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_DUAL_SOLAND -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue

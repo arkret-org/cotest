@@ -306,7 +306,9 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION,
     )?;
-    let ceiling = participation_field(vector, "ceiling")?;
+    let provision_ceiling = participation_field(vector, "provision_ceiling")?;
+    let governance_ceiling = participation_field(vector, "governance_ceiling")?;
+    let ceiling = fold_ceiling_chain([provision_ceiling, governance_ceiling]);
     let selection = participation_field(vector, "selection")?;
     let expected = participation_pointer(vector, "/expected/effective")?;
 
@@ -355,7 +357,9 @@ pub fn run_agent_participation_selection_within_ceiling_vector() -> Result<()> {
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_SELECTION_WITHIN_CEILING,
     )?;
-    let ceiling = participation_field(vector, "ceiling")?;
+    let provision_ceiling = participation_field(vector, "provision_ceiling")?;
+    let governance_ceiling = participation_field(vector, "governance_ceiling")?;
+    let ceiling = fold_ceiling_chain([provision_ceiling, governance_ceiling]);
     let selection = participation_field(vector, "selection")?;
     expect_reason(
         validate_selection_within_ceiling(ceiling, selection).unwrap_err(),
