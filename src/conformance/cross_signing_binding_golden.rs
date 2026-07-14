@@ -5,7 +5,7 @@
 //! device-trust canonical signing-input construction in TypeScript
 //! (`e2e/helpers/cross-signing-harness.ts`) because it cannot call the Rust SDK
 //! directly. The authoritative construction is
-//! `arkret_crypto::CrossSigningPublishContent::{self,user}_signing_binding_input`
+//! `arkret_core::CrossSigningPublish::{self,user}_signing_binding_input`
 //! (`ak.cross-signing-bind-v1`) and `arkret_crypto::DeviceTrustBinding::canonical_input`
 //! (`ak.device-trust-bind-v1`); soland verifies the resulting signatures with
 //! those exact bytes, so any drift between the TS mirror and the SDK is a silent
@@ -23,8 +23,8 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use arkret_core::{DeviceId, Did};
-use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
+use arkret_core::{CrossSigningPublish, DeviceId, Did};
+use arkret_crypto::DeviceTrustBinding;
 use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::Value;
@@ -96,13 +96,13 @@ pub fn run_cross_signing_binding_golden_suite() -> Result<()> {
     let b64 = base64::engine::general_purpose::STANDARD;
 
     for vector in &doc.cross_signing_vectors {
-        let content: CrossSigningPublishContent =
-            serde_json::from_value(vector.publish_payload.clone()).with_context(|| {
-                format!(
-                    "vector {}: parse publish_payload into SDK type",
-                    vector.name
-                )
-            })?;
+        let content: CrossSigningPublish = serde_json::from_value(vector.publish_payload.clone())
+            .with_context(|| {
+            format!(
+                "vector {}: parse publish_payload into SDK type",
+                vector.name
+            )
+        })?;
         let self_signing =
             b64.encode(content.self_signing_binding_input().map_err(|err| {
                 anyhow::anyhow!("vector {}: self_signing input: {err}", vector.name)

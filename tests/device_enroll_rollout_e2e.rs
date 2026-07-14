@@ -330,12 +330,14 @@ fn service_attested_device_authorize_event(
     let payload = arkret_core::DeviceAuthorizePayload {
         principal_id: arkret_core::Did::new(principal_id.to_owned())
             .map_err(|error| anyhow!("invalid principal DID: {error}"))?,
-        device_id: device_id.to_owned(),
-        device_public_key: device_public_key.to_owned(),
-        hpke_key: "z6LSCotestEnrollHpkeKey".to_owned(),
+        device_id: arkret_core::DeviceId::new(device_id.to_owned())
+            .map_err(|error| anyhow!("invalid device id: {error}"))?,
+        device_public_key: arkret_core::NonEmptyString::new(device_public_key.to_owned())
+            .map_err(|error| anyhow!("invalid device public key: {error}"))?,
+        hpke_key: arkret_core::NonEmptyString::new("z6LSCotestEnrollHpkeKey").unwrap(),
         algorithms: vec![
-            "ak.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
-            "ak.mls.v1".to_owned(),
+            arkret_core::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
+            arkret_core::NonEmptyString::new("ak.mls.v1").unwrap(),
         ],
         device_key_algorithm: None,
         authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority.clone()),
@@ -349,9 +351,10 @@ fn service_attested_device_authorize_event(
         cross_signing_binding: None,
         bootstrap_binding: None,
         enrollment_authority_binding: Some(arkret_core::DeviceEnrollmentAuthorityBinding {
-            kind: arkret_core::DeviceEnrollmentAuthorityBinding::KIND_SERVICE_ATTESTED.to_owned(),
+            kind: arkret_core::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
             authority_did: authority,
-            authorization_ref: authorization_ref.to_owned(),
+            authorization_ref: arkret_core::NonEmptyString::new(authorization_ref.to_owned())
+                .unwrap(),
         }),
         recovery_session_id: None,
     };

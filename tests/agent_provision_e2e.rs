@@ -24,20 +24,18 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, DeviceAuthorizePayload, DeviceCrossSigningBinding,
-    DeviceId, DeviceOrPrincipalRef, Did, Error as ArkretError, EventsFrontierAccountClientState,
-    EventsFrontierView, EventsSubscribeFrameKind, KeyBackup, KeyBackupAead, KeyBackupAuthData,
-    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
-    KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, ManagedFrontierRef, ManagedPrincipalBinding, PolicyId,
-    RecoveryKeyEntry, RecoveryPolicy, RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
-    SignatureMaterial, TypedTrustDomainId, canonical, ed25519_pubkey_to_did_key_multibase,
-    principal_control_realm_id,
+    BackupClass, BackupId, BackupSeriesId, CrossSigningPublish, DeviceAuthorizePayload,
+    DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, Error as ArkretError,
+    EventsFrontierAccountClientState, EventsFrontierView, EventsSubscribeFrameKind, KeyBackup,
+    KeyBackupAead, KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
+    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupFrontierRef,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyFormat, ManagedFrontierRef,
+    ManagedPrincipalBinding, NonEmptyString, PolicyId, PublishedKey, RecoveryKeyEntry,
+    RecoveryPolicy, RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
+    SignatureMaterial, SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
+    canonical, ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
 };
-use arkret_crypto::{
-    CrossSigningBinding, CrossSigningKeyRecord, CrossSigningPublishContent, DeviceTrustBinding,
-    SignedCrossSigningKey,
-};
+use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -858,40 +856,55 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let ssk_kid = format!("{ALICE_DID}#cotest-ssk");
     let usk_kid = format!("{ALICE_DID}#cotest-usk");
 
-    let key_record = |kid: String, key: &SigningKey| CrossSigningKeyRecord {
-        kid,
-        alg: "EdDSA".to_owned(),
-        public_key: ed25519_pubkey_to_did_key_multibase(key.verifying_key().as_bytes()),
-        key_format: "multibase".to_owned(),
+    let key_record = |kid: String, key: &SigningKey| PublishedKey {
+        kid: NonEmptyString::new(kid).unwrap(),
+        alg: NonEmptyString::new("EdDSA").unwrap(),
+        public_key: NonEmptyString::new(ed25519_pubkey_to_did_key_multibase(
+            key.verifying_key().as_bytes(),
+        ))
+        .unwrap(),
+        key_format: KeyFormat::Multibase,
     };
-    let mut cross_signing = CrossSigningPublishContent {
+    let ssk_record = key_record(ssk_kid.clone(), &ssk);
+    let usk_record = key_record(usk_kid, &usk);
+    let mut cross_signing = CrossSigningPublish {
         principal_id: principal_id.clone(),
         trust_domain: trust_domain.clone(),
         principal_signing_key: key_record(psk_kid.clone(), &psk),
-        self_signing_key: SignedCrossSigningKey {
-            key: key_record(ssk_kid.clone(), &ssk),
-            binding: CrossSigningBinding {
-                verification_method: psk_kid.clone(),
-                alg: "EdDSA".to_owned(),
-                signature: String::new(),
+        self_signing_key: SubordinateSignedKey {
+            kid: ssk_record.kid,
+            alg: ssk_record.alg,
+            public_key: ssk_record.public_key,
+            key_format: ssk_record.key_format,
+            binding: SubordinateSignedKeyBinding {
+                verification_method: NonEmptyString::new(psk_kid.clone())?,
+                alg: NonEmptyString::new("EdDSA")?,
+                signature: NonEmptyString::new("pending")?,
             },
         },
-        user_signing_key: SignedCrossSigningKey {
-            key: key_record(usk_kid, &usk),
-            binding: CrossSigningBinding {
-                verification_method: psk_kid,
-                alg: "EdDSA".to_owned(),
-                signature: String::new(),
+        user_signing_key: SubordinateSignedKey {
+            kid: usk_record.kid,
+            alg: usk_record.alg,
+            public_key: usk_record.public_key,
+            key_format: usk_record.key_format,
+            binding: SubordinateSignedKeyBinding {
+                verification_method: NonEmptyString::new(psk_kid)?,
+                alg: NonEmptyString::new("EdDSA")?,
+                signature: NonEmptyString::new("pending")?,
             },
         },
         expected_previous_generation: 0,
-        generation: 1,
+        generation: std::num::NonZeroU64::new(1).unwrap(),
         issued_at: canonical_now(),
     };
-    cross_signing.self_signing_key.binding.signature =
-        sign_ed25519_b64url(&psk, &cross_signing.self_signing_binding_input()?);
-    cross_signing.user_signing_key.binding.signature =
-        sign_ed25519_b64url(&psk, &cross_signing.user_signing_binding_input()?);
+    cross_signing.self_signing_key.binding.signature = NonEmptyString::new(sign_ed25519_b64url(
+        &psk,
+        &cross_signing.self_signing_binding_input()?,
+    ))?;
+    cross_signing.user_signing_key.binding.signature = NonEmptyString::new(sign_ed25519_b64url(
+        &psk,
+        &cross_signing.user_signing_binding_input()?,
+    ))?;
     submit_event(
         server,
         token,
@@ -907,10 +920,10 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
     let algorithms = TEST_DEVICE_ALGORITHMS.map(str::to_owned).to_vec();
     let cross_signing_binding = DeviceCrossSigningBinding {
-        verification_method: json!(ssk_kid),
-        alg: "EdDSA".to_owned(),
-        ssk_generation: 1,
-        signature: sign_ed25519_b64url(
+        verification_method: arkret_core::DidUrl::new(ssk_kid.to_owned())?,
+        alg: arkret_core::NonEmptyString::new("EdDSA")?,
+        ssk_generation: std::num::NonZeroU64::new(1).unwrap(),
+        signature: arkret_core::Base64UrlString::new(sign_ed25519_b64url(
             &ssk,
             &DeviceTrustBinding::canonical_input(
                 &principal_id,
@@ -920,15 +933,18 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
                 &algorithms,
                 1,
             )?,
-        ),
+        ))?,
     };
     let mut device_authorize = DeviceAuthorizePayload {
         principal_id: principal_id.clone(),
-        device_id: ALICE_DEVICE.to_owned(),
-        device_public_key,
-        hpke_key: TEST_DEVICE_HPKE_KEY.to_owned(),
-        algorithms,
-        device_key_algorithm: Some("EdDSA".to_owned()),
+        device_id: device_id.clone(),
+        device_public_key: arkret_core::NonEmptyString::new(device_public_key)?,
+        hpke_key: arkret_core::NonEmptyString::new(TEST_DEVICE_HPKE_KEY)?,
+        algorithms: algorithms
+            .into_iter()
+            .map(arkret_core::NonEmptyString::new)
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        device_key_algorithm: Some(arkret_core::NonEmptyString::new("EdDSA")?),
         authorized_by: DeviceOrPrincipalRef::DeviceId(device_id),
         scopes: None,
         not_before: canonical_now(),

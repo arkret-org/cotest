@@ -1,8 +1,11 @@
 use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
-use arkret_core::{DeviceId, Did, Hash, Proof, canonical, principal_control_realm_id, proof_kind};
-use arkret_crypto::{CrossSigningPublishContent, DeviceTrustBinding};
+use arkret_core::{
+    CrossSigningPublish, DeviceId, Did, Hash, Proof, canonical, principal_control_realm_id,
+    proof_kind,
+};
+use arkret_crypto::DeviceTrustBinding;
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -95,13 +98,13 @@ fn principal_control_realm(input: Value) -> Result<Value> {
 
 /// 05-2 — deserialize a full `ak.cross_signing.publish` payload (the shape the
 /// TS `buildCrossSigningPublishPayload` helper emits) into the SDK's
-/// `CrossSigningPublishContent` and return the SDK-authoritative PSK→SSK and
+/// `CrossSigningPublish` and return the SDK-authoritative PSK→SSK and
 /// PSK→USK `ak.cross-signing-bind-v1` canonical signing inputs. The TS
 /// `crossSigningBindingInput` byte-mirror is regression-checked against these
 /// bytes so a drift in the prefix / body field-set / canonical-JSON encoding
 /// is caught cross-language.
 fn cross_signing_binding_input(input: Value) -> Result<Value> {
-    let content: CrossSigningPublishContent =
+    let content: CrossSigningPublish =
         serde_json::from_value(input).context("parse cross_signing.publish content")?;
     let self_signing = content
         .self_signing_binding_input()

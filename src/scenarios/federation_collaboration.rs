@@ -886,14 +886,16 @@ pub(crate) fn bootstrap_device_authorize_payload(
     let mut payload = arkret_core::DeviceAuthorizePayload {
         principal_id: Did::new(principal_id.to_owned())
             .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
-        device_id: device_id.to_owned(),
-        device_public_key,
-        hpke_key: "z6LSCotestDeviceHpkeKey".to_owned(),
+        device_id: arkret_core::DeviceId::new(device_id.to_owned()).context("invalid device id")?,
+        device_public_key: arkret_core::NonEmptyString::new(device_public_key)
+            .map_err(anyhow::Error::msg)?,
+        hpke_key: arkret_core::NonEmptyString::new("z6LSCotestDeviceHpkeKey")
+            .expect("static HPKE key is non-empty"),
         algorithms: vec![
-            "ak.hpke_x25519_aead_chacha20poly1305.v1".to_owned(),
-            "ak.mls.v1".to_owned(),
+            arkret_core::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
+            arkret_core::NonEmptyString::new("ak.mls.v1").unwrap(),
         ],
-        device_key_algorithm: Some("EdDSA".to_owned()),
+        device_key_algorithm: Some(arkret_core::NonEmptyString::new("EdDSA").unwrap()),
         authorized_by: arkret_core::DeviceOrPrincipalRef::Did(
             Did::new(principal_id.to_owned())
                 .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
@@ -907,8 +909,11 @@ pub(crate) fn bootstrap_device_authorize_payload(
         proof: None,
         cross_signing_binding: None,
         bootstrap_binding: Some(arkret_core::DeviceBootstrapBinding {
-            kind: "inception_self_authorized".to_owned(),
-            did_method_evidence_ref: format!("{principal_id}#inception"),
+            kind: arkret_core::DeviceBootstrapBindingKind::InceptionSelfAuthorized,
+            did_method_evidence_ref: arkret_core::NonEmptyString::new(format!(
+                "{principal_id}#inception"
+            ))
+            .unwrap(),
         }),
         enrollment_authority_binding: None,
         recovery_session_id: None,

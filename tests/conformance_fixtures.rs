@@ -97,7 +97,7 @@ conformance_test!(
 
 conformance_test!(
     /// 05-2 — Cross-language golden gate for the device-lifecycle §5.1/§5.2
-    /// canonical signing inputs. The SDK (CrossSigningPublishContent /
+    /// canonical signing inputs. The SDK (CrossSigningPublish /
     /// DeviceTrustBinding) must reproduce every golden vector in
     /// e2e/fixtures/cross-signing-binding-golden.json byte-for-byte. The TS
     /// byte-mirror (e2e/tests/conformance/cross-signing-binding-golden.spec.ts)
