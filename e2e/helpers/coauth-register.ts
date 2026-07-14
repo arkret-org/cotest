@@ -16,6 +16,7 @@
 
 import { randomUUID } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
+import { mockEmailBaseUrl } from "./env";
 
 // The deterministic verification code coauth mints under the dev email-delivery
 // bypass. Mirrors coauth tasks/notifications.rs + handlers/account/register.rs.
@@ -84,6 +85,7 @@ async function verifyEmailWithRetry(
   request: APIRequestContext,
   coauthBase: string,
   id: string,
+  email: string,
 ): Promise<RegStep> {
   const deadline = Date.now() + 30_000;
   let last = "";
@@ -91,10 +93,17 @@ async function verifyEmailWithRetry(
   // first attempt, to avoid burning rate-limit budget on guaranteed misses.
   await new Promise((r) => setTimeout(r, 1_000));
   while (Date.now() < deadline) {
+    const code = mockEmailBaseUrl()
+      ? await latestMockEmailCode(request, email)
+      : COAUTH_DEV_EMAIL_CODE;
+    if (!code) {
+      await new Promise((r) => setTimeout(r, 1_500));
+      continue;
+    }
     const { status, body, raw } = await postJson(
       request,
       `${coauthBase}/_coauth/account/auth/register/${id}/verify-email`,
-      { code: COAUTH_DEV_EMAIL_CODE },
+      { code },
     );
     if (status === 200 && body?.status === "success") {
       return body.next_step as RegStep;
@@ -109,6 +118,31 @@ async function verifyEmailWithRetry(
   throw new Error(
     `coauth verify-email timed out waiting for the dev code (last: ${last})`,
   );
+}
+
+export async function latestMockEmailCode(
+  request: APIRequestContext,
+  email: string,
+): Promise<string | undefined> {
+  const base = mockEmailBaseUrl();
+  if (!base) {
+    return undefined;
+  }
+  const response = await request.get(
+    `${base}/mock/email/verification/inbox?to=${encodeURIComponent(email)}`,
+  );
+  if (!response.ok()) {
+    return undefined;
+  }
+  const body = objectRecord(await response.json());
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const token = objectRecord(messages[index])?.token;
+    if (typeof token === "string" && token.length > 0) {
+      return token;
+    }
+  }
+  return undefined;
 }
 
 async function beginRegistrationWithRetry(
@@ -165,7 +199,7 @@ export async function registerCoauthPasswordAccount(
 
   // 2. verify email (async-minted dev code)
   if (next === "verify_email") {
-    next = await verifyEmailWithRetry(request, coauthBase, id);
+    next = await verifyEmailWithRetry(request, coauthBase, id, email);
   }
 
   // 3. display name

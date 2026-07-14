@@ -60,6 +60,87 @@ function canonicalHash(value) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 }
 
+function registrationEpochHash(packageBase, evidence) {
+  const methodOrder = new Map([
+    ["GET", 0],
+    ["POST", 1],
+    ["PUT", 2],
+    ["PATCH", 3],
+    ["DELETE", 4],
+  ]);
+  const authOrder = new Map([
+    ["none", 0],
+    ["webhook_signature", 1],
+    ["bearer", 2],
+    ["mtls", 3],
+  ]);
+  const sortedEndpoints = [...packageBase.endpoint_policy.endpoints].sort((left, right) => {
+    const method = methodOrder.get(left.method) - methodOrder.get(right.method);
+    if (method !== 0) return method;
+    const path = left.path.localeCompare(right.path);
+    if (path !== 0) return path;
+    return (authOrder.get(left.auth) ?? -1) - (authOrder.get(right.auth) ?? -1);
+  });
+  const sortedNamespaces = Object.fromEntries(
+    Object.entries(packageBase.namespaces).map(([kind, entries]) => [
+      kind,
+      [...entries].sort(
+        (left, right) =>
+          left.pattern.localeCompare(right.pattern) ||
+          Number(left.exclusive) - Number(right.exclusive),
+      ),
+    ]),
+  );
+  const securityPolicy = {
+    claimed_profiles: [...packageBase.claimed_profiles].sort(),
+    limits: packageBase.limits,
+    ghost_policy: packageBase.ghost_policy,
+    delegation_policy: packageBase.delegation_policy,
+    e2ee_policy: packageBase.e2ee_policy,
+  };
+  if (packageBase.widget !== undefined) securityPolicy.widget = packageBase.widget;
+  const transcript = {
+    schema: "ak.schema.applet_registration_epoch_transcript.v1",
+    derived_registration: {
+      kind: "ak.applet.registration",
+      applet_id: packageBase.applet_id,
+      service_id: packageBase.service_id,
+      controller_id: packageBase.controller_id,
+      base_url: packageBase.base_url,
+      bot_actor_id: packageBase.bot_actor_id,
+      protocols: [...packageBase.protocols].sort(),
+      namespaces: sortedNamespaces,
+      receive_events: packageBase.receive_events,
+      receive_ephemeral: packageBase.receive_ephemeral,
+      rate_limited: packageBase.rate_limited,
+      requested_scopes: [...packageBase.requested_scopes].sort(),
+      created_at: packageBase.created_at,
+    },
+    service_did_document: {
+      service_id: evidence.service_id,
+      document_digest: evidence.did_document_digest,
+      method_version: evidence.method_version_evidence,
+    },
+    accepted_signing_keys: [...evidence.accepted_signing_keys].sort((left, right) =>
+      left.key_ref.localeCompare(right.key_ref),
+    ),
+    endpoint_policy: {
+      ...packageBase.endpoint_policy,
+      endpoints: sortedEndpoints,
+    },
+    webhook_auth: {
+      ...packageBase.webhook_auth,
+      accepted_algs: [...packageBase.webhook_auth.accepted_algs].sort(),
+    },
+    security_policy: securityPolicy,
+  };
+  const digest = createHash("sha256")
+    .update("arkret-applet-registration-epoch-v1\n", "utf8")
+    .update(canonicalJson(transcript), "utf8")
+    .digest("hex");
+  return `sha256:${digest}`;
+}
+
 function rfc3339Now() {
   return canonicalTimestamp();
 }
@@ -156,6 +237,16 @@ function signedPackage(body) {
   const registrationEpochEvidence = {
     service_id: serviceId,
     did_document_digest: canonicalHash(serviceIdDocument),
+    method_version_evidence: serviceId.startsWith("did:webvh:")
+      ? {
+          method: "did:webvh",
+          version_time: createdAt,
+          unversioned_refetch: false,
+        }
+      : {
+          method: `did:${String(serviceId).split(":")[1]}`,
+          unversioned_refetch: true,
+        },
     accepted_signing_keys: [
       {
         key_ref: webhookAuth.key_ref,
@@ -218,20 +309,14 @@ function signedPackage(body) {
       enabled: false,
       mls_join_requested: false,
     },
-    registration_epoch:
-      body.registration_epoch ??
-      canonicalHash({
-        applet_id: appletId,
-        service_id: serviceId,
-        namespace: safe,
-        created_at: createdAt,
-      }),
     registration_epoch_evidence: registrationEpochEvidence,
     created_at: createdAt,
   };
   if (body.widget) {
     packageBase.widget = body.widget;
   }
+  packageBase.registration_epoch =
+    body.registration_epoch ?? registrationEpochHash(packageBase, registrationEpochEvidence);
   // The evidence is required on input so the Principal Server can validate
   // the service DID epoch, but AppletPackage deliberately excludes it from
   // serialization and therefore from both canonical package transcripts.

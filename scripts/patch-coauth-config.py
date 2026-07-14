@@ -132,10 +132,11 @@ def main() -> int:
     )
     src = replace_top_level_section(src, "policy", policy)
 
+    email_bypass = "false" if args.mock_email_base_url else "true"
     account = (
         "account:\n"
         "  password_registration_enabled: true\n"
-        "  registration_email_delivery_bypass_allowed: true\n"
+        f"  registration_email_delivery_bypass_allowed: {email_bypass}\n"
     )
     src = replace_top_level_section(src, "account", account)
 

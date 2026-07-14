@@ -26,6 +26,7 @@ import {
   webvhScid,
 } from "../../helpers/onboarding";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
+import { latestMockEmailCode } from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
 
@@ -101,21 +102,31 @@ test.describe("account onboarding", () => {
     expect(start.status()).toBe(200);
     const started = await start.json();
     expect(started, JSON.stringify(started)).toMatchObject({ status: "success" });
-    expect(started.email_verification_bypass_allowed).toBe(true);
+    const mockEmail = mockEmailBaseUrl();
+    expect(started.email_verification_bypass_allowed).toBe(!mockEmail);
 
+    const emailAddress = `${user.name}@example.test`;
     const email = await request.post(
       `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/email`,
-      { data: { email: `${user.name}@example.test` } },
+      { data: { email: emailAddress } },
     );
     expect(email.status()).toBe(200);
     const emailBody = await email.json();
     expect(emailBody.status).toBe("sent");
-    expect(emailBody.delivery).toBe("skipped");
-    expect(emailBody.dev_code).toBeTruthy();
+    expect(emailBody.delivery).toBe(mockEmail ? "email" : "skipped");
+    let verificationCode = emailBody.dev_code as string | undefined;
+    if (mockEmail) {
+      await expect
+        .poll(() => latestMockEmailCode(request, emailAddress), { timeout: 30_000 })
+        .toBeTruthy();
+      verificationCode = await latestMockEmailCode(request, emailAddress);
+    } else {
+      expect(verificationCode).toBeTruthy();
+    }
 
     const verify = await request.post(
       `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
-      { data: { code: emailBody.dev_code } },
+      { data: { code: verificationCode } },
     );
     expect(verify.status()).toBe(200);
     const verified = await verify.json();
@@ -278,7 +289,8 @@ test.describe("account onboarding", () => {
     expect(start.status(), await start.text()).toBe(200);
     const started = await start.json();
     expect(started.status).toBe("success");
-    expect(started.email_verification_bypass_allowed).toBe(true);
+    const mockEmail = mockEmailBaseUrl();
+    expect(started.email_verification_bypass_allowed).toBe(!mockEmail);
 
     const email = `${user.name}@example.test`;
     const sent = await request.post(
@@ -288,15 +300,21 @@ test.describe("account onboarding", () => {
     expect(sent.status(), await sent.text()).toBe(200);
     const sentBody = await sent.json();
     expect(sentBody.status).toBe("sent");
-    expect(sentBody.dev_code).toBeTruthy();
+    if (mockEmail) {
+      expect(sentBody.dev_code).toBeFalsy();
+    } else {
+      expect(sentBody.dev_code).toBeTruthy();
+    }
 
     // If a mock-email service is wired, the verification message landed in its
     // inbox for this recipient.
-    const mockEmail = mockEmailBaseUrl();
+    let verificationCode = sentBody.dev_code as string | undefined;
     if (mockEmail) {
-      const inbox = await request.get(
-        `${mockEmail}/mock/email/verification/inbox?to=${encodeURIComponent(email)}`,
-      );
+      await expect
+        .poll(() => latestMockEmailCode(request, email), { timeout: 30_000 })
+        .toBeTruthy();
+      verificationCode = await latestMockEmailCode(request, email);
+      const inbox = await request.get(`${mockEmail}/mock/email/verification/inbox?to=${encodeURIComponent(email)}`);
       const inboxText = await inbox.text();
       expect(inbox.status(), inboxText).toBe(200);
       const inboxBody = JSON.parse(inboxText) as {
@@ -306,7 +324,7 @@ test.describe("account onboarding", () => {
       expect(messages.length, `mock inbox for ${email}: ${JSON.stringify(inboxBody)}`).toBeGreaterThan(0);
       const serializedMessages = JSON.stringify(messages);
       expect(
-        [sentBody.dev_code, started.registration_id].some((needle) =>
+        [verificationCode, started.registration_id].some((needle) =>
           serializedMessages.includes(String(needle)),
         ),
         `mock inbox message should reference the verification code or registration id: ${serializedMessages}`,
@@ -315,7 +333,7 @@ test.describe("account onboarding", () => {
 
     const verify = await request.post(
       `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
-      { data: { code: sentBody.dev_code } },
+      { data: { code: verificationCode } },
     );
     expect(verify.status(), await verify.text()).toBe(200);
     const verified = await verify.json();
@@ -326,7 +344,7 @@ test.describe("account onboarding", () => {
     // the token is single-use.
     const replay = await request.post(
       `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
-      { data: { code: sentBody.dev_code } },
+      { data: { code: verificationCode } },
     );
     const replayBody = await replay.json();
     expect(replayBody.status).not.toBe("success");

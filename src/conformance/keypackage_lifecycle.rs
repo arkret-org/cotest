@@ -897,6 +897,26 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
                 "sig": "c2ln"
             }
         },
+        "governance_binding": {
+            "binding_version": 1,
+            "encoding_profile": "cbor-deterministic-rfc8949-v1",
+            "realm_id": fixture.intended_realm_id,
+            "effective_scope": {
+                "kind": "realm",
+                "realm_id": fixture.intended_realm_id
+            },
+            "mls_group_id": "mls-group-a",
+            "previous_epoch": 0,
+            "next_epoch": 1,
+            "membership_frontier": [
+                "ak:event:0196419b-0000-7000-8000-000000000001"
+            ],
+            "policy_root": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "capability_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "discussion_metadata_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "binding_profile": "ak.profile.mls_governance_binding.full.v1",
+            "reducer_profile": "ak.reducer.v1"
+        },
         "ciphertext": "AQID",
         "expires_at": "2100-01-01T00:00:00Z"
     })

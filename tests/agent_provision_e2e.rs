@@ -731,7 +731,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     assert!(paused.ok, "pause must succeed");
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
 
-    let after_pause = event_envelope(
+    let mut after_pause = event_envelope(
         &agent_did,
         &realm_id,
         "ak.message.create",
@@ -746,6 +746,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             },
         }),
     );
+    move_event_after_actor_frontier(&server, &token, &agent_did, &mut after_pause).await?;
     expect_sdk_api_error(
         agent_client
             .events_submit(&event_from_value(&after_pause)?)
@@ -768,7 +769,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         "deactivated"
     );
 
-    let after_deactivate = event_envelope(
+    let mut after_deactivate = event_envelope(
         &agent_did,
         &realm_id,
         "ak.message.create",
@@ -783,6 +784,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             },
         }),
     );
+    move_event_after_actor_frontier(&server, &token, &agent_did, &mut after_deactivate).await?;
     expect_sdk_api_error(
         agent_client
             .events_submit(&event_from_value(&after_deactivate)?)
@@ -1129,6 +1131,25 @@ async fn managed_agent_actor_seq(
             Err(anyhow!("managed Agent actor frontier returned Realm view"))
         }
     }
+}
+
+async fn move_event_after_actor_frontier(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+    event: &mut Value,
+) -> Result<()> {
+    let original_actor_seq = event["actor_seq"].as_u64().unwrap_or_default();
+    let frontier_actor_seq = managed_agent_actor_seq(server, token, actor_id).await?;
+    // Lifecycle commands author a bounded fan-out of Agent control events. On
+    // deactivation the controller also loses visibility of the terminal Agent
+    // PCR frontier, so a rejection probe needs headroom beyond both its local
+    // sequence and the last caller-visible frontier.
+    let actor_seq = original_actor_seq.max(frontier_actor_seq) + 32;
+    event["actor_seq"] = json!(actor_seq);
+    event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
+    refresh_event_proof(event);
+    Ok(())
 }
 
 async fn ensure_agent_pcr_mls<P: PairingOutcome>(
