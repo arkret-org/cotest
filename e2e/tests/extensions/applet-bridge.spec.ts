@@ -203,7 +203,7 @@ test.describe("applet bridge", () => {
         },
       });
       expect([403, 409]).toContain(afterRevoke.status());
-      expect(wireErrCode(await afterRevoke.json())).toBe("applet_revoked");
+      expect(wireErrCode(await afterRevoke.json())).toBe("applet_registration_unauthorized");
       expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(
         afterRevokeText,
       );

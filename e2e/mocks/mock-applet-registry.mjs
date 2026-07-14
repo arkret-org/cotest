@@ -256,10 +256,7 @@ function signedGhostMessageEvent({
     created_at: createdAt,
     hlc: currentHlc(),
     prev_refs: [],
-    // EventRef.critical defaults to true when decoded by the SDK, but it is
-    // always emitted again on typed serialization. Include it before hashing
-    // so Content-Digest covers the same canonical transaction the edge sees.
-    refs: [{ id: authorizationRef, role: "authorized_by", critical: true }],
+    refs: [],
     executed_by: packageInfo.serviceId,
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
