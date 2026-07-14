@@ -1,20 +1,20 @@
 # cotest e2e coverage
 
-Promised: 399 · Verified: 269 (67.4%)
+Promised: 389 · Verified: 259 (66.6%)
 
-Totals: 67 scenarios / 67 specs / 269 verified / 399 promised / 130 fixme / 25 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 259 verified / 389 promised / 130 fixme / 25 skip (19 domains)
 
 ## Totals
 
 | metric | count |
 |---|---:|
-| scenario docs | 67 |
-| spec files | 67 |
-| live tests | 269 |
+| scenario docs | 66 |
+| spec files | 66 |
+| live tests | 259 |
 | test.fixme | 130 |
-| promised tests | 399 |
-| verified tests | 269 |
-| verified ratio | 67.4% |
+| promised tests | 389 |
+| verified tests | 259 |
+| verified ratio | 66.6% |
 | test.skip (conditional) | 25 |
 | domains | 19 |
 
@@ -26,10 +26,10 @@ Totals: 67 scenarios / 67 specs / 269 verified / 399 promised / 130 fixme / 25 s
 | calls | 4 | 4 | 13 | 13 | 100.0% | 0 | 0 |
 | conformance | 4 | 4 | 32 | 33 | 97.0% | 1 | 3 |
 | discovery | 2 | 2 | 10 | 11 | 90.9% | 1 | 0 |
-| encryption | 5 | 5 | 24 | 34 | 70.6% | 10 | 1 |
+| encryption | 5 | 5 | 20 | 30 | 66.7% | 10 | 1 |
 | events | 1 | 1 | 1 | 1 | 100.0% | 0 | 0 |
 | extensions | 3 | 3 | 7 | 14 | 50.0% | 7 | 1 |
-| federation | 3 | 3 | 16 | 18 | 88.9% | 2 | 4 |
+| federation | 2 | 2 | 10 | 12 | 83.3% | 2 | 4 |
 | governance | 4 | 4 | 26 | 28 | 92.9% | 2 | 1 |
 | harness | 1 | 1 | 10 | 10 | 100.0% | 0 | 10 |
 | identity | 9 | 9 | 31 | 69 | 44.9% | 38 | 2 |
@@ -59,16 +59,15 @@ Totals: 67 scenarios / 67 specs / 269 verified / 399 promised / 130 fixme / 25 s
 | discovery/directory | 4 | 5 | 80.0% | 1 | 0 | mixed | yes |  |
 | discovery/notifications | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/audited-e2ee | 5 | 6 | 83.3% | 1 | 1 | mixed | yes |  |
-| encryption/encrypted-attachments | 3 | 4 | 75.0% | 1 | 0 | mixed | yes |  |
-| encryption/key-backup | 3 | 6 | 50.0% | 3 | 0 | mixed | yes |  |
-| encryption/key-backup-restore | 7 | 7 | 100.0% | 0 | 0 | live-only | yes |  |
+| encryption/encrypted-attachments | 2 | 3 | 66.7% | 1 | 0 | mixed | yes |  |
+| encryption/key-backup | 1 | 4 | 25.0% | 3 | 0 | mixed | yes |  |
+| encryption/key-backup-restore | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/mls-group | 6 | 11 | 54.5% | 5 | 0 | mixed | yes |  |
 | events/batch-realm-bootstrap | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | extensions/applet-bridge | 4 | 4 | 100.0% | 0 | 1 | live-only | yes |  |
 | extensions/mimi-federation | 2 | 4 | 50.0% | 2 | 0 | mixed | yes |  |
 | federation/cross-server | 8 | 10 | 80.0% | 2 | 1 | mixed | yes |  |
 | federation/security-hardening | 2 | 2 | 100.0% | 0 | 3 | live-only | yes |  |
-| federation/signing-and-trust-domain | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
 | governance/gdpr-audit-retention | 7 | 7 | 100.0% | 0 | 1 | live-only | yes |  |
 | governance/moderation-appeal | 9 | 9 | 100.0% | 0 | 0 | live-only | yes |  |
 | governance/organization-policy | 5 | 7 | 71.4% | 2 | 0 | mixed | yes |  |

@@ -7,8 +7,8 @@ Generated: 2026-05-25T15:48:03.316Z
 | UJ-A - First login and multi-device recovery | 68 | 85 | 80.0% | 17 |
 | UJ-B - Workspace creation, invites, and archive visibility | 26 | 33 | 78.8% | 7 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 47 | 87.2% | 6 |
-| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 27 | 33 | 81.8% | 6 |
-| UJ-E - Federation and cross-domain collaboration | 16 | 20 | 80.0% | 4 |
+| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 23 | 29 | 79.3% | 6 |
+| UJ-E - Federation and cross-domain collaboration | 10 | 14 | 71.4% | 4 |
 | UJ-F - Kanban collaboration and concurrent work | 33 | 42 | 78.6% | 9 |
 | UJ-G - Privacy rights, governance, appeal, and GDPR | 38 | 41 | 92.7% | 3 |
 | UJ-H - Calls, push, and cross-platform sync | 21 | 25 | 84.0% | 4 |
@@ -56,9 +56,9 @@ Generated: 2026-05-25T15:48:03.316Z
 | spec | mapping | verified | promised | blocking |
 |---|---|---:|---:|---:|
 | encryption/audited-e2ee | domain-fallback | 5 | 6 | 1 |
-| encryption/encrypted-attachments | domain-fallback | 3 | 4 | 1 |
-| encryption/key-backup | domain-fallback | 8 | 8 | 0 |
-| encryption/key-backup-restore | domain-fallback | 7 | 7 | 0 |
+| encryption/encrypted-attachments | domain-fallback | 2 | 3 | 1 |
+| encryption/key-backup | domain-fallback | 6 | 6 | 0 |
+| encryption/key-backup-restore | domain-fallback | 6 | 6 | 0 |
 | encryption/mls-group | domain-fallback | 4 | 8 | 4 |
 
 ## UJ-E - Federation and cross-domain collaboration
@@ -67,7 +67,6 @@ Generated: 2026-05-25T15:48:03.316Z
 |---|---|---:|---:|---:|
 | extensions/mimi-federation | domain-fallback | 2 | 4 | 2 |
 | federation/cross-server | domain-fallback | 8 | 10 | 2 |
-| federation/signing-and-trust-domain | domain-fallback | 6 | 6 | 0 |
 
 ## UJ-F - Kanban collaboration and concurrent work
 

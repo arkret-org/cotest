@@ -252,7 +252,10 @@ function Get-RepositoryBuildInputState {
 
     $buildInputPaths = @(
         "Cargo.toml", "Cargo.lock", "build.rs", "Dioxus.toml", "crates", "src",
-        "migrations", "assets", "public"
+        "migrations", "assets", "public",
+        ":(exclude)crates/**/tests/**", ":(exclude)tests/**",
+        ":(exclude)crates/**/benches/**", ":(exclude)benches/**",
+        ":(exclude)crates/**/examples/**", ":(exclude)examples/**"
     )
     $commitArguments = @(
         "-C", $resolvedRepository, "log", "-1", "--format=%cI", "--"
@@ -1973,13 +1976,20 @@ try {
     foreach ($task in $preparationTasks) {
         $task.Service.Process.WaitForExit()
         $task.Service.Process.Refresh()
+    }
+    foreach ($task in $preparationTasks) {
         $duration = [Math]::Round(((Get-Date) - $task.Started).TotalSeconds, 3)
-        if ($task.Service.Process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $task.Artifact -PathType Leaf)) {
-            throw "preparing $($task.Name) failed; see $($task.Service.Stdout) and $($task.Service.Stderr)"
+        $exitCode = $task.Service.Process.ExitCode
+        $artifactExists = Test-Path -LiteralPath $task.Artifact -PathType Leaf
+        $artifactUpdated = $artifactExists -and `
+            (Get-Item -LiteralPath $task.Artifact).LastWriteTimeUtc -ge $task.Started.ToUniversalTime().AddSeconds(-2)
+        if (($null -ne $exitCode -and $exitCode -ne 0) -or -not $artifactUpdated) {
+            throw "preparing $($task.Name) failed (exit=$exitCode, artifact_updated=$artifactUpdated); see $($task.Service.Stdout) and $($task.Service.Stderr)"
         }
         $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = "built"; duration_seconds = $duration; detail = $task.Artifact })
     }
-    $preparationTimings | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8
+    ConvertTo-Json -InputObject @($preparationTimings.ToArray()) -Depth 4 |
+        Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8
 
     if (-not $SkipPreflight) {
         Invoke-JointE2ePreflight `
