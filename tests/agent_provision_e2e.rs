@@ -527,6 +527,79 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle() -> Result<()> {
+    let server = ArkretServer::spawn("agent-pcr-recovery-gate-e2e").await?;
+    let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
+    prepare_agent_controller_recovery(&server, &token).await?;
+    let controller = bearer_sdk_client(&server, &token)?;
+    let provisioned = controller
+        .agent_provision(&arkret::AgentProvisionRequestBody {
+            display_name: Some("Recovery Gate Assistant".to_owned()),
+            slug: "recoverygate".to_owned(),
+            avatar_blob_ref: None,
+            requested_scope: test_agent_requested_scope(),
+            accountability: Value::Null,
+            pairing_ttl_ms: None,
+        })
+        .await?;
+
+    // Establish the Agent PCR frontier, but deliberately omit the
+    // controller-owned managed-PCR recovery backup that must cover it.
+    ensure_agent_pcr_mls(&server, &token, &provisioned).await?;
+    let body =
+        build_agent_key_pair_request_as(&server, &token, &provisioned, "runtime-key-recovery-gate")
+            .await?;
+
+    expect_sdk_api_error(
+        controller.agent_key_pair(&body).await,
+        StatusCode::PRECONDITION_FAILED,
+        "agent_pcr_recovery_not_ready",
+    )?;
+    assert_eq!(
+        agent_status(&server, &token, provisioned.agent_id.as_str()).await?,
+        "pending_runtime_key",
+        "a rejected recovery gate must not activate or consume the pairing"
+    );
+
+    // Publishing the current backup does not advance the Agent PCR frontier,
+    // so the exact same controller-signed request and pairing handle must now
+    // succeed.
+    prepare_agent_pcr_recovery(&server, &token, &provisioned).await?;
+    let outcome = controller.agent_key_pair(&body).await?;
+    assert_eq!(
+        outcome.authorized_event_ref, body.authorize_event.event_id,
+        "the retry must accept the original authorization event"
+    );
+    assert_eq!(
+        agent_status(&server, &token, provisioned.agent_id.as_str()).await?,
+        "active"
+    );
+    eventually(
+        "pairing advances the Agent PCR beyond its pre-commit recovery tail",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || async {
+            let recovery = bearer_sdk_client(&server, &token)?
+                .agent_get(provisioned.agent_id.as_str())
+                .await?
+                .key_state
+                .ok_or_else(|| anyhow!("managed Agent key_state is missing"))?
+                .pcr_recovery;
+            if !matches!(recovery, arkret::AgentPcrRecoveryState::Stale { .. }) {
+                return Err(anyhow!(
+                    "post-pairing Agent PCR recovery is not stale: {recovery:?}"
+                ));
+            }
+            Ok(())
+        },
+    )
+    .await?;
+    prepare_agent_pcr_recovery(&server, &token, &provisioned).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     let service_name = "agent-live-e2e";
     let holder = AgentSessionHolder::new();
@@ -1754,6 +1827,22 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
     provisioned: &P,
     fragment: &str,
 ) -> Result<arkret::AgentKeyPairOutcome> {
+    prepare_agent_pcr_recovery(server, token, provisioned).await?;
+    let body = build_agent_key_pair_request_as(server, token, provisioned, fragment).await?;
+    // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
+    // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the
+    // durable `ak.agent.key.authorize` event that clears `pending_runtime_key`.
+    Ok(bearer_sdk_client(server, token)?
+        .agent_key_pair(&body)
+        .await?)
+}
+
+async fn build_agent_key_pair_request_as<P: PairingOutcome>(
+    server: &ArkretServer,
+    token: &str,
+    provisioned: &P,
+    fragment: &str,
+) -> Result<arkret::AgentKeyPairRequestBody> {
     let agent_did = provisioned.agent_id().to_string();
     let pairing_request_id = provisioned.pairing_request_id();
     let pairing_code = provisioned
@@ -1765,7 +1854,6 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
     let agent_id = provisioned.agent_id().clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
-    prepare_agent_pcr_recovery(server, token, provisioned).await?;
     let signing_key = runtime_signing_key_for_fragment(fragment);
     let verification_method = format!("{agent_did}#{fragment}");
     let builder = runtime_key_request_builder(server, provisioned, &signing_key)?
@@ -1845,13 +1933,7 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
         &format!("{ALICE_DID}#cotest"),
         arkret::signatures::SignEventOptions::new().with_created_at(canonical_now()),
     )?;
-    let body = builder.build_key_pair_request(authorize_event)?.body;
-    // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
-    // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the
-    // durable `ak.agent.key.authorize` event that clears `pending_runtime_key`.
-    Ok(bearer_sdk_client(server, token)?
-        .agent_key_pair(&body)
-        .await?)
+    Ok(builder.build_key_pair_request(authorize_event)?.body)
 }
 
 async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Result<String> {
