@@ -5,6 +5,7 @@ use arkret::{SecretShareRequestContent, SecretShareSendContent};
 use arkret_core::canonical::{canonical_json_bytes, from_canonical_json_slice};
 use arkret_core::{
     DeviceId, DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody, Did,
+    ProtocolKind,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -57,8 +58,8 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
 
     let request_content = request_content(&request, &requester_pk)?;
     let request_target = DeviceMessageTarget {
-        kind: REQUEST_KIND.to_owned(),
-        content: serde_json::to_value(&request_content)?,
+        kind: ProtocolKind::new(REQUEST_KIND).map_err(anyhow::Error::msg)?,
+        content: serde_json::from_value(serde_json::to_value(&request_content)?)?,
         expires_at: parse_utc(EXPIRES_AT)?,
     };
     let request_body = device_message_body(device_id(OLD_DEVICE)?, request_target)?;
@@ -86,8 +87,8 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
 
     let send_content = seal_secret_send(&parsed_request, ACCOUNT_SECRET, 7, EXPIRES_AT)?;
     let send_target = DeviceMessageTarget {
-        kind: SEND_KIND.to_owned(),
-        content: serde_json::to_value(&send_content)?,
+        kind: ProtocolKind::new(SEND_KIND).map_err(anyhow::Error::msg)?,
+        content: serde_json::from_value(serde_json::to_value(&send_content)?)?,
         expires_at: parse_utc(EXPIRES_AT)?,
     };
     let send_body = device_message_body(device_id(NEW_DEVICE)?, send_target)?;
@@ -161,12 +162,10 @@ fn d2d_root_secret_share_rejects_unsolicited_or_tampered_sends() -> Result<()> {
     assert!(open_secret_send(&request, &wrong_recipient).is_err());
 
     let mut wrong_scheme = envelope.clone();
-    let mut content = wrong_scheme.content.as_object().unwrap().clone();
-    content.insert(
+    wrong_scheme.content.insert(
         "scheme".to_owned(),
         json!("ak.hpke_x25519_aead_aesgcm128.v1"),
     );
-    wrong_scheme.content = Value::Object(content);
     let err = open_secret_send(&request, &wrong_scheme).unwrap_err();
     assert!(format!("{err}").contains("scheme"));
 
@@ -237,7 +236,8 @@ fn open_secret_send(
     if envelope.kind != SEND_KIND {
         bail!("not a ak.secret.send envelope");
     }
-    let content: SecretShareSendContent = serde_json::from_value(envelope.content.clone())?;
+    let content: SecretShareSendContent =
+        serde_json::from_value(serde_json::to_value(&envelope.content)?)?;
     if content.request_id != request.request_id {
         bail!("unsolicited ak.secret.send");
     }
@@ -328,14 +328,14 @@ fn device_message_body(
 
 fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<DeviceMessageEnvelope> {
     Ok(DeviceMessageEnvelope {
-        kind: SEND_KIND.to_owned(),
+        kind: ProtocolKind::new(SEND_KIND).map_err(anyhow::Error::msg)?,
         sender_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
         sender_device_id: device_id(OLD_DEVICE)?,
         recipient_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
         recipient_device_id: device_id(NEW_DEVICE)?,
         sent_at: parse_utc("2026-06-10T00:00:00Z")?,
         expires_at: parse_utc(expires_at)?,
-        content,
+        content: serde_json::from_value(content)?,
         device_proof: None,
         unsigned: None,
     })
