@@ -213,6 +213,38 @@ export async function createRealmApi(
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
+  const realmObject = {
+    id: realmId,
+    schema: "ak.schema.realm.v1",
+    title: data.title,
+    summary: data.summary,
+    created_by: ownerDid,
+    trust_domain: "ak:trust_domain:soland.local",
+    schema_refs: ["ak.schema.realm.v1"],
+    default_discoverability:
+      data.discoverability ?? (data.public ? "public" : "listed"),
+    default_join_rule: data.default_join_rule ?? "invite",
+    history_visibility: data.history_visibility ?? "shared",
+    encryption_profile: data.encryption_profile ?? "none",
+    ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
+    plaintext_visible_services: plaintextVisibleServices,
+    ...(data.owning_organizations
+      ? { owning_organizations: data.owning_organizations }
+      : {}),
+    ...(data.audit_disclosure_policy
+      ? { audit_disclosure_policy: data.audit_disclosure_policy }
+      : {}),
+    ...(data.retention_policy
+      ? { retention_policy: data.retention_policy }
+      : {}),
+    security_class: "standard",
+    federation_policy: data.federation_policy ?? "restricted",
+    notary_profile: "single_did",
+    digest_algorithm: "sha256",
+    notary: singleDidNotary(ownerDid),
+    created_at: createdAt,
+  };
+  const realmCreateCell = `ak:cell:ak.component.realm.create.v1:${realmId}`;
 
   await submitSignedEventApi(
     request,
@@ -222,43 +254,23 @@ export async function createRealmApi(
       realmId,
       kind: "ak.realm.create",
       createdAt,
+      preconditions: [
+        {
+          cell: realmCreateCell,
+          predicate: { op: "head_eq", value: null },
+        },
+      ],
+      effects: [
+        {
+          cell: realmCreateCell,
+          op: { kind: "set", value: realmObject },
+        },
+      ],
       payload: {
         // `plaintext_visible_services` lives on the realm object only — the
         // realm_create_payload root is additionalProperties:false and rejects
         // it (it stays inside `object` below, which is additionalProperties:true).
-        object: {
-          id: realmId,
-          schema: "ak.schema.realm.v1",
-          title: data.title,
-          summary: data.summary,
-          created_by: ownerDid,
-          trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ak.schema.realm.v1"],
-          default_discoverability:
-            data.discoverability ?? (data.public ? "public" : "listed"),
-          default_join_rule: data.default_join_rule ?? "invite",
-          history_visibility: data.history_visibility ?? "shared",
-          encryption_profile: data.encryption_profile ?? "none",
-          ...(data.content_scheme
-            ? { content_scheme: data.content_scheme }
-            : {}),
-          plaintext_visible_services: plaintextVisibleServices,
-          ...(data.owning_organizations
-            ? { owning_organizations: data.owning_organizations }
-            : {}),
-          ...(data.audit_disclosure_policy
-            ? { audit_disclosure_policy: data.audit_disclosure_policy }
-            : {}),
-          ...(data.retention_policy
-            ? { retention_policy: data.retention_policy }
-            : {}),
-          security_class: "standard",
-          federation_policy: data.federation_policy ?? "restricted",
-          notary_profile: "single_did",
-          digest_algorithm: "sha256",
-          notary: singleDidNotary(ownerDid),
-          created_at: createdAt,
-        },
+        object: realmObject,
       },
     }),
     { server: opts.server, context: `create realm ${data.title}` },
@@ -1300,8 +1312,6 @@ export function signedEventEnvelope(
       schema: args.requirementsSchema ?? [
         args.schemaId ?? schemaIdForEventKind(args.kind),
       ],
-      features: [],
-      critical_extensions: [],
     },
     payload,
   }) as Record<string, unknown>;
@@ -2045,7 +2055,7 @@ function peerGetHeaders(
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),
-    developmentServiceHttpPrivateKey(sourceDid),
+    serviceHttpPrivateKey(sourceDid),
   );
   return {
     "source-service-id": sourceDid,
@@ -2096,7 +2106,7 @@ function signedFederationPushHeaders(
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),
-    developmentServiceHttpPrivateKey(sourceDid),
+    serviceHttpPrivateKey(sourceDid),
   );
   return {
     "content-type": "application/json",
@@ -2150,17 +2160,41 @@ export function developmentServicePrivateKey(serviceId: string) {
 }
 
 // FIXTURE ONLY: mirrors soland development_mode service HTTP signing keys.
-function developmentServiceHttpPrivateKey(serviceId: string) {
-  const seed = createHash("sha256")
-    .update("soland:notary-ephemeral:")
-    .update(serviceId)
-    .digest();
+function serviceHttpPrivateKey(serviceId: string) {
+  const configuredSeed = configuredServiceSigningSeed(serviceId);
+  const seed =
+    configuredSeed ??
+    createHash("sha256")
+      .update("soland:notary-ephemeral:")
+      .update(serviceId)
+      .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
     key: Buffer.concat([pkcs8Prefix, seed]),
     format: "der",
     type: "pkcs8",
   });
+}
+
+function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
+  let encoded: string | undefined;
+  if (serviceId === solandServiceId("default")) {
+    encoded = process.env.COTEST_SOLAND_SERVICE_SIGNING_KEY?.trim();
+  } else if (serviceId === solandServiceId("beta")) {
+    encoded = process.env.COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY?.trim();
+  }
+  if (!encoded) {
+    return undefined;
+  }
+  const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const seed = Buffer.from(padded, "base64");
+  if (seed.length !== 32) {
+    throw new Error(
+      `configured Soland service signing key for ${serviceId} must decode to 32 bytes`,
+    );
+  }
+  return seed;
 }
 
 function trustDomainFromServiceId(serviceId: string): string {

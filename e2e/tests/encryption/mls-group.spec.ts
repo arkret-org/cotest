@@ -45,6 +45,7 @@ import {
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { buildGenesisEntry, type WebvhKey } from "../../helpers/webvh-api";
+import { auditBrowserStorage } from "../../helpers/browser-storage-audit";
 
 test.describe.configure({ mode: "serial" });
 
@@ -370,52 +371,76 @@ async function createEncryptedRealm(
 type MlsGroupContext = {
   groupId: string;
   effectiveScope: { kind: "realm"; realm_id: string };
-  policyRoot: string;
-  frontierRef: string;
+  epochRefs: Map<number, string>;
 };
 
 const MLS_CIPHER_SUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 
-function mlsGovernanceBinding(
-  group: MlsGroupContext,
+async function fetchMlsGovernanceBinding(
+  request: import("@playwright/test").APIRequestContext,
+  token: string,
+  group: Pick<MlsGroupContext, "groupId" | "effectiveScope">,
   previousEpoch: number,
   nextEpoch: number,
-  policyRoot = group.policyRoot,
-): Record<string, unknown> {
-  return {
-    binding_version: 1,
-    encoding_profile: "cbor-deterministic-rfc8949-v1",
+): Promise<Record<string, unknown>> {
+  const response = await request.post(
+    `${solandBaseUrl()}/_arkret/self/events/mls-governance-proof`,
+    {
+      headers: authHeaders(token),
+      data: {
+        realm_id: group.effectiveScope.realm_id,
+        effective_scope: group.effectiveScope,
+        mls_group_id: group.groupId,
+        previous_epoch: previousEpoch,
+        next_epoch: nextEpoch,
+        binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+        reducer_profile: MLS_REDUCER_PROFILE_V1,
+      },
+    },
+  );
+  const body = await response
+    .json()
+    .catch(async () => ({ raw: await response.text() }));
+  expect(
+    response.ok(),
+    `MLS governance proof failed with ${response.status()}: ${JSON.stringify(body)}`,
+  ).toBeTruthy();
+  expect(body.governance_binding).toMatchObject({
     realm_id: group.effectiveScope.realm_id,
     effective_scope: group.effectiveScope,
     mls_group_id: group.groupId,
     previous_epoch: previousEpoch,
     next_epoch: nextEpoch,
-    membership_frontier: [group.frontierRef],
-    policy_root: policyRoot,
     binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
     reducer_profile: MLS_REDUCER_PROFILE_V1,
-  };
+  });
+  return body.governance_binding as Record<string, unknown>;
 }
 
 // Submit ak.mls.genesis for a fresh MLS group bound to `realmId` at epoch 0 and
-// return the group context the commit helper threads through. The genesis locks
-// the group's policy_root; later commits MUST carry the same root.
+// return the group context the commit helper threads through. Every binding is
+// materialized from accepted Realm control state instead of fixture hashes.
 async function submitMlsGenesis(
   request: import("@playwright/test").APIRequestContext,
   token: string,
   owner: JointUser,
   realmId: string,
 ): Promise<MlsGroupContext> {
-  const groupId = typedId("mls_group");
+  const groupId = b64url(typedId("mls_group"));
   const genesisEventId = typedId("event");
   const effectiveScope = { kind: "realm" as const, realm_id: realmId };
-  const policyRoot = `sha256:${"2".repeat(64)}`;
   const group: MlsGroupContext = {
     groupId,
     effectiveScope,
-    policyRoot,
-    frontierRef: genesisEventId,
+    epochRefs: new Map(),
   };
+  const governanceBinding = await fetchMlsGovernanceBinding(
+    request,
+    token,
+    group,
+    0,
+    0,
+  );
   const body = await submitSignedEventApi(
     request,
     token,
@@ -433,18 +458,20 @@ async function submitMlsGenesis(
         cipher_suite: MLS_CIPHER_SUITE,
         group_info_digest: `sha256:${"3".repeat(64)}`,
         ratchet_tree_digest: `sha256:${"4".repeat(64)}`,
-        governance_binding: mlsGovernanceBinding(group, 0, 0),
+        governance_binding: governanceBinding,
         created_at: canonicalTimestamp(),
       },
     }),
     { context: `submit MLS genesis ${groupId}` },
   );
   expect(body.accepted ?? []).toContain(genesisEventId);
+  group.epochRefs.set(0, genesisEventId);
   return group;
 }
 
 // Submit a ak.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`. Optional
-// `policyRoot` override forges a mismatched governance binding (E11.2);
+// `policyRoot` override forges one field of an otherwise materialized binding
+// (E11.2);
 // `concurrentCommit` flags a racing fork at the same base epoch (E11.1). Returns
 // the raw submit response so callers can assert accepted ids or wire codes.
 async function submitMlsCommit(
@@ -464,19 +491,29 @@ async function submitMlsCommit(
 ): Promise<Record<string, unknown>> {
   const { realmId, group, baseEpoch, label } = args;
   const nextEpoch = baseEpoch + 1;
+  const eventId = args.eventId ?? typedId("event");
+  const baseEpochRef = group.epochRefs.get(baseEpoch);
+  if (!baseEpochRef) {
+    throw new Error(`missing MLS epoch ${baseEpoch} event ref`);
+  }
+  const governanceBinding = await fetchMlsGovernanceBinding(
+    request,
+    token,
+    group,
+    baseEpoch,
+    nextEpoch,
+  );
+  if (args.policyRoot) {
+    governanceBinding.policy_root = args.policyRoot;
+  }
   const payload: Record<string, unknown> = {
     mls_group_id: group.groupId,
     base_epoch: baseEpoch,
-    base_epoch_ref: group.frontierRef,
+    base_epoch_ref: baseEpochRef,
     proposal_refs: [],
     next_epoch: nextEpoch,
     commit_digest: sha256Digest(Buffer.from(label, "utf8")),
-    governance_binding: mlsGovernanceBinding(
-      group,
-      baseEpoch,
-      nextEpoch,
-      args.policyRoot ?? group.policyRoot,
-    ),
+    governance_binding: governanceBinding,
   };
   if (args.concurrentCommit) {
     payload.concurrent_commit = true;
@@ -485,7 +522,7 @@ async function submitMlsCommit(
     actorDid: committer.did,
     realmId,
     kind: "ak.mls.commit",
-    eventId: args.eventId ?? typedId("event"),
+    eventId,
     payload,
   });
   if (args.raw) {
@@ -495,9 +532,16 @@ async function submitMlsCommit(
     });
     return { __status: resp.status(), __body: await resp.json() };
   }
-  return await submitSignedEventApi(request, token, envelope, {
+  const body = await submitSignedEventApi(request, token, envelope, {
     context: `submit MLS commit ${label}`,
   });
+  if (
+    !args.concurrentCommit &&
+    ((body.accepted as string[] | undefined) ?? []).includes(eventId)
+  ) {
+    group.epochRefs.set(nextEpoch, eventId);
+  }
+  return body;
 }
 
 async function sendEncryptedTimelineMessage(
@@ -776,7 +820,7 @@ test.describe("MLS group encryption", () => {
     );
   });
 
-  test("alice claims bob's KeyPackage; Welcome queue endpoint and commit epoch smoke stay live", async ({
+  test("alice claims bob's KeyPackage; durable Welcome delivery and commit epoch stay live", async ({
     request,
   }) => {
     // API-first smoke for the G3.S1 subset: MLS group genesis,
@@ -812,7 +856,7 @@ test.describe("MLS group encryption", () => {
     const keypackageDigest = sha256Digest(Buffer.from(keyPackage, "base64url"));
     const keypackageRef = keypackageDigest;
     const keypackageCapabilities = ["ak.mls.profile.full"];
-    const groupId = typedId("mls_group");
+    const groupId = b64url(typedId("mls_group"));
     const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
     const createdAt = canonicalTimestamp();
     const expiresAt = canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000));
@@ -858,14 +902,25 @@ test.describe("MLS group encryption", () => {
     expect(publishBody.rejected ?? []).toEqual([]);
     expect(publishBody.key_package_refs).toContain(keypackageRef);
 
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `MLS lifecycle ${stamp}`,
+      ownerDid: alice.did,
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+
     const pendingBefore = await request.get(
-      `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
       {
         headers: authHeaders(bobToken),
       },
     );
     expect(pendingBefore.ok()).toBeTruthy();
-    expect((await pendingBefore.json()).welcomes).toEqual([]);
+    expect(
+      ((await pendingBefore.json()).messages ?? []).filter(
+        (message: Record<string, unknown>) => message.kind === "ak.mls.welcome",
+      ),
+    ).toEqual([]);
 
     const claim = await request.post(
       `${solandBaseUrl()}/_arkret/self/keys/keypackages/claim`,
@@ -874,7 +929,7 @@ test.describe("MLS group encryption", () => {
         data: {
           target_principal_id: bob.did,
           target_device_ids: [bob.deviceId],
-          intended_realm_id: typedId("realm"),
+          intended_realm_id: realmId,
           requester: alice.did,
           required_capabilities: keypackageCapabilities,
           claim_nonce: `claim-${stamp}`,
@@ -903,12 +958,12 @@ test.describe("MLS group encryption", () => {
         data: {
           target_principal_id: bob.did,
           target_device_ids: [bob.deviceId],
-          intended_realm_id: typedId("realm"),
+          intended_realm_id: realmId,
           requester: alice.did,
           required_capabilities: keypackageCapabilities,
           claim_nonce: `claim-again-${stamp}`,
           expires_at: expiresAt,
-          mls_group_id: typedId("mls_group"),
+          mls_group_id: groupId,
           proofs: [],
         },
       },
@@ -920,30 +975,17 @@ test.describe("MLS group encryption", () => {
       "mls_keypackage_not_found",
     );
 
-    const realmId = await createRealmApi(request, aliceToken, {
-      title: `MLS lifecycle ${stamp}`,
-      ownerDid: alice.did,
-      history_visibility: "joined",
-      encryption_profile: "mls_rfc9420",
-    });
-
     const genesisEventId = typedId("event");
     const commitEventId = typedId("event");
-    const frontierEventRef = genesisEventId;
-    const effectiveScope = { kind: "realm", realm_id: realmId };
-    const genesisBinding = {
-      binding_version: 1,
-      encoding_profile: "cbor-deterministic-rfc8949-v1",
-      realm_id: realmId,
-      effective_scope: effectiveScope,
-      mls_group_id: groupId,
-      previous_epoch: 0,
-      next_epoch: 0,
-      membership_frontier: [frontierEventRef],
-      policy_root: digest("2"),
-      binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
-      reducer_profile: MLS_REDUCER_PROFILE_V1,
-    };
+    const effectiveScope = { kind: "realm" as const, realm_id: realmId };
+    const group = { groupId, effectiveScope };
+    const genesisBinding = await fetchMlsGovernanceBinding(
+      request,
+      aliceToken,
+      group,
+      0,
+      0,
+    );
     const genesisBody = await submitSignedEventApi(
       request,
       aliceToken,
@@ -970,6 +1012,14 @@ test.describe("MLS group encryption", () => {
       },
     );
     expect(genesisBody.accepted ?? []).toContain(genesisEventId);
+
+    const commitBinding = await fetchMlsGovernanceBinding(
+      request,
+      aliceToken,
+      group,
+      0,
+      1,
+    );
 
     const welcomeId = typedId("mls_welcome");
     const welcomeEventId = typedId("event");
@@ -1027,7 +1077,7 @@ test.describe("MLS group encryption", () => {
           ciphertext: welcomeCiphertext,
           expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
           commit_ref: commitEventId,
-          governance_binding: genesisBinding,
+          governance_binding: commitBinding,
         },
       }),
       {
@@ -1036,26 +1086,14 @@ test.describe("MLS group encryption", () => {
     );
     expect(welcomeBody.accepted ?? []).toContain(welcomeEventId);
 
-    const commitPayload = (label: string, nextEpoch = 1) => ({
+    const commitPayload = (label: string) => ({
       mls_group_id: groupId,
       base_epoch: 0,
-      base_epoch_ref: frontierEventRef,
+      base_epoch_ref: genesisEventId,
       proposal_refs: [],
-      next_epoch: nextEpoch,
+      next_epoch: 1,
       commit_digest: sha256Digest(Buffer.from(label, "utf8")),
-      governance_binding: {
-        binding_version: 1,
-        encoding_profile: "cbor-deterministic-rfc8949-v1",
-        realm_id: realmId,
-        effective_scope: effectiveScope,
-        mls_group_id: groupId,
-        previous_epoch: 0,
-        next_epoch: nextEpoch,
-        membership_frontier: [frontierEventRef],
-        policy_root: digest("2"),
-        binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
-        reducer_profile: MLS_REDUCER_PROFILE_V1,
-      },
+      governance_binding: commitBinding,
     });
     const commitEnvelope = signedEventEnvelope({
       actorDid: alice.did,
@@ -1075,30 +1113,56 @@ test.describe("MLS group encryption", () => {
     expect(commitBody.accepted ?? []).toContain(commitEventId);
 
     const pendingAfterWelcome = await request.get(
-      `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
       {
         headers: authHeaders(bobToken),
       },
     );
     expect(pendingAfterWelcome.ok()).toBeTruthy();
     const pendingAfterWelcomeBody = await pendingAfterWelcome.json();
-    expect(pendingAfterWelcomeBody.welcomes).toHaveLength(1);
-    expect(pendingAfterWelcomeBody.welcomes[0]).toMatchObject({
-      welcome_id: welcomeId,
-      mls_group_ref: groupId,
-      key_package_id: keypackageRef,
+    const deliveredWelcomes = (pendingAfterWelcomeBody.messages ?? []).filter(
+      (message: Record<string, unknown>) => message.kind === "ak.mls.welcome",
+    );
+    expect(deliveredWelcomes).toHaveLength(1);
+    expect(deliveredWelcomes[0]).toMatchObject({
+      kind: "ak.mls.welcome",
+      recipient_principal_id: bob.did,
+      recipient_device_id: bob.deviceId,
+      content: {
+        welcome_id: welcomeId,
+        mls_group_id: groupId,
+        keypackage_ref: keypackageRef,
+        commit_ref: commitEventId,
+        governance_binding: commitBinding,
+      },
     });
-    expect(pendingAfterWelcomeBody.welcomes[0].group_id).toBeUndefined();
-    expect(pendingAfterWelcomeBody.welcomes[0].delivered_at).toBeTruthy();
+    expect(pendingAfterWelcomeBody.ack_token).toBeTruthy();
+    expect(pendingAfterWelcomeBody.next_cursor).toBeTruthy();
 
-    const pendingAfterDrain = await request.get(
-      `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
+    const ackWelcome = await request.post(
+      `${solandBaseUrl()}/_arkret/self/device_messages/ack`,
+      {
+        headers: authHeaders(bobToken),
+        data: { ack_token: pendingAfterWelcomeBody.ack_token },
+      },
+    );
+    expect(ackWelcome.ok()).toBeTruthy();
+    expect((await ackWelcome.json()).ok).toBe(true);
+
+    const pendingAfterAck = await request.get(
+      `${solandBaseUrl()}/_arkret/self/device_messages?from=${encodeURIComponent(
+        String(pendingAfterWelcomeBody.next_cursor),
+      )}`,
       {
         headers: authHeaders(bobToken),
       },
     );
-    expect(pendingAfterDrain.ok()).toBeTruthy();
-    expect((await pendingAfterDrain.json()).welcomes).toEqual([]);
+    expect(pendingAfterAck.ok()).toBeTruthy();
+    expect(
+      ((await pendingAfterAck.json()).messages ?? []).filter(
+        (message: Record<string, unknown>) => message.kind === "ak.mls.welcome",
+      ),
+    ).toEqual([]);
 
     const staleCommit = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
@@ -1166,6 +1230,15 @@ test.describe("MLS group encryption", () => {
         grantAudience: bobSession!.grantAudience,
       }),
     ]);
+    const invalidHistoryBackupWarnings: string[] = [];
+    for (const userPage of [alicePage, bobPage]) {
+      userPage.page.on("console", (message) => {
+        const text = message.text();
+        if (text.includes("encryption.aead is required")) {
+          invalidHistoryBackupWarnings.push(text);
+        }
+      });
+    }
 
     try {
       await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
@@ -1260,6 +1333,34 @@ test.describe("MLS group encryption", () => {
       expect(rawWire).toContain("encrypted_content");
       expect(rawWire).toContain("mls-exporter-aead");
       expect(rawWire).not.toContain(plaintext);
+      expect(rawWire).not.toContain(bobPlaintext);
+
+      const storageNeedles = [plaintext, bobPlaintext];
+      const [aliceStorage, bobStorage] = await Promise.all([
+        auditBrowserStorage(alicePage.page, storageNeedles),
+        auditBrowserStorage(bobPage.page, storageNeedles),
+      ]);
+      for (const audit of [aliceStorage, bobStorage]) {
+        expect(
+          audit.indexedDbEnumerationSupported,
+          "Chromium must expose IndexedDB database enumeration for a complete storage audit",
+        ).toBe(true);
+        expect(audit.indexedDbStores).toContain(
+          "inkson.secret.inkson/entries",
+        );
+        expect(
+          audit.indexedDbEntryKeys.some((key) =>
+            key.includes("inkson.e2ee_plaintext_cache.v1."),
+          ),
+          "the audit must observe the encrypted E2EE plaintext-cache entry",
+        ).toBe(true);
+        expect(audit.plaintextMatches).toEqual([]);
+        expect(audit.weakE2eeLocalStorageKeys).toEqual([]);
+      }
+      expect(
+        invalidHistoryBackupWarnings,
+        "a metadata-only key-backup list summary must never reach the MLS envelope decoder",
+      ).toEqual([]);
 
       await stepShot(
         bobPage.page,
@@ -1342,7 +1443,12 @@ test.describe("MLS group encryption", () => {
           if (resp.status() !== 200) {
             return null;
           }
-          return JSON.stringify(await resp.json());
+          const body = (await resp.json()) as {
+            events?: Array<{ event_id?: unknown }>;
+          };
+          return (body.events ?? [])
+            .map((event) => event.event_id)
+            .filter((eventId): eventId is string => typeof eventId === "string");
         },
         {
           timeout: 60_000,
@@ -1357,10 +1463,15 @@ test.describe("MLS group encryption", () => {
       headers: authHeaders(carolToken),
     });
     expect(carolEvents.status()).toBe(200);
-    const carolWire = JSON.stringify(await carolEvents.json());
+    const carolBody = (await carolEvents.json()) as {
+      events?: Array<{ event_id?: unknown }>;
+    };
+    const carolEventIds = (carolBody.events ?? [])
+      .map((event) => event.event_id)
+      .filter((eventId): eventId is string => typeof eventId === "string");
     // Post-join epoch event visible; pre-join epoch event id cropped.
-    expect(carolWire).toContain(postJoinEventId);
-    expect(carolWire).not.toContain(preJoinEventId);
+    expect(carolEventIds).toContain(postJoinEventId);
+    expect(carolEventIds).not.toContain(preJoinEventId);
 
     // Sanity: alice (owner) still sees both events — the crop is a per-reader
     // history gate, not a delete.
@@ -1368,9 +1479,14 @@ test.describe("MLS group encryption", () => {
       headers: authHeaders(aliceToken),
     });
     expect(aliceEvents.status()).toBe(200);
-    const aliceWire = JSON.stringify(await aliceEvents.json());
-    expect(aliceWire).toContain(preJoinEventId);
-    expect(aliceWire).toContain(postJoinEventId);
+    const aliceBody = (await aliceEvents.json()) as {
+      events?: Array<{ event_id?: unknown }>;
+    };
+    const aliceEventIds = (aliceBody.events ?? [])
+      .map((event) => event.event_id)
+      .filter((eventId): eventId is string => typeof eventId === "string");
+    expect(aliceEventIds).toContain(preJoinEventId);
+    expect(aliceEventIds).toContain(postJoinEventId);
   });
 
   test("alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms", async ({

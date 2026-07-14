@@ -13,6 +13,7 @@ import {
 import {
   coauthBaseUrl,
   diagnosticsRoot,
+  inksonBaseUrl,
   type SolandKey,
   solandBaseUrl,
   solandServiceId,
@@ -1357,16 +1358,6 @@ export async function openUser(
     sanitize(`${Date.now()}-${user.name}`),
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
-  const context = await browser.newContext({
-    // Opt-in for running against a live Caddy stack whose TLS is `tls internal`
-    // (self-signed). Default off so CI/headless harness runs are unaffected.
-    ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
-    recordHar: {
-      path: path.join(diagnosticsDir, "network.har"),
-      mode: "minimal",
-      content: "omit",
-    },
-  });
   const sessionInjection =
     opts.grantJwt && opts.dpopSeedB64url
       ? {
@@ -1376,61 +1367,79 @@ export async function openUser(
           audience: opts.grantAudience ?? "",
         }
       : undefined;
-  await context.addInitScript(
-    (init) => {
-      if (init.neutralLoginConfig) {
-        if (!window.localStorage.getItem("inkson.config.v1")) {
-          window.localStorage.setItem(
-            "inkson.config.v1",
-            JSON.stringify(init.config),
-          );
-        }
-      } else {
-        window.localStorage.setItem(
-          "inkson.config.v1",
-          JSON.stringify(init.config),
-        );
-      }
-      // The harness injects sessions into localStorage; inkson's wasm build is
-      // IndexedDB-only for session credentials/secrets by default (SubtleCrypto, non-
-      // extractable). Opt into the localStorage compatibility tier so the
-      // injected credential/seed are accepted (test-only; production leaves this
-      // unset). See inkson secure_key_store WASM_ALLOW_LOCALSTORAGE_SECRETS_FLAG.
-      window.localStorage.setItem(
-        "inkson.security.allow_localstorage_secrets",
-        "1",
-      );
-      // ②(A+②) real-grant injection: hand inkson's dev-only boot path the real
-      // ak.session.grant + the DPoP device seed it is bound to, so the wasm
-      // client rehydrates a genuine grant (coauth introspection passes, device
-      // enrollment runs) instead of a soland-only dev-login credential. inkson reads
-      // this key only when allow_localstorage_secrets is on. See inkson
-      // app.rs inject_test_session_grant.
-      if (init.sessionInjection) {
-        window.localStorage.setItem(
-          "inkson.test.session_injection.v1",
-          JSON.stringify(init.sessionInjection),
-        );
-      } else if (init.sessionCredential) {
-        window.localStorage.setItem(
-          "inkson.test.session_credential_injection.v1",
-          init.sessionCredential,
-        );
-      }
-    },
+  const localStorage = [
     {
-      config: {
+      name: "inkson.config.v1",
+      value: JSON.stringify({
         server_url: serverUrl,
         principal_servers: [serverUrl],
         account_did: opts.neutralLoginConfig ? "" : user.did,
         device_id: opts.neutralLoginConfig ? "" : user.deviceId,
         session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
-      },
-      neutralLoginConfig: opts.neutralLoginConfig === true,
-      sessionInjection,
-      sessionCredential,
+      }),
     },
+  ];
+  if (sessionInjection) {
+    localStorage.push({
+      name: "inkson.test.session_injection.v1",
+      value: JSON.stringify(sessionInjection),
+    });
+  } else if (sessionCredential) {
+    localStorage.push({
+      name: "inkson.test.session_credential_injection.v1",
+      value: sessionCredential,
+    });
+  }
+  const context = await browser.newContext({
+    // Opt-in for running against a live Caddy stack whose TLS is `tls internal`
+    // (self-signed). Default off so CI/headless harness runs are unaffected.
+    ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+    recordHar: {
+      path: path.join(diagnosticsDir, "network.har"),
+      mode: "minimal",
+      content: "omit",
+    },
+    // Seed the Inkson origin directly. An init script also runs once against
+    // the initial opaque about:blank document, where localStorage access throws
+    // SecurityError and can make session injection nondeterministic.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: new URL(inksonBaseUrl(opts.server)).origin,
+          localStorage,
+        },
+      ],
+    },
+  });
+  const seededStorageState = await context.storageState();
+  const seededOrigin = seededStorageState.origins.find(
+    ({ origin }) => origin === new URL(inksonBaseUrl(opts.server)).origin,
   );
+  const seededNames = new Set(
+    seededOrigin?.localStorage.map(({ name }) => name) ?? [],
+  );
+  if (!seededNames.has("inkson.config.v1")) {
+    await context.close();
+    throw new Error("Inkson browser context is missing its seeded config");
+  }
+  if (
+    sessionInjection &&
+    !seededNames.has("inkson.test.session_injection.v1")
+  ) {
+    await context.close();
+    throw new Error("Inkson browser context is missing its test session fixture");
+  }
+  if (
+    !sessionInjection &&
+    sessionCredential &&
+    !seededNames.has("inkson.test.session_credential_injection.v1")
+  ) {
+    await context.close();
+    throw new Error(
+      "Inkson browser context is missing its test credential fixture",
+    );
+  }
   // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's
   // dev WS reconnects mid-test the overlay covers the page and blocks pointer
   // events, even though the app underneath is interactive. We never want to

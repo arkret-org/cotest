@@ -22,10 +22,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret_core::error::{
     REASON_ACCOUNTABILITY_GRANT_MISSING, REASON_AGENT_DEACTIVATED,
-    REASON_AGENT_KEY_AUTHORIZATION_EXPIRED, REASON_AGENT_PAUSED, REASON_APPROVAL_ALREADY_CONSUMED,
-    REASON_APPROVAL_NONCE_REUSED, REASON_PAIRING_REQUEST_EXPIRED, REASON_PROOF_INVALID,
-    REASON_SIDECAR_CREATE_DENIED, REASON_SUPERSEDED_BY_REPAIRING,
-    REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+    REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE, REASON_AGENT_KEY_AUTHORIZATION_EXPIRED,
+    REASON_AGENT_PAUSED, REASON_APPROVAL_ALREADY_CONSUMED, REASON_APPROVAL_NONCE_REUSED,
+    REASON_PAIRING_REQUEST_EXPIRED, REASON_PROOF_INVALID, REASON_SIDECAR_CREATE_DENIED,
+    REASON_SUPERSEDED_BY_REPAIRING, REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
 };
 use arkret_core::{
     AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, Did, ErrorEnvelope,
@@ -100,19 +100,51 @@ fn validate_agent_vectors_fixture_metadata() -> Result<()> {
 
 // ─── VECT-AG-1 — provision ─────────────────────────────────────────────────
 
-#[derive(Clone, Copy, Debug)]
-struct MiniAgentGrantState {
-    paired_authorized_key: bool,
-    effective_after_first_authorized_key: bool,
+type ScopeSelector<'a> = (&'a str, Option<&'a str>, Option<&'a str>);
+
+fn content_selector(kind: &str) -> bool {
+    matches!(kind, "realm" | "strand" | "space" | "object")
 }
 
-fn admit_agent_session_with_grant(
-    state: MiniAgentGrantState,
+fn selector_covers(parent: ScopeSelector<'_>, child: ScopeSelector<'_>) -> bool {
+    let (parent_kind, parent_realm, parent_ref) = parent;
+    let (child_kind, child_realm, child_ref) = child;
+    let kind_covers =
+        parent_kind == child_kind || (parent_kind == "realm" && content_selector(child_kind));
+    kind_covers
+        && parent_realm.is_none_or(|value| child_realm == Some(value))
+        && parent_ref.is_none_or(|value| child_ref == Some(value))
+}
+
+fn admit_scope_within_agent_ceiling(
+    requested_actions: &[&str],
+    requested_resources: &[ScopeSelector<'_>],
+    requested_constraints: &[&str],
+    child_actions: &[&str],
+    child_resources: &[ScopeSelector<'_>],
+    child_constraints: &[&str],
+    reason: &'static str,
 ) -> std::result::Result<(), &'static str> {
-    if state.effective_after_first_authorized_key && !state.paired_authorized_key {
-        return Err("agent_grant_inactive_before_pairing");
+    let actions_fit = child_actions
+        .iter()
+        .all(|action| requested_actions.contains(action));
+    let has_content_ceiling = requested_resources
+        .iter()
+        .any(|(kind, ..)| content_selector(kind));
+    let resources_fit = child_resources.iter().all(|child| {
+        (content_selector(child.0) && !has_content_ceiling)
+            || requested_resources
+                .iter()
+                .any(|parent| selector_covers(*parent, *child))
+    });
+    let constraints_fit = requested_constraints
+        .iter()
+        .all(|constraint| child_constraints.contains(constraint));
+    if actions_fit && resources_fit && constraints_fit {
+        Ok(())
+    } else {
+        Err(reason)
     }
-    Ok(())
 }
 
 pub fn run_agent_provision_vector() -> Result<()> {
@@ -131,19 +163,72 @@ pub fn run_agent_provision_vector() -> Result<()> {
             "REASON_ACCOUNTABILITY_GRANT_MISSING spelling drifted: {REASON_ACCOUNTABILITY_GRANT_MISSING}"
         );
     }
-    let pending = MiniAgentGrantState {
-        paired_authorized_key: false,
-        effective_after_first_authorized_key: true,
-    };
-    if admit_agent_session_with_grant(pending) != Err("agent_grant_inactive_before_pairing") {
-        bail!("agent grant became active before agent key pairing");
+    let realm = "ak:realm:019a7360-0000-7000-8000-000000000000";
+    let other_realm = "ak:realm:019a7360-0000-7000-8000-000000000001";
+    let ceiling_actions = ["ak.event.read", "ak.message.create", "ak.reaction.add"];
+    let ceiling_resources = [
+        ("operation", None, Some("ak.self.events.stream.subscribe")),
+        ("realm", Some(realm), None),
+    ];
+    let mandatory_constraints = ["controller_approval_required"];
+
+    admit_scope_within_agent_ceiling(
+        &ceiling_actions,
+        &ceiling_resources,
+        &mandatory_constraints,
+        &["ak.event.read"],
+        &[("strand", Some(realm), Some("ak:strand:019a7360"))],
+        &["controller_approval_required", "rate_limit"],
+        "agent_scope_exceeds_requested_scope",
+    )
+    .map_err(|reason| anyhow!("narrower Agent key scope was rejected: {reason}"))?;
+    if admit_scope_within_agent_ceiling(
+        &ceiling_actions,
+        &ceiling_resources,
+        &mandatory_constraints,
+        &["ak.event.read"],
+        &[("strand", Some(realm), Some("ak:strand:019a7360"))],
+        &[],
+        "agent_scope_exceeds_requested_scope",
+    ) != Err("agent_scope_exceeds_requested_scope")
+    {
+        bail!("Agent key scope dropped a mandatory provision constraint");
     }
-    let paired = MiniAgentGrantState {
-        paired_authorized_key: true,
-        effective_after_first_authorized_key: true,
-    };
-    admit_agent_session_with_grant(paired)
-        .map_err(|reason| anyhow!("paired grant was rejected: {reason}"))?;
+
+    admit_scope_within_agent_ceiling(
+        &ceiling_actions,
+        &ceiling_resources,
+        &mandatory_constraints,
+        &["ak.event.read"],
+        &[("object", Some(realm), Some("ak:object:019a7360"))],
+        &["controller_approval_required"],
+        REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+    )
+    .map_err(|reason| anyhow!("narrower Realm grant was rejected: {reason}"))?;
+    if admit_scope_within_agent_ceiling(
+        &ceiling_actions,
+        &ceiling_resources,
+        &mandatory_constraints,
+        &["ak.strand.update"],
+        &[("object", Some(realm), Some("ak:object:019a7360"))],
+        &["controller_approval_required"],
+        REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+    ) != Err(REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE)
+    {
+        bail!("Realm grant restored an action omitted from requested_scope");
+    }
+    if admit_scope_within_agent_ceiling(
+        &ceiling_actions,
+        &ceiling_resources,
+        &mandatory_constraints,
+        &["ak.event.read"],
+        &[("object", Some(other_realm), Some("ak:object:019a7361"))],
+        &["controller_approval_required"],
+        REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+    ) != Err(REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE)
+    {
+        bail!("Realm grant escaped the provisioned content resource ceiling");
+    }
     Ok(())
 }
 

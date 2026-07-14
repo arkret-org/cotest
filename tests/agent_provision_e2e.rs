@@ -4,8 +4,8 @@
 //! Exercises the dev-mode server-authored fan-out (architecture option B) end
 //! to end through the public agent HTTP surface:
 //!   1. `ak.self.agent.command.provision` -> `pending_runtime_key` + pairing.
-//!   2. `ak.gate.account.command.pair_agent_key` -> durable `ak.agent.key.authorize`, clears
-//!      `effective_after_first_authorized_key`, status -> `active`.
+//!   2. `ak.gate.account.command.pair_agent_key` -> durable `ak.agent.key.authorize`, status ->
+//!      `active` without changing Realm grants.
 //!   3. grant attach / detach -> durable `ak.capability.grant` / `ak.capability.revoke`.
 //!   4. pause / resume / deactivate -> durable lifecycle events flip status.
 //!
@@ -78,6 +78,32 @@ const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901
 static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
 static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, (u64, Vec<String>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn test_agent_requested_scope() -> arkret::AgentKeyScope {
+    let service_actions = [
+        "ak.self.events.stream.subscribe",
+        "ak.self.events.query.scan",
+        "ak.self.events.command.submit",
+    ];
+    arkret::AgentKeyScope {
+        actions: service_actions
+            .into_iter()
+            .chain(["ak.event.read", "ak.message.create"])
+            .map(ToOwned::to_owned)
+            .collect(),
+        resources: service_actions
+            .into_iter()
+            .map(|operation| arkret::AgentKeyScopeResource {
+                kind: arkret::AgentKeyScopeResourceKind::Operation,
+                realm_id: None,
+                resource_ref: None,
+                operation: Some(operation.to_owned()),
+                service_id: None,
+            })
+            .collect(),
+        constraints: Vec::new(),
+    }
+}
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
@@ -166,7 +192,6 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                     issued_at: Utc::now(),
                     not_before: None,
                     expires_at: None,
-                    effective_after_first_authorized_key: None,
                     updated_by: None,
                     updated_at: None,
                     revoked_by: None,
@@ -263,7 +288,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
             display_name: Some("Renewal Assistant".to_owned()),
             slug: "renewal".to_owned(),
             avatar_blob_ref: None,
-            requested_scope: None,
+            requested_scope: test_agent_requested_scope(),
             accountability: Value::Null,
             pairing_ttl_ms: Some(1),
         })
@@ -401,7 +426,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
             display_name: Some("Status Poll Assistant".to_owned()),
             slug: "statuspoll".to_owned(),
             avatar_blob_ref: None,
-            requested_scope: None,
+            requested_scope: test_agent_requested_scope(),
             accountability: Value::Null,
             pairing_ttl_ms: None,
         })
@@ -1550,7 +1575,7 @@ async fn provision_and_pair_agent(
             display_name: Some(display_name.to_owned()),
             slug: slug.to_owned(),
             avatar_blob_ref: None,
-            requested_scope: None,
+            requested_scope: test_agent_requested_scope(),
             accountability: Value::Null,
             pairing_ttl_ms: None,
         })
@@ -1719,33 +1744,13 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
         &pairing_expires_at,
         server.service_id(),
     )?;
-    let actions = [
-        "ak.self.events.stream.subscribe",
-        "ak.self.events.query.scan",
-        "ak.self.events.command.submit",
-        "ak.event.read",
-        "ak.message.create",
-    ];
     let authorize_payload = arkret::AgentKeyAuthorizePayload {
         agent_id: agent_id.clone(),
         key_id: verification_method.clone(),
         verification_method: verification_method.clone(),
         public_key_digest: Some(runtime_public_key_digest),
         accountable_principal_id: controller_id.clone(),
-        agent_key_scope: arkret::AgentKeyScope {
-            actions: actions.iter().map(|action| (*action).to_owned()).collect(),
-            resources: actions
-                .iter()
-                .map(|operation| arkret::AgentKeyScopeResource {
-                    kind: arkret::AgentKeyScopeResourceKind::Operation,
-                    realm_id: None,
-                    resource_ref: None,
-                    operation: Some((*operation).to_owned()),
-                    service_id: None,
-                })
-                .collect(),
-            constraints: Vec::new(),
-        },
+        agent_key_scope: test_agent_requested_scope(),
         audience: vec![server.service_id().to_owned()],
         issued_at: canonical_now(),
         expires_at: Some(
