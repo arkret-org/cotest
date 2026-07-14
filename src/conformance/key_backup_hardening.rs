@@ -176,10 +176,7 @@ fn backup_envelope_state(value: &Value) -> Result<BackupEnvelopeState> {
 }
 
 fn proof_digest_str(proof: &KeyBackupUnlockProof) -> Result<&str> {
-    proof
-        .proof_digest
-        .as_str()
-        .ok_or_else(|| anyhow!("proof_digest must be a string hash"))
+    Ok(proof.proof_digest.as_str())
 }
 
 fn backup_class_str(backup_class: BackupClass) -> &'static str {
@@ -210,7 +207,7 @@ fn authorize_unlock(
         || path_backup_id != envelope.backup_id
         || proof.recovery_session_id.as_str() != session.recovery_session_id
         || proof.principal_id.as_str() != session.principal_id
-        || proof.requesting_device_id != session.requesting_device_id
+        || proof.requesting_device_id.as_str() != session.requesting_device_id
         || backup_class_str(proof.backup_class) != envelope.backup_class
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest

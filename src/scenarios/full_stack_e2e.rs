@@ -47,8 +47,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_core::{
     Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
-    DeliveryMode, Did, Handle, HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate,
-    PayloadProof, RecipientServiceType, sanitize_blind_payload, sanitize_blind_payload_strict,
+    DeliveryMode, Did, EventId, Handle, HandleHintBindingSource, Hash,
+    MemberDeliveryBindingCandidate, Proof, RecipientServiceType, sanitize_blind_payload,
+    sanitize_blind_payload_strict,
 };
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
@@ -70,7 +71,7 @@ const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
 const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-fullstacke2e1";
 const STABLE_STRAND_ID: &str = "ak:strand:0196419b-0000-7000-8000-fullstackflow";
 const STABLE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-fullstackevt0";
-const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-srcref0000001";
+const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
 
 /// Opaque push pseudonym used by the blind-wakeup mock. Matches the
 /// `ak:pseudonym:push:<token>` shape required by the sanitizer.
@@ -509,7 +510,7 @@ fn negative_placeholder_proof_sdk_layer() -> Result<()> {
         .proofs
         .first()
         .ok_or_else(|| anyhow!("sample candidate is missing proofs[]"))?;
-    let jws = proof.get("jws").and_then(Value::as_str).unwrap_or_default();
+    let jws = proof.jws.as_str();
     if jws == "a..b" {
         bail!(
             "T8.1 negative: sample_candidate emits the production-rejected \
@@ -660,8 +661,8 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
         issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),
         expires_at: future_expiry(ChronoDuration::minutes(5)),
-        issued_at: Some(Utc::now()),
-        source_refs: vec![SOURCE_REF_EVENT_ID.to_owned()],
+        issued_at: Utc::now(),
+        source_refs: vec![EventId::new(SOURCE_REF_EVENT_ID.to_owned())?],
         proofs: vec![candidate_payload_proof(
             "sha256:00000000000000000000000000000000000000000000000000000000000000bb",
             TARGET_REALM_ID,
@@ -676,17 +677,15 @@ fn future_expiry(window: ChronoDuration) -> DateTime<Utc> {
     Utc::now() + window
 }
 
-fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Value> {
-    let proof = PayloadProof {
+fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Proof> {
+    Ok(Proof {
         kind: "detached_jws".to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: "did:web:principal.acme.example#key-1".to_owned(),
-        payload_digest: Hash::new(digest.to_owned())?,
+        event_digest: Hash::new(digest.to_owned())?,
         created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00Z")?.with_timezone(&Utc),
         domain: None,
         audience: Some(Audience::Single(audience.to_owned())),
-        proof_purpose: None,
         jws: jws.to_owned(),
-    };
-    Ok(serde_json::to_value(proof)?)
+    })
 }

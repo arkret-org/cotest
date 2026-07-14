@@ -1116,7 +1116,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         bail!("mismatched claim_envelope nonce was accepted");
     }
     if expected_bool(vector, "all_digest_fields_equal")?
-        && good.keypackage_digest.as_str() != Some(claim.keypackage_digest.as_str())
+        && good.keypackage_digest.as_str() != claim.keypackage_digest.as_str()
     {
         bail!("good welcome digest fields are not equal");
     }

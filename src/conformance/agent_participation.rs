@@ -6,13 +6,14 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_core::{
     AGENT_SELECTOR_CLAIM_SCHEMA, AgentParticipation, AgentParticipationEntry,
-    AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope,
+    AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope, Audience,
     AgentSelectorClaim, Did, DirectoryAgentSelectorResolutionOutcome, Handle, HandleBindingState,
-    HandleVisibility, Mention, MentionNode, RealmId, effective_participation, fold_ceiling_chain,
-    validate_agent_participation_tightens, validate_selection_within_ceiling,
+    HandleVisibility, Hash, Mention, MentionNode, Proof, RealmId, effective_participation,
+    fold_ceiling_chain, validate_agent_participation_tightens,
+    validate_selection_within_ceiling,
 };
 use chrono::{TimeZone, Utc};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
 
@@ -181,7 +182,20 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
         verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
         source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
-        proofs: vec![json!({"kind": "detached_jws", "alg": "EdDSA"})],
+        proofs: vec![Proof {
+            kind: "detached_jws".to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: "did:web:directory.acme.example#key-1".to_owned(),
+            event_digest: Hash::new(
+                "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+            )?,
+            created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
+            domain: None,
+            audience: Some(Audience::Single(
+                "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned(),
+            )),
+            jws: "fixture.signature.value".to_owned(),
+        }],
     })
 }
 

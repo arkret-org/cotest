@@ -3,8 +3,9 @@ use std::sync::atomic::Ordering;
 use anyhow::{Result, anyhow};
 use arkret_core::{
     ContentBlock, DeliveryStatus, Did, EventId, Hash, InviteCreatePayload, InviteDeliveryTarget,
-    InviteId, MembershipPayload, MembershipPayloadState, MessageCreatePayload, MessageId,
-    MessageRedactPayload, MessageRevisePayload, RealmId, StrandId,
+    InviteId, MemberDeliveryBinding, MembershipInviteRef, MembershipPayload,
+    MembershipPayloadState, MessageCreatePayload, MessageId, MessageRedactPayload,
+    MessageRevisePayload, RealmId, StrandId,
 };
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
@@ -472,6 +473,14 @@ fn member_payload(
     invite_ref: Option<String>,
     reason: Option<String>,
 ) -> Result<Value> {
+    let delivery_binding = delivery_binding
+        .map(serde_json::from_value::<MemberDeliveryBinding>)
+        .transpose()
+        .map_err(|error| anyhow!("invalid member delivery binding: {error}"))?;
+    let invite_ref = invite_ref
+        .map(|value| serde_json::from_value::<MembershipInviteRef>(Value::String(value)))
+        .transpose()
+        .map_err(|error| anyhow!("invalid membership invite ref: {error}"))?;
     MembershipPayload {
         membership,
         strand_id: None,

@@ -161,7 +161,7 @@ fn unsigned_recovery_policy(
             .map(str::to_owned)
             .collect(),
         },
-        extra: BTreeMap::new(),
+        extra: Default::default(),
     })
 }
 

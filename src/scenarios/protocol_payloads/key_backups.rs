@@ -19,11 +19,11 @@ use anyhow::{Context as _, Result, anyhow};
 use arkret_core::canonical::canonical_json_bytes;
 use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, DeviceId, Did, Hash, KeyBackup, KeyBackupAead,
-    KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
+    BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, Hash, KeyBackup,
+    KeyBackupAead, KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
     KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
     KeyBackupRetention, KeyBackupSignatureAlgorithm, KeyBackupUnlockProof,
-    KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, RecoverySessionId,
+    KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, ProofKind, RecoverySessionId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -270,21 +270,22 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
             "ak:recovery_session:01964137-0000-7000-8000-0000000000aa",
         )?,
         principal_id: did(ACTOR_ID)?,
-        requesting_device_id: DEVICE_ID.to_owned(),
+        requesting_device_id: DeviceId::new(DEVICE_ID.to_owned())?,
         backup_id: backup_id(BACKUP_ID)?,
         backup_class: BackupClass::MlsHistory,
         series_id: backup_series_id(SERIES_ID)?,
         ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
-        proof_kind: "principal_signing".to_owned(),
-        proof_digest: Value::String(
-            "sha256:84a51084210842108421084210842108421084210842108421084210842108aa".to_owned(),
-        ),
+        proof_kind: ProofKind::PrincipalSigning,
+        proof_digest: Hash::new(
+            "sha256:84a51084210842108421084210842108421084210842108421084210842108aa",
+        )?,
         challenge: None,
         issued_at: ts("2026-04-26T00:00:00Z")?,
         auth_data: KeyBackupUnlockProofAuthData {
-            verification_method: Value::String(verification_method),
-            signature_algorithm: "Ed25519".to_owned(),
-            signature: String::new(),
+            verification_method: DidUrl::new(verification_method)
+                .map_err(|error| anyhow!(error))?,
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
             signed_fields: [
                 "schema",
                 "recovery_session_id",
@@ -302,7 +303,7 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
             .map(str::to_owned)
             .collect(),
         },
-        extra: BTreeMap::new(),
+        extra: Default::default(),
     };
     // soland verifies the signature over canonical JSON of the proof with
     // `auth_data.signature` removed — sign first, then attach.
@@ -310,7 +311,8 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
     remove_auth_signature(&mut unsigned)?;
     let canonical = canonical_json_bytes(&unsigned)?;
     let signature = signing_key.sign(&canonical);
-    proof.auth_data.signature = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+    proof.auth_data.signature = Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+        .map_err(|error| anyhow!(error))?;
     Ok(proof)
 }
 

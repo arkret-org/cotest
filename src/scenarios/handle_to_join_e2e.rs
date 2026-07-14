@@ -38,8 +38,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_core::{
     Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
-    DeliveryMode, Did, Handle, HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate,
-    PayloadProof, RecipientServiceType,
+    DeliveryMode, Did, EventId, Handle, HandleHintBindingSource, Hash,
+    MemberDeliveryBindingCandidate, Proof, RecipientServiceType,
 };
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
@@ -73,7 +73,7 @@ const ALICE_HANDLE: &str = "alice:acme.example";
 /// Source-ref event id the directory would echo back on a real
 /// `ak.find.directory.query.resolve_handle` envelope. Carried so `source_refs[]` is
 /// non-empty (a candidate validator MUST-rule).
-const SOURCE_REF_EVENT_ID: &str = "ak:event:01890000-0000-7000-8000-source0001";
+const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000002";
 
 // ── Public scenario entry-point ────────────────────────────────────────────
 
@@ -509,8 +509,8 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
         issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),
         expires_at: future_expiry(ChronoDuration::minutes(5)),
-        issued_at: Some(Utc::now()),
-        source_refs: vec![SOURCE_REF_EVENT_ID.to_owned()],
+        issued_at: Utc::now(),
+        source_refs: vec![EventId::new(SOURCE_REF_EVENT_ID.to_owned())?],
         proofs: vec![candidate_payload_proof(
             "sha256:00000000000000000000000000000000000000000000000000000000000000aa",
             TARGET_REALM_ID,
@@ -525,17 +525,15 @@ fn future_expiry(window: ChronoDuration) -> DateTime<Utc> {
     Utc::now() + window
 }
 
-fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Value> {
-    let proof = PayloadProof {
+fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Proof> {
+    Ok(Proof {
         kind: "detached_jws".to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: "did:web:principal.acme.example#key-1".to_owned(),
-        payload_digest: Hash::new(digest.to_owned())?,
+        event_digest: Hash::new(digest.to_owned())?,
         created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00Z")?.with_timezone(&Utc),
         domain: None,
         audience: Some(Audience::Single(audience.to_owned())),
-        proof_purpose: None,
         jws: jws.to_owned(),
-    };
-    Ok(serde_json::to_value(proof)?)
+    })
 }
