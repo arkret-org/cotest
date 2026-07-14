@@ -1,13 +1,11 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
-    KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
-    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, PolicyId, RecoveryPolicy, RecoveryPolicyAuthData,
-    RecoveryPolicyRef, RecoveryProofKind, TypedTrustDomainId,
+    BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, KeyBackup,
+    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
+    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, PolicyId, RecoveryPolicy,
+    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind, TypedTrustDomainId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -186,16 +184,16 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             // aead.name MUST equal that suite's AEAD (`chacha20_poly1305`) —
             // the SDK rejects a mismatch at parse time (schema_violation).
             aead: KeyBackupAead {
-                name: "chacha20_poly1305".to_owned(),
+                name: KeyBackupAeadName::Chacha20Poly1305,
                 aead_profile: Some("ak.aead.chacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
                 nonce: None,
-                enc: Some("Y290ZXN0LWVuYw".to_owned()),
-                extra: BTreeMap::new(),
+                enc: Some(Base64UrlString::new("Y290ZXN0LWVuYw").map_err(|error| anyhow!(error))?),
+                extra: Default::default(),
             },
             key_commitment: None,
             hpke_suite: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         domain_separation: KeyBackupDomainSeparation {
             hkdf_info: "arkret-key-backup/did_recovery/recovery_policy/v1".to_owned(),
@@ -211,9 +209,9 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
-                extra: BTreeMap::new(),
+                extra: Default::default(),
             },
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
             item_type: "recovery_secret".to_owned(),
@@ -225,7 +223,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             last_event_id: None,
             secret_id: None,
             secret_version: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }],
         ciphertext: "cotest-did-recovery-ciphertext".to_owned(),
         ciphertext_digest:
@@ -233,10 +231,11 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
         plaintext_commitment: None,
         auth_data: Some(KeyBackupAuthData {
             device_id: DeviceId::new(DEVICE_A.to_owned())?,
-            verification_method: "did:key:z6Mkdevice#z6Mkdevice".to_owned(),
+            verification_method: DidUrl::new("did:key:z6Mkdevice#z6Mkdevice")
+                .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
-            signature: "c2lnbmF0dXJl".to_owned(),
-            ssk_generation: Some(1),
+            signature: Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?,
+            ssk_generation: std::num::NonZeroU64::new(1),
             device_authorize_event_id: None,
             signed_fields: [
                 "backup_id",
@@ -254,7 +253,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             .into_iter()
             .map(str::to_owned)
             .collect(),
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }),
         retention: None,
         series_id: BackupSeriesId::new(
@@ -268,7 +267,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             policy_id: PolicyId::new(policy_id.to_owned())?,
             policy_version: 1,
         }),
-        extra: BTreeMap::new(),
+        extra: Default::default(),
     })
 }
 

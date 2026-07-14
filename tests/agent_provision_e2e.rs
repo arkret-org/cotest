@@ -17,7 +17,7 @@
 //! DPoP-bound `agent_key_proof` session grant and backing soland with a local
 //! introspection service.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
@@ -27,13 +27,14 @@ use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, CrossSigningPublish,
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, DidUrl,
     Error as ArkretError, EventsFrontierAccountClientState, EventsFrontierView,
-    EventsSubscribeFrameKind, KeyBackup, KeyBackupAead, KeyBackupAuthData, KeyBackupContentItem,
-    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
-    KeyBackupFrontierRef, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyFormat,
-    ManagedFrontierRef, ManagedPrincipalBinding, NonEmptyString, PolicyId, PublishedKey,
-    RecoveryKeyEntry, RecoveryPolicy, RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
-    SignatureMaterial, SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
-    canonical, ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
+    EventsSubscribeFrameKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
+    KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, KeyFormat, ManagedFrontierRef, ManagedPrincipalBinding,
+    NonEmptyString, PolicyId, PublishedKey, RecoveryKeyEntry, RecoveryPolicy,
+    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial,
+    SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId, canonical,
+    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
 };
 use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
@@ -1417,16 +1418,19 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             recipient_key_ref: Some(recipient_key_ref.clone()),
             kdf: None,
             aead: KeyBackupAead {
-                name: "chacha20_poly1305".to_owned(),
+                name: KeyBackupAeadName::Chacha20Poly1305,
                 aead_profile: Some("ak.aead.chacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
                 nonce: None,
-                enc: Some("Y290ZXN0LW1hbmFnZWQtYWdlbnQtcGNy".to_owned()),
-                extra: BTreeMap::new(),
+                enc: Some(
+                    Base64UrlString::new("Y290ZXN0LW1hbmFnZWQtYWdlbnQtcGNy")
+                        .map_err(|error| anyhow!(error))?,
+                ),
+                extra: Default::default(),
             },
             key_commitment: None,
             hpke_suite: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         domain_separation: KeyBackupDomainSeparation {
             hkdf_info: "arkret-key-backup/mls_history/managed_agent_pcr/v1".to_owned(),
@@ -1442,9 +1446,9 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                 managed_principal_bindings: vec![binding.clone()],
                 recipient_method: Some(KeyBackupRecipientMethod::RecoveryPublicKey),
                 recipient_key_ref: Some(recipient_key_ref.clone()),
-                extra: BTreeMap::new(),
+                extra: Default::default(),
             },
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
             item_type: "mls_group_state".to_owned(),
@@ -1456,7 +1460,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             last_event_id: None,
             secret_id: None,
             secret_version: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }],
         ciphertext: "Y290ZXN0LW1hbmFnZWQtYWdlbnQtcGNyLXN0YXRl".to_owned(),
         ciphertext_digest:
@@ -1464,13 +1468,16 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         plaintext_commitment: None,
         auth_data: Some(KeyBackupAuthData {
             device_id: DeviceId::new(ALICE_DEVICE.to_owned())?,
-            verification_method: format!("did:key:{device_multibase}#{device_multibase}"),
+            verification_method: DidUrl::new(format!(
+                "did:key:{device_multibase}#{device_multibase}"
+            ))
+            .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
-            signature: String::new(),
-            ssk_generation: Some(1),
+            signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
+            ssk_generation: std::num::NonZeroU64::new(1),
             device_authorize_event_id: None,
             signed_fields,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }),
         retention: None,
         series_id: series_id.clone(),
@@ -1486,7 +1493,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             policy_id: PolicyId::new(RECOVERY_POLICY_ID.to_owned())?,
             policy_version: 1,
         }),
-        extra: BTreeMap::new(),
+        extra: Default::default(),
     };
     let mut unsigned = serde_json::to_value(&backup)?;
     unsigned["auth_data"]
@@ -1497,7 +1504,11 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         .auth_data
         .as_mut()
         .expect("auth_data present")
-        .signature = sign_ed25519_b64url(&device_key, &canonical::canonical_json_bytes(&unsigned)?);
+        .signature = Base64UrlString::new(sign_ed25519_b64url(
+        &device_key,
+        &canonical::canonical_json_bytes(&unsigned)?,
+    ))
+    .map_err(|error| anyhow!(error))?;
     let put = expect_json(
         server
             .http()

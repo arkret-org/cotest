@@ -1,11 +1,9 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
-    KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
-    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm,
+    BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, KeyBackup,
+    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
+    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm,
 };
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
@@ -152,16 +150,18 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
             kdf: None,
             aead: KeyBackupAead {
-                name: "xchacha20_poly1305".to_owned(),
+                name: KeyBackupAeadName::Xchacha20Poly1305,
                 aead_profile: Some("ak.aead.xchacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
-                nonce: Some("cotest-d3-nonce".to_owned()),
+                nonce: Some(
+                    Base64UrlString::new("cotest-d3-nonce").map_err(|error| anyhow!(error))?,
+                ),
                 enc: None,
-                extra: BTreeMap::new(),
+                extra: Default::default(),
             },
             key_commitment: None,
             hpke_suite: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         domain_separation: KeyBackupDomainSeparation {
             hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
@@ -177,9 +177,9 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
                 managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
-                extra: BTreeMap::new(),
+                extra: Default::default(),
             },
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
             item_type: "mls_group_state".to_owned(),
@@ -191,7 +191,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             last_event_id: None,
             secret_id: None,
             secret_version: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }],
         ciphertext: "cotest-d3-ciphertext".to_owned(),
         ciphertext_digest:
@@ -199,13 +199,14 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
         plaintext_commitment: None,
         auth_data: Some(KeyBackupAuthData {
             device_id: DeviceId::new(device_id.to_owned())?,
-            verification_method: format!("{actor}#device"),
+            verification_method: DidUrl::new(format!("{actor}#device"))
+                .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
-            signature: "c2lnbmF0dXJl".to_owned(),
-            ssk_generation: Some(1),
+            signature: Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?,
+            ssk_generation: std::num::NonZeroU64::new(1),
             device_authorize_event_id: None,
             signed_fields: key_backup_signed_fields(),
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }),
         retention: None,
         series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,
@@ -214,7 +215,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
         supersedes_digest: None,
         frontier_ref: None,
         recovery_policy_ref: None,
-        extra: BTreeMap::new(),
+        extra: Default::default(),
     };
     Ok(serde_json::to_value(backup)?)
 }

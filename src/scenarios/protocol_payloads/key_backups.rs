@@ -20,10 +20,11 @@ use arkret_core::canonical::canonical_json_bytes;
 use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, Hash, KeyBackup,
-    KeyBackupAead, KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
-    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupRetention, KeyBackupSignatureAlgorithm, KeyBackupUnlockProof,
-    KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, ProofKind, RecoverySessionId,
+    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
+    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
+    KeyBackupUnlockProof, KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, ProofKind,
+    RecoverySessionId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -103,16 +104,16 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
             kdf: None,
             aead: KeyBackupAead {
-                name: "xchacha20_poly1305".to_owned(),
+                name: KeyBackupAeadName::Xchacha20Poly1305,
                 aead_profile: Some("ak.aead.xchacha20_poly1305.v1".to_owned()),
                 nonce_salt: None,
-                nonce: Some("nonce".to_owned()),
+                nonce: Some(Base64UrlString::new("nonce").map_err(|error| anyhow!(error))?),
                 enc: None,
-                extra: BTreeMap::new(),
+                extra: Default::default(),
             },
             key_commitment: None,
             hpke_suite: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         domain_separation: KeyBackupDomainSeparation {
             hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
@@ -128,9 +129,9 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
                 managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
-                extra: BTreeMap::new(),
+                extra: Default::default(),
             },
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
             item_type: "mls_group_state".to_owned(),
@@ -142,20 +143,21 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             last_event_id: None,
             secret_id: None,
             secret_version: None,
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }],
         ciphertext: "ciphertext".to_owned(),
         ciphertext_digest: CIPHERTEXT_DIGEST.to_owned(),
         plaintext_commitment: None,
         auth_data: Some(KeyBackupAuthData {
             device_id: device_id(ENVELOPE_DEVICE_ID)?,
-            verification_method,
+            verification_method: DidUrl::new(verification_method)
+                .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
-            signature: String::new(),
-            ssk_generation: Some(1),
+            signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
+            ssk_generation: std::num::NonZeroU64::new(1),
             device_authorize_event_id: None,
             signed_fields: key_backup_signed_fields(),
-            extra: BTreeMap::new(),
+            extra: Default::default(),
         }),
         retention: Some(KeyBackupRetention {
             delete_after: Some(ts("2020-01-01T00:00:00Z")?),
@@ -168,14 +170,15 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
         supersedes_digest: None,
         frontier_ref: None,
         recovery_policy_ref: None,
-        extra: BTreeMap::new(),
+        extra: Default::default(),
     };
     let mut unsigned = serde_json::to_value(&envelope)?;
     remove_auth_signature(&mut unsigned)?;
     let canonical = canonical_json_bytes(&unsigned)?;
     let signature = signing_key.sign(&canonical);
     if let Some(auth_data) = &mut envelope.auth_data {
-        auth_data.signature = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+        auth_data.signature = Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+            .map_err(|error| anyhow!(error))?;
     }
     Ok(envelope)
 }
