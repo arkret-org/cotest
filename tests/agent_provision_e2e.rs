@@ -97,6 +97,7 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
                 kind: arkret::AgentKeyScopeResourceKind::Operation,
                 realm_id: None,
                 resource_ref: None,
+                schema_ref: None,
                 operation: Some(operation.to_owned()),
                 service_id: None,
             })

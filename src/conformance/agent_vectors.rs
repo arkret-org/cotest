@@ -28,11 +28,12 @@ use arkret_core::error::{
     REASON_SUPERSEDED_BY_REPAIRING, REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
 };
 use arkret_core::{
-    AgentHumanApprovalErrorDetails, CAP_ACTION_AGENT_PROVISION, Did, ErrorEnvelope,
+    AgentHumanApprovalErrorDetails, AgentKeyScope, CAP_ACTION_AGENT_PROVISION, Did, ErrorEnvelope,
     NotificationDelta, NotificationDeltaAction, OP_ACCOUNT_AGENT_KEY_PAIR,
     OP_ACCOUNT_ISSUE_SESSION_GRANT, OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH,
     OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE, OP_AGENT_PROVISION,
     OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
+    agent_requested_scope_digest,
 };
 use serde_json::Value;
 
@@ -103,7 +104,26 @@ fn validate_agent_vectors_fixture_metadata() -> Result<()> {
 type ScopeSelector<'a> = (&'a str, Option<&'a str>, Option<&'a str>);
 
 fn content_selector(kind: &str) -> bool {
-    matches!(kind, "realm" | "strand" | "space" | "object")
+    matches!(
+        kind,
+        "realm"
+            | "space"
+            | "circle"
+            | "strand"
+            | "message"
+            | "morph"
+            | "object"
+            | "relation"
+            | "view"
+            | "event"
+            | "actor"
+            | "schema"
+            | "policy"
+            | "invite"
+            | "notification"
+            | "read_cursor"
+            | "blob"
+    )
 }
 
 fn selector_covers(parent: ScopeSelector<'_>, child: ScopeSelector<'_>) -> bool {
@@ -148,6 +168,42 @@ fn admit_scope_within_agent_ceiling(
 }
 
 pub fn run_agent_provision_vector() -> Result<()> {
+    let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
+    let vector = fixture["cases"]
+        .as_array()
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID_AGENT_PROVISION)
+            })
+        })
+        .ok_or_else(|| anyhow!("agent provision vector case is missing"))?;
+    let commitment = vector
+        .get("requested_scope_commitment")
+        .ok_or_else(|| anyhow!("agent provision vector commitment is missing"))?;
+    let agent_id = Did::new(
+        commitment
+            .get("agent_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("commitment agent_id is missing"))?
+            .to_owned(),
+    )?;
+    let controller_id = Did::new(
+        commitment
+            .get("controller_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("commitment controller_id is missing"))?
+            .to_owned(),
+    )?;
+    let requested_scope: AgentKeyScope = serde_json::from_value(
+        commitment
+            .get("requested_scope")
+            .cloned()
+            .ok_or_else(|| anyhow!("commitment requested_scope is missing"))?,
+    )?;
+    let digest = agent_requested_scope_digest(&agent_id, &controller_id, &requested_scope)?;
+    if commitment.get("expected_digest").and_then(Value::as_str) != Some(digest.as_str()) {
+        bail!("Agent requested_scope DID commitment digest drifted");
+    }
     if OP_AGENT_PROVISION != "ak.self.agent.command.provision" {
         bail!("OP_AGENT_PROVISION spelling drifted: {OP_AGENT_PROVISION}");
     }
@@ -205,6 +261,16 @@ pub fn run_agent_provision_vector() -> Result<()> {
         REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
     )
     .map_err(|reason| anyhow!("narrower Realm grant was rejected: {reason}"))?;
+    admit_scope_within_agent_ceiling(
+        &ceiling_actions,
+        &ceiling_resources,
+        &mandatory_constraints,
+        &["ak.event.read"],
+        &[("circle", Some(realm), Some("ak:circle:019a7360"))],
+        &["controller_approval_required"],
+        REASON_AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+    )
+    .map_err(|reason| anyhow!("Realm ceiling did not cover a Circle grant: {reason}"))?;
     if admit_scope_within_agent_ceiling(
         &ceiling_actions,
         &ceiling_resources,

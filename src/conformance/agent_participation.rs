@@ -43,6 +43,7 @@ const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
     "schemas/agent-operations.schema.json#/$defs/agent_participation_entry";
 const GRANT_MESSAGE_CREATE: &str = "ak.message.create";
 const GRANT_REACTION_ADD: &str = "ak.reaction.add";
+const GRANT_EVENT_READ: &str = "ak.event.read";
 const GRANT_ACT_ON_BEHALF: &str = "ak.agent.act_on_behalf";
 
 fn participation_fixture() -> Result<Value> {
@@ -300,13 +301,76 @@ fn materialized_grants(effective: AgentParticipation) -> Vec<&'static str> {
     grants
 }
 
+fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<AgentParticipation> {
+    let actions = scope
+        .get("actions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("requested_scope.actions[] is required"))?
+        .iter()
+        .map(|action| {
+            action
+                .as_str()
+                .ok_or_else(|| anyhow!("requested_scope action must be a string"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let message_create = actions.contains(&GRANT_MESSAGE_CREATE);
+    let controller_constraint = scope
+        .get("constraints")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .any(|constraint| {
+            if constraint.get("constraint_type").and_then(Value::as_str) != Some("claim_based") {
+                return false;
+            }
+            let controller_requirement = match constraint.get("subtype").and_then(Value::as_str) {
+                Some("approval") => {
+                    constraint.get("approval_required").and_then(Value::as_bool) == Some(true)
+                        && (constraint.get("approval_relation").and_then(Value::as_str)
+                            == Some("controller")
+                            || constraint
+                                .get("controller_approval_required")
+                                .and_then(Value::as_bool)
+                                == Some(true))
+                }
+                Some("accountability") => {
+                    constraint
+                        .get("accountability_required")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                        && constraint.get("approval_relation").and_then(Value::as_str)
+                            == Some("controller")
+                }
+                _ => false,
+            };
+            let applies = constraint
+                .get("applies_to_actions")
+                .and_then(Value::as_array)
+                .is_none_or(|applicable| {
+                    applicable
+                        .iter()
+                        .any(|action| action.as_str() == Some(GRANT_MESSAGE_CREATE))
+                });
+            controller_requirement && applies
+        });
+    Ok(AgentParticipation {
+        reply: message_create && actions.contains(&GRANT_REACTION_ADD),
+        accept_third_party_mention: actions.contains(&GRANT_EVENT_READ),
+        act_on_behalf: message_create && controller_constraint,
+    })
+}
+
 pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     let fixture = participation_fixture()?;
     let vector = case(
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION,
     )?;
-    let provision_ceiling = participation_field(vector, "provision_ceiling")?;
+    let provision_ceiling = provision_ceiling_from_requested_scope(
+        vector
+            .get("requested_scope")
+            .ok_or_else(|| anyhow!("effective vector missing requested_scope"))?,
+    )?;
     let governance_ceiling = participation_field(vector, "governance_ceiling")?;
     let ceiling = fold_ceiling_chain([provision_ceiling, governance_ceiling]);
     let selection = participation_field(vector, "selection")?;
@@ -348,6 +412,32 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     {
         bail!("unknown ceiling source did not fail closed to no participation");
     }
+    for variant in vector
+        .get("derivation_variants")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("effective vector missing derivation_variants[]"))?
+    {
+        let actual = provision_ceiling_from_requested_scope(
+            variant
+                .get("requested_scope")
+                .ok_or_else(|| anyhow!("derivation variant missing requested_scope"))?,
+        )?;
+        let expected: AgentParticipation = serde_json::from_value(
+            variant
+                .get("expected")
+                .cloned()
+                .ok_or_else(|| anyhow!("derivation variant missing expected"))?,
+        )?;
+        if actual != expected {
+            bail!(
+                "requested_scope derivation variant {} drifted: expected {expected:?}, got {actual:?}",
+                variant
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unnamed")
+            );
+        }
+    }
     Ok(())
 }
 
@@ -357,7 +447,11 @@ pub fn run_agent_participation_selection_within_ceiling_vector() -> Result<()> {
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_SELECTION_WITHIN_CEILING,
     )?;
-    let provision_ceiling = participation_field(vector, "provision_ceiling")?;
+    let provision_ceiling = provision_ceiling_from_requested_scope(
+        vector
+            .get("requested_scope")
+            .ok_or_else(|| anyhow!("selection vector missing requested_scope"))?,
+    )?;
     let governance_ceiling = participation_field(vector, "governance_ceiling")?;
     let ceiling = fold_ceiling_chain([provision_ceiling, governance_ceiling]);
     let selection = participation_field(vector, "selection")?;
