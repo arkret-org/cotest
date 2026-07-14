@@ -2151,10 +2151,23 @@ export function developmentServicePrivateKey(serviceId: string) {
 
 // FIXTURE ONLY: mirrors soland development_mode service HTTP signing keys.
 function developmentServiceHttpPrivateKey(serviceId: string) {
-  const seed = createHash("sha256")
-    .update("soland:notary-ephemeral:")
-    .update(serviceId)
-    .digest();
+  const configuredSeed =
+    serviceId === process.env.COTEST_SOLAND_ALPHA_SERVICE_ID
+      ? process.env.COTEST_SOLAND_ALPHA_NOTARY_SIGNING_KEY
+      : serviceId === process.env.COTEST_SOLAND_BETA_SERVICE_ID
+        ? process.env.COTEST_SOLAND_BETA_NOTARY_SIGNING_KEY
+        : serviceId === process.env.COTEST_SOLAND_SERVICE_ID
+          ? process.env.COTEST_SOLAND_NOTARY_SIGNING_KEY
+          : undefined;
+  const seed = configuredSeed
+    ? Buffer.from(configuredSeed, "base64")
+    : createHash("sha256")
+        .update("soland:notary-ephemeral:")
+        .update(serviceId)
+        .digest();
+  if (seed.length !== 32) {
+    throw new Error(`invalid cotest notary signing seed for ${serviceId}`);
+  }
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
     key: Buffer.concat([pkcs8Prefix, seed]),

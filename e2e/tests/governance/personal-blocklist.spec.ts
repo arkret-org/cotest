@@ -321,12 +321,20 @@ test.describe("personal blocklist", () => {
     const body = `S31 E11.1 bob ${stamp}`;
     const sent = await sendMessageApi(request, bobToken, realmId, body);
 
-    expect(
-      eventsText(await queryRealmEventsApi(request, aliceToken, realmId)),
-    ).toContain(body);
-    expect(
-      eventsText(await queryRealmEventsApi(request, carolToken, realmId)),
-    ).toContain(body);
+    for (const [label, token] of [
+      ["alice", aliceToken],
+      ["carol", carolToken],
+    ] as const) {
+      await expect
+        .poll(
+          async () => eventsText(await queryRealmEventsApi(request, token, realmId)),
+          {
+            timeout: 30_000,
+            message: `${label} sees the accepted message before moderation`,
+          },
+        )
+        .toContain(body);
+    }
 
     const redactEvent = signedEventEnvelope({
       actorDid: alice.did,
@@ -343,9 +351,15 @@ test.describe("personal blocklist", () => {
       context: `redact ${sent.event_id}`,
     });
 
-    expect(
-      eventsText(await queryRealmEventsApi(request, carolToken, realmId)),
-    ).not.toContain(body);
+    await expect
+      .poll(
+        async () => eventsText(await queryRealmEventsApi(request, carolToken, realmId)),
+        {
+          timeout: 30_000,
+          message: "carol observes the moderation redaction projection",
+        },
+      )
+      .not.toContain(body);
   });
 
   test("E11.2 mute vs private blocklist: ordinary server queries still render messages while private preferences stay opaque", async ({

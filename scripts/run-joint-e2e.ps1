@@ -70,8 +70,8 @@ param(
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
     [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
-    [string]$SolandServiceId = "did:webvh:z6mkfixture:soland.joint-e2e.local",
-    [string]$SolandNotarySigningKey,
+    [string]$SolandServiceId = "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN",
+    [string]$SolandNotarySigningKey = "Iawpld/ca+lGnAU+03cMpCESmVIH6OMxwfo7NLqdf5c=",
     [string]$CoauthServiceId = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
@@ -96,8 +96,8 @@ param(
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [switch]$DualSoland,
-    [string]$SolandBetaServiceId = "did:webvh:z6mkfixture:soland-beta.joint-e2e.local",
-    [string]$SolandBetaNotarySigningKey,
+    [string]$SolandBetaServiceId = "did:key:z6MkmqW95R1r59eyRAdtpLdgXFHKuuNSjWwBdkZE3HCrz8Si",
+    [string]$SolandBetaNotarySigningKey = "OQb/cI67vMlcbHGgjp2kmDkqLL1yZAxStQkytdnPbXc=",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -2528,6 +2528,7 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
+    $env:COTEST_SOLAND_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
     if ($InksonBaseUrl) {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
@@ -2536,8 +2537,10 @@ try {
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
         $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
+        $env:COTEST_SOLAND_ALPHA_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_ID = $SolandBetaServiceId
+        $env:COTEST_SOLAND_BETA_NOTARY_SIGNING_KEY = $SolandBetaNotarySigningKey
         $env:COTEST_REQUIRE_DUAL_SOLAND = "1"
         if ($InksonBaseUrl) {
             $env:COTEST_INKSON_ALPHA_BASE_URL = $InksonBaseUrl
@@ -2552,8 +2555,10 @@ try {
     } else {
         Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_ALPHA_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_BETA_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_DUAL_SOLAND -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue

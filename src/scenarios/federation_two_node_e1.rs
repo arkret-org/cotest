@@ -86,15 +86,17 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("ak:device:");
     // alice is homed on server_a, so her DID MUST live under server_a's trust
-    // domain. Appending `:alice-e2` to server_a's `did:webvh:<scid>:<host>...`
-    // service DID keeps the host segment (the one soland derives the trust
-    // domain from) unchanged, so alice's home domain equals server_a's.
+    // domain. Use a did:web DID whose host is the service trust-domain scope;
+    // this also works when the harness service identity is a durable did:key.
     // Federation admission binds the relayed actor to the relaying server:
     // `federation_actor_origin_acceptable`
     // accepts an inbound event only when the actor's home trust domain equals the
     // asserted `source-trust-domain` (or the actor is already a known member).
     // A DID under an unrelated domain is rejected `capability_denied` on push.
-    let alice_did = format!("{}:alice-e2", server_a.service_id());
+    let alice_did = format!(
+        "did:web:{}:alice-e2",
+        did_host_from_service_id(server_a.service_id())
+    );
     let actor_a = server_a
         .register_client(&alice_did, "@alice-e2", &device_alice)
         .await
@@ -207,9 +209,10 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     .await
     .context("push peer events to server_b")?;
     let status = push_response.status();
-    if !(status.is_success() || status.is_client_error()) {
+    if !status.is_success() {
+        let body = push_response.text().await.unwrap_or_default();
         return Err(anyhow::anyhow!(
-            "server_b federation push returned unexpected status {status}"
+            "server_b federation push returned unexpected status {status}: {body}"
         ));
     }
 

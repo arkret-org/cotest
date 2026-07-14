@@ -52,7 +52,8 @@ export function solandServiceId(key: SolandKey = "default"): string {
     );
   }
   return (
-    optionalEnv("COTEST_SOLAND_SERVICE_ID") ?? "did:webvh:z6mkfixture:soland.joint-e2e.local"
+    optionalEnv("COTEST_SOLAND_SERVICE_ID") ??
+    "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
   );
 }
 

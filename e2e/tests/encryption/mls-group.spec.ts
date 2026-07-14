@@ -392,6 +392,8 @@ function mlsGovernanceBinding(
     next_epoch: nextEpoch,
     membership_frontier: [group.frontierRef],
     policy_root: policyRoot,
+    capability_root: `sha256:${"a".repeat(64)}`,
+    discussion_metadata_digest: `sha256:${"b".repeat(64)}`,
     binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
     reducer_profile: MLS_REDUCER_PROFILE_V1,
   };
@@ -941,6 +943,8 @@ test.describe("MLS group encryption", () => {
       next_epoch: 0,
       membership_frontier: [frontierEventRef],
       policy_root: digest("2"),
+      capability_root: digest("a"),
+      discussion_metadata_digest: digest("b"),
       binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
       reducer_profile: MLS_REDUCER_PROFILE_V1,
     };
@@ -1053,6 +1057,8 @@ test.describe("MLS group encryption", () => {
         next_epoch: nextEpoch,
         membership_frontier: [frontierEventRef],
         policy_root: digest("2"),
+        capability_root: digest("a"),
+        discussion_metadata_digest: digest("b"),
         binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
         reducer_profile: MLS_REDUCER_PROFILE_V1,
       },

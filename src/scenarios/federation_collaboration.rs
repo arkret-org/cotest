@@ -29,8 +29,6 @@ use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
 };
 
-const ALICE_DID: &str = "did:web:federation-collaboration-0.cotest.local";
-const BOB_DID: &str = "did:web:federation-collaboration-1.cotest.local";
 const ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 const BOB_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000bb";
 const REALM_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc011ab000";
@@ -56,8 +54,11 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
     let server_a = group.server(0);
     let server_b = group.server(1);
-    let alice = register_account(server_a, ALICE_DID, "@cotest-fed-alice", ALICE_DEVICE_ID).await?;
-    let bob = register_account(server_b, BOB_DID, "@cotest-fed-bob", BOB_DEVICE_ID).await?;
+    let alice_did = actor_did_for_service(server_a.service_id(), "alice");
+    let bob_did = actor_did_for_service(server_b.service_id(), "bob");
+    let alice =
+        register_account(server_a, &alice_did, "@cotest-fed-alice", ALICE_DEVICE_ID).await?;
+    let bob = register_account(server_b, &bob_did, "@cotest-fed-bob", BOB_DEVICE_ID).await?;
 
     let describe_a = expect_json(
         server_a.http().get(server_a.url("/_arkret/describe")),
@@ -76,18 +77,18 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         server_a
             .http()
             .post(server_a.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": BOB_DID})),
+            .json(&json!({"did": bob_did})),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(bob_document["did_document"]["document"]["id"], BOB_DID);
+    assert_eq!(bob_document["did_document"]["document"]["id"], bob_did);
 
     let visible_services = vec![
         server_a.service_id().to_owned(),
         server_b.service_id().to_owned(),
     ];
-    let realm_id = create_federated_realm(server_a, &alice, &visible_services).await?;
-    add_member(server_a, &alice, ALICE_DID, &realm_id, BOB_DID).await?;
+    let realm_id = create_federated_realm(server_a, &alice, &alice_did, &visible_services).await?;
+    add_member(server_a, &alice, &alice_did, &realm_id, &bob_did).await?;
     // server_a delivery-binding setup so the later b->a federation push (bob's
     // reply) clears the `delivery_binding_stale` gate: a push to a Realm the
     // receiver already hosts MUST assert a member delivery-binding frontier
@@ -98,7 +99,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     submit_event(
         server_a,
         &alice,
-        ALICE_DID,
+        &alice_did,
         &realm_id,
         "ak.realm.delivery_binding_policy",
         json!({
@@ -112,12 +113,12 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let alice_local_binding = submit_event(
         server_a,
         &alice,
-        ALICE_DID,
+        &alice_did,
         &realm_id,
         "ak.member.state",
         member_join_payload_with_delivery_binding(
             &realm_id,
-            ALICE_DID,
+            &alice_did,
             json!({
                 "recipient_service_id": server_a.service_id(),
                 "recipient_service_type": "principal_server",
@@ -139,23 +140,23 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         REALM_CREATE_EVENT_ID,
         "ak.realm.create",
         &realm_id,
-        ALICE_DID,
+        &alice_did,
         1,
-        federated_realm_payload(&realm_id, &visible_services),
+        federated_realm_payload(&realm_id, &alice_did, &visible_services),
     )?;
     let alice_delivery_binding = signed_federation_event(
         ALICE_DELIVERY_BINDING_EVENT_ID,
         "ak.member.state",
         &realm_id,
-        ALICE_DID,
+        &alice_did,
         2,
-        member_delivery_binding_payload(&realm_id, ALICE_DID, server_a.service_id()),
+        member_delivery_binding_payload(&realm_id, &alice_did, server_a.service_id()),
     )?;
     let alice_message = signed_federation_event(
         ALICE_MESSAGE_EVENT_ID,
         "ak.message.create",
         &realm_id,
-        ALICE_DID,
+        &alice_did,
         3,
         message_create_text_payload(&realm_id, "hello bob from server a")?,
     )?;
@@ -163,9 +164,9 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         BOB_JOIN_EVENT_ID,
         "ak.member.state",
         &realm_id,
-        ALICE_DID,
+        &alice_did,
         4,
-        member_join_payload_value(&realm_id, BOB_DID)?,
+        member_join_payload_value(&realm_id, &bob_did)?,
     )?;
     let a_to_b_body = peer_events_submit_body(
         &realm_id,
@@ -247,7 +248,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         BOB_MESSAGE_EVENT_ID,
         "ak.message.create",
         &realm_id,
-        BOB_DID,
+        &bob_did,
         1,
         message_create_text_payload(&realm_id, "hello alice from server b")?,
     )?;
@@ -299,14 +300,14 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     // the welcome's device-bound claim signature can be checked on server_b.
     let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
     let alice_principal_realm =
-        principal_control_realm_id(&Did::new(ALICE_DID.to_owned()).context("invalid alice did")?);
+        principal_control_realm_id(&Did::new(alice_did.clone()).context("invalid alice did")?);
     let alice_device_authorize = signed_federation_event(
         ALICE_DEVICE_AUTHORIZE_EVENT_ID,
         "ak.device.authorize",
         &alice_principal_realm,
-        ALICE_DID,
+        &alice_did,
         5,
-        bootstrap_device_authorize_payload(ALICE_DID, ALICE_DEVICE_ID, &alice_device_key)?,
+        bootstrap_device_authorize_payload(&alice_did, ALICE_DEVICE_ID, &alice_device_key)?,
     )?;
     let alice_device_body = peer_events_submit_body(
         &alice_principal_realm,
@@ -339,34 +340,36 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         E2EE_REALM_CREATE_EVENT_ID,
         "ak.realm.create",
         E2EE_REALM_ID,
-        ALICE_DID,
+        &alice_did,
         6,
-        federated_e2ee_realm_payload(E2EE_REALM_ID),
+        federated_e2ee_realm_payload(E2EE_REALM_ID, &alice_did),
     )?;
     let e2ee_bob_join = signed_federation_event(
         E2EE_BOB_JOIN_EVENT_ID,
         "ak.member.state",
         E2EE_REALM_ID,
-        ALICE_DID,
+        &alice_did,
         7,
-        member_delivery_binding_payload(E2EE_REALM_ID, BOB_DID, server_b.service_id()),
+        member_delivery_binding_payload(E2EE_REALM_ID, &bob_did, server_b.service_id()),
     )?;
     let e2ee_genesis = signed_federation_event(
         E2EE_MLS_GENESIS_EVENT_ID,
         "ak.mls.genesis",
         E2EE_REALM_ID,
-        ALICE_DID,
+        &alice_did,
         8,
-        mls_genesis_payload(E2EE_REALM_ID),
+        mls_genesis_payload(E2EE_REALM_ID, &alice_did),
     )?;
     let e2ee_welcome = signed_federation_event(
         E2EE_MLS_WELCOME_EVENT_ID,
         "ak.mls.welcome",
         E2EE_REALM_ID,
-        ALICE_DID,
+        &alice_did,
         9,
         mls_welcome_payload(
             E2EE_REALM_ID,
+            &alice_did,
+            &bob_did,
             &alice_device_key,
             ALICE_DEVICE_ID,
             ALICE_DEVICE_AUTHORIZE_EVENT_ID,
@@ -376,7 +379,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         E2EE_MLS_COMMIT_EVENT_ID,
         "ak.mls.commit",
         E2EE_REALM_ID,
-        ALICE_DID,
+        &alice_did,
         10,
         mls_commit_payload(E2EE_REALM_ID),
     )?;
@@ -384,7 +387,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         E2EE_MESSAGE_EVENT_ID,
         "ak.message.create",
         E2EE_REALM_ID,
-        ALICE_DID,
+        &alice_did,
         11,
         encrypted_message_payload(E2EE_REALM_ID),
     )?;
@@ -466,7 +469,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     );
 
     let bob_device_key = SigningKey::from_bytes(&BOB_DEVICE_KEY_SEED);
-    authorize_device_public_key(server_b, &bob, BOB_DID, BOB_DEVICE_ID, &bob_device_key).await?;
+    authorize_device_public_key(server_b, &bob, &bob_did, BOB_DEVICE_ID, &bob_device_key).await?;
     let bob_one_time_keys = json!({
         "signed_curve25519:bob-otk1": {
             "algorithm": "signed_curve25519",
@@ -481,7 +484,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .post(server_b.url("/_arkret/self/keys/upload"))
             .bearer_auth(&bob)
             .json(&signed_keys_upload_body(
-                BOB_DID,
+                &bob_did,
                 BOB_DEVICE_ID,
                 &bob_device_key,
                 bob_one_time_keys,
@@ -500,7 +503,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .header("Idempotency-Key", "federation-to-bob-01")
             .json(&json!({
                 "messages": {
-                    BOB_DID: {
+                    bob_did.clone(): {
                         "ak:device:01904100-0000-7000-8000-0000000000bb": {
                             "kind": "ak.mls.welcome",
                             "content": encrypted_envelope("ak.mls.welcome", "opaque-cross-server-welcome"),
@@ -578,7 +581,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                 "realm_id": realm_id,
                 "target_ref": ALICE_MESSAGE_EVENT_ID,
                 "report_reason_code": "spam",
-                "reporter": BOB_DID
+                "reporter": bob_did
             })),
         StatusCode::OK,
     )
@@ -591,16 +594,17 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
 async fn create_federated_realm(
     server: &ArkretServer,
     alice: &str,
+    alice_did: &str,
     visible_services: &[String],
 ) -> Result<String> {
     let realm_id = "ak:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
     let created = submit_event(
         server,
         alice,
-        ALICE_DID,
+        alice_did,
         &realm_id,
         "ak.realm.create",
-        federated_realm_payload(&realm_id, visible_services),
+        federated_realm_payload(&realm_id, alice_did, visible_services),
         StatusCode::OK,
     )
     .await?;
@@ -608,7 +612,7 @@ async fn create_federated_realm(
     Ok(realm_id)
 }
 
-fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value {
+fn federated_realm_payload(realm_id: &str, alice_did: &str, visible_services: &[String]) -> Value {
     // soland gates plaintext (`encryption_profile: "none"`) message delivery on
     // each receiving service holding the `message_content` plaintext data class
     // for the realm (`RealmMetaRecord::allows_plaintext_data_class`). The realm
@@ -634,7 +638,7 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
             "title": "Federated Collaboration Space",
             "summary": "cross server collaboration",
             "trust_domain": "ak:trust_domain:federation-collaboration.cotest.local",
-            "created_by": ALICE_DID,
+            "created_by": alice_did,
             "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
             "default_join_rule": "invite",
@@ -647,7 +651,7 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
             "plaintext_visible_services": plaintext_visible_services,
             "notary": {
                 "type": "single_did",
-                "did": ALICE_DID,
+                "did": alice_did,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
@@ -674,7 +678,7 @@ fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_id:
     .expect("valid federation member delivery binding payload")
 }
 
-fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
+fn federated_e2ee_realm_payload(realm_id: &str, alice_did: &str) -> Value {
     json!({
         "object": {
             "id": realm_id,
@@ -682,7 +686,7 @@ fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
             "title": "Federated E2EE DM Realm",
             "summary": "cross personal server E2EE DM replication",
             "trust_domain": "ak:trust_domain:federation-collaboration.e2ee.cotest.local",
-            "created_by": ALICE_DID,
+            "created_by": alice_did,
             "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
             "default_join_rule": "invite",
@@ -698,7 +702,7 @@ fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
             "digest_algorithm": "sha256",
             "notary": {
                 "type": "single_did",
-                "did": ALICE_DID,
+                "did": alice_did,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
@@ -729,7 +733,7 @@ fn mls_governance_binding(realm_id: &str, previous_epoch: u64, next_epoch: u64) 
     })
 }
 
-fn mls_genesis_payload(realm_id: &str) -> Value {
+fn mls_genesis_payload(realm_id: &str, alice_did: &str) -> Value {
     json!({
         "mls_group_id": E2EE_MLS_GROUP_ID,
         "effective_scope": {
@@ -737,7 +741,7 @@ fn mls_genesis_payload(realm_id: &str) -> Value {
             "realm_id": realm_id
         },
         "epoch": 0,
-        "creator_principal_id": ALICE_DID,
+        "creator_principal_id": alice_did,
         "creator_device_id": ALICE_DEVICE_ID,
         "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
         "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
@@ -749,6 +753,8 @@ fn mls_genesis_payload(realm_id: &str) -> Value {
 
 fn mls_welcome_payload(
     realm_id: &str,
+    alice_did: &str,
+    bob_did: &str,
     requester_device_key: &SigningKey,
     requester_device_id: &str,
     device_authorize_event_id: &str,
@@ -780,7 +786,7 @@ fn mls_welcome_payload(
         "keypackage_digest": keypackage_ref,
         "intended_realm_id": realm_id,
         "claim_id": claim_id,
-        "requester_did": ALICE_DID,
+        "requester_did": alice_did,
         "requester_device_id": requester_device_id,
         "nonce": nonce,
         "welcome_digest": welcome_digest,
@@ -790,7 +796,7 @@ fn mls_welcome_payload(
     Ok(json!({
         "mls_group_id": E2EE_MLS_GROUP_ID,
         "epoch": 1,
-        "recipient_principal_id": BOB_DID,
+        "recipient_principal_id": bob_did,
         "recipient_device_id": BOB_DEVICE_ID,
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_ref,
@@ -807,13 +813,13 @@ fn mls_welcome_payload(
             "keypackage_digest": keypackage_ref,
             "intended_realm_id": realm_id,
             "claim_id": claim_id,
-            "requester_did": ALICE_DID,
+            "requester_did": alice_did,
             "requester_device_id": requester_device_id,
             "nonce": nonce,
             "welcome_digest": welcome_digest,
             "created_at": created_at_canonical,
             "signature": {
-                "kid": format!("{ALICE_DID}#device"),
+                "kid": format!("{alice_did}#device"),
                 "alg": "EdDSA",
                 "sig": URL_SAFE_NO_PAD.encode(claim_signature.to_bytes())
             }
@@ -1175,6 +1181,15 @@ fn with_federation_trust_headers_for_digest(
 
 fn trust_domain_for(service_id: &str) -> String {
     format!("ak:trust_domain:{}", did_host_from_service_id(service_id))
+}
+
+/// Mint a distinct principal DID whose `did:web` host is the same scope that
+/// soland derives for the owning service. This remains valid when the harness
+/// uses durable `did:key` service identities: appending a path segment to a
+/// `did:key` changes its trust-domain fallback, while `did:web:<scope>:<actor>`
+/// keeps the actor distinct without changing the home trust domain.
+fn actor_did_for_service(service_id: &str, actor: &str) -> String {
+    format!("did:web:{}:{actor}", did_host_from_service_id(service_id))
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,

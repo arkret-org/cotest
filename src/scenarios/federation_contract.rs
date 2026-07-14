@@ -313,15 +313,15 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     )
     .await?;
     // A syntactically valid JSON object that cannot deserialize into the
-    // typed peer-events command fails at the body decoder before federation
-    // trust headers are evaluated.
+    // typed peer-events command fails schema validation before federation trust
+    // headers are evaluated.
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/peer/events"))
             .json(&json!({"operations": []})),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "schema_violation",
     )
     .await?;
     expect_api_error(

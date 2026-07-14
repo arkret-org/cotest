@@ -54,6 +54,9 @@ const registryDid =
 
 const { publicKey, privateKey, jwks } = createEd25519KeyPair("mock-applet-registry-key-1");
 const publicJwk = publicKey.export({ format: "jwk" });
+const packagesByApplet = new Map();
+const provisionedGhosts = new Map();
+const actorSequences = new Map();
 
 
 function canonicalHash(value) {
@@ -145,18 +148,23 @@ function rfc3339Now() {
   return canonicalTimestamp();
 }
 
-function developmentAppletPublicJwk(verificationMethod) {
+function developmentAppletPrivateKey(verificationMethod) {
   const seed = createHash("sha256")
     .update("soland:applet-service-key:")
     .update(verificationMethod)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
-  const privateKey = createPrivateKey({
+  return createPrivateKey({
     key: Buffer.concat([pkcs8Prefix, seed]),
     format: "der",
     type: "pkcs8",
   });
-  return createPublicKey(privateKey).export({ format: "jwk" });
+}
+
+function developmentAppletPublicJwk(verificationMethod) {
+  return createPublicKey(developmentAppletPrivateKey(verificationMethod)).export({
+    format: "jwk",
+  });
 }
 
 function uuidV7Like() {
@@ -187,6 +195,160 @@ function safeToken(value) {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return safe || "bridge-demo";
+}
+
+function nextActorSequence(actorDid) {
+  const next = (actorSequences.get(actorDid) ?? 1) + 1;
+  actorSequences.set(actorDid, next);
+  return next;
+}
+
+function currentHlc() {
+  return `${Date.now().toString(16).padStart(12, "0")}-0000-00000000`;
+}
+
+function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
+  const eventDigest = canonicalHash(event);
+  const createdAt = rfc3339Now();
+  const binding = {
+    context: "ak.event-proof-v1",
+    event_digest: eventDigest,
+    actor_id: actorDid,
+    verification_method: verificationMethod,
+    created_at: createdAt,
+  };
+  const protectedHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const signingInput = `${protectedHeader}.${Buffer.from(canonicalJson(binding), "utf8").toString(
+    "base64url",
+  )}`;
+  const signature = sign(null, Buffer.from(signingInput, "utf8"), signingKey).toString(
+    "base64url",
+  );
+  return {
+    kind: "detached_jws",
+    alg: "EdDSA",
+    verification_method: verificationMethod,
+    event_digest: eventDigest,
+    created_at: createdAt,
+    jws: `${protectedHeader}..${signature}`,
+  };
+}
+
+function signedGhostMessageEvent({
+  packageInfo,
+  provision,
+  authorizationRef,
+  realmId,
+  externalId,
+  displayName,
+  text,
+}) {
+  const createdAt = rfc3339Now();
+  const eventId = typedId("event");
+  const messageId = typedId("message");
+  const strandId = realmId.replace(/^ak:realm:/, "ak:strand:");
+  const event = {
+    event_id: eventId,
+    kind: "ak.message.create",
+    realm_id: realmId,
+    actor_id: provision.ghost_actor_id,
+    actor_seq: nextActorSequence(provision.ghost_actor_id),
+    created_at: createdAt,
+    hlc: currentHlc(),
+    prev_refs: [],
+    // EventRef.critical defaults to true when decoded by the SDK, but it is
+    // always emitted again on typed serialization. Include it before hashing
+    // so Content-Digest covers the same canonical transaction the edge sees.
+    refs: [{ id: authorizationRef, role: "authorized_by", critical: true }],
+    executed_by: packageInfo.serviceId,
+    authorization_ref: authorizationRef,
+    applet_id: packageInfo.appletId,
+    external_ref: {
+      protocol: "bridge",
+      network_id: "joint-e2e",
+      external_id: externalId,
+    },
+    payload: {
+      message_id: messageId,
+      strand_id: strandId,
+      track_name: "discussion",
+      content: {
+        kind: "ak.content.text",
+        body: text,
+        portal: {
+          applet_id: packageInfo.appletId,
+          bot_actor_id: packageInfo.botActorId,
+          ghost_actor_id: provision.ghost_actor_id,
+          portal_realm_id: realmId,
+          external_id: externalId,
+          display_name: displayName,
+        },
+      },
+    },
+  };
+  // Applet-originated ghost events are executed and signed by the installed
+  // service principal; actor_id remains the accountable ghost identity.
+  const verificationMethod = packageInfo.verificationMethod;
+  return {
+    event: {
+      ...event,
+      proofs: [
+        detachedEventProof(event, provision.ghost_actor_id, verificationMethod, packageInfo.signingKey),
+      ],
+    },
+    eventId,
+    messageId,
+  };
+}
+
+async function submitSignedAppletTransaction({
+  solandBase,
+  destinationServiceId,
+  packageInfo,
+  event,
+  idempotencyKey,
+}) {
+  const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
+  const targetUrl = new URL(target);
+  const transaction = { source_service_id: packageInfo.serviceId, events: [event] };
+  const body = canonicalJson(transaction);
+  const contentDigest = `sha-256=:${createHash("sha256")
+    .update(body, "utf8")
+    .digest("base64")}:`;
+  const created = Math.floor(Date.now() / 1000);
+  const expires = created + 60;
+  const signatureParams =
+    `("@method" "@target-uri" "@authority" "content-digest" ` +
+    `"source-service-id" "destination-service-id" "idempotency-key");` +
+    `created=${created};expires=${expires};keyid="${packageInfo.verificationMethod}";` +
+    `alg="ed25519"`;
+  const signatureBase =
+    `"@method": POST\n` +
+    `"@target-uri": ${target}\n` +
+    `"@authority": ${targetUrl.host}\n` +
+    `"content-digest": ${contentDigest}\n` +
+    `"source-service-id": ${packageInfo.serviceId}\n` +
+    `"destination-service-id": ${destinationServiceId}\n` +
+    `"idempotency-key": ${idempotencyKey}\n` +
+    `"@signature-params": ${signatureParams}`;
+  const signature = sign(
+    null,
+    Buffer.from(signatureBase, "utf8"),
+    packageInfo.signingKey,
+  ).toString("base64");
+  return await fetch(target, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "content-digest": contentDigest,
+      "source-service-id": packageInfo.serviceId,
+      "destination-service-id": destinationServiceId,
+      "idempotency-key": idempotencyKey,
+      "signature-input": `sig1=${signatureParams}`,
+      signature: `sig1=:${signature}:`,
+    },
+    body,
+  });
 }
 
 function requestedScopesFromBody(body) {
@@ -349,6 +511,15 @@ function signedPackage(body) {
       jws,
     },
   };
+  packagesByApplet.set(appletId, {
+    appletId,
+    botActorId: packageBase.bot_actor_id,
+    namespace,
+    safe,
+    serviceId,
+    verificationMethod: webhookAuth.key_ref,
+    signingKey: developmentAppletPrivateKey(webhookAuth.key_ref),
+  });
   return {
     applet_package: appletPackage,
     package_digest: packageDigest,
@@ -439,28 +610,100 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_soland_base_url_or_authorization" }));
       return;
     }
+    const packageInfo = packagesByApplet.get(body.applet_id);
+    if (!packageInfo) {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: "unknown_applet_package" }));
+      return;
+    }
+    const externalId = String(body.external_user?.id ?? body.external_id ?? "bot");
+    const displayName = body.external_user?.display_name ?? body.display_name;
+    const ghostKey = `${body.applet_id}\n${externalId}`;
+    let provision = provisionedGhosts.get(ghostKey);
+    if (!provision) {
+      const ghostActorId = `did:web:ghost-${packageInfo.safe}:${safeToken(externalId)}`;
+      let provisionResponse;
+      try {
+        provisionResponse = await fetch(
+          `${String(solandBase).replace(/\/$/, "")}/_arkret/self/applets/${encodeURIComponent(
+            body.applet_id,
+          )}/ghosts/provision`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization,
+              "Idempotency-Key": `provision-${body.applet_id}-${safeToken(externalId)}`,
+            },
+            body: JSON.stringify({
+              schema: "ak.applet.ghost_actor.provision_request.v1",
+              applet_id: body.applet_id,
+              service_id: packageInfo.serviceId,
+              ghost_actor_id: ghostActorId,
+              protocol: "bridge",
+              tenant: "joint-e2e",
+              external_user_id: externalId,
+              ...(displayName ? { display_name: displayName } : {}),
+              realm_id: body.realm_id,
+              external_ref: {
+                protocol: "bridge",
+                network_id: "joint-e2e",
+                external_id: externalId,
+              },
+            }),
+          },
+        );
+      } catch (err) {
+        res.statusCode = 502;
+        res.end(JSON.stringify({ error: "upstream_unreachable", detail: String(err) }));
+        return;
+      }
+      const provisionText = await provisionResponse.text();
+      if (!provisionResponse.ok) {
+        res.statusCode = provisionResponse.status;
+        res.end(provisionText);
+        return;
+      }
+      provision = JSON.parse(provisionText);
+      provisionedGhosts.set(ghostKey, provision);
+    }
+    if (body.payload?.kind !== "message") {
+      res.end(
+        JSON.stringify({
+          applet_id: body.applet_id,
+          ghost_actor_id: provision.ghost_actor_id,
+          external_id: externalId,
+          display_name: displayName,
+          authorization_ref: provision.authorization_ref,
+        }),
+      );
+      return;
+    }
+    const destinationServiceId = body.destination_service_id;
+    if (!destinationServiceId) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "missing_destination_service_id" }));
+      return;
+    }
+    const signed = signedGhostMessageEvent({
+      packageInfo,
+      provision,
+      authorizationRef: body.authorization_ref ?? provision.authorization_ref,
+      realmId: body.realm_id,
+      externalId,
+      displayName,
+      text: body.payload.text,
+    });
     let upstream;
     try {
-      upstream = await fetch(
-        `${String(solandBase).replace(/\/$/, "")}/_soland/edge/applets/${encodeURIComponent(
-          body.applet_id,
-        )}/ghosts`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization,
-            "Idempotency-Key":
-              body.idempotency_key ??
-              `external-${body.applet_id}-${body.external_user?.id ?? "bot"}-${Date.now()}`,
-          },
-          body: JSON.stringify({
-            realm_id: body.realm_id,
-            external_user: body.external_user,
-            payload: body.payload,
-          }),
-        },
-      );
+      upstream = await submitSignedAppletTransaction({
+        solandBase,
+        destinationServiceId,
+        packageInfo,
+        event: signed.event,
+        idempotencyKey:
+          body.idempotency_key ?? `external-${body.applet_id}-${safeToken(externalId)}-${Date.now()}`,
+      });
     } catch (err) {
       // soland unreachable / connection refused / timeout: degrade to a
       // structured 502 instead of letting the rejected promise escape the
@@ -470,8 +713,31 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "upstream_unreachable", detail: String(err) }));
       return;
     }
-    res.statusCode = upstream.status;
-    res.end(await upstream.text());
+    const upstreamText = await upstream.text();
+    if (!upstream.ok) {
+      res.statusCode = upstream.status;
+      res.end(upstreamText);
+      return;
+    }
+    const outcome = JSON.parse(upstreamText);
+    if (!outcome.ok) {
+      res.statusCode = 422;
+      res.end(upstreamText);
+      return;
+    }
+    res.end(
+      JSON.stringify({
+        applet_id: body.applet_id,
+        ghost_actor_id: provision.ghost_actor_id,
+        external_id: externalId,
+        display_name: displayName,
+        authorization_ref: provision.authorization_ref,
+        message_id: signed.messageId,
+        event_id: signed.eventId,
+        realm_id: body.realm_id,
+        portal_realm_id: body.realm_id,
+      }),
+    );
     return;
   }
 

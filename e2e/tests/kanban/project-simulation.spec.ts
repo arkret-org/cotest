@@ -258,9 +258,9 @@ test.describe("project simulation", () => {
   }, testInfo) => {
     const stamp = Date.now();
     const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
-      openDpopUserPage(browser, request, "s16-alice", { prepareMlsDevice: false }),
-      openDpopUserPage(browser, request, "s16-bob", { prepareMlsDevice: false }),
-      openDpopUserPage(browser, request, "s16-carol", { prepareMlsDevice: false }),
+      openDpopUserPage(browser, request, "s16-alice"),
+      openDpopUserPage(browser, request, "s16-bob"),
+      openDpopUserPage(browser, request, "s16-carol"),
     ]);
     if (!aliceFlow || !bobFlow || !carolFlow) {
       assertJointStackNotRequired("project simulation DPoP login");
