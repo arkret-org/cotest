@@ -1,4 +1,7 @@
 use anyhow::Result;
+use arkret::{
+    AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody,
+};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -112,11 +115,31 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let empty_list = expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?;
     assert!(empty_list["agents"].as_array().unwrap().is_empty());
 
+    let requested_operation = "ak.self.events.command.submit";
+    let provision = AgentProvisionRequestBody {
+        display_name: Some("Planner".to_owned()),
+        slug: "planner".to_owned(),
+        avatar_blob_ref: None,
+        requested_scope: AgentKeyScope {
+            actions: vec![
+                requested_operation.to_owned(),
+                "ak.message.create".to_owned(),
+            ],
+            resources: vec![AgentKeyScopeResource {
+                kind: AgentKeyScopeResourceKind::Operation,
+                realm_id: None,
+                resource_ref: None,
+                schema_ref: None,
+                operation: Some(requested_operation.to_owned()),
+                service_id: None,
+            }],
+            constraints: Vec::new(),
+        },
+        accountability: None,
+        pairing_ttl_ms: None,
+    };
     expect_api_error(
-        alice.post("/_arkret/self/agents").json(&json!({
-            "display_name": "Planner",
-            "slug": "planner"
-        })),
+        alice.post("/_arkret/self/agents").json(&provision),
         StatusCode::PRECONDITION_FAILED,
         "failed_precondition",
     )
