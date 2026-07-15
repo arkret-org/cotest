@@ -787,14 +787,6 @@
             "/_arkret/edge/push/register-device",
             "/_arkret/self/rtc/ice-config"
           ]
-        },
-        {
-          "kind": "gap_guard",
-          "path": "src/scenarios/soland_floria_push_e2e.rs",
-          "markers": [
-            "ak.edge.push.command.register_device",
-            "/_arkret/edge/push/notify"
-          ]
         }
       ]
     },

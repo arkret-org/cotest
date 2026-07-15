@@ -16,8 +16,8 @@
 //!      payload (no Dioxus app required).
 //!   6. **floria notify gateway blind-wakeup payload** — verifies the sanitizer rejects all
 //!      forbidden fields per `push-notifications.md` §4.5.
-//!   7. **chime mock receives blind wakeup** — in-process HTTPS sink modelled on the
-//!      `soland_floria_push_e2e` mock receiver; verifies it can accept a sanitized payload.
+//!   7. **chime mock receives blind wakeup** — an in-process receiver verifies it can accept a
+//!      sanitized payload.
 //!   8. **rebind handover** — model T3.3 reducer state by mutating the candidate's
 //!      `member_delivery_binding.recipient_service_id` and asserting the local allow-list model
 //!      rejects it.
@@ -331,8 +331,7 @@ fn step_6_floria_blind_payload(_inbound: &Value) -> Result<Value> {
 
 /// The chime client is the on-device receiver. We don't boot a real chime
 /// here (it has no test-runnable binary), but we model the receiver as the
-/// same sanitiser pass + the explicit forbidden-key audit that
-/// `soland_floria_push_e2e::assert_blind_wakeup_invariants` performs.
+/// same sanitiser pass plus an explicit forbidden-key audit.
 fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
     let inner = blind
         .get("notification")
