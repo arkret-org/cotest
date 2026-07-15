@@ -64,19 +64,14 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     assert_eq!(typing["kind"], "ak.typing");
 
     let sync_with_typing = alice.sync().await?;
-    let ephemeral = sync_with_typing["realms"][&realm_id]["ephemeral"]
+    let ephemeral = sync_with_typing["realms"][&realm_id]["ephemeral"]["events"]
         .as_array()
-        .unwrap();
+        .expect("realm ephemeral container exposes typed events");
     assert_eq!(ephemeral.len(), 1);
-    assert_eq!(ephemeral[0]["type"], "ak.typing");
-    assert_eq!(ephemeral[0]["strand_id"], strand_id);
-    assert!(
-        ephemeral[0]["actors"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|actor| actor["actor"] == bob.actor)
-    );
+    assert_eq!(ephemeral[0]["kind"], "ak.typing");
+    assert_eq!(ephemeral[0]["payload"]["strand_id"], strand_id);
+    assert_eq!(ephemeral[0]["payload"]["typing"], true);
+    assert_eq!(ephemeral[0]["actor_id"], bob.actor);
 
     let stopped = expect_json(
         bob.post("/_arkret/self/ephemeral").json(&typing_envelope(
@@ -93,9 +88,9 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let sync_without_typing = alice.sync().await?;
     assert!(
-        sync_without_typing["realms"][&realm_id]["ephemeral"]
+        sync_without_typing["realms"][&realm_id]["ephemeral"]["events"]
             .as_array()
-            .unwrap()
+            .expect("realm ephemeral container exposes typed events")
             .is_empty()
     );
 
@@ -137,7 +132,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let listed_rules =
         account_data_entry(&listed_sync, "ak.push_rules").expect("ak.push_rules account_data row");
     assert_eq!(
-        listed_rules["content"], push_rules_carrier,
+        listed_rules["payload"]["body"], push_rules_carrier,
         "push_rules must round-trip as an encrypted account-data envelope unchanged: {listed_rules}"
     );
 
@@ -167,7 +162,11 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value> {
     sync["account_data"]["events"]
         .as_array()
-        .and_then(|events| events.iter().find(|event| event["data_type"] == data_type))
+        .and_then(|events| {
+            events
+                .iter()
+                .find(|event| event["payload"]["key"] == data_type)
+        })
 }
 
 /// Author the realm's conversation Strand (the message/typing envelope derives
