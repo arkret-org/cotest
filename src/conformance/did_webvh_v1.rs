@@ -351,3 +351,42 @@ fn expect_rejected<T, E: std::fmt::Display>(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rotation_builder_receives_the_complete_predecessor_chain() {
+        let inception = external_inception().unwrap();
+        let third_root = public_multikey([3_u8; 32]);
+        let first_rotation = prepare_principal_rotation(&PrincipalRotationInput {
+            did: &inception.did,
+            local_id: &inception.local_id,
+            previous_entries: std::slice::from_ref(&inception.log_entry),
+            version_time: timestamp("2026-07-16T00:00:00Z").unwrap(),
+            current_root_seed: &[2_u8; 32],
+            next_root_public_key_multibase: &third_root,
+            state: &inception.log_entry["state"],
+        })
+        .unwrap();
+
+        let history = vec![inception.log_entry, first_rotation.log_entry];
+        let fourth_root = public_multikey([4_u8; 32]);
+        let second_rotation = prepare_principal_rotation(&PrincipalRotationInput {
+            did: &inception.did,
+            local_id: &inception.local_id,
+            previous_entries: &history,
+            version_time: timestamp("2026-07-17T00:00:00Z").unwrap(),
+            current_root_seed: &[3_u8; 32],
+            next_root_public_key_multibase: &fourth_root,
+            state: &history[1]["state"],
+        })
+        .unwrap();
+
+        let did = Did::new(inception.did).unwrap();
+        let mut complete_log = history;
+        complete_log.push(second_rotation.log_entry);
+        verify_did_webvh_v1_log(&did, &complete_log).unwrap();
+    }
+}

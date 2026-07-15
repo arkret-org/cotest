@@ -116,6 +116,20 @@ mod tests {
         let typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope).unwrap();
         assert_eq!(typed.proof.kind, arkret_core::proof_kind::DETACHED_JWS);
         assert!(!typed.proof.jws.is_empty());
+
+        let wire = serde_json::to_value(&typed).unwrap();
+        assert_eq!(
+            wire["device_id"],
+            "ak:device:019f3b1c-76c8-7000-8000-000000000001"
+        );
+        let mut missing_device_id = wire;
+        missing_device_id
+            .as_object_mut()
+            .unwrap()
+            .remove("device_id");
+        assert!(
+            serde_json::from_value::<arkret_core::EphemeralEnvelope>(missing_device_id).is_err()
+        );
     }
 }
 
