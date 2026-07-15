@@ -1207,12 +1207,10 @@ export async function createDpopUserSessionForAccount(
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
   expect(grant.scopes).toContain(`urn:arkret:client:device:${seed.deviceId}`);
-  // Model-B identity: adopt the minted `did:webvh:…:webvh:<ulid>` principal DID
-  // the grant subject is bound to (coauth debug seam), NOT the coauth-local
-  // `user_did_for` fallback (`…:users:<ulid>`) that account.did carries. Only the
-  // minted DID's document designates coauth's ArkretDeviceEnrollmentAuthority, so
-  // device enrollment + MLS KeyPackage publish resolve the right document.
-  expect(grant.principalDid, "debug seam must return the minted principal DID").toBeTruthy();
+  // Model-B identity: consume only the already verified client-authored DID
+  // binding returned by the debug seam. Coauth must return principal_unknown
+  // rather than synthesize a local/fallback DID when no binding exists.
+  expect(grant.principalDid, "debug seam must return the bound principal DID").toBeTruthy();
   const user = {
     ...seed,
     name: account.handle,
@@ -1236,7 +1234,7 @@ export async function createDpopUserSessionForAccount(
   // authorization suppresses self-enrollment (only unauthorized devices
   // self-enroll), the harness enroll MUST be skipped, not merely overwritten.
   if (!opts.skipDeviceEnrollment) {
-    await enrollOnboardedDeviceSigningKey(
+    const authorizedKey = await enrollOnboardedDeviceSigningKey(
       request,
       coauth,
       {
@@ -1251,6 +1249,12 @@ export async function createDpopUserSessionForAccount(
       },
       { server: opts.server },
     );
+    if (!authorizedKey) {
+      // The current SDK/Coauth device-enroll DTO cannot bind the exact accepted
+      // actor frontier. Skip this API-only session instead of submitting an
+      // actor_seq=1, prev_refs=[] pseudo-bootstrap Event.
+      return undefined;
+    }
   }
   return {
     user,

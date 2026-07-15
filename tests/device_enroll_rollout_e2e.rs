@@ -1,62 +1,136 @@
 use anyhow::{Context, Result, anyhow};
-use arkret_core::canonical::canonical_json_bytes;
-use arkret_core::{ed25519_pubkey_to_did_key_multibase, encode_base58btc};
-use cotest::harness::{
-    ArkretServer, dev_login, expect_api_error, expect_json, refresh_event_proof,
+use arkret::identity::{
+    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
+    self_principal_bootstrap_submit_request,
 };
-use ed25519_dalek::{Signer, SigningKey};
+use arkret::webvh::{
+    PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
+    prepare_principal_inception,
+};
+use arkret_core::{
+    Did, Event, EventId, EventRef, EventsSubmitRequestBody, Hlc, RealmId, TypedTrustDomainId,
+    ed25519_pubkey_to_did_key_multibase,
+};
+use arkret_signatures::{Ed25519MoveSigner, SignEventOptions, sign_event};
+use cotest::harness::{ArkretServer, dev_login, expect_api_error, expect_json};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
-use url::Url;
-
-const WEBVH_BEARER: &str = "cotest-webvh-enroll-rollout";
-const WEBVH_SCID_PLACEHOLDER: &str = "{SCID}";
-const WEBVH_METHOD_VERSION: &str = "did:webvh:1.0";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
-    let server = ArkretServer::spawn_with_env(
-        "device-enroll-rollout",
-        &[("SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER", WEBVH_BEARER)],
-    )
-    .await?;
+    let server = ArkretServer::spawn("device-enroll-rollout").await?;
 
-    let authority = did_key_authority([17u8; 32]);
+    let authority = did_key_authority([17_u8; 32]);
     let registered =
         register_webvh_principal(&server, "alice-enroll-rollout", &authority.did).await?;
-    let principal_id = registered["did"]
-        .as_str()
-        .context("webvh registration response did")?;
+    let principal_id = registered.prepared.did.as_str();
     let authorization_ref = format!("{principal_id}#enrollment-authority");
-    assert_enrollment_authority_service(&registered, &authorization_ref, &authority.did)?;
-
-    let session_device = "ak:device:01904100-0000-7000-8000-00000000e100";
-    let token = dev_login(&server, principal_id, session_device).await?;
-    let enrolled_device = "ak:device:01904100-0000-7000-8000-00000000e101";
-    let enrolled_device_key = SigningKey::from_bytes(&[41u8; 32]);
-    let enrolled_device_public_key = multibase_public_key(&enrolled_device_key);
-
-    let event = service_attested_device_authorize_event(
-        principal_id,
+    assert_enrollment_authority_service(
+        &registered.did_document,
+        &authorization_ref,
         &authority.did,
-        &authority.verification_method,
+    )?;
+
+    let enrolled_device = "ak:device:01904100-0000-7000-8000-00000000e101";
+    let token = dev_login(&server, principal_id, enrolled_device).await?;
+    let enrolled_device_key = SigningKey::from_bytes(&[41_u8; 32]);
+    let enrolled_device_public_key = multibase_public_key(&enrolled_device_key);
+    let bootstrap = principal_bootstrap_request(
+        &registered.prepared,
+        &authority,
         &authorization_ref,
         enrolled_device,
         &enrolled_device_public_key,
-        1,
-        "ak:event:01904100-0000-7000-8000-00000000e101",
     )?;
+    let create = bootstrap.events[0].clone();
+    let authorize = bootstrap.events[1].clone();
+
+    // The identity-root genesis can never be stored by itself.
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&token)
+            .json(&create),
+        StatusCode::PRECONDITION_FAILED,
+        "failed_precondition",
+    )
+    .await?;
+
+    // Nor may the authority half be submitted alone to trigger the legacy
+    // implicit-PCR path.
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&token)
+            .json(&authorize),
+        StatusCode::PRECONDITION_FAILED,
+        "failed_precondition",
+    )
+    .await?;
+
+    // Slot 1 must reference exactly the slot-0 genesis Event.
+    let mut missing_predecessor = authorize.clone();
+    missing_predecessor.prev_refs.clear();
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&token)
+            .json(&EventsSubmitRequestBody {
+                event: None,
+                events: vec![create.clone(), missing_predecessor],
+            }),
+        StatusCode::CONFLICT,
+        "schema_violation",
+    )
+    .await?;
+
+    let mut extra_predecessor = authorize.clone();
+    extra_predecessor.prev_refs.push(EventId::new(
+        "ak:event:01904100-0000-7000-8000-00000000e199",
+    )?);
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&token)
+            .json(&EventsSubmitRequestBody {
+                event: None,
+                events: vec![create.clone(), extra_predecessor],
+            }),
+        StatusCode::CONFLICT,
+        "schema_violation",
+    )
+    .await?;
+
     let accepted = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
-            .json(&event),
+            .json(&bootstrap),
         StatusCode::OK,
     )
     .await?;
-    assert_accepted_event(&accepted, "ak:event:01904100-0000-7000-8000-00000000e101")?;
+    assert_accepted_event(&accepted, create.event_id.as_str())?;
+    assert_accepted_event(&accepted, authorize.event_id.as_str())?;
+
+    // A response can be lost after commit. Byte-identical retry must resolve
+    // to the already accepted closed unit rather than duplicating either slot.
+    let retried = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&token)
+            .json(&bootstrap),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_accepted_event(&retried, create.event_id.as_str())?;
+    assert_accepted_event(&retried, authorize.event_id.as_str())?;
 
     let query = expect_json(
         server
@@ -79,16 +153,38 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         "keys/query: {query}"
     );
 
-    let imposter = did_key_authority([18u8; 32]);
+    let imposter = did_key_authority([18_u8; 32]);
     let rejected_event = service_attested_device_authorize_event(
         principal_id,
-        &imposter.did,
-        &imposter.verification_method,
+        &imposter,
         &authorization_ref,
         "ak:device:01904100-0000-7000-8000-00000000e102",
-        &multibase_public_key(&SigningKey::from_bytes(&[42u8; 32])),
+        &multibase_public_key(&SigningKey::from_bytes(&[42_u8; 32])),
         2,
         "ak:event:01904100-0000-7000-8000-00000000e102",
+        vec![authorize.event_id.clone()],
+    )?;
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&token)
+            .json(&rejected_event),
+        StatusCode::FORBIDDEN,
+        "device_enrollment_authority_not_designated",
+    )
+    .await?;
+
+    let wrong_authorization_ref = format!("{principal_id}#other-enrollment-authority");
+    let rejected_event = service_attested_device_authorize_event(
+        principal_id,
+        &authority,
+        &wrong_authorization_ref,
+        "ak:device:01904100-0000-7000-8000-00000000e103",
+        &multibase_public_key(&SigningKey::from_bytes(&[43_u8; 32])),
+        2,
+        "ak:event:01904100-0000-7000-8000-00000000e103",
+        vec![authorize.event_id],
     )?;
     expect_api_error(
         server
@@ -105,6 +201,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
 }
 
 struct DidKeyAuthority {
+    seed: [u8; 32],
     did: String,
     verification_method: String,
 }
@@ -115,6 +212,7 @@ fn did_key_authority(seed: [u8; 32]) -> DidKeyAuthority {
     let did = format!("did:key:{multibase}");
     let verification_method = format!("{did}#{multibase}");
     DidKeyAuthority {
+        seed,
         did,
         verification_method,
     }
@@ -124,264 +222,163 @@ fn multibase_public_key(signing_key: &SigningKey) -> String {
     ed25519_pubkey_to_did_key_multibase(&signing_key.verifying_key().to_bytes())
 }
 
+struct RegisteredPrincipal {
+    prepared: PreparedPrincipalInception,
+    did_document: Value,
+}
+
 async fn register_webvh_principal(
     server: &ArkretServer,
     local_id: &str,
     authority_did: &str,
-) -> Result<Value> {
-    let did_signing = SigningKey::from_bytes(&[31u8; 32]);
-    let update_signing = SigningKey::from_bytes(&[32u8; 32]);
-    let body = webvh_registration_body(
-        &server.base_url(),
+) -> Result<RegisteredPrincipal> {
+    let root_seed = [32_u8; 32];
+    let next_root = SigningKey::from_bytes(&[33_u8; 32]);
+    let next_root_public_key_multibase = multibase_public_key(&next_root);
+    let also_known_as = vec![format!("acct:{local_id}@example.com")];
+    let version_time: chrono::DateTime<chrono::Utc> = "2026-06-17T00:00:00Z".parse()?;
+    let prepared = prepare_principal_inception(&PrincipalInceptionInput {
+        principal_endpoint: &server.base_url(),
         local_id,
-        &did_signing,
-        &update_signing,
-        authority_did,
-    )?;
-    expect_json(
+        also_known_as: &also_known_as,
+        version_time,
+        root_seed: &root_seed,
+        next_root_public_key_multibase: &next_root_public_key_multibase,
+        enrollment: PrincipalEnrollmentDelegation::ExternalAuthority { authority_did },
+    })?;
+    let submitted = expect_json(
         server
             .http()
-            .post(server.url("/_soland/root/identity/webvh/register"))
-            .bearer_auth(WEBVH_BEARER)
-            .json(&body),
-        StatusCode::CREATED,
+            .post(server.url("/_arkret/root/identity/submit-did-operation"))
+            .json(&prepared.submit_body),
+        StatusCode::OK,
     )
-    .await
-}
-
-fn webvh_registration_body(
-    endpoint: &Url,
-    local_id: &str,
-    did_signing: &SigningKey,
-    update_signing: &SigningKey,
-    authority_did: &str,
-) -> Result<Value> {
-    let (method_authority, _) = authority_pair(endpoint)?;
-    let did_public_key_multibase = multibase_public_key(did_signing);
-    let update_public_key_multibase = multibase_public_key(update_signing);
-    let service_endpoint = endpoint.as_str().trim_end_matches('/').to_owned();
-    let version_time = "2026-06-17T00:00:00Z";
-    let placeholder_did = format_webvh_did(&method_authority, WEBVH_SCID_PLACEHOLDER, local_id);
-    let placeholder_key_id = format!("{placeholder_did}#did-key-1");
-    let document_skeleton = webvh_document_value(
-        &placeholder_did,
-        &placeholder_key_id,
-        &did_public_key_multibase,
-        local_id,
-        &service_endpoint,
-        authority_did,
-    );
-    let entry_skeleton = json!({
-        "versionId": WEBVH_SCID_PLACEHOLDER,
-        "versionTime": version_time,
-        "parameters": {
-            "scid": WEBVH_SCID_PLACEHOLDER,
-            "method": WEBVH_METHOD_VERSION,
-            "updateKeys": [update_public_key_multibase.clone()],
-        },
-        "state": document_skeleton,
-    });
-    let scid = sha256_multihash_base58btc(&canonical_bytes(&entry_skeleton)?);
-    let mut log_entry = substitute_scid(&entry_skeleton, &scid)?;
-    let version_hash =
-        sha256_multihash_base58btc(&canonical_bytes(&strip_for_hash(&log_entry, &scid))?);
-    if let Value::Object(map) = &mut log_entry {
-        map.insert(
-            "versionId".to_owned(),
-            Value::String(format!("1-{version_hash}")),
-        );
+    .await?;
+    if submitted["did"].as_str() != Some(prepared.did.as_str()) {
+        return Err(anyhow!("DID submit outcome drifted: {submitted}"));
     }
-    let proof = webvh_log_proof(&log_entry, update_signing, &update_public_key_multibase)?;
-
-    Ok(json!({
-        "local_id": local_id,
-        "did_public_key_multibase": did_public_key_multibase,
-        "update_public_key_multibase": update_public_key_multibase,
-        "did_key_id": "did-key-1",
-        "update_key_id": "update-key-1",
-        "also_known_as": [format!("acct:{local_id}@example.com")],
-        "version_time": version_time,
-        "device_enrollment_authority_did": authority_did,
-        "proof": proof,
-    }))
-}
-
-fn authority_pair(endpoint: &Url) -> Result<(String, String)> {
-    let host = endpoint.host_str().context("endpoint host")?;
-    let method_authority = match endpoint.port() {
-        Some(port) => format!("{host}%3A{port}"),
-        None => host.to_owned(),
-    };
-    let https_authority = match endpoint.port() {
-        Some(port) => format!("{host}:{port}"),
-        None => host.to_owned(),
-    };
-    Ok((method_authority, https_authority))
-}
-
-fn webvh_document_value(
-    did: &str,
-    did_key_id: &str,
-    did_public_key_multibase: &str,
-    local_id: &str,
-    service_endpoint: &str,
-    authority_did: &str,
-) -> Value {
-    json!({
-        "@context": ["https://www.w3.org/ns/did/v1"],
-        "id": did,
-        "verificationMethod": [{
-            "id": did_key_id,
-            "type": "Multikey",
-            "controller": did,
-            "publicKeyMultibase": did_public_key_multibase,
-        }],
-        "authentication": [did_key_id],
-        "assertionMethod": [did_key_id],
-        "alsoKnownAs": [format!("acct:{local_id}@example.com")],
-        "service": [
-            {
-                "id": format!("{did}#soland"),
-                "type": "ArkretPrincipalServer",
-                "serviceEndpoint": service_endpoint,
-            },
-            {
-                "id": format!("{did}#enrollment-authority"),
-                "type": arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY,
-                "serviceEndpoint": authority_did,
-            },
-        ],
+    let resolved = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/root/identity/resolve"))
+            .json(&json!({"did": prepared.did})),
+        StatusCode::OK,
+    )
+    .await?;
+    Ok(RegisteredPrincipal {
+        prepared,
+        did_document: resolved["did_document"].clone(),
     })
 }
 
-fn webvh_log_proof(
-    log_entry: &Value,
-    update_signing: &SigningKey,
-    update_public_key_multibase: &str,
-) -> Result<Value> {
-    let payload = canonical_bytes(log_entry)?;
-    let signature = update_signing.sign(&payload);
-    Ok(json!({
-        "type": "DataIntegrityProof",
-        "cryptosuite": "eddsa-jcs-2022",
-        "verificationMethod": format!("did:key:{update_public_key_multibase}#{update_public_key_multibase}"),
-        "proofPurpose": "assertionMethod",
-        "proofValue": format!("z{}", encode_base58btc(signature.to_bytes())),
-    }))
+fn principal_bootstrap_request(
+    prepared: &PreparedPrincipalInception,
+    authority: &DidKeyAuthority,
+    authorization_ref: &str,
+    device_id: &str,
+    device_public_key: &str,
+) -> Result<EventsSubmitRequestBody> {
+    let principal = Did::new(prepared.did.clone())?;
+    let realm_id = RealmId::new(arkret_core::principal_control_realm_id(&principal))?;
+    let created_at = "2026-06-17T00:00:00Z".parse()?;
+    let mut create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
+        principal_id: principal.clone(),
+        realm_id,
+        trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
+        did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+        event_id: EventId::new("ak:event:01904100-0000-7000-8000-00000000e100")?,
+        created_at,
+        hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
+    })?;
+    let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
+    let root_signer = Ed25519MoveSigner::from_did_key_seed(
+        [32_u8; 32],
+        root_did,
+        prepared.root_verification_method.clone(),
+    );
+    sign_event(
+        &mut create,
+        &root_signer,
+        &prepared.root_verification_method,
+        SignEventOptions::new().with_created_at(created_at),
+    )?;
+
+    let authorize = service_attested_device_authorize_event(
+        principal.as_str(),
+        authority,
+        authorization_ref,
+        device_id,
+        device_public_key,
+        1,
+        "ak:event:01904100-0000-7000-8000-00000000e101",
+        vec![create.event_id.clone()],
+    )?;
+    Ok(self_principal_bootstrap_submit_request(create, authorize)?)
 }
 
-fn canonical_bytes(value: &Value) -> Result<Vec<u8>> {
-    canonical_json_bytes(value).map_err(|error| anyhow!("{error}"))
-}
-
-/// did:webvh v1.0 entry-hash preimage: drop `proof`, set `versionId` to the
-/// predecessor anchor (the SCID for the inception entry).
-fn strip_for_hash(value: &Value, prev_anchor: &str) -> Value {
-    let mut clone = value.clone();
-    if let Value::Object(map) = &mut clone {
-        map.remove("proof");
-        map.insert(
-            "versionId".to_owned(),
-            Value::String(prev_anchor.to_owned()),
-        );
-    }
-    clone
-}
-
-fn substitute_scid(value: &Value, scid: &str) -> Result<Value> {
-    let text = serde_json::to_string(value)?;
-    Ok(serde_json::from_str(
-        &text.replace(WEBVH_SCID_PLACEHOLDER, scid),
-    )?)
-}
-
-/// Bare base58btc sha256 multihash — no multibase `z` prefix (did:webvh v1.0).
-fn sha256_multihash_base58btc(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut multihash = Vec::with_capacity(34);
-    multihash.push(0x12);
-    multihash.push(0x20);
-    multihash.extend_from_slice(&digest);
-    encode_base58btc(&multihash)
-}
-
-fn format_webvh_did(method_authority: &str, scid: &str, local_id: &str) -> String {
-    format!("did:webvh:{scid}:{method_authority}:webvh:{local_id}")
-}
-
+#[allow(clippy::too_many_arguments)]
 fn service_attested_device_authorize_event(
     principal_id: &str,
-    authority_did: &str,
-    authority_verification_method: &str,
+    authority: &DidKeyAuthority,
     authorization_ref: &str,
     device_id: &str,
     device_public_key: &str,
     actor_seq: u64,
     event_id: &str,
-) -> Result<Value> {
-    let principal = arkret::Did::new(principal_id.to_owned())
-        .map_err(|error| anyhow!("invalid principal DID: {error}"))?;
+    prev_refs: Vec<EventId>,
+) -> Result<Event> {
+    let principal = Did::new(principal_id.to_owned())?;
     let realm_id = arkret_core::principal_control_realm_id(&principal);
-    // Typed wire payload: device-lifecycle.md §5.4 — the enrollment authority
-    // attests the device verify key, HPKE sealing key AND the canonical
-    // algorithm set. Built on the SDK counterpart so schema drift fails here.
-    let authority = arkret_core::Did::new(authority_did.to_owned())
-        .map_err(|error| anyhow!("invalid authority DID: {error}"))?;
+    let authority_did = Did::new(authority.did.clone())?;
     let payload = arkret_core::DeviceAuthorizePayload {
-        principal_id: arkret_core::Did::new(principal_id.to_owned())
-            .map_err(|error| anyhow!("invalid principal DID: {error}"))?,
-        device_id: arkret_core::DeviceId::new(device_id.to_owned())
-            .map_err(|error| anyhow!("invalid device id: {error}"))?,
-        device_public_key: arkret_core::NonEmptyString::new(device_public_key.to_owned())
-            .map_err(|error| anyhow!("invalid device public key: {error}"))?,
-        hpke_key: arkret_core::NonEmptyString::new("z6LSCotestEnrollHpkeKey").unwrap(),
+        principal_id: principal.clone(),
+        device_id: arkret_core::DeviceId::new(device_id.to_owned())?,
+        device_public_key: non_empty(device_public_key)?,
+        hpke_key: non_empty("z6LSCotestEnrollHpkeKey")?,
         algorithms: vec![
-            arkret_core::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
-            arkret_core::NonEmptyString::new("ak.mls.v1").unwrap(),
+            non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?,
+            non_empty("ak.mls.v1")?,
         ],
-        device_key_algorithm: None,
-        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority.clone()),
+        device_key_algorithm: Some(non_empty("EdDSA")?),
+        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority_did.clone()),
         scopes: None,
-        not_before: "2026-06-17T00:00:00Z"
-            .parse()
-            .expect("static timestamp parses"),
+        not_before: "2026-06-17T00:00:00Z".parse()?,
         expires_at: None,
         device_signature: None,
         proof: None,
         cross_signing_binding: None,
-        bootstrap_binding: None,
         enrollment_authority_binding: Some(arkret_core::DeviceEnrollmentAuthorityBinding {
             kind: arkret_core::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
-            authority_did: authority,
-            authorization_ref: arkret_core::NonEmptyString::new(authorization_ref.to_owned())
-                .unwrap(),
+            authority_did: authority_did.clone(),
+            authorization_ref: non_empty(authorization_ref)?,
         }),
         recovery_session_id: None,
     };
-    let payload = serde_json::to_value(&payload)?;
-    let mut event = json!({
-        "event_id": event_id,
-        "kind": "ak.device.authorize",
-        "realm_id": realm_id,
-        "actor_id": principal_id,
-        "actor_seq": actor_seq,
-        "created_at": "2026-06-17T00:00:00Z",
-        "hlc": format!("01970e589d21-{actor_seq:04x}-a13f9c2e"),
-        "prev_refs": [],
-        "refs": [],
-        "executed_by": authority_did,
-        "authorization_ref": authorization_ref,
-        "payload": payload,
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": authority_verification_method,
-            "event_digest": "",
-            "created_at": "2026-06-17T00:00:00Z",
-            "jws": "placeholder"
-        }],
-    });
-    refresh_event_proof(&mut event);
+    let created_at = "2026-06-17T00:00:00Z".parse()?;
+    let mut event = Event::new(
+        arkret_core::events::kinds::DEVICE_AUTHORIZE,
+        RealmId::new(realm_id)?,
+        principal,
+        actor_seq,
+        Hlc::new(format!("01970e589d21-{actor_seq:04x}-a13f9c2e"))?,
+        serde_json::to_value(payload)?,
+    )?;
+    event.event_id = EventId::new(event_id)?;
+    event.created_at = created_at;
+    event.prev_refs = prev_refs;
+    event.executed_by = Some(authority_did.clone());
+    event.authorization_ref = Some(authorization_ref.to_owned());
+    let authority_signer = Ed25519MoveSigner::from_did_key_seed(
+        authority.seed,
+        authority_did,
+        authority.verification_method.clone(),
+    );
+    sign_event(
+        &mut event,
+        &authority_signer,
+        &authority.verification_method,
+        SignEventOptions::new().with_created_at(created_at),
+    )?;
     Ok(event)
 }
 
@@ -397,11 +394,11 @@ fn assert_accepted_event(body: &Value, event_id: &str) -> Result<()> {
 }
 
 fn assert_enrollment_authority_service(
-    registered: &Value,
+    did_document: &Value,
     expected_service_id: &str,
     expected_authority_did: &str,
 ) -> Result<()> {
-    let services = registered["did_document"]["service"]
+    let services = did_document["service"]
         .as_array()
         .context("registered did_document.service")?;
     let service = services
@@ -420,4 +417,8 @@ fn assert_enrollment_authority_service(
         Some(expected_authority_did)
     );
     Ok(())
+}
+
+fn non_empty(value: impl Into<String>) -> Result<arkret_core::NonEmptyString> {
+    arkret_core::NonEmptyString::new(value).map_err(anyhow::Error::msg)
 }

@@ -16,7 +16,7 @@
 |---|---|---|
 | OIDC IdP | [`mocks/mock-idp.mjs`](../../mocks/mock-idp.mjs) | identity/onboarding, identity/account-device-auth |
 | Email 3PID | [`mocks/mock-email.mjs`](../../mocks/mock-email.mjs) | invites/third-party, identity/onboarding |
-| WebVH witness | [`mocks/mock-witness.mjs`](../../mocks/mock-witness.mjs) | identity/webvh-rotation |
+| WebVH witness | [`mocks/mock-witness.mjs`](../../mocks/mock-witness.mjs) | harness/mocks-selftest |
 | Audit agent | [`mocks/mock-audit-agent.mjs`](../../mocks/mock-audit-agent.mjs) | encryption/audited-e2ee, governance/gdpr-audit-retention |
 | Policy server | [`mocks/mock-policy-server.mjs`](../../mocks/mock-policy-server.mjs) | authz/policy-server-check, governance/organization-policy |
 | Push gateway | [`mocks/mock-push-gateway.mjs`](../../mocks/mock-push-gateway.mjs) | discovery/notifications |

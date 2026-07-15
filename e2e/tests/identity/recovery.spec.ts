@@ -17,12 +17,6 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-import { authHeaders } from "../../helpers/soland-api";
-import {
-  prepareRecoveryPrincipal,
-  restoreViaRecoveryUnlock,
-  revokeDevice,
-} from "../../helpers/recovery-unlock-harness";
 
 test.describe.configure({ mode: "serial" });
 
@@ -280,67 +274,19 @@ test.describe("account recovery", () => {
     }
   });
 
-  test("device-2 restores account using the Recovery Key; new device authorized via ak.device.authorize with a recovery_unlock proof", async ({
-    request,
-  }) => {
-    // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1; device-lifecycle.md §15.
-    //
-    // soland now implements the `recovery_unlock` factor end-to-end
-    // (routing/identity/recovery/session_endpoints.rs::verify_recovery_unlock_proof):
-    // the trust root is the principal-published recovery_policy.recovery_keys[]
-    // (§15), so the harness declares a freshly-minted Ed25519 recovery signing
-    // key into a genesis recovery policy and signs the unlock proof with it
-    // (helpers/recovery-unlock-harness.ts). The full §15 state machine runs:
-    // open session → recovery_unlock proof (pending→verified) → SSK-signed
-    // ak.device.authorize (carrying recovery_session_id) + ak.device.list_update
-    // on the control stream → /complete referencing those durable event ids.
-    test.setTimeout(120_000);
-    const alice = uniqueUser("recovery-restore-alice");
-    const principal = await prepareRecoveryPrincipal(request, "recovery-restore", alice);
-
-    const result = await restoreViaRecoveryUnlock(request, principal);
-    expect(result.completeResponse.ok).toBe(true);
-    expect(result.completeResponse.state).toBeTruthy();
-
-    // The recovered device is now an active, verified signer in the principal's
-    // device-set projection (§15 step 3 / §7 — restore authorized the device).
-    // Read through the recovered device's own session so the assertion does not
-    // depend on the original signer device.
-    await expect
-      .poll(
-        async () => {
-          const viewer = await request.get(
-            `${solandBaseUrl()}/_arkret/self/account/viewer`,
-            { headers: authHeaders(result.deviceToken) },
-          );
-          if (!viewer.ok()) {
-            return "http-" + viewer.status();
-          }
-          const body = (await viewer.json()) as {
-            devices?: Array<{
-              device_id?: string;
-              status?: string;
-              verification_state?: string;
-            }>;
-          };
-          const row = (body.devices ?? []).find(
-            (d) => d.device_id === result.deviceId,
-          );
-          if (!row) {
-            return "absent";
-          }
-          return `${row.status ?? "?"}/${row.verification_state ?? "?"}`;
-        },
-        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
-      )
-      .toMatch(/^active\/verified$/);
-  });
+  test.fixme(
+    "B-model Recovery Key restore publishes a registry entry then atomically reanchors and authorizes the replacement device",
+    async () => {
+      // The previous direct-authorize harness was removed because it bypassed
+      // the DID-generation fence. The replacement
+      // live strand must drive the accepted registry head, root-signed
+      // ak.device.reanchor + authority-signed replacement authorize unit, and
+      // assert its typed receipt before the recovered device may write.
+    },
+  );
 
   test.fixme(
-    // @blocking-on: the device-2 Recovery-Key restore fixme above (the
-    //   `principal_signing` proof cannot be minted because no party holds a
-    //   private key resolving inside the principal DID document; see that
-    //   fixme's full root-cause note).
+    // @blocking-on: the B-model registry-entry + re-anchor live harness above.
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
     "after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline",
@@ -482,72 +428,12 @@ test.describe("account recovery", () => {
     ).toBeTruthy();
   });
 
-  test("E8.7 after device-1 revoked, recovery_unlock restore on a fresh device still succeeds", async ({
-    request,
-  }) => {
-    // spec: crypto-media/encryption-and-audit.md §2.3.5/§2.4; device-lifecycle.md §15.
-    //
-    // The recovery_unlock factor is anchored on the principal-published
-    // recovery_policy.recovery_keys[] (§15), independent of the device set, so
-    // revoking the original (device-1) signer device MUST NOT prevent a fresh
-    // device from recovering. We first land a recovery_unlock restore (device-2),
-    // revoke device-1 from that peer device, then drive a second independent
-    // recovery_unlock restore (device-3) and assert it still authorizes a new,
-    // verified device.
-    test.setTimeout(180_000);
-    const alice = uniqueUser("recovery-e8-7-alice");
-    const principal = await prepareRecoveryPrincipal(request, "recovery-e8-7", alice);
-
-    const firstRestore = await restoreViaRecoveryUnlock(request, principal);
-    expect(firstRestore.completeResponse.ok).toBe(true);
-
-    // Revoke device-1 (the original dev-login signer) from device-2 (a peer).
-    await revokeDevice(
-      request,
-      principal,
-      principal.user.deviceId,
-      firstRestore.deviceId,
-      firstRestore.deviceToken,
-    );
-
-    // A subsequent recovery_unlock restore still succeeds post-revoke — the
-    // recovery factor does not depend on the revoked device. The §15 step-3
-    // control events are submitted by the still-valid device-2 peer.
-    const secondRestore = await restoreViaRecoveryUnlock(request, principal, {
-      submitterToken: firstRestore.deviceToken,
-    });
-    expect(secondRestore.completeResponse.ok).toBe(true);
-    expect(secondRestore.deviceId).not.toBe(firstRestore.deviceId);
-
-    // Read through device-3's own (post-revoke) session — device-1 is revoked
-    // and device-2 stays valid, but device-3 is the freshly authorized signer.
-    await expect
-      .poll(
-        async () => {
-          const viewer = await request.get(
-            `${solandBaseUrl()}/_arkret/self/account/viewer`,
-            { headers: authHeaders(secondRestore.deviceToken) },
-          );
-          if (!viewer.ok()) {
-            return "http-" + viewer.status();
-          }
-          const body = (await viewer.json()) as {
-            devices?: Array<{
-              device_id?: string;
-              status?: string;
-              verification_state?: string;
-            }>;
-          };
-          const row = (body.devices ?? []).find(
-            (d) => d.device_id === secondRestore.deviceId,
-          );
-          if (!row) {
-            return "absent";
-          }
-          return `${row.status ?? "?"}/${row.verification_state ?? "?"}`;
-        },
-        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
-      )
-      .toMatch(/^active\/verified$/);
-  });
+  test.fixme(
+    "E8.7 revoked old device cannot block a higher-generation B-model re-anchor",
+    async () => {
+      // The replacement live harness must prove recovery authority comes from
+      // the accepted policy and DID update chain, not any old-generation
+      // device, then assert all prior-generation writes are fenced.
+    },
+  );
 });

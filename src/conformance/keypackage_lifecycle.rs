@@ -4,7 +4,10 @@
 //! Welcome digest binding against the spec artifact fixture.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::error::{ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED, ERROR_CODE_KEYPACKAGE_UNKNOWN};
+use arkret_core::error::{
+    ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED, ERROR_CODE_KEYPACKAGE_UNKNOWN,
+    REASON_KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
+};
 use arkret_core::{
     DeviceId, Did, Hash, KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome,
     KeyPackagesUploadOutcome, MlsKeypackagePayload, MlsWelcomePayload, OP_KEYS_KEYPACKAGES_CLAIM,
@@ -996,22 +999,24 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         ..good_welcome
     });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_top_value)?;
-    let bad_top: MlsWelcomePayload = serde_json::from_value(bad_top_value)?;
-    let reason = validate_mls_welcome_claim_envelope(
-        &bad_top,
-        &claim,
-        &published,
-        &intended_realm_id,
-        &requester_did,
-        &welcome_digest,
-        claim_nonce,
-        Some(ssk_generation),
-        None,
-        Some(ssk_generation),
-        None,
-    )
-    .err()
-    .ok_or_else(|| anyhow!("mismatched top-level welcome digest was accepted"))?;
+    let reason = match parse_welcome_with_early_binding_rejection(bad_top_value)? {
+        Ok(bad_top) => validate_mls_welcome_claim_envelope(
+            &bad_top,
+            &claim,
+            &published,
+            &intended_realm_id,
+            &requester_did,
+            &welcome_digest,
+            claim_nonce,
+            Some(ssk_generation),
+            None,
+            Some(ssk_generation),
+            None,
+        )
+        .err()
+        .ok_or_else(|| anyhow!("mismatched top-level welcome digest was accepted"))?,
+        Err(reason) => reason,
+    };
     if reason != expected_str(vector, "reason")? {
         bail!("welcome mismatch reason drifted: {reason}");
     }
@@ -1024,22 +1029,25 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         ..good_welcome
     });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_claim_ref_value)?;
-    let bad_claim_ref: MlsWelcomePayload = serde_json::from_value(bad_claim_ref_value)?;
-    if validate_mls_welcome_claim_envelope(
-        &bad_claim_ref,
-        &claim,
-        &published,
-        &intended_realm_id,
-        &requester_did,
-        &welcome_digest,
-        claim_nonce,
-        Some(ssk_generation),
-        None,
-        Some(ssk_generation),
-        None,
-    )
-    .is_ok()
+    let claim_ref_rejected = match parse_welcome_with_early_binding_rejection(bad_claim_ref_value)?
     {
+        Ok(bad_claim_ref) => validate_mls_welcome_claim_envelope(
+            &bad_claim_ref,
+            &claim,
+            &published,
+            &intended_realm_id,
+            &requester_did,
+            &welcome_digest,
+            claim_nonce,
+            Some(ssk_generation),
+            None,
+            Some(ssk_generation),
+            None,
+        )
+        .is_err(),
+        Err(reason) => reason == REASON_KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
+    };
+    if !claim_ref_rejected {
         bail!("mismatched claim_ref keypackage_digest was accepted");
     }
     let bad_realm_value = welcome_payload_value(WelcomePayloadFixture {
@@ -1122,6 +1130,22 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     }
     Hash::new(digest.to_owned())?;
     Ok(())
+}
+
+fn parse_welcome_with_early_binding_rejection(
+    value: Value,
+) -> Result<std::result::Result<MlsWelcomePayload, &'static str>> {
+    match serde_json::from_value(value) {
+        Ok(payload) => Ok(Ok(payload)),
+        Err(error)
+            if error
+                .to_string()
+                .contains("claim bindings do not match top-level fields") =>
+        {
+            Ok(Err(REASON_KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH))
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {

@@ -495,7 +495,15 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
 pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let wire = json!({
         "target_kind": "strand",
-        "object_preview": { "strand_id": format!("ak:strand:{F}"), "title": "Launch planning" },
+        "object_preview": {
+            "object_id": format!("ak:strand:{F}"),
+            "object_kind": "strand",
+            "title": "Launch planning",
+            "as_of": "2026-05-27T00:00:00Z",
+            "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
+            "policy_revision": "rev-7",
+            "stale": false
+        },
         "join_rule": "knock",
         "as_of": "2026-05-27T00:00:00Z",
         "source_refs": [
@@ -602,7 +610,8 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         "join_rule": "invite",
         "as_of": "2026-05-27T00:00:00Z",
         "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
-        "join_candidates": []
+        "join_candidates": [],
+        "policy_revision": "rev-1"
     });
     let body: DirectoryTargetResolutionOutcome =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise realm res: {e}"))?;

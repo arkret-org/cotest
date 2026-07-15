@@ -318,34 +318,6 @@ fn test_cot_1_mention_render_fallback_transitions_live() {
 // ─── P0 / FIX-1 — fixture presence + shape ────────────────────────────────
 
 #[test]
-fn recovery_policy_fixture_loads_and_has_canonical_shape() {
-    let value = load_local_fixture_value("recovery-policy.json").expect("recovery-policy.json");
-    assert_eq!(
-        value.get("schema_ref").and_then(Value::as_str),
-        Some("ak.schema.recovery_policy.v1")
-    );
-    let cases = value
-        .get("cases")
-        .and_then(Value::as_array)
-        .expect("cases array");
-    assert!(!cases.is_empty(), "recovery-policy.json must have cases");
-}
-
-#[test]
-fn recovery_receipt_fixture_loads_and_has_canonical_shape() {
-    let value = load_local_fixture_value("recovery-receipt.json").expect("recovery-receipt.json");
-    assert_eq!(
-        value.get("schema_ref").and_then(Value::as_str),
-        Some("ak.schema.recovery_receipt.v1")
-    );
-    let cases = value
-        .get("cases")
-        .and_then(Value::as_array)
-        .expect("cases array");
-    assert!(!cases.is_empty(), "recovery-receipt.json must have cases");
-}
-
-#[test]
 fn agent_payloads_fixture_loads_and_has_canonical_shape() {
     let value = load_local_fixture_value("agent_payloads.json").expect("agent_payloads.json");
     let cases = value
@@ -468,84 +440,23 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
 
 #[test]
 fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
-    let value = load_local_fixture_value("recovery-policy.json")?;
-    let cases = value
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("recovery-policy.json missing cases"))?;
-    // Lifecycle enum coverage: active + retired must both appear.
-    let mut lifecycles: Vec<&str> = cases
-        .iter()
-        .filter_map(|c| {
-            c.get("policy")
-                .and_then(|p| p.get("lifecycle"))
-                .and_then(Value::as_str)
-        })
-        .collect();
-    lifecycles.sort_unstable();
-    lifecycles.dedup();
-    if !lifecycles.contains(&"active") || !lifecycles.contains(&"retired") {
-        bail!("recovery-policy.json must cover active + retired lifecycles");
-    }
-    // Proof-kind enum coverage: all four variants appear at least once.
-    let mut proof_kinds: Vec<String> = cases
-        .iter()
-        .filter_map(|c| {
-            c.get("policy")
-                .and_then(|p| p.get("body"))
-                .and_then(|b| b.get("proof_kinds"))
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(str::to_owned))
-                        .collect::<Vec<_>>()
-                })
-        })
-        .flatten()
-        .collect();
-    proof_kinds.sort();
-    proof_kinds.dedup();
-    for required in [
-        "device_quorum",
-        "recovery_unlock",
-        "trusted_recovery_service",
-        "principal_signing",
-    ] {
-        if !proof_kinds.iter().any(|p| p == required) {
-            bail!("recovery-policy.json missing proof_kind `{required}`");
-        }
-    }
-    // Witness-revoke-lagging negative path is present in the receipt
-    // fixture.
-    let receipt = load_local_fixture_value("recovery-receipt.json")?;
-    let has_lagging = receipt
-        .get("cases")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter().any(|c| {
-                c.get("reason").and_then(Value::as_str) == Some("recovery_witness_revoke_lagging")
-            })
-        })
-        .unwrap_or(false);
-    if !has_lagging {
-        bail!("recovery-receipt.json missing witness_revoke_lagging negative case");
-    }
+    cotest::conformance::run_identity_recovery_kdf_fixture_suite()?;
+    cotest::conformance::run_identity_root_anchor_checkpoint_suite()?;
+    cotest::conformance::run_identity_model_generation_fence_suite()?;
     Ok(())
 }
 
-/// Gating: R3.1 — soland recovery reducer + witness-revoke check not yet
-/// implemented.
+/// Gating: B-model live registry + re-anchor harness is not yet wired.
 /// Tier: live
 #[test]
-#[ignore = "R3.1: soland recovery reducer + witness-revoke check not yet implemented"]
+#[ignore = "B-model live registry entry + atomic re-anchor harness not yet wired"]
 fn test_5_recovery_policy_state_machine_live() {
     // Live integration:
-    //   1. POST recovery-policy (epoch=1) → 200.
-    //   2. POST recovery-policy (same epoch) → 409 / recovery_policy_mismatch.
-    //   3. POST recovery-receipt with policy_epoch=1 → 200.
-    //   4. POST recovery-receipt where witness has not yet revoked → 409
-    //      recovery_witness_revoke_lagging.
-    unreachable!("integration target gated on soland P2-impl recovery reducer");
+    //   1. Resolve an accepted policy snapshot with distinct signing/HPKE keys.
+    //   2. Publish the higher canonical DID registry entry.
+    //   3. Atomically submit root-signed re-anchor + authority-signed authorize.
+    //   4. Verify the receipt and reject old-generation Event/Seal replay.
+    unreachable!("integration target gated on B-model registry/re-anchor harness");
 }
 
 // ─── P0 / TEST-6 — Handle homograph reject ─────────────────────────────────

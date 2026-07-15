@@ -7,8 +7,9 @@
 //!   - **series_seq_not_monotonic** — out-of-order `series_seq`.
 //!   - **series_predecessor_not_found** — PUT references a `supersedes` envelope id that does not
 //!     exist on the server.
-//!   - **first_backup_gate** — inception key retire is rejected unless a
-//!     `backup_class=did_recovery` envelope has been published first.
+//!   - **first_backup_gate** — normal use is rejected until cold custody, recovery policy, and
+//!     either the first `backup_class=did_recovery` or a confirmed root-signed offline receipt are
+//!     ready.
 //!   - **post_reset_stale** — cross-signing reset accepted ↦ existing `secret_storage` envelopes
 //!     have 24h to publish a successor, else recovery strand rejects with
 //!     `backup_post_reset_stale`.

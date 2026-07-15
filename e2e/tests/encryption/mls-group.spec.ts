@@ -44,7 +44,11 @@ import {
 } from "../../helpers/users";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
-import { buildGenesisEntry, type WebvhKey } from "../../helpers/webvh-api";
+import {
+  buildPrincipalGenesisEntry,
+  submitPrincipalGenesisEntry,
+  type WebvhKey,
+} from "../../helpers/webvh-api";
 import { auditBrowserStorage } from "../../helpers/browser-storage-audit";
 
 test.describe.configure({ mode: "serial" });
@@ -68,7 +72,7 @@ type Ed25519FixtureKey = {
 
 type WebvhPrincipalFixture = {
   did: string;
-  didKeyId: string;
+  principalSigningKeyId: string;
   psk: Ed25519FixtureKey;
   ssk: Ed25519FixtureKey;
   usk: Ed25519FixtureKey;
@@ -151,53 +155,28 @@ async function registerWebvhPrincipal(
   localId: string,
 ): Promise<WebvhPrincipalFixture> {
   const psk = ed25519FixtureKey();
-  const updateKey = ed25519FixtureKey();
+  const enrollmentKey = ed25519FixtureKey();
+  const rootKey = ed25519FixtureKey();
+  const nextRootKey = ed25519FixtureKey();
   const ssk = ed25519FixtureKey();
   const usk = ed25519FixtureKey();
   const serviceEndpoint = solandBaseUrl().replace(/\/$/, "");
-  const didKeyFragment = "did-key-1";
-  const updateKeyFragment = "update-key-1";
-  const versionTime = canonicalTimestamp();
-  const built = buildGenesisEntry({
+  const built = buildPrincipalGenesisEntry({
     baseUrl: serviceEndpoint,
     localId,
-    didKey: asWebvhKey(psk),
-    updateKey: asWebvhKey(updateKey),
+    rootKey: asWebvhKey(rootKey),
+    nextRootKey: asWebvhKey(nextRootKey),
+    principalSigningKey: asWebvhKey(psk),
+    enrollmentKey: asWebvhKey(enrollmentKey),
     alsoKnownAs: [],
     serviceEndpoint,
-    versionTime,
+    versionTime: canonicalTimestamp(),
   });
-  const proof = (built.entry.proof as Record<string, unknown>[])[0];
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/root/identity/webvh/register`,
-    {
-      headers: {
-        authorization: `Bearer ${
-          process.env.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER ??
-          "joint-e2e-webvh-registration"
-        }`,
-      },
-      data: {
-        local_id: localId,
-        did_public_key_multibase: psk.publicKeyMultibase,
-        update_public_key_multibase: updateKey.publicKeyMultibase,
-        did_key_id: didKeyFragment,
-        update_key_id: updateKeyFragment,
-        also_known_as: [],
-        version_time: versionTime,
-        proof,
-      },
-    },
-  );
-  const body = await response.json();
-  expect(
-    response.status(),
-    `embedded webvh register returned ${response.status()}: ${JSON.stringify(body)}`,
-  ).toBe(201);
-  const did = String(body.did);
+  await submitPrincipalGenesisEntry(request, serviceEndpoint, built);
+  const did = built.did;
   return {
     did,
-    didKeyId: String(body.did_key_id),
+    principalSigningKeyId: built.principalSigningKeyId,
     psk,
     ssk,
     usk,
@@ -244,7 +223,7 @@ async function publishCrossSigning(
 ): Promise<string> {
   const trustDomain = await solandTrustDomain(request);
   const realmId = principalControlRealmForDid(fixture.did);
-  const pskKid = fixture.didKeyId;
+  const pskKid = fixture.principalSigningKeyId;
   const principalSigningKey = {
     kid: pskKid,
     alg: "EdDSA",

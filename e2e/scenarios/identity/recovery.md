@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的 Recovery Key 生成(备份自动上传)、跨设备使用 backup envelope 解密、新设备的 `ak.device.authorize` 写入、E2EE 历史消息解密。Recovery Key 是唯一的内容恢复用户凭证(spec §3.3/§7.7);独立 vault passphrase 凭证层已弃用(§7.5.1)。
+验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:冷保管确认、恢复策略与首备份、跨设备解密、B 模型 DID entry + 原子 `ak.device.reanchor` / replacement authorize、generation fence 及 E2EE 历史恢复。Recovery Key 是唯一的内容恢复用户凭证,但派生出的 DID root、recovery-proof Ed25519 key 与 backup-only X25519 HPKE key 必须角色分离。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
@@ -19,6 +19,7 @@
 - `identity/key-management.md` §7.10 — 自动持续备份
 - `identity/key-management.md` §8 — Threshold recovery service
 - `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + Backup API (PUT/GET/DELETE)
+- `crypto-media/device-lifecycle.md` 的 B 模型恢复与 device generation fence — 原子 re-anchor unit、旧代拒绝与冲突 quarantine
 
 ## 拓扑
 
@@ -38,13 +39,14 @@
 
 ### Phase A — 生成 Recovery Key(备份自动上传)
 
-1. alice (device-1) 进 `/settings/recovery`(RecoveryPanel)
-2. alice 点 "Generate"(`recovery-key-regenerate`):UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写;本地只存 SHA-256 指纹,词串不上传(spec §3.3/§7.7;首次创建 encrypted Realm 时 `MlsBackupPrompt` 也会自动走同一流程)
+1. alice 在 onboarding 的 inception draft 尚未发布前生成 24 词 BIP-39 Recovery Key,只显示一次并完成冷保管确认;未确认不得发布 entry 0。已存在身份的 `recovery-key-regenerate` 是独立权威存在时的两 entry handoff,不得原地替换当前 root。
+2. 客户端持久化可续跑的 draft/checkpoint,但不把词串写入普通设备状态、wire、日志或服务端 backup。
 3. 客户端:
-   - 从 24 词确定性派生 recovery private/public key
-   - 发布或确认 genesis recovery policy accepted
-   - 上传 `backup_class="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope
-   - 用同一个 recovery public key HPKE 加密账户 secret(`mls_account_secret` 等 `secret_storage` 域材料)
+   - 按规范 HKDF 从 Recovery Key 派生代际 DID root、独立 recovery-proof signing key 与 backup-only HPKE key
+   - entry 0 的 `updateKeys` 使用 root;root 不进入 DID Document `verificationMethod`
+   - 发布或确认同时绑定 recovery signing / HPKE pair 的 genesis recovery policy accepted
+   - 上传 `backup_class="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope；或保存 root-signed offline-sealed receipt 并要求用户二次确认离线持有
+   - 只用配对的 X25519 backup key HPKE 加密账户 secret;不得把 signing key 当 recipient
 4. `PUT /_arkret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
 5. 服务端**只能存** ciphertext,不接受 Recovery Key 词串明文
 6. 断言:
@@ -68,9 +70,9 @@
     - 生成新 device key(本地)
     - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ 派生 recovery private key → HPKE open `recovery_public_key` envelope
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
-14. 客户端签 `ak.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
-15. 提交到 soland;soland 校验 recovery policy → 接受
-16. 断言:device-2 上 `GET /_soland/self/account/me` 返回 alice.did,设备列表新增 device-2
+14. 客户端从 accepted policy snapshot 判定身份模型,不得由客户端自报:A 模型只走 SSK reset;B 模型先发布更高且 canonical 的 did:webvh entry,再构造 root-signed `ak.device.reanchor` + enrollment-authority-signed replacement `ak.device.authorize` 原子 unit。
+15. B 模型提交 unit 时绑定 live registry head、完整 `pre_fence_basis` CAS 与 recovery session;无 prior Seal 时 basis 必须显式为 null。任一拆批、错 authority/ref、旧/spent root 或 frontier 漂移均零副作用拒绝。
+16. 断言 typed receipt 同时绑定两个 Event;`GET /_arkret/self/account/viewer` 显示 device-2 active,当前 generation 等于新 DID version,所有未提交旧代 Event/Seal 被 `device_generation_fenced` 拒绝。
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 
@@ -81,10 +83,10 @@
 ## Observable assertions(合并)
 
 - Phase A 步骤 6:backup metadata 暴露 ✓,plaintext 不暴露 ✓
-- Phase A 步骤 6:`active_policy` + `did_recovery` 同时存在才算 recovery configured;仅有本地 `recovery.state.v1` 指纹或 `backups=[]` 必须显示 incomplete
+- Phase A 步骤 6:`active_policy` + (`did_recovery` 或经校验且二次确认的 root-signed offline receipt) 才算 recovery configured；普通本地指纹或无签名 receipt 不得绕过 gate
 - Phase C 步骤 10:fresh browser 优先 existing-device authorization;无 active policy / 无 `did_recovery` 时 fail closed,不尝试 recovery proof,不生成新 24 词
 - Phase C 步骤 13:Recovery Key 错误 → 非法 24 词在输入校验即拒;合法但错误的词串在本地 HPKE open / envelope 校验阶段拒,**不发解锁请求到服务器**(避免 oracle)
-- Phase C 步骤 16:device-2 成功注册,alice 的 device 列表有 2 台
+- Phase C 步骤 16:device-2 成功注册、generation 推进,旧代离线队列不重放
 - Phase D 步骤 19:历史消息明文渲染
 
 ## Edge cases / sub-tests
@@ -95,17 +97,20 @@
 - **E8.4 threshold recovery (3 of 5 shares)**:alice 用恢复 shares 而非 24 词词串;3 个 share holder 各自签发响应,客户端拼凑出 recovery key → 解密 envelope。覆盖 `key-management.md §8`(门限是 recovery policy 层,§7.5.4)
 - **E8.5 trusted recovery service**:走第三方恢复服务(`ak.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
 - **E8.6 Mixed-domain backup**:`mixed_secret_storage=true` only 允许在 `personal_node` profile;`high_assurance` 部署 MUST 拒(§7.1)
-- **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke(spec §5.2);Phase C 恢复仍然成功,但**新设备的 historical access 仍按当前 membership 评估**(`crypto-media/encryption-and-audit.md` §2.3.5/§2.4)
+- **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke;B 模型恢复仍由 accepted policy + DID update authority 完成,不依赖旧设备,且历史访问仍按当前 membership 评估。
+- **E8.8 A/B 混用**:A 模型携带 re-anchor、B 模型携带 SSK-reset,或同一设备同时呈现两种 authority binding,必须 fail closed。
+- **E8.9 同高度冲突**:同 DID version number 的不同 entry 或同 entry 的不同 unit 均全候选 quarantine,不得 first-seen winner;只允许更高预承诺 root 解除冲突。
+- **E8.10 恢复秘密疑似泄露**:若没有预先存在的独立权威,禁止同 DID 原地 handoff,必须重铸 DID 并重建信任;有独立权威时按 durable checkpoints 完成两 entry handoff、re-anchor、policy、全 active backup series 重封装、pointer 推进,最后撤销旧 policy key。
 
 ## Implementation notes
 
-- **soland 缺口**:recovery policy state machine、recovery proof(`ak.schema.recovery_session.v1`)与 `ak.device.authorize` 的端到端绑定仍未贯通;key-backup CRUD + series 链 + unlock-proof 门已实现。整条 scenario 的 device-authorize 段仍 fixme。
+- **当前可执行 conformance**：Rust `identity_root_conformance` 已直接运行正式 KDF KAT、SDK typed bootstrap/re-anchor helper、A/B 互斥与 generation fence；旧的 direct-authorize recovery harness 已删除。完整 canonical two-entry history、原子 admission/reducer 与 B-model live re-anchor 在对应 runner 落地前仍按未覆盖记录，不得把 fixture 名称检查计作执行。
 - **inkson 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 先按 device authorization fail-closed,只有 active policy + backup 可用时才进入输入已有 24 词的 restore。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 
 ## 风险 / 前置依赖
 
-- spec §8(threshold / recovery service)与 §7.4 recovery proof 绑定 soland 实现不完整。**device-authorize 恢复段 fixme 起步**;内容恢复段(MLS account secret)已由 `encryption/key-backup` A1/A2 live 覆盖。
+- threshold / recovery service 的客户端 reconstruction、完整 B 模型 live registry/re-anchor harness，以及覆盖全部正式 case 的 Cotest admission/reducer runner 仍是端到端前置依赖；内容恢复段由 `encryption/key-backup` A1/A2 live 覆盖。
 - E2EE history backup key 是否能跨 MLS epoch 解 backfill,实现复杂度高(spec §7.3 step 6)。
 
 ## 总耗时预估

@@ -599,6 +599,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
     }
     // `accountability_grant.expires_at` is optional the same way.
     let grant = serde_json::json!({
+        "schema": "ak.schema.accountability_grant.v1",
         "issuer": "did:web:alice.example",
         "subject": "did:web:agent.example",
         "accountability_scope": "agent_operator",
@@ -608,8 +609,9 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:alice.example#key-1",
-            "event_digest": format!("sha256:{}", "0".repeat(64)),
+            "payload_digest": format!("sha256:{}", "0".repeat(64)),
             "created_at": "2026-07-12T00:00:00Z",
+            "proof_purpose": "issuer_attestation",
             "jws": "eyJhbGciOiJFZERTQSJ9..sig"
         }
     });

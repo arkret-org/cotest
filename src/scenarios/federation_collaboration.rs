@@ -874,7 +874,7 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
     })
 }
 
-/// Typed `ak.device.authorize` bootstrap payload (inception_self_authorized):
+/// Typed model-A `ak.device.authorize` payload:
 /// built on the SDK `DeviceAuthorizePayload` so a schema drift breaks the
 /// build here instead of surfacing as a server-side `schema_violation`.
 pub(crate) fn bootstrap_device_authorize_payload(
@@ -883,23 +883,37 @@ pub(crate) fn bootstrap_device_authorize_payload(
     device_signing_key: &SigningKey,
 ) -> Result<Value> {
     let device_public_key = multicodec_ed25519_public_key(&device_signing_key.verifying_key());
+    let principal = Did::new(principal_id.to_owned())
+        .with_context(|| format!("invalid principal DID `{principal_id}`"))?;
+    let device = arkret_core::DeviceId::new(device_id.to_owned()).context("invalid device id")?;
+    let algorithms = vec![
+        arkret_core::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
+        arkret_core::NonEmptyString::new("ak.mls.v1").unwrap(),
+    ];
+    let trust_algorithms = algorithms
+        .iter()
+        .map(|algorithm| algorithm.as_str().to_owned())
+        .collect::<Vec<_>>();
+    let ssk_generation = std::num::NonZeroU64::new(1).unwrap();
+    let ssk_signature =
+        device_signing_key.sign(&arkret_crypto::DeviceTrustBinding::canonical_input(
+            &principal,
+            &device,
+            &device_public_key,
+            "z6LSCotestDeviceHpkeKey",
+            &trust_algorithms,
+            ssk_generation.get(),
+        )?);
     let mut payload = arkret_core::DeviceAuthorizePayload {
-        principal_id: Did::new(principal_id.to_owned())
-            .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
-        device_id: arkret_core::DeviceId::new(device_id.to_owned()).context("invalid device id")?,
+        principal_id: principal.clone(),
+        device_id: device,
         device_public_key: arkret_core::NonEmptyString::new(device_public_key)
             .map_err(anyhow::Error::msg)?,
         hpke_key: arkret_core::NonEmptyString::new("z6LSCotestDeviceHpkeKey")
             .expect("static HPKE key is non-empty"),
-        algorithms: vec![
-            arkret_core::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
-            arkret_core::NonEmptyString::new("ak.mls.v1").unwrap(),
-        ],
+        algorithms,
         device_key_algorithm: Some(arkret_core::NonEmptyString::new("EdDSA").unwrap()),
-        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(
-            Did::new(principal_id.to_owned())
-                .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
-        ),
+        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(principal),
         scopes: None,
         not_before: "2026-05-02T00:00:00Z"
             .parse()
@@ -907,12 +921,16 @@ pub(crate) fn bootstrap_device_authorize_payload(
         expires_at: None,
         device_signature: None,
         proof: None,
-        cross_signing_binding: None,
-        bootstrap_binding: Some(arkret_core::DeviceBootstrapBinding {
-            kind: arkret_core::DeviceBootstrapBindingKind::InceptionSelfAuthorized,
-            did_method_evidence_ref: arkret_core::NonEmptyString::new(format!(
-                "{principal_id}#inception"
+        cross_signing_binding: Some(arkret_core::DeviceCrossSigningBinding {
+            verification_method: arkret_core::DidUrl::new(format!(
+                "{principal_id}#ak_self_signing_v1"
             ))
+            .map_err(anyhow::Error::msg)?,
+            alg: arkret_core::NonEmptyString::new("EdDSA").unwrap(),
+            ssk_generation,
+            signature: arkret_core::Base64UrlString::new(
+                URL_SAFE_NO_PAD.encode(ssk_signature.to_bytes()),
+            )
             .unwrap(),
         }),
         enrollment_authority_binding: None,

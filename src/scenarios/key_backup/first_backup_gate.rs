@@ -1,64 +1,86 @@
 //! P4-C.4 — first-backup gate (positive + negative).
 //!
-//! Per AKP-0008 §1.3 + key-management.md §5.2, inception key retire
-//! MUST be hard-blocked until a `backup_class=did_recovery` envelope
-//! has been published (or an offline-sealed `recovery_receipt`
-//! captured). The gate fails closed: any retire attempt before the
-//! recovery envelope produces an error.
+//! Principal onboarding and recovery readiness are distinct from DID update
+//! key retirement. Normal use remains blocked until cold custody is confirmed,
+//! an active recovery policy binds separate signing/HPKE keys, and the first
+//! `backup_class=did_recovery` envelope is durable.
 
 use anyhow::{Result, anyhow};
 
 #[derive(Default)]
 struct DeviceState {
-    /// True once a backup_class=did_recovery envelope has landed.
+    custody_confirmed: bool,
+    active_recovery_policy: bool,
     did_recovery_published: bool,
-    /// True once the inception key has retired.
-    inception_retired: bool,
+    root_signed_offline_receipt_confirmed: bool,
+    normal_use_enabled: bool,
 }
 
 impl DeviceState {
-    fn try_retire_inception(&mut self) -> Result<()> {
-        if !self.did_recovery_published {
+    fn try_enable_normal_use(&mut self) -> Result<()> {
+        let recovery_material_ready =
+            self.did_recovery_published || self.root_signed_offline_receipt_confirmed;
+        if !self.custody_confirmed || !self.active_recovery_policy || !recovery_material_ready {
             return Err(anyhow!(
-                "first_backup_gate: inception key retire blocked until \
-                 backup_class=did_recovery envelope is published"
+                "first_backup_gate: normal use requires confirmed cold custody, \
+                 an active recovery policy, and a did_recovery backup"
             ));
         }
-        self.inception_retired = true;
+        self.normal_use_enabled = true;
         Ok(())
     }
 
-    fn publish_did_recovery(&mut self) {
+    fn complete_online_recovery_readiness(&mut self) {
+        self.custody_confirmed = true;
+        self.active_recovery_policy = true;
         self.did_recovery_published = true;
+    }
+
+    fn complete_offline_recovery_readiness(&mut self) {
+        self.custody_confirmed = true;
+        self.active_recovery_policy = true;
+        self.root_signed_offline_receipt_confirmed = true;
     }
 }
 
 pub async fn first_backup_gate_run() -> Result<()> {
-    // Negative: retire-before-publish MUST fail.
+    // Every incomplete readiness state fails closed.
     let mut state = DeviceState::default();
-    if state.try_retire_inception().is_ok() {
+    if state.try_enable_normal_use().is_ok() {
         return Err(anyhow!(
-            "first-backup gate accepted retire BEFORE a did_recovery envelope"
+            "first-backup gate enabled normal use before recovery readiness"
         ));
     }
-    if state.inception_retired {
+    state.custody_confirmed = true;
+    if state.try_enable_normal_use().is_ok() {
         return Err(anyhow!(
-            "first-backup gate marked inception retired despite the gate failing"
+            "first-backup gate ignored the missing policy and backup"
+        ));
+    }
+    state.active_recovery_policy = true;
+    if state.try_enable_normal_use().is_ok() {
+        return Err(anyhow!("first-backup gate ignored the missing backup"));
+    }
+
+    state.complete_online_recovery_readiness();
+    state.try_enable_normal_use()?;
+    if !state.normal_use_enabled {
+        return Err(anyhow!(
+            "first-backup gate did not enable normal use after recovery readiness"
         ));
     }
 
-    // Positive: publish first, then retire is allowed.
-    state.publish_did_recovery();
-    state.try_retire_inception()?;
-    if !state.inception_retired {
+    // The protocol also permits an identity-root-signed offline receipt after
+    // explicit user confirmation; it is an alternative to publishing a
+    // did_recovery envelope, not a weaker substitute for custody or policy.
+    let mut offline = DeviceState::default();
+    offline.complete_offline_recovery_readiness();
+    offline.try_enable_normal_use()?;
+    if !offline.normal_use_enabled || offline.did_recovery_published {
         return Err(anyhow!(
-            "first-backup gate failed to mark inception retired after publish"
+            "first-backup gate did not honor the offline receipt alternative"
         ));
     }
-
-    // TODO(P4-impl): live inkson bootstrap strand — bind device-A,
-    // attempt `ak.device.authorize` for device-B BEFORE the recovery
-    // envelope lands; assert 4xx with errcode `first_backup_gate`.
     Ok(())
 }
 

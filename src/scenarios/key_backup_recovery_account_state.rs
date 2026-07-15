@@ -134,6 +134,7 @@ fn unsigned_recovery_policy(
         threshold: None,
         device_quorum: None,
         recovery_keys: None,
+        recovery_key_agreements: None,
         trusted_recovery_services: None,
         approval_requirement: None,
         audit: None,

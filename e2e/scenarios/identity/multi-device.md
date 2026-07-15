@@ -4,7 +4,7 @@
 
 验证用户在多个设备上的生命周期:Device 1 已登录;通过 QR 码 + cross-signing 绑定 Device 2;两台设备并发收发消息;Device 1 远程撤销 Device 2;撤销后 Device 2 提交的 Move 被拒绝;Device 2 的 to-device 队列消息被 drop。
 
-不验证:首次 onboarding(identity/onboarding)、账户恢复(identity/recovery)、WebVH 密钥轮换(identity/webvh-rotation)。
+不验证:首次 onboarding(identity/onboarding)、账户恢复(identity/recovery)、WebVH 根代际轮换(由正式 identity-root conformance vectors 覆盖)。
 
 ## Spec 锚点
 

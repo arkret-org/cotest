@@ -68,4 +68,3 @@ pub mod teabay_unsigned_ingest;
 pub mod to_device_offline_ordering;
 pub mod upgrade_n_minus_one_replay;
 pub mod webvh_blackbox;
-pub mod webvh_witness_offline;

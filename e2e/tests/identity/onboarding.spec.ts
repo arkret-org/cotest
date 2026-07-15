@@ -20,19 +20,9 @@ import {
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
-import {
-  onboardPrincipalViaCoauth,
-  resolvePrincipalDid,
-  webvhScid,
-} from "../../helpers/onboarding";
-import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import { latestMockEmailCode } from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 test.describe("account onboarding", () => {
   test("dev-login path issues a token bound to a registered DID (baseline; the real onboarding spec is below)", async ({
@@ -182,102 +172,31 @@ test.describe("account onboarding", () => {
     }
   });
 
-  test("alice onboards for real (no dev-login); coauth binds a did:webvh principal and issues a device-bound ak.session.grant that works on /_arkret/self/*", async ({
-    request,
-  }) => {
-    // spec: account-lifecycle.md §2.1, key-management.md §5.0/§6, device-lifecycle.md §3.2
-    //
-    // The user-facing promise is "real onboarding mints a principal DID + a
-    // short-term session grant, fully off the dev-login short-circuit". We drive
-    // coauth's real onboarding chain (password factor + DPoP device key ->
-    // coauth mints `did:webvh:<scid>:<host>:webvh:<ulid>` via soland's embedded
-    // webvh registration, registers the principal account on soland, and issues
-    // a device-bound `ak.session.grant` with `cnf.jkt` == the device key). The
-    // WebAuthn ceremony is one of several login factors over the SAME bridge;
-    // exercising it specifically needs a CDP virtual authenticator + a coauth
-    // passkey UI surface (coauth owns account creation, not inkson), tracked
-    // separately. The observable spec contract — real did:webvh + working grant
-    // — is fully asserted here.
-    const coauth = coauthBaseUrl();
-    test.skip(!coauth, "coauth not started for this run");
+  test.fixme(
+    "alice confirms cold recovery custody, submits a root-signed entry 0, and receives a device-bound grant only after atomic PCR bootstrap",
+    async () => {
+      // The live path must consume Coauth's advertised enrollment-authority
+      // descriptor, build the client-custodied entry through the SDK-equivalent
+      // helper, complete the closed two-Event PCR bootstrap, then close the
+      // recovery-material gate. Coauth must never mint or retain the root.
+    },
+  );
 
-    const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "s7-alice");
-    expect(onboarded.principalDid).toMatch(/^did:webvh:/);
-    expect(onboarded.grantAudience).toBe(solandServiceId());
+  test.fixme(
+    "client-signed did:webvh entry resolves with root only in method parameters and B-model authority in service",
+    async () => {
+      // Assert canonical SCID/history and allow an empty verificationMethod;
+      // identity root and device keys must never be projected into DIDDoc.
+    },
+  );
 
-    // The short-term grant authenticates a `/_arkret/self/*` call with a
-    // per-request DPoP proof bound to the device key it was minted for.
-    const meUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
-    const meResp = await request.get(meUrl, {
-      headers: selfPathGrantHeaders({
-        deviceKey: onboarded.deviceKey,
-        grantJwt: onboarded.grantJwt,
-        method: "GET",
-        url: meUrl,
-      }),
-    });
-    expect(meResp.ok(), await meResp.text()).toBeTruthy();
-    const me = await meResp.json();
-    expect(me.principal_id).toBe(onboarded.principalDid);
-    expect(me.state).toBe("active");
-    // The onboarding device is in the account's device inventory.
-    expect(
-      (me.devices ?? []).some(
-        (d: { device_id?: string }) => d.device_id === onboarded.deviceId,
-      ),
-      `device ${onboarded.deviceId} not in ${JSON.stringify(me.devices)}`,
-    ).toBeTruthy();
-  });
-
-  test("alice's did:webvh resolves: SCID embedded in the DID, did.jsonl history chain, and a ArkretPrincipalServer service endpoint", async ({
-    request,
-  }) => {
-    // spec: identity-did.md §2.1, §3.4
-    const coauth = coauthBaseUrl();
-    test.skip(!coauth, "coauth not started for this run");
-
-    const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "s7-webvh");
-    const scid = webvhScid(onboarded.principalDid);
-    expect(scid.length).toBeGreaterThan(0);
-
-    const { document, log } = await resolvePrincipalDid(request, onboarded.principalDid);
-    expect(document.id).toBe(onboarded.principalDid);
-    // The DID Document MUST advertise the principal server.
-    const services = Array.isArray(document.service)
-      ? document.service.filter(isRecord)
-      : [];
-    const principalService = services.find((s) => s.type === "ArkretPrincipalServer");
-    expect(principalService, JSON.stringify(services)).toBeTruthy();
-    expect(principalService?.serviceEndpoint).toBeTruthy();
-    // At least one verificationMethod (the inception key).
-    const verificationMethods = Array.isArray(document.verificationMethod)
-      ? document.verificationMethod
-      : [];
-    expect(verificationMethods.length).toBeGreaterThan(0);
-
-    // The history chain (did.jsonl) has at least the genesis entry, and every
-    // entry's SCID matches the DID's SCID.
-    expect(log.length).toBeGreaterThan(0);
-    for (const entry of log) {
-      const parameters = isRecord(entry.parameters) ? entry.parameters : undefined;
-      expect(parameters, `did.jsonl entry missing parameters: ${JSON.stringify(entry)}`).toBeTruthy();
-      const entryScid = parameters?.scid;
-      expect(entryScid, `did.jsonl entry missing parameters.scid: ${JSON.stringify(entry)}`).toBe(scid);
-    }
-  });
-
-  test("carol onboards via email-only (3PID precursor): coauth verifies the emailed code and issues a did:webvh principal", async ({
+  test.fixme("carol verifies email then finishes with her client-signed cold-root inception", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1 + sync/third-party-invites.md §3
     //
-    // The webvh registration path requires an email-verification leg before the
-    // account is created. We drive it end-to-end: start -> email -> verify the
-    // emailed code -> the onboarded account carries a did:webvh principal. Under
-    // the dev email-delivery bypass the code is returned in-band (`dev_code`);
-    // when a real mock-email service is wired we additionally assert the message
-    // was captured there. Either way the verification token is consumed exactly
-    // once and a DID is issued.
+    // Keep the verified 3PID strand, then supply a client-authored entry 0 to
+    // finish. No service is permitted to generate the identity root.
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
@@ -349,38 +268,15 @@ test.describe("account onboarding", () => {
     const replayBody = await replay.json();
     expect(replayBody.status).not.toBe("success");
 
-    // The principal that this verified registration onboards into carries a
-    // resolvable did:webvh.
-    const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "s7-carol");
-    expect(onboarded.principalDid).toMatch(/^did:webvh:/);
-    const { document } = await resolvePrincipalDid(request, onboarded.principalDid);
-    expect(document.id).toBe(onboarded.principalDid);
   });
 
-  test("E7.5 handle conflict: a second webvh registration for a claimed handle is rejected", async ({
-    request,
-  }) => {
-    // spec: identity/identity-handles.md — a handle can be claimed once.
-    const coauth = coauthBaseUrl();
-    test.skip(!coauth, "coauth not started for this run");
-
-    const handle = uniqueUser("s7-claim").handle.slice(1);
-    const startUrl = `${coauth}/_coauth/account/auth/register/webvh/start`;
-
-    // Onboard the first claimant so the handle is durably claimed (the account
-    // is created, not just a pending registration).
-    await onboardPrincipalViaCoauth(request, coauth!, "s7-claim-a", { handle });
-
-    const second = await request.post(startUrl, {
-      data: { handle, principal_server_url: solandBaseUrl() },
-    });
-    expect(second.status()).toBe(200);
-    const secondBody = await second.json();
-    expect(secondBody.status).toBe("error");
-    // coauth surfaces a handle-already-taken rejection (wire code `handle_exists`
-    // from the webvh/start availability check).
-    expect(secondBody.error).toBe("handle_exists");
-  });
+  test.fixme(
+    "E7.5 a claimed handle remains unavailable after client-signed inception binding",
+    async () => {
+      // The first claimant must finish through the cold-root path before the
+      // second start request is expected to return handle_exists.
+    },
+  );
 
   // ── Retained (honestly out of low-risk reach) ────────────────────────────
   //
@@ -393,17 +289,12 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "principal control Realm is created (purpose=principal_control); first device registered via ak.device.authorize; cross-signing PSK/SSK/USK published",
+    "principal control Realm and first device are accepted as one B-model bootstrap unit before recovery-material gate closure",
     async () => {
-      // The principal control Realm is auto-materialized and ak.cross_signing.publish
-      // / ak.device.authorize are EVENT-log operations, not observable HTTP
-      // surfaces. There is no client-visible projection that lets a black-box
-      // test assert "the first device's DPoP key is enrolled as a
-      // verificationMethod `{principal}#{device_id}` in the DID document" — the
-      // device.authorize -> DID-document verificationMethod projection is
-      // scaffolded but not yet implemented, and lives in the device/webvh
-      // modules owned by a parallel workstream. Promote once that projection
-      // lands and the per-device key is observable via the resolver.
+      // Assert root-signed PCR create + authority-signed authorize are atomic,
+      // then publish the recovery policy and backup/receipt gate material.
+      // Model B has no SSK and device keys remain in the device registry, never
+      // in DID Document verificationMethod.
     },
   );
 
@@ -419,11 +310,9 @@ test.describe("account onboarding", () => {
       // account (`upstream_oauth_link().find_by_subject` -> else
       // `upstream_link_required`); there is no auto-provision-fresh-DID path for
       // an unlinked external subject. Driving this needs the upstream-OAuth
-      // browser link ceremony + seeded provider/link rows (DB + config), which
-      // is a separate surface outside this onboarding workstream. (The
-      // first-sign-in fresh-DID minting that the other onboarding tests cover
-      // runs over the LocalCoauth issuer, exercised via the real onboarding
-      // helper above.)
+      // browser link ceremony + seeded provider/link rows (DB + config), then
+      // the same client-signed cold-root inception/binding flow used by every
+      // other registration factor.
     },
   );
 });

@@ -70,6 +70,7 @@ fn build_realm(
         relation_profiles: Vec::new(),
         notary_profile: NotaryProfile::SingleDid,
         notary: NotaryValue::single_did(principal.clone()),
+        fields: Default::default(),
         // `max_anchor_staleness_ms` was retired by the dual-plane split
         // without a direct replacement; revocation staleness is governed by
         // `revocation_freshness_window_ms`.

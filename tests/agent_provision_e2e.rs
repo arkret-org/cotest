@@ -31,10 +31,11 @@ use arkret_core::{
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
     KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
     KeyBackupSignatureAlgorithm, KeyFormat, ManagedFrontierRef, ManagedPrincipalBinding,
-    NonEmptyString, PolicyId, PublishedKey, RecoveryKeyEntry, RecoveryPolicy,
-    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial,
-    SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId, canonical,
-    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
+    NonEmptyString, PolicyId, PublishedKey, RecoveryHpkeSuite, RecoveryKeyAgreementAlgorithm,
+    RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse, RecoveryKeyEntry,
+    RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData, RecoveryPolicyRef,
+    RecoveryProofKind, SignatureMaterial, SubordinateSignedKey, SubordinateSignedKeyBinding,
+    TypedTrustDomainId, canonical, ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
 };
 use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
@@ -60,13 +61,15 @@ const AGENT_SESSION_GRANT: &str = "cotest.agent.session.grant";
 const INTROSPECTION_BEARER: &str = "cotest-introspection-bearer";
 const TRUST_DOMAIN: &str = "ak:trust_domain:soland.local";
 const RECOVERY_POLICY_SIGNATURE_TYPE: &str = "ak.identity.recovery_policy.signature.v1";
-const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 9] = [
+const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 11] = [
     "schema",
     "policy_id",
     "principal_id",
     "version",
     "trust_domain",
     "allowed_proof_kinds",
+    "recovery_keys",
+    "recovery_key_agreements",
     "supersedes",
     "issued_at",
     "expires_at",
@@ -198,7 +201,10 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                     issuer: arkret::Did::new(ALICE_DID)?,
                     subject: arkret::CapabilitySubject::Did(arkret::Did::new(agent_did.clone())?),
                     actions: vec!["ak.event.read".to_owned()],
-                    resources: vec![json!({"kind": "realm", "realm_id": realm_id})],
+                    resources: vec![serde_json::from_value(json!({
+                        "kind": "realm",
+                        "realm_id": realm_id
+                    }))?],
                     constraints: Vec::new(),
                     parent_grant_id: None,
                     issued_at: Utc::now(),
@@ -301,7 +307,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
             slug: "renewal".to_owned(),
             avatar_blob_ref: None,
             requested_scope: test_agent_requested_scope(),
-            accountability: Value::Null,
+            accountability: None,
             pairing_ttl_ms: Some(1),
         })
         .await?;
@@ -439,7 +445,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
             slug: "statuspoll".to_owned(),
             avatar_blob_ref: None,
             requested_scope: test_agent_requested_scope(),
-            accountability: Value::Null,
+            accountability: None,
             pairing_ttl_ms: None,
         })
         .await?;
@@ -538,7 +544,7 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
             slug: "recoverygate".to_owned(),
             avatar_blob_ref: None,
             requested_scope: test_agent_requested_scope(),
-            accountability: Value::Null,
+            accountability: None,
             pairing_ttl_ms: None,
         })
         .await?;
@@ -1038,7 +1044,6 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         device_signature: Some(SignatureMaterial::NonEmptyString(non_empty("pending")?)),
         proof: None,
         cross_signing_binding: Some(cross_signing_binding),
-        bootstrap_binding: None,
         enrollment_authority_binding: None,
         recovery_session_id: None,
     };
@@ -1090,7 +1095,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
 
     let issued_at = canonical_now();
     let signed_fields = RECOVERY_POLICY_SIGNED_FIELDS.map(str::to_owned).to_vec();
-    let recovery_verification_method = recovery_verification_method();
+    let (recovery_verification_method, recovery_public_key_multibase) =
+        recovery_signing_key_material()?;
+    let recovery_key_agreement_ref = did_url(format!("{ALICE_DID}#backup-hpke-1"))?;
     let mut policy = RecoveryPolicy {
         schema: "ak.schema.recovery_policy.v1".to_owned(),
         policy_id: PolicyId::new(RECOVERY_POLICY_ID.to_owned())?,
@@ -1104,7 +1111,19 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         trusted_recovery_services: None,
         recovery_keys: Some(vec![RecoveryKeyEntry {
             verification_method: recovery_verification_method,
-            alg: "Ed25519".to_owned(),
+            public_key_multibase: recovery_public_key_multibase,
+            key_agreement_ref: recovery_key_agreement_ref.clone(),
+            alg: RecoveryKeySignatureAlgorithm::Ed25519,
+            not_before: issued_at - TimeDelta::minutes(1),
+            expires_at: issued_at + TimeDelta::days(365),
+            revoked_at: None,
+        }]),
+        recovery_key_agreements: Some(vec![RecoveryKeyAgreementEntry {
+            key_agreement_ref: recovery_key_agreement_ref,
+            alg: RecoveryKeyAgreementAlgorithm::X25519,
+            public_key_multibase: non_empty("z6LSriWhVBzW9Vz2PvqbieSz7Aa2hPLzTKJuDwXTMKFeomeW")?,
+            hpke_suites: vec![RecoveryHpkeSuite::X25519ChaCha20Poly1305],
+            usage: RecoveryKeyAgreementUse::BackupHpke,
             not_before: issued_at - TimeDelta::minutes(1),
             expires_at: issued_at + TimeDelta::days(365),
             revoked_at: None,
@@ -1160,10 +1179,13 @@ fn sign_ed25519_b64url(key: &SigningKey, input: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(key.sign(input).to_bytes())
 }
 
-fn recovery_verification_method() -> String {
+fn recovery_signing_key_material() -> Result<(DidUrl, NonEmptyString)> {
     let recovery_key = SigningKey::from_bytes(&[25_u8; 32]);
     let multibase = ed25519_pubkey_to_did_key_multibase(recovery_key.verifying_key().as_bytes());
-    format!("did:key:{multibase}#{multibase}")
+    Ok((
+        did_url(format!("{ALICE_DID}#recovery-proof-1"))?,
+        non_empty(multibase)?,
+    ))
 }
 
 fn canonical_now() -> DateTime<Utc> {
@@ -1455,7 +1477,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         managed_frontier_ref,
     };
     let created_at = canonical_now();
-    let recipient_key_ref = recovery_verification_method();
+    let recipient_key_ref = format!("{ALICE_DID}#backup-hpke-1");
     let device_key = SigningKey::from_bytes(&[24_u8; 32]);
     let device_multibase =
         ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
@@ -1690,7 +1712,7 @@ async fn provision_and_pair_agent(
             slug: slug.to_owned(),
             avatar_blob_ref: None,
             requested_scope: test_agent_requested_scope(),
-            accountability: Value::Null,
+            accountability: None,
             pairing_ttl_ms: None,
         })
         .await?;

@@ -1,66 +1,28 @@
-// Real account onboarding helpers (no dev-login short-circuit).
+// Client-custodied principal onboarding resolver helpers.
 //
-// These drive the genuine coauth -> soland onboarding chain that the
-// identity/onboarding.md and identity/account-device-auth.md scenarios
-// describe:
-//   * coauth mints a `did:webvh:<scid>:<host>:webvh:<ulid>` principal DID via
-//     soland's embedded webvh registration (services/soland_webvh.rs), and
-//   * issues a device-bound `ak.session.grant` (cnf.jkt == device DPoP key
-//     thumbprint), and
-//   * registers the principal account on soland.
-//
-// The vehicle is coauth's password+DPoP login (handlers/account/auth.rs):
-// the same code path `helpers/users.ts::createDpopUserSession` already uses.
-// It exercises the real onboarding (webvh DID + cross-signing-backed account +
-// session grant) WITHOUT the WebAuthn browser ceremony or dev-login, so the
-// minted DID is a resolvable did:webvh and the grant works on `/_arkret/self/*`.
+// Principal entry 0 must be built and root-signed by the client after recovery
+// custody confirmation. Coauth only advertises the B-model enrollment
+// authority, verifies/binds the submitted operation, authorizes devices, and
+// issues device-bound grants; it never mints or stores the identity root.
 
-import { expect, type APIRequestContext } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
-import {
-  registerCoauthPasswordAccount,
-  type CoauthPasswordAccount,
-} from "./coauth-register";
-import {
-  generateDpopDeviceKey,
-  kickoffDpopHeaders,
-  type DpopDeviceKey,
-} from "./session-grant-dpop";
-import { uniqueUser } from "./users";
+import type { APIRequestContext } from "@playwright/test";
+import { type SolandKey, solandBaseUrl } from "./env";
+import type { CoauthPasswordAccount } from "./coauth-register";
+import type { DpopDeviceKey } from "./session-grant-dpop";
 
+/// Non-secret output of a completed client-custodied onboarding strand.
 export type OnboardedPrincipal = {
-  /// The coauth password account backing this principal.
   account: CoauthPasswordAccount;
-  /// `did:webvh:<scid>:<host>:webvh:<ulid>` minted by coauth via soland.
   principalDid: string;
-  /// `ak:device:<uuidv7>` the session grant is bound to.
   deviceId: string;
-  /// The device DPoP key (`cnf.jkt` == its thumbprint).
   deviceKey: DpopDeviceKey;
-  /// The issued `ak.session.grant` JWT.
   grantJwt: string;
-  /// coauth grant id (DB row id).
   grantId: string;
-  /// Audience the grant is bound to (the soland service DID).
   grantAudience: string;
-  /// All scopes the grant carries.
   scopes: string[];
 };
 
 type JsonRecord = Record<string, unknown>;
-
-type CoauthLoginGrant = {
-  grant_jwt: string;
-  id: string;
-  audience: string;
-  scopes: string[];
-};
-
-type CoauthLoginResponse = {
-  status?: string;
-  viewer?: { did?: string };
-  session_grant?: CoauthLoginGrant;
-};
 
 function objectRecord(value: unknown): JsonRecord | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -83,105 +45,6 @@ function parseJsonObject(raw: string): JsonRecord | null {
   } catch {
     return null;
   }
-}
-
-function parseCoauthLoginResponse(raw: string): CoauthLoginResponse | null {
-  const record = parseJsonObject(raw);
-  if (!record) {
-    return null;
-  }
-  const grantRecord = objectRecord(record.session_grant);
-  const scopes = grantRecord?.scopes;
-  const grant =
-    stringField(grantRecord, "grant_jwt") &&
-    stringField(grantRecord, "id") &&
-    stringField(grantRecord, "audience") &&
-    Array.isArray(scopes) &&
-    scopes.every((scope) => typeof scope === "string")
-      ? {
-          grant_jwt: stringField(grantRecord, "grant_jwt")!,
-          id: stringField(grantRecord, "id")!,
-          audience: stringField(grantRecord, "audience")!,
-          scopes: scopes as string[],
-        }
-      : undefined;
-  return {
-    status: stringField(record, "status"),
-    viewer: {
-      did: stringField(objectRecord(record.viewer), "did"),
-    },
-    session_grant: grant,
-  };
-}
-
-/// Drive a full, real onboarding via coauth password+DPoP login. Returns the
-/// minted did:webvh principal + a working device-bound session grant. Throws on
-/// any failure (so the test fails loudly), except a 404 login (release build
-/// without the bridge) which throws a clear message — callers should
-/// `test.skip` when `coauthBaseUrl()` is unset rather than relying on a soft
-/// return here.
-export async function onboardPrincipalViaCoauth(
-  request: APIRequestContext,
-  coauthBase: string,
-  prefix: string,
-  opts: { server?: SolandKey; handle?: string } = {},
-): Promise<OnboardedPrincipal> {
-  const account = await registerCoauthPasswordAccount(request, coauthBase, {
-    handle: opts.handle,
-    password: "ArkretOnboard!2026",
-  });
-  return loginPrincipalViaCoauth(request, coauthBase, prefix, account, opts);
-}
-
-/// Issue a fresh device-bound session grant for an existing coauth account via
-/// the password+DPoP login. Each call uses a distinct device key + device id,
-/// so this also models a second device acquiring its own device-specific grant.
-export async function loginPrincipalViaCoauth(
-  request: APIRequestContext,
-  coauthBase: string,
-  prefix: string,
-  account: CoauthPasswordAccount,
-  opts: { server?: SolandKey; deviceId?: string } = {},
-): Promise<OnboardedPrincipal> {
-  const deviceId = opts.deviceId ?? uniqueUser(prefix).deviceId;
-  const deviceKey = generateDpopDeviceKey();
-  const audience = solandServiceId(opts.server);
-  const loginUrl = `${coauthBase}/_coauth/account/auth/login`;
-  const login = await request.post(loginUrl, {
-    headers: kickoffDpopHeaders({ deviceKey, method: "POST", url: loginUrl }),
-    data: {
-      handle: account.handle,
-      password: account.password,
-      audience,
-      device_id: deviceId,
-    },
-  });
-  const raw = await login.text();
-  const body = parseCoauthLoginResponse(raw);
-  if (!login.ok() || body?.status !== "success") {
-    throw new Error(
-      `coauth onboarding login returned ${login.status()}: ${raw}`,
-    );
-  }
-  const grant = body?.session_grant;
-  const principalDid = body?.viewer?.did;
-  if (!principalDid || !grant?.grant_jwt || !grant?.id || !grant?.audience) {
-    throw new Error(`coauth onboarding login omitted principal grant: ${raw}`);
-  }
-  expect(principalDid).toMatch(/^did:webvh:/);
-  expect(grant.audience).toBe(audience);
-  expect(Array.isArray(grant.scopes)).toBeTruthy();
-  expect(grant.scopes).toContain(`urn:arkret:client:device:${deviceId}`);
-  return {
-    account,
-    principalDid,
-    deviceId,
-    deviceKey,
-    grantJwt: grant.grant_jwt,
-    grantId: grant.id,
-    grantAudience: grant.audience,
-    scopes: grant.scopes,
-  };
 }
 
 /// Resolve a principal DID through soland's public resolver

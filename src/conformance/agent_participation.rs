@@ -8,9 +8,9 @@ use arkret_core::{
     AGENT_SELECTOR_CLAIM_SCHEMA, AgentParticipation, AgentParticipationEntry,
     AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope,
     AgentSelectorClaim, Audience, Did, DirectoryAgentSelectorResolutionOutcome, Handle,
-    HandleBindingState, HandleVisibility, Hash, Mention, MentionNode, PayloadProof, RealmId,
-    effective_participation, fold_ceiling_chain, validate_agent_participation_tightens,
-    validate_selection_within_ceiling,
+    HandleBindingState, HandleVisibility, Hash, Mention, MentionNode, PayloadProof,
+    PayloadProofPurpose, RealmId, effective_participation, fold_ceiling_chain,
+    validate_agent_participation_tightens, validate_selection_within_ceiling,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::Value;
@@ -194,7 +194,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
             audience: Some(Audience::Single(
                 "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned(),
             )),
-            proof_purpose: None,
+            proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
             jws: "fixture.signature.value".to_owned(),
         }],
     })

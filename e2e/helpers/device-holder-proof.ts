@@ -12,28 +12,24 @@
 // the principal DID document. So a black-box harness must first enrol the device
 // key into soland's directory, then sign the holder proof with the SAME key.
 //
-// This module drives:
-//   1. enrolment — `POST {coauth}/_arkret/gate/account/device-enroll` returns a
-//      signed `service_attested` `ak.device.authorize`; submit it verbatim to
-//      `POST {soland}/_arkret/self/events`. The onboarded principal's did:webvh
-//      document already designates coauth's enrollment authority (coauth mints it
-//      via `prepare_inception(enrollment_authority_did=...)`), so the binding is
-//      accepted and projected, marking the device verified-with-key.
-//   2. the holder proof — canonical `SoftLogoutDidProofClaims` signed as an EdDSA
-//      detached JWS with the device key, plus the
+// This module drives the holder proof: canonical `SoftLogoutDidProofClaims`
+// signed as an EdDSA detached JWS with the device key, plus the
 //      `soft_logout_restore_request_canonical_digest` binding, byte-mirroring the
 //      Rust structs in refresh.rs.
+//
+// Post-bootstrap enrolment remains deliberately unavailable until the typed
+// Coauth request carries the accepted actor frontier. Entry-0 enrolment belongs
+// to the closed PCR bootstrap unit and is never driven through this helper.
 
 import { createHash, sign } from "node:crypto";
-import { type APIRequestContext, expect } from "@playwright/test";
-import { solandBaseUrl, type SolandKey } from "./env";
+import type { APIRequestContext } from "@playwright/test";
+import type { SolandKey } from "./env";
 import type { OnboardedPrincipal } from "./onboarding";
 import { base64urlJsonCanonical, canonicalJson } from "./soland-api";
 import { encodeEd25519PubkeyMultibase } from "./encoding";
 import {
   type DpopDeviceKey,
   mintDpopProof,
-  selfPathGrantHeaders,
 } from "./session-grant-dpop";
 
 /// Render an Ed25519 raw public key (32 bytes) as the multibase form soland
@@ -58,76 +54,28 @@ function rfc3339Seconds(epochSeconds: number): string {
   return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z")}`;
 }
 
-/// Enrol the onboarded device's DPoP key into the Principal Server's device
-/// directory as a verified, non-revoked device signing key. Returns the
+/// Enrol a post-bootstrap device's DPoP key into the Principal Server's device
+/// directory as a verified, non-revoked device signing key. The first device
+/// is authorized inside the closed PCR bootstrap unit and MUST NOT use this
+/// isolated-event helper. Returns the
 /// `did:key:z…` the directory will surface for it.
 ///
-/// Returns `undefined` when coauth does not expose `device-enroll` (e.g. no
-/// principal server configured), so callers can `test.skip` cleanly.
+/// This currently returns `undefined` because the typed device-enroll request
+/// does not yet carry the accepted actor frontier / exact `prev_refs`. Sending
+/// `actor_seq=1` with an empty predecessor set would counterfeit a bootstrap
+/// authorization and is forbidden. Callers must skip until the SDK DTO and
+/// Coauth handler expose the post-bootstrap predecessor contract.
 export async function enrollOnboardedDeviceSigningKey(
   request: APIRequestContext,
   coauthBase: string,
   onboarded: OnboardedPrincipal,
   opts: { server?: SolandKey } = {},
 ): Promise<string | undefined> {
-  const enrollUrl = `${coauthBase}/_arkret/gate/account/device-enroll`;
-  const enrollResp = await request.post(enrollUrl, {
-    headers: {
-      authorization: `Bearer ${onboarded.grantJwt}`,
-      dpop: mintDpopProof({
-        deviceKey: onboarded.deviceKey,
-        method: "POST",
-        url: enrollUrl,
-        grantJwt: onboarded.grantJwt,
-      }),
-    },
-    data: {
-      device_id: onboarded.deviceId,
-      // base64url of the 32-byte Ed25519 public key — accepted by coauth's
-      // `decode_device_public_key` and re-rendered to multibase server-side.
-      device_public_key: onboarded.deviceKey.publicJwk.x,
-      // §5.4: the enrollment authority also attests the device HPKE sealing
-      // key and the canonical algorithm set.
-      hpke_key: "z6LSCotestE2eDeviceHpkeKey",
-      algorithms: ["ak.hpke_x25519_aead_chacha20poly1305.v1", "ak.mls.v1"],
-      actor_seq: 1,
-    },
-  });
-  if (enrollResp.status() === 404) {
-    return undefined;
-  }
-  const enrollText = await enrollResp.text();
-  expect(
-    enrollResp.ok(),
-    `device-enroll returned ${enrollResp.status()}: ${enrollText}`,
-  ).toBeTruthy();
-  const enrolled = JSON.parse(enrollText) as {
-    authorized_event?: Record<string, unknown>;
-  };
-  const event = enrolled.authorized_event;
-  if (!event) {
-    throw new Error(`device-enroll omitted authorized_event: ${enrollText}`);
-  }
-
-  // Submit the signed ak.device.authorize verbatim to the Principal Server via
-  // the onboarded grant + per-request DPoP (the /_arkret/self/* edge).
-  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-  const submitResp = await request.post(eventsUrl, {
-    headers: selfPathGrantHeaders({
-      deviceKey: onboarded.deviceKey,
-      grantJwt: onboarded.grantJwt,
-      method: "POST",
-      url: eventsUrl,
-    }),
-    data: event,
-  });
-  const submitText = await submitResp.text();
-  expect(
-    submitResp.ok(),
-    `submit ak.device.authorize returned ${submitResp.status()}: ${submitText}`,
-  ).toBeTruthy();
-
-  return deviceSigningKeyDid(onboarded.deviceKey);
+  void request;
+  void coauthBase;
+  void onboarded;
+  void opts;
+  return undefined;
 }
 
 /// `sha256:`-prefixed digest of a JCS-canonical object, matching the SDK

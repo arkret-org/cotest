@@ -235,10 +235,7 @@ fn issue_session_grant(
     let requested_expires_at = request.proof.expires_at.unwrap_or(now + server_max_ttl);
     let expires_at = requested_expires_at.min(now + server_max_ttl);
     Ok(SessionGrantOutcome {
-        principal_id: request
-            .principal_id
-            .clone()
-            .expect("fixture uses a human DID-bound grant"),
+        principal_id: request.principal_id.clone(),
         device_id: request.device_id.clone(),
         session_grant: "ak.session.grant.test".to_owned(),
         expires_at,

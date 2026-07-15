@@ -1,59 +1,48 @@
-// did:webvh rotation helpers (S9 / identity/webvh-rotation.md).
+// Principal did:webvh inception fixture construction.
 //
-// These mirror, byte-for-byte, the inception + rotation entry construction that
-// coauth's `services/soland_webvh.rs` and soland's
-// `routing/identity/did/webvh.rs` + `webvh_validation.rs` perform, so the
-// genesis SCID, per-entry hash chain, controller proof (eddsa-jcs-2022) and
-// witness attestation all verify against a live soland:
-//
-//   - SCID  = bare base58btc sha256-multihash (no multibase `z` prefix, per
-//             DIF did:webvh v1.0) of the canonical-JCS genesis skeleton with
-//             `{SCID}` placeholders, `proof`/`witness` stripped and
-//             `versionId` set to the bare `{SCID}` placeholder
-//             (derive_webvh_scid_from_skeleton).
-//   - hash  = bare base58btc sha256-multihash of the canonical-JCS entry with
-//             `proof` stripped and `versionId` set to the predecessor anchor —
-//             the SCID for the genesis entry, the previous `versionId`
-//             otherwise (webvh_entry_hash_multibase).
-//   - proof = ed25519 signature (eddsa-jcs-2022) over the canonical-JCS entry
-//             with `proof` stripped, `verificationMethod = did:key:<mb>#<mb>`
-//             (build_proof / verify_webvh_log_proof).
-//   - witness = ed25519 signature over the canonical-JCS entry with `proof`,
-//             `witness`, and `versionId` stripped. The entry hash includes
-//             `witness[]`, so the witness transcript cannot include the final
-//             `versionId` without creating a cycle.
-//
-// Canonical JSON is the project's JCS profile (sorted keys, integer-only
-// numbers, NFC) — the same `canonicalJson` soland's
-// `arkret_sdk::canonical::canonical_json_bytes` implements.
+// This helper only emits the current cold-root entry-0 shape. The root and
+// next root stay in method parameters, while the DID document contains a
+// distinct principal-signing key and a dedicated enrollment key for model A.
 
 import {
   createHash,
-  createPrivateKey,
   generateKeyPairSync,
   type KeyObject,
   sign,
 } from "node:crypto";
-import {
-  expect,
-  type APIRequestContext,
-  type APIResponse,
-} from "@playwright/test";
+import type { APIRequestContext } from "@playwright/test";
 import { canonicalBytes, expectJsonOk } from "./soland-api";
 import { base58btcEncode, encodeEd25519PubkeyMultibase } from "./encoding";
-
-export { base58btcEncode, encodeEd25519PubkeyMultibase };
 
 const WEBVH_SCID_PLACEHOLDER = "{SCID}";
 const WEBVH_METHOD_VERSION = "did:webvh:1.0";
 
 export type WebvhKey = {
-  /// raw 32-byte ed25519 public key
   publicKey: Buffer;
-  /// node KeyObject used to produce detached ed25519 signatures
   privateKey: KeyObject;
-  /// `z…` base58btc multibase of the multicodec-prefixed public key
   multibase: string;
+};
+
+export type PrincipalGenesisInput = {
+  baseUrl: string;
+  localId: string;
+  rootKey: WebvhKey;
+  nextRootKey: WebvhKey;
+  principalSigningKey: WebvhKey;
+  enrollmentKey: WebvhKey;
+  alsoKnownAs?: string[];
+  serviceEndpoint?: string;
+  versionTime?: string;
+};
+
+export type BuiltPrincipalGenesis = {
+  did: string;
+  scid: string;
+  versionId: string;
+  entry: Record<string, unknown>;
+  didDocument: Record<string, unknown>;
+  principalSigningKeyId: string;
+  enrollmentKeyId: string;
 };
 
 export function generateWebvhKey(): WebvhKey {
@@ -72,74 +61,50 @@ export function generateWebvhKey(): WebvhKey {
 
 function sha256MultihashBase58btc(bytes: Buffer): string {
   const digest = createHash("sha256").update(bytes).digest();
-  // multihash: sha2-256 (0x12) + length 32 (0x20) + digest. Bare base58btc,
-  // no multibase `z` prefix (did:webvh v1.0).
-  const multihash = Buffer.concat([Buffer.from([0x12, 0x20]), digest]);
-  return base58btcEncode(multihash);
+  return base58btcEncode(Buffer.concat([Buffer.from([0x12, 0x20]), digest]));
 }
 
-/// did:webvh v1.0 entry-hash preimage: drop `proof`, set `versionId` to the
-/// predecessor anchor (the SCID for the genesis entry, the previous
-/// `versionId` otherwise).
-function stripForHash(
-  entry: Record<string, unknown>,
-  prevAnchor: string,
-): Record<string, unknown> {
-  const clone = { ...entry };
-  delete clone.proof;
-  clone.versionId = prevAnchor;
-  return clone;
+function entryHash(entry: Record<string, unknown>, previousAnchor: string): string {
+  const preimage: Record<string, unknown> = {
+    ...entry,
+    versionId: previousAnchor,
+  };
+  delete preimage.proof;
+  return sha256MultihashBase58btc(canonicalBytes(preimage));
 }
 
-export function entryHashMultibase(
-  entry: Record<string, unknown>,
-  prevAnchor: string,
-): string {
-  return sha256MultihashBase58btc(canonicalBytes(stripForHash(entry, prevAnchor)));
-}
-
-/// Sign an entry (with `proof` stripped) under eddsa-jcs-2022 and return the
-/// DataIntegrityProof object. `verificationMethod` mirrors coauth's
-/// `did:key:<mb>#<mb>` shape so the fragment carries the signing key.
-export function buildEntryProof(
+function buildEntryProof(
   entry: Record<string, unknown>,
   signer: WebvhKey,
 ): Record<string, unknown> {
-  const payloadEntry = { ...entry };
-  delete payloadEntry.proof;
-  const signature = sign(null, canonicalBytes(payloadEntry), signer.privateKey);
-  return {
+  const proofConfig = {
     type: "DataIntegrityProof",
     cryptosuite: "eddsa-jcs-2022",
     verificationMethod: `did:key:${signer.multibase}#${signer.multibase}`,
     proofPurpose: "assertionMethod",
+  };
+  const document = { ...entry };
+  delete document.proof;
+  const signingInput = Buffer.concat([
+    createHash("sha256").update(canonicalBytes(proofConfig)).digest(),
+    createHash("sha256").update(canonicalBytes(document)).digest(),
+  ]);
+  const signature = sign(null, signingInput, signer.privateKey);
+  return {
+    ...proofConfig,
     proofValue: `z${base58btcEncode(signature)}`,
   };
 }
 
-/// soland's `embedded_webvh_authority`: host (with `%3A<port>` for the DID
-/// method authority, literal `:<port>` for URLs).
-export function webvhAuthority(baseUrl: string): {
-  methodAuthority: string;
-  httpsAuthority: string;
-} {
+function webvhMethodAuthority(baseUrl: string): string {
   const url = new URL(baseUrl);
-  const host = url.hostname;
-  if (!host.includes(".")) {
-    throw new Error(
-      `webvh host must contain a dot for did:webvh: ${host}`,
-    );
+  if (!url.hostname.includes(".")) {
+    throw new Error(`webvh host must contain a dot: ${url.hostname}`);
   }
-  if (url.port) {
-    return {
-      methodAuthority: `${host}%3A${url.port}`,
-      httpsAuthority: `${host}:${url.port}`,
-    };
-  }
-  return { methodAuthority: host, httpsAuthority: host };
+  return url.port ? `${url.hostname}%3A${url.port}` : url.hostname;
 }
 
-export function formatWebvhDid(
+function formatWebvhDid(
   methodAuthority: string,
   scid: string,
   localId: string,
@@ -147,395 +112,116 @@ export function formatWebvhDid(
   return `did:webvh:${scid}:${methodAuthority}:webvh:${localId}`;
 }
 
-export type GenesisInput = {
-  baseUrl: string;
-  localId: string;
-  didKey: WebvhKey;
-  updateKey: WebvhKey;
-  alsoKnownAs?: string[];
-  serviceEndpoint?: string;
-  versionTime?: string;
-  /// genesis-declared recovery keys (key-management.md §3.3) — emergency
-  /// rotations may then be signed by one of these instead of the controller.
-  recoveryKeys?: string[];
-  /// witnesses + threshold this DID requires (resolver counts attestations
-  /// against this quorum).
-  witnessKeys?: string[];
-  witnessThreshold?: number;
-  /// genesis-declared organization governance threshold (identity-did.md §8).
-  governance?: { threshold: number; eligibleMethods: string[] };
-};
-
-export type BuiltEntry = {
-  did: string;
-  scid: string;
-  versionId: string;
-  localId: string;
-  entry: Record<string, unknown>;
-  didDocument: Record<string, unknown>;
-};
-
-function genesisDidDocument(
+function principalDocument(
   did: string,
-  didKeyId: string,
-  didKey: WebvhKey,
-  alsoKnownAs: string[],
-  serviceEndpoint: string,
+  input: PrincipalGenesisInput,
 ): Record<string, unknown> {
+  const principalSigningKeyId = `${did}#principal-signing-key`;
+  const enrollmentKeyId = `${did}#device-enrollment-authority`;
   return {
     "@context": ["https://www.w3.org/ns/did/v1"],
     id: did,
     verificationMethod: [
       {
-        id: didKeyId,
+        id: principalSigningKeyId,
         type: "Multikey",
         controller: did,
-        publicKeyMultibase: didKey.multibase,
+        publicKeyMultibase: input.principalSigningKey.multibase,
+      },
+      {
+        id: enrollmentKeyId,
+        type: "Multikey",
+        controller: did,
+        publicKeyMultibase: input.enrollmentKey.multibase,
       },
     ],
-    authentication: [didKeyId],
-    assertionMethod: [didKeyId],
-    alsoKnownAs,
+    authentication: [principalSigningKeyId],
+    assertionMethod: [principalSigningKeyId],
+    capabilityDelegation: [enrollmentKeyId],
+    alsoKnownAs: input.alsoKnownAs ?? [],
     service: [
       {
         id: `${did}#soland`,
         type: "ArkretPrincipalServer",
-        serviceEndpoint,
+        serviceEndpoint:
+          input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, ""),
       },
     ],
   };
 }
 
-/// Build the inception entry (SCID, versionId, controller proof). Mirrors
-/// soland `embedded_webvh_register`.
-export function buildGenesisEntry(input: GenesisInput): BuiltEntry {
-  const { methodAuthority, httpsAuthority } = webvhAuthority(input.baseUrl);
-  void httpsAuthority;
-  const versionTime = input.versionTime ?? new Date().toISOString();
-  const serviceEndpoint =
-    input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, "");
+export function buildPrincipalGenesisEntry(
+  input: PrincipalGenesisInput,
+): BuiltPrincipalGenesis {
+  const keys = [
+    input.rootKey.multibase,
+    input.nextRootKey.multibase,
+    input.principalSigningKey.multibase,
+    input.enrollmentKey.multibase,
+  ];
+  if (new Set(keys).size !== keys.length) {
+    throw new Error("principal root, next root, signing, and enrollment keys must be distinct");
+  }
+
+  const methodAuthority = webvhMethodAuthority(input.baseUrl);
   const placeholderDid = formatWebvhDid(
     methodAuthority,
     WEBVH_SCID_PLACEHOLDER,
     input.localId,
   );
-  const placeholderKeyId = `${placeholderDid}#did-key-1`;
-  const skeletonDoc = genesisDidDocument(
-    placeholderDid,
-    placeholderKeyId,
-    input.didKey,
-    input.alsoKnownAs ?? [],
-    serviceEndpoint,
-  );
-  const parameters: Record<string, unknown> = {
-    scid: WEBVH_SCID_PLACEHOLDER,
-    method: WEBVH_METHOD_VERSION,
-    updateKeys: [input.updateKey.multibase],
-  };
-  if (input.recoveryKeys?.length) {
-    parameters.recoveryKeys = input.recoveryKeys;
-  }
-  if (input.witnessKeys?.length) {
-    parameters.witnesses = input.witnessKeys.map((key) => ({
-      publicKeyMultibase: key,
-    }));
-    parameters.witness_threshold =
-      input.witnessThreshold ?? input.witnessKeys.length;
-  }
-  if (input.governance) {
-    parameters.governance = {
-      threshold: {
-        required: input.governance.threshold,
-        eligible_methods: input.governance.eligibleMethods,
-      },
-    };
-  }
   const entrySkeleton: Record<string, unknown> = {
     versionId: WEBVH_SCID_PLACEHOLDER,
-    versionTime,
-    parameters,
-    state: skeletonDoc,
+    versionTime: input.versionTime ?? new Date().toISOString(),
+    parameters: {
+      scid: WEBVH_SCID_PLACEHOLDER,
+      method: WEBVH_METHOD_VERSION,
+      updateKeys: [input.rootKey.multibase],
+      nextKeyHashes: [
+        sha256MultihashBase58btc(Buffer.from(input.nextRootKey.multibase, "utf8")),
+      ],
+    },
+    state: principalDocument(placeholderDid, input),
   };
   const scid = sha256MultihashBase58btc(canonicalBytes(entrySkeleton));
   const did = formatWebvhDid(methodAuthority, scid, input.localId);
-  const realised = JSON.parse(
+  const entry = JSON.parse(
     JSON.stringify(entrySkeleton).split(WEBVH_SCID_PLACEHOLDER).join(scid),
   ) as Record<string, unknown>;
-  const versionHash = entryHashMultibase(realised, scid);
-  const versionId = `1-${versionHash}`;
-  realised.versionId = versionId;
-  realised.proof = [buildEntryProof(realised, input.updateKey)];
+  const versionId = `1-${entryHash(entry, scid)}`;
+  entry.versionId = versionId;
+  entry.proof = [buildEntryProof(entry, input.rootKey)];
   return {
     did,
     scid,
     versionId,
-    localId: input.localId,
-    entry: realised,
-    didDocument: realised.state as Record<string, unknown>,
+    entry,
+    didDocument: entry.state as Record<string, unknown>,
+    principalSigningKeyId: `${did}#principal-signing-key`,
+    enrollmentKeyId: `${did}#device-enrollment-authority`,
   };
 }
 
-export type RotationInput = {
-  did: string;
-  scid: string;
-  prevVersionId: string;
-  prevDidDocument: Record<string, unknown>;
-  /// the previous entry's `parameters.updateKeys` (distinct from the
-  /// document's verificationMethod). Required for `keepControl` refreshes so
-  /// the entry re-declares the SAME updateKeys and soland sees no rotation.
-  prevUpdateKeys?: string[];
-  newUpdateKey: WebvhKey;
-  /// key that signs the rotation entry: the previous update key (normal
-  /// controller rotation), a recovery key (emergency), or one or more
-  /// governance keys.
-  signers: WebvhKey[];
-  /// When true the entry keeps the previous document + updateKeys unchanged
-  /// (a witness / metadata refresh, NOT a control rotation). soland's
-  /// `is_rotation_entry` then returns false, so this entry is governed by the
-  /// degraded-window rule rather than the immediate rotation fail-closed rule.
-  keepControl?: boolean;
-  versionTime?: string;
-  /// witness signing keys. Their multibase is declared in
-  /// `parameters.witnesses` and they sign the `witness[]` attestation. When
-  /// `witnessKeys` is omitted it is derived from these.
-  witnesses?: WebvhKey[];
-  witnessKeys?: string[];
-  witnessThreshold?: number;
-  governance?: { threshold: number; eligibleMethods: string[] };
-  recoveryKeys?: string[];
-};
-
-/// Build a rotation entry linked to the previous head. The new document keeps
-/// the same id but swaps in the new controlling key; `updateKeys` advances to
-/// the new update key.
-///
-/// Ordering matters and mirrors soland: the `witness[]` attestation is signed
-/// over the proof+witness+versionId-stripped body, then the versionId hash is
-/// computed over the body INCLUDING `witness[]` (soland strips only proof +
-/// versionId), and finally the controller `proof[]` is signed over the body
-/// including `witness[]` + `versionId`.
-export function buildRotationEntry(input: RotationInput): BuiltEntry {
-  const seq = parseInt(input.prevVersionId.split("-")[0], 10) + 1;
-  const versionTime = input.versionTime ?? new Date().toISOString();
-  const witnessKeys =
-    input.witnessKeys ?? input.witnesses?.map((key) => key.multibase);
-  const prevDoc = input.prevDidDocument;
-  let newDocument: Record<string, unknown>;
-  let updateKeys: string[];
-  if (input.keepControl) {
-    if (!input.prevUpdateKeys?.length) {
-      throw new Error("keepControl requires prevUpdateKeys");
-    }
-    newDocument = { ...prevDoc };
-    updateKeys = input.prevUpdateKeys;
-  } else {
-    const newKeyId = `${input.did}#did-key-${seq}`;
-    newDocument = {
-      ...prevDoc,
-      verificationMethod: [
-        {
-          id: newKeyId,
-          type: "Multikey",
-          controller: input.did,
-          publicKeyMultibase: input.newUpdateKey.multibase,
-        },
-      ],
-      authentication: [newKeyId],
-      assertionMethod: [newKeyId],
-    };
-    updateKeys = [input.newUpdateKey.multibase];
-  }
-  const parameters: Record<string, unknown> = {
-    scid: input.scid,
-    method: WEBVH_METHOD_VERSION,
-    updateKeys,
-  };
-  if (input.recoveryKeys?.length) {
-    parameters.recoveryKeys = input.recoveryKeys;
-  }
-  if (witnessKeys?.length) {
-    parameters.witnesses = witnessKeys.map((key) => ({
-      publicKeyMultibase: key,
-    }));
-    parameters.witness_threshold = input.witnessThreshold ?? witnessKeys.length;
-  }
-  if (input.governance) {
-    parameters.governance = {
-      threshold: {
-        required: input.governance.threshold,
-        eligible_methods: input.governance.eligibleMethods,
-      },
-    };
-  }
-  const body: Record<string, unknown> = {
-    versionTime,
-    previousVersionId: input.prevVersionId,
-    parameters,
-    state: newDocument,
-  };
-  if (input.witnesses?.length) {
-    body.witness = input.witnesses.map((witness) =>
-      buildWitnessProof(body, witness),
-    );
-  }
-  const versionHash = entryHashMultibase(body, input.prevVersionId);
-  const versionId = `${seq}-${versionHash}`;
-  body.versionId = versionId;
-  body.proof = input.signers.map((signer) => buildEntryProof(body, signer));
-  return {
-    did: input.did,
-    scid: input.scid,
-    versionId,
-    localId: input.did.split(":webvh:").pop() ?? "",
-    entry: body,
-    didDocument: newDocument,
-  };
-}
-
-/// A witness proof signs the entry with `proof`, `witness`, and `versionId`
-/// stripped (matching soland `verify_one_witness_proof`). soland's resolver
-/// verifies the `witness[]` array (distinct from the controller `proof[]`) and
-/// counts each distinct valid signer whose multibase is declared in
-/// `parameters.witnesses` toward the witness quorum.
-export function buildWitnessProof(
-  entry: Record<string, unknown>,
-  witness: WebvhKey,
-): Record<string, unknown> {
-  const payloadEntry = { ...entry };
-  delete payloadEntry.proof;
-  delete payloadEntry.witness;
-  delete payloadEntry.versionId;
-  const signature = sign(null, canonicalBytes(payloadEntry), witness.privateKey);
-  return {
-    type: "DataIntegrityProof",
-    cryptosuite: "eddsa-jcs-2022",
-    verificationMethod: `did:web:witness.example#${witness.multibase}`,
-    proofValue: `z${base58btcEncode(signature)}`,
-  };
-}
-
-// ── HTTP wrappers ─────────────────────────────────────────────────────────
-
-export function webvhRegistrationBearer(): string {
-  return process.env.COTEST_WEBVH_REGISTRATION_BEARER ?? "joint-e2e-webvh-registration";
-}
-
-export function bearerHeaders(): Record<string, string> {
-  return { authorization: `Bearer ${webvhRegistrationBearer()}` };
-}
-
-export async function registerWebvhGenesis(
+export async function submitPrincipalGenesisEntry(
   request: APIRequestContext,
   baseUrl: string,
-  built: BuiltEntry,
-  input: GenesisInput,
-): Promise<Record<string, unknown>> {
+  built: BuiltPrincipalGenesis,
+): Promise<void> {
   const response = await request.post(
-    `${baseUrl.replace(/\/$/, "")}/_soland/root/identity/webvh/register`,
+    `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/submit-did-operation`,
     {
-      headers: bearerHeaders(),
       data: {
-        local_id: input.localId,
-        did_public_key_multibase: input.didKey.multibase,
-        update_public_key_multibase: input.updateKey.multibase,
-        also_known_as: input.alsoKnownAs ?? [],
-        version_time: (built.entry.versionTime as string) ?? undefined,
-        proof: (built.entry.proof as unknown[])[0],
-        ...(input.recoveryKeys?.length
-          ? { recovery_keys: input.recoveryKeys }
-          : {}),
-        ...(input.governance
-          ? {
-              governance: {
-                threshold: {
-                  required: input.governance.threshold,
-                  eligible_methods: input.governance.eligibleMethods,
-                },
-              },
-            }
-          : {}),
+        did: built.did,
+        did_method: "did:webvh",
+        seq: 1,
+        operation: built.entry,
+        policy_context: {
+          provider_id: "soland.protocol",
+          profile: "ak.identity.webvh.provider.v1",
+          local_id: built.did.split(":").at(-1),
+        },
+        proofs: [],
       },
     },
   );
-  return await expectJsonOk(response, `register webvh genesis ${built.did}`);
+  await expectJsonOk(response, `submit principal inception ${built.did}`);
 }
-
-export async function rawRotateWebvh(
-  request: APIRequestContext,
-  baseUrl: string,
-  did: string,
-  built: BuiltEntry,
-): Promise<APIResponse> {
-  return await request.post(
-    `${baseUrl.replace(/\/$/, "")}/_soland/root/identity/webvh/rotate`,
-    {
-      headers: bearerHeaders(),
-      data: { did, log_entry: built.entry },
-    },
-  );
-}
-
-export async function rotateWebvh(
-  request: APIRequestContext,
-  baseUrl: string,
-  did: string,
-  built: BuiltEntry,
-): Promise<Record<string, unknown>> {
-  const response = await rawRotateWebvh(request, baseUrl, did, built);
-  return await expectJsonOk(response, `rotate webvh ${did}`);
-}
-
-export async function rawResolveDid(
-  request: APIRequestContext,
-  baseUrl: string,
-  did: string,
-): Promise<APIResponse> {
-  return await request.post(
-    `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/resolve`,
-    { data: { did } },
-  );
-}
-
-export async function resolveDid(
-  request: APIRequestContext,
-  baseUrl: string,
-  did: string,
-): Promise<{
-  did_document: { did: string; document: Record<string, unknown> };
-  key_log_head?: string | null;
-  seq?: number;
-  method_evidence?: Record<string, unknown>;
-}> {
-  const response = await rawResolveDid(request, baseUrl, did);
-  return await expectJsonOk(response, `resolve did ${did}`);
-}
-
-export async function fetchDidLog(
-  request: APIRequestContext,
-  baseUrl: string,
-  did: string,
-): Promise<Array<Record<string, unknown>>> {
-  const response = await request.get(
-    `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/log?did=${encodeURIComponent(did)}`,
-  );
-  const body = await expectJsonOk<{ events?: Array<Record<string, unknown>> }>(
-    response,
-    `fetch did log ${did}`,
-  );
-  return body.events ?? [];
-}
-
-/// Count verificationMethod fragments in a resolved document — used to assert
-/// the controlling key advanced after a rotation.
-export function documentControlKeys(
-  document: Record<string, unknown>,
-): string[] {
-  const methods = Array.isArray(document.verificationMethod)
-    ? (document.verificationMethod as Array<Record<string, unknown>>)
-    : [];
-  return methods
-    .map((method) => method.publicKeyMultibase)
-    .filter((value): value is string => typeof value === "string");
-}
-
-export { expect };

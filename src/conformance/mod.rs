@@ -20,6 +20,7 @@ mod federation;
 mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
 mod history_crypto_closure;
+mod identity_root;
 mod inkson_client;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
@@ -167,6 +168,10 @@ pub use history_crypto_closure::{
     run_history_crypto_closure_fixture_suite,
     run_history_sharing_e2ee_prejoin_key_share_policy_vector,
     run_preview_token_scoped_stripped_state_vector,
+};
+pub use identity_root::{
+    run_identity_model_generation_fence_suite, run_identity_recovery_kdf_fixture_suite,
+    run_identity_root_anchor_checkpoint_suite,
 };
 pub use inkson_client::run_inkson_client_profile_manifest_suite;
 pub use key_backup_hardening::{

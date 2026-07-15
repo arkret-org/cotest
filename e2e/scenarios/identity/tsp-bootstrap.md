@@ -106,7 +106,7 @@
 ## Edge cases / sub-tests
 
 - **E2.1 TSP endpoint unreachable → fallback 到直接 HTTPS**:测试 harness 把 mock TSP endpoint 端口下掉(`process.kill(MOCK_TSP_ENDPOINT_PID)` 或 `route.block`);alice 再次尝试发 `ak.invite.create`;客户端应当**降级**到 Arkret v1 core 默认的 HTTPS JWE transport(spec 顶部 status 行:v1 core 默认走 HTTPS JWE / MLS DM),soland 通过 alice 的常规 `POST /_arkret/self/events` 路径接收。断言:invite 仍然送达 bob_extern(或在 soland 端进入 outbound queue 等待 bob_extern 上线),并且 audit log 出现一条 `transport.fallback{from: "tsp", to: "https-jwe", reason: "endpoint_unreachable"}` 记录
-- **E2.2 VID resolver degraded(no witness)→ TSP relationship 降级**:把 alice 的 webvh witness service 下掉(沿用 webvh-rotation 的 `degraded_no_witness` 机制),让 bob_extern 解析 alice VID 时进入 degraded 状态;bob_extern 仍然能用 alice 的 update key 验证 signature,但 trust level 下降。断言:Phase B 第 9 步的 `trust_level` 字段从 `"verified"` 变成 `"degraded"`,UI 显示 ⚠ 标记;Phase D 第 18 步的 ACK 中 `verification.tsp_authenticity = "ok"`,但 `verification.vid_trust = "degraded_no_witness"`(spec §8:记录 support system 与 trust assessment result)
+- **E2.2 VID resolver degraded(no witness)→ TSP relationship 降级**:把 alice 的 webvh witness service 下掉,让 bob_extern 解析 alice VID 时进入 degraded 状态;bob_extern 仍然能用已验证的 cached history 验证 signature,但 trust level 下降。断言:Phase B 第 9 步的 `trust_level` 字段从 `"verified"` 变成 `"degraded"`,UI 显示 ⚠ 标记;Phase D 第 18 步的 ACK 中 `verification.tsp_authenticity = "ok"`,但 `verification.vid_trust = "degraded_no_witness"`(spec §8:记录 support system 与 trust assessment result)
 - **E2.3 metadata privacy (nested message)**:同 Phase C 的 nested mode,但显式引入一个 routing intermediary(mock 增加一个 `relay` 角色);intermediary 收到外层 envelope 后,只能看见 pairwise VID 与 `payload_digest`,看不到 `vid_local`(真实 alice DID)、看不到内层 `operation` 字段、也看不到 `payload` 明文。断言:`GET mock://relay-view?relationship_id=...` 返回的相关字段都被打码或缺失;唯有 bob_extern 这一终点能解出内层(spec §5:nested 隐藏内层 VID;intermediary 不应被视为可信授权方)
 
 ## Implementation notes
@@ -114,7 +114,7 @@
 - **soland 缺口**:`ak.service.tsp` endpoint declaration 的注入、TSP envelope verify/route 路径、`tsp.*` audit event、`/_arkret/root/identity/{did}/transports` 暴露 — 整组未实现。整个 scenario fixme starter
 - **inkson 缺口**:`/directory` 上的 `establish-tsp-button`、`/settings/connections` 的 TSP relationship 列表、relationship `trust_level` 的 ⚠ 标记 UI 都缺
 - **mock-tsp-endpoint.mjs**:由并行任务交付;测试只通过 `process.env.MOCK_TSP_ENDPOINT_PORT` 与 `process.env.MOCK_TSP_ENDPOINT_VID` 访问。若两个 env 未设置,本 spec 应当 `test.skip` 而非 fail(下方 spec 用 `optionalEnv` 风格 guard)
-- **WebVH host / DID:web host**:沿用 webvh-rotation / onboarding 的现有 harness;DID Document 中 `ak.service.tsp` 注入需要 harness 支持(否则 Phase A 第 1-2 步会 fail closed)
+- **WebVH host / DID:web host**:沿用 onboarding 的 current-root inception harness;DID Document 中 `ak.service.tsp` 注入需要 harness 支持(否则 Phase A 第 1-2 步会 fail closed)
 - **TSP 是 extension profile,不是 v1 core 必需**:`tsp-integration.md` 顶部明确标注,整个文件目前是 SHOULD/MAY,因此 .spec.ts 全 fixme 不会 block release
 
 ## 总耗时预估

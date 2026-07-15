@@ -77,9 +77,8 @@ param(
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
-    # from the 24h spec ceiling so webvh-rotation.spec.ts (E9.4) can exercise the
-    # expiry -> unresolvable edge without a real 24h wait. soland clamps any value
-    # back to the 24h ceiling, so this can only tighten the window.
+    # for resolver and harness witness-health checks; production clamps any
+    # value back to the protocol ceiling, so this can only tighten the window.
     [int]$WebvhDegradedNoWitnessMaxSecs = 30,
     # OAuth `client_id` soland advertises in `/_arkret/describe.auth_metadata.methods[].client_id`
     # (soland config `oidc_client_id`). MUST match a client registered at coauth; the joint

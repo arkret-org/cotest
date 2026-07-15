@@ -39,7 +39,7 @@ fn payload_for(trigger: DisappearingMessageExpiryTrigger) -> Value {
     MessageCreatePayload::with_content(
         strand_id(),
         "discussion",
-        ContentBlock::text("temporary body").to_value().unwrap(),
+        ContentBlock::text("temporary body"),
     )
     .with_message_id("ak:message:01904100-0000-7000-8000-000000000003")
     .with_expiry(expiry(trigger))
@@ -132,7 +132,7 @@ fn disappearing_message_payloads_keep_expiry_for_all_triggers() {
     let permanent = MessageCreatePayload::with_content(
         strand_id(),
         "discussion",
-        ContentBlock::text("ordinary body").to_value().unwrap(),
+        ContentBlock::text("ordinary body"),
     )
     .to_value()
     .unwrap();
