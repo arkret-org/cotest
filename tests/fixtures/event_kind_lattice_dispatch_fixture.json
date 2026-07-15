@@ -78,6 +78,7 @@
       "ak.component.circle.create.v1",
       "ak.component.contact.fact_log.v1",
       "ak.component.cross_signing.reset.v1",
+      "ak.component.device.reanchor.v1",
       "ak.component.direct_conversation.binding.v1",
       "ak.component.member.identity.v1",
       "ak.component.policy.rule.v1",
