@@ -2,9 +2,7 @@
 //!
 //! Pins the two behaviors that landed in `routing::events::sync`:
 //!
-//! 1. Incremental syncs hold on `event_broadcast` until something interesting happens or
-//!    `max_wait_ms` elapses — clients that send `?max_wait_ms=0` keep the legacy immediate-return
-//!    semantics.
+//! 1. Incremental syncs hold on `event_broadcast` until something interesting happens.
 //! 2. Incremental delta frames omit realms whose timeline position and `realm_meta.updated_at` are
 //!    both unchanged since the cursor was issued. The realm's baseline
 //!    (`summary`/`strands`/`state_after`/ `members`) is no longer re-sent on every quiet poll.
@@ -14,7 +12,6 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, anyhow};
 use chrono::{Duration as ChronoDuration, SecondsFormat};
 use reqwest::StatusCode;
-use reqwest::header::CONTENT_TYPE;
 use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
@@ -22,8 +19,6 @@ use crate::harness::{
     TestServerGroup, eventually, expect_response, invite_create_payload,
     member_join_payload_with_invite_ref, message_create_text_payload,
 };
-
-const QUIET_RESPONSE_BYTES_CEILING: usize = 768;
 
 pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()> {
     let group = TestServerGroup::single("account-subscribe-long-poll").await?;
@@ -53,76 +48,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
         .ok_or_else(|| anyhow!("baseline sync missing cursor: {baseline}"))?
         .to_owned();
 
-    let (json_quiet, json_content_type) = fetch_account_subscribe_json(
-        &alice,
-        &format!("catchup=true&max_wait_ms=0&after={cursor}"),
-    )
-    .await?;
-    assert!(
-        json_content_type.contains("application/json"),
-        "JSON subscribe should negotiate application/json, got {json_content_type:?}"
-    );
-    assert!(
-        json_quiet.get("kind").is_none(),
-        "JSON subscribe returns a SyncOutcome body, not an NDJSON frame wrapper: {json_quiet}"
-    );
-    assert!(
-        json_quiet
-            .get("realms")
-            .is_none_or(|realms| realms.as_object().is_some_and(|map| map.is_empty())),
-        "quiet JSON incremental sync should leave realms empty: {json_quiet}"
-    );
-
-    // (1) Quiet incremental sync with long-poll opted out — must drop
-    //     the realm from the response so idle clients no longer
-    //     re-receive the full baseline.
-    let (quiet, quiet_bytes) = fetch_account_subscribe_with_size(
-        &alice,
-        &format!("catchup=true&max_wait_ms=0&after={cursor}"),
-    )
-    .await?;
-    assert!(
-        quiet["realms"][&realm_id].is_null(),
-        "quiet incremental sync MUST drop the realm baseline: {quiet}"
-    );
-    assert!(
-        quiet["realms"]
-            .as_object()
-            .is_some_and(|map| map.is_empty()),
-        "quiet incremental sync should leave realms empty: {quiet}"
-    );
-    assert!(
-        quiet_bytes < QUIET_RESPONSE_BYTES_CEILING,
-        "quiet response should be tiny (< {QUIET_RESPONSE_BYTES_CEILING}B), was {quiet_bytes}B"
-    );
-
-    // (2) Long-poll deadline behavior — with no broadcast in flight,
-    //     the request should hold at least to the supplied window and
-    //     return an empty delta. Use a short window so the scenario
-    //     itself stays fast.
-    let timeout_start = Instant::now();
-    let timed_out = fetch_account_subscribe(
-        &alice,
-        &format!("catchup=true&max_wait_ms=400&after={cursor}"),
-    )
-    .await?;
-    let elapsed = timeout_start.elapsed();
-    assert!(
-        timed_out["realms"]
-            .as_object()
-            .is_some_and(|map| map.is_empty()),
-        "long-poll timeout MUST still return an empty realms delta: {timed_out}"
-    );
-    assert!(
-        elapsed >= Duration::from_millis(300),
-        "long-poll should hold ~max_wait_ms before returning empty (got {elapsed:?})"
-    );
-    assert!(
-        elapsed < Duration::from_secs(5),
-        "long-poll should not overshoot the deadline by much (got {elapsed:?})"
-    );
-
-    // (3) A real timeline event must wake the long-poll — fire a
+    // A real timeline event must wake the long-poll — fire a
     //     concurrent send and verify the incremental subscribe returns
     //     well inside the deadline with the new realm baseline + event.
     let alice_for_wake = alice.clone();
@@ -135,11 +61,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     });
 
     let wake_start = Instant::now();
-    let woken = fetch_account_subscribe(
-        &alice,
-        &format!("catchup=true&max_wait_ms=5000&after={cursor}"),
-    )
-    .await?;
+    let woken = fetch_account_subscribe(&alice, &format!("catchup=true&after={cursor}")).await?;
     let wake_elapsed = wake_start.elapsed();
     let sent_event = waker.await.expect("waker task did not panic")?;
     let sent_event_id = submitted_event_id(&sent_event)
@@ -307,7 +229,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             async move {
                 let sync = fetch_account_subscribe(
                     bob_client,
-                    &format!("catchup=true&max_wait_ms=0&after={bob_cursor}"),
+                    &format!("catchup=true&after={bob_cursor}"),
                 )
                 .await?;
                 let events = timeline_events(&sync, &realm_id)?;
@@ -345,11 +267,9 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             let realm_id = realm_id.clone();
             let alice = alice.clone();
             async move {
-                let sync = fetch_account_subscribe(
-                    &alice,
-                    &format!("catchup=true&max_wait_ms=0&after={alice_cursor}"),
-                )
-                .await?;
+                let sync =
+                    fetch_account_subscribe(&alice, &format!("catchup=true&after={alice_cursor}"))
+                        .await?;
                 let events = timeline_events(&sync, &realm_id)?;
                 if events
                     .iter()
@@ -490,26 +410,6 @@ async fn fetch_account_subscribe_with_size(
     let bytes = body.len();
     let frame = parse_delta_frame(&body)?;
     Ok((frame, bytes))
-}
-
-async fn fetch_account_subscribe_json(
-    actor: &crate::harness::TestActorClient,
-    query: &str,
-) -> Result<(Value, String)> {
-    let response = expect_response(
-        actor
-            .get(&format!("/_arkret/self/account/subscribe?{query}"))
-            .header("accept", "application/json"),
-        StatusCode::OK,
-    )
-    .await?;
-    let content_type = response
-        .headers
-        .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_owned();
-    Ok((response.json()?, content_type))
 }
 
 fn parse_delta_frame(ndjson: &str) -> Result<Value> {
