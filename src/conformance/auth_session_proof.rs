@@ -225,7 +225,7 @@ fn issue_session_grant(
     if request.proof.proof_kind != SessionGrantProofKind::DidBoundSignature {
         return Err(REASON_PROOF_INVALID);
     }
-    if request.proof.audience != target_audience {
+    if request.proof.audience.as_str() != target_audience {
         return Err(ERROR_CODE_AUDIENCE_MISMATCH);
     }
     if &request.proof.request_canonical_digest != expected_digest {

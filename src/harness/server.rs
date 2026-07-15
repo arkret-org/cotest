@@ -9,7 +9,6 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
-use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -51,17 +50,11 @@ enum SutRuntimeMode {
     Docker,
 }
 
-fn test_service_identity(name: &str) -> (String, String, [u8; 32]) {
+fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
     let digest = Sha256::digest(format!("cotest:notary:{name}").as_bytes());
     let mut seed = [0_u8; 32];
     seed.copy_from_slice(&digest);
-    let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
-    let key_multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
-    (
-        format!("did:key:{key_multibase}"),
-        BASE64_STANDARD.encode(seed),
-        seed,
-    )
+    (BASE64_STANDARD.encode(seed), seed)
 }
 
 impl ArkretServer {
@@ -138,7 +131,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (service_id, notary_signing_key, notary_signing_key_seed) = test_service_identity(name);
+        let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -152,7 +145,6 @@ impl ArkretServer {
             .arg(&bind)
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SOLAND_SERVICE_ID", &service_id)
             .env("SOLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
             .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
@@ -180,6 +172,7 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
+        let service_id = fetch_service_id(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -212,7 +205,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (service_id, notary_signing_key, notary_signing_key_seed) = test_service_identity(name);
+        let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -232,7 +225,6 @@ impl ArkretServer {
             .arg(&bind)
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SOLAND_SERVICE_ID", &service_id)
             .env("SOLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
             .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
@@ -255,6 +247,7 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
+        let service_id = fetch_service_id(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -276,7 +269,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let (service_id, notary_signing_key, notary_signing_key_seed) = test_service_identity(name);
+        let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -316,8 +309,6 @@ impl ArkretServer {
             .arg("--env")
             .arg(format!("SOLAND_PUBLIC_BASE_URL={public_base_url}"))
             .arg("--env")
-            .arg(format!("SOLAND_SERVICE_ID={service_id}"))
-            .arg("--env")
             .arg(format!("SOLAND_NOTARY_SIGNING_KEY={}", notary_signing_key))
             .arg("--env")
             .arg("SOLAND_DEVELOPMENT_MODE=1")
@@ -348,6 +339,7 @@ impl ArkretServer {
             };
             return Err(anyhow!("{error}{log_suffix}"));
         }
+        let service_id = fetch_service_id(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
@@ -530,10 +522,9 @@ impl TestServerGroup {
     }
 
     /// Spawn `count` pre-built soland binaries with each node wired to every
-    /// other as a `SOLAND_FEDERATION_PEERS` entry (`did:webvh|base_url`). Ports
-    /// are reserved for all nodes up front so each node's `did:webvh` + base URL
-    /// is known before any node starts, which is the only way to inject a
-    /// mutual peer mesh through start-time env. Without this, an inbound
+    /// other through endpoint-only `SOLAND_FEDERATION_PEERS` entries. Ports
+    /// are reserved up front and each node resolves the peer service DID from
+    /// standard describe after startup. Without the resulting mutual mesh, an inbound
     /// `/_arkret/peer/events` submission can never resolve the source peer's
     /// ServiceDescribe, so the federation profile gate falls back to
     /// `federation_minimal` and rejects core kinds like `ak.message.create`.
@@ -551,7 +542,6 @@ impl TestServerGroup {
             name: String,
             port: ReservedPort,
             metrics: ReservedPort,
-            did: String,
             url: String,
         }
 
@@ -560,13 +550,11 @@ impl TestServerGroup {
             let node_name = format!("{name}-{index}");
             let port = reserve_port()?;
             let metrics = reserve_port()?;
-            let (did, ..) = test_service_identity(&node_name);
             let url = format!("http://127.0.0.1:{}", port.port());
             pending.push(Pending {
                 name: node_name,
                 port,
                 metrics,
-                did,
                 url,
             });
         }
@@ -577,7 +565,7 @@ impl TestServerGroup {
                     .iter()
                     .enumerate()
                     .filter(|(other, _)| *other != index)
-                    .map(|(_, peer)| format!("{}|{}", peer.did, peer.url))
+                    .map(|(_, peer)| peer.url.clone())
                     .collect::<Vec<_>>()
                     .join(",")
             })
@@ -1009,4 +997,21 @@ async fn wait_until_healthy(base_url: Url) -> Result<()> {
     }
 
     Err(last_error.unwrap_or_else(|| anyhow!("server did not become healthy")))
+}
+
+async fn fetch_service_id(base_url: &Url) -> Result<String> {
+    let url = base_url.join("/_arkret/describe")?;
+    let response = HttpClient::new()
+        .get(url.clone())
+        .send()
+        .await
+        .with_context(|| format!("fetch service describe from {url}"))?
+        .error_for_status()
+        .with_context(|| format!("service describe failed at {url}"))?;
+    let body: Value = response.json().await?;
+    body.get("service_id")
+        .and_then(Value::as_str)
+        .filter(|value| value.starts_with("did:"))
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("service describe at {url} omitted a valid service_id"))
 }

@@ -78,8 +78,9 @@ The image contract is intentionally simple:
 
 - start `soland` as the entrypoint
 - listen on `SOLAND_BIND`
-- honor `SOLAND_PUBLIC_BASE_URL`, `SOLAND_SERVICE_ID`,
-  `SOLAND_DEVELOPMENT_MODE`, and `SOLAND_BLOB_ROOT`
+- honor `SOLAND_PUBLIC_BASE_URL`, `SOLAND_FIRST_PROVISIONING`,
+  `SOLAND_DEVELOPMENT_MODE`, and `SOLAND_BLOB_ROOT`; the service DID is
+  resolved from durable service-identity state and never injected
 - expose port `8008`
 
 The current implementation source-builds `soland` inside Docker:
