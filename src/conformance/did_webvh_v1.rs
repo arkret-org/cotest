@@ -131,7 +131,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             let rotation = prepare_principal_rotation(&PrincipalRotationInput {
                 did: &inception.did,
                 local_id: &inception.local_id,
-                previous_entry: &inception.log_entry,
+                previous_entries: std::slice::from_ref(&inception.log_entry),
                 version_time: timestamp("2026-07-16T00:00:00Z")?,
                 current_root_seed: &current_seed,
                 next_root_public_key_multibase: &next_key,
@@ -205,7 +205,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             let mut rotation = prepare_principal_rotation(&PrincipalRotationInput {
                 did: &inception.did,
                 local_id: &inception.local_id,
-                previous_entry: &inception.log_entry,
+                previous_entries: std::slice::from_ref(&inception.log_entry),
                 version_time: timestamp("2026-07-16T00:00:00Z")?,
                 current_root_seed: &[2_u8; 32],
                 next_root_public_key_multibase: &next_key,
@@ -226,7 +226,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             let mut rotation = prepare_principal_rotation(&PrincipalRotationInput {
                 did: &inception.did,
                 local_id: &inception.local_id,
-                previous_entry: &inception.log_entry,
+                previous_entries: std::slice::from_ref(&inception.log_entry),
                 version_time: timestamp("2026-07-16T00:00:00Z")?,
                 current_root_seed: &[2_u8; 32],
                 next_root_public_key_multibase: &next_key,
@@ -247,18 +247,16 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
         "reject_spent_update_key_reuse" => {
             let inception = external_inception()?;
             let spent_root = inception.root_public_key_multibase.clone();
-            let rotation = prepare_principal_rotation(&PrincipalRotationInput {
-                did: &inception.did,
-                local_id: &inception.local_id,
-                previous_entry: &inception.log_entry,
-                version_time: timestamp("2026-07-16T00:00:00Z")?,
-                current_root_seed: &[2_u8; 32],
-                next_root_public_key_multibase: &spent_root,
-                state: &inception.log_entry["state"],
-            })?;
-            let did = Did::new(inception.did)?;
             expect_rejected(
-                verify_did_webvh_v1_log(&did, &[inception.log_entry, rotation.log_entry]),
+                prepare_principal_rotation(&PrincipalRotationInput {
+                    did: &inception.did,
+                    local_id: &inception.local_id,
+                    previous_entries: std::slice::from_ref(&inception.log_entry),
+                    version_time: timestamp("2026-07-16T00:00:00Z")?,
+                    current_root_seed: &[2_u8; 32],
+                    next_root_public_key_multibase: &spent_root,
+                    state: &inception.log_entry["state"],
+                }),
                 name,
             )?;
             Ok(reject())
@@ -278,7 +276,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
                 prepare_principal_rotation(&PrincipalRotationInput {
                     did: &inception.did,
                     local_id: &inception.local_id,
-                    previous_entry: &inception.log_entry,
+                    previous_entries: std::slice::from_ref(&inception.log_entry),
                     version_time: timestamp("2026-07-16T00:00:00Z")?,
                     current_root_seed: &[9_u8; 32],
                     next_root_public_key_multibase: &next_key,

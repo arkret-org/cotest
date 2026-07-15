@@ -8,6 +8,9 @@ use crate::harness::{
     ArkretServer, TestActorClient, attach_ephemeral_proof, ephemeral_proof_placeholder,
     expect_account_subscribe_delta, expect_api_error, expect_json, expect_status, submit_event,
 };
+use crate::scenarios::federation_collaboration::{
+    actor_did_for_service, authorize_additional_device_public_key, authorize_device_public_key,
+};
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = ArkretServer::spawn("authz-grants").await?;
@@ -265,12 +268,22 @@ async fn expect_authz_check_hard_deny(
 
 pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let server = ArkretServer::spawn("presence-policy").await?;
+    let alice_actor = actor_did_for_service(server.service_id(), "presence-alice")?;
     let alice = server
         .demo_client(
-            "did:web:alice.example",
+            &alice_actor,
             "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
+    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &alice_device_key,
+    )
+    .await?;
 
     // client-sync.md: the account subscribe surface is read-only —
     // `set_presence` is not a subscribe parameter (the server ignores the
@@ -296,6 +309,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 &alice.actor,
                 alice.device_id.as_str(),
                 &presence_realm_id,
+                &alice_device_key,
                 json!({"state": "unavailable"}),
             )),
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -312,6 +326,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 &alice.actor,
                 alice.device_id.as_str(),
                 &presence_realm_id,
+                &alice_device_key,
                 json!({"state": "idle", "last_active_at": "2026-06-22T10:34:00Z/PT1H"}),
             )),
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -327,6 +342,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 &alice.actor,
                 alice.device_id.as_str(),
                 &presence_realm_id,
+                &alice_device_key,
                 json!({"state": "idle", "last_active_at": "2026-06-22T10:00:00Z/PT30S"}),
             )),
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -343,6 +359,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 &alice.actor,
                 alice.device_id.as_str(),
                 &presence_realm_id,
+                &alice_device_key,
                 json!({"state": "idle", "last_active_at": "2026-06-22T10:34:56Z"}),
             )),
         StatusCode::FORBIDDEN,
@@ -358,6 +375,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 &alice.actor,
                 alice.device_id.as_str(),
                 &presence_realm_id,
+                &alice_device_key,
                 json!({"state": "dnd", "status_message": "字".repeat(257)}),
             )),
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -375,6 +393,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 &alice.actor,
                 alice.device_id.as_str(),
                 &presence_realm_id,
+                &alice_device_key,
                 json!({"state": "dnd", "status_message": "In a meeting"}),
             )),
         StatusCode::OK,
@@ -395,7 +414,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         .expect("account subscribe presence events array");
     let alice_presence = presence_events
         .iter()
-        .find(|event| event["actor_id"] == "did:web:alice.example")
+        .find(|event| event["actor_id"] == alice.actor)
         .expect("alice presence in account subscribe baseline");
     assert_eq!(alice_presence["payload"]["state"], "dnd");
     assert_eq!(
@@ -424,7 +443,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         .as_array()
         .expect("observer presence events array")
         .iter()
-        .find(|event| event["actor_id"] == "did:web:alice.example")
+        .find(|event| event["actor_id"] == alice.actor)
     {
         assert_eq!(
             observed_alice["payload"]["state"], "dnd",
@@ -493,7 +512,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ak.message.create",
-                "actor_id": "did:web:alice.example",
+                "actor_id": alice.actor.as_str(),
                 "source": {
                     "service_id": "did:web:soland.cotest.local",
                     "service_type": "principal_server",
@@ -522,7 +541,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ak.realm.destroy",
-                "actor_id": "did:web:alice.example",
+                "actor_id": alice.actor.as_str(),
                 "source": {
                     "service_id": "did:web:soland.cotest.local",
                     "service_type": "principal_server",
@@ -577,6 +596,152 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     Ok(())
 }
 
+pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<()> {
+    const PRIMARY_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e90000000001";
+    const SIBLING_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e90000000002";
+    const UNREGISTERED_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e9000000dead";
+
+    let server = ArkretServer::spawn("ephemeral-device-proof-negative").await?;
+    let actor = actor_did_for_service(server.service_id(), "ephemeral-proof")?;
+    let primary = server.demo_client(&actor, PRIMARY_DEVICE).await?;
+    let primary_key = SigningKey::from_bytes(&[0xe1; 32]);
+    authorize_device_public_key(
+        &server,
+        &primary.token,
+        &actor,
+        PRIMARY_DEVICE,
+        &primary_key,
+    )
+    .await?;
+    let realm_id = primary.create_realm("Ephemeral Device Proof Realm").await?;
+
+    let accepted = expect_json(
+        primary
+            .post("/_arkret/self/ephemeral")
+            .json(&presence_envelope(
+                &actor,
+                PRIMARY_DEVICE,
+                &realm_id,
+                &primary_key,
+                json!({"state": "online"}),
+            )),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(accepted["accepted"], true);
+
+    let wrong_key = SigningKey::from_bytes(&[0xe2; 32]);
+    expect_ephemeral_proof_invalid(primary.post("/_arkret/self/ephemeral").json(
+        &presence_envelope(
+            &actor,
+            PRIMARY_DEVICE,
+            &realm_id,
+            &wrong_key,
+            json!({"state": "dnd"}),
+        ),
+    ))
+    .await?;
+
+    let unregistered_key = SigningKey::from_bytes(&[0xe3; 32]);
+    expect_ephemeral_proof_invalid(primary.post("/_arkret/self/ephemeral").json(
+        &presence_envelope(
+            &actor,
+            UNREGISTERED_DEVICE,
+            &realm_id,
+            &unregistered_key,
+            json!({"state": "idle"}),
+        ),
+    ))
+    .await?;
+
+    let mut wrong_controller = presence_envelope(
+        &actor,
+        PRIMARY_DEVICE,
+        &realm_id,
+        &primary_key,
+        json!({"state": "online"}),
+    );
+    wrong_controller.proof.verification_method =
+        format!("did:web:other-controller.example#{PRIMARY_DEVICE}");
+    let wrong_controller_body = expect_json(
+        primary
+            .post("/_arkret/self/ephemeral")
+            .json(&wrong_controller),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    assert_eq!(wrong_controller_body["error"]["code"], "invalid_param");
+
+    let mut tampered = serde_json::to_value(presence_envelope(
+        &actor,
+        PRIMARY_DEVICE,
+        &realm_id,
+        &primary_key,
+        json!({"state": "online"}),
+    ))?;
+    tampered["payload"]["state"] = json!("dnd");
+    let tampered_body = expect_json(
+        primary.post("/_arkret/self/ephemeral").json(&tampered),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    assert_eq!(tampered_body["error"]["code"], "invalid_param");
+
+    let sibling = server.demo_client(&actor, SIBLING_DEVICE).await?;
+    let sibling_key = SigningKey::from_bytes(&[0xe4; 32]);
+    authorize_additional_device_public_key(
+        &server,
+        &primary.token,
+        &actor,
+        SIBLING_DEVICE,
+        &sibling_key,
+    )
+    .await?;
+    let principal = arkret_core::Did::new(actor.clone())?;
+    let principal_realm = arkret_core::principal_control_realm_id(&principal);
+    let revoked = sibling
+        .submit_event(
+            principal_realm.as_str(),
+            "ak.device.revoke",
+            serde_json::to_value(arkret_core::DeviceRevokePayload {
+                principal_id: principal,
+                device_id: arkret_core::DeviceId::new(PRIMARY_DEVICE.to_owned())?,
+                revoked_by: arkret_core::DeviceOrPrincipalRef::DeviceId(
+                    arkret_core::DeviceId::new(SIBLING_DEVICE.to_owned())?,
+                ),
+                revoked_at: Utc::now(),
+                reason: arkret_core::DeviceRevocationReason::new("security_test")
+                    .map_err(anyhow::Error::msg)?,
+                proof: None,
+            })?,
+        )
+        .await?;
+    assert_eq!(revoked["status"], "accepted");
+
+    expect_ephemeral_proof_invalid(sibling.post("/_arkret/self/ephemeral").json(
+        &presence_envelope(
+            &actor,
+            PRIMARY_DEVICE,
+            &realm_id,
+            &primary_key,
+            json!({"state": "dnd"}),
+        ),
+    ))
+    .await?;
+
+    Ok(())
+}
+
+async fn expect_ephemeral_proof_invalid(request: reqwest::RequestBuilder) -> Result<Value> {
+    let body = expect_json(request, StatusCode::BAD_REQUEST).await?;
+    assert_eq!(body["error"]["code"], "invalid_param", "{body}");
+    assert_eq!(
+        body["error"]["details"]["reason_code"], "proof_invalid",
+        "{body}"
+    );
+    Ok(body)
+}
+
 /// ephemeral-envelope.schema.json: broadcast `ak.presence` with the
 /// proof-bound sending device (detached JWS over the canonical envelope
 /// without `proof`). `payload_fields` merges over the base
@@ -586,6 +751,7 @@ fn presence_envelope(
     actor_id: &str,
     device_id: &str,
     realm_id: &str,
+    signing_key: &SigningKey,
     payload_fields: Value,
 ) -> arkret_core::EphemeralEnvelope {
     let sent_at = Utc::now()
@@ -606,13 +772,13 @@ fn presence_envelope(
         "ak.presence",
         arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
         arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-        Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
+        arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed"),
         sent_at,
         expires_at,
         serde_json::from_value(payload).expect("presence payload is an object"),
         ephemeral_proof_placeholder(actor_id, device_id, sent_at),
     )
     .expect("presence envelope is well-formed");
-    attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));
+    attach_ephemeral_proof(&mut envelope, signing_key);
     envelope
 }

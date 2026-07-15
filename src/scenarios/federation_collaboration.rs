@@ -1054,10 +1054,11 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
         .strip_prefix("did:webvh:")
         .and_then(|remainder| remainder.split_once(':'))
         .context("test principal is not a did:webvh DID")?;
-    let (host, local_id) = remainder
-        .split_once(':')
+    let (method_authority, local_id) = remainder
+        .split_once(":webvh:")
         .context("test principal DID has no local id")?;
-    let prepared = test_principal_inception(host, local_id)?;
+    let host = method_authority.replace("%3A", ":").replace("%3a", ":");
+    let prepared = test_principal_inception(&host, local_id)?;
     anyhow::ensure!(
         prepared.did == actor,
         "deterministic native inception does not reproduce test principal DID"
@@ -1114,6 +1115,17 @@ pub(crate) async fn authorize_device_public_key(
     device_signing_key: &SigningKey,
 ) -> Result<()> {
     publish_test_cross_signing(server, token, actor).await?;
+    authorize_additional_device_public_key(server, token, actor, device_id, device_signing_key)
+        .await
+}
+
+pub(crate) async fn authorize_additional_device_public_key(
+    server: &ArkretServer,
+    token: &str,
+    actor: &str,
+    device_id: &str,
+    device_signing_key: &SigningKey,
+) -> Result<()> {
     let principal =
         Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
     let principal_realm = principal_control_realm_id(&principal);
@@ -1415,14 +1427,18 @@ fn trust_domain_for(service_id: &str) -> String {
 /// When the harness service still uses `did:key`, its stable multibase value is
 /// placed under the reserved `.cotest.local` suffix so the resulting method
 /// authority is a DNS-shaped test host rather than a non-standard bare label.
-fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
+pub(crate) fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
     let service_host = did_host_from_service_id(service_id);
     let webvh_host = if service_host.contains('.') {
         service_host
     } else {
         format!("{service_host}.cotest.local")
     };
-    Ok(test_principal_inception(&webvh_host, actor)?.did)
+    Ok(test_principal_inception(&webvh_host, actor)
+        .with_context(|| {
+            format!("prepare test principal inception for local id {actor:?} at {webvh_host:?}")
+        })?
+        .did)
 }
 
 fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrincipalInception> {
@@ -1455,7 +1471,11 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
             enrollment_fragment: Some("cotest-device-enrollment-authority"),
         },
     })
-    .context("prepare deterministic native principal inception")
+    .with_context(|| {
+        format!(
+            "prepare deterministic native principal inception for local id {local_id:?} at {endpoint}"
+        )
+    })
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,

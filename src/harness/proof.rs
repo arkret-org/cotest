@@ -123,31 +123,21 @@ mod tests {
 /// ephemeral envelope: a real ed25519 detached JWS whose
 /// `verification_method` is `{actor_id}#{device_id}` and whose `event_digest`
 /// covers the canonical envelope bytes without `proof` (the shape the soland
-/// relay admits; cryptographic verification is the receiver's job).
+/// relay verifies against the active device directory key before admission).
 ///
 /// Fully typed on the SDK surface: the binding transcript comes from
-/// [`arkret_core::Proof::canonical_binding_bytes`] and the JWS wire form from
-/// [`arkret_signatures::sign_eddsa_detached_jws`], so this helper can never
+/// [`arkret_core::Proof::canonical_ephemeral_binding_bytes`] and the JWS wire
+/// form from [`arkret_signatures::proof::Ed25519DetachedJwsSigner`], so this helper can never
 /// drift from the verifier's bytes.
 pub fn attach_ephemeral_proof(
     envelope: &mut arkret_core::EphemeralEnvelope,
     signing_key: &ed25519_dalek::SigningKey,
 ) {
-    let device_id = envelope
-        .device_id
-        .as_ref()
-        .expect("broadcast ephemeral envelope requires device_id")
-        .as_str()
-        .to_owned();
+    let device_id = envelope.device_id.as_str().to_owned();
 
-    // event_digest covers the canonical envelope without `proof`.
-    let mut without_proof =
-        serde_json::to_value(&*envelope).expect("ephemeral envelope serializes");
-    without_proof
-        .as_object_mut()
-        .expect("ephemeral envelope serializes as an object")
-        .remove("proof");
-    let canonical = arkret_core::canonical::canonical_json_bytes(&without_proof)
+    // event_digest covers the SDK-defined canonical envelope without `proof`.
+    let canonical = envelope
+        .canonical_bytes_without_proof()
         .expect("ephemeral envelope is canonicalizable");
     let event_digest = arkret_core::Hash::new(arkret_core::canonical::sha256_digest(&canonical))
         .expect("sha256 digest is a valid Hash");
@@ -163,10 +153,13 @@ pub fn attach_ephemeral_proof(
         jws: String::new(),
     };
     let binding_bytes = proof
-        .canonical_binding_bytes(&envelope.actor_id)
+        .canonical_ephemeral_binding_bytes(&envelope.actor_id)
         .expect("proof binding is canonicalizable");
-    proof.jws = arkret_signatures::proof::sign_eddsa_detached_jws(signing_key, &binding_bytes)
-        .expect("detached JWS signing succeeds");
+    let signer = arkret_signatures::proof::Ed25519DetachedJwsSigner::new(
+        signing_key.clone(),
+        proof.verification_method.clone(),
+    );
+    proof.jws = signer.sign_detached_jws(&binding_bytes);
     envelope.proof = proof;
 }
 
@@ -184,7 +177,9 @@ pub fn ephemeral_proof_placeholder(
         created_at,
         domain: None,
         audience: None,
-        jws: String::new(),
+        // `EphemeralEnvelope::new` validates the required proof shape before
+        // the caller can replace it with the real signature.
+        jws: "eyJhbGciOiJFZERTQSJ9..c2ln".to_owned(),
     }
 }
 

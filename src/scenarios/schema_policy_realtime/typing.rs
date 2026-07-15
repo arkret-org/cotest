@@ -8,6 +8,9 @@ use crate::harness::{
     ArkretServer, TestActorClient, attach_ephemeral_proof, ephemeral_proof_placeholder,
     expect_api_error, expect_json,
 };
+use crate::scenarios::federation_collaboration::{
+    actor_did_for_service, authorize_device_public_key,
+};
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = ArkretServer::spawn("typing-push-rules").await?;
@@ -17,9 +20,10 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
+    let bob_actor = actor_did_for_service(server.service_id(), "bob-typing")?;
     let bob = server
         .register_client(
-            "did:web:bob-typing.example",
+            &bob_actor,
             "@bob-typing",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
@@ -31,6 +35,16 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-000000000ca0",
         )
         .await?;
+    let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
+    authorize_device_public_key(
+        &server,
+        &bob.token,
+        &bob.actor,
+        &bob.device_id,
+        &bob_device_key,
+    )
+    .await?;
+    let carol_device_key = SigningKey::from_bytes(&[0xca; 32]);
 
     let realm_id = alice.create_realm("Typing And Push Realm").await?;
     alice.add_member(&realm_id, &bob).await?;
@@ -42,6 +56,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-000000000ca0",
             &realm_id,
             &strand_id,
+            &carol_device_key,
             true,
         )),
         StatusCode::FORBIDDEN,
@@ -55,6 +70,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
             &realm_id,
             &strand_id,
+            &bob_device_key,
             true,
         )),
         StatusCode::OK,
@@ -79,6 +95,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
             &realm_id,
             &strand_id,
+            &bob_device_key,
             false,
         )),
         StatusCode::OK,
@@ -245,6 +262,7 @@ fn typing_envelope(
     device_id: &str,
     realm_id: &str,
     strand_id: &str,
+    signing_key: &SigningKey,
     typing: bool,
 ) -> arkret_core::EphemeralEnvelope {
     let sent_at = Utc::now()
@@ -255,7 +273,7 @@ fn typing_envelope(
         "ak.typing",
         arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
         arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-        Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
+        arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed"),
         sent_at,
         expires_at,
         std::collections::BTreeMap::from([
@@ -268,6 +286,6 @@ fn typing_envelope(
         ephemeral_proof_placeholder(actor_id, device_id, sent_at),
     )
     .expect("typing envelope is well-formed");
-    attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));
+    attach_ephemeral_proof(&mut envelope, signing_key);
     envelope
 }
