@@ -3,9 +3,14 @@ use serial_test::serial;
 
 #[tokio::test]
 #[serial]
-async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()> {
-    cotest::scenarios::account_subscribe_long_poll::account_subscribe_skips_quiet_realms_and_long_polls()
-        .await
+async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result<()> {
+    cotest::scenarios::account_subscribe_long_poll::account_subscribe_omits_quiet_realm_at_unchanged_cursor().await
+}
+
+#[tokio::test]
+#[serial]
+async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> {
+    cotest::scenarios::account_subscribe_long_poll::account_subscribe_long_poll_wakes_on_visible_event().await
 }
 
 #[tokio::test]

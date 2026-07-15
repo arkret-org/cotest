@@ -10,6 +10,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
+use base64::Engine as _;
 use chrono::{Duration as ChronoDuration, SecondsFormat};
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -20,7 +21,71 @@ use crate::harness::{
     member_join_payload_with_invite_ref, message_create_text_payload,
 };
 
-pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()> {
+pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result<()> {
+    let group = TestServerGroup::single("account-subscribe-quiet-realm").await?;
+    let server = group.server(0);
+    let alice = server
+        .demo_client(
+            "did:web:alice.example",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
+        )
+        .await?;
+    let realm_id = alice.create_realm("Quiet Incremental Realm").await?;
+    alice
+        .send_message(&realm_id, "ak:thread:quiet-realm", "baseline message")
+        .await?;
+
+    let baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
+    assert!(
+        baseline["realms"][&realm_id].is_object(),
+        "full sync MUST include the realm baseline: {baseline}"
+    );
+    let cursor = baseline["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("baseline sync missing cursor: {baseline}"))?
+        .to_owned();
+
+    let quiet = tokio::time::timeout(
+        Duration::from_secs(30),
+        fetch_account_subscribe(&alice, &format!("catchup=true&after={cursor}")),
+    )
+    .await
+    .map_err(|_| anyhow!("quiet incremental subscribe exceeded its controlled deadline"))??;
+
+    let quiet_cursor = quiet["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("quiet incremental response missing cursor: {quiet}"))?;
+    assert_eq!(
+        cursor_frontier_handle(quiet_cursor)?,
+        cursor_frontier_handle(&cursor)?,
+        "an empty incremental response MUST preserve the cursor frontier: {quiet}"
+    );
+    let quiet_realms = quiet["realms"]
+        .as_object()
+        .ok_or_else(|| anyhow!("quiet incremental response missing realms object: {quiet}"))?;
+    let realm_keys = quiet_realms.keys().cloned().collect::<Vec<_>>();
+    assert_eq!(
+        realm_keys,
+        Vec::<String>::new(),
+        "unchanged incremental response MUST omit every quiet realm, including {realm_id}: {quiet}"
+    );
+
+    Ok(())
+}
+
+fn cursor_frontier_handle(cursor: &str) -> Result<String> {
+    let encoded = cursor
+        .strip_prefix("ak:cursor:")
+        .ok_or_else(|| anyhow!("account subscribe cursor has the wrong prefix"))?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(encoded)?;
+    let payload: Value = serde_json::from_slice(&bytes)?;
+    payload["h"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("account subscribe cursor missing frontier handle: {payload}"))
+}
+
+pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> {
     let group = TestServerGroup::single("account-subscribe-long-poll").await?;
     let server = group.server(0);
     let alice = server

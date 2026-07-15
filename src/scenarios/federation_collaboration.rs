@@ -1073,8 +1073,6 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
         seq: None,
         prev_event_digest: None,
         operation,
-        policy_context: None,
-        proofs: Vec::new(),
     };
     let accepted = expect_json(
         server
@@ -1128,6 +1126,17 @@ pub(crate) async fn authorize_device_public_key(
     device_signing_key: &SigningKey,
 ) -> Result<()> {
     publish_test_cross_signing(server, token, actor).await?;
+    authorize_additional_device_public_key(server, token, actor, device_id, device_signing_key)
+        .await
+}
+
+pub(crate) async fn authorize_additional_device_public_key(
+    server: &ArkretServer,
+    token: &str,
+    actor: &str,
+    device_id: &str,
+    device_signing_key: &SigningKey,
+) -> Result<()> {
     let principal =
         Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
     let principal_realm = principal_control_realm_id(&principal);
