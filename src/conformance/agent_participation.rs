@@ -8,7 +8,7 @@ use arkret_core::{
     AGENT_SELECTOR_CLAIM_SCHEMA, AgentParticipation, AgentParticipationEntry,
     AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope,
     AgentSelectorClaim, Audience, Did, DirectoryAgentSelectorResolutionOutcome, Handle,
-    HandleBindingState, HandleVisibility, Hash, Mention, MentionNode, Proof, RealmId,
+    HandleBindingState, HandleVisibility, Hash, Mention, MentionNode, PayloadProof, RealmId,
     effective_participation, fold_ceiling_chain, validate_agent_participation_tightens,
     validate_selection_within_ceiling,
 };
@@ -182,11 +182,11 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
         verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
         source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
-        proofs: vec![Proof {
+        proofs: vec![PayloadProof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
             verification_method: "did:web:directory.acme.example#key-1".to_owned(),
-            event_digest: Hash::new(
+            payload_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000001",
             )?,
             created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
@@ -194,6 +194,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
             audience: Some(Audience::Single(
                 "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned(),
             )),
+            proof_purpose: None,
             jws: "fixture.signature.value".to_owned(),
         }],
     })
