@@ -369,6 +369,8 @@ fn runner_kind_registry_is_closed_and_fully_owned() -> Result<()> {
         "json_schema_and_semantic_cases",
         "json_schema_validation_cases",
         "did_method_adapter_cases",
+        "known_answer_tests",
+        "identity_root_anchor_state_machine",
         "profile_discovery_coverage",
         "generated_limit_cases",
         "arkret_private_kdf_and_durability",

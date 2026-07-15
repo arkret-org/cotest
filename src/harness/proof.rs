@@ -92,6 +92,31 @@ mod tests {
 
         assert_eq!(digest, typed.event_digest().unwrap());
     }
+
+    #[test]
+    fn raw_ephemeral_envelope_can_be_signed_before_it_has_a_proof() {
+        let mut envelope = json!({
+            "kind": "ak.typing",
+            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
+            "actor_id": "did:web:alice.example",
+            "device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
+            "sent_at": "2026-07-07T00:00:00Z",
+            "expires_at": "2026-07-07T00:00:15Z",
+            "payload": {
+                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001",
+                "typing": true
+            }
+        });
+
+        super::attach_ephemeral_proof_value(
+            &mut envelope,
+            &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+        );
+
+        let typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope).unwrap();
+        assert_eq!(typed.proof.kind, arkret_core::proof_kind::DETACHED_JWS);
+        assert!(!typed.proof.jws.is_empty());
+    }
 }
 
 /// Attach the `ephemeral-envelope.schema.json` broadcast `proof` to an
@@ -168,6 +193,33 @@ pub fn ephemeral_proof_placeholder(
 /// (so a malformed envelope fails loudly here, not at the server) and
 /// re-serialized with the attached proof.
 pub fn attach_ephemeral_proof_value(envelope: &mut Value, signing_key: &ed25519_dalek::SigningKey) {
+    let actor_id = envelope
+        .get("actor_id")
+        .and_then(Value::as_str)
+        .expect("ephemeral envelope actor_id is a string")
+        .to_owned();
+    let device_id = envelope
+        .get("device_id")
+        .and_then(Value::as_str)
+        .expect("ephemeral envelope device_id is a string")
+        .to_owned();
+    let created_at = serde_json::from_value(
+        envelope
+            .get("sent_at")
+            .cloned()
+            .expect("ephemeral envelope carries sent_at"),
+    )
+    .expect("ephemeral envelope sent_at is a timestamp");
+    envelope
+        .as_object_mut()
+        .expect("ephemeral envelope is an object")
+        .insert(
+            "proof".to_owned(),
+            serde_json::to_value(ephemeral_proof_placeholder(
+                &actor_id, &device_id, created_at,
+            ))
+            .expect("ephemeral proof placeholder serializes"),
+        );
     let mut typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope.clone())
         .expect("value is a well-formed ephemeral envelope");
     attach_ephemeral_proof(&mut typed, signing_key);
