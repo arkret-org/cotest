@@ -211,15 +211,9 @@ export async function submitPrincipalGenesisEntry(
     {
       data: {
         did: built.did,
-        did_method: "did:webvh",
+        did_method: "webvh",
         seq: 1,
         operation: built.entry,
-        policy_context: {
-          provider_id: "soland.protocol",
-          profile: "ak.identity.webvh.provider.v1",
-          local_id: built.did.split(":").at(-1),
-        },
-        proofs: [],
       },
     },
   );

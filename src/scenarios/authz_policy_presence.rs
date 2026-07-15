@@ -9,10 +9,8 @@ use crate::harness::{
     expect_account_subscribe_delta, expect_api_error, expect_json, expect_status, submit_event,
 };
 use crate::scenarios::federation_collaboration::{
-    authorize_additional_device_public_key, authorize_device_public_key,
+    actor_did_for_service, authorize_additional_device_public_key, authorize_device_public_key,
 };
-
-const EPHEMERAL_TEST_PRINCIPAL: &str = "did:key:z6MksPykuQeYh4zgthFRFBExrgo1dwFWWenY2TEJ9SvT9jn1";
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = ArkretServer::spawn("authz-grants").await?;
@@ -270,9 +268,10 @@ async fn expect_authz_check_hard_deny(
 
 pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let server = ArkretServer::spawn("presence-policy").await?;
+    let alice_actor = actor_did_for_service(server.service_id(), "presence-alice")?;
     let alice = server
         .demo_client(
-            EPHEMERAL_TEST_PRINCIPAL,
+            &alice_actor,
             "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
@@ -598,23 +597,29 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 }
 
 pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<()> {
-    const ACTOR: &str = EPHEMERAL_TEST_PRINCIPAL;
     const PRIMARY_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e90000000001";
     const SIBLING_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e90000000002";
     const UNREGISTERED_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e9000000dead";
 
     let server = ArkretServer::spawn("ephemeral-device-proof-negative").await?;
-    let primary = server.demo_client(ACTOR, PRIMARY_DEVICE).await?;
+    let actor = actor_did_for_service(server.service_id(), "ephemeral-proof")?;
+    let primary = server.demo_client(&actor, PRIMARY_DEVICE).await?;
     let primary_key = SigningKey::from_bytes(&[0xe1; 32]);
-    authorize_device_public_key(&server, &primary.token, ACTOR, PRIMARY_DEVICE, &primary_key)
-        .await?;
+    authorize_device_public_key(
+        &server,
+        &primary.token,
+        &actor,
+        PRIMARY_DEVICE,
+        &primary_key,
+    )
+    .await?;
     let realm_id = primary.create_realm("Ephemeral Device Proof Realm").await?;
 
     let accepted = expect_json(
         primary
             .post("/_arkret/self/ephemeral")
             .json(&presence_envelope(
-                ACTOR,
+                &actor,
                 PRIMARY_DEVICE,
                 &realm_id,
                 &primary_key,
@@ -628,7 +633,7 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
     let wrong_key = SigningKey::from_bytes(&[0xe2; 32]);
     expect_ephemeral_proof_invalid(primary.post("/_arkret/self/ephemeral").json(
         &presence_envelope(
-            ACTOR,
+            &actor,
             PRIMARY_DEVICE,
             &realm_id,
             &wrong_key,
@@ -640,7 +645,7 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
     let unregistered_key = SigningKey::from_bytes(&[0xe3; 32]);
     expect_ephemeral_proof_invalid(primary.post("/_arkret/self/ephemeral").json(
         &presence_envelope(
-            ACTOR,
+            &actor,
             UNREGISTERED_DEVICE,
             &realm_id,
             &unregistered_key,
@@ -650,7 +655,7 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
     .await?;
 
     let mut wrong_controller = presence_envelope(
-        ACTOR,
+        &actor,
         PRIMARY_DEVICE,
         &realm_id,
         &primary_key,
@@ -668,7 +673,7 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
     assert_eq!(wrong_controller_body["error"]["code"], "invalid_param");
 
     let mut tampered = serde_json::to_value(presence_envelope(
-        ACTOR,
+        &actor,
         PRIMARY_DEVICE,
         &realm_id,
         &primary_key,
@@ -682,17 +687,17 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
     .await?;
     assert_eq!(tampered_body["error"]["code"], "invalid_param");
 
-    let sibling = server.demo_client(ACTOR, SIBLING_DEVICE).await?;
+    let sibling = server.demo_client(&actor, SIBLING_DEVICE).await?;
     let sibling_key = SigningKey::from_bytes(&[0xe4; 32]);
     authorize_additional_device_public_key(
         &server,
         &primary.token,
-        ACTOR,
+        &actor,
         SIBLING_DEVICE,
         &sibling_key,
     )
     .await?;
-    let principal = arkret_core::Did::new(ACTOR.to_owned())?;
+    let principal = arkret_core::Did::new(actor.clone())?;
     let principal_realm = arkret_core::principal_control_realm_id(&principal);
     let revoked = sibling
         .submit_event(
@@ -715,7 +720,7 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
 
     expect_ephemeral_proof_invalid(sibling.post("/_arkret/self/ephemeral").json(
         &presence_envelope(
-            ACTOR,
+            &actor,
             PRIMARY_DEVICE,
             &realm_id,
             &primary_key,

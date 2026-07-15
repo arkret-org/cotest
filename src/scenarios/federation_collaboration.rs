@@ -9,10 +9,14 @@ use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
 use arkret_core::{
-    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did,
-    DidOperationSubmitRequestBody, Event, EventId, Hash, Hlc, KeyFormat, KeyOperationSignature,
-    KeysUploadRequestBody, NonEmptyString, Proof, PublishedKey, RealmId, SubordinateSignedKey,
-    SubordinateSignedKeyBinding, TypedTrustDomainId, principal_control_realm_id, proof_kind,
+    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId, Hash,
+    Hlc, KeyFormat, KeyOperationSignature, KeysUploadRequestBody, NonEmptyString, Proof,
+    PublishedKey, RealmId, SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
+    principal_control_realm_id, proof_kind,
+};
+use arkret_signatures::webvh::{
+    PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
+    prepare_principal_inception,
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -20,6 +24,7 @@ use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
@@ -57,8 +62,8 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
     let server_a = group.server(0);
     let server_b = group.server(1);
-    let alice_did = actor_did_for_service(server_a.service_id(), "alice");
-    let bob_did = actor_did_for_service(server_b.service_id(), "bob");
+    let alice_did = actor_did_for_service(server_a.service_id(), "alice")?;
+    let bob_did = actor_did_for_service(server_b.service_id(), "bob")?;
     let alice =
         register_account(server_a, &alice_did, "@cotest-fed-alice", ALICE_DEVICE_ID).await?;
     let bob = register_account(server_b, &bob_did, "@cotest-fed-bob", BOB_DEVICE_ID).await?;
@@ -1045,40 +1050,24 @@ fn test_cross_signing_publish(actor: &str) -> Result<CrossSigningPublish> {
 
 async fn install_test_principal_control_document(server: &ArkretServer, actor: &str) -> Result<()> {
     let psk_kid = format!("{actor}#cotest-principal-signing-key");
-    let psk_public_key =
-        multicodec_ed25519_public_key(&test_principal_signing_key().verifying_key());
-    let mut operation = BTreeMap::new();
-    operation.insert("type".to_owned(), json!("replace"));
-    operation.insert(
-        "state".to_owned(),
-        json!({
-            "id": actor,
-            "verificationMethod": [{
-                "id": psk_kid,
-                "type": "Multikey",
-                "controller": actor,
-                "publicKeyMultibase": psk_public_key,
-            }],
-            "authentication": [psk_kid],
-            "assertionMethod": [psk_kid],
-        }),
+    let (_, remainder) = actor
+        .strip_prefix("did:webvh:")
+        .and_then(|remainder| remainder.split_once(':'))
+        .context("test principal is not a did:webvh DID")?;
+    let (method_authority, local_id) = remainder
+        .split_once(":webvh:")
+        .context("test principal DID has no local id")?;
+    let host = method_authority.replace("%3A", ":").replace("%3a", ":");
+    let prepared = test_principal_inception(&host, local_id)?;
+    anyhow::ensure!(
+        prepared.did == actor,
+        "deterministic native inception does not reproduce test principal DID"
     );
-    let request = DidOperationSubmitRequestBody {
-        did: Did::new(actor.to_owned()).context("invalid test principal DID")?,
-        did_method: actor
-            .split(':')
-            .nth(1)
-            .context("test principal DID has no method")?
-            .to_owned(),
-        seq: None,
-        prev_event_digest: None,
-        operation,
-    };
     let accepted = expect_json(
         server
             .http()
             .post(server.url("/_arkret/root/identity/submit-did-operation"))
-            .json(&request),
+            .json(&prepared.submit_body),
         StatusCode::OK,
     )
     .await?;
@@ -1434,20 +1423,59 @@ fn trust_domain_for(service_id: &str) -> String {
     format!("ak:trust_domain:{}", did_host_from_service_id(service_id))
 }
 
-/// Mint a distinct `did:webvh` principal whose host is the same scope that
-/// soland derives for the owning service. The harness uses `did:key` service
-/// identities, so their multibase key is also a stable fixture SCID; the actor
-/// path keeps principals distinct without changing the home trust domain.
-fn actor_did_for_service(service_id: &str, actor: &str) -> String {
-    let scid = service_id
-        .strip_prefix("did:webvh:")
-        .and_then(|rest| rest.split(':').next())
-        .or_else(|| service_id.strip_prefix("did:key:"))
-        .unwrap_or("zcotestfederationactor");
-    format!(
-        "did:webvh:{scid}:{}:{actor}",
-        did_host_from_service_id(service_id)
-    )
+/// Mint a distinct, fully verifiable `did:webvh` principal for a test service.
+/// When the harness service still uses `did:key`, its stable multibase value is
+/// placed under the reserved `.cotest.local` suffix so the resulting method
+/// authority is a DNS-shaped test host rather than a non-standard bare label.
+pub(crate) fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
+    let service_host = did_host_from_service_id(service_id);
+    let webvh_host = if service_host.contains('.') {
+        service_host
+    } else {
+        format!("{service_host}.cotest.local")
+    };
+    Ok(test_principal_inception(&webvh_host, actor)
+        .with_context(|| {
+            format!("prepare test principal inception for local id {actor:?} at {webvh_host:?}")
+        })?
+        .did)
+}
+
+fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrincipalInception> {
+    let endpoint = Url::parse(&format!("https://{host}/"))
+        .with_context(|| format!("invalid test principal WebVH host {host}"))?;
+    let root_seed: [u8; 32] =
+        Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
+    let next_root_seed: [u8; 32] =
+        Sha256::digest(format!("cotest:webvh:next-root:{host}:{local_id}").as_bytes()).into();
+    let enrollment_seed: [u8; 32] =
+        Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
+    let next_root = SigningKey::from_bytes(&next_root_seed);
+    let enrollment = SigningKey::from_bytes(&enrollment_seed);
+    let next_root_multibase = multicodec_ed25519_public_key(&next_root.verifying_key());
+    let principal_signing_multibase =
+        multicodec_ed25519_public_key(&test_principal_signing_key().verifying_key());
+    let enrollment_multibase = multicodec_ed25519_public_key(&enrollment.verifying_key());
+    prepare_principal_inception(&PrincipalInceptionInput {
+        principal_endpoint: &endpoint,
+        local_id,
+        also_known_as: &[],
+        version_time: chrono::DateTime::parse_from_rfc3339("2026-05-01T00:00:00Z")?
+            .with_timezone(&chrono::Utc),
+        root_seed: &root_seed,
+        next_root_public_key_multibase: &next_root_multibase,
+        enrollment: PrincipalEnrollmentDelegation::SelfAuthority {
+            principal_signing_public_key_multibase: &principal_signing_multibase,
+            enrollment_public_key_multibase: &enrollment_multibase,
+            principal_signing_fragment: Some("cotest-principal-signing-key"),
+            enrollment_fragment: Some("cotest-device-enrollment-authority"),
+        },
+    })
+    .with_context(|| {
+        format!(
+            "prepare deterministic native principal inception for local id {local_id:?} at {endpoint}"
+        )
+    })
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,

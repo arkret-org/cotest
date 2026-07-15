@@ -135,14 +135,9 @@ pub fn attach_ephemeral_proof(
 ) {
     let device_id = envelope.device_id.as_str().to_owned();
 
-    // event_digest covers the canonical envelope without `proof`.
-    let mut without_proof =
-        serde_json::to_value(&*envelope).expect("ephemeral envelope serializes");
-    without_proof
-        .as_object_mut()
-        .expect("ephemeral envelope serializes as an object")
-        .remove("proof");
-    let canonical = arkret_core::canonical::canonical_json_bytes(&without_proof)
+    // event_digest covers the SDK-defined canonical envelope without `proof`.
+    let canonical = envelope
+        .canonical_bytes_without_proof()
         .expect("ephemeral envelope is canonicalizable");
     let event_digest = arkret_core::Hash::new(arkret_core::canonical::sha256_digest(&canonical))
         .expect("sha256 digest is a valid Hash");

@@ -315,10 +315,7 @@ pub const STARID_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     sibling_path: &["starid", "target", "debug"],
     bind_env: "STARID_BIND",
     bind_arg: None,
-    extra_env: &[
-        ("STARID_SERVICE_ID", "did:web:starid.cotest.local"),
-        ("STARID_DEVELOPMENT_MODE", "true"),
-    ],
+    extra_env: &[("STARID_DEVELOPMENT_MODE", "true")],
     extra_args: &[],
     required_env_vars: &[],
     health_path: "/health",

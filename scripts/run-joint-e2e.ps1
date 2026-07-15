@@ -64,16 +64,12 @@ param(
     [switch]$StartStarid,
     [string]$StaridBin,
     [string]$StaridBaseUrl,
-    [string]$StaridServiceId = "did:webvh:z6mkfixture:starid.joint-e2e.local",
     [switch]$StartTeabay,
     [string]$TeabayBin,
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
     [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
-    [string]$SolandServiceId = "did:key:z6MkhctUcGzdTWV4B6TYMiG1JzkeyveTpRrvG2p1Unxt1qDg",
     [string]$SolandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
-    [string]$CoauthServiceId = "did:webvh:z6mkfixture:coauth.joint-e2e.local",
-    [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
@@ -95,7 +91,6 @@ param(
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [switch]$DualSoland,
-    [string]$SolandBetaServiceId = "did:key:z6MknTBH9mbtdQBt78xgnUC6sdgYashbRxTucg5UJZHkF36D",
     [string]$SolandBetaNotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
@@ -151,6 +146,11 @@ if ($MockWitnessExtraDids.Count -gt 0) {
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+$StaridServiceId = $null
+$SolandServiceId = $null
+$SolandBetaServiceId = $null
+$CoauthServiceId = $null
 
 if ($PreflightOnly -and $SkipPreflight) {
     throw "-PreflightOnly cannot be combined with -SkipPreflight"
@@ -1051,9 +1051,6 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
-        [Parameter(Mandatory = $true)][string]$SolandServiceId,
-        [Parameter(Mandatory = $true)][string]$CoauthServiceId,
-        [Parameter(Mandatory = $true)][string]$OAuthIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
         [string]$MockEmailBaseUrl
@@ -1062,9 +1059,6 @@ function New-CoauthJointConfig {
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
     $configPath = Join-Path $JointDir "coauth.yaml"
     $generateLog = Join-Path $JointDir "coauth-config-generate.log"
-    # coauth (07-02 service ID bootstrap flow) requires either an explicit
-    # arkret.service_id or the local-development `--dev` mode; the joint
-    # harness patches its own service DID afterwards, so --dev is correct here.
     $generateOutput = & $CoauthBinary config generate --dev 2>"$generateLog"
     if ($LASTEXITCODE -ne 0) {
         throw "coauth config generate failed; see $generateLog"
@@ -1084,9 +1078,6 @@ function New-CoauthJointConfig {
         "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
-        "--soland-service-id", $SolandServiceId,
-        "--coauth-service-id", $CoauthServiceId,
-        "--oauth-introspection-bearer", $OAuthIntrospectionBearer,
         "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
     )
@@ -1156,6 +1147,21 @@ function Wait-HttpReady {
         Start-Sleep -Milliseconds 500
     }
     throw "Timed out waiting for $Url. Last error: $lastError"
+}
+
+function Get-DescribedServiceId {
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseUrl,
+        [Parameter(Mandatory = $true)][string]$ServiceName
+    )
+
+    $url = "$($BaseUrl.TrimEnd('/'))/_arkret/describe"
+    $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
+    $serviceId = [string]$describe.service_id
+    if ([string]::IsNullOrWhiteSpace($serviceId) -or -not $serviceId.StartsWith("did:")) {
+        throw "$ServiceName describe at $url did not return a valid service_id"
+    }
+    return $serviceId
 }
 
 function Assert-CoauthDpopGrantSeamReady {
@@ -2172,9 +2178,6 @@ try {
             -InksonBaseUrl $InksonBaseUrl `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
-            -SolandServiceId $SolandServiceId `
-            -CoauthServiceId $CoauthServiceId `
-            -OAuthIntrospectionBearer $CoauthOAuthIntrospectionBearer `
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
@@ -2200,16 +2203,6 @@ try {
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
-    if ($CoauthCommand) {
-        if (-not $CoauthBaseUrl -and -not $CoauthHealthUrl) {
-            throw "CoauthCommand requires CoauthBaseUrl or CoauthHealthUrl"
-        }
-        $coauthWorkingDirectory = if ($StartCoauth) { Join-Path $workspaceRoot "coauth" } else { $workspaceRoot }
-        $managedServices.Add((Start-ManagedCommand -Name "coauth" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serviceLogDir))
-        $health = if ($CoauthHealthUrl) { $CoauthHealthUrl } else { "$($CoauthBaseUrl.TrimEnd('/'))/health" }
-        Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
-    }
-
     # CT-6: starid (DID resolver) - no external deps. Spawned
     # before soland so soland's SOLAND_STARID_WEBVH_RESOLVER_URL points at a
     # live listener from the first request onwards.
@@ -2221,7 +2214,6 @@ try {
         $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $workspaceRoot
         $staridConfigPath = Join-Path $jointDir "starid.env"
         Write-DotEnvFile -Path $staridConfigPath -Values ([ordered]@{
-                STARID_SERVICE_ID = $StaridServiceId
                 STARID_DEVELOPMENT_MODE = "true"
             })
         $staridCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
@@ -2230,6 +2222,7 @@ try {
             $staridPort
         $managedServices.Add((Start-ManagedCommand -Name "starid" -Command $staridCmd -WorkingDirectory (Split-Path -Parent $staridBinary) -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($StaridBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        $StaridServiceId = Get-DescribedServiceId -BaseUrl $StaridBaseUrl -ServiceName "starid"
     }
 
     # CT-6: teabay (directory) - needs a Postgres DSN. The validation block
@@ -2261,7 +2254,6 @@ try {
     function Build-SolandDockerEnvironment {
         param(
             [Parameter(Mandatory = $true)][string]$BaseUrl,
-            [Parameter(Mandatory = $true)][string]$ServiceId,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
@@ -2279,7 +2271,6 @@ try {
             DATABASE_URL = ""
             SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
-            SOLAND_SERVICE_ID = $ServiceId
             SOLAND_DEVELOPMENT_MODE = "true"
             SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
@@ -2311,10 +2302,8 @@ try {
         }
         if ($FederationPeers) {
             $parts = $FederationPeers -split "\|", 2
-            if ($parts.Count -eq 2) {
-                $map.SOLAND_FEDERATION_POLICY = "Mesh"
-                $map.SOLAND_FEDERATION_PEERS = "$(Convert-ToContainerReachableUrl $parts[0])|$($parts[1])"
-            }
+            $map.SOLAND_FEDERATION_POLICY = "Mesh"
+            $map.SOLAND_FEDERATION_PEERS = Convert-ToContainerReachableUrl $parts[0]
         }
         if ($NotarySigningKey) {
             $map.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
@@ -2327,7 +2316,6 @@ try {
             [Parameter(Mandatory = $true)][string]$BinaryPath,
             [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
-            [Parameter(Mandatory = $true)][string]$ServiceId,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
             [Parameter(Mandatory = $true)][int]$Port,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
@@ -2341,7 +2329,6 @@ try {
             RUST_LOG = $rustLog
             DATABASE_URL = ""
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
-            SOLAND_SERVICE_ID = $ServiceId
             SOLAND_DEVELOPMENT_MODE = "true"
             SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
@@ -2395,13 +2382,12 @@ try {
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
         $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $workspaceRoot
-        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceId" } else { "" }
+        $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
         $SolandCommand = Build-SolandCommand `
             -BinaryPath $solandBinary `
             -ConfigPath (Join-Path $jointDir "soland.env") `
             -BaseUrl $SolandBaseUrl `
-            -ServiceId $SolandServiceId `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
             -Port $solandPort `
             -MetricsPort $solandMetricsPort `
@@ -2415,11 +2401,10 @@ try {
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
         $managedServices.Add((Start-ManagedCommand -Name $solandName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir))
     } elseif ($willStartDockerSoland) {
-        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceId" } else { "" }
+        $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
         $solandDockerEnv = Build-SolandDockerEnvironment `
             -BaseUrl $SolandBaseUrl `
-            -ServiceId $SolandServiceId `
             -MetricsPort $solandMetricsPort `
             -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
             -CorsAllowOrigin $solandCorsAllowOrigin `
@@ -2436,6 +2421,7 @@ try {
                     -Environment $solandDockerEnv))
     }
     Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+    $SolandServiceId = Get-DescribedServiceId -BaseUrl $SolandBaseUrl -ServiceName "soland"
 
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
@@ -2444,12 +2430,11 @@ try {
         if ($SolandRuntime -eq "docker") {
             $solandBetaDockerEnv = Build-SolandDockerEnvironment `
                 -BaseUrl $solandBetaBaseUrl `
-                -ServiceId $SolandBetaServiceId `
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
                 -NotarySigningKey $SolandBetaNotarySigningKey `
-                -FederationPeers "$SolandBaseUrl|$SolandServiceId"
+                -FederationPeers $SolandBaseUrl
             $managedServices.Add((Start-ManagedDockerSoland `
                         -Name "soland-beta" `
                         -Image $SolandImage `
@@ -2463,17 +2448,30 @@ try {
                 -BinaryPath $solandBinary `
                 -ConfigPath (Join-Path $jointDir "soland-beta.env") `
                 -BaseUrl $solandBetaBaseUrl `
-                -ServiceId $SolandBetaServiceId `
                 -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
                 -Port $solandBetaPort `
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFile $solandBetaTraceFile `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
                 -NotarySigningKey $SolandBetaNotarySigningKey `
-                -FederationPeers "$SolandBaseUrl|$SolandServiceId"
+                -FederationPeers $SolandBaseUrl
             $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         }
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        $SolandBetaServiceId = Get-DescribedServiceId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
+    }
+
+    if ($CoauthCommand) {
+        if (-not $CoauthBaseUrl -and -not $CoauthHealthUrl) {
+            throw "CoauthCommand requires CoauthBaseUrl or CoauthHealthUrl"
+        }
+        $coauthWorkingDirectory = if ($StartCoauth) { Join-Path $workspaceRoot "coauth" } else { $workspaceRoot }
+        $managedServices.Add((Start-ManagedCommand -Name "coauth" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serviceLogDir))
+        $health = if ($CoauthHealthUrl) { $CoauthHealthUrl } else { "$($CoauthBaseUrl.TrimEnd('/'))/health" }
+        Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
+        if ($CoauthBaseUrl) {
+            $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
+        }
     }
 
     $inksonService = $null
@@ -2544,6 +2542,13 @@ try {
         finally {
             Pop-Location
         }
+    }
+
+    if ($StaridBaseUrl -and -not $StaridServiceId) {
+        $StaridServiceId = Get-DescribedServiceId -BaseUrl $StaridBaseUrl -ServiceName "starid"
+    }
+    if ($CoauthBaseUrl -and -not $CoauthServiceId) {
+        $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
     }
 
     $env:COTEST_JOINT_RUN_DIR = $jointDir

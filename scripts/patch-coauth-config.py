@@ -90,10 +90,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inkson-base-url", required=True)
     parser.add_argument("--oauth-client-id", required=True)
     parser.add_argument("--soland-base-url", required=True)
-    parser.add_argument("--soland-service-id", required=True)
-    parser.add_argument("--coauth-service-id", required=True)
     parser.add_argument("--admin-audience")
-    parser.add_argument("--oauth-introspection-bearer", required=True)
     parser.add_argument("--session-grant-introspection-bearer", required=True)
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
     parser.add_argument("--mock-email-base-url")
@@ -192,23 +189,14 @@ def main() -> int:
         "arkret:\n"
         "  principal_servers:\n"
         "  - name: soland\n"
-        f"    audience: {yaml_string(args.soland_service_id)}\n"
         f"    endpoint: {yaml_string(soland_base)}\n"
-        f"    did: {yaml_string(args.soland_service_id)}\n"
-        f"    oauth_introspection_bearer: {yaml_string(args.oauth_introspection_bearer)}\n"
         "    session_grant_introspection_bearer: "
         f"{yaml_string(args.session_grant_introspection_bearer)}\n"
         "    embedded_webvh_registration_bearer: "
         f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
-        f"  service_id: {yaml_string(args.coauth_service_id)}\n"
-        f"  issuer_did: {yaml_string(args.coauth_service_id)}\n"
-        # coauth's service ID bootstrap validation only admits did:web
-        # service/issuer DIDs under the explicit personal-node no-history
-        # profile; the joint harness runs did:web:*.joint-e2e.local fixtures.
         "  deployment_profile: personal_node\n"
         "  principal_method: \"did:web\"\n"
         f"  admin_audience: {yaml_string(admin_audience)}\n"
-        f"  principal_server_url: {yaml_string(soland_base)}\n"
         "  password_login_session_grants_enabled: true\n"
     )
     src = replace_top_level_section(src, "arkret", arkret)

@@ -8,7 +8,9 @@ use crate::harness::{
     ArkretServer, TestActorClient, attach_ephemeral_proof, ephemeral_proof_placeholder,
     expect_api_error, expect_json,
 };
-use crate::scenarios::federation_collaboration::authorize_device_public_key;
+use crate::scenarios::federation_collaboration::{
+    actor_did_for_service, authorize_device_public_key,
+};
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = ArkretServer::spawn("typing-push-rules").await?;
@@ -18,9 +20,10 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
+    let bob_actor = actor_did_for_service(server.service_id(), "bob-typing")?;
     let bob = server
         .register_client(
-            "did:key:z6MksPykuQeYh4zgthFRFBExrgo1dwFWWenY2TEJ9SvT9jn1",
+            &bob_actor,
             "@bob-typing",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
