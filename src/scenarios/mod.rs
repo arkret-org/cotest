@@ -27,7 +27,6 @@ pub mod federation_contract;
 pub mod federation_idempotency_after_revoke;
 pub mod federation_idempotency_historical_only;
 pub mod federation_readiness;
-pub mod federation_three_server_fork_quarantine;
 pub mod federation_two_node_e1;
 pub mod four_service_smoke;
 pub mod full_stack_e2e;

@@ -9,9 +9,8 @@
 //! The test is built around a small in-process simulator so it runs in
 //! CI without docker — the simulator is itself useful as a regression
 //! guard against the spec's quorum + heal-window numbers drifting.
-//! The full wire-level version (3 soland binaries + a packet-loss
-//! shim) stays on the existing `federation_three_server_fork_quarantine`
-//! track; this entrypoint pins the protocol invariants.
+//! A future full wire-level version will require three soland binaries
+//! plus a packet-loss shim; this entrypoint pins the protocol invariants.
 
 use std::collections::BTreeSet;
 

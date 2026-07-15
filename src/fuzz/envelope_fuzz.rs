@@ -17,7 +17,6 @@ use std::panic;
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, SNAPSHOT_SCHEMA};
 use arkret_schema::{self as schema, ProtocolSchemaRegistry};
-use serde::Serialize;
 use serde_json::{Value, json};
 
 /// Reusable schema registry. The artifact-backed registry is preferred (it
@@ -324,23 +323,6 @@ where
     })?;
     catch(|| {
         typed(value);
-    })
-}
-
-// ── Convenience wrapper for typed re-serialization ─────────────────────────
-
-/// Round-trip a typed envelope through `serde_json::to_value` and back; the
-/// smoke test uses this against valid handcrafted envelopes to confirm the
-/// fuzz harness's `catch` layer doesn't smother legitimate panics from
-/// reachable code paths.
-#[allow(dead_code)]
-pub fn round_trip_via_value<T>(value: &T) -> Result<(), String>
-where
-    T: Serialize + serde::de::DeserializeOwned + panic::RefUnwindSafe,
-{
-    catch(|| {
-        let serialized = serde_json::to_value(value).expect("serialize fuzz round-trip value");
-        let _ = serde_json::from_value::<T>(serialized);
     })
 }
 

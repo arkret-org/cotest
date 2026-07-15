@@ -2,8 +2,7 @@
 //!
 //! Companion to `envelope_fuzz::fuzz_seal_envelope`: this module
 //! drives a wider set of `Arbitrary` inputs that exercise the Seal
-//! validator's edge cases — long predecessor chains, conflicting kind
-//! discriminators, and malformed signatures.
+//! validator's edge cases — long predecessor chains and malformed signatures.
 //!
 //! Same panic-catch contract as the existing harness: any panic
 //! escaping the validator boundary surfaces as `Err(message)`; typed
@@ -64,26 +63,6 @@ pub struct FuzzSealDeepInput {
     pub delta_count: u8,
     pub predecessor_template: String,
     pub delta_template: String,
-}
-
-#[derive(Debug, Arbitrary)]
-pub enum ArbSealKind {
-    Normal,
-    Compaction,
-    /// Free-form string — the validator's discriminator MUST reject
-    /// unknown variants without panicking.
-    Junk,
-}
-
-#[allow(dead_code)]
-impl ArbSealKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Normal => "normal",
-            Self::Compaction => "compaction",
-            Self::Junk => "what-even-is-this-kind",
-        }
-    }
 }
 
 #[derive(Debug, Arbitrary)]
