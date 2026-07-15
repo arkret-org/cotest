@@ -102,7 +102,7 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
     arkret::AgentKeyScope {
         actions: service_actions
             .into_iter()
-            .chain(["ak.event.read", "ak.message.create"])
+            .chain(["ak.event.read", "ak.message.create", "ak.reaction.add"])
             .map(ToOwned::to_owned)
             .collect(),
         resources: service_actions
@@ -2224,7 +2224,8 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                     "ak.self.events.query.scan",
                     "ak.self.events.command.submit",
                     "ak.event.read",
-                    "ak.message.create"
+                    "ak.message.create",
+                    "ak.reaction.add"
                 ],
                 "expires_at": "2026-12-31T23:59:59Z",
                 "revocation_ref": "ak:session:agent-live-e2e-grant",
