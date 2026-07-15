@@ -116,11 +116,14 @@ pub fn attach_ephemeral_proof(
         .to_owned();
 
     // event_digest covers the canonical envelope without `proof`.
-    envelope.proof = None;
-    let canonical = arkret_core::canonical::canonical_json_bytes(
-        &serde_json::to_value(&*envelope).expect("ephemeral envelope serializes"),
-    )
-    .expect("ephemeral envelope is canonicalizable");
+    let mut without_proof =
+        serde_json::to_value(&*envelope).expect("ephemeral envelope serializes");
+    without_proof
+        .as_object_mut()
+        .expect("ephemeral envelope serializes as an object")
+        .remove("proof");
+    let canonical = arkret_core::canonical::canonical_json_bytes(&without_proof)
+        .expect("ephemeral envelope is canonicalizable");
     let event_digest = arkret_core::Hash::new(arkret_core::canonical::sha256_digest(&canonical))
         .expect("sha256 digest is a valid Hash");
 
@@ -139,7 +142,25 @@ pub fn attach_ephemeral_proof(
         .expect("proof binding is canonicalizable");
     proof.jws = arkret_signatures::proof::sign_eddsa_detached_jws(signing_key, &binding_bytes)
         .expect("detached JWS signing succeeds");
-    envelope.proof = Some(serde_json::to_value(&proof).expect("proof serializes"));
+    envelope.proof = proof;
+}
+
+pub fn ephemeral_proof_placeholder(
+    actor_id: &str,
+    device_id: &str,
+    created_at: chrono::DateTime<chrono::Utc>,
+) -> arkret_core::Proof {
+    arkret_core::Proof {
+        kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: format!("{actor_id}#{device_id}"),
+        event_digest: arkret_core::Hash::new(format!("sha256:{}", "0".repeat(64)))
+            .expect("zero SHA-256 digest is typed"),
+        created_at,
+        domain: None,
+        audience: None,
+        jws: String::new(),
+    }
 }
 
 /// [`attach_ephemeral_proof`] for callers holding a raw JSON envelope: the

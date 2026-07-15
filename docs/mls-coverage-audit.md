@@ -72,10 +72,10 @@
 
 ### A. 加密 discussion/chat 消息在 inkson 端从未端到端可用 —— ✅ 已修复(2026-06-01,E15.9 实测真绿)
 > 修复方案与执行记录见 `cotask/tasks/encrypt_fix.md` / `encrypt_fix_todos.md`。要点:
-> SDK 新增唯一权威合规类型 `EncryptedEnvelopeV1`(精确匹配 `ak.schema.encrypted_envelope.v1`,单测绿);
+> SDK 使用唯一权威合规类型 `EncryptedEnvelope`（精确匹配 `ak.schema.encrypted_envelope.v1`，单测绿）；
 > soland 移除手写 `validate_encrypted_payload_envelope` 对消息的校验、改由注册 spec schema 唯一把关
 > (464+ 测试零回归);inkson 新增 `encrypt_message_with_device_snapshot`(带 aad)+ chat 用
-> `EncryptedEnvelopeV1::from_payload` 产出合规 envelope(key_ref 绑 commit 事件 id)+ 去 wasm 门 +
+> `encrypted_envelope_from_payload` 产出合规 envelope（key_ref 绑 commit 事件 id）+ 去 wasm 门 +
 > 加密 channel 默认 Send 自动 MLS 加密(隐藏明文 Send)+ 乐观回显。E15.9 端到端真绿(提交体不含明文 +
 > status<400 + 评论解密渲染)。**以下为原始诊断记录:**
 

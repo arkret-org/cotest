@@ -67,8 +67,6 @@ fn build_realm(
         created_at: chrono::Utc::now(),
         updated_by: None,
         updated_at: None,
-        labels: Vec::new(),
-        metadata: std::collections::BTreeMap::new(),
         relation_profiles: Vec::new(),
         notary_profile: NotaryProfile::SingleDid,
         notary: NotaryValue::single_did(principal.clone()),
@@ -80,7 +78,6 @@ fn build_realm(
         bottom_escalation_after_ms: None,
         cell_lattices: Vec::new(),
         co_write_policy: None,
-        extra: std::collections::BTreeMap::new(),
     })
 }
 

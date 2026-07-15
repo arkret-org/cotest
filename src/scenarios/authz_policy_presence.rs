@@ -5,8 +5,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, attach_ephemeral_proof, expect_account_subscribe_delta,
-    expect_api_error, expect_json, expect_status, submit_event,
+    ArkretServer, TestActorClient, attach_ephemeral_proof, ephemeral_proof_placeholder,
+    expect_account_subscribe_delta, expect_api_error, expect_json, expect_status, submit_event,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -614,8 +614,8 @@ fn presence_envelope(
         Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
         sent_at,
         expires_at,
-        payload,
-        None,
+        serde_json::from_value(payload).expect("presence payload is an object"),
+        ephemeral_proof_placeholder(actor_id, device_id, sent_at),
     )
     .expect("presence envelope is well-formed");
     attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));

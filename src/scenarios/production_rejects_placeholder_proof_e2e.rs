@@ -6,7 +6,7 @@
 //! ## Why this scenario exists
 //!
 //! inkson historically attached a placeholder proof
-//! (`EventEnvelope::attach_placeholder_proof`) from `OperationBuilder::build`
+//! (`Event::attach_placeholder_proof`) from `OperationBuilder::build`
 //! so the dev-mode soland would accept the envelope. If a user pointed a
 //! dev-feature inkson build at a *production* soland, that placeholder
 //! would leak onto the wire. T1.3 closes the hole on both sides:

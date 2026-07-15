@@ -5,7 +5,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, attach_ephemeral_proof, expect_api_error, expect_json,
+    ArkretServer, TestActorClient, attach_ephemeral_proof, ephemeral_proof_placeholder,
+    expect_api_error, expect_json,
 };
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
@@ -258,14 +259,14 @@ fn typing_envelope(
         Some(arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
         sent_at,
         expires_at,
-        json!({
-            "strand_id": strand_id,
+        std::collections::BTreeMap::from([
+            ("strand_id".to_owned(), json!(strand_id)),
             // ephemeral-envelope.schema.json ak.typing branch: optional, const
             // "discussion" in v1; omitted resolves to "discussion".
-            "track_name": "discussion",
-            "typing": typing
-        }),
-        None,
+            ("track_name".to_owned(), json!("discussion")),
+            ("typing".to_owned(), json!(typing)),
+        ]),
+        ephemeral_proof_placeholder(actor_id, device_id, sent_at),
     )
     .expect("typing envelope is well-formed");
     attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));

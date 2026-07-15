@@ -334,9 +334,7 @@ pub(crate) fn message_create_text_payload_for_strand(
     strand_id: StrandId,
     body: &str,
 ) -> Result<Value> {
-    let content = ContentBlock::text(body)
-        .to_value()
-        .map_err(|err| anyhow!("message content serialize: {err}"))?;
+    let content = ContentBlock::text(body);
     MessageCreatePayload::with_content(strand_id, "discussion", content)
         .to_value()
         .map_err(|err| anyhow!("message create payload serialize: {err}"))

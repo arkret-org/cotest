@@ -53,7 +53,7 @@ fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
 
 // ── Event envelope ──────────────────────────────────────────────────────────
 
-/// `arbitrary`-derived input that mirrors the `EventEnvelope` wire shape.
+/// `arbitrary`-derived input that mirrors the `Event` wire shape.
 /// All free-form fields (`payload`, `unsigned`, `proofs`, `refs`) use
 /// `ArbValue` so the deserializer sees realistic JSON variety.
 #[derive(Debug, Arbitrary)]
@@ -110,27 +110,27 @@ impl FuzzEventInput {
     }
 }
 
-/// Fuzz the `EventEnvelope` deserialization + schema-validation path.
+/// Fuzz the `Event` deserialization + schema-validation path.
 ///
 /// Three sub-paths are exercised back-to-back so a panic in any of them is
 /// caught:
 ///   1. Raw `serde_json::from_slice` over the random bytes (catches panics in the wire
 ///      deserializer).
-///   2. `serde_json::from_value::<EventEnvelope>` over the `Arbitrary`-shaped JSON (catches
-///      `From<Value>` / `TryFrom` panics, e.g. ID parsers that `unwrap()` on malformed inputs).
+///   2. `serde_json::from_value::<Event>` over the `Arbitrary`-shaped JSON (catches `From<Value>` /
+///      `TryFrom` panics, e.g. ID parsers that `unwrap()` on malformed inputs).
 ///   3. `ProtocolSchemaRegistry::validate_value(EVENT_SCHEMA, ...)` over the same JSON value
 ///      (catches schema-validator panics on pathological shapes — recursive arrays, deeply nested
 ///      objects, etc.).
 pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_core::EventEnvelope>(data);
+        let _ = serde_json::from_slice::<arkret_core::Event>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzEventInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), EVENT_SCHEMA, |v| {
-        let _ = serde_json::from_value::<arkret_core::EventEnvelope>(v.clone());
+        let _ = serde_json::from_value::<arkret_core::Event>(v.clone());
     })
 }
 

@@ -143,7 +143,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
             cursor: cursor
                 .map(|cursor| arkret_core::identifiers::Cursor::new(cursor.to_owned()))
                 .transpose()?,
-            payload: Value::Null,
+            payload: None,
             reconnect_after_ms,
         }),
     })
@@ -168,7 +168,7 @@ fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFra
             kind: EventsSubscribeFrameKind::Dropped,
             realm_id: None,
             cursor: None,
-            payload: Value::Null,
+            payload: None,
             reconnect_after_ms: None,
         }),
     }
