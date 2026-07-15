@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -24,10 +24,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(
-        resolved["did_document"]["document"]["id"],
-        "did:web:alice.example"
-    );
+    assert_eq!(resolved["did_document"]["id"], "did:web:alice.example");
 
     let document = expect_json(
         server
@@ -36,10 +33,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(
-        document["did_document"]["document"]["id"],
-        "did:web:alice.example"
-    );
+    assert_eq!(document["did_document"]["id"], "did:web:alice.example");
 
     let log = expect_json(
         server
@@ -105,7 +99,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     );
     assert_eq!(resolved_after_submit["seq"], 1);
     assert_eq!(
-        resolved_after_submit["did_document"]["document"]["authentication"][0],
+        resolved_after_submit["did_document"]["authentication"][0],
         "did:web:alice.example#key-1"
     );
 
@@ -119,17 +113,21 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     assert_eq!(log_after_submit["events"].as_array().unwrap().len(), 1);
     assert_eq!(log_after_submit["events"][0]["seq"], 1);
 
+    let submitted_head = submitted["head_event_digest"]
+        .as_str()
+        .context("accepted DID operation response is missing head_event_digest")?;
     let receipts = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/root/identity/receipts?did=did:web:alice.example")),
+            .get(server.url("/_arkret/root/identity/receipts"))
+            .query(&[("did", "did:web:alice.example"), ("head", submitted_head)]),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(receipts["threshold_met"], true);
-    assert_eq!(
-        receipts["receipts"][0]["head_event_digest"],
-        submitted["head_event_digest"]
+    assert_eq!(receipts["threshold_met"], false);
+    assert!(
+        receipts["receipts"].as_array().is_some_and(Vec::is_empty),
+        "registry without a witness must return an empty receipt set: {receipts}"
     );
 
     Ok(())
