@@ -635,6 +635,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
     prepare_agent_controller_recovery(&server, &token).await?;
 
     let realm_id = create_realm(&server, &token, ALICE_DID, "Agent reply live e2e").await?;
+    mock.set_realm_scope(realm_id.clone());
     let agent_did = provision_and_pair_agent(&server, &token, "Reply Assistant", "reply").await?;
     mock.set_subject(agent_did.clone());
     advance_event_sequence(ALICE_DID, &realm_id, 32);
@@ -2097,6 +2098,7 @@ struct AgentIntrospectionState {
     request_count: Arc<AtomicUsize>,
     service_id: Arc<Mutex<String>>,
     subject: Arc<Mutex<Option<String>>>,
+    realm_scope: Arc<Mutex<Option<String>>>,
     cnf_jkt: String,
     session_public_key: String,
 }
@@ -2107,6 +2109,7 @@ struct MockIntrospection {
     request_count: Arc<AtomicUsize>,
     service_id: Arc<Mutex<String>>,
     subject: Arc<Mutex<Option<String>>>,
+    realm_scope: Arc<Mutex<Option<String>>>,
     _server: MockServer,
 }
 
@@ -2120,11 +2123,13 @@ impl MockIntrospection {
         let request_count = Arc::new(AtomicUsize::new(0));
         let service_id = Arc::new(Mutex::new(service_id));
         let subject = Arc::new(Mutex::new(None));
+        let realm_scope = Arc::new(Mutex::new(None));
         let state = AgentIntrospectionState {
             active: Arc::clone(&active),
             request_count: Arc::clone(&request_count),
             service_id: Arc::clone(&service_id),
             subject: Arc::clone(&subject),
+            realm_scope: Arc::clone(&realm_scope),
             cnf_jkt,
             session_public_key,
         };
@@ -2139,6 +2144,7 @@ impl MockIntrospection {
             request_count,
             service_id,
             subject,
+            realm_scope,
             _server: server,
         })
     }
@@ -2160,6 +2166,12 @@ impl MockIntrospection {
     fn set_subject(&self, subject: String) {
         if let Ok(mut guard) = self.subject.lock() {
             *guard = Some(subject);
+        }
+    }
+
+    fn set_realm_scope(&self, realm_id: String) {
+        if let Ok(mut guard) = self.realm_scope.lock() {
+            *guard = Some(realm_id);
         }
     }
 
@@ -2204,6 +2216,12 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
         .ok()
         .and_then(|guard| guard.clone())
         .unwrap_or_else(|| "did:web:agent-unset.example".to_owned());
+    let realm_scope = state
+        .realm_scope
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+        .unwrap_or_else(|| "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned());
     let body = if state.active.load(Ordering::SeqCst) {
         json!({
             "active": true,
@@ -2233,19 +2251,28 @@ async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 "cnf_jkt": state.cnf_jkt,
                 "proof_kind": "agent_key_proof",
                 "scope_details": {
-                    "agent_id": subject,
-                    "controller_id": ALICE_DID,
-                    "resources": {
-                        "realm_refs": ["*"],
-                        "strand_refs": []
-                    },
-                    "constraints": {
-                        "allowed_tracks": [],
-                        "allowed_data_classes": [],
-                        "allowed_endpoints": []
-                    },
-                    "capability_grant_refs": [],
-                    "policy_refs": []
+                    "realm_ids": [realm_scope],
+                    "participation": [{
+                        "participation_scope": {
+                            "kind": "realm",
+                            "realm_id": realm_scope
+                        },
+                        "selection": {
+                            "reply": true,
+                            "accept_third_party_mention": false,
+                            "act_on_behalf": false
+                        },
+                        "ceiling": {
+                            "reply": true,
+                            "accept_third_party_mention": true,
+                            "act_on_behalf": false
+                        },
+                        "effective": {
+                            "reply": true,
+                            "accept_third_party_mention": false,
+                            "act_on_behalf": false
+                        }
+                    }]
                 },
                 "freshness_state": "fresh"
             }
