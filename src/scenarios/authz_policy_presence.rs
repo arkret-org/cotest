@@ -395,20 +395,18 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         .expect("account subscribe presence events array");
     let alice_presence = presence_events
         .iter()
-        .find(|event| {
-            event["actor_id"] == "did:web:alice.example"
-                || event["user_id"] == "did:web:alice.example"
-        })
+        .find(|event| event["actor_id"] == "did:web:alice.example")
         .expect("alice presence in account subscribe baseline");
-    assert_eq!(alice_presence["status"], "dnd");
+    assert_eq!(alice_presence["payload"]["state"], "dnd");
     assert_eq!(
-        alice_presence["status_message"], "In a meeting",
+        alice_presence["payload"]["status_message"], "In a meeting",
         "admitted status_message must survive into the projection: {alice_presence}"
     );
 
-    // §3.4 activity-side-channel downgrade: an observer outside alice's
-    // accepted-contact set sees `dnd` degraded to `offline`, with no
-    // status_message or activity bucket leaking alongside.
+    // The missing visibility policy defaults to `public`; a Realm peer is
+    // therefore inside Alice's authorized presence set and receives the same
+    // typed ephemeral payload. `contacts_only`/`nobody` gating is a separate
+    // policy-projection contract and must not be inferred from Realm membership.
     let observer = server
         .register_client(
             "did:web:observer-presence.example",
@@ -426,18 +424,15 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         .as_array()
         .expect("observer presence events array")
         .iter()
-        .find(|event| {
-            event["actor_id"] == "did:web:alice.example"
-                || event["user_id"] == "did:web:alice.example"
-        })
+        .find(|event| event["actor_id"] == "did:web:alice.example")
     {
         assert_eq!(
-            observed_alice["status"], "offline",
-            "dnd must degrade to offline for non-contact observers: {observed_alice}"
+            observed_alice["payload"]["state"], "dnd",
+            "public presence must preserve the authorized state: {observed_alice}"
         );
-        assert!(
-            observed_alice.get("status_message").is_none(),
-            "degraded presence must not leak the status message: {observed_alice}"
+        assert_eq!(
+            observed_alice["payload"]["status_message"], "In a meeting",
+            "public presence must preserve its authorized status message: {observed_alice}"
         );
     }
 
