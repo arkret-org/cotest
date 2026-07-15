@@ -66,8 +66,8 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
             .json(&authorize),
-        StatusCode::PRECONDITION_FAILED,
-        "failed_precondition",
+        StatusCode::CONFLICT,
+        "dependency_missing",
     )
     .await?;
 
@@ -83,7 +83,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
                 event: None,
                 events: vec![create.clone(), missing_predecessor],
             }),
-        StatusCode::CONFLICT,
+        StatusCode::BAD_REQUEST,
         "schema_violation",
     )
     .await?;
@@ -101,7 +101,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
                 event: None,
                 events: vec![create.clone(), extra_predecessor],
             }),
-        StatusCode::CONFLICT,
+        StatusCode::BAD_REQUEST,
         "schema_violation",
     )
     .await?;
