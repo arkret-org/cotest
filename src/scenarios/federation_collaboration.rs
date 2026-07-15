@@ -9,7 +9,10 @@ use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
 use arkret_core::{
-    Did, Event, EventId, Hash, Hlc, Proof, RealmId, principal_control_realm_id, proof_kind,
+    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did,
+    DidOperationSubmitRequestBody, Event, EventId, Hash, Hlc, KeyFormat, KeyOperationSignature,
+    KeysUploadRequestBody, NonEmptyString, Proof, PublishedKey, RealmId, SubordinateSignedKey,
+    SubordinateSignedKeyBinding, TypedTrustDomainId, principal_control_realm_id, proof_kind,
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -17,7 +20,6 @@ use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
@@ -48,6 +50,7 @@ const E2EE_MESSAGE_CIPHERTEXT: &str = "opaque_cross_server_e2ee_message";
 const E2EE_MESSAGE_PLAINTEXT: &str = "cross-server e2ee plaintext must stay client-side";
 const BOB_DEVICE_KEY_SEED: [u8; 32] = [187u8; 32];
 const ALICE_DEVICE_KEY_SEED: [u8; 32] = [161u8; 32];
+const ALICE_CROSS_SIGNING_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a10";
 const ALICE_DEVICE_AUTHORIZE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a11";
 
 pub async fn cross_server_collaboration_strand_works() -> Result<()> {
@@ -81,7 +84,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(bob_document["did_document"]["document"]["id"], bob_did);
+    assert_eq!(bob_document["did_document"]["id"], bob_did);
 
     let visible_services = vec![
         server_a.service_id().to_owned(),
@@ -301,7 +304,16 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
     let alice_principal_realm =
         principal_control_realm_id(&Did::new(alice_did.clone()).context("invalid alice did")?);
-    let alice_device_authorize = signed_federation_event(
+    install_test_principal_control_document(server_b, &alice_did).await?;
+    let alice_cross_signing = signed_federation_event(
+        ALICE_CROSS_SIGNING_EVENT_ID,
+        "ak.cross_signing.publish",
+        &alice_principal_realm,
+        &alice_did,
+        4,
+        serde_json::to_value(test_cross_signing_publish(&alice_did)?)?,
+    )?;
+    let mut alice_device_authorize = signed_federation_event(
         ALICE_DEVICE_AUTHORIZE_EVENT_ID,
         "ak.device.authorize",
         &alice_principal_realm,
@@ -309,10 +321,17 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         5,
         bootstrap_device_authorize_payload(&alice_did, ALICE_DEVICE_ID, &alice_device_key)?,
     )?;
+    alice_device_authorize.prev_refs = vec![
+        EventId::new(ALICE_CROSS_SIGNING_EVENT_ID.to_owned())
+            .context("invalid alice cross-signing event id")?,
+    ];
+    let authorize_digest =
+        Hash::new(alice_device_authorize.event_digest()?).context("invalid device event digest")?;
+    alice_device_authorize.proofs[0].event_digest = authorize_digest;
     let alice_device_body = peer_events_submit_body(
         &alice_principal_realm,
-        vec![alice_device_authorize],
-        Some("a-to-b-device-01"),
+        vec![alice_cross_signing, alice_device_authorize],
+        Some("a-to-b-identity-bootstrap-01"),
     )?;
     let alice_device_url = server_b.url("/_arkret/peer/events");
     let alice_device_pushed = expect_json(
@@ -330,6 +349,11 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
+    assert_json_array_contains(
+        &alice_device_pushed["accepted"],
+        ALICE_CROSS_SIGNING_EVENT_ID,
+        &alice_device_pushed,
+    );
     assert_json_array_contains(
         &alice_device_pushed["accepted"],
         ALICE_DEVICE_AUTHORIZE_EVENT_ID,
@@ -896,7 +920,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
         .collect::<Vec<_>>();
     let ssk_generation = std::num::NonZeroU64::new(1).unwrap();
     let ssk_signature =
-        device_signing_key.sign(&arkret_crypto::DeviceTrustBinding::canonical_input(
+        test_self_signing_key().sign(&arkret_crypto::DeviceTrustBinding::canonical_input(
             &principal,
             &device,
             &device_public_key,
@@ -954,6 +978,148 @@ pub(crate) fn bootstrap_device_authorize_payload(
     serde_json::to_value(&payload).context("serialize device.authorize payload")
 }
 
+fn test_self_signing_key() -> SigningKey {
+    SigningKey::from_bytes(&[0x52; 32])
+}
+
+fn test_principal_signing_key() -> SigningKey {
+    SigningKey::from_bytes(&[0x51; 32])
+}
+
+fn test_cross_signing_publish(actor: &str) -> Result<CrossSigningPublish> {
+    let principal = Did::new(actor.to_owned()).context("invalid cross-signing principal")?;
+    let psk = test_principal_signing_key();
+    let ssk = test_self_signing_key();
+    let usk = SigningKey::from_bytes(&[0x53; 32]);
+    let psk_kid = format!("{actor}#cotest-principal-signing-key");
+    let ssk_kid = format!("{actor}#ak_self_signing_v1");
+    let usk_kid = format!("{actor}#ak_user_signing_v1");
+    let key_record = |kid: String, key: &SigningKey| PublishedKey {
+        kid: NonEmptyString::new(kid).expect("test key id is non-empty"),
+        alg: NonEmptyString::new("EdDSA".to_owned()).unwrap(),
+        public_key: NonEmptyString::new(multicodec_ed25519_public_key(&key.verifying_key()))
+            .unwrap(),
+        key_format: KeyFormat::Multibase,
+    };
+    let ssk_record = key_record(ssk_kid.clone(), &ssk);
+    let usk_record = key_record(usk_kid, &usk);
+    let pending_binding = |verification_method: String| SubordinateSignedKeyBinding {
+        verification_method: NonEmptyString::new(verification_method).unwrap(),
+        alg: NonEmptyString::new("EdDSA".to_owned()).unwrap(),
+        signature: NonEmptyString::new("pending".to_owned()).unwrap(),
+    };
+    let mut publish = CrossSigningPublish {
+        principal_id: principal,
+        trust_domain: TypedTrustDomainId::new(
+            "ak:trust_domain:0196419b-0000-7000-8000-000000000000".to_owned(),
+        )?,
+        principal_signing_key: key_record(psk_kid.clone(), &psk),
+        self_signing_key: SubordinateSignedKey {
+            kid: ssk_record.kid,
+            alg: ssk_record.alg,
+            public_key: ssk_record.public_key,
+            key_format: ssk_record.key_format,
+            binding: pending_binding(psk_kid.clone()),
+        },
+        user_signing_key: SubordinateSignedKey {
+            kid: usk_record.kid,
+            alg: usk_record.alg,
+            public_key: usk_record.public_key,
+            key_format: usk_record.key_format,
+            binding: pending_binding(psk_kid),
+        },
+        expected_previous_generation: 0,
+        generation: std::num::NonZeroU64::new(1).unwrap(),
+        issued_at: "2026-05-02T00:00:00Z".parse().unwrap(),
+    };
+    publish.self_signing_key.binding.signature = NonEmptyString::new(
+        URL_SAFE_NO_PAD.encode(psk.sign(&publish.self_signing_binding_input()?).to_bytes()),
+    )
+    .unwrap();
+    publish.user_signing_key.binding.signature = NonEmptyString::new(
+        URL_SAFE_NO_PAD.encode(psk.sign(&publish.user_signing_binding_input()?).to_bytes()),
+    )
+    .unwrap();
+    Ok(publish)
+}
+
+async fn install_test_principal_control_document(server: &ArkretServer, actor: &str) -> Result<()> {
+    let psk_kid = format!("{actor}#cotest-principal-signing-key");
+    let psk_public_key =
+        multicodec_ed25519_public_key(&test_principal_signing_key().verifying_key());
+    let mut operation = BTreeMap::new();
+    operation.insert("type".to_owned(), json!("replace"));
+    operation.insert(
+        "state".to_owned(),
+        json!({
+            "id": actor,
+            "verificationMethod": [{
+                "id": psk_kid,
+                "type": "Multikey",
+                "controller": actor,
+                "publicKeyMultibase": psk_public_key,
+            }],
+            "authentication": [psk_kid],
+            "assertionMethod": [psk_kid],
+        }),
+    );
+    let request = DidOperationSubmitRequestBody {
+        did: Did::new(actor.to_owned()).context("invalid test principal DID")?,
+        did_method: actor
+            .split(':')
+            .nth(1)
+            .context("test principal DID has no method")?
+            .to_owned(),
+        seq: None,
+        prev_event_digest: None,
+        operation,
+        policy_context: None,
+        proofs: Vec::new(),
+    };
+    let accepted = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/root/identity/submit-did-operation"))
+            .json(&request),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(accepted["status"], "accepted");
+    let resolved = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/root/identity/resolve"))
+            .json(&json!({"did": actor})),
+        StatusCode::OK,
+    )
+    .await?;
+    anyhow::ensure!(
+        resolved["did_document"]["verificationMethod"]
+            .as_array()
+            .is_some_and(|methods| methods.iter().any(|method| method["id"] == psk_kid)),
+        "installed principal control key is absent from resolved DID document: {resolved}"
+    );
+    Ok(())
+}
+
+async fn publish_test_cross_signing(server: &ArkretServer, token: &str, actor: &str) -> Result<()> {
+    install_test_principal_control_document(server, actor).await?;
+    let principal = Did::new(actor.to_owned()).context("invalid cross-signing principal")?;
+    let principal_realm = principal_control_realm_id(&principal);
+    let accepted = submit_event(
+        server,
+        token,
+        actor,
+        principal_realm.as_str(),
+        "ak.cross_signing.publish",
+        serde_json::to_value(test_cross_signing_publish(actor)?)?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(accepted["status"], "accepted");
+    Ok(())
+}
+
 pub(crate) async fn authorize_device_public_key(
     server: &ArkretServer,
     token: &str,
@@ -961,6 +1127,7 @@ pub(crate) async fn authorize_device_public_key(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<()> {
+    publish_test_cross_signing(server, token, actor).await?;
     let principal =
         Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
     let principal_realm = principal_control_realm_id(&principal);
@@ -987,31 +1154,83 @@ pub(crate) fn signed_keys_upload_body(
     signing_key: &SigningKey,
     one_time_keys: Value,
     fallback_keys: Value,
-) -> Result<Value> {
+) -> Result<KeysUploadRequestBody> {
+    let one_time_keys = signed_algorithm_key_records(actor, one_time_keys, false)?;
+    let fallback_keys = signed_algorithm_key_records(actor, fallback_keys, true)?;
     let signing_input = keys_upload_signing_input(device_id, &one_time_keys, &fallback_keys)?;
-    let jws = arkret::jws::sign_jws_ed25519(&signing_input, signing_key)
-        .map_err(anyhow::Error::msg)
-        .context("sign keys/upload body")?;
-    Ok(json!({
-        "device_id": device_id,
-        // soland binds keys/upload to the authoritative device key: the payload
-        // carries the device_public_key and the detached JWS is verified against
-        // it (keys.rs upload signature gate).
-        "device_public_key": multicodec_ed25519_public_key(&signing_key.verifying_key()),
-        "one_time_keys": one_time_keys,
-        "fallback_keys": fallback_keys,
-        "device_signature": {
-            "alg": "EdDSA",
-            "kid": format!("{actor}#device"),
-            "jws": jws,
-        }
-    }))
+    let signature = signing_key.sign(&signing_input);
+    let device_public_key = multicodec_ed25519_public_key(&signing_key.verifying_key());
+    Ok(KeysUploadRequestBody {
+        device_id: DeviceId::new(device_id.to_owned()).context("invalid keys/upload device id")?,
+        one_time_keys,
+        fallback_keys,
+        device_signature: KeyOperationSignature {
+            kid: NonEmptyString::new(format!("did:key:{device_public_key}#{device_public_key}"))
+                .unwrap(),
+            alg: Some(NonEmptyString::new("EdDSA").unwrap()),
+            sig: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
+        },
+    })
+}
+
+fn signed_algorithm_key_records(
+    actor: &str,
+    records: Value,
+    fallback: bool,
+) -> Result<AlgorithmKeyRecords> {
+    let Value::Object(records) = records else {
+        anyhow::bail!("keys/upload key records must be an object");
+    };
+    let signing_key = test_self_signing_key();
+    records
+        .into_iter()
+        .map(|(record_id, record)| {
+            let Value::Object(mut record) = record else {
+                anyhow::bail!("keys/upload record `{record_id}` must be an object");
+            };
+            let algorithm = record
+                .get("algorithm")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+                .or_else(|| record_id.split_once(':').map(|(value, _)| value.to_owned()))
+                .context("keys/upload record has no algorithm")?;
+            let key_id = record
+                .get("key_id")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+                .or_else(|| record_id.split_once(':').map(|(_, value)| value.to_owned()))
+                .unwrap_or_else(|| record_id.clone());
+            record
+                .get("key")
+                .and_then(Value::as_str)
+                .context("keys/upload record has no key")?;
+            record.insert("algorithm".to_owned(), json!(algorithm));
+            record.insert("key_id".to_owned(), json!(key_id));
+            if fallback {
+                record.insert("fallback".to_owned(), json!(true));
+            }
+            let signed_fields = Value::Object(record.clone());
+            let signature_input = canonical_json_bytes(&signed_fields)?;
+            record.insert(
+                "signature".to_owned(),
+                json!({
+                    "kid": format!("{actor}#ak_self_signing_v1"),
+                    "alg": "EdDSA",
+                    "sig": URL_SAFE_NO_PAD.encode(signing_key.sign(&signature_input).to_bytes()),
+                }),
+            );
+            let record = serde_json::from_value(Value::Object(record))
+                .with_context(|| format!("parse typed keys/upload record `{record_id}`"))?;
+            let record_id = NonEmptyString::new(record_id).map_err(anyhow::Error::msg)?;
+            Ok((record_id, record))
+        })
+        .collect()
 }
 
 pub(crate) fn keys_upload_signing_input(
     device_id: &str,
-    one_time_keys: &Value,
-    fallback_keys: &Value,
+    one_time_keys: &impl Serialize,
+    fallback_keys: &impl Serialize,
 ) -> Result<Vec<u8>> {
     let body = json!({
         "device_id": device_id,
@@ -1129,7 +1348,7 @@ fn with_federation_trust_headers_empty(
          \"@signature-params\": {signature_params}",
         method.to_ascii_uppercase()
     );
-    let signing_key = development_service_signing_key(source_service_id);
+    let signing_key = signing_key_from_seed(source.notary_signing_key_seed());
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
     Ok(builder
@@ -1188,7 +1407,7 @@ fn with_federation_trust_headers_for_digest(
          \"@signature-params\": {signature_params}",
         method.to_ascii_uppercase()
     );
-    let signing_key = development_service_signing_key(source_service_id);
+    let signing_key = signing_key_from_seed(source.notary_signing_key_seed());
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
     Ok(builder
@@ -1206,13 +1425,20 @@ fn trust_domain_for(service_id: &str) -> String {
     format!("ak:trust_domain:{}", did_host_from_service_id(service_id))
 }
 
-/// Mint a distinct principal DID whose `did:web` host is the same scope that
-/// soland derives for the owning service. This remains valid when the harness
-/// uses durable `did:key` service identities: appending a path segment to a
-/// `did:key` changes its trust-domain fallback, while `did:web:<scope>:<actor>`
-/// keeps the actor distinct without changing the home trust domain.
+/// Mint a distinct `did:webvh` principal whose host is the same scope that
+/// soland derives for the owning service. The harness uses `did:key` service
+/// identities, so their multibase key is also a stable fixture SCID; the actor
+/// path keeps principals distinct without changing the home trust domain.
 fn actor_did_for_service(service_id: &str, actor: &str) -> String {
-    format!("did:web:{}:{actor}", did_host_from_service_id(service_id))
+    let scid = service_id
+        .strip_prefix("did:webvh:")
+        .and_then(|rest| rest.split(':').next())
+        .or_else(|| service_id.strip_prefix("did:key:"))
+        .unwrap_or("zcotestfederationactor");
+    format!(
+        "did:webvh:{scid}:{}:{actor}",
+        did_host_from_service_id(service_id)
+    )
 }
 
 /// Extract the HTTP authority (host) a service DID's trust domain is scoped to,
@@ -1245,14 +1471,6 @@ fn did_host_from_service_id(service_id: &str) -> String {
         .unwrap_or(service_id)
         .to_ascii_lowercase()
         .replace(':', ".")
-}
-
-fn development_service_signing_key(service_id: &str) -> arkret::http_signature::Ed25519SigningKey {
-    let mut hasher = Sha256::new();
-    hasher.update(b"soland:notary-ephemeral:");
-    hasher.update(service_id.as_bytes());
-    let seed: [u8; 32] = hasher.finalize().into();
-    signing_key_from_seed(&seed)
 }
 
 fn sync_timeline_events<'a>(delta: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>> {

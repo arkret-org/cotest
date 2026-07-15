@@ -18,13 +18,13 @@ const BLOB_REALM_MEMBER_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("delivery-keys").await?;
-    let alice_did = "did:web:alice.example";
+    let alice_did = "did:key:z6MksPykuQeYh4zgthFRFBExrgo1dwFWWenY2TEJ9SvT9jn1";
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
-    let token = dev_login(&server, alice_did, alice_device).await?;
+    let token = register_account(&server, alice_did, "@delivery-alice", alice_device).await?;
 
     // soland binds keys/upload to the authoritative device key (the device must
-    // be authorized, and the upload carries a detached JWS over the canonical
-    // body signed by that key). Authorize Alice's device up front.
+    // be authorized, and the upload carries an Ed25519 signature over the
+    // canonical body). Authorize Alice's device up front.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
     authorize_device_public_key(&server, &token, alice_did, alice_device, &device_key).await?;
 
@@ -101,15 +101,14 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"ak:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
+                    (alice_did): {(alice_device): "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        first_claim["one_time_keys"]["did:web:alice.example"]["ak:device:01904100-0000-7000-8000-0000000000a1"]
-            ["key"],
+        first_claim["one_time_keys"][alice_did][alice_device]["signed_curve25519"]["key"],
         "single-use"
     );
 
@@ -120,14 +119,14 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"ak:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
+                    (alice_did): {(alice_device): "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert!(
-        second_claim["one_time_keys"]["did:web:alice.example"]
+        second_claim["one_time_keys"][alice_did]
             .as_object()
             .unwrap()
             .is_empty()

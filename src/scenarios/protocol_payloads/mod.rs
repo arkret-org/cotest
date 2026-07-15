@@ -39,7 +39,11 @@ mod moderation;
 mod push;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
-    let server = ArkretServer::spawn("protocol-payloads").await?;
+    let server = ArkretServer::spawn_with_env(
+        "protocol-payloads",
+        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+    )
+    .await?;
     let token = dev_login(
         &server,
         "did:web:alice.example",

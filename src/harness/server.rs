@@ -28,6 +28,7 @@ pub struct ArkretServer {
     handle: SutHandle,
     base_url: Url,
     service_id: String,
+    notary_signing_key_seed: [u8; 32],
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
     _port_reservations: Vec<ReservedPort>,
@@ -50,7 +51,7 @@ enum SutRuntimeMode {
     Docker,
 }
 
-fn test_service_identity(name: &str) -> (String, String) {
+fn test_service_identity(name: &str) -> (String, String, [u8; 32]) {
     let digest = Sha256::digest(format!("cotest:notary:{name}").as_bytes());
     let mut seed = [0_u8; 32];
     seed.copy_from_slice(&digest);
@@ -59,6 +60,7 @@ fn test_service_identity(name: &str) -> (String, String) {
     (
         format!("did:key:{key_multibase}"),
         BASE64_STANDARD.encode(seed),
+        seed,
     )
 }
 
@@ -136,7 +138,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (service_id, notary_signing_key) = test_service_identity(name);
+        let (service_id, notary_signing_key, notary_signing_key_seed) = test_service_identity(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -183,6 +185,7 @@ impl ArkretServer {
             handle: SutHandle::Local(child),
             base_url,
             service_id,
+            notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
             _port_reservations: vec![port, metrics_port],
@@ -209,7 +212,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (service_id, notary_signing_key) = test_service_identity(name);
+        let (service_id, notary_signing_key, notary_signing_key_seed) = test_service_identity(name);
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -257,6 +260,7 @@ impl ArkretServer {
             handle: SutHandle::Local(child),
             base_url,
             service_id,
+            notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
             _port_reservations: vec![port, metrics_port],
@@ -272,7 +276,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let (service_id, notary_signing_key) = test_service_identity(name);
+        let (service_id, notary_signing_key, notary_signing_key_seed) = test_service_identity(name);
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -349,6 +353,7 @@ impl ArkretServer {
             handle: SutHandle::Docker { container_name },
             base_url,
             service_id,
+            notary_signing_key_seed,
             blob_root: None,
             log_path,
             _port_reservations: vec![host_port],
@@ -361,6 +366,10 @@ impl ArkretServer {
 
     pub fn service_id(&self) -> &str {
         &self.service_id
+    }
+
+    pub(crate) fn notary_signing_key_seed(&self) -> &[u8; 32] {
+        &self.notary_signing_key_seed
     }
 
     pub fn http(&self) -> HttpClient {
@@ -551,7 +560,7 @@ impl TestServerGroup {
             let node_name = format!("{name}-{index}");
             let port = reserve_port()?;
             let metrics = reserve_port()?;
-            let (did, _) = test_service_identity(&node_name);
+            let (did, ..) = test_service_identity(&node_name);
             let url = format!("http://127.0.0.1:{}", port.port());
             pending.push(Pending {
                 name: node_name,

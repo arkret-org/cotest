@@ -31,7 +31,6 @@ use arkret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{TestServerGroup, expect_json};
@@ -352,7 +351,7 @@ fn with_peer_headers_for_digest(
          \"@signature-params\": {signature_params}",
         method.to_ascii_uppercase()
     );
-    let signing_key = development_service_signing_key(source_service_id);
+    let signing_key = signing_key_from_seed(source.notary_signing_key_seed());
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
     let mut builder = builder
@@ -368,14 +367,6 @@ fn with_peer_headers_for_digest(
             .header("Request-Canonical-Digest", request_canonical_digest);
     }
     Ok(builder)
-}
-
-fn development_service_signing_key(service_id: &str) -> arkret::http_signature::Ed25519SigningKey {
-    let mut hasher = Sha256::new();
-    hasher.update(b"soland:notary-ephemeral:");
-    hasher.update(service_id.as_bytes());
-    let seed: [u8; 32] = hasher.finalize().into();
-    signing_key_from_seed(&seed)
 }
 
 fn trust_domain_for(service_id: &str) -> String {

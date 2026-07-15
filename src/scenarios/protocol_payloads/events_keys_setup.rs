@@ -5,8 +5,6 @@
 //! the upload is visible.
 
 use anyhow::Result;
-use arkret::Did;
-use arkret_core::principal_control_realm_id;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -15,7 +13,9 @@ use crate::harness::{
     ArkretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
     refresh_event_proof,
 };
-use crate::scenarios::federation_collaboration::signed_keys_upload_body;
+use crate::scenarios::federation_collaboration::{
+    authorize_device_public_key, signed_keys_upload_body,
+};
 
 const KEYS_ACTOR_DID: &str = "did:web:alice.example";
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
@@ -25,64 +25,14 @@ const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00
 const ADAPTER_MESSAGE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
 
 pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
-    // soland's keys/upload requires a verified, authorized device record whose
-    // device_public_key the detached JWS is verified against. Authorize the
-    // device FIRST, as actor_seq 0, so it precedes this phase's contiguous
-    // actor-frontier (the adapter realm/message use seq 1/2) instead of
-    // perturbing it.
+    // keys/upload verifies its typed request signature against the accepted
+    // device projection. Publish the principal/self-signing hierarchy before
+    // authorizing the device; the adapter realm/message then continue at actor
+    // sequence 3/4.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
-    authorize_keys_device(server, token, &device_key).await?;
+    authorize_device_public_key(server, token, KEYS_ACTOR_DID, KEYS_DEVICE_ID, &device_key).await?;
     submit_adapter_event(server, token).await?;
     upload_and_inspect_keys(server, token, &device_key).await?;
-    Ok(())
-}
-
-async fn authorize_keys_device(
-    server: &ArkretServer,
-    token: &str,
-    device_key: &SigningKey,
-) -> Result<()> {
-    let principal = Did::new(KEYS_ACTOR_DID.to_owned())
-        .map_err(|error| anyhow::anyhow!("invalid keys actor DID: {error}"))?;
-    let control_realm = principal_control_realm_id(&principal);
-    let mut event = json!({
-        "event_id": "ak:event:0196419b-0000-7000-8000-00000000d0a0",
-        "kind": "ak.device.authorize",
-        "realm_id": control_realm,
-        "actor_id": KEYS_ACTOR_DID,
-        "actor_seq": 1,
-        "created_at": "2026-05-02T00:00:00Z",
-        "hlc": "01970e589d21-0001-a13f9c2e",
-        "prev_refs": [],
-        "refs": [],
-        "payload": crate::scenarios::federation_collaboration::bootstrap_device_authorize_payload(
-            KEYS_ACTOR_DID,
-            KEYS_DEVICE_ID,
-            device_key,
-        )?,
-        "unsigned": {
-            "local_operation_idempotency_alias": "ak:operation:0196419b-0000-7000-8000-00000000d0a0"
-        },
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{KEYS_ACTOR_DID}#cotest"),
-            "event_digest": "",
-            "created_at": "2026-05-02T00:00:00Z",
-            "jws": "a..b",
-        }],
-    });
-    refresh_event_proof(&mut event);
-    let accepted = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(token)
-            .json(&event),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(accepted["status"], "accepted");
     Ok(())
 }
 
@@ -90,7 +40,7 @@ async fn submit_adapter_event(server: &ArkretServer, token: &str) -> Result<()> 
     let realm_id = create_adapter_realm(server, token).await?;
     let event = signed_message_event(
         ADAPTER_MESSAGE_EVENT_ID,
-        3,
+        4,
         &realm_id,
         "did:web:alice.example",
         "ak:device:01904100-0000-7000-8000-0000000000a1",
@@ -116,7 +66,7 @@ async fn submit_adapter_event(server: &ArkretServer, token: &str) -> Result<()> 
 async fn create_adapter_realm(server: &ArkretServer, token: &str) -> Result<String> {
     let event = signed_realm_create_event(
         ADAPTER_REALM_CREATE_EVENT_ID,
-        2,
+        3,
         ADAPTER_REALM_ID,
         "did:web:alice.example",
         "Adapter Event Space",
@@ -280,14 +230,20 @@ async fn upload_and_inspect_keys(
         StatusCode::OK,
     )
     .await?;
-    // The stored device_signature is the authoritative detached-JWS bundle
-    // (alg / kid / jws) the upload was verified with, not a stub `signature`.
-    let queried_signature = &query_keys["device_keys"]["did:web:alice.example"]["ak:device:01904100-0000-7000-8000-0000000000a1"]
-        ["algorithms"]["device_signature"];
-    assert_eq!(queried_signature["alg"], "EdDSA");
+    // Query returns the accepted device directory projection and cross-signing
+    // link. The upload request signature authorizes the mutation; it is not a
+    // prekey algorithm entry and therefore is not echoed under `algorithms`.
+    let queried_device = &query_keys["device_keys"][KEYS_ACTOR_DID][KEYS_DEVICE_ID];
+    assert_eq!(queried_device["device_status"], "active");
     assert!(
-        queried_signature["jws"].as_str().is_some(),
-        "queried device_signature must carry the detached JWS: {queried_signature}"
+        queried_device["device_signing_key"]
+            .as_str()
+            .is_some_and(|key| key.starts_with("did:key:z6Mk")),
+        "query must expose the authoritative active device signing key: {queried_device}"
+    );
+    assert_eq!(
+        queried_device["cross_signing_binding"]["verification_method"],
+        format!("{KEYS_ACTOR_DID}#ak_self_signing_v1")
     );
 
     let claimed = expect_json(
@@ -304,8 +260,7 @@ async fn upload_and_inspect_keys(
     )
     .await?;
     assert_eq!(
-        claimed["one_time_keys"]["did:web:alice.example"]["ak:device:01904100-0000-7000-8000-0000000000a1"]
-            ["key"],
+        claimed["one_time_keys"][KEYS_ACTOR_DID][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
         "one-time"
     );
     Ok(())
