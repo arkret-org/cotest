@@ -10,6 +10,9 @@ use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone)]
 struct ServerAttestedAka {
+    // Never read on purpose: identity-handles.md §4.1/§6.0 makes the
+    // server-attested `binding_state` a cache hint only, so no trust
+    // decision may consult it. The field models the wire shape.
     #[allow(dead_code)]
     binding_state: String,
 }

@@ -28,7 +28,6 @@ use crate::scenarios::_helpers::external_binary::{
 pub struct SpawnedFloria {
     pub server: SpawnedExternalProcess,
     /// Held so the file isn't deleted while floria is running.
-    #[allow(dead_code)]
     pub config: NamedTempFile,
 }
 

@@ -1,116 +1,12 @@
-//! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
-//! and `session_grant_presentation_uses_configured_coauth_introspection`.
+//! Bridge-contract scenario helpers for
+//! `session_grant_presentation_uses_configured_coauth_introspection`.
 use std::env;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use anyhow::Result;
-use reqwest::StatusCode;
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
-
-use crate::harness::expect_json;
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct BridgeContractSnapshot {
-    pub service: &'static str,
-    pub surface: &'static str,
-    pub contract: String,
-    pub version: String,
-    pub required_paths: Vec<String>,
-    pub example_keys: Vec<String>,
-    pub todo: &'static str,
-}
-
-#[derive(Debug)]
-pub struct BridgeContractMatrixScaffold {
-    pub rows: Vec<BridgeContractSnapshot>,
-}
-
-pub fn configured_external_service_base(env_key: &str) -> Option<String> {
-    env::var(env_key)
-        .ok()
-        .map(|value| value.trim().trim_end_matches('/').to_owned())
-        .filter(|value| !value.is_empty())
-}
-
-pub async fn load_optional_live_contract(
-    base_url: Option<&str>,
-    path: &str,
-) -> Result<Option<Value>> {
-    let Some(base_url) = base_url else {
-        return Ok(None);
-    };
-    let url = format!("{base_url}{path}");
-    let client = super::http::live_probe_client()?;
-    let body = expect_json(client.get(url), StatusCode::OK).await?;
-    Ok(Some(body))
-}
-
-pub fn snapshot_from_live(
-    service: &'static str,
-    surface: &'static str,
-    body: &Value,
-    required_paths: &[&str],
-    example_keys: &[&str],
-) -> BridgeContractSnapshot {
-    BridgeContractSnapshot {
-        service,
-        surface,
-        contract: body
-            .get("contract")
-            .and_then(Value::as_str)
-            .unwrap_or("missing")
-            .to_owned(),
-        version: body
-            .get("version")
-            .and_then(Value::as_str)
-            .unwrap_or("missing")
-            .to_owned(),
-        required_paths: required_paths
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        example_keys: example_keys
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        todo: "TODO(cotest): expand this live bridge row with cross-service semantic assertions once the composed stack harness lands",
-    }
-}
-
-pub fn snapshot_placeholder(
-    service: &'static str,
-    surface: &'static str,
-    contract: &'static str,
-    required_paths: &[&str],
-    example_keys: &[&str],
-    todo: &'static str,
-) -> BridgeContractSnapshot {
-    let _placeholder_body = json!({
-        "service": service,
-        "surface": surface,
-        "contract": contract,
-        "required_paths": required_paths,
-        "example_keys": example_keys,
-    });
-    BridgeContractSnapshot {
-        service,
-        surface,
-        contract: contract.to_owned(),
-        version: "2026-05-04-scaffold".to_owned(),
-        required_paths: required_paths
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        example_keys: example_keys
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        todo,
-    }
-}
 
 pub struct EnvOverride {
     previous: Vec<(&'static str, Option<String>)>,

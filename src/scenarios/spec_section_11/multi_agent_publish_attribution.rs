@@ -11,6 +11,8 @@ use anyhow::{Result, anyhow};
 
 #[derive(Clone, Debug)]
 struct PublishedEvent {
+    // Models the wire shape; attribution keys off (actor_id, executed_by).
+    // Read once the TODO(P4-impl) live vector below lands.
     #[allow(dead_code)]
     event_id: String,
     actor_id: String,

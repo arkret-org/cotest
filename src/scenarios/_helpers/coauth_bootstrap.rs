@@ -75,7 +75,6 @@ pub fn coauth_with_db_available() -> bool {
 impl EphemeralPg {
     /// Container name (mostly useful for debug logs / introspection from
     /// tests that want to `docker exec ...` into it).
-    #[allow(dead_code)]
     pub fn container_name(&self) -> &str {
         &self.container_name
     }
@@ -109,10 +108,8 @@ pub struct SpawnedCoauth {
     /// internal-only health probe.
     pub internal_base_url: String,
     /// Held so the file isn't deleted while coauth is running.
-    #[allow(dead_code)]
     pub config: NamedTempFile,
     _internal_port_reservation: ReservedPort,
-    #[allow(dead_code)]
     pub pg: EphemeralPg,
 }
 
@@ -124,7 +121,6 @@ impl SpawnedCoauth {
 
     /// Internal-listener base — use for `/health` probes (coauth puts
     /// `health` on a separate listener from the public REST surface).
-    #[allow(dead_code)]
     pub fn health_url(&self) -> String {
         format!("{}/health", self.internal_base_url)
     }

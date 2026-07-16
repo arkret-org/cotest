@@ -32,8 +32,6 @@ mod media_binding;
 mod member_identity_vectors;
 mod member_roster_vectors;
 mod mention_rendering_vectors;
-#[cfg(test)]
-mod mock_vector_base;
 mod object_addressing_vectors;
 mod operation_clause_registry;
 mod operation_registry_gate;

@@ -582,7 +582,6 @@ impl RedactionTracker {
         RedactionState::Pending
     }
 
-    #[allow(dead_code)]
     fn materialize_target(&mut self, target: &Value) -> Result<Value> {
         let target_id = target["event_id"]
             .as_str()

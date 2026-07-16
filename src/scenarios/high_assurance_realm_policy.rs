@@ -34,7 +34,7 @@ fn build_realm(
 ) -> Result<Realm> {
     let id = realm_id()?;
     let principal = principal_id()?;
-    // TODO(sdk-trust-domain-dep): A1 added required `trust_domain` to Realm.
+    // `trust_domain` is a required Realm binding (arkret_core::models::Realm).
     // Cotest uses a fixed canonical trust domain id here so the high-assurance
     // policy scenario stays representative.
     let trust_domain = TypedTrustDomainId::new("ak:trust_domain:example.net".to_owned())

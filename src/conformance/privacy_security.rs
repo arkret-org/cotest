@@ -88,6 +88,8 @@ struct PrincipalDirectorySpy {
 }
 
 impl PrincipalDirectorySpy {
+    // Intentionally never called: the spy being unreachable from the
+    // production validator IS the assertion (see the type doc above).
     #[allow(dead_code)]
     fn keys_query(&mut self, _principal: &str) {
         self.queries += 1;

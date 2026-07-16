@@ -33,10 +33,6 @@ pub(crate) use event_builder::{
     message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
     parse_strand_id,
 };
-// `canonical_event_digest` has no current caller outside `proof`, but the
-// harness contract keeps it reachable as `crate::harness::canonical_event_digest`.
-#[allow(unused_imports)]
-pub(crate) use proof::canonical_event_digest;
 pub use proof::{
     attach_ephemeral_proof, attach_ephemeral_proof_value, ephemeral_proof_placeholder,
     refresh_event_proof,
