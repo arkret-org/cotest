@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret_core::{
     AccountSubscribeFrame, AccountSubscribeFrameKind, ErrorCode, EventsSubscribeFrame,
-    EventsSubscribeFrameKind, StreamTraceError,
-    StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator};
+    EventsSubscribeFrameKind, StreamTraceError, StreamTraceFrame, StreamTraceFrameKind,
+    StreamTraceValidator,
+};
 use serde_json::{Value, json};
 
 use super::{
@@ -338,7 +339,10 @@ pub fn run_stream_frame_sequence_vector() -> Result<()> {
         required_field(vector, "operations")?,
         "stream frame sequence operations",
     )?;
-    let expected_operations = [arkret_core::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE, arkret_core::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE];
+    let expected_operations = [
+        arkret_core::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
+        arkret_core::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
+    ];
     if operations.len() != expected_operations.len()
         || !expected_operations.iter().all(|operation| {
             operations

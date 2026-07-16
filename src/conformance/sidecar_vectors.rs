@@ -14,7 +14,8 @@ use anyhow::{Result, anyhow, bail};
 use arkret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
-    PROFILE_AGENT_SIDECAR_THREAD};
+    PROFILE_AGENT_SIDECAR_THREAD,
+};
 use serde_json::Value;
 
 pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ak.vector.sidecar.ensure_idempotent.v1";
@@ -68,8 +69,12 @@ fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
-    if arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
-        bail!("arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE");
+    if arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE
+        != "ak.self.agent.sidecar_thread.command.ensure"
+    {
+        bail!(
+            "arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE"
+        );
     }
     if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
         bail!(
@@ -93,9 +98,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     // the canonical error codes (also covered by the agent FSM
     // vector, but pinned again at the sidecar-specific code path).
     if arkret_core::error::ReasonCode::AGENT_PAUSED != "agent_paused" {
-        bail!(
-            "arkret_core::error::ReasonCode::AGENT_PAUSED spelling drifted: agent_paused"
-        );
+        bail!("arkret_core::error::ReasonCode::AGENT_PAUSED spelling drifted: agent_paused");
     }
     if arkret_core::error::ReasonCode::AGENT_DEACTIVATED != "agent_deactivated" {
         bail!(

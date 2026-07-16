@@ -24,7 +24,10 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     let sdk = server.sdk()?;
     let description = sdk.describe().await?;
     assert_eq!(description.protocol_version, "1.0");
-    assert_eq!(description.service_type, arkret_core::ServiceType::PrincipalServer);
+    assert_eq!(
+        description.service_type,
+        arkret_core::ServiceType::PrincipalServer
+    );
 
     let server_describe = expect_json(
         server.http().get(server.url("/_arkret/describe")),

@@ -5,8 +5,7 @@
 //! fails this test before reaching the live soland surface.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    CAP_ACTION_AGENT_PROVISION, Did, EventId};
+use arkret_core::{CAP_ACTION_AGENT_PROVISION, Did, EventId};
 
 /// The 11 personal-agent endpoint operation IDs registered in
 /// `operation-registry.json` and mounted under soland `agents.rs`. Key
@@ -43,12 +42,16 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
             "duplicate personal-agent operation ids: {PERSONAL_AGENT_OPERATIONS:?}"
         ));
     }
-    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
+    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION
+        != "ak.self.agent.command.provision"
+    {
         return Err(anyhow!(
             "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
         ));
     }
-    if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY != "ak.gate.account.command.pair_agent_key" {
+    if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY
+        != "ak.gate.account.command.pair_agent_key"
+    {
         return Err(anyhow!(
             "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY"
         ));

@@ -23,8 +23,7 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    MEDIA_TOKEN_TTL_MAX_SECS, PARTICIPANT_BINDING_SCHEMA};
+use arkret_core::{MEDIA_TOKEN_TTL_MAX_SECS, PARTICIPANT_BINDING_SCHEMA};
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use hkdf::Hkdf;
 use serde_json::{Value, json};
@@ -173,9 +172,7 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
     // Off-focus token request from Bob must fail-closed with
     // `focus_mismatch`.
     if arkret_core::error::ReasonCode::FOCUS_MISMATCH != "focus_mismatch" {
-        bail!(
-            "arkret_core::error::ReasonCode::FOCUS_MISMATCH spelling drifted: focus_mismatch"
-        );
+        bail!("arkret_core::error::ReasonCode::FOCUS_MISMATCH spelling drifted: focus_mismatch");
     }
     Ok(())
 }
@@ -240,8 +237,12 @@ fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
 }
 
 pub fn run_token_exchange_minimal_vector() -> Result<()> {
-    if arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN != "ak.self.call.media.exchange.issue_token" {
-        bail!("arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN");
+    if arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN
+        != "ak.self.call.media.exchange.issue_token"
+    {
+        bail!(
+            "arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN"
+        );
     }
     if PARTICIPANT_BINDING_SCHEMA != "ak.media.participant_binding.v1" {
         bail!("PARTICIPANT_BINDING_SCHEMA drifted: {PARTICIPANT_BINDING_SCHEMA}");

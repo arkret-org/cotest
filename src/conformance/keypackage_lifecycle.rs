@@ -7,7 +7,8 @@ use anyhow::{Result, anyhow, bail};
 use arkret_core::{
     DeviceId, Did, Hash, KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome,
     KeyPackagesUploadOutcome, MlsKeypackagePayload, MlsWelcomePayload, RealmId,
-    validate_mls_welcome_claim_envelope};
+    validate_mls_welcome_claim_envelope,
+};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
