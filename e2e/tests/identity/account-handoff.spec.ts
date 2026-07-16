@@ -6,7 +6,7 @@ import {
   createCanonicalAccountHandoff,
   registerUnboundCoauthPasswordAccount,
 } from "../../helpers/coauth-register";
-import { coauthBaseUrl, solandServiceId } from "../../helpers/env";
+import { coauthBaseUrl, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   dpopDeviceSeedB64url,
   generateDpopDeviceKey,
@@ -25,6 +25,23 @@ function accountHandle(prefix: string): string {
 test.describe.configure({ mode: "serial" });
 
 test.describe("canonical account handoff", () => {
+  test("Principal Server pins the Account Authority enrollment DID", async ({ request }) => {
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+    const [principalResponse, authorityResponse] = await Promise.all([
+      request.get(`${solandBaseUrl()}/_arkret/describe`),
+      request.get(`${coauth}/_arkret/describe`),
+    ]);
+    expect(principalResponse.ok(), await principalResponse.text()).toBeTruthy();
+    expect(authorityResponse.ok(), await authorityResponse.text()).toBeTruthy();
+    const principal = await principalResponse.json();
+    const authority = await authorityResponse.json();
+    const expected = principal.auth_metadata?.account_authority?.enrollment_authority_did;
+    const advertised = authority.auth_metadata?.account_authority?.enrollment_authority_did;
+    expect(expected).toMatch(/^did:/);
+    expect(advertised).toBe(expected);
+  });
+
   test("same holder renews the lease while a second holder receives busy", async ({ request }) => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");

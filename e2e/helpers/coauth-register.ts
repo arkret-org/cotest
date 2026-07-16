@@ -454,9 +454,24 @@ export async function registerCoauthPasswordAccount(
   );
   const trustDomain = stringValue(principalDescribe.trust_domain);
   const audience = stringValue(principalDescribe.service_id) ?? solandServiceId();
-  const enrollmentAuthorityDid = stringValue(authorityDescribe.service_id);
+  const principalAuthMetadata = objectRecord(principalDescribe.auth_metadata);
+  const principalAccountAuthority = objectRecord(principalAuthMetadata?.account_authority);
+  const enrollmentAuthorityDid = stringValue(
+    principalAccountAuthority?.enrollment_authority_did,
+  );
+  const authorityAuthMetadata = objectRecord(authorityDescribe.auth_metadata);
+  const authorityAccountAuthority = objectRecord(authorityAuthMetadata?.account_authority);
+  const authorityEnrollmentAuthorityDid = stringValue(
+    authorityAccountAuthority?.enrollment_authority_did,
+  );
   if (!trustDomain || !enrollmentAuthorityDid) {
     throw new Error("service descriptions omitted trust/enrollment authority pins");
+  }
+  if (authorityEnrollmentAuthorityDid !== enrollmentAuthorityDid) {
+    throw new Error(
+      `Account Authority enrollment DID does not match Principal Server deployment pin: ` +
+        `expected ${enrollmentAuthorityDid}, got ${authorityEnrollmentAuthorityDid ?? "missing"}`,
+    );
   }
   const handoff = await createCanonicalAccountHandoff(request, coauthBase, {
     audience,

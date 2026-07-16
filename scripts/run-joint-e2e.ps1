@@ -151,6 +151,7 @@ $StaridServiceId = $null
 $SolandServiceId = $null
 $SolandBetaServiceId = $null
 $CoauthServiceId = $null
+$CoauthEnrollmentAuthorityDid = "did:key:z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
 
 if ($PreflightOnly -and $SkipPreflight) {
     throw "-PreflightOnly cannot be combined with -SkipPreflight"
@@ -2322,6 +2323,7 @@ try {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
+            $map.SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID = $CoauthEnrollmentAuthorityDid
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
@@ -2379,6 +2381,7 @@ try {
         if ($CoauthBaseUrl) {
             $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
+            $values.SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID = $CoauthEnrollmentAuthorityDid
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId

@@ -79,6 +79,22 @@ def trailing_slash(value: str) -> str:
     return value.rstrip("/") + "/"
 
 
+def replace_named_pem_key(src: str, kid: str, pem_body: str) -> str:
+    pattern = (
+        rf"(^  - kid: {re.escape(kid)}\s*$\n^    key: \|\s*$\n)"
+        r"(?:^      .*\n)+"
+    )
+    replacement = (
+        rf"\g<1>      -----BEGIN PRIVATE KEY-----\n"
+        f"      {pem_body}\n"
+        "      -----END PRIVATE KEY-----\n"
+    )
+    patched, count = re.subn(pattern, replacement, src, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise SystemExit(f"FATAL: failed to patch configured key {kid!r}")
+    return patched
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("raw_config", type=pathlib.Path)
@@ -100,6 +116,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     src = args.raw_config.read_text(encoding="utf-8-sig")
+    src = replace_named_pem_key(
+        src,
+        "coauth-device-enrollment-v1",
+        "MC4CAQAwBQYDK2VwBCIEIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+    )
     coauth_base = trailing_slash(args.coauth_base_url)
     soland_base = trailing_slash(args.soland_base_url)
     inkson_callback = trailing_slash(args.inkson_base_url) + "auth/callback"
