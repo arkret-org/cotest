@@ -2,9 +2,10 @@ use std::collections::BTreeSet;
 
 use arkret_core::events::{EventKind, EventProductClass, EventRegistryCategory};
 use arkret_core::{
-    DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, HPKE_SUITES, MLS_CIPHERSUITES, PROOF_CONTEXTS,
-    RELATION_KIND_DESCRIPTORS, RelationKind, SERVICE_OPERATION_DESCRIPTORS,
-    SERVICE_TYPE_DESCRIPTORS, SIGNATURE_ALGORITHMS, ServiceOperationId, ServiceType,
+    CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, ExporterLabelId, HPKE_SUITES,
+    MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
+    SERVICE_OPERATION_DESCRIPTORS, SERVICE_TYPE_DESCRIPTORS, SIGNATURE_ALGORITHMS,
+    ServiceOperationId, ServiceType,
 };
 use arkret_schema::{
     REGISTERED_ACCOUNT_DATA_PATTERNS, REGISTERED_CAPABILITY_ACTIONS, REGISTERED_ID_KINDS,
@@ -19,6 +20,7 @@ fn generated_registry_sets_are_complete_and_unique() {
     assert_eq!(REGISTERED_ID_KINDS.len(), 48);
     assert_eq!(REGISTERED_SPECIAL_FORM_ID_KINDS.len(), 9);
     assert_eq!(REGISTERED_CAPABILITY_ACTIONS.len(), 152);
+    assert_eq!(CapabilityActionId::ALL.len(), 152);
     assert_eq!(REGISTERED_SCHEMA_IDS.len(), 120);
 
     let routes = SERVICE_OPERATION_DESCRIPTORS
@@ -59,6 +61,16 @@ fn generated_metadata_keeps_product_and_security_domains_separate() {
 
     assert_eq!(PROOF_CONTEXTS.len(), 24);
     assert_eq!(EXPORTER_LABELS.len(), 8);
+    assert_eq!(ProofContextId::ALL.len(), PROOF_CONTEXTS.len());
+    assert_eq!(ExporterLabelId::ALL.len(), EXPORTER_LABELS.len());
+    assert_eq!(
+        ProofContextId::from_wire(ProofContextId::EventProofV1.as_str()),
+        Some(ProofContextId::EventProofV1)
+    );
+    assert_eq!(
+        ExporterLabelId::from_wire(ExporterLabelId::RtcRecordingKeyV1.as_str()),
+        Some(ExporterLabelId::RtcRecordingKeyV1)
+    );
     assert!(PROOF_CONTEXTS.iter().all(|context| {
         EXPORTER_LABELS
             .iter()
@@ -68,6 +80,21 @@ fn generated_metadata_keeps_product_and_security_domains_separate() {
     assert!(!SIGNATURE_ALGORITHMS.is_empty());
     assert!(!HPKE_SUITES.is_empty());
     assert!(!MLS_CIPHERSUITES.is_empty());
+}
+
+#[test]
+fn unknown_remote_error_code_remains_round_trippable_wire_data() {
+    let detail = arkret_core::ErrorDetail {
+        code: "vendor.example.future_error".to_owned(),
+        message: "future peer error".to_owned(),
+        retry_after_ms: None,
+        details: Default::default(),
+    };
+    assert_eq!(detail.error_code(), None);
+    let encoded = serde_json::to_value(&detail).expect("serialize open remote error");
+    let decoded: arkret_core::ErrorDetail =
+        serde_json::from_value(encoded).expect("deserialize open remote error");
+    assert_eq!(decoded.code, "vendor.example.future_error");
 }
 
 #[test]

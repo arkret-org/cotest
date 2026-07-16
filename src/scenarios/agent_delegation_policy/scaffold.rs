@@ -1,9 +1,9 @@
 //! SDK-pure agent_delegation_policy profile scaffold.
 //!
-//! The 14-action delegation grid (11 base + 3 aggregate) is the
-//! capability surface a controller binds to an `accountability_grant`.
+//! The agent-action projection of the complete registry is the capability
+//! surface a controller binds to an `accountability_grant`.
 //! The sub-test here pins:
-//!   1. all 14 actions are present in `AGENT_CAPABILITY_ACTIONS`.
+//!   1. the generated type and descriptor cover the same complete registry.
 //!   2. every action is well-formed (snake_case, no whitespace, dot- delimited, prefixed
 //!      `ak.agent.` or `ak.self.agent.`).
 //!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
@@ -13,38 +13,39 @@
 //!      (the dedicated `ak:accountability_grant:` typed-id family is retired).
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    AGENT_CAPABILITY_ACTIONS, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, EventId,
-};
+use arkret_core::{CapabilityActionId, EventId};
+use arkret_schema::REGISTERED_CAPABILITY_ACTIONS;
 
 /// The 3 aggregate sidecar-thread actions. Each carries a
 /// `migration_group` in the spec's registry artifact.
 const AGGREGATE_ACTIONS: &[&str] = &[
-    CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH,
+    CapabilityActionId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
+    CapabilityActionId::AGENT_SIDECAR_THREAD_WRITE,
+    CapabilityActionId::AGENT_SIDECAR_THREAD_PUBLISH,
 ];
 
 pub async fn agent_delegation_policy_run() -> Result<()> {
     // (1) The spec promises 14 actions — 11 base + 3 sidecar aggregates.
-    //     The SDK constant carries 11 entries (the SDK's
-    //     `AGENT_CAPABILITY_ACTIONS` includes the 3 sidecar entries as
-    //     base because they each map to a single concrete event kind;
-    //     the `migration_group` metadata is the spec's aggregation
-    //     hint).
-    if AGENT_CAPABILITY_ACTIONS.len() != 11 {
+    //     The generated type and descriptor must remain count-aligned.
+    if REGISTERED_CAPABILITY_ACTIONS.len() != CapabilityActionId::ALL.len() {
         return Err(anyhow!(
-            "expected 11 entries in AGENT_CAPABILITY_ACTIONS (8 base + 3 sidecar), got {}",
-            AGENT_CAPABILITY_ACTIONS.len()
+            "capability descriptor/type count mismatch: {} versus {}",
+            REGISTERED_CAPABILITY_ACTIONS.len(),
+            CapabilityActionId::ALL.len()
         ));
     }
+
+    let agent_actions = REGISTERED_CAPABILITY_ACTIONS
+        .iter()
+        .map(|descriptor| descriptor.action.as_str())
+        .filter(|action| action.starts_with("ak.agent.") || action.starts_with("ak.self.agent."))
+        .collect::<Vec<_>>();
 
     // (2) Per-action well-formedness. Agent capability actions live under the
     // agent surface — either the bare `ak.agent.*` namespace or the
     // account-scoped `ak.self.agent.*` trust segment (lifecycle actions such as
     // provision/pause/resume/deactivate and sidecar_thread.ensure).
-    for action in AGENT_CAPABILITY_ACTIONS {
+    for action in &agent_actions {
         if !(action.starts_with("ak.agent.") || action.starts_with("ak.self.agent.")) {
             return Err(anyhow!(
                 "capability action `{action}` MUST start with ak.agent. or ak.self.agent."
@@ -65,13 +66,11 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     }
 
     // (3) The 3 aggregate actions are present in
-    //     `AGENT_CAPABILITY_ACTIONS`. The grid is therefore (11) where
-    //     the 3 are the sidecar trio.
+    //     the generated agent-action projection.
     for aggregate in AGGREGATE_ACTIONS {
-        if !AGENT_CAPABILITY_ACTIONS.iter().any(|a| a == aggregate) {
+        if !agent_actions.iter().any(|action| action == aggregate) {
             return Err(anyhow!(
-                "aggregate capability action `{aggregate}` is missing from \
-                 AGENT_CAPABILITY_ACTIONS — registry drift"
+                "aggregate capability action is missing from the generated registry"
             ));
         }
         if !aggregate.contains(".sidecar_thread.") {

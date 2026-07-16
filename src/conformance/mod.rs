@@ -206,8 +206,7 @@ pub use media_binding::{
     run_token_issuer_unauthorised_vector, run_unknown_type_fail_closed_vector,
 };
 pub use member_identity_vectors::{
-    ALL_MEMBER_IDENTITY_VECTOR_IDS, REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN,
-    run_member_identity_cross_subject_replacement_ignored_vector,
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, run_member_identity_cross_subject_replacement_ignored_vector,
     run_member_identity_expected_state_digest_mismatch_vector,
     run_member_identity_handle_field_forbidden_vector, run_member_identity_proof_invalid_vector,
     run_member_identity_replacement_digest_mismatch_vector,

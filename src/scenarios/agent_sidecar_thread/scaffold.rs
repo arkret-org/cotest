@@ -11,8 +11,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::{
-    AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, CircleId,
+    AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CapabilityActionId, CircleId,
     PROFILE_AGENT_SIDECAR_THREAD,
 };
 
@@ -42,9 +41,9 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
     // (4) The 3 sidecar actions form the canonical ensure/write/publish
     //     trio (AKP-0009 §3 invariant 10).
     let trio = [
-        CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-        CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
-        CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH,
+        CapabilityActionId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
+        CapabilityActionId::AGENT_SIDECAR_THREAD_WRITE,
+        CapabilityActionId::AGENT_SIDECAR_THREAD_PUBLISH,
     ];
     for action in trio {
         if !action.contains(".sidecar_thread.") {

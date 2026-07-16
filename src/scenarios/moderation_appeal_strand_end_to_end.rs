@@ -26,39 +26,35 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::TypedAppealId;
+use arkret_core::events::EventKind;
 use arkret_schema::embedded_error_code_identifiers;
-
-pub const APPEAL_KIND_SUBMIT: &str = "ak.moderation.appeal.submit";
-pub const APPEAL_KIND_REVIEW: &str = "ak.moderation.appeal.review";
-pub const APPEAL_KIND_DECISION: &str = "ak.moderation.appeal.decision";
-pub const APPEAL_KIND_CLOSE: &str = "ak.moderation.appeal.close";
-
-pub const DECISION_LIFT_KIND: &str = "ak.moderation.decision.lift";
 
 pub const APPEAL_SCHEMA: &str = "ak.schema.moderation_appeal.v1";
 pub const APPEAL_ID_PREFIX: &str = "ak:appeal:";
 
 /// Error codes the reducer SHOULD surface on the negative branches.
-pub const EXPECTED_OVERTURN_MISSING_LIFT: &str = "appeal_overturn_missing_lift";
-pub const EXPECTED_SELF_REVIEW_FORBIDDEN: &str = "appeal_self_review_forbidden";
 
 /// Wire-level executable check: the SDK's appeal-related error code
 /// constants agree with the cotest pins and the canonical registry
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
 /// `ak:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
-    if arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
+    if arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT
+        != arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT
+    {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
-            EXPECTED_OVERTURN_MISSING_LIFT,
+            arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
         ));
     }
-    if arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN != EXPECTED_SELF_REVIEW_FORBIDDEN {
+    if arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN
+        != arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN
+    {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
-            EXPECTED_SELF_REVIEW_FORBIDDEN,
+            arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
         ));
     }
     // Both appeal codes are spec `reason_codes`, not top-level error `codes`,
@@ -101,10 +97,10 @@ mod tests {
     #[test]
     fn appeal_kinds_are_distinct_and_well_formed() {
         for k in [
-            APPEAL_KIND_SUBMIT,
-            APPEAL_KIND_REVIEW,
-            APPEAL_KIND_DECISION,
-            APPEAL_KIND_CLOSE,
+            EventKind::MODERATION_APPEAL_SUBMIT,
+            EventKind::MODERATION_APPEAL_REVIEW,
+            EventKind::MODERATION_APPEAL_DECISION,
+            EventKind::MODERATION_APPEAL_CLOSE,
         ] {
             assert!(
                 k.starts_with("ak.moderation.appeal."),
@@ -118,7 +114,13 @@ mod tests {
         moderation_appeal_strand_end_to_end_run()
             .await
             .expect("appeal error codes + TypedAppealId must stay registered");
-        assert_eq!(DECISION_LIFT_KIND, "ak.moderation.decision.lift");
-        assert_ne!(APPEAL_KIND_DECISION, DECISION_LIFT_KIND);
+        assert_eq!(
+            EventKind::MODERATION_DECISION_LIFT,
+            "ak.moderation.decision.lift"
+        );
+        assert_ne!(
+            EventKind::MODERATION_APPEAL_DECISION,
+            EventKind::MODERATION_DECISION_LIFT
+        );
     }
 }

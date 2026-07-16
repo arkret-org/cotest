@@ -55,7 +55,7 @@ pub const VECTOR_ID_MID_HANDLE_FIELD_FORBIDDEN: &str =
     "ak.cotest_vector.member_identity.handle_field_forbidden.v1";
 
 /// Wire reason code a receiver MUST surface for VECT-COT-8.
-pub const REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN: &str =
+const REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN: &str =
     "member_identity_handle_field_forbidden";
 
 pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[

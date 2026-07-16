@@ -7,10 +7,7 @@
 //!   agent_principal DID, NOT the controller DID.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
-    CAP_ACTION_AGENT_ACTION_REQUEST, CAP_ACTION_AGENT_DRAFT_PROPOSE, Did,
-};
+use arkret_core::{CapabilityActionId, Did};
 
 /// Validate a `runtime_attestation` envelope per §1.2 — unknown kinds
 /// fail-closed; v1 baseline is `self_asserted`.
@@ -59,10 +56,10 @@ pub async fn agent_auth_run() -> Result<()> {
     // (d) authz: the four actor-private agent capability actions stay
     //     in lock-step with the spec head 37ce729 registry.
     for action in [
-        CAP_ACTION_AGENT_DRAFT_PROPOSE,
-        CAP_ACTION_AGENT_ACTION_REQUEST,
-        CAP_ACTION_AGENT_ACTION_APPROVE,
-        CAP_ACTION_AGENT_ACTION_REJECT,
+        CapabilityActionId::AGENT_DRAFT_PROPOSE,
+        CapabilityActionId::AGENT_ACTION_REQUEST,
+        CapabilityActionId::AGENT_ACTION_APPROVE,
+        CapabilityActionId::AGENT_ACTION_REJECT,
     ] {
         if !action.starts_with("ak.agent.") {
             return Err(anyhow!(

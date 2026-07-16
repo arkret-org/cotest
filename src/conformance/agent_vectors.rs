@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::{
-    AgentHumanApprovalErrorDetails, AgentKeyScope, CAP_ACTION_AGENT_PROVISION, Did, ErrorEnvelope,
+    AgentHumanApprovalErrorDetails, AgentKeyScope, CapabilityActionId, Did, ErrorEnvelope,
     NotificationDelta, NotificationDeltaAction, agent_requested_scope_digest,
 };
 use serde_json::Value;
@@ -200,8 +200,8 @@ pub fn run_agent_provision_vector() -> Result<()> {
             "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
         );
     }
-    if CAP_ACTION_AGENT_PROVISION != "ak.self.agent.command.provision" {
-        bail!("CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}");
+    if CapabilityActionId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
+        bail!("personal-agent provision capability action spelling drifted");
     }
     // The provisioning error matrix MUST include `failed_precondition`
     // (modeled by absence of the controller-self capability binding)

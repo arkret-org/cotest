@@ -12,8 +12,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::{
-    AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
+    AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CapabilityActionId,
     PROFILE_AGENT_SIDECAR_THREAD,
 };
 use serde_json::Value;
@@ -76,10 +75,10 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
             "arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE"
         );
     }
-    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
-        bail!(
-            "CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE}"
-        );
+    if CapabilityActionId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE
+        != "ak.self.agent.sidecar_thread.command.ensure"
+    {
+        bail!("sidecar ensure capability action spelling drifted");
     }
     if PROFILE_AGENT_SIDECAR_THREAD != "ak.profile.agent_sidecar_thread.v1" {
         bail!("PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}");
@@ -134,9 +133,9 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
 pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
     // The publish/write/ensure trio MUST be present and namespaced.
     let trio = [
-        CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-        CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
-        CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH,
+        CapabilityActionId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
+        CapabilityActionId::AGENT_SIDECAR_THREAD_WRITE,
+        CapabilityActionId::AGENT_SIDECAR_THREAD_PUBLISH,
     ];
     for action in trio {
         if !action.contains(".sidecar_thread.") {

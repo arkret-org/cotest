@@ -5,7 +5,7 @@
 //! fails this test before reaching the live soland surface.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CAP_ACTION_AGENT_PROVISION, Did, EventId};
+use arkret_core::{CapabilityActionId, Did, EventId};
 
 /// The 11 personal-agent endpoint operation IDs registered in
 /// `operation-registry.json` and mounted under soland `agents.rs`. Key
@@ -58,9 +58,9 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
     }
 
     // (b) Provisioning capability action constant matches the registry.
-    if CAP_ACTION_AGENT_PROVISION != "ak.self.agent.command.provision" {
+    if CapabilityActionId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
         return Err(anyhow!(
-            "CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}"
+            "personal-agent provision capability action spelling drifted"
         ));
     }
 

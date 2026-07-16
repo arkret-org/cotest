@@ -35,30 +35,26 @@ use arkret_core::models::{
 };
 use arkret_schema::embedded_error_code_identifiers;
 
-pub const EXPECTED_MLS_GOVERNANCE_BINDING_STALE: &str = "mls_governance_binding_stale";
-pub const EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED: &str =
-    "media_plaintext_service_not_authorised";
-
 /// Wire-level executable check: the SDK constants for both media
 /// plaintext error codes agree with the cotest pins and the canonical
 /// registry recognises them.
 pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()> {
     if arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE
-        != EXPECTED_MLS_GOVERNANCE_BINDING_STALE
+        != arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE
     {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
-            EXPECTED_MLS_GOVERNANCE_BINDING_STALE,
+            arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
         ));
     }
     if arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
-        != EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
+        != arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
     {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED ({}) drifted from cotest pin ({}).",
             arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
-            EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
         ));
     }
     // Both codes are spec `reason_codes`, not top-level error `codes`, so they
@@ -180,7 +176,8 @@ mod tests {
             .await
             .expect("media plaintext error-code pins must be registered");
         assert_ne!(
-            EXPECTED_MLS_GOVERNANCE_BINDING_STALE, EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
+            arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
             "stale governance and unauthorized service paths must stay distinguishable"
         );
     }

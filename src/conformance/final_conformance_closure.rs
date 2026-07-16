@@ -38,7 +38,6 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
 const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ak.vector_group.privacy_security.v1";
-const APPLET_TRANSACTION_OPERATION_ID: &str = "ak.edge.applet.command.transaction";
 const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_arkret_inbound";
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -450,7 +449,7 @@ fn applet_transaction_replay_identity(
         operation_id: transaction
             .get("operation_id")
             .and_then(Value::as_str)
-            .unwrap_or(APPLET_TRANSACTION_OPERATION_ID)
+            .unwrap_or(arkret_core::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION)
             .to_owned(),
         direction: transaction
             .get("direction")
