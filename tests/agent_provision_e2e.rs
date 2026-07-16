@@ -1534,7 +1534,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(ALICE_DID.to_owned())?,
-                device_id: ALICE_DEVICE.to_owned(),
+                device_id: Some(ALICE_DEVICE.to_owned()),
                 backup_class: BackupClass::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,

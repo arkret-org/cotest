@@ -121,7 +121,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: did(ACTOR_ID)?,
-                device_id: ENVELOPE_DEVICE_ID.to_owned(),
+                device_id: Some(ENVELOPE_DEVICE_ID.to_owned()),
                 backup_class: BackupClass::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,
