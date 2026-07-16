@@ -30,6 +30,7 @@ export type PrincipalGenesisInput = {
   nextRootKey: WebvhKey;
   principalSigningKey: WebvhKey;
   enrollmentKey: WebvhKey;
+  externalEnrollmentAuthorityDid?: string;
   alsoKnownAs?: string[];
   serviceEndpoint?: string;
   versionTime?: string;
@@ -116,6 +117,27 @@ function principalDocument(
   did: string,
   input: PrincipalGenesisInput,
 ): Record<string, unknown> {
+  const principalServerService = {
+    id: `${did}#soland`,
+    type: "ArkretPrincipalServer",
+    serviceEndpoint:
+      input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, ""),
+  };
+  if (input.externalEnrollmentAuthorityDid) {
+    return {
+      "@context": ["https://www.w3.org/ns/did/v1"],
+      id: did,
+      alsoKnownAs: input.alsoKnownAs ?? [],
+      service: [
+        principalServerService,
+        {
+          id: `${did}#enrollment-authority`,
+          type: "ArkretDeviceEnrollmentAuthority",
+          serviceEndpoint: input.externalEnrollmentAuthorityDid,
+        },
+      ],
+    };
+  }
   const principalSigningKeyId = `${did}#principal-signing-key`;
   const enrollmentKeyId = `${did}#device-enrollment-authority`;
   return {
@@ -139,14 +161,7 @@ function principalDocument(
     assertionMethod: [principalSigningKeyId],
     capabilityDelegation: [enrollmentKeyId],
     alsoKnownAs: input.alsoKnownAs ?? [],
-    service: [
-      {
-        id: `${did}#soland`,
-        type: "ArkretPrincipalServer",
-        serviceEndpoint:
-          input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, ""),
-      },
-    ],
+    service: [principalServerService],
   };
 }
 
@@ -156,8 +171,12 @@ export function buildPrincipalGenesisEntry(
   const keys = [
     input.rootKey.multibase,
     input.nextRootKey.multibase,
-    input.principalSigningKey.multibase,
-    input.enrollmentKey.multibase,
+    ...(input.externalEnrollmentAuthorityDid
+      ? []
+      : [
+          input.principalSigningKey.multibase,
+          input.enrollmentKey.multibase,
+        ]),
   ];
   if (new Set(keys).size !== keys.length) {
     throw new Error("principal root, next root, signing, and enrollment keys must be distinct");

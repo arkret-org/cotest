@@ -66,11 +66,17 @@ export async function resolvePrincipalDid(
     throw new Error(`identity resolve ${did} returned non-object JSON: ${text}`);
   }
   const didDocument = objectRecord(body.did_document);
-  const resolvedDid = stringField(didDocument, "did") ?? stringField(body, "did");
+  const resolvedDid =
+    stringField(didDocument, "id") ??
+    stringField(didDocument, "did") ??
+    stringField(body, "did");
   if (resolvedDid !== did) {
     throw new Error(`identity resolve returned ${resolvedDid}, expected ${did}`);
   }
-  const document = objectRecord(didDocument?.document) ?? objectRecord(body.document);
+  const document =
+    objectRecord(didDocument?.document) ??
+    didDocument ??
+    objectRecord(body.document);
   if (!document) {
     throw new Error(`identity resolve ${did} omitted document: ${text}`);
   }
@@ -91,7 +97,8 @@ export async function resolvePrincipalDid(
   const log = Array.isArray(logBody.events)
     ? logBody.events.flatMap((entry) => {
         const record = objectRecord(entry);
-        const operation = objectRecord(record?.operation);
+        const operation =
+          objectRecord(record?.operation_body) ?? objectRecord(record?.operation);
         return operation ? [operation] : record ? [record] : [];
       })
     : [];

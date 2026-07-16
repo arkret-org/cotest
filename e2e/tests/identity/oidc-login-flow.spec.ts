@@ -34,15 +34,10 @@
 //   COTEST_COAUTH_BASE_URL=…  COTEST_SOLAND_BASE_URL=…  COTEST_INKSON_BASE_URL=… \
 //     npx playwright test identity/oidc-login-flow
 //
-// Optional: set COTEST_OIDC_LOGIN_HANDLE + COTEST_OIDC_LOGIN_PASSWORD to drive
-// an existing account instead of self-registering.
-
 import { expect, test } from "@playwright/test";
 import {
   coauthBaseUrl,
   optionalEnv,
-  realOidcLoginHandle,
-  realOidcLoginPassword,
   solandBaseUrl,
 } from "../../helpers/env";
 import { openUserPage, uniqueUser } from "../../helpers/users";
@@ -51,7 +46,6 @@ import {
   hardLogoutViaAccountMenu,
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
-  type RealOidcAccount,
 } from "../../helpers/real-oidc-login";
 import { assertJointStackNotRequired } from "../../helpers/users";
 
@@ -75,21 +69,18 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       );
     }
 
-    // 1. Establish a password account: an explicitly-provided one, else
-    //    self-register a fresh new user over coauth's registration API.
-    const envHandle = realOidcLoginHandle();
-    const envPassword = realOidcLoginPassword();
-    const account: RealOidcAccount =
-      envHandle && envPassword
-        ? { handle: envHandle, password: envPassword }
-        : await registerCoauthPasswordAccount(request, coauth!);
+    // 1. Establish a client-signed principal account. A bare password account
+    // is intentionally insufficient because the session-grant request cannot
+    // infer a principal DID from the OAuth subject.
+    const account = await registerCoauthPasswordAccount(request, coauth!);
 
-    // Open inkson with no session token so it lands on the login panel; the
-    // injected account_did/device_id are placeholders overridden by the OIDC
-    // callback identity.
-    const jointPage = await openUserPage(browser, uniqueUser("oidc-login"), {
-      neutralLoginConfig: true,
-    });
+    // A session-grant request is explicitly principal-bound. Registration
+    // gives the client that verified DID, so persist it as the returning-account
+    // selection before opening OIDC; the callback must never infer a principal
+    // from an unbound OAuth subject.
+    const returningUser = uniqueUser("oidc-login");
+    returningUser.did = account.did;
+    const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
     try {
       // 2. First login (new user).

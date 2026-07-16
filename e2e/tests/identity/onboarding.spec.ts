@@ -21,6 +21,8 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import { latestMockEmailCode } from "../../helpers/coauth-register";
+import { resolvePrincipalDid } from "../../helpers/onboarding";
+import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 
 test.describe.configure({ mode: "serial" });
 
@@ -172,23 +174,126 @@ test.describe("account onboarding", () => {
     }
   });
 
-  test.fixme(
-    "alice confirms cold recovery custody, submits a root-signed entry 0, and receives a device-bound grant only after atomic PCR bootstrap",
-    async () => {
-      // The live path must consume Coauth's advertised enrollment-authority
-      // descriptor, build the client-custodied entry through the SDK-equivalent
-      // helper, complete the closed two-Event PCR bootstrap, then close the
-      // recovery-material gate. Coauth must never mint or retain the root.
-    },
-  );
+  test("alice confirms cold recovery custody, binds client-signed entry 0, and completes atomic PCR bootstrap", async ({
+    browser,
+    request,
+  }) => {
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
 
-  test.fixme(
-    "client-signed did:webvh entry resolves with root only in method parameters and B-model authority in service",
-    async () => {
-      // Assert canonical SCID/history and allow an empty verificationMethod;
-      // identity root and device keys must never be projected into DIDDoc.
-    },
-  );
+    const user = uniqueUser("s7-cold-root");
+    const handle = user.handle.slice(1);
+    const email = `${user.name}@example.test`;
+    const password = "ArkretE2E!2026";
+    const jointPage = await openUserPage(browser, user, {
+      neutralLoginConfig: true,
+      autoCompleteRecoveryKeySetup: false,
+    });
+    const page = jointPage.page;
+    try {
+      await page.goto("/register", { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("registration-panel")).toBeVisible();
+      await page.getByTestId("register-server").fill(solandBaseUrl());
+      await page.getByTestId("register-handle").fill(handle);
+      await page.getByTestId("register-email").fill(email);
+      await page.getByTestId("register-password").fill(password);
+      await page.getByTestId("register-password-confirm").fill(password);
+      await page.getByTestId("register-prepare").click();
+
+      const generated = page.getByTestId("register-recovery-key");
+      await expect(generated).toBeVisible({ timeout: 60_000 });
+      const recoveryKey = (await generated.inputValue()).trim();
+      expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+      await page.getByTestId("register-recovery-confirm").fill(recoveryKey);
+      const devCodeText = await page.getByTestId("register-dev-code").innerText();
+      const verificationCode = devCodeText.match(/\b\d{6}\b/)?.[0];
+      expect(verificationCode).toBeTruthy();
+      await page.getByTestId("register-email-code").fill(verificationCode!);
+      await page.getByTestId("register-commit").click();
+
+      await expect(
+        page.locator("#login-handle").or(page.locator("#login-password")),
+      ).toBeVisible({ timeout: 120_000 });
+      await submitCoauthPasswordCredentials(page, { handle, password });
+      const approve = page.getByTestId("coauth-oauth-approve");
+      if (
+        await approve
+          .waitFor({ state: "visible", timeout: 20_000 })
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        await approve.click();
+      }
+
+      await expect(page.getByTestId("onboarding-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(page.getByTestId("pending-principal-bootstrap")).toBeVisible();
+      const principalDid = await page.evaluate(() => {
+        const config = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}");
+        return String(config.account_did ?? "");
+      });
+      expect(principalDid).toMatch(/^did:webvh:/);
+
+      const resolved = await resolvePrincipalDid(request, principalDid);
+      expect(resolved.log).toHaveLength(1);
+      expect(resolved.document.verificationMethod).toBeUndefined();
+      expect(resolved.document.assertionMethod).toBeUndefined();
+      expect(resolved.document.capabilityDelegation).toBeUndefined();
+      expect(resolved.document.service).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "ArkretDeviceEnrollmentAuthority",
+            serviceEndpoint: expect.stringMatching(/^did:/),
+          }),
+        ]),
+      );
+
+      await page.getByTestId("bootstrap-recovery-key").fill(recoveryKey);
+      const sealResponsePromise = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.origin === new URL(solandBaseUrl()).origin &&
+          url.pathname === "/_arkret/self/events/seals" &&
+          response.request().method() === "POST"
+        );
+      });
+      await page.getByTestId("bootstrap-submit").click();
+      const sealResponse = await sealResponsePromise;
+      expect(sealResponse.status(), await sealResponse.text()).toBe(200);
+      const submittedSeal = sealResponse.request().postDataJSON() as {
+        id: string;
+        predecessor_refs: string[];
+        delta: string[];
+        covered_event_digests: string[];
+        state_root: string;
+        notary_signature: { verification_method: string };
+      };
+      const sealOutcome = await sealResponse.json();
+      expect(submittedSeal.predecessor_refs).toEqual([]);
+      expect(submittedSeal.delta).toHaveLength(2);
+      expect(submittedSeal.covered_event_digests).toEqual(submittedSeal.delta);
+      expect(submittedSeal.notary_signature.verification_method).toMatch(
+        new RegExp(`^${principalDid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}#ak:device:`),
+      );
+      expect(sealOutcome).toEqual({
+        seal_id: submittedSeal.id,
+        accepted_event_digests: submittedSeal.delta,
+        post_state_root: submittedSeal.state_root,
+      });
+      await expect(page.getByTestId("pending-principal-bootstrap")).toHaveCount(0, {
+        timeout: 120_000,
+      });
+      await page.getByRole("tab", { name: "3. Atomic bootstrap" }).click();
+      await expect(page.getByTestId("onboarding-first-backup-gate")).toHaveAttribute(
+        "data-gate-state",
+        "satisfied",
+        { timeout: 60_000 },
+      );
+    } finally {
+      await jointPage.close();
+    }
+  });
 
   test.fixme("carol verifies email then finishes with her client-signed cold-root inception", async ({
     request,
