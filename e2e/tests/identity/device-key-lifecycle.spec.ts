@@ -13,6 +13,7 @@ import {
 } from "../../helpers/real-oidc-login";
 import {
   assertJointStackNotRequired,
+  completePendingPrincipalBootstrap,
   openUserPage,
   uniqueUser,
   type JointUserPage,
@@ -42,13 +43,28 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
 
     const envHandle = realOidcLoginHandle();
     const envPassword = realOidcLoginPassword();
-    const account: RealOidcAccount =
+    const configuredDid = optionalEnv("COTEST_REAL_OIDC_PRINCIPAL_DID");
+    const registeredAccount =
       envHandle && envPassword
-        ? { handle: envHandle, password: envPassword }
+        ? undefined
         : await registerCoauthPasswordAccount(request, coauth!);
-
-    const jointPage = await openUserPage(browser, uniqueUser("oidc-key-life"), {
-      neutralLoginConfig: true,
+    const account: RealOidcAccount = registeredAccount ?? {
+      handle: envHandle!,
+      password: envPassword!,
+    };
+    const principalDid = registeredAccount?.did ?? configuredDid;
+    test.skip(
+      !principalDid,
+      "COTEST_REAL_OIDC_PRINCIPAL_DID is required with a preconfigured OIDC account",
+    );
+    const returningUser = uniqueUser("oidc-key-life");
+    returningUser.did = principalDid!;
+    if (registeredAccount) {
+      returningUser.deviceId = registeredAccount.bootstrapDeviceId;
+    }
+    const jointPage = await openUserPage(browser, returningUser, {
+      pendingPrincipalRegistration:
+        registeredAccount?.pendingPrincipalRegistration,
     });
     const page = jointPage.page;
     const grants = observeSessionGrants(page);
@@ -64,6 +80,12 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       await test.step("first real OIDC login establishes the device identity", async () => {
         await jointPage.gotoLogin();
         await serverLoginViaCoauth(page, account);
+        if (registeredAccount) {
+          await completePendingPrincipalBootstrap(
+            jointPage,
+            registeredAccount.recoveryKey,
+          );
+        }
       });
 
       let activeGrant = await grants.waitForLatest();

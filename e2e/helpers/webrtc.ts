@@ -471,20 +471,17 @@ export async function relayedCallSignals(
 ): Promise<Array<Record<string, unknown>>> {
   const frames = await accountSubscribeFramesApi(request, token);
   const frame = frames.find((candidate) => candidate.kind === "delta") as {
-    realms?: Record<string, { ephemeral?: Array<Record<string, unknown>> }>;
+    realms?: Record<
+      string,
+      {
+        ephemeral?: {
+          events?: Array<Record<string, unknown>>;
+        };
+      }
+    >;
   } | undefined;
-  const ephemeral = frame?.realms?.[realmId]?.ephemeral ?? [];
-  const out: Array<Record<string, unknown>> = [];
-  for (const item of ephemeral) {
-    if (item.type !== "ak.call.signal") {
-      continue;
-    }
-    const signals = Array.isArray(item.call_signals)
-      ? (item.call_signals as Array<Record<string, unknown>>)
-      : [];
-    out.push(...signals);
-  }
-  return out;
+  const events = frame?.realms?.[realmId]?.ephemeral?.events ?? [];
+  return events.filter((event) => event.kind === "ak.call.signal");
 }
 
 export async function expectCallSignalError(

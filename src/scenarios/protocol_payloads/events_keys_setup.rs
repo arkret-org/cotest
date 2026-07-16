@@ -17,32 +17,31 @@ use crate::scenarios::federation_collaboration::{
     authorize_device_public_key, signed_keys_upload_body,
 };
 
-const KEYS_ACTOR_DID: &str = "did:web:alice.example";
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
 const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-000000000101";
 const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000100";
 const ADAPTER_MESSAGE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
 
-pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     // keys/upload verifies its typed request signature against the accepted
     // device projection. Publish the principal/self-signing hierarchy before
     // authorizing the device; the adapter realm/message then continue at actor
     // sequence 3/4.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
-    authorize_device_public_key(server, token, KEYS_ACTOR_DID, KEYS_DEVICE_ID, &device_key).await?;
-    submit_adapter_event(server, token).await?;
-    upload_and_inspect_keys(server, token, &device_key).await?;
+    authorize_device_public_key(server, token, actor_id, KEYS_DEVICE_ID, &device_key).await?;
+    submit_adapter_event(server, token, actor_id).await?;
+    upload_and_inspect_keys(server, token, actor_id, &device_key).await?;
     Ok(())
 }
 
-async fn submit_adapter_event(server: &ArkretServer, token: &str) -> Result<()> {
-    let realm_id = create_adapter_realm(server, token).await?;
+async fn submit_adapter_event(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+    let realm_id = create_adapter_realm(server, token, actor_id).await?;
     let event = signed_message_event(
         ADAPTER_MESSAGE_EVENT_ID,
         4,
         &realm_id,
-        "did:web:alice.example",
+        actor_id,
         "ak:device:01904100-0000-7000-8000-0000000000a1",
         "ak:thread:adapter",
         "hello",
@@ -63,12 +62,16 @@ async fn submit_adapter_event(server: &ArkretServer, token: &str) -> Result<()> 
     Ok(())
 }
 
-async fn create_adapter_realm(server: &ArkretServer, token: &str) -> Result<String> {
+async fn create_adapter_realm(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<String> {
     let event = signed_realm_create_event(
         ADAPTER_REALM_CREATE_EVENT_ID,
         3,
         ADAPTER_REALM_ID,
-        "did:web:alice.example",
+        actor_id,
         "Adapter Event Space",
     )?;
     let submit = expect_json(
@@ -196,6 +199,7 @@ fn signed_message_event(
 async fn upload_and_inspect_keys(
     server: &ArkretServer,
     token: &str,
+    actor_id: &str,
     device_key: &SigningKey,
 ) -> Result<()> {
     let upload_keys = expect_json(
@@ -204,7 +208,7 @@ async fn upload_and_inspect_keys(
             .post(server.url("/_arkret/self/keys/upload"))
             .bearer_auth(token)
             .json(&signed_keys_upload_body(
-                KEYS_ACTOR_DID,
+                actor_id,
                 KEYS_DEVICE_ID,
                 device_key,
                 json!({
@@ -226,14 +230,14 @@ async fn upload_and_inspect_keys(
             .http()
             .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(token)
-            .json(&json!({"device_keys": {"did:web:alice.example": ["ak:device:01904100-0000-7000-8000-0000000000a1"]}})),
+            .json(&json!({"device_keys": {(actor_id): [KEYS_DEVICE_ID]}})),
         StatusCode::OK,
     )
     .await?;
     // Query returns the accepted device directory projection and cross-signing
     // link. The upload request signature authorizes the mutation; it is not a
     // prekey algorithm entry and therefore is not echoed under `algorithms`.
-    let queried_device = &query_keys["device_keys"][KEYS_ACTOR_DID][KEYS_DEVICE_ID];
+    let queried_device = &query_keys["device_keys"][actor_id][KEYS_DEVICE_ID];
     assert_eq!(queried_device["device_status"], "active");
     assert!(
         queried_device["device_signing_key"]
@@ -243,7 +247,7 @@ async fn upload_and_inspect_keys(
     );
     assert_eq!(
         queried_device["cross_signing_binding"]["verification_method"],
-        format!("{KEYS_ACTOR_DID}#ak_self_signing_v1")
+        format!("{actor_id}#ak_self_signing_v1")
     );
 
     let claimed = expect_json(
@@ -253,14 +257,14 @@ async fn upload_and_inspect_keys(
             .bearer_auth(token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"ak:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
+                    (actor_id): {(KEYS_DEVICE_ID): "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        claimed["one_time_keys"][KEYS_ACTOR_DID][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
+        claimed["one_time_keys"][actor_id][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
         "one-time"
     );
     Ok(())

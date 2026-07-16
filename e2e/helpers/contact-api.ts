@@ -40,12 +40,22 @@ import {
 } from "./soland-api";
 import type { JointUser } from "./users";
 import { encodeEd25519PubkeyMultibase } from "./encoding";
+import {
+  buildPrincipalGenesisEntry,
+  generateWebvhKey,
+  submitPrincipalGenesisEntry,
+} from "./webvh-api";
 
 const CROSS_SIGNING_BINDING_LABEL = "ak.cross-signing-bind-v1\n";
 
-type Ed25519FixtureKey = {
+export type Ed25519FixtureKey = {
   privateKey: KeyObject;
   publicKeyMultibase: string;
+};
+
+export type PreparedDirectConversationIdentity = {
+  user: JointUser;
+  principalSigningKey: Ed25519FixtureKey;
 };
 
 // ── Contact list / request / respond wire types (subset we assert on). ──
@@ -321,20 +331,47 @@ export async function resolveDirectConversationArkret(
   );
 }
 
+export async function prepareDirectConversationIdentityArkret(
+  request: APIRequestContext,
+  user: JointUser,
+  opts: { server?: SolandKey } = {},
+): Promise<PreparedDirectConversationIdentity> {
+  const principalSigningKey = generateWebvhKey();
+  const built = buildPrincipalGenesisEntry({
+    baseUrl: solandBaseUrl(opts.server),
+    localId: user.name,
+    rootKey: generateWebvhKey(),
+    nextRootKey: generateWebvhKey(),
+    principalSigningKey,
+    enrollmentKey: generateWebvhKey(),
+    serviceEndpoint: solandBaseUrl(opts.server),
+  });
+  await submitPrincipalGenesisEntry(
+    request,
+    solandBaseUrl(opts.server),
+    built,
+  );
+  return {
+    user: { ...user, did: built.did },
+    principalSigningKey: {
+      privateKey: principalSigningKey.privateKey,
+      publicKeyMultibase: principalSigningKey.multibase,
+    },
+  };
+}
+
 export async function seedDirectConversationIdentityArkret(
   request: APIRequestContext,
   token: string,
   user: JointUser,
-  opts: { server?: SolandKey } = {},
+  opts: { principalSigningKey: Ed25519FixtureKey; server?: SolandKey },
 ): Promise<void> {
-  const psk = ed25519FixtureKey();
+  const psk = opts.principalSigningKey;
   const ssk = ed25519FixtureKey();
   const usk = ed25519FixtureKey();
-  const pskKid = `${user.did}#ak_principal_signing_v1`;
+  const pskKid = `${user.did}#principal-signing-key`;
   const sskKid = `${user.did}#ak_self_signing_v1`;
   const uskKid = `${user.did}#ak_user_signing_v1`;
-  await submitFixtureDidDocument(request, user.did, pskKid, psk, opts);
-
   const trustDomain = await solandTrustDomain(request, opts);
   const generation = 1;
   const principalSigningKey = {
@@ -473,52 +510,6 @@ async function solandTrustDomain(
     "describe trust_domain",
   );
   return body.trust_domain ?? "ak:trust_domain:soland.joint-e2e.local";
-}
-
-async function submitFixtureDidDocument(
-  request: APIRequestContext,
-  did: string,
-  pskKid: string,
-  psk: Ed25519FixtureKey,
-  opts: { server?: SolandKey } = {},
-): Promise<void> {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/root/identity/submit-did-operation`,
-    {
-      data: {
-        did,
-        did_method: didMethod(did),
-        operation: {
-          type: "replace",
-          state: {
-            "@context": ["https://www.w3.org/ns/did/v1"],
-            id: did,
-            verificationMethod: [
-              {
-                id: pskKid,
-                type: "Multikey",
-                controller: did,
-                publicKeyMultibase: psk.publicKeyMultibase,
-              },
-            ],
-            authentication: [pskKid],
-            assertionMethod: [pskKid],
-            alsoKnownAs: [],
-          },
-        },
-        proofs: [],
-      },
-    },
-  );
-  await expectJsonOk(response, `submit DID document ${did}`);
-}
-
-function didMethod(did: string): string {
-  const match = /^did:([^:]+):/.exec(did);
-  if (!match) {
-    throw new Error(`invalid DID: ${did}`);
-  }
-  return `did:${match[1]}`;
 }
 
 async function uploadDirectConversationKeyPackage(

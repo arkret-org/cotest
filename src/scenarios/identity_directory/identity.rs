@@ -3,6 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
+use crate::scenarios::federation_collaboration::prepare_actor_inception_for_service;
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let server = ArkretServer::spawn("identity-surface").await?;
@@ -44,52 +45,25 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     .await?;
     assert_eq!(log["has_more"], false);
 
+    let prepared = prepare_actor_inception_for_service(server.service_id(), "identity-alice")?;
+    let actor_id = prepared.did.clone();
     let submitted = expect_json(
         server
             .http()
             .post(server.url("/_arkret/root/identity/submit-did-operation"))
-            .json(&json!({
-                "did": "did:web:alice.example",
-                "did_method": "did:web",
-                "seq": 1,
-                "operation": {
-                    "type": "replace",
-                    "state": {
-                        "id": "did:web:alice.example",
-                        "verificationMethod": [{
-                            "id": "did:web:alice.example#key-1",
-                            "type": "JsonWebKey2020",
-                            "controller": "did:web:alice.example",
-                            "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": "dev"}
-                        }],
-                        "authentication": ["did:web:alice.example#key-1"],
-                        "service": [{
-                            "id": "#soland",
-                            "type": "ArkretPrincipalServer",
-                            "serviceEndpoint": "https://alice.example"
-                        }]
-                    }
-                },
-                "proofs": [{
-                    "kind": "detached_jws",
-                    "alg": "EdDSA",
-                    "verification_method": "did:web:alice.example#key-1",
-                    "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                    "created_at": "2026-05-02T00:00:00Z",
-                    "jws": "a..b"
-                }]
-            })),
+            .json(&prepared.submit_body),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(submitted["status"], "accepted");
+    assert_eq!(submitted["did"], actor_id);
     assert_eq!(submitted["seq"], 1);
 
     let resolved_after_submit = expect_json(
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": "did:web:alice.example"})),
+            .json(&json!({"did": actor_id})),
         StatusCode::OK,
     )
     .await?;
@@ -98,15 +72,13 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         submitted["head_event_digest"]
     );
     assert_eq!(resolved_after_submit["seq"], 1);
-    assert_eq!(
-        resolved_after_submit["did_document"]["authentication"][0],
-        "did:web:alice.example#key-1"
-    );
+    assert_eq!(resolved_after_submit["did_document"]["id"], actor_id);
 
     let log_after_submit = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/root/identity/log?did=did:web:alice.example")),
+            .get(server.url("/_arkret/root/identity/log"))
+            .query(&[("did", actor_id.as_str())]),
         StatusCode::OK,
     )
     .await?;
@@ -120,7 +92,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         server
             .http()
             .get(server.url("/_arkret/root/identity/receipts"))
-            .query(&[("did", "did:web:alice.example"), ("head", submitted_head)]),
+            .query(&[("did", actor_id.as_str()), ("head", submitted_head)]),
         StatusCode::OK,
     )
     .await?;

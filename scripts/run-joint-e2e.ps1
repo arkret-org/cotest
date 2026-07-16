@@ -1152,16 +1152,27 @@ function Wait-HttpReady {
 function Get-DescribedServiceId {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
-        [Parameter(Mandatory = $true)][string]$ServiceName
+        [Parameter(Mandatory = $true)][string]$ServiceName,
+        [int]$TimeoutSeconds = 60
     )
 
     $url = "$($BaseUrl.TrimEnd('/'))/_arkret/describe"
-    $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
-    $serviceId = [string]$describe.service_id
-    if ([string]::IsNullOrWhiteSpace($serviceId) -or -not $serviceId.StartsWith("did:")) {
-        throw "$ServiceName describe at $url did not return a valid service_id"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastError = $null
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
+            $serviceId = [string]$describe.service_id
+            if (-not [string]::IsNullOrWhiteSpace($serviceId) -and $serviceId.StartsWith("did:")) {
+                return $serviceId
+            }
+            $lastError = "response did not contain a valid service_id"
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        Start-Sleep -Milliseconds 500
     }
-    return $serviceId
+    throw "Timed out waiting for $ServiceName describe at $url. Last error: $lastError"
 }
 
 function Assert-CoauthDpopGrantSeamReady {
@@ -1968,6 +1979,29 @@ try {
             $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "soland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
+        }
+    }
+
+    if (-not $SkipBuild -and $StartCoauth -and -not $CoauthBin) {
+        $defaultCoauthBinary = Join-Path $workspaceRoot "coauth\target\debug\coauth.exe"
+        $coauthFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $defaultCoauthBinary `
+            -RepositoryRoots @(
+                (Join-Path $workspaceRoot "coauth"),
+                (Join-Path $workspaceRoot "arkret-rust-sdk")
+            )
+        if (-not $coauthFreshness.Fresh) {
+            Write-Host "Preparing coauth binary: $($coauthFreshness.Detail)"
+            $started = Get-Date
+            $coauthManifest = Join-Path $workspaceRoot "coauth\Cargo.toml"
+            $service = Start-ManagedCommand `
+                -Name "prepare-coauth" `
+                -Command ("cargo build --manifest-path {0} --bin coauth" -f (Quote-PsLiteral $coauthManifest)) `
+                -WorkingDirectory (Split-Path -Parent $coauthManifest) `
+                -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; Service = $service; Started = $started; Artifact = $defaultCoauthBinary })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "coauth"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFreshness.Detail })
         }
     }
 

@@ -16,10 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
 import { mockEmailBaseUrl, solandBaseUrl } from "./env";
-import {
-  buildPrincipalGenesisEntry,
-  generateWebvhKey,
-} from "./webvh-api";
+import { cotestWire } from "./soland-api";
 
 // The deterministic verification code coauth mints under the dev email-delivery
 // bypass. Mirrors coauth tasks/notifications.rs + handlers/account/register.rs.
@@ -32,6 +29,16 @@ export type CoauthPasswordAccount = {
   displayName: string;
   did: string;
   principalId?: string;
+  bootstrapDeviceId: string;
+  recoveryKey: string;
+  pendingPrincipalRegistration: Record<string, unknown>;
+  bootstrapClaimed?: boolean;
+};
+
+type PrincipalRegistrationFixture = {
+  did_operation: Record<string, unknown>;
+  recovery_key: string;
+  checkpoint: Record<string, unknown>;
 };
 
 function objectRecord(value: unknown): Record<string, unknown> | undefined {
@@ -118,24 +125,37 @@ export async function registerCoauthPasswordAccount(
     throw new Error(`coauth WebVH verify-email failed (${verifyResponse.status()}): ${verifyRaw}`);
   }
 
-  const built = buildPrincipalGenesisEntry({
-    baseUrl: solandBaseUrl(),
-    localId: id.toLowerCase(),
-    rootKey: generateWebvhKey(),
-    nextRootKey: generateWebvhKey(),
-    principalSigningKey: generateWebvhKey(),
-    enrollmentKey: generateWebvhKey(),
-    externalEnrollmentAuthorityDid: enrollmentAuthorityDid,
-    serviceEndpoint: solandBaseUrl(),
-  });
+  const deviceSuffix = randomUUID().replace(/-/g, "").slice(0, 12);
+  const bootstrapDeviceId = `ak:device:01904100-0000-7000-8000-${deviceSuffix}`;
+  const describeResponse = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+  const describeRaw = await describeResponse.text();
+  const describe = objectRecord(describeRaw ? JSON.parse(describeRaw) : {});
+  const trustDomain = typeof describe?.trust_domain === "string"
+    ? describe.trust_domain
+    : undefined;
+  if (!describeResponse.ok() || !trustDomain) {
+    throw new Error(`soland describe omitted trust_domain (${describeResponse.status()}): ${describeRaw}`);
+  }
+  const fixture = cotestWire<PrincipalRegistrationFixture>(
+    "principal-registration-fixture",
+    {
+      principal_server_url: solandBaseUrl(),
+      gate_account_base: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
+      registration_id: id,
+      handle: slug,
+      email,
+      device_id: bootstrapDeviceId,
+      enrollment_authority_did: enrollmentAuthorityDid,
+      trust_domain: trustDomain,
+    },
+  );
+  const did = fixture.checkpoint.did;
+  if (typeof did !== "string" || fixture.recovery_key.split(/\s+/).length !== 24) {
+    throw new Error("cotest principal registration fixture is incomplete");
+  }
   const finishResponse = await request.post(`${base}/${id}/finish`, {
     data: {
-      did_operation: {
-        did: built.did,
-        did_method: "webvh",
-        seq: 1,
-        operation: built.entry,
-      },
+      did_operation: fixture.did_operation,
       password,
       password_confirm: password,
     },
@@ -145,8 +165,8 @@ export async function registerCoauthPasswordAccount(
   if (finishResponse.status() !== 200 || finished?.status !== "success") {
     throw new Error(`coauth WebVH register finish failed (${finishResponse.status()}): ${finishRaw}`);
   }
-  const did = objectRecord(finished.did_operation)?.did;
-  if (typeof did !== "string" || did !== built.did) {
+  const finishedDid = objectRecord(finished.did_operation)?.did;
+  if (typeof finishedDid !== "string" || finishedDid !== did) {
     throw new Error(`coauth WebVH finish did not include the bound DID: ${finishRaw}`);
   }
 
@@ -156,5 +176,8 @@ export async function registerCoauthPasswordAccount(
     password,
     displayName,
     did,
+    bootstrapDeviceId,
+    recoveryKey: fixture.recovery_key,
+    pendingPrincipalRegistration: fixture.checkpoint,
   };
 }

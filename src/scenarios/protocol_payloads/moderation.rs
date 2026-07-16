@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
 
-pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let report = expect_json(
         server
             .http()
@@ -18,7 +18,7 @@ pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000101",
                 "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
-                "reporter": "did:web:alice.example"
+                "reporter": actor_id
             })),
         StatusCode::OK,
     )

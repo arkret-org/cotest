@@ -29,6 +29,7 @@
 use anyhow::Result;
 
 use crate::harness::{ArkretServer, dev_login};
+use crate::scenarios::federation_collaboration::actor_did_for_service;
 
 mod backup_delete;
 mod blob;
@@ -44,20 +45,21 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
         &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
     .await?;
+    let actor_id = actor_did_for_service(server.service_id(), "protocol-payloads-alice")?;
     let token = dev_login(
         &server,
-        "did:web:alice.example",
+        &actor_id,
         "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
 
-    events_keys_setup::run(&server, &token).await?;
-    device_messages::run(&server, &token).await?;
-    key_backups::run(&server, &token).await?;
-    backup_delete::run(&server, &token).await?;
+    events_keys_setup::run(&server, &token, &actor_id).await?;
+    device_messages::run(&server, &token, &actor_id).await?;
+    key_backups::run(&server, &token, &actor_id).await?;
+    backup_delete::run(&server, &token, &actor_id).await?;
     blob::run(&server, &token).await?;
     push::run(&server, &token).await?;
-    moderation::run(&server, &token).await?;
+    moderation::run(&server, &token, &actor_id).await?;
 
     Ok(())
 }

@@ -1107,7 +1107,7 @@ async fn publish_test_cross_signing(server: &ArkretServer, token: &str, actor: &
     Ok(())
 }
 
-pub(crate) async fn authorize_device_public_key(
+pub async fn authorize_device_public_key(
     server: &ArkretServer,
     token: &str,
     actor: &str,
@@ -1427,18 +1427,26 @@ fn trust_domain_for(service_id: &str) -> String {
 /// When the harness service still uses `did:key`, its stable multibase value is
 /// placed under the reserved `.cotest.local` suffix so the resulting method
 /// authority is a DNS-shaped test host rather than a non-standard bare label.
-pub(crate) fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
+pub fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
+    Ok(prepare_actor_inception_for_service(service_id, actor)?.did)
+}
+
+/// Prepare the deterministic native WebVH inception used by live principal
+/// scenarios without submitting it, so endpoint tests can inspect the exact
+/// request and outcome themselves.
+pub fn prepare_actor_inception_for_service(
+    service_id: &str,
+    actor: &str,
+) -> Result<PreparedPrincipalInception> {
     let service_host = did_host_from_service_id(service_id);
     let webvh_host = if service_host.contains('.') {
         service_host
     } else {
         format!("{service_host}.cotest.local")
     };
-    Ok(test_principal_inception(&webvh_host, actor)
-        .with_context(|| {
-            format!("prepare test principal inception for local id {actor:?} at {webvh_host:?}")
-        })?
-        .did)
+    test_principal_inception(&webvh_host, actor).with_context(|| {
+        format!("prepare test principal inception for local id {actor:?} at {webvh_host:?}")
+    })
 }
 
 fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrincipalInception> {

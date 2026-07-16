@@ -7,15 +7,19 @@ use serde_json::json;
 
 use crate::harness::{ArkretServer, encrypted_envelope, expect_json};
 
-pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
-    send_application_message(server, token).await?;
-    duplicate_send_is_idempotent(server, token).await?;
+pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+    send_application_message(server, token, actor_id).await?;
+    duplicate_send_is_idempotent(server, token, actor_id).await?;
     list_delivered_keeps_ciphertext_only(server, token).await?;
-    send_verification_message(server, token).await?;
+    send_verification_message(server, token, actor_id).await?;
     Ok(())
 }
 
-async fn send_application_message(server: &ArkretServer, token: &str) -> Result<()> {
+async fn send_application_message(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<()> {
     let send = expect_json(
         server
             .http()
@@ -24,7 +28,7 @@ async fn send_application_message(server: &ArkretServer, token: &str) -> Result<
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
                 "messages": {
-                    "did:web:alice.example": {
+                    (actor_id): {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ak.mls.application",
                             "content": encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
@@ -40,7 +44,11 @@ async fn send_application_message(server: &ArkretServer, token: &str) -> Result<
     Ok(())
 }
 
-async fn duplicate_send_is_idempotent(server: &ArkretServer, token: &str) -> Result<()> {
+async fn duplicate_send_is_idempotent(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<()> {
     let duplicate_send = expect_json(
         server
             .http()
@@ -49,7 +57,7 @@ async fn duplicate_send_is_idempotent(server: &ArkretServer, token: &str) -> Res
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
                 "messages": {
-                    "did:web:alice.example": {
+                    (actor_id): {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ak.mls.application",
                             "content": encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
@@ -84,7 +92,11 @@ async fn list_delivered_keeps_ciphertext_only(server: &ArkretServer, token: &str
     Ok(())
 }
 
-async fn send_verification_message(server: &ArkretServer, token: &str) -> Result<()> {
+async fn send_verification_message(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<()> {
     let verification_send = expect_json(
         server
             .http()
@@ -93,7 +105,7 @@ async fn send_verification_message(server: &ArkretServer, token: &str) -> Result
             .header("Idempotency-Key", "protocol-verification-txn")
             .json(&json!({
                 "messages": {
-                    "did:web:alice.example": {
+                    (actor_id): {
                         "ak:device:01904100-0000-7000-8000-0000000000a1": {
                             "kind": "ak.key.verification.request",
                             "content": encrypted_envelope(

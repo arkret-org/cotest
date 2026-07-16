@@ -1,4 +1,5 @@
 use std::io::{self, Read};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_core::{
@@ -7,7 +8,7 @@ use arkret_core::{
 };
 use arkret_crypto::DeviceTrustBinding;
 use base64::Engine as _;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike as _, Utc};
 use ed25519_dalek::SigningKey;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -29,6 +30,18 @@ struct EventProofInput {
 #[derive(Debug, Deserialize)]
 struct PrincipalControlRealmInput {
     principal_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrincipalRegistrationFixtureInput {
+    principal_server_url: String,
+    gate_account_base: String,
+    registration_id: String,
+    handle: String,
+    email: String,
+    device_id: String,
+    enrollment_authority_did: String,
+    trust_domain: String,
 }
 
 /// 05-2 — flat inputs for the SSK→device `ak.device-trust-bind-v1` canonical
@@ -54,6 +67,7 @@ fn main() -> Result<()> {
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
+        "principal-registration-fixture" => principal_registration_fixture(input)?,
         "cross-signing-binding-input" => cross_signing_binding_input(input)?,
         "device-trust-binding-input" => device_trust_binding_input(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
@@ -61,6 +75,92 @@ fn main() -> Result<()> {
 
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+fn principal_registration_fixture(input: Value) -> Result<Value> {
+    let input: PrincipalRegistrationFixtureInput =
+        serde_json::from_value(input).context("parse principal-registration fixture input")?;
+    let endpoint =
+        url::Url::parse(&input.principal_server_url).context("parse principal server URL")?;
+    let created_at = Utc::now().with_nanosecond(0).unwrap_or_else(Utc::now);
+
+    // Cotest fixture entropy is unique to this registration and never leaves
+    // the local test process except as the user-facing mnemonic. Production
+    // recovery-key generation remains OS-CSPRNG backed in Inkson.
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before Unix epoch")?
+        .as_nanos();
+    let mut entropy_hasher = Sha256::new();
+    entropy_hasher.update(b"cotest-principal-registration-v1");
+    entropy_hasher.update(input.registration_id.as_bytes());
+    entropy_hasher.update(input.device_id.as_bytes());
+    entropy_hasher.update(nonce.to_le_bytes());
+    let entropy: [u8; 32] = entropy_hasher.finalize().into();
+    let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
+        .context("build 24-word principal recovery mnemonic")?;
+    let recovery_key = mnemonic.words().collect::<Vec<_>>().join(" ");
+    let key_material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
+        &recovery_key,
+        "",
+        0,
+    )
+    .context("derive principal recovery key material")?;
+    let draft =
+        arkret::webvh::prepare_principal_inception(&arkret::webvh::PrincipalInceptionInput {
+            principal_endpoint: &endpoint,
+            local_id: &input.registration_id.to_ascii_lowercase(),
+            also_known_as: &[],
+            version_time: created_at,
+            root_seed: &key_material.root_seed,
+            next_root_public_key_multibase: &key_material.next_root_public_key_multikey,
+            enrollment: arkret::webvh::PrincipalEnrollmentDelegation::ExternalAuthority {
+                authority_did: &input.enrollment_authority_did,
+            },
+        })
+        .context("prepare principal inception")?;
+    let principal = Did::new(draft.did.clone()).context("parse prepared principal DID")?;
+    let control_realm = principal_control_realm_id(&principal);
+    let mut hlc = arkret::hlc::HlcGenerator::new(
+        &control_realm,
+        &input.device_id,
+        input.registration_id.as_bytes(),
+    );
+    let recovery_key_fingerprint = format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(recovery_key.as_bytes()))
+    );
+    let did_operation = serde_json::to_value(&draft.submit_body)
+        .context("serialize prepared principal DID operation")?;
+    let checkpoint = json!({
+        "principal_server_url": input.principal_server_url,
+        "gate_account_base": input.gate_account_base,
+        "registration_id": input.registration_id,
+        "handle": input.handle,
+        "email": input.email,
+        "device_id": input.device_id,
+        "enrollment_authority_did": input.enrollment_authority_did,
+        "trust_domain": input.trust_domain,
+        "did": draft.did,
+        "version_id": draft.version_id,
+        "root_public_key_multibase": draft.root_public_key_multibase,
+        "root_verification_method": draft.root_verification_method,
+        "next_root_public_key_multibase": draft.next_root_public_key_multibase,
+        "next_root_key_hash": draft.next_root_key_hash,
+        "recovery_proof_public_key_multibase": key_material.recovery_proof_public_key_multikey,
+        "backup_hpke_public_key_multibase": key_material.backup_hpke_public_key_multikey,
+        "recovery_key_fingerprint": recovery_key_fingerprint,
+        "did_operation": did_operation,
+        "bootstrap_create_event_id": arkret_core::new_prefixed_uuid7("ak:event:"),
+        "bootstrap_created_at": created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "bootstrap_hlc": hlc.generate().to_string(),
+        "stage": "did_bound",
+    });
+    Ok(json!({
+        "did_operation": checkpoint["did_operation"],
+        "recovery_key": recovery_key,
+        "checkpoint": checkpoint,
+    }))
 }
 
 fn read_stdin_json() -> Result<Value> {

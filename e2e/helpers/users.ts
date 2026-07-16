@@ -91,6 +91,8 @@ export type OpenUserOpts = {
   grantId?: string;
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
+  pendingPrincipalRegistration?: Record<string, unknown>;
+  recoveryKey?: string;
 };
 
 export type DpopUserSession = {
@@ -100,6 +102,8 @@ export type DpopUserSession = {
   grantAudience: string;
   dpopSeedB64url: string;
   deviceKey: DpopDeviceKey;
+  recoveryKey?: string;
+  pendingPrincipalRegistration?: Record<string, unknown>;
 };
 
 export type DpopUserPageSession = {
@@ -107,6 +111,14 @@ export type DpopUserPageSession = {
   session: DpopUserSession;
   page: JointUserPage;
 };
+
+const pendingBootstrapByGrant = new Map<
+  string,
+  {
+    recoveryKey: string;
+    pendingPrincipalRegistration: Record<string, unknown>;
+  }
+>();
 
 export type CreateRealmOpts = {
   title: string;
@@ -1190,6 +1202,11 @@ export async function createDpopUserSessionForAccount(
     return undefined;
   }
   const seed = uniqueUser(prefix);
+  const claimsPrincipalBootstrap = !account.bootstrapClaimed;
+  account.bootstrapClaimed = true;
+  if (claimsPrincipalBootstrap) {
+    seed.deviceId = account.bootstrapDeviceId;
+  }
   const deviceKey = generateDpopDeviceKey();
   const audience = solandServiceId(opts.server);
   const grant = await mintDpopBoundGrant(
@@ -1256,14 +1273,25 @@ export async function createDpopUserSessionForAccount(
       return undefined;
     }
   }
-  return {
+  const session = {
     user,
     grantJwt: grant.grantJwt,
     grantId: grant.grantId,
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     deviceKey,
+    recoveryKey: claimsPrincipalBootstrap ? account.recoveryKey : undefined,
+    pendingPrincipalRegistration: claimsPrincipalBootstrap
+      ? account.pendingPrincipalRegistration
+      : undefined,
   };
+  if (session.recoveryKey && session.pendingPrincipalRegistration) {
+    pendingBootstrapByGrant.set(session.grantJwt, {
+      recoveryKey: session.recoveryKey,
+      pendingPrincipalRegistration: session.pendingPrincipalRegistration,
+    });
+  }
+  return session;
 }
 
 export async function openDpopUserPage(
@@ -1327,6 +1355,8 @@ async function openDpopUserPageFromSession(
     dpopSeedB64url: session.dpopSeedB64url,
     grantId: session.grantId,
     grantAudience: session.grantAudience,
+    pendingPrincipalRegistration: session.pendingPrincipalRegistration,
+    recoveryKey: session.recoveryKey,
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
   if (opts.prepareMlsDevice !== false) {
@@ -1335,6 +1365,20 @@ async function openDpopUserPageFromSession(
     await page.acknowledgeRecommendedEncryptionPromptIfVisible();
   }
   return { user: session.user, session, page };
+}
+
+export async function completePendingPrincipalBootstrap(
+  page: JointUserPage,
+  recoveryKey: string,
+): Promise<void> {
+  await page.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+  const pending = page.page.getByTestId("pending-principal-bootstrap");
+  await expect(pending).toBeVisible({ timeout: 120_000 });
+  await page.page
+    .getByTestId("bootstrap-recovery-key")
+    .fill(recoveryKey);
+  await page.page.getByTestId("bootstrap-submit").click();
+  await expect(pending).toHaveCount(0, { timeout: 120_000 });
 }
 
 export function selfPathHeadersForDpopSession(
@@ -1363,12 +1407,23 @@ export async function openUser(
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const sessionInjection =
-    opts.grantJwt && opts.dpopSeedB64url
+    (opts.grantJwt && opts.dpopSeedB64url) ||
+    opts.pendingPrincipalRegistration
       ? {
+          ...(opts.grantJwt && opts.dpopSeedB64url
+            ? {
           grant_jwt: opts.grantJwt,
           dpop_seed_b64url: opts.dpopSeedB64url,
           grant_id: opts.grantId ?? "",
           audience: opts.grantAudience ?? "",
+              }
+            : {}),
+          ...(opts.pendingPrincipalRegistration
+            ? {
+                pending_principal_registration:
+                  opts.pendingPrincipalRegistration,
+              }
+            : {}),
         }
       : undefined;
   const localStorage = [
@@ -1605,9 +1660,36 @@ export async function openUserPage(
   user: JointUser,
   opts: OpenUserOpts = {},
 ): Promise<JointUserPage> {
-  const userPage = new JointUserPage(user, await openUser(browser, user, opts));
+  const registeredBootstrap = opts.grantJwt
+    ? pendingBootstrapByGrant.get(opts.grantJwt)
+    : undefined;
+  const resolvedOpts = registeredBootstrap
+    ? {
+        ...opts,
+        pendingPrincipalRegistration:
+          opts.pendingPrincipalRegistration ??
+          registeredBootstrap.pendingPrincipalRegistration,
+        recoveryKey: opts.recoveryKey ?? registeredBootstrap.recoveryKey,
+      }
+    : opts;
+  const userPage = new JointUserPage(
+    user,
+    await openUser(browser, user, resolvedOpts),
+  );
   if (!opts.keepDeviceAuthorizationModal) {
     await dismissDeviceAuthorizationPrompt(userPage.page);
+  }
+  if (
+    resolvedOpts.grantJwt &&
+    resolvedOpts.pendingPrincipalRegistration &&
+    resolvedOpts.recoveryKey
+  ) {
+    await userPage.gotoHome();
+    await completePendingPrincipalBootstrap(
+      userPage,
+      resolvedOpts.recoveryKey,
+    );
+    pendingBootstrapByGrant.delete(resolvedOpts.grantJwt);
   }
   return userPage;
 }

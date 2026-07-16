@@ -34,6 +34,7 @@ import {
   getInviteReceivePolicyArkret,
   listAuthzInvitesArkret,
   requestContactArkret,
+  prepareDirectConversationIdentityArkret,
   resolveDirectConversationArkret,
   respondContactArkret,
   seedDirectConversationIdentityArkret,
@@ -142,8 +143,18 @@ test.describe("contact graph (same principal server)", () => {
   test("S3 friends via direct_message -> resolve direct conversation (realm_id + main_strand_id, both sides converge)", async ({
     request,
   }) => {
-    const alice = uniqueUser("cg-s3-alice");
-    const bob = uniqueUser("cg-s3-bob");
+    const [aliceIdentity, bobIdentity] = await Promise.all([
+      prepareDirectConversationIdentityArkret(
+        request,
+        uniqueUser("cg-s3-alice"),
+      ),
+      prepareDirectConversationIdentityArkret(
+        request,
+        uniqueUser("cg-s3-bob"),
+      ),
+    ]);
+    const alice = aliceIdentity.user;
+    const bob = bobIdentity.user;
     await Promise.all([
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
@@ -153,8 +164,12 @@ test.describe("contact graph (same principal server)", () => {
       issueDevSession(request, bob),
     ]);
     await Promise.all([
-      seedDirectConversationIdentityArkret(request, aliceToken, alice),
-      seedDirectConversationIdentityArkret(request, bobToken, bob),
+      seedDirectConversationIdentityArkret(request, aliceToken, alice, {
+        principalSigningKey: aliceIdentity.principalSigningKey,
+      }),
+      seedDirectConversationIdentityArkret(request, bobToken, bob, {
+        principalSigningKey: bobIdentity.principalSigningKey,
+      }),
     ]);
 
     // Establish a bidirectional direct_message contact. direct conversation

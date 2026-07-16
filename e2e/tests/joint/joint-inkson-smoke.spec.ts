@@ -25,20 +25,14 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   // strand.
   test("creates a public realm and renders a soland message in inkson", async ({
     jointRealm,
-    request,
   }) => {
     const stamp = Date.now();
     const aliceMessage = `joint smoke from Alice ${stamp}`;
 
-    await submitMessageEvent(
-      request,
-      jointRealm.aliceSession,
-      jointRealm.alice.did,
-      jointRealm.alicePage.serverUrl,
+    await jointRealm.alicePage.sendTimelineMessage(
       jointRealm.realmId,
       aliceMessage,
     );
-    await jointRealm.alicePage.gotoTimelineRealm(jointRealm.realmId);
     await expect(jointRealm.alicePage.timelineEvent(aliceMessage)).toBeVisible({
       timeout: 30_000,
     });
@@ -286,42 +280,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     }
   });
 });
-
-async function submitMessageEvent(
-  request: APIRequestContext,
-  session: DpopUserSession,
-  actorDid: string,
-  serverUrl: string,
-  realmId: string,
-  body: string,
-) {
-  const eventId = `ak:event:${uuidV7()}`;
-  const strandId = await resolveDefaultStrandId(request, session, serverUrl, realmId);
-  const payload = {
-    strand_id: strandId,
-    track_name: "discussion",
-    content: {
-      kind: "ak.content.text",
-      body,
-    },
-  };
-  const envelope = signedEventEnvelope({
-    actorDid,
-    realmId,
-    eventId,
-    kind: "ak.message.create",
-    actorSeq: 9_000_000_000_000_000,
-    payload,
-  });
-
-  const url = `${serverUrl}/_arkret/self/events`;
-  const response = await request.post(url, {
-    headers: selfPathHeadersForDpopSession(session, "POST", url),
-    data: envelope,
-  });
-  const text = await response.text();
-  expect([200, 201], `submit ak.message.create: ${text}`).toContain(response.status());
-}
 
 async function submitSignedEvent(
   request: APIRequestContext,

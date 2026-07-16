@@ -37,7 +37,6 @@ use crate::harness::{ArkretServer, expect_json};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
-const ACTOR_ID: &str = "did:web:alice.example";
 /// Must match the device id minted by `dev_login` in
 /// [`super::events_keys_device_blob_push_and_moderation_surfaces_work`]: the
 /// unlock proof binds `requesting_device_id` to the authenticated session
@@ -56,22 +55,22 @@ fn device_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[7u8; 32])
 }
 
-pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
-    put_backup(server, token).await?;
+pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+    put_backup(server, token, actor_id).await?;
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token).await?;
-    principal_signing_unlock_reaches_trust_anchor(server, token).await?;
+    principal_signing_unlock_reaches_trust_anchor(server, token, actor_id).await?;
     Ok(())
 }
 
-async fn put_backup(server: &ArkretServer, token: &str) -> Result<()> {
+async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let backup_put = expect_json(
         server
             .http()
             .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
-            .json(&signed_backup_envelope()?),
+            .json(&signed_backup_envelope(actor_id)?),
         StatusCode::OK,
     )
     .await?;
@@ -84,14 +83,14 @@ async fn put_backup(server: &ArkretServer, token: &str) -> Result<()> {
 /// `auth_data` device-signature block (device key signs the canonical
 /// envelope minus `auth_data.signature`; `ssk_generation` binds the
 /// cross-signing generation).
-fn signed_backup_envelope() -> Result<KeyBackup> {
+fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
     let created_at = ts("2026-04-26T00:00:00Z")?;
     let mut envelope = KeyBackup {
         backup_id: backup_id(BACKUP_ID)?,
-        actor_id: did(ACTOR_ID)?,
+        actor_id: did(actor_id)?,
         device_id: Some(device_id(ENVELOPE_DEVICE_ID)?),
         backup_class: BackupClass::MlsHistory,
         mixed_secret_storage: false,
@@ -120,7 +119,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             subdomain: "test".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ak.schema.key_backup.v1".to_owned(),
-                actor_id: did(ACTOR_ID)?,
+                actor_id: did(actor_id)?,
                 device_id: ENVELOPE_DEVICE_ID.to_owned(),
                 backup_class: BackupClass::MlsHistory,
                 backup_version: "kb_1".to_owned(),
@@ -240,6 +239,7 @@ async fn unlock_backup_requires_body_proof(server: &ArkretServer, token: &str) -
 async fn principal_signing_unlock_reaches_trust_anchor(
     server: &ArkretServer,
     token: &str,
+    actor_id: &str,
 ) -> Result<()> {
     let unlock = expect_json(
         server
@@ -247,7 +247,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
             .json(&KeysBackupsUnlockRequestBody {
-                proof: unlock_proof()?,
+                proof: unlock_proof(actor_id)?,
             }),
         StatusCode::UNAUTHORIZED,
     )
@@ -263,7 +263,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
 /// No durable recovery-session record exists for this synthetic session id.
 /// `principal_signing` is the compatibility proof kind that may still reach
 /// the trust-anchor check without a bound recovery ceremony.
-fn unlock_proof() -> Result<KeyBackupUnlockProof> {
+fn unlock_proof(actor_id: &str) -> Result<KeyBackupUnlockProof> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
@@ -272,7 +272,7 @@ fn unlock_proof() -> Result<KeyBackupUnlockProof> {
         recovery_session_id: RecoverySessionId::new(
             "ak:recovery_session:01964137-0000-7000-8000-0000000000aa",
         )?,
-        principal_id: did(ACTOR_ID)?,
+        principal_id: did(actor_id)?,
         requesting_device_id: DeviceId::new(DEVICE_ID.to_owned())?,
         backup_id: backup_id(BACKUP_ID)?,
         backup_class: BackupClass::MlsHistory,

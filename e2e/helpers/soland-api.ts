@@ -2234,6 +2234,7 @@ type CotestWireCommand =
   | "event-proof"
   | "event-envelope-proof"
   | "principal-control-realm-id"
+  | "principal-registration-fixture"
   | "cross-signing-binding-input"
   | "device-trust-binding-input";
 
@@ -2368,7 +2369,7 @@ function sdkEventEnvelopeProof(args: {
   });
 }
 
-function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
+export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
   const binary = process.env.COTEST_WIRE_BIN;
   const result = spawnSync(
     binary ?? "cargo",

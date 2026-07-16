@@ -84,6 +84,14 @@ fn run_case(case: &Value) -> Result<()> {
             )?
         }
         "sibling_forks" => bounded_outcome(generator, "count", 16, "accept", "quarantine")?,
+        "mls_governance_proof_limit_matrix" => {
+            validate_three_point_limit_matrix(case, generator)?;
+            return Ok(());
+        }
+        "mls_governance_proof_chunk_request_matrix" => {
+            validate_chunk_request_matrix(case, generator)?;
+            return Ok(());
+        }
         other => bail!("{name} uses unknown generated limit kind {other}"),
     };
     let expected = case
@@ -92,6 +100,218 @@ fn run_case(case: &Value) -> Result<()> {
         .ok_or_else(|| anyhow!("{name} missing expected.decision"))?;
     if actual != expected {
         bail!("{name} decision drifted: expected {expected}, got {actual}");
+    }
+    Ok(())
+}
+
+fn validate_three_point_limit_matrix(case: &Value, generator: &Value) -> Result<()> {
+    const EXPECTED_DIMENSIONS: &[(&str, u64, &str, &str)] = &[
+        (
+            "response_encoded_bytes",
+            4_194_304,
+            "over_decision",
+            "reject_response_before_full_buffer",
+        ),
+        (
+            "chunk_manifest.total_item_bytes",
+            268_435_456,
+            "over_error_code",
+            "mls_governance_proof_bounds_exceeded",
+        ),
+        (
+            "chunk_manifest.chunk_count",
+            1_024,
+            "over_error_code",
+            "mls_governance_proof_bounds_exceeded",
+        ),
+        (
+            "chunk_manifest.collection_totals.seal_path",
+            4_096,
+            "over_error_code",
+            "mls_governance_proof_bounds_exceeded",
+        ),
+        (
+            "chunk_manifest.collection_totals.covered_event_digests",
+            1_048_576,
+            "over_error_code",
+            "mls_governance_proof_bounds_exceeded",
+        ),
+        (
+            "chunk_manifest.collection_totals.control_state",
+            262_144,
+            "over_error_code",
+            "mls_governance_proof_bounds_exceeded",
+        ),
+        (
+            "chunk_manifest.collection_totals.frontier_events",
+            128,
+            "over_error_code",
+            "mls_governance_proof_bounds_exceeded",
+        ),
+        (
+            "chunk.seal_path.items",
+            128,
+            "over_error_code",
+            "schema_violation",
+        ),
+        (
+            "chunk.covered_event_digests.items",
+            8_192,
+            "over_error_code",
+            "schema_violation",
+        ),
+        (
+            "chunk.control_state.items",
+            1_024,
+            "over_error_code",
+            "schema_violation",
+        ),
+        (
+            "chunk.frontier_events.items",
+            32,
+            "over_error_code",
+            "schema_violation",
+        ),
+        (
+            "chunk.chunk_proof",
+            10,
+            "over_error_code",
+            "schema_violation",
+        ),
+        (
+            "proof_request.chunk_index",
+            1_023,
+            "over_error_code",
+            "schema_violation",
+        ),
+    ];
+    let name = required_str(case, "name")?;
+    let dimensions = generator
+        .get("dimensions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{name} missing dimensions[]"))?;
+    if dimensions.is_empty() {
+        bail!("{name} dimensions[] must not be empty");
+    }
+    if dimensions.len() != EXPECTED_DIMENSIONS.len() {
+        bail!(
+            "{name} dimension count drifted: expected {}, got {}",
+            EXPECTED_DIMENSIONS.len(),
+            dimensions.len()
+        );
+    }
+    for dimension in dimensions {
+        let field = required_str(dimension, "field")?;
+        let limit = required_u64(dimension, "limit")?;
+        let (_, expected_limit, outcome_field, expected_outcome) = EXPECTED_DIMENSIONS
+            .iter()
+            .find(|(expected_field, ..)| *expected_field == field)
+            .ok_or_else(|| anyhow!("{name} has unknown MLS governance proof dimension {field}"))?;
+        if limit != *expected_limit {
+            bail!("{name} dimension {field} limit drifted: expected {expected_limit}, got {limit}");
+        }
+        if dimension.get(*outcome_field).and_then(Value::as_str) != Some(*expected_outcome) {
+            bail!("{name} dimension {field} over-limit outcome drifted");
+        }
+        let values = dimension
+            .get("values")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{name} dimension {field} missing values[]"))?;
+        let expected = [limit.saturating_sub(1), limit, limit.saturating_add(1)];
+        let actual = values
+            .iter()
+            .map(|value| {
+                value
+                    .as_u64()
+                    .ok_or_else(|| anyhow!("{name} dimension {field} has a non-integer value"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if actual.as_slice() != expected {
+            bail!(
+                "{name} dimension {field} must generate limit-1/limit/limit+1: expected {expected:?}, got {actual:?}"
+            );
+        }
+        if dimension
+            .get("over_decision")
+            .and_then(Value::as_str)
+            .is_none()
+            && dimension
+                .get("over_error_code")
+                .and_then(Value::as_str)
+                .is_none()
+        {
+            bail!("{name} dimension {field} does not declare its over-limit failure");
+        }
+    }
+    if case
+        .pointer("/expected/limit_minus_one")
+        .and_then(Value::as_str)
+        != Some("accept")
+        || case.pointer("/expected/limit").and_then(Value::as_str) != Some("accept")
+        || case
+            .pointer("/expected/limit_plus_one")
+            .and_then(Value::as_str)
+            != Some("reject_without_truncation")
+        || case
+            .pointer("/expected/must_not_allocate_declared_cardinality")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || case
+            .pointer("/expected/must_not_return_partial_manifest")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        bail!("{name} boundary expectations drifted");
+    }
+    Ok(())
+}
+
+fn validate_chunk_request_matrix(case: &Value, generator: &Value) -> Result<()> {
+    let name = required_str(case, "name")?;
+    let expected_cases = serde_json::json!([
+        {
+            "chunk_index": 0,
+            "expected_bundle_digest": "absent",
+            "expect": "accept"
+        },
+        {
+            "chunk_index": 0,
+            "expected_bundle_digest": "present",
+            "expect": "schema_violation"
+        },
+        {
+            "chunk_index": 1,
+            "expected_bundle_digest": "absent",
+            "expect": "schema_violation"
+        },
+        {
+            "chunk_index": 1,
+            "expected_bundle_digest": "matches_chunk_zero",
+            "expect": "accept"
+        },
+        {
+            "chunk_index": "equal_to_manifest_chunk_count",
+            "expected_bundle_digest": "matches_chunk_zero",
+            "expect": "invalid_param"
+        }
+    ]);
+    if generator.get("cases") != Some(&expected_cases) {
+        bail!("{name} chunk acquisition cases drifted");
+    }
+    if case
+        .pointer("/expected/proof_request_digest_excludes_transport_fields")
+        .and_then(Value::as_bool)
+        != Some(true)
+        || case
+            .pointer("/expected/must_not_mix_bundle_digests")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || case
+            .pointer("/expected/unavailable_expected_bundle_error_code")
+            .and_then(Value::as_str)
+            != Some("frontier_unavailable")
+    {
+        bail!("{name} chunk acquisition expectations drifted");
     }
     Ok(())
 }

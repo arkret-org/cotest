@@ -9,10 +9,10 @@ use reqwest::StatusCode;
 use super::key_backups::BACKUP_ID;
 use crate::harness::{ArkretServer, expect_json};
 
-pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let body = KeysBackupsDeleteRequestBody {
         proof: KeyBackupDeleteProof::Development(KeyBackupDeleteDevelopmentProof::new(format!(
-            "dev-ssk-delete:v1:did:web:alice.example:{BACKUP_ID}"
+            "dev-ssk-delete:v1:{actor_id}:{BACKUP_ID}"
         ))),
         reason: Some("user_requested".to_owned()),
     };

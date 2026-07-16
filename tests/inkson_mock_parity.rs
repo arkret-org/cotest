@@ -7,6 +7,9 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, SecondsFormat, Utc};
 use cotest::harness::{ArkretServer, register_account};
+use cotest::scenarios::federation_collaboration::{
+    actor_did_for_service, authorize_device_public_key,
+};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -122,15 +125,24 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     }
 
     let server = ArkretServer::spawn("inkson-mock-parity").await?;
+    let alice_did = actor_did_for_service(server.service_id(), "alice-mock-parity")?;
     let alice_token = register_account(
         &server,
-        "did:web:alice-mock-parity.example",
+        &alice_did,
         "@alice-mock-parity",
         MOCK_PARITY_ALICE_DEVICE_ID,
     )
     .await?;
+    authorize_device_public_key(
+        &server,
+        &alice_token,
+        &alice_did,
+        MOCK_PARITY_ALICE_DEVICE_ID,
+        &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+    )
+    .await?;
     let ctx = TemplateContext {
-        alice_did: "did:web:alice-mock-parity.example".to_owned(),
+        alice_did,
         alice_token,
         service_id: server.service_id().to_owned(),
         realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
@@ -155,7 +167,13 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         let rendered_body = render_body(case, &ctx);
         let mock = normalize_snapshot(
             &case.id,
-            call_mock_contract(&contract_path, case, &rendered_path, rendered_body.clone())?,
+            call_mock_contract(
+                &contract_path,
+                case,
+                &rendered_path,
+                rendered_body.clone(),
+                &ctx,
+            )?,
         );
         let live = normalize_snapshot(
             &case.id,
@@ -262,7 +280,7 @@ fn assert_mock_contract_format(
     for case in &fixture.cases {
         let rendered_path = render_str(&case.path, ctx);
         let rendered_body = render_body(case, ctx);
-        let snapshot = call_mock_contract(contract_path, case, &rendered_path, rendered_body)
+        let snapshot = call_mock_contract(contract_path, case, &rendered_path, rendered_body, ctx)
             .with_context(|| format!("format smoke for {}", case.id))?;
         if snapshot.status == 599 {
             bail!(
@@ -356,10 +374,10 @@ fn assert_mock_contract_artifact_gate(
             }
             if operation.response_schema_ref.is_some() {
                 let body = render_body(case, ctx);
-                let snapshot = call_mock_contract(contract_path, case, &rendered_path, body)
+                let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                     .with_context(|| {
-                        format!("mock response for artifact gate case `{}`", case.id)
-                    })?;
+                    format!("mock response for artifact gate case `{}`", case.id)
+                })?;
                 if !(200..300).contains(&snapshot.status) {
                     bail!(
                         "fixture case `{}` returned non-success mock status {}",
@@ -384,7 +402,7 @@ fn assert_mock_contract_artifact_gate(
             }
         } else {
             let body = render_body(case, ctx);
-            let snapshot = call_mock_contract(contract_path, case, &rendered_path, body)
+            let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                 .with_context(|| format!("mock response for artifact gate case `{}`", case.id))?;
             assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
         }
@@ -855,6 +873,7 @@ fn call_mock_contract(
     case: &ParityCase,
     rendered_path: &str,
     body: Option<Value>,
+    ctx: &TemplateContext,
 ) -> Result<HttpSnapshot> {
     let (path_only, query) = split_path_query(rendered_path);
     let request = json!({
@@ -863,7 +882,7 @@ fn call_mock_contract(
         "query": query,
         "headers": case.headers,
         "account": {
-            "did": "did:web:alice-mock-parity.example",
+            "did": ctx.alice_did,
             "handle": "@alice-mock-parity",
             "display_name": "alice-mock-parity",
             "device_id": MOCK_PARITY_ALICE_DEVICE_ID
@@ -1206,6 +1225,8 @@ fn normalize_string(value: &str) -> String {
         "<ak:operation>".to_owned()
     } else if value.starts_with("ak:backup:") {
         "<ak:backup>".to_owned()
+    } else if value.starts_with("did:webvh:") {
+        "<did:webvh>".to_owned()
     } else if value.starts_with("did:web:") {
         "<did:web>".to_owned()
     } else if value.starts_with("http://127.0.0.1:") {

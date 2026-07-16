@@ -327,10 +327,17 @@ function Invoke-CargoTestInvocation {
             -FilePath "cargo" `
             -ArgumentList $CargoArgs `
             -NoNewWindow `
-            -Wait `
             -PassThru `
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath
+
+        # `Start-Process -Wait` waits for the entire descendant process tree on
+        # Windows. Cargo test binaries spawn and tear down real SUT processes;
+        # even after Cargo and every visible child have exited, the tree wait
+        # can remain attached to an inherited handle and prevent report
+        # generation. Wait for the directly launched Cargo proxy instead.
+        Wait-Process -Id $process.Id | Out-Null
+        $process.Refresh()
 
         foreach ($path in @($stderrPath, $stdoutPath)) {
             if (-not (Test-Path $path)) {
