@@ -47,6 +47,44 @@ export type SignedEventEnvelopeArgs = {
 
 export type EventProofMode = "dev-proof" | "detached-jws";
 
+type RegisteredEventSigner = {
+  verificationMethod: string;
+  signingSeedB64url: string;
+};
+
+const registeredEventSigners = new Map<string, RegisteredEventSigner>();
+
+/**
+ * Register the real browser device signer for direct API events emitted by the
+ * same test actor. This keeps the event-key lifecycle separate from DPoP while
+ * ensuring both submission paths produce proofs for the authorized device.
+ */
+export function registerEventSigner(args: {
+  actorDid: string;
+  deviceId: string;
+  signingSeedB64url: string;
+}): void {
+  registeredEventSigners.set(args.actorDid, {
+    verificationMethod: `${args.actorDid}#${args.deviceId}`,
+    signingSeedB64url: args.signingSeedB64url,
+  });
+}
+
+function eventSignerFor(
+  actorDid: string,
+  requestedVerificationMethod?: string,
+): RegisteredEventSigner | undefined {
+  const registered = registeredEventSigners.get(actorDid);
+  if (
+    !registered ||
+    (requestedVerificationMethod !== undefined &&
+      requestedVerificationMethod !== registered.verificationMethod)
+  ) {
+    return undefined;
+  }
+  return registered;
+}
+
 export function authHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
@@ -1353,8 +1391,14 @@ export function eventProof(args: {
   verificationMethod?: string;
 }): Record<string, unknown> {
   const mode = eventProofMode();
+  const registeredSigner = eventSignerFor(
+    args.actorDid,
+    args.verificationMethod,
+  );
   const verificationMethod =
-    args.verificationMethod ?? `${args.actorDid}#device`;
+    args.verificationMethod ??
+    registeredSigner?.verificationMethod ??
+    `${args.actorDid}#device`;
   const eventDigest = `sha256:${sha256CanonicalJson(args.event)}`;
   const createdAt = canonicalTimestamp();
 
@@ -1371,6 +1415,7 @@ export function eventProof(args: {
     event: args.event,
     verificationMethod,
     createdAt,
+    signingSeedB64url: registeredSigner?.signingSeedB64url,
   });
 }
 
@@ -1380,8 +1425,14 @@ function eventEnvelopeProof(args: {
   verificationMethod?: string;
 }): Record<string, unknown> {
   const mode = eventProofMode();
+  const registeredSigner = eventSignerFor(
+    args.actorDid,
+    args.verificationMethod,
+  );
   const verificationMethod =
-    args.verificationMethod ?? `${args.actorDid}#device`;
+    args.verificationMethod ??
+    registeredSigner?.verificationMethod ??
+    `${args.actorDid}#device`;
   const createdAt = canonicalTimestamp();
 
   if (mode === "dev-proof") {
@@ -1398,6 +1449,7 @@ function eventEnvelopeProof(args: {
     event: args.event,
     verificationMethod,
     createdAt,
+    signingSeedB64url: registeredSigner?.signingSeedB64url,
   });
 }
 
@@ -1446,19 +1498,66 @@ export async function submitSignedEventApi(
   envelope: Record<string, unknown>,
   opts: { server?: SolandKey; context?: string } = {},
 ) {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-    {
-      headers: authHeaders(token),
-      data: envelope,
-    },
+  const context = opts.context ?? `submit ${String(envelope.kind)}`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await request.post(
+      `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+      {
+        headers: authHeaders(token),
+        data: envelope,
+      },
+    );
+    const text = await response.text();
+    if ([200, 201].includes(response.status())) {
+      return JSON.parse(text) as Record<string, unknown>;
+    }
+    const body = JSON.parse(text) as unknown;
+    const staleActorFrontier =
+      response.status() === 409 &&
+      wireErrCode(body) === "cas_conflict" &&
+      text.includes("actor_seq is older than the accepted actor frontier");
+    if (!staleActorFrontier || attempt === 2) {
+      expect(
+        [200, 201],
+        `${context} returned ${response.status()}: ${text}`,
+      ).toContain(response.status());
+    }
+    await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
+  }
+  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
+async function advanceEnvelopeToActorFrontier(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  server?: SolandKey,
+): Promise<void> {
+  const actorDid = stringValue(envelope.actor_id);
+  if (!actorDid) {
+    throw new Error("Event envelope actor_id is required to refresh its frontier");
+  }
+  const response = await request.get(
+    `${solandBaseUrl(server)}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(actorDid)}`,
+    { headers: authHeaders(token) },
   );
-  const text = await response.text();
-  expect(
-    [200, 201],
-    `${opts.context ?? `submit ${String(envelope.kind)}`} returned ${response.status()}: ${text}`,
-  ).toContain(response.status());
-  return JSON.parse(text) as Record<string, unknown>;
+  const body = await expectJsonOk<{
+    frontier?: { actor_seq?: unknown; event_id?: unknown };
+  }>(response, `read actor frontier for ${actorDid}`);
+  const actorSeq = body.frontier?.actor_seq;
+  if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq)) {
+    throw new Error(`actor frontier for ${actorDid} has no valid actor_seq`);
+  }
+  const eventId = stringValue(body.frontier?.event_id);
+  const proofVerificationMethod = Array.isArray(envelope.proofs)
+    ? stringValue(
+        (envelope.proofs[0] as Record<string, unknown> | undefined)
+          ?.verification_method,
+      )
+    : undefined;
+  envelope.actor_seq = actorSeq + 1;
+  envelope.prev_refs = eventId ? [eventId] : [];
+  refreshEventEnvelopeProof(envelope, proofVerificationMethod);
 }
 
 // COT-06-004: discover a Realm's default discussion Strand via the projection face
@@ -2347,6 +2446,7 @@ function sdkEventProof(args: {
   event: Record<string, unknown>;
   verificationMethod: string;
   createdAt: string;
+  signingSeedB64url?: string;
 }): Record<string, unknown> {
   assertJsonTransportable(args.event, "$.event");
   return cotestWire<Record<string, unknown>>("event-proof", {
@@ -2354,6 +2454,7 @@ function sdkEventProof(args: {
     event: args.event,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,
+    signing_seed_b64url: args.signingSeedB64url,
   });
 }
 
@@ -2362,6 +2463,7 @@ function sdkEventEnvelopeProof(args: {
   event: Record<string, unknown>;
   verificationMethod: string;
   createdAt: string;
+  signingSeedB64url?: string;
 }): Record<string, unknown> {
   assertJsonTransportable(args.event, "$.event");
   return cotestWire<Record<string, unknown>>("event-envelope-proof", {
@@ -2369,6 +2471,7 @@ function sdkEventEnvelopeProof(args: {
     event: args.event,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,
+    signing_seed_b64url: args.signingSeedB64url,
   });
 }
 

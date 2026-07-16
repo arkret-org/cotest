@@ -25,6 +25,7 @@ struct EventProofInput {
     verification_method: String,
     created_at: String,
     event: Value,
+    signing_seed_b64url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -386,7 +387,10 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         .with_timezone(&Utc);
     let event_digest =
         Hash::new(event_digest(&input.event, digest_mode)?).context("parse event digest")?;
-    let signing_key = development_event_signing_key(&input.actor_did);
+    let signing_key = match input.signing_seed_b64url.as_deref() {
+        Some(seed) => signing_key_from_seed(seed).context("parse event signing seed")?,
+        None => development_event_signing_key(&input.actor_did),
+    };
 
     let mut proof = Proof {
         kind: proof_kind::DETACHED_JWS.to_owned(),

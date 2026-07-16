@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   expect,
+  request as playwrightRequest,
   type APIRequestContext,
   type APIResponse,
   type Browser,
@@ -13,12 +14,12 @@ import {
 import {
   coauthBaseUrl,
   diagnosticsRoot,
+  embeddedWebvhRegistrationBearer,
   inksonBaseUrl,
   type SolandKey,
   solandBaseUrl,
   solandServiceId,
 } from "./env";
-import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
 import {
   issueCanonicalHandoffSession,
@@ -33,6 +34,7 @@ import {
   type DpopDeviceKey,
 } from "./session-grant-dpop";
 import { enrollOnboardedDeviceSigningKey } from "./device-holder-proof";
+import { registerEventSigner } from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -86,6 +88,9 @@ export type OpenUserOpts = {
   /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
   /// bound to (its thumbprint == the grant's `cnf.jkt`).
   dpopSeedB64url?: string;
+  /// Test-only event-signing seed. This is deliberately distinct from the DPoP
+  /// seed and lets browser and direct API submissions share one device identity.
+  eventSigningSeedB64url?: string;
   /// coauth-assigned grant id (DB row id), persisted by inkson with the grant
   /// so refresh/logout paths can identify the current grant chain.
   grantId?: string;
@@ -101,6 +106,7 @@ export type DpopUserSession = {
   grantId: string;
   grantAudience: string;
   dpopSeedB64url: string;
+  eventSigningSeedB64url: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
   pendingPrincipalRegistration?: Record<string, unknown>;
@@ -839,69 +845,11 @@ export class JointUserPage {
   // `ak.invite.create` followed by invitee-authored `ak.invite.accept`; soland
   // then cascades the accepted invite into Realm membership.
   async acceptInvite(realmId: string) {
-    const serverUrl = this.session.serverUrl;
-    const list = new URL("/_arkret/self/authz/invites", serverUrl);
-    list.searchParams.set("subject", this.user.did);
-    list.searchParams.set("realm_id", realmId);
-    const listUrl = list.toString();
-    const listResp = await this.page.request.get(listUrl, {
-      headers: this.selfPathHeaders("GET", listUrl),
-    });
-    if (!listResp.ok()) {
-      throw new Error(
-        `acceptInvite: list /authz/invites returned ${listResp.status()} for ${this.user.did}`,
-      );
-    }
-    const body = objectRecord(await listResp.json()) ?? {};
-    const invites = Array.isArray(body.invites)
-      ? body.invites
-          .map(objectRecord)
-          .filter(
-            (invite): invite is Record<string, unknown> => invite !== undefined,
-          )
-      : [];
-    const invite = invites.find(
-      (i) =>
-        stringField(i, "realm_id") === realmId &&
-        stringField(i, "invitee") === this.user.did,
-    );
-    if (!invite) {
-      throw new Error(
-        `acceptInvite: no pending invite for ${this.user.did} in realm ${realmId} ` +
-          `(visible invites: ${JSON.stringify(invites)})`,
-      );
-    }
-    const inviteId = stringField(invite, "id");
-    if (!inviteId) {
-      throw new Error(
-        `acceptInvite: invite for ${this.user.did} in realm ${realmId} has no canonical id ` +
-          `(invite: ${JSON.stringify(invite)})`,
-      );
-    }
-    await this.acceptInviteById(realmId, inviteId);
-  }
-
-  async acceptInviteById(realmId: string, inviteId: string) {
-    const serverUrl = this.session.serverUrl;
-    const envelope = signedEventEnvelope({
-      actorDid: this.user.did,
-      realmId,
-      kind: "ak.invite.accept",
-      payload: {
-        invite_id: inviteId,
-      },
-    });
-    const eventsUrl = `${serverUrl}/_arkret/self/events`;
-    const acceptResp = await this.page.request.post(eventsUrl, {
-      headers: this.selfPathHeaders("POST", eventsUrl),
-      data: envelope,
-    });
-    if (![200, 201].includes(acceptResp.status())) {
-      const text = await acceptResp.text();
-      throw new Error(
-        `acceptInviteById: ak.invite.accept returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
-      );
-    }
+    // B-model Events must be signed by the device key authorized during the
+    // browser's PCR bootstrap. A Node-side fixture signer cannot impersonate
+    // that key, so drive Inkson's first-party action and let its active event
+    // signer author the acceptance.
+    await this.acceptInviteFromNotifications(realmId);
   }
 
   // Accept a pending Realm invite through the visible inkson notification UI.
@@ -1114,9 +1062,13 @@ export async function ensureRegistered(
     display_name: user.displayName,
     device_id: user.deviceId,
   };
+  const registrationBearer = embeddedWebvhRegistrationBearer();
+  const headers = registrationBearer
+    ? { authorization: `Bearer ${registrationBearer}` }
+    : undefined;
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-    const response = await request.post(url, { data });
+    const response = await request.post(url, { data, headers });
     if ([200, 409].includes(response.status())) {
       return;
     }
@@ -1165,7 +1117,7 @@ export async function issueDevSession(
 }
 
 export async function createDpopUserSession(
-  request: APIRequestContext,
+  _request: APIRequestContext,
   prefix: string,
   opts: { server?: SolandKey; coauthBase?: string; skipDeviceEnrollment?: boolean } = {},
 ): Promise<DpopUserSession | undefined> {
@@ -1173,10 +1125,21 @@ export async function createDpopUserSession(
   if (!coauth) {
     return undefined;
   }
-  const account = await registerCoauthPasswordAccount(request, coauth, {
-    password: "1amTester!",
+  // Account registration and OIDC handoff are cookie-bound. A single Playwright
+  // `request` fixture is often shared by parallel user creation in one scenario;
+  // isolating each flow prevents one account's Set-Cookie from switching the
+  // other flow onto the wrong identity-creation lease.
+  const accountRequest = await playwrightRequest.newContext({
+    ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
   });
-  return createDpopUserSessionForAccount(request, prefix, account, opts);
+  try {
+    const account = await registerCoauthPasswordAccount(accountRequest, coauth, {
+      password: "1amTester!",
+    });
+    return await createDpopUserSessionForAccount(accountRequest, prefix, account, opts);
+  } finally {
+    await accountRequest.dispose();
+  }
 }
 
 export async function createDpopUserSessionForAccount(
@@ -1208,6 +1171,7 @@ export async function createDpopUserSessionForAccount(
     seed.deviceId = account.bootstrapDeviceId;
   }
   const deviceKey = generateDpopDeviceKey();
+  const eventSigningKey = generateDpopDeviceKey();
   const audience = solandServiceId(opts.server);
   const grant = await issueCanonicalHandoffSession(
     request,
@@ -1235,6 +1199,12 @@ export async function createDpopUserSessionForAccount(
     displayName: account.displayName,
   };
   await ensureRegistered(request, user, { server: opts.server });
+  const eventSigningSeedB64url = dpopDeviceSeedB64url(eventSigningKey);
+  registerEventSigner({
+    actorDid: user.did,
+    deviceId: user.deviceId,
+    signingSeedB64url: eventSigningSeedB64url,
+  });
   // Device authorization up front, for API-only sessions that never open a
   // browser (no in-browser self-enrollment runs, so authorize here to make the
   // KeyPackage upload / MLS flows accepted).
@@ -1278,6 +1248,7 @@ export async function createDpopUserSessionForAccount(
     grantId: grant.grantId,
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
+    eventSigningSeedB64url,
     deviceKey,
     recoveryKey: claimsPrincipalBootstrap ? account.recoveryKey : undefined,
     pendingPrincipalRegistration: claimsPrincipalBootstrap
@@ -1352,6 +1323,7 @@ async function openDpopUserPageFromSession(
     server: opts.server,
     grantJwt: session.grantJwt,
     dpopSeedB64url: session.dpopSeedB64url,
+    eventSigningSeedB64url: session.eventSigningSeedB64url,
     grantId: session.grantId,
     grantAudience: session.grantAudience,
     pendingPrincipalRegistration: session.pendingPrincipalRegistration,
@@ -1413,6 +1385,9 @@ export async function openUser(
             ? {
           grant_jwt: opts.grantJwt,
           dpop_seed_b64url: opts.dpopSeedB64url,
+          ...(opts.eventSigningSeedB64url
+            ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
+            : {}),
           grant_id: opts.grantId ?? "",
           audience: opts.grantAudience ?? "",
               }

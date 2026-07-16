@@ -2593,6 +2593,7 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
+    $env:COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
     if ($SolandNotarySigningKey) {
         # The peer-surface fixtures must sign as the configured service
         # identity. A deterministic development key is only correct when the

@@ -95,6 +95,10 @@ export function coauthServiceId(): string {
   return optionalEnv("COTEST_COAUTH_SERVICE_ID") ?? "did:webvh:z6mkfixture:coauth.joint-e2e.local";
 }
 
+export function embeddedWebvhRegistrationBearer(): string | undefined {
+  return optionalEnv("COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER");
+}
+
 // The OAuth `client_id` soland is configured to advertise in
 // `/_arkret/describe.auth_metadata.methods[].client_id` (soland config
 // `oidc_client_id`). The joint harness sets this to the coauth-seeded
