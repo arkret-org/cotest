@@ -87,7 +87,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     //     grant event's `EventId`.
     if arkret_core::events::EventKind::IDENTITY_ACCOUNTABILITY_GRANT != "ak.identity.accountability_grant" {
         return Err(anyhow!(
-            "arkret_core::events::EventKind::IDENTITY_ACCOUNTABILITY_GRANT spelling drifted: {arkret_core::events::EventKind::IDENTITY_ACCOUNTABILITY_GRANT}"
+            "arkret_core::events::EventKind::IDENTITY_ACCOUNTABILITY_GRANT spelling drifted: arkret_core::events::EventKind::IDENTITY_ACCOUNTABILITY_GRANT"
         ));
     }
     let grant_ref = EventId::new("ak:event:01999999-0000-7000-8000-0000000ab001".to_owned())

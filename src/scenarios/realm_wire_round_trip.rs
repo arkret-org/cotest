@@ -10,7 +10,7 @@
 //!
 //! 1. Round-trip parses back into the same `(kind, realm_id, payload)` triple (the wire bytes any
 //!    other project — soland / inkson / federation peer — would receive).
-//! 2. [`arkret_core::events::event_product_class`] recognises the new kinds in their new family
+//! 2. [`arkret_core::events::event_product_class_from_wire`] recognises the new kinds in their new family
 //!    (Realm / Space-container).
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no
 //! binary, no network — the round-trip is entirely against the SDK so
@@ -18,8 +18,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_core::events::{
-    EventProductClass, event_product_class};
+use arkret_core::events::EventProductClass;
 use arkret_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
@@ -130,7 +129,7 @@ fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String
     if parsed_payload != &vector.payload {
         return Err(anyhow!("round-tripped {}: payload drifted", vector.label,));
     }
-    let class = event_product_class(parsed_kind);
+    let class = arkret_core::events::event_product_class_from_wire(parsed_kind);
     if class != vector.expected_class {
         return Err(anyhow!(
             "round-tripped {}: event_product_class drifted: got {:?}, want {:?}",

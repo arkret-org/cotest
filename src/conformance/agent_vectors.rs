@@ -193,7 +193,7 @@ pub fn run_agent_provision_vector() -> Result<()> {
         bail!("Agent requested_scope DID commitment digest drifted");
     }
     if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
-        bail!("arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION}");
+        bail!("arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION");
     }
     if CAP_ACTION_AGENT_PROVISION != "ak.self.agent.command.provision" {
         bail!("CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}");
@@ -297,7 +297,7 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
         );
     }
     if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY != "ak.gate.account.command.pair_agent_key" {
-        bail!("arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: {arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY}");
+        bail!("arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY");
     }
     // The error-response matrix for the key-pair endpoint MUST
     // include `verification_method_principal_mismatch`,
@@ -508,7 +508,7 @@ fn renew_pairing_gate(status: &str) -> std::result::Result<&'static str, &'stati
 
 pub fn run_agent_repairing_supersede_vector() -> Result<()> {
     if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING != "ak.self.agent.command.renew_pairing" {
-        bail!("arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING}");
+        bail!("arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING");
     }
     if arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING != "superseded_by_repairing" {
         bail!(
@@ -664,7 +664,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         }
     }
     if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE != "ak.self.agent.command.deactivate" {
-        bail!("arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE}");
+        bail!("arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE");
     }
 
     // Happy path: active → paused → active → deactivated terminal.
@@ -891,7 +891,7 @@ fn expect_proof_denial(
 
 pub fn run_agent_session_grant_replay_vector() -> Result<()> {
     if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT != "ak.gate.account.command.issue_session_grant" {
-        bail!("arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT spelling drifted: {arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT}");
+        bail!("arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT");
     }
     // Agent branch reject codes per §0.8:
     //   proof_invalid / verification_method_principal_mismatch /

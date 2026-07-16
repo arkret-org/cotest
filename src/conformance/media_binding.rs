@@ -241,7 +241,7 @@ fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
 
 pub fn run_token_exchange_minimal_vector() -> Result<()> {
     if arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN != "ak.self.call.media.exchange.issue_token" {
-        bail!("arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: {arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN}");
+        bail!("arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN");
     }
     if PARTICIPANT_BINDING_SCHEMA != "ak.media.participant_binding.v1" {
         bail!("PARTICIPANT_BINDING_SCHEMA drifted: {PARTICIPANT_BINDING_SCHEMA}");

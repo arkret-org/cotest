@@ -69,7 +69,7 @@ fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     if arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
-        bail!("arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE}");
+        bail!("arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE");
     }
     if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
         bail!(

@@ -45,12 +45,12 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
     }
     if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
         return Err(anyhow!(
-            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION}"
+            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
         ));
     }
     if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY != "ak.gate.account.command.pair_agent_key" {
         return Err(anyhow!(
-            "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: {arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY}"
+            "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY"
         ));
     }
 
