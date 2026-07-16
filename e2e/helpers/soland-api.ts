@@ -2234,7 +2234,10 @@ type CotestWireCommand =
   | "event-proof"
   | "event-envelope-proof"
   | "principal-control-realm-id"
+  | "account-handoff-request"
   | "principal-registration-fixture"
+  | "identity-creation-register-request"
+  | "pre-registration-session-request"
   | "cross-signing-binding-input"
   | "device-trust-binding-input";
 

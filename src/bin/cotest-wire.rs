@@ -9,7 +9,7 @@ use arkret_core::{
 use arkret_crypto::DeviceTrustBinding;
 use base64::Engine as _;
 use chrono::{DateTime, Timelike as _, Utc};
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -36,12 +36,44 @@ struct PrincipalControlRealmInput {
 struct PrincipalRegistrationFixtureInput {
     principal_server_url: String,
     gate_account_base: String,
-    registration_id: String,
-    handle: String,
-    email: String,
+    handoff_request_id: String,
+    identity_creation_lease: Value,
     device_id: String,
     enrollment_authority_did: String,
     trust_domain: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountHandoffRequestFixtureInput {
+    request_id: String,
+    audience: String,
+    issuer: String,
+    client_id: String,
+    redirect_uri: String,
+    state: String,
+    nonce: String,
+    authorization_code: String,
+    code_verifier: String,
+    dpop_seed_b64url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IdentityCreationRegisterFixtureInput {
+    challenge: Value,
+    did_operation: Value,
+    recovery_key: String,
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PreRegistrationSessionFixtureInput {
+    principal_id: String,
+    device_id: String,
+    requested_scope: Vec<String>,
+    account_handoff_grant: String,
+    audience: String,
+    expires_at: String,
+    dpop_seed_b64url: String,
 }
 
 /// 05-2 — flat inputs for the SSK→device `ak.device-trust-bind-v1` canonical
@@ -67,7 +99,10 @@ fn main() -> Result<()> {
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
+        "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
+        "identity-creation-register-request" => identity_creation_register_request(input)?,
+        "pre-registration-session-request" => pre_registration_session_request(input)?,
         "cross-signing-binding-input" => cross_signing_binding_input(input)?,
         "device-trust-binding-input" => device_trust_binding_input(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
@@ -93,7 +128,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         .as_nanos();
     let mut entropy_hasher = Sha256::new();
     entropy_hasher.update(b"cotest-principal-registration-v1");
-    entropy_hasher.update(input.registration_id.as_bytes());
+    entropy_hasher.update(input.handoff_request_id.as_bytes());
     entropy_hasher.update(input.device_id.as_bytes());
     entropy_hasher.update(nonce.to_le_bytes());
     let entropy: [u8; 32] = entropy_hasher.finalize().into();
@@ -109,7 +144,10 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let draft =
         arkret::webvh::prepare_principal_inception(&arkret::webvh::PrincipalInceptionInput {
             principal_endpoint: &endpoint,
-            local_id: &input.registration_id.to_ascii_lowercase(),
+            local_id: &input
+                .handoff_request_id
+                .trim_start_matches("ak:request:")
+                .to_ascii_lowercase(),
             also_known_as: &[],
             version_time: created_at,
             root_seed: &key_material.root_seed,
@@ -124,7 +162,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let mut hlc = arkret::hlc::HlcGenerator::new(
         &control_realm,
         &input.device_id,
-        input.registration_id.as_bytes(),
+        input.handoff_request_id.as_bytes(),
     );
     let recovery_key_fingerprint = format!(
         "sha256:{}",
@@ -132,12 +170,22 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     );
     let did_operation = serde_json::to_value(&draft.submit_body)
         .context("serialize prepared principal DID operation")?;
+    let lease: arkret::IdentityCreationLease =
+        serde_json::from_value(input.identity_creation_lease)
+            .context("parse identity-creation lease")?;
+    let challenge_request = garth::identity_binding_challenge_request(
+        arkret::RequestId::new(arkret_core::new_prefixed_uuid7("ak:request:"))
+            .context("build identity-binding challenge request id")?,
+        &lease,
+        draft.submit_body,
+    )
+    .context("build identity-binding challenge request")?;
     let checkpoint = json!({
         "principal_server_url": input.principal_server_url,
         "gate_account_base": input.gate_account_base,
-        "registration_id": input.registration_id,
-        "handle": input.handle,
-        "email": input.email,
+        "handoff_request_id": input.handoff_request_id,
+        "lease_id": lease.lease_id,
+        "lease_fence": lease.fence,
         "device_id": input.device_id,
         "enrollment_authority_did": input.enrollment_authority_did,
         "trust_domain": input.trust_domain,
@@ -154,13 +202,97 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "bootstrap_create_event_id": arkret_core::new_prefixed_uuid7("ak:event:"),
         "bootstrap_created_at": created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         "bootstrap_hlc": hlc.generate().to_string(),
-        "stage": "did_bound",
+        "binding_receipt": null,
+        "stage": "custody_confirmed",
     });
     Ok(json!({
         "did_operation": checkpoint["did_operation"],
         "recovery_key": recovery_key,
         "checkpoint": checkpoint,
+        "challenge_request": challenge_request,
     }))
+}
+
+fn account_handoff_request(input: Value) -> Result<Value> {
+    let input: AccountHandoffRequestFixtureInput =
+        serde_json::from_value(input).context("parse account-handoff request input")?;
+    let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
+    let request = garth::oidc_account_handoff_request(
+        garth::OidcAccountHandoffInput {
+            request_id: arkret::RequestId::new(input.request_id)
+                .context("parse account-handoff request id")?,
+            audience: Did::new(input.audience).context("parse handoff audience")?,
+            issuer: input.issuer,
+            client_id: input.client_id,
+            redirect_uri: input.redirect_uri,
+            state: input.state,
+            nonce: input.nonce,
+            authorization_code: input.authorization_code,
+            code_verifier: input.code_verifier,
+        },
+        |bytes| {
+            Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(signing_key.sign(bytes).to_bytes()))
+        },
+    )
+    .context("build account-handoff request")?;
+    serde_json::to_value(request).context("serialize account-handoff request")
+}
+
+fn identity_creation_register_request(input: Value) -> Result<Value> {
+    let input: IdentityCreationRegisterFixtureInput =
+        serde_json::from_value(input).context("parse identity-creation register input")?;
+    let challenge: arkret::IdentityBindingChallengeOutcome =
+        serde_json::from_value(input.challenge).context("parse identity-binding challenge")?;
+    let did_operation: arkret::DidOperationSubmitRequestBody =
+        serde_json::from_value(input.did_operation).context("parse DID operation")?;
+    let key_material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
+        &input.recovery_key,
+        "",
+        0,
+    )
+    .context("derive identity root for control proof")?;
+    let request = garth::identity_creation_register_request(
+        &challenge,
+        did_operation,
+        &key_material.root_seed,
+        input.display_name,
+    )
+    .context("build identity-creation register request")?;
+    serde_json::to_value(request).context("serialize identity-creation register request")
+}
+
+fn pre_registration_session_request(input: Value) -> Result<Value> {
+    let input: PreRegistrationSessionFixtureInput =
+        serde_json::from_value(input).context("parse pre-registration session input")?;
+    let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
+    let expires_at = DateTime::parse_from_rfc3339(&input.expires_at)
+        .context("parse pre-registration proof expiry")?
+        .with_timezone(&Utc);
+    let request = garth::pre_registration_session_grant_request(
+        Did::new(input.principal_id).context("parse session principal")?,
+        Some(DeviceId::new(input.device_id).context("parse session device id")?),
+        input.requested_scope,
+        &input.account_handoff_grant,
+        Did::new(input.audience).context("parse session audience")?,
+        expires_at,
+        |bytes| {
+            Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(signing_key.sign(bytes).to_bytes()))
+        },
+    )
+    .context("build pre-registration session request")?;
+    serde_json::to_value(request).context("serialize pre-registration session request")
+}
+
+fn signing_key_from_seed(seed_b64url: &str) -> Result<SigningKey> {
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(seed_b64url)
+        .context("decode Ed25519 seed")?;
+    let seed: [u8; 32] = bytes.try_into().map_err(|bytes: Vec<u8>| {
+        anyhow::anyhow!("Ed25519 seed must be 32 bytes, got {}", bytes.len())
+    })?;
+    Ok(SigningKey::from_bytes(&seed))
 }
 
 fn read_stdin_json() -> Result<Value> {

@@ -12,13 +12,9 @@
 // device / expiry. The `DPoP` header distinguishes current session-grant
 // presentation from development and deployment compatibility credentials.
 //
-// Minting approach: a real DPoP-bound grant is obtained from coauth's cotest
-// debug seam (POST /_coauth/account/test/debug/issue-dpop-grant), which
-// signs a grant whose `cnf.jkt` matches a supplied device public JWK — without
-// driving the OIDC browser ceremony. That route is mounted only in debug builds
-// with COAUTH_ENABLE_TEST_ENDPOINTS enabled; the grant-minting cases skip
-// cleanly when it (or coauth) is absent. The "missing DPoP rejected" and
-// "dev-bearer still works" cases need neither and run against soland directly.
+// Minting approach: create an account-first service account, bind its
+// client-signed identity through the canonical handoff, then obtain the grant
+// through a second bound handoff with `pre_registration_handoff` proof.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { coauthBaseUrl, solandBaseUrl, solandServiceId } from "../../helpers/env";
@@ -28,12 +24,14 @@ import {
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
-import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
+import {
+  issueCanonicalHandoffSession,
+  registerCoauthPasswordAccount,
+} from "../../helpers/coauth-register";
 import { wireErrCode } from "../../helpers/soland-api";
 import {
   dpopDeviceSeedB64url,
   generateDpopDeviceKey,
-  mintDpopBoundGrant,
   mintDpopProof,
   type DpopBoundGrant,
   type DpopDeviceKey,
@@ -57,20 +55,9 @@ function viewerUrl(): string {
 test.describe.configure({ mode: "serial" });
 
 test.describe("session-grant + DPoP self-path (② A+②)", () => {
-  // ── Cases needing a real DPoP-bound grant (coauth + debug seam) ──────────
+  // ── Cases needing a real canonical DPoP-bound grant ─────────────────────
   //
   // A per-describe shared setup: register a user, mint a device key + grant.
-  // When the debug seam is unavailable the dependent tests skip with a clear
-  // message rather than fail.
-  let sharedAccount:
-    | {
-        coauth: string;
-        actorDid: string;
-        deviceId: string;
-        displayName: string;
-      }
-    | undefined;
-
   async function setupAccount(
     request: APIRequestContext,
   ): Promise<
@@ -79,12 +66,11 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
         actorDid: string;
         deviceId: string;
         displayName: string;
+        handle: string;
+        password: string;
       }
     | undefined
   > {
-    if (sharedAccount) {
-      return sharedAccount;
-    }
     const coauth = coauthBaseUrl();
     if (!coauth) {
       return undefined;
@@ -99,13 +85,14 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       displayName: account.displayName,
     };
     await ensureRegistered(request, user);
-    sharedAccount = {
+    return {
       coauth,
       actorDid: user.did,
       deviceId: user.deviceId,
       displayName: user.displayName,
+      handle: account.handle,
+      password: account.password,
     };
-    return sharedAccount;
   }
 
   async function setupGrant(
@@ -116,6 +103,8 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
         actorDid: string;
         deviceId: string;
         displayName: string;
+        handle: string;
+        password: string;
         deviceKey: DpopDeviceKey;
         grant: DpopBoundGrant;
       }
@@ -126,17 +115,20 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       return undefined;
     }
     const deviceKey = generateDpopDeviceKey();
-    const grant = await mintDpopBoundGrant(
+    const grant = await issueCanonicalHandoffSession(
       request,
       account.coauth,
-      account.actorDid,
-      account.deviceId,
-      deviceKey,
-      { audience: solandServiceId() },
+      {
+        principalId: account.actorDid,
+        deviceId: account.deviceId,
+        deviceKey,
+        audience: solandServiceId(),
+        account: {
+          handle: account.handle,
+          password: account.password,
+        },
+      },
     );
-    if (!grant) {
-      return undefined;
-    }
     // Sanity: the grant the AA minted is bound to OUR device key.
     expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
     expect(grant.audience).toBe(solandServiceId());
@@ -157,7 +149,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     const ctx = await setupGrant(request);
     test.skip(
       !ctx,
-      "coauth debug grant-mint seam unavailable (release build or COAUTH_ENABLE_TEST_ENDPOINTS unset)",
+      "coauth canonical handoff prerequisites unavailable",
     );
     const { deviceKey, grant } = ctx!;
 
@@ -192,7 +184,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     const ctx = await setupGrant(request);
     test.skip(
       !ctx,
-      "coauth debug grant-mint seam unavailable (release build or COAUTH_ENABLE_TEST_ENDPOINTS unset)",
+      "coauth canonical handoff prerequisites unavailable",
     );
     const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
     const user = {
@@ -266,7 +258,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
     const ctx = await setupGrant(request);
-    test.skip(!ctx, "coauth debug grant-mint seam unavailable");
+    test.skip(!ctx, "coauth canonical handoff prerequisites unavailable");
     const { grant } = ctx!;
 
     const url = viewerUrl();
@@ -295,7 +287,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
     const ctx = await setupGrant(request);
-    test.skip(!ctx, "coauth debug grant-mint seam unavailable");
+    test.skip(!ctx, "coauth canonical handoff prerequisites unavailable");
     const { deviceKey, grant } = ctx!;
     const url = viewerUrl();
 
@@ -343,7 +335,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
     const ctx = await setupGrant(request);
-    test.skip(!ctx, "coauth debug grant-mint seam unavailable");
+    test.skip(!ctx, "coauth canonical handoff prerequisites unavailable");
     const { deviceKey, grant } = ctx!;
     const url = viewerUrl();
 
@@ -395,7 +387,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       const ctx = await setupGrant(request);
       test.skip(
         !ctx,
-        "PRECONDITION_GRANT_ISSUER_UNAVAILABLE: coauth debug grant issuer is disabled",
+        "PRECONDITION_GRANT_ISSUER_UNAVAILABLE: canonical handoff is unavailable",
       );
       const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
       const user = {
@@ -460,7 +452,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       const ctx = await setupGrant(request);
       test.skip(
         !ctx,
-        "PRECONDITION_GRANT_ISSUER_UNAVAILABLE: coauth debug grant issuer is disabled",
+        "PRECONDITION_GRANT_ISSUER_UNAVAILABLE: canonical handoff is unavailable",
       );
       const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
       const user = {
@@ -505,7 +497,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     },
   );
 
-  // ── Cases that need neither coauth nor the debug seam ────────────────────
+  // ── Cases that need neither coauth nor a canonical grant ─────────────────
 
   test("2. a session grant presented WITHOUT a DPoP header is rejected (401)", async ({
     request,

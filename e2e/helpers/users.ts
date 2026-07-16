@@ -21,6 +21,7 @@ import {
 import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
 import {
+  issueCanonicalHandoffSession,
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
 } from "./coauth-register";
@@ -28,7 +29,6 @@ import {
   dpopDeviceSeedB64url,
   dpopDeviceKeyFromSeedB64url,
   generateDpopDeviceKey,
-  mintDpopBoundGrant,
   selfPathGrantHeaders,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
@@ -1209,25 +1209,24 @@ export async function createDpopUserSessionForAccount(
   }
   const deviceKey = generateDpopDeviceKey();
   const audience = solandServiceId(opts.server);
-  const grant = await mintDpopBoundGrant(
+  const grant = await issueCanonicalHandoffSession(
     request,
     coauth,
-    account.did,
-    seed.deviceId,
-    deviceKey,
-    { audience },
+    {
+      principalId: account.did,
+      deviceId: seed.deviceId,
+      deviceKey,
+      audience,
+      account: { handle: account.handle, password: account.password },
+    },
   );
-  if (!grant) {
-    return undefined;
-  }
   expect(grant.audience).toBe(audience);
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
   expect(grant.scopes).toContain(`urn:arkret:client:device:${seed.deviceId}`);
-  // Model-B identity: consume only the already verified client-authored DID
-  // binding returned by the debug seam. Coauth must return principal_unknown
-  // rather than synthesize a local/fallback DID when no binding exists.
-  expect(grant.principalDid, "debug seam must return the bound principal DID").toBeTruthy();
+  // Model-B identity: consume only the verified DID returned by the canonical
+  // pre-registration handoff. There is deliberately no actor-id fallback.
+  expect(grant.principalDid, "handoff session must return the bound principal DID").toBeTruthy();
   const user = {
     ...seed,
     name: account.handle,

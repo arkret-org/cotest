@@ -314,6 +314,9 @@ export async function mintDpopBoundGrant(
     expires_at: string;
     principal_did?: string;
   };
+  if (!body.principal_did) {
+    throw new Error("debug issue-dpop-grant omitted verified principal_did");
+  }
   return {
     grantId: body.grant_id,
     grantJwt: body.grant_jwt,
@@ -321,8 +324,6 @@ export async function mintDpopBoundGrant(
     audience: body.audience,
     scopes: body.scopes,
     expiresAt: body.expires_at,
-    // Fall back to the requested actor DID for older coauth builds that predate
-    // the model-B principal_did response field.
-    principalDid: body.principal_did ?? actorDid,
+    principalDid: body.principal_did,
   };
 }

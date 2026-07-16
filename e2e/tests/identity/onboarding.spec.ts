@@ -25,7 +25,6 @@ import {
   registerCoauthPasswordAccount,
 } from "../../helpers/coauth-register";
 import { resolvePrincipalDid } from "../../helpers/onboarding";
-import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 
 test.describe.configure({ mode: "serial" });
 
@@ -50,7 +49,7 @@ test.describe("account onboarding", () => {
     expect(me.did).toBe(alice.did);
   });
 
-  test("coauth exposes OIDC/passkey bridge metadata and email verification onboarding", async ({
+  test("coauth exposes canonical handoff metadata and account-first registration", async ({
     request,
   }) => {
     const coauth = coauthBaseUrl();
@@ -76,11 +75,15 @@ test.describe("account onboarding", () => {
       ]),
     );
 
-    const user = uniqueUser("p1-025-webvh-email");
+    const user = uniqueUser("p1-025-account-first");
     const serviceDescribe = await request.get(`${coauth}/_arkret/describe`);
     expect(serviceDescribe.status()).toBe(200);
     const service = await serviceDescribe.json();
     expect(service.supported_operations).toContain("ak.gate.account.command.issue_session_grant");
+    expect(service.supported_operations).toContain("ak.gate.account.exchange.create_handoff");
+    expect(service.supported_operations).toContain(
+      "ak.gate.account.command.issue_identity_binding_challenge",
+    );
     expect(service.auth_metadata?.issuer_did).toBe(coauthServiceId());
     expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth!).origin);
     expect(service.auth_metadata?.account_authority?.gate_account_base).toBe(
@@ -88,45 +91,16 @@ test.describe("account onboarding", () => {
     );
     expect(JSON.stringify(service.auth_metadata)).not.toContain(solandServiceId());
 
-    const start = await request.post(`${coauth}/_coauth/account/auth/register/webvh/start`, {
-      data: {
-        handle: user.handle.slice(1),
-        principal_server_url: solandBaseUrl(),
-      },
+    const account = await registerCoauthPasswordAccount(request, coauth!, {
+      handle: user.handle.slice(1),
     });
-    expect(start.status()).toBe(200);
-    const started = await start.json();
-    expect(started, JSON.stringify(started)).toMatchObject({ status: "success" });
-    const mockEmail = mockEmailBaseUrl();
-    expect(started.email_verification_bypass_allowed).toBe(!mockEmail);
-
-    const emailAddress = `${user.name}@example.test`;
-    const email = await request.post(
-      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/email`,
-      { data: { email: emailAddress } },
-    );
-    expect(email.status()).toBe(200);
-    const emailBody = await email.json();
-    expect(emailBody.status).toBe("sent");
-    expect(emailBody.delivery).toBe(mockEmail ? "email" : "skipped");
-    let verificationCode = emailBody.dev_code as string | undefined;
-    if (mockEmail) {
-      await expect
-        .poll(() => latestMockEmailCode(request, emailAddress), { timeout: 30_000 })
-        .toBeTruthy();
-      verificationCode = await latestMockEmailCode(request, emailAddress);
-    } else {
-      expect(verificationCode).toBeTruthy();
-    }
-
-    const verify = await request.post(
-      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
-      { data: { code: verificationCode } },
-    );
-    expect(verify.status()).toBe(200);
-    const verified = await verify.json();
-    expect(verified.status).toBe("success");
-    expect(verified.next_step).toBe("finish");
+    expect(account.did).toMatch(/^did:webvh:/);
+    expect(account.recoveryKey.split(/\s+/)).toHaveLength(24);
+    expect(account.pendingPrincipalRegistration).toMatchObject({
+      handoff_request_id: expect.stringMatching(/^ak:request:/),
+      stage: "binding_registered",
+      binding_receipt: expect.objectContaining({ binding_state: "bound" }),
+    });
   });
 
   test("inkson starts the coauth OIDC bridge instead of dev-login", async ({ browser }) => {
@@ -197,27 +171,31 @@ test.describe("account onboarding", () => {
       await page.goto("/register", { waitUntil: "domcontentloaded" });
       await expect(page.getByTestId("registration-panel")).toBeVisible();
       await page.getByTestId("register-server").fill(solandBaseUrl());
-      await page.getByTestId("register-handle").fill(handle);
-      await page.getByTestId("register-email").fill(email);
-      await page.getByTestId("register-password").fill(password);
-      await page.getByTestId("register-password-confirm").fill(password);
-      await page.getByTestId("register-prepare").click();
-
-      const generated = page.getByTestId("register-recovery-key");
-      await expect(generated).toBeVisible({ timeout: 60_000 });
-      const recoveryKey = (await generated.inputValue()).trim();
-      expect(recoveryKey.split(/\s+/)).toHaveLength(24);
-      await page.getByTestId("register-recovery-confirm").fill(recoveryKey);
-      const devCodeText = await page.getByTestId("register-dev-code").innerText();
-      const verificationCode = devCodeText.match(/\b\d{6}\b/)?.[0];
-      expect(verificationCode).toBeTruthy();
-      await page.getByTestId("register-email-code").fill(verificationCode!);
-      await page.getByTestId("register-commit").click();
-
-      await expect(
-        page.locator("#login-handle").or(page.locator("#login-password")),
-      ).toBeVisible({ timeout: 120_000 });
-      await submitCoauthPasswordCredentials(page, { handle, password });
+      await page.getByTestId("register-open-account-authority").click();
+      await expect(page.locator("#login-handle")).toBeVisible({ timeout: 120_000 });
+      await page.getByRole("link", { name: /create account/i }).click();
+      await page.locator('input[autocomplete="username"]').fill(handle);
+      await page.locator('input[autocomplete="email"]').fill(email);
+      await page.locator("#new-password").fill(password);
+      await page.locator("#confirm-new-password").fill(password);
+      await page.getByRole("button", { name: /create account/i }).click();
+      await expect(page.locator("#register-email-verify-code")).toBeVisible({
+        timeout: 60_000,
+      });
+      let verificationCode = "123456";
+      if (mockEmailBaseUrl()) {
+        await expect
+          .poll(() => latestMockEmailCode(request, email), { timeout: 30_000 })
+          .toBeTruthy();
+        verificationCode = (await latestMockEmailCode(request, email))!;
+      }
+      await page.locator("#register-email-verify-code").fill(verificationCode);
+      await page.getByRole("button", { name: "Verify", exact: true }).click();
+      const displayName = page.locator('input[autocomplete="name"]');
+      if (await displayName.isVisible({ timeout: 10_000 }).catch(() => false)) {
+        await displayName.fill(user.displayName);
+        await page.getByRole("button", { name: /continue/i }).click();
+      }
       const approve = page.getByTestId("coauth-oauth-approve");
       if (
         await approve
@@ -231,6 +209,22 @@ test.describe("account onboarding", () => {
       await expect(page.getByTestId("onboarding-panel")).toBeVisible({
         timeout: 120_000,
       });
+      await expect(page.getByTestId("account-handoff-onboarding")).toBeVisible();
+      await page.getByTestId("onboarding-generate-recovery-key").click();
+      const generated = page.getByTestId("onboarding-recovery-key-display");
+      await expect(generated).toBeVisible();
+      const recoveryKey = (await generated.inputValue()).trim();
+      const recoveryWords = recoveryKey.split(/\s+/);
+      expect(recoveryWords).toHaveLength(24);
+      const confirmations = page.getByTestId("custody-word-confirmation");
+      await expect(confirmations).toHaveCount(3);
+      for (let slot = 0; slot < 3; slot += 1) {
+        const label = await confirmations.nth(slot).locator("xpath=preceding-sibling::label[1]").innerText();
+        const position = Number(label.match(/#(\d+)/)?.[1]);
+        expect(position).toBeGreaterThanOrEqual(1);
+        await confirmations.nth(slot).fill(recoveryWords[position - 1]);
+      }
+      await page.getByTestId("onboarding-bind-identity").click();
       await expect(page.getByTestId("pending-principal-bootstrap")).toBeVisible();
       const principalDid = await page.evaluate(() => {
         const config = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}");
@@ -298,7 +292,7 @@ test.describe("account onboarding", () => {
     }
   });
 
-  test("carol verifies email then finishes with her client-signed cold-root inception", async ({
+  test("carol creates an account then binds her client-signed cold-root inception", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1 + sync/third-party-invites.md §3
@@ -317,8 +311,15 @@ test.describe("account onboarding", () => {
     expect(resolved.document.capabilityDelegation).toBeUndefined();
 
     const duplicate = await request.post(
-      `${coauth}/_coauth/account/auth/register/webvh/start`,
-      { data: { handle, principal_server_url: solandBaseUrl() } },
+      `${coauth}/_coauth/account/auth/register`,
+      {
+        data: {
+          handle,
+          email: `${handle}-duplicate@example.test`,
+          password: "ArkretE2E!2026",
+          password_confirm: "ArkretE2E!2026",
+        },
+      },
     );
     expect(duplicate.status(), await duplicate.text()).toBe(200);
     expect(await duplicate.json()).toMatchObject({
@@ -327,28 +328,4 @@ test.describe("account onboarding", () => {
     });
   });
 
-  // ── Retained (honestly out of low-risk reach) ────────────────────────────
-  //
-  // The following remain `test.fixme` after this pass. They are NOT promotable
-  // by a black-box harness test today; promoting them would assert behavior
-  // that the running stack cannot satisfy, or require changes to modules owned
-  // by other workstreams (device / webvh / upstream-OAuth). Rationale inline.
-
-  test.fixme(
-    // @blocking-on: soland#identity-onboarding-gap
-    // @user-promise: e2e/scenarios/identity/onboarding.md
-    // @expected-live-by: 2026Q3
-    "bob registers via OIDC bridge (mock IdP); coauth verifies ID token and binds a fresh DID",
-    async () => {
-      // coauth's OIDC bridge (handlers/account/auth/oidc_bridge.rs) treats an
-      // EXTERNAL issuer (the mock IdP) as a Federated upstream provider. The
-      // exchange requires the upstream subject to already be linked to a local
-      // account (`upstream_oauth_link().find_by_subject` -> else
-      // `upstream_link_required`); there is no auto-provision-fresh-DID path for
-      // an unlinked external subject. Driving this needs the upstream-OAuth
-      // browser link ceremony + seeded provider/link rows (DB + config), then
-      // the same client-signed cold-root inception/binding flow used by every
-      // other registration factor.
-    },
-  );
 });

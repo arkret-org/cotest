@@ -1,25 +1,28 @@
-// Self-register a password-loginable coauth account through the client-signed
-// did:webvh flow, so the account always has a verified principal binding before
-// the real OIDC browser-login ceremony starts.
+// Canonical account-first registration helpers.
 //
-// Flow (coauth handlers/account/register.rs):
-//   1. start WebVH registration and verify email
-//   2. build and root-sign entry 0 in the client harness
-//   3. finish with the signed DID operation and password
-//
-// The email code is minted asynchronously by coauth's notification worker. Under
-// the dev email-delivery bypass (`registration_email_delivery_bypass_allowed`,
-// which the joint harness always enables) it is the deterministic "123456" — the
-// same fixed code the webvh path returns in-band as `dev_code`. We poll
-// verify-email until the worker has stored it.
+// A Coauth service account is created without a principal DID. The harness then
+// runs the same holder-bound OIDC handoff / lease / challenge / register
+// protocol as Inkson. All canonical DTO construction and root signatures are
+// delegated to cotest-wire, which consumes Garth and the Arkret Rust SDK.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
-import { mockEmailBaseUrl, solandBaseUrl } from "./env";
-import { cotestWire } from "./soland-api";
+import {
+  coauthOidcClientId,
+  mockEmailBaseUrl,
+  solandBaseUrl,
+  solandServiceId,
+} from "./env";
+import {
+  dpopDeviceSeedB64url,
+  generateDpopDeviceKey,
+  kickoffDpopHeaders,
+  mintDpopProof,
+  type DpopBoundGrant,
+  type DpopDeviceKey,
+} from "./session-grant-dpop";
+import { cotestWire, typedId } from "./soland-api";
 
-// The deterministic verification code coauth mints under the dev email-delivery
-// bypass. Mirrors coauth tasks/notifications.rs + handlers/account/register.rs.
 export const COAUTH_DEV_EMAIL_CODE = "123456";
 
 export type CoauthPasswordAccount = {
@@ -35,16 +38,54 @@ export type CoauthPasswordAccount = {
   bootstrapClaimed?: boolean;
 };
 
+export type CanonicalAccountHandoff = {
+  requestId: string;
+  accountHandoffGrant: string;
+  expiresAt: string;
+  binding: Record<string, unknown>;
+  deviceKey: DpopDeviceKey;
+};
+
 type PrincipalRegistrationFixture = {
   did_operation: Record<string, unknown>;
   recovery_key: string;
   checkpoint: Record<string, unknown>;
+  challenge_request: Record<string, unknown>;
+};
+
+type OidcAuthorization = {
+  issuer: string;
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  nonce: string;
+  authorizationCode: string;
+  codeVerifier: string;
 };
 
 function objectRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+async function responseJsonRecord(
+  response: Awaited<ReturnType<APIRequestContext["get"]>>,
+  context: string,
+): Promise<Record<string, unknown>> {
+  const raw = await response.text();
+  if (!response.ok()) {
+    throw new Error(`${context} failed (${response.status()}): ${raw}`);
+  }
+  const body = objectRecord(raw ? JSON.parse(raw) : {});
+  if (!body) {
+    throw new Error(`${context} returned a non-object response: ${raw}`);
+  }
+  return body;
 }
 
 export async function latestMockEmailCode(
@@ -72,6 +113,316 @@ export async function latestMockEmailCode(
   return undefined;
 }
 
+async function registrationEmailCode(
+  request: APIRequestContext,
+  email: string,
+): Promise<string> {
+  if (!mockEmailBaseUrl()) {
+    return COAUTH_DEV_EMAIL_CODE;
+  }
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const code = await latestMockEmailCode(request, email);
+    if (code) {
+      return code;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`coauth registration email did not arrive for ${email}`);
+}
+
+export async function registerUnboundCoauthPasswordAccount(
+  request: APIRequestContext,
+  coauthBase: string,
+  args: { handle: string; email?: string; password?: string; displayName?: string },
+): Promise<{ handle: string; email: string; password: string; displayName: string }> {
+  const email = args.email ?? `${args.handle}@example.test`;
+  const password = args.password ?? "ArkretE2E!2026";
+  const displayName = args.displayName ?? `E2E ${args.handle}`;
+  const base = `${coauthBase}/_coauth/account/auth/register`;
+  const startResponse = await request.post(base, {
+    data: {
+      handle: args.handle,
+      email,
+      password,
+      password_confirm: password,
+    },
+  });
+  const started = await responseJsonRecord(startResponse, "coauth account-first registration");
+  if (started.status !== "success") {
+    throw new Error(`coauth account-first registration was rejected: ${JSON.stringify(started)}`);
+  }
+  const registrationId = stringValue(started.id);
+  if (!registrationId) {
+    throw new Error("coauth account-first registration omitted id");
+  }
+  let nextStep = stringValue(started.next_step);
+  if (nextStep === "verify_email") {
+    const code = await registrationEmailCode(request, email);
+    const deadline = Date.now() + 30_000;
+    let verified: Record<string, unknown> | undefined;
+    while (Date.now() < deadline) {
+      verified = await responseJsonRecord(
+        await request.post(`${base}/${registrationId}/verify-email`, { data: { code } }),
+        "coauth account email verification",
+      );
+      if (verified.status === "success") {
+        break;
+      }
+      if (verified.error !== "invalid_code") {
+        throw new Error(`coauth account email verification failed: ${JSON.stringify(verified)}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (verified?.status !== "success") {
+      throw new Error(`coauth account email verification timed out: ${JSON.stringify(verified)}`);
+    }
+    nextStep = stringValue(verified.next_step);
+  }
+  if (nextStep === "display_name") {
+    const named = await responseJsonRecord(
+      await request.post(`${base}/${registrationId}/display-name`, {
+        data: { display_name: displayName },
+      }),
+      "coauth account display-name step",
+    );
+    if (named.status !== "success") {
+      throw new Error(`coauth display-name step failed: ${JSON.stringify(named)}`);
+    }
+    nextStep = stringValue(named.next_step);
+  }
+  if (nextStep !== "finish") {
+    throw new Error(`unsupported coauth registration next_step: ${String(nextStep)}`);
+  }
+  const finished = await responseJsonRecord(
+    await request.post(`${base}/${registrationId}/finish`, { data: {} }),
+    "coauth account registration finish",
+  );
+  if (finished.status !== "success" || finished.did != null) {
+    throw new Error(`coauth account-first finish returned an invalid outcome: ${JSON.stringify(finished)}`);
+  }
+  return { handle: args.handle, email, password, displayName };
+}
+
+async function authorizeWithCurrentAccount(
+  request: APIRequestContext,
+  coauthBase: string,
+  audience: string,
+  deviceId: string,
+): Promise<OidcAuthorization> {
+  const discovery = await responseJsonRecord(
+    await request.get(`${coauthBase}/.well-known/openid-configuration`),
+    "coauth OIDC discovery",
+  );
+  const issuer = stringValue(discovery.issuer);
+  const authorizationEndpoint = stringValue(discovery.authorization_endpoint);
+  const clientId = coauthOidcClientId();
+  if (!issuer || !authorizationEndpoint || !clientId) {
+    throw new Error("coauth OIDC discovery/client configuration is incomplete");
+  }
+  const redirectUri = "http://127.0.0.1/auth/callback";
+  const state = randomBytes(24).toString("base64url");
+  const nonce = randomBytes(24).toString("base64url");
+  const codeVerifier = randomBytes(32).toString("base64url");
+  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+  const authorize = new URL(authorizationEndpoint);
+  authorize.searchParams.set("response_type", "code");
+  authorize.searchParams.set("client_id", clientId);
+  authorize.searchParams.set("redirect_uri", redirectUri);
+  authorize.searchParams.set("scope", `openid urn:arkret:client:device:${deviceId}`);
+  authorize.searchParams.set("state", state);
+  authorize.searchParams.set("nonce", nonce);
+  authorize.searchParams.set("resource", audience);
+  authorize.searchParams.set("code_challenge_method", "S256");
+  authorize.searchParams.set("code_challenge", codeChallenge);
+
+  const authorization = await request.get(authorize.toString(), { maxRedirects: 0 });
+  const location = authorization.headers().location;
+  if (!location || ![302, 303, 307, 308].includes(authorization.status())) {
+    throw new Error(
+      `coauth authorize did not enter approval (${authorization.status()}): ${await authorization.text()}`,
+    );
+  }
+  const approvalUrl = new URL(location, coauthBase);
+  const grantId = approvalUrl.pathname.split("/").filter(Boolean).at(-1);
+  if (!grantId || !approvalUrl.pathname.includes("/oauth/approval/")) {
+    throw new Error(`coauth authorize returned an unexpected location: ${approvalUrl}`);
+  }
+  const approved = await responseJsonRecord(
+    await request.post(
+      `${coauthBase}/_coauth/self/oauth/authorization-grants/${grantId}/decision`,
+      { data: { action: "approve" } },
+    ),
+    "coauth OAuth approval",
+  );
+  const redirect = stringValue(approved.redirect_url);
+  if (approved.status !== "success" || !redirect) {
+    throw new Error(`coauth OAuth approval did not return a callback: ${JSON.stringify(approved)}`);
+  }
+  const callback = new URL(redirect);
+  if (callback.searchParams.get("state") !== state) {
+    throw new Error("coauth OAuth callback state did not match");
+  }
+  const authorizationCode = callback.searchParams.get("code");
+  if (!authorizationCode) {
+    throw new Error(`coauth OAuth callback omitted code: ${callback}`);
+  }
+  return {
+    issuer,
+    clientId,
+    redirectUri,
+    state,
+    nonce,
+    authorizationCode,
+    codeVerifier,
+  };
+}
+
+export function accountHandoffHeaders(args: {
+  deviceKey: DpopDeviceKey;
+  accountHandoffGrant: string;
+  method: string;
+  url: string;
+}): Record<string, string> {
+  return {
+    authorization: `DPoP ${args.accountHandoffGrant}`,
+    dpop: mintDpopProof({
+      deviceKey: args.deviceKey,
+      method: args.method,
+      url: args.url,
+      grantJwt: args.accountHandoffGrant,
+    }),
+  };
+}
+
+export async function createCanonicalAccountHandoff(
+  request: APIRequestContext,
+  coauthBase: string,
+  args: {
+    audience: string;
+    deviceId: string;
+    deviceKey?: DpopDeviceKey;
+    account?: { handle: string; password: string };
+  },
+): Promise<CanonicalAccountHandoff> {
+  const deviceKey = args.deviceKey ?? generateDpopDeviceKey();
+  if (args.account) {
+    const login = await responseJsonRecord(
+      await request.post(`${coauthBase}/_coauth/account/auth/login`, {
+        data: args.account,
+      }),
+      "coauth password authentication",
+    );
+    if (login.status !== "success") {
+      throw new Error(`coauth password authentication failed: ${JSON.stringify(login)}`);
+    }
+  }
+  const authorization = await authorizeWithCurrentAccount(
+    request,
+    coauthBase,
+    args.audience,
+    args.deviceId,
+  );
+  const requestId = typedId("request");
+  const body = cotestWire<Record<string, unknown>>("account-handoff-request", {
+    request_id: requestId,
+    audience: args.audience,
+    issuer: authorization.issuer,
+    client_id: authorization.clientId,
+    redirect_uri: authorization.redirectUri,
+    state: authorization.state,
+    nonce: authorization.nonce,
+    authorization_code: authorization.authorizationCode,
+    code_verifier: authorization.codeVerifier,
+    dpop_seed_b64url: dpopDeviceSeedB64url(deviceKey),
+  });
+  const url = `${coauthBase}/_arkret/gate/account/authentication-handoffs`;
+  const outcome = await responseJsonRecord(
+    await request.post(url, {
+      data: body,
+      headers: kickoffDpopHeaders({ deviceKey, method: "POST", url }),
+    }),
+    "canonical account handoff",
+  );
+  const allowedOperations = outcome.allowed_operations;
+  const canonicalAllowlist = [
+    "ak.gate.account.command.issue_identity_binding_challenge",
+    "ak.gate.account.command.register",
+    "ak.gate.account.command.issue_session_grant",
+  ];
+  if (
+    outcome.request_id !== requestId ||
+    JSON.stringify(allowedOperations) !== JSON.stringify(canonicalAllowlist)
+  ) {
+    throw new Error(`invalid account handoff outcome: ${JSON.stringify(outcome)}`);
+  }
+  const accountHandoffGrant = stringValue(outcome.account_handoff_grant);
+  const expiresAt = stringValue(outcome.expires_at);
+  const binding = objectRecord(outcome.binding);
+  if (!accountHandoffGrant || !expiresAt || !binding) {
+    throw new Error(`incomplete account handoff outcome: ${JSON.stringify(outcome)}`);
+  }
+  return { requestId, accountHandoffGrant, expiresAt, binding, deviceKey };
+}
+
+export async function issueCanonicalHandoffSession(
+  request: APIRequestContext,
+  coauthBase: string,
+  args: {
+    principalId: string;
+    audience: string;
+    deviceId: string;
+    deviceKey: DpopDeviceKey;
+    account: { handle: string; password: string };
+  },
+): Promise<DpopBoundGrant> {
+  const handoff = await createCanonicalAccountHandoff(request, coauthBase, args);
+  if (handoff.binding.state !== "bound" || handoff.binding.principal_id !== args.principalId) {
+    throw new Error(`bound account handoff expected: ${JSON.stringify(handoff.binding)}`);
+  }
+  const body = cotestWire<Record<string, unknown>>("pre-registration-session-request", {
+    principal_id: args.principalId,
+    device_id: args.deviceId,
+    requested_scope: [],
+    account_handoff_grant: handoff.accountHandoffGrant,
+    audience: args.audience,
+    expires_at: new Date(Date.now() + 4 * 60_000).toISOString(),
+    dpop_seed_b64url: dpopDeviceSeedB64url(args.deviceKey),
+  });
+  const url = `${coauthBase}/_arkret/gate/account/session-grants`;
+  const outcome = await responseJsonRecord(
+    await request.post(url, {
+      data: body,
+      headers: accountHandoffHeaders({
+        deviceKey: args.deviceKey,
+        accountHandoffGrant: handoff.accountHandoffGrant,
+        method: "POST",
+        url,
+      }),
+    }),
+    "pre-registration handoff session grant",
+  );
+  const grantId = stringValue(outcome.grant_id);
+  const grantJwt = stringValue(outcome.session_grant);
+  const audience = stringValue(outcome.audience);
+  const expiresAt = stringValue(outcome.expires_at);
+  const principalDid = stringValue(outcome.principal_id);
+  if (!grantId || !grantJwt || !audience || !expiresAt || !principalDid) {
+    throw new Error(`incomplete session grant outcome: ${JSON.stringify(outcome)}`);
+  }
+  return {
+    grantId,
+    grantJwt,
+    dpopJkt: args.deviceKey.thumbprint,
+    audience,
+    scopes: Array.isArray(outcome.granted_scope)
+      ? outcome.granted_scope.filter((scope): scope is string => typeof scope === "string")
+      : [],
+    expiresAt,
+    principalDid,
+  };
+}
+
 export async function registerCoauthPasswordAccount(
   request: APIRequestContext,
   coauthBase: string,
@@ -84,100 +435,108 @@ export async function registerCoauthPasswordAccount(
   const password = opts.password ?? "ArkretE2E!2026";
   const email = `${slug}@example.test`;
   const displayName = `E2E ${slug}`;
-  const base = `${coauthBase}/_coauth/account/auth/register/webvh`;
-  const startResponse = await request.post(`${base}/start`, {
-    data: { handle: slug, principal_server_url: solandBaseUrl() },
+  await registerUnboundCoauthPasswordAccount(request, coauthBase, {
+    handle: slug,
+    email,
+    password,
+    displayName,
   });
-  const startRaw = await startResponse.text();
-  const started = objectRecord(startRaw ? JSON.parse(startRaw) : {});
-  const id = typeof started?.registration_id === "string"
-    ? started.registration_id
-    : undefined;
-  const enrollmentAuthorityDid =
-    typeof started?.enrollment_authority_did === "string"
-      ? started.enrollment_authority_did
-      : undefined;
-  if (startResponse.status() !== 200 || started?.status !== "success" || !id || !enrollmentAuthorityDid) {
-    throw new Error(`coauth WebVH register start failed (${startResponse.status()}): ${startRaw}`);
-  }
-
-  const emailResponse = await request.post(`${base}/${id}/email`, {
-    data: { email },
-  });
-  const emailRaw = await emailResponse.text();
-  const emailBody = objectRecord(emailRaw ? JSON.parse(emailRaw) : {});
-  if (emailResponse.status() !== 200 || emailBody?.status !== "sent") {
-    throw new Error(`coauth WebVH register email failed (${emailResponse.status()}): ${emailRaw}`);
-  }
-  const devCode = typeof emailBody.dev_code === "string" ? emailBody.dev_code : undefined;
-  const code = mockEmailBaseUrl()
-    ? await latestMockEmailCode(request, email)
-    : devCode ?? COAUTH_DEV_EMAIL_CODE;
-  if (!code) {
-    throw new Error("coauth WebVH registration verification code is unavailable");
-  }
-  const verifyResponse = await request.post(`${base}/${id}/verify-email`, {
-    data: { code },
-  });
-  const verifyRaw = await verifyResponse.text();
-  const verified = objectRecord(verifyRaw ? JSON.parse(verifyRaw) : {});
-  if (verifyResponse.status() !== 200 || verified?.status !== "success") {
-    throw new Error(`coauth WebVH verify-email failed (${verifyResponse.status()}): ${verifyRaw}`);
-  }
 
   const deviceSuffix = randomUUID().replace(/-/g, "").slice(0, 12);
   const bootstrapDeviceId = `ak:device:01904100-0000-7000-8000-${deviceSuffix}`;
-  const describeResponse = await request.get(`${solandBaseUrl()}/_arkret/describe`);
-  const describeRaw = await describeResponse.text();
-  const describe = objectRecord(describeRaw ? JSON.parse(describeRaw) : {});
-  const trustDomain = typeof describe?.trust_domain === "string"
-    ? describe.trust_domain
-    : undefined;
-  if (!describeResponse.ok() || !trustDomain) {
-    throw new Error(`soland describe omitted trust_domain (${describeResponse.status()}): ${describeRaw}`);
+  const principalDescribe = await responseJsonRecord(
+    await request.get(`${solandBaseUrl()}/_arkret/describe`),
+    "soland describe",
+  );
+  const authorityDescribe = await responseJsonRecord(
+    await request.get(`${coauthBase}/_arkret/describe`),
+    "coauth describe",
+  );
+  const trustDomain = stringValue(principalDescribe.trust_domain);
+  const audience = stringValue(principalDescribe.service_id) ?? solandServiceId();
+  const enrollmentAuthorityDid = stringValue(authorityDescribe.service_id);
+  if (!trustDomain || !enrollmentAuthorityDid) {
+    throw new Error("service descriptions omitted trust/enrollment authority pins");
+  }
+  const handoff = await createCanonicalAccountHandoff(request, coauthBase, {
+    audience,
+    deviceId: bootstrapDeviceId,
+  });
+  if (handoff.binding.state !== "identity_creation_active") {
+    throw new Error(`fresh account did not receive an active identity lease: ${JSON.stringify(handoff.binding)}`);
+  }
+  const lease = objectRecord(handoff.binding.identity_creation_lease);
+  if (!lease) {
+    throw new Error(`identity-creation handoff omitted lease: ${JSON.stringify(handoff.binding)}`);
   }
   const fixture = cotestWire<PrincipalRegistrationFixture>(
     "principal-registration-fixture",
     {
       principal_server_url: solandBaseUrl(),
       gate_account_base: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
-      registration_id: id,
-      handle: slug,
-      email,
+      handoff_request_id: handoff.requestId,
+      identity_creation_lease: lease,
       device_id: bootstrapDeviceId,
       enrollment_authority_did: enrollmentAuthorityDid,
       trust_domain: trustDomain,
     },
   );
-  const did = fixture.checkpoint.did;
-  if (typeof did !== "string" || fixture.recovery_key.split(/\s+/).length !== 24) {
+  const did = stringValue(fixture.checkpoint.did);
+  if (!did || fixture.recovery_key.split(/\s+/).length !== 24) {
     throw new Error("cotest principal registration fixture is incomplete");
   }
-  const finishResponse = await request.post(`${base}/${id}/finish`, {
-    data: {
+  const challengeUrl = `${coauthBase}/_arkret/gate/account/identity-binding-challenges`;
+  const challenge = await responseJsonRecord(
+    await request.post(challengeUrl, {
+      data: fixture.challenge_request,
+      headers: accountHandoffHeaders({
+        deviceKey: handoff.deviceKey,
+        accountHandoffGrant: handoff.accountHandoffGrant,
+        method: "POST",
+        url: challengeUrl,
+      }),
+    }),
+    "identity-binding challenge",
+  );
+  const registerBody = cotestWire<Record<string, unknown>>(
+    "identity-creation-register-request",
+    {
+      challenge,
       did_operation: fixture.did_operation,
-      password,
-      password_confirm: password,
+      recovery_key: fixture.recovery_key,
+      display_name: displayName,
     },
-  });
-  const finishRaw = await finishResponse.text();
-  const finished = objectRecord(finishRaw ? JSON.parse(finishRaw) : {});
-  if (finishResponse.status() !== 200 || finished?.status !== "success") {
-    throw new Error(`coauth WebVH register finish failed (${finishResponse.status()}): ${finishRaw}`);
+  );
+  const registerUrl = `${coauthBase}/_arkret/gate/account/register`;
+  const registered = await responseJsonRecord(
+    await request.post(registerUrl, {
+      data: registerBody,
+      headers: accountHandoffHeaders({
+        deviceKey: handoff.deviceKey,
+        accountHandoffGrant: handoff.accountHandoffGrant,
+        method: "POST",
+        url: registerUrl,
+      }),
+    }),
+    "canonical identity-creation register",
+  );
+  const receipt = objectRecord(registered.binding_receipt);
+  if (registered.principal_id !== did || !receipt || receipt.binding_state !== "bound") {
+    throw new Error(`canonical account binding failed: ${JSON.stringify(registered)}`);
   }
-  const finishedDid = objectRecord(finished.did_operation)?.did;
-  if (typeof finishedDid !== "string" || finishedDid !== did) {
-    throw new Error(`coauth WebVH finish did not include the bound DID: ${finishRaw}`);
-  }
-
   return {
     handle: slug,
     email,
     password,
     displayName,
     did,
+    principalId: did,
     bootstrapDeviceId,
     recoveryKey: fixture.recovery_key,
-    pendingPrincipalRegistration: fixture.checkpoint,
+    pendingPrincipalRegistration: {
+      ...fixture.checkpoint,
+      binding_receipt: receipt,
+      stage: "binding_registered",
+    },
   };
 }
