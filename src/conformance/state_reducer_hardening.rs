@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::CellRef;
-use arkret_core::error::ERROR_CODE_SCHEMA_VIOLATION;
 use arkret_core::lattice::CellState;
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
 use serde::{Deserialize, Serialize};
@@ -552,26 +551,32 @@ fn apply_single_track_patch(
     patch: &TrackPatch,
 ) -> std::result::Result<(), &'static str> {
     if patch.path.contains('[') || patch.path.contains(']') {
-        return Err(ERROR_CODE_SCHEMA_VIOLATION);
+        return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
     }
     let parts: Vec<&str> = patch.path.split('.').collect();
     if parts.len() != 3 || parts[0] != "tracks" {
-        return Err(ERROR_CODE_SCHEMA_VIOLATION);
+        return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
     }
     let track_key = parts[1];
     let field = parts[2];
     if !valid_track_key(track_key) || patch.op != "set" {
-        return Err(ERROR_CODE_SCHEMA_VIOLATION);
+        return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
     }
 
     let track = tracks.entry(track_key.to_owned()).or_default();
     match field {
         "enabled" => {
-            track.enabled = patch.value.as_bool().ok_or(ERROR_CODE_SCHEMA_VIOLATION)?;
+            track.enabled = patch
+                .value
+                .as_bool()
+                .ok_or(arkret_core::error::ErrorCode::SCHEMA_VIOLATION)?;
             Ok(())
         }
         "is_primary" => {
-            track.is_primary = patch.value.as_bool().ok_or(ERROR_CODE_SCHEMA_VIOLATION)?;
+            track.is_primary = patch
+                .value
+                .as_bool()
+                .ok_or(arkret_core::error::ErrorCode::SCHEMA_VIOLATION)?;
             Ok(())
         }
         "profile" => {
@@ -579,12 +584,12 @@ fn apply_single_track_patch(
                 patch
                     .value
                     .as_str()
-                    .ok_or(ERROR_CODE_SCHEMA_VIOLATION)?
+                    .ok_or(arkret_core::error::ErrorCode::SCHEMA_VIOLATION)?
                     .to_owned(),
             );
             Ok(())
         }
-        _ => Err(ERROR_CODE_SCHEMA_VIOLATION),
+        _ => Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION),
     }
 }
 
@@ -592,22 +597,22 @@ fn validate_tracks_invariant(
     tracks: &BTreeMap<String, TrackState>,
 ) -> std::result::Result<(), &'static str> {
     if tracks.is_empty() {
-        return Err(ERROR_CODE_SCHEMA_VIOLATION);
+        return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
     }
     let mut primary_count = 0;
     for (key, track) in tracks {
         if !valid_track_key(key) {
-            return Err(ERROR_CODE_SCHEMA_VIOLATION);
+            return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
         }
         if track.is_primary && !track.enabled {
-            return Err(ERROR_CODE_SCHEMA_VIOLATION);
+            return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
         }
         if track.enabled && track.is_primary {
             primary_count += 1;
         }
     }
     if primary_count != 1 {
-        return Err(ERROR_CODE_SCHEMA_VIOLATION);
+        return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
     }
     Ok(())
 }

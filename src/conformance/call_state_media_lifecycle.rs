@@ -24,11 +24,6 @@
 //! error enum grows them.
 
 use anyhow::{Result, bail};
-use arkret_core::error::{
-    ERROR_CODE_SCHEMA_VIOLATION, REASON_LEGAL_HOLD_ACTIVE,
-    REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED, REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED,
-    REASON_TRANSCRIPTION_DENIED,
-};
 use arkret_core::{
     BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
@@ -101,12 +96,9 @@ fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
 // Mirrors the canonical spelling. Remaining local pins cover codes not yet
 // surfaced as SDK constants.
 
-const REASON_RECORDING_CONSENT_REQUIRED: &str = "recording_consent_required";
-// `REASON_TRANSCRIPTION_DENIED` / `REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED`
-// now come from `arkret_core::error` (imported above) instead of local pins.
-const REASON_CALL_MODERATION_UNAUTHORISED: &str = "call_moderation_unauthorised";
-const REASON_CALL_PARTICIPANT_REMOVED: &str = "call_participant_removed";
-const REASON_CALL_SUMMARY_INVALID: &str = "call_summary_invalid";
+// `arkret_core::error::ReasonCode::TRANSCRIPTION_DENIED` /
+// `arkret_core::error::ReasonCode::TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED` now come from
+// `arkret_core::error` (imported above) instead of local pins.
 
 // ── Exporter-label pins (exporter-label-registry.json) ──────────────────────
 
@@ -133,7 +125,7 @@ struct RetentionState {
 /// An active audit lock blocks deletion regardless of TTL → `legal_hold_active`.
 fn try_delete_recording(state: &RetentionState) -> std::result::Result<(), &'static str> {
     if state.audit_lock {
-        return Err(REASON_LEGAL_HOLD_ACTIVE);
+        return Err(arkret_core::error::ReasonCode::LEGAL_HOLD_ACTIVE);
     }
     if !state.retention_expired || state.deletion_trigger != "retention_expiry" {
         return Err("retention_active");
@@ -146,13 +138,15 @@ fn capture_consent_ok(consent_confirmed: bool) -> std::result::Result<(), &'stat
     if consent_confirmed {
         Ok(())
     } else {
-        Err(REASON_RECORDING_CONSENT_REQUIRED)
+        Err(arkret_core::error::ReasonCode::RECORDING_CONSENT_REQUIRED)
     }
 }
 
 pub fn run_recording_retention_lock_vector() -> Result<()> {
-    if REASON_LEGAL_HOLD_ACTIVE != "legal_hold_active" {
-        bail!("REASON_LEGAL_HOLD_ACTIVE spelling drifted: {REASON_LEGAL_HOLD_ACTIVE}");
+    if arkret_core::error::ReasonCode::LEGAL_HOLD_ACTIVE != "legal_hold_active" {
+        bail!(
+            "arkret_core::error::ReasonCode::LEGAL_HOLD_ACTIVE spelling drifted: legal_hold_active"
+        );
     }
 
     // Step 2 — delete before TTL with audit_lock set → legal_hold_active.
@@ -162,7 +156,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
         deletion_trigger: "retention_expiry",
     };
     match try_delete_recording(&locked_before) {
-        Err(code) if code == REASON_LEGAL_HOLD_ACTIVE => {}
+        Err(code) if code == arkret_core::error::ReasonCode::LEGAL_HOLD_ACTIVE => {}
         other => {
             bail!("delete before TTL under audit_lock must be legal_hold_active, got {other:?}")
         }
@@ -176,7 +170,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
         deletion_trigger: "retention_expiry",
     };
     match try_delete_recording(&locked_after) {
-        Err(code) if code == REASON_LEGAL_HOLD_ACTIVE => {}
+        Err(code) if code == arkret_core::error::ReasonCode::LEGAL_HOLD_ACTIVE => {}
         other => {
             bail!("delete after TTL under audit_lock must be legal_hold_active, got {other:?}")
         }
@@ -184,7 +178,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
 
     // Step 4 — capturing recording_state without consent_confirmed.
     match capture_consent_ok(false) {
-        Err(code) if code == REASON_RECORDING_CONSENT_REQUIRED => {}
+        Err(code) if code == arkret_core::error::ReasonCode::RECORDING_CONSENT_REQUIRED => {}
         other => bail!("capture without consent must be recording_consent_required, got {other:?}"),
     }
 
@@ -338,28 +332,28 @@ fn evaluate_recording_result_artifact_shape(
     deletion_completed: bool,
 ) -> std::result::Result<(), &'static str> {
     if value_has_backend_direct_ref(&value) {
-        return Err(REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED);
+        return Err(arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED);
     }
-    let payload: CallStatePayload =
-        serde_json::from_value(value).map_err(|_| ERROR_CODE_SCHEMA_VIOLATION)?;
+    let payload: CallStatePayload = serde_json::from_value(value)
+        .map_err(|_| arkret_core::error::ErrorCode::SCHEMA_VIOLATION)?;
     payload.validate_recording_result_artifact()?;
     let artifact = payload
         .recording_result
         .as_ref()
         .and_then(|result| result.artifact.as_ref())
-        .ok_or(ERROR_CODE_SCHEMA_VIOLATION)?;
+        .ok_or(arkret_core::error::ErrorCode::SCHEMA_VIOLATION)?;
     if deletion_completed {
         let audit = artifact
             .deletion_audit
             .as_ref()
-            .ok_or(ERROR_CODE_SCHEMA_VIOLATION)?;
+            .ok_or(arkret_core::error::ErrorCode::SCHEMA_VIOLATION)?;
         if audit.outcome != CallRecordingDeletionOutcome::Completed
             || audit
                 .erasure_receipt_ref
                 .as_deref()
                 .is_none_or(str::is_empty)
         {
-            return Err(ERROR_CODE_SCHEMA_VIOLATION);
+            return Err(arkret_core::error::ErrorCode::SCHEMA_VIOLATION);
         }
     }
     Ok(())
@@ -372,9 +366,11 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
             CallRecordingArtifact::SCHEMA
         );
     }
-    if REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
+    if arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED
+        != "recording_artifact_pipeline_bypassed"
+    {
         bail!(
-            "REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
+            "arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: recording_artifact_pipeline_bypassed"
         );
     }
 
@@ -382,7 +378,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
         serde_json::to_value(ready_call_state_payload(None)).unwrap(),
         false,
     ) {
-        Err(code) if code == ERROR_CODE_SCHEMA_VIOLATION => {}
+        Err(code) if code == arkret_core::error::ErrorCode::SCHEMA_VIOLATION => {}
         other => bail!("ready recording without artifact must be schema_violation, got {other:?}"),
     }
 
@@ -391,7 +387,8 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
     direct_result["recording_result"]["recording_url"] =
         json!("https://s3.amazonaws.com/bucket/recording.mp4");
     match evaluate_recording_result_artifact_shape(direct_result, false) {
-        Err(code) if code == REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
+        Err(code)
+            if code == arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
         other => bail!("backend direct result URL must be pipeline bypass, got {other:?}"),
     }
 
@@ -400,7 +397,8 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
     direct_artifact["recording_result"]["artifact"]["destination"] =
         json!("livekit://egress/recording-1");
     match evaluate_recording_result_artifact_shape(direct_artifact, false) {
-        Err(code) if code == REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
+        Err(code)
+            if code == arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
         other => {
             bail!("backend direct artifact destination must be pipeline bypass, got {other:?}")
         }
@@ -412,7 +410,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
         serde_json::to_value(ready_call_state_payload(Some(missing_audit))).unwrap(),
         true,
     ) {
-        Err(code) if code == ERROR_CODE_SCHEMA_VIOLATION => {}
+        Err(code) if code == arkret_core::error::ErrorCode::SCHEMA_VIOLATION => {}
         other => bail!("completed deletion without deletion_audit must fail closed, got {other:?}"),
     }
 
@@ -426,7 +424,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
         serde_json::to_value(ready_call_state_payload(Some(missing_receipt))).unwrap(),
         true,
     ) {
-        Err(code) if code == ERROR_CODE_SCHEMA_VIOLATION => {}
+        Err(code) if code == arkret_core::error::ErrorCode::SCHEMA_VIOLATION => {}
         other => {
             bail!("completed deletion without erasure_receipt_ref must fail closed, got {other:?}")
         }
@@ -447,7 +445,7 @@ fn transcribe_authorised(has_transcribe_cap: bool) -> std::result::Result<(), &'
     if has_transcribe_cap {
         Ok(())
     } else {
-        Err(REASON_TRANSCRIPTION_DENIED)
+        Err(arkret_core::error::ReasonCode::TRANSCRIPTION_DENIED)
     }
 }
 
@@ -459,10 +457,10 @@ fn transcript_key_source_ok(
     context_fields: &[&str],
 ) -> std::result::Result<(), &'static str> {
     if label != LABEL_RTC_TRANSCRIPT_KEY {
-        return Err(REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
+        return Err(arkret_core::error::ReasonCode::TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
     }
     if context_fields.is_empty() {
-        return Err(REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
+        return Err(arkret_core::error::ReasonCode::TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
     }
     Ok(())
 }
@@ -470,7 +468,7 @@ fn transcript_key_source_ok(
 pub fn run_transcribe_lifecycle_vector() -> Result<()> {
     // Step 1 — transcribe without capability is denied.
     match transcribe_authorised(false) {
-        Err(code) if code == REASON_TRANSCRIPTION_DENIED => {}
+        Err(code) if code == arkret_core::error::ReasonCode::TRANSCRIPTION_DENIED => {}
         other => bail!("transcribe without cap must be transcription_denied, got {other:?}"),
     }
     transcribe_authorised(true)
@@ -483,7 +481,10 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         (LABEL_RTC_TRANSCRIPT_KEY, &[][..]),
     ] {
         match transcript_key_source_ok(label, context) {
-            Err(code) if code == REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED => {}
+            Err(code)
+                if code
+                    == arkret_core::error::ReasonCode::TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED => {
+            }
             other => bail!(
                 "transcript key reuse ({label}, {context:?}) must be \
                  transcription_artifact_pipeline_bypassed, got {other:?}"
@@ -571,7 +572,7 @@ fn moderation_authorised(has_moderate_cap: bool) -> std::result::Result<(), &'st
     if has_moderate_cap {
         Ok(())
     } else {
-        Err(REASON_CALL_MODERATION_UNAUTHORISED)
+        Err(arkret_core::error::ReasonCode::CALL_MODERATION_UNAUTHORISED)
     }
 }
 
@@ -589,10 +590,10 @@ fn token_reissue_allowed(
         }
         match entry.device_id {
             // Actor-wide ban: every device of this actor is refused.
-            None => return Err(REASON_CALL_PARTICIPANT_REMOVED),
+            None => return Err(arkret_core::error::ReasonCode::CALL_PARTICIPANT_REMOVED),
             // Device-scoped kick: only the named device is refused.
             Some(removed_device) if removed_device == device_id => {
-                return Err(REASON_CALL_PARTICIPANT_REMOVED);
+                return Err(arkret_core::error::ReasonCode::CALL_PARTICIPANT_REMOVED);
             }
             Some(_) => {}
         }
@@ -603,7 +604,7 @@ fn token_reissue_allowed(
 pub fn run_moderator_kick_ban_vector() -> Result<()> {
     // Step 1 — moderation without ak.call.moderate is unauthorised.
     match moderation_authorised(false) {
-        Err(code) if code == REASON_CALL_MODERATION_UNAUTHORISED => {}
+        Err(code) if code == arkret_core::error::ReasonCode::CALL_MODERATION_UNAUTHORISED => {}
         other => {
             bail!("moderation without cap must be call_moderation_unauthorised, got {other:?}")
         }
@@ -618,7 +619,7 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
         device_id: Some("ak:device:bob-1"),
     }];
     match token_reissue_allowed(&kicked, "did:web:bob.example", "ak:device:bob-1") {
-        Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
+        Err(code) if code == arkret_core::error::ReasonCode::CALL_PARTICIPANT_REMOVED => {}
         other => bail!("kicked device re-issue must be call_participant_removed, got {other:?}"),
     }
     token_reissue_allowed(&kicked, "did:web:bob.example", "ak:device:bob-2")
@@ -631,7 +632,7 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
     }];
     for device in ["ak:device:bob-1", "ak:device:bob-2"] {
         match token_reissue_allowed(&banned, "did:web:bob.example", device) {
-            Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
+            Err(code) if code == arkret_core::error::ReasonCode::CALL_PARTICIPANT_REMOVED => {}
             other => bail!(
                 "banned actor re-issue ({device}) must be call_participant_removed, got {other:?}"
             ),
@@ -668,7 +669,7 @@ fn summary_accepted(final_state: &str) -> std::result::Result<(), &'static str> 
     if is_terminal_call_state(final_state) {
         Ok(())
     } else {
-        Err(REASON_CALL_SUMMARY_INVALID)
+        Err(arkret_core::error::ReasonCode::CALL_SUMMARY_INVALID)
     }
 }
 
@@ -695,7 +696,7 @@ pub fn run_p2p_to_sfu_upgrade_vector() -> Result<()> {
     }
     for non_terminal in ["scheduled", "ringing", "connecting", "active"] {
         match summary_accepted(non_terminal) {
-            Err(code) if code == REASON_CALL_SUMMARY_INVALID => {}
+            Err(code) if code == arkret_core::error::ReasonCode::CALL_SUMMARY_INVALID => {}
             other => bail!("summary on {non_terminal} must be call_summary_invalid, got {other:?}"),
         }
     }

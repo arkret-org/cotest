@@ -302,7 +302,7 @@ pub fn run_realm_link_fsm_transition_matrix_vector() -> Result<()> {
             };
             if transition_error.error_code() != ErrorCode::FailedPrecondition
                 || transition_error.reason_code()
-                    != arkret_core::REASON_REALM_LINK_INVALID_TRANSITION
+                    != arkret_core::ReasonCode::REALM_LINK_INVALID_TRANSITION
             {
                 bail!("undeclared Realm Link transition returned the wrong error mapping");
             }
@@ -358,7 +358,7 @@ pub fn run_realm_link_fsm_transition_matrix_vector() -> Result<()> {
         },
     )
     .expect_err("tombstone write on a later basis must be rejected");
-    if tombstone_error.reason_code() != arkret_core::REASON_REALM_LINK_INVALID_TRANSITION {
+    if tombstone_error.reason_code() != arkret_core::ReasonCode::REALM_LINK_INVALID_TRANSITION {
         bail!("tombstone terminal rejection returned the wrong reason");
     }
 
@@ -397,7 +397,7 @@ pub fn run_realm_link_fsm_transition_matrix_vector() -> Result<()> {
     )
     .expect_err("self-reference must be rejected");
     if self_reference_error.error_code() != ErrorCode::SchemaViolation
-        || self_reference_error.reason_code() != arkret_core::REASON_REALM_LINK_SELF_REFERENCE
+        || self_reference_error.reason_code() != arkret_core::ReasonCode::REALM_LINK_SELF_REFERENCE
     {
         bail!("Realm Link self-reference returned the wrong error mapping");
     }

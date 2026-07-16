@@ -34,12 +34,12 @@ fn productivity_registry_entries_are_present_and_exact() {
         .filter_map(|entry| entry["event_kind"].as_str())
         .collect();
     for expected in [
-        kinds::RSVP_SET,
-        kinds::PIN_ADD,
-        kinds::PIN_REMOVE,
-        kinds::PIN_REORDER,
-        kinds::REALM_DISAPPEARING_POLICY,
-        kinds::REALM_SEARCH_POLICY,
+        arkret_core::events::EventKind::RSVP_SET,
+        arkret_core::events::EventKind::PIN_ADD,
+        arkret_core::events::EventKind::PIN_REMOVE,
+        arkret_core::events::EventKind::PIN_REORDER,
+        arkret_core::events::EventKind::REALM_DISAPPEARING_POLICY,
+        arkret_core::events::EventKind::REALM_SEARCH_POLICY,
     ] {
         assert!(
             event_kinds.contains(expected),
@@ -97,7 +97,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     catalog
         .validate_payload(
-            kinds::RSVP_SET,
+            arkret_core::events::EventKind::RSVP_SET,
             &json!({
                 "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
                 "status": "accepted",
@@ -108,7 +108,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                kinds::RSVP_SET,
+                arkret_core::events::EventKind::RSVP_SET,
                 &json!({
                     "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
                     "status": "yes",
@@ -125,7 +125,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     });
     catalog
         .validate_payload(
-            kinds::PIN_ADD,
+            arkret_core::events::EventKind::PIN_ADD,
             &json!({
                 "pin_scope": pin_scope,
                 "target_ref": "ak:message:01904100-0000-7000-8000-000000000002",
@@ -136,7 +136,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     catalog
         .validate_payload(
-            kinds::REALM_DISAPPEARING_POLICY,
+            arkret_core::events::EventKind::REALM_DISAPPEARING_POLICY,
             &json!({
                 "enabled": true,
                 "max_ttl_ms": 3600000,
@@ -152,7 +152,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     // hard error, so assert the warning rather than an Err.
     let disappearing_warnings = catalog
         .validate_payload_with_warnings(
-            kinds::REALM_DISAPPEARING_POLICY,
+            arkret_core::events::EventKind::REALM_DISAPPEARING_POLICY,
             &json!({
                 "enabled": true,
                 "max_ttl_ms": 3600000,
@@ -170,7 +170,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     catalog
         .validate_payload(
-            kinds::REALM_SEARCH_POLICY,
+            arkret_core::events::EventKind::REALM_SEARCH_POLICY,
             &json!({
                 "enabled_profile_refs": ["ak.profile.search.blind_index.v1"],
                 "allowed_service_ids": ["did:web:search.example"],
@@ -183,7 +183,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                kinds::REALM_SEARCH_POLICY,
+                arkret_core::events::EventKind::REALM_SEARCH_POLICY,
                 &json!({
                     "profile_refs": ["ak.profile.search.blind_index.v1"],
                     "service_ids": ["did:web:search.example"],

@@ -7,7 +7,6 @@
 //! `backup_post_reset_stale`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::error::REASON_BACKUP_POST_RESET_STALE;
 use chrono::{DateTime, Duration, Utc};
 
 /// Returns true when an existing envelope is "stale" relative to the
@@ -21,10 +20,10 @@ fn is_post_reset_stale(envelope_emitted_at: DateTime<Utc>, last_reset_at: DateTi
 }
 
 pub async fn post_reset_stale_run() -> Result<()> {
-    if REASON_BACKUP_POST_RESET_STALE != "backup_post_reset_stale" {
+    if arkret_core::error::ReasonCode::BACKUP_POST_RESET_STALE != "backup_post_reset_stale" {
         return Err(anyhow!(
-            "REASON_BACKUP_POST_RESET_STALE spelling drifted: \
-             {REASON_BACKUP_POST_RESET_STALE}"
+            "arkret_core::error::ReasonCode::BACKUP_POST_RESET_STALE spelling drifted: \
+             backup_post_reset_stale"
         ));
     }
 

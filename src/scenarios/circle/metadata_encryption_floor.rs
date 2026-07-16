@@ -24,8 +24,6 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::EncryptionFloor;
-use arkret_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
-
 /// Strictness rank for the two floor values: stricter → larger rank.
 fn rank(floor: EncryptionFloor) -> u8 {
     match floor {
@@ -38,7 +36,7 @@ fn rank(floor: EncryptionFloor) -> u8 {
 /// `metadata_encryption_floor` floor, but MUST NOT loosen it. Returns
 /// `Ok(())` when the Circle's floor is `>=` the Realm's floor in
 /// strictness; otherwise `Err` whose message carries the canonical
-/// [`REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION`] reason code.
+/// [`arkret_core::error::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION`] reason code.
 fn validate_metadata_floor_tightens(
     realm_floor: EncryptionFloor,
     circle_floor: EncryptionFloor,
@@ -47,7 +45,7 @@ fn validate_metadata_floor_tightens(
         Ok(())
     } else {
         Err(anyhow!(
-            "reason={REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION}: \
+            "reason=metadata_encryption_floor_violation: \
              Circle metadata_encryption_floor={circle_floor:?} is laxer than \
              parent Realm metadata_encryption_floor={realm_floor:?}; Circle MAY \
              only tighten the floor (AKP-0007 §3.4.1)"
@@ -130,9 +128,9 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION) {
+            if !msg.contains(arkret_core::error::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION) {
                 return Err(anyhow!(
-                    "expected reason={REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION}; got: {msg}"
+                    "expected reason=metadata_encryption_floor_violation; got: {msg}"
                 ));
             }
         }

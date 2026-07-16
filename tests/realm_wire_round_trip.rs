@@ -13,7 +13,7 @@
 //! - R2.1 positive — `ak.realm.create` / `ak.space.create` (container) /
 //!   `ak.realm.delivery_binding_policy` / `ak.realm.link` build via SDK typed `Event`, encode via
 //!   `canonical_json_bytes`, round-trip back to the same kind + payload, and classify into the
-//!   `EventClass::Realm` / `EventClass::Space` families.
+//!   `EventProductClass::Realm` / `EventProductClass::Space` families.
 
 use anyhow::Result;
 use cotest::scenarios::realm_wire_round_trip::run_positive_round_trip;

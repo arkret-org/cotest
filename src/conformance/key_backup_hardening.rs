@@ -1,10 +1,6 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::error::{
-    ERROR_CODE_CAPABILITY_DENIED, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED,
-    REASON_RECOVERY_EVIDENCE_UNBOUND,
-};
 use arkret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;
 
@@ -195,13 +191,13 @@ fn authorize_unlock(
     envelope: &BackupEnvelopeState,
 ) -> std::result::Result<(), &'static str> {
     if !session.fresh_device_proof {
-        return Err(ERROR_CODE_UNAUTHENTICATED);
+        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
     }
     if caller != envelope.actor_id {
-        return Err(ERROR_CODE_CAPABILITY_DENIED);
+        return Err(arkret_core::error::ErrorCode::CAPABILITY_DENIED);
     }
     let Some(proof) = proof else {
-        return Err(ERROR_CODE_UNAUTHENTICATED);
+        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
     };
     if path_backup_id != proof.backup_id.as_str()
         || path_backup_id != envelope.backup_id
@@ -211,10 +207,11 @@ fn authorize_unlock(
         || backup_class_str(proof.backup_class) != envelope.backup_class
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest
-        || proof_digest_str(proof).map_err(|_| REASON_RECOVERY_EVIDENCE_UNBOUND)?
+        || proof_digest_str(proof)
+            .map_err(|_| arkret_core::error::ReasonCode::RECOVERY_EVIDENCE_UNBOUND)?
             != session.proof_digest
     {
-        return Err(REASON_RECOVERY_EVIDENCE_UNBOUND);
+        return Err(arkret_core::error::ReasonCode::RECOVERY_EVIDENCE_UNBOUND);
     }
     Ok(())
 }
@@ -260,8 +257,9 @@ pub fn run_key_backup_kdf_floor_rejected_vector() -> Result<()> {
     if !schema_rejects(KEY_BACKUP_ENCRYPTION_SCHEMA, &unknown_kdf)? {
         bail!("unknown KDF name did not fail closed");
     }
-    if expected_str(vector, "negative_reason")? != ERROR_CODE_SCHEMA_VIOLATION
-        || expected_str(vector, "unknown_kdf_reason")? != ERROR_CODE_SCHEMA_VIOLATION
+    if expected_str(vector, "negative_reason")? != arkret_core::error::ErrorCode::SCHEMA_VIOLATION
+        || expected_str(vector, "unknown_kdf_reason")?
+            != arkret_core::error::ErrorCode::SCHEMA_VIOLATION
     {
         bail!("KDF floor expected schema_violation reason drifted");
     }

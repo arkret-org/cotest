@@ -356,7 +356,7 @@ fn service_attested_device_authorize_event(
     };
     let created_at = "2026-06-17T00:00:00Z".parse()?;
     let mut event = Event::new(
-        arkret_core::events::kinds::DEVICE_AUTHORIZE,
+        arkret_core::events::EventKind::DEVICE_AUTHORIZE,
         RealmId::new(realm_id)?,
         principal,
         actor_seq,

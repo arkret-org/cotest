@@ -16,9 +16,6 @@
 //! This module covers the two negative branches.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE, REASON_RELAXED_WINDOW_EXCEEDS_CEILING,
-};
 use arkret_schema::embedded_error_code_identifiers;
 
 pub const ABSOLUTE_HARD_CEILING_MS: u64 = 300_000;
@@ -43,12 +40,12 @@ pub const EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE: &str =
 /// `relaxed_window_max_ms = 400_000` payload is not yet implemented; do not
 /// count this pin as behavioural fail-closed coverage.
 pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
-    if REASON_RELAXED_WINDOW_EXCEEDS_CEILING != EXPECTED_RELAXED_EXCEEDS_CEILING {
+    if arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING != EXPECTED_RELAXED_EXCEEDS_CEILING {
         return Err(anyhow!(
-            "SDK REASON_RELAXED_WINDOW_EXCEEDS_CEILING ({}) drifted from the \
+            "SDK arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING ({}) drifted from the \
              cotest-pinned wire literal ({}). Update one or the other before \
              unfreezing this scenario.",
-            REASON_RELAXED_WINDOW_EXCEEDS_CEILING,
+            arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING,
             EXPECTED_RELAXED_EXCEEDS_CEILING,
         ));
     }
@@ -57,9 +54,9 @@ pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
     // the SDK's codes-only `KNOWN_ERROR_CODES` table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(REASON_RELAXED_WINDOW_EXCEEDS_CEILING) {
+    if !registry_identifiers.contains(arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {REASON_RELAXED_WINDOW_EXCEEDS_CEILING}"
+            "error-code-registry missing reason code relaxed_window_exceeds_ceiling"
         ));
     }
     Ok(())
@@ -69,13 +66,13 @@ pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
 /// confirm the SDK constant string matches the cotest pin and that the
 /// canonical registry knows it.
 pub async fn e2ee_relaxed_disallowed_in_compliance_run() -> Result<()> {
-    if REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE
+    if arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE
         != EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE
     {
         return Err(anyhow!(
-            "SDK REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE ({}) drifted \
+            "SDK arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE ({}) drifted \
              from cotest pin ({}).",
-            REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
+            arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
             EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE,
         ));
     }
@@ -83,10 +80,12 @@ pub async fn e2ee_relaxed_disallowed_in_compliance_run() -> Result<()> {
     // validate against the registry union, not the codes-only table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE) {
+    if !registry_identifiers
+        .contains(arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE)
+    {
         return Err(anyhow!(
             "error-code-registry missing reason code \
-             {REASON_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE}"
+             e2ee_relaxed_disallowed_in_compliance_profile"
         ));
     }
     Ok(())

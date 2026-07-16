@@ -3,9 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret_core::{
     AccountSubscribeFrame, AccountSubscribeFrameKind, ErrorCode, EventsSubscribeFrame,
-    EventsSubscribeFrameKind, OP_ACCOUNT_SUBSCRIBE, OP_EVENTS_SUBSCRIBE, StreamTraceError,
-    StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
-};
+    EventsSubscribeFrameKind, StreamTraceError,
+    StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator};
 use serde_json::{Value, json};
 
 use super::{
@@ -37,8 +36,8 @@ enum StreamSurface {
 impl StreamSurface {
     const fn operation_id(self) -> &'static str {
         match self {
-            Self::Account => OP_ACCOUNT_SUBSCRIBE,
-            Self::Events => OP_EVENTS_SUBSCRIBE,
+            Self::Account => arkret_core::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
+            Self::Events => arkret_core::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
         }
     }
 }
@@ -339,7 +338,7 @@ pub fn run_stream_frame_sequence_vector() -> Result<()> {
         required_field(vector, "operations")?,
         "stream frame sequence operations",
     )?;
-    let expected_operations = [OP_ACCOUNT_SUBSCRIBE, OP_EVENTS_SUBSCRIBE];
+    let expected_operations = [arkret_core::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE, arkret_core::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE];
     if operations.len() != expected_operations.len()
         || !expected_operations.iter().all(|operation| {
             operations

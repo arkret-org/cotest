@@ -11,14 +11,10 @@
 //! this suite hard-fails on registry drift today.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::error::{
-    REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED, REASON_SIDECAR_CREATE_DENIED,
-};
 use arkret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
-    OP_AGENT_SIDECAR_THREAD_ENSURE, PROFILE_AGENT_SIDECAR_THREAD,
-};
+    PROFILE_AGENT_SIDECAR_THREAD};
 use serde_json::Value;
 
 pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ak.vector.sidecar.ensure_idempotent.v1";
@@ -72,8 +68,8 @@ fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
-    if OP_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
-        bail!("OP_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {OP_AGENT_SIDECAR_THREAD_ENSURE}");
+    if arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
+        bail!("arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE}");
     }
     if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ak.self.agent.sidecar_thread.command.ensure" {
         bail!(
@@ -96,11 +92,15 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     // Sidecar ensure rejects from `paused` / `deactivated` agents with
     // the canonical error codes (also covered by the agent FSM
     // vector, but pinned again at the sidecar-specific code path).
-    if REASON_AGENT_PAUSED != "agent_paused" {
-        bail!("REASON_AGENT_PAUSED spelling drifted: {REASON_AGENT_PAUSED}");
+    if arkret_core::error::ReasonCode::AGENT_PAUSED != "agent_paused" {
+        bail!(
+            "arkret_core::error::ReasonCode::AGENT_PAUSED spelling drifted: agent_paused"
+        );
     }
-    if REASON_AGENT_DEACTIVATED != "agent_deactivated" {
-        bail!("REASON_AGENT_DEACTIVATED spelling drifted: {REASON_AGENT_DEACTIVATED}");
+    if arkret_core::error::ReasonCode::AGENT_DEACTIVATED != "agent_deactivated" {
+        bail!(
+            "arkret_core::error::ReasonCode::AGENT_DEACTIVATED spelling drifted: agent_deactivated"
+        );
     }
     // Default home-policy is `context_realm_preferred` (B-F).
     if AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED != "context_realm_preferred" {
@@ -118,8 +118,10 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     // A caller without the `ak.self.agent.sidecar_thread.command.ensure` capability
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
-    if REASON_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
-        bail!("REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}");
+    if arkret_core::error::ReasonCode::SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
+        bail!(
+            "arkret_core::error::ReasonCode::SIDECAR_CREATE_DENIED spelling drifted: sidecar_create_denied"
+        );
     }
     Ok(())
 }

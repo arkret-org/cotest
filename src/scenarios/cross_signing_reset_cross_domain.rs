@@ -22,10 +22,7 @@
 //!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    EventId, REASON_CROSS_DOMAIN_REPLAY_REJECTED, REASON_RESET_EVENT_ID_MISMATCH,
-    TypedTrustDomainId,
-};
+use arkret_core::{EventId, TypedTrustDomainId};
 use arkret_schema::embedded_error_code_identifiers;
 
 pub const EXPECTED_CROSS_DOMAIN_REPLAY: &str = "cross_domain_replay_rejected";
@@ -40,10 +37,10 @@ pub const TRUST_DOMAIN_ID_PREFIX: &str = "ak:trust_domain:";
 /// pin the error code constant matches the cotest expectation and that
 /// the SDK can construct (and distinguish) the two ids.
 pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
-    if REASON_CROSS_DOMAIN_REPLAY_REJECTED != EXPECTED_CROSS_DOMAIN_REPLAY {
+    if arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED != EXPECTED_CROSS_DOMAIN_REPLAY {
         return Err(anyhow!(
-            "SDK REASON_CROSS_DOMAIN_REPLAY_REJECTED ({}) drifted from cotest pin ({}).",
-            REASON_CROSS_DOMAIN_REPLAY_REJECTED,
+            "SDK arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED ({}) drifted from cotest pin ({}).",
+            arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED,
             EXPECTED_CROSS_DOMAIN_REPLAY,
         ));
     }
@@ -53,9 +50,9 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
     // union (codes ∪ reason_codes), which is the spec truth source.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(REASON_CROSS_DOMAIN_REPLAY_REJECTED) {
+    if !registry_identifiers.contains(arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {REASON_CROSS_DOMAIN_REPLAY_REJECTED}"
+            "error-code-registry missing reason code cross_domain_replay_rejected"
         ));
     }
     // Validate the SDK accepts two well-formed trust domain ids and that
@@ -85,10 +82,10 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
 /// reducer surface for this code is "payload.reset_event_id != Event.id"
 /// which is a structural inequality the SDK constructors enable.
 pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
-    if REASON_RESET_EVENT_ID_MISMATCH != EXPECTED_RESET_EVENT_ID_MISMATCH {
+    if arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH != EXPECTED_RESET_EVENT_ID_MISMATCH {
         return Err(anyhow!(
-            "SDK REASON_RESET_EVENT_ID_MISMATCH ({}) drifted from cotest pin ({}).",
-            REASON_RESET_EVENT_ID_MISMATCH,
+            "SDK arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH ({}) drifted from cotest pin ({}).",
+            arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH,
             EXPECTED_RESET_EVENT_ID_MISMATCH,
         ));
     }
@@ -97,9 +94,9 @@ pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
     // against the registry union rather than the codes-only table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(REASON_RESET_EVENT_ID_MISMATCH) {
+    if !registry_identifiers.contains(arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {REASON_RESET_EVENT_ID_MISMATCH}"
+            "error-code-registry missing reason code reset_event_id_mismatch"
         ));
     }
     let id_a = EventId::new("ak:event:01904100-0000-7000-8000-000000000001")

@@ -6,27 +6,24 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::{
-    CAP_ACTION_AGENT_PROVISION, Did, EventId, OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_DEACTIVATE,
-    OP_AGENT_GET, OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
-    OP_AGENT_PROVISION, OP_AGENT_RENEW_PAIRING, OP_AGENT_RESUME, OP_AGENT_SIDECAR_THREAD_ENSURE,
-};
+    CAP_ACTION_AGENT_PROVISION, Did, EventId};
 
 /// The 11 personal-agent endpoint operation IDs registered in
 /// `operation-registry.json` and mounted under soland `agents.rs`. Key
 /// rotation is expressed through runtime replacement re-pairing
 /// (`renew_pairing`), not a dedicated rotate operation.
 const PERSONAL_AGENT_OPERATIONS: &[&str] = &[
-    OP_ACCOUNT_AGENT_KEY_PAIR,
-    OP_AGENT_PROVISION,
-    OP_AGENT_RENEW_PAIRING,
-    OP_AGENT_LIST,
-    OP_AGENT_GET,
-    OP_AGENT_PAUSE,
-    OP_AGENT_RESUME,
-    OP_AGENT_DEACTIVATE,
-    OP_AGENT_GRANT_ATTACH,
-    OP_AGENT_GRANT_DETACH,
-    OP_AGENT_SIDECAR_THREAD_ENSURE,
+    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
+    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
+    arkret_core::ServiceOperationId::SELF_AGENT_QUERY_LIST,
+    arkret_core::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
+    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
+    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
+    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
+    arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
+    arkret_core::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
+    arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
 ];
 
 pub async fn personal_agent_provisioning_run() -> Result<()> {
@@ -46,14 +43,14 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
             "duplicate personal-agent operation ids: {PERSONAL_AGENT_OPERATIONS:?}"
         ));
     }
-    if OP_AGENT_PROVISION != "ak.self.agent.command.provision" {
+    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
         return Err(anyhow!(
-            "OP_AGENT_PROVISION spelling drifted: {OP_AGENT_PROVISION}"
+            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: {arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION}"
         ));
     }
-    if OP_ACCOUNT_AGENT_KEY_PAIR != "ak.gate.account.command.pair_agent_key" {
+    if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY != "ak.gate.account.command.pair_agent_key" {
         return Err(anyhow!(
-            "OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}"
+            "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: {arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY}"
         ));
     }
 

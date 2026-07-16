@@ -5,13 +5,13 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::BackupSeriesId;
-use arkret_core::error::REASON_SERIES_PREDECESSOR_NOT_FOUND;
-
 pub async fn series_predecessor_not_found_run() -> Result<()> {
-    if REASON_SERIES_PREDECESSOR_NOT_FOUND != "series_predecessor_not_found" {
+    if arkret_core::error::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND
+        != "series_predecessor_not_found"
+    {
         return Err(anyhow!(
-            "REASON_SERIES_PREDECESSOR_NOT_FOUND spelling drifted: \
-             {REASON_SERIES_PREDECESSOR_NOT_FOUND}"
+            "arkret_core::error::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND spelling drifted: \
+             series_predecessor_not_found"
         ));
     }
     // UUIDv7 literal: lowercase hex, version nibble = 7, variant nibble ∈

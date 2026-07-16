@@ -5,17 +5,15 @@
 //! `series_seq_not_monotonic`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::error::REASON_SERIES_SEQ_NOT_MONOTONIC;
-
 fn is_monotonic_advance(tip: u64, candidate: u64) -> bool {
     candidate > tip
 }
 
 pub async fn series_seq_not_monotonic_run() -> Result<()> {
-    if REASON_SERIES_SEQ_NOT_MONOTONIC != "series_seq_not_monotonic" {
+    if arkret_core::error::ReasonCode::SERIES_SEQ_NOT_MONOTONIC != "series_seq_not_monotonic" {
         return Err(anyhow!(
-            "REASON_SERIES_SEQ_NOT_MONOTONIC spelling drifted: \
-             {REASON_SERIES_SEQ_NOT_MONOTONIC}"
+            "arkret_core::error::ReasonCode::SERIES_SEQ_NOT_MONOTONIC spelling drifted: \
+             series_seq_not_monotonic"
         ));
     }
     if !is_monotonic_advance(2, 3) {

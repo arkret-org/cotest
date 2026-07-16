@@ -1,9 +1,6 @@
 //! Auth, DID-proof, and sender-constrained session proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::error::{
-    ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_UNAUTHENTICATED, REASON_PROOF_INVALID,
-};
 use arkret_core::{
     DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
     canonical,
@@ -41,8 +38,6 @@ const SESSION_GRANT_REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody";
 const SESSION_GRANT_OUTCOME_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantOutcome";
-const ERROR_CODE_AUDIENCE_MISMATCH: &str = "audience_mismatch";
-const REASON_DID_PROOF_REPLAY_WINDOW_EXCEEDED: &str = "did_proof_replay_window_exceeded";
 const MAX_HTTP_SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const HTTP_SIGNATURE_SKEW_SECONDS: i64 = 30;
 
@@ -223,13 +218,13 @@ fn issue_session_grant(
     now: DateTime<Utc>,
 ) -> std::result::Result<SessionGrantOutcome, &'static str> {
     if request.proof.proof_kind != SessionGrantProofKind::DidBoundSignature {
-        return Err(REASON_PROOF_INVALID);
+        return Err(arkret_core::error::ReasonCode::PROOF_INVALID);
     }
     if request.proof.audience.as_str() != target_audience {
-        return Err(ERROR_CODE_AUDIENCE_MISMATCH);
+        return Err(arkret_core::error::ErrorCode::AUDIENCE_MISMATCH);
     }
     if &request.proof.request_canonical_digest != expected_digest {
-        return Err(REASON_PROOF_INVALID);
+        return Err(arkret_core::error::ReasonCode::PROOF_INVALID);
     }
 
     let requested_expires_at = request.proof.expires_at.unwrap_or(now + server_max_ttl);
@@ -312,23 +307,23 @@ fn validate_did_proof(
         || &proof.request_canonical_digest != validation.expected_request_digest
         || proof.challenge != challenge.challenge
     {
-        return Err(REASON_PROOF_INVALID);
+        return Err(arkret_core::error::ReasonCode::PROOF_INVALID);
     }
     if challenge.used {
-        return Err(REASON_PROOF_INVALID);
+        return Err(arkret_core::error::ReasonCode::PROOF_INVALID);
     }
     if proof.audience != challenge.audience || proof.origin != challenge.origin {
-        return Err(ERROR_CODE_AUDIENCE_MISMATCH);
+        return Err(arkret_core::error::ErrorCode::AUDIENCE_MISMATCH);
     }
     if proof.issued_at != challenge.issued_at || proof.expires_at != challenge.expires_at {
-        return Err(REASON_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
+        return Err(arkret_core::error::ReasonCode::DID_PROOF_REPLAY_WINDOW_EXCEEDED);
     }
     if proof.expires_at - proof.issued_at > validation.max_window
         || proof.issued_at > validation.now + validation.skew
         || validation.now > proof.expires_at
         || validation.now - proof.issued_at > validation.max_window + validation.skew
     {
-        return Err(REASON_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
+        return Err(arkret_core::error::ReasonCode::DID_PROOF_REPLAY_WINDOW_EXCEEDED);
     }
     challenge.used = true;
     Ok(())
@@ -486,14 +481,14 @@ fn verify_self_pop(
         &policy,
         now,
     )
-    .map_err(|_| ERROR_CODE_UNAUTHENTICATED)?;
+    .map_err(|_| arkret_core::error::ErrorCode::UNAUTHENTICATED)?;
     if verified.signature_input.key_id != expected_key_id {
-        return Err(ERROR_CODE_UNAUTHENTICATED);
+        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
     }
     if verified.signature_input.expires - verified.signature_input.created
         > MAX_HTTP_SIGNATURE_WINDOW_SECONDS
     {
-        return Err(ERROR_CODE_UNAUTHENTICATED);
+        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
     }
     Ok(())
 }
@@ -515,7 +510,7 @@ fn protected_bare_bearer_admission(
         "protected_current_v1_endpoint" | "regular_write" | "sensitive_read"
     );
     if protected && !has_sender_constrained_proof {
-        return Err(ERROR_CODE_UNAUTHENTICATED);
+        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
     }
     Ok(())
 }
@@ -616,7 +611,7 @@ pub fn run_auth_soft_logout_did_proof_vector() -> Result<()> {
     let mut session_state = "soft_logged_out";
     let holder_key_available = true;
     if holder_key_available && session_state == "soft_logged_out" {
-        let reason = ERROR_CODE_DID_PROOF_REQUIRED;
+        let reason = arkret_core::error::ErrorCode::DID_PROOF_REQUIRED;
         if reason != expected_str(vector, "holder_only_reason")? {
             bail!("soft logout holder-only reason drifted");
         }

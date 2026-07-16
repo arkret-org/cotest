@@ -48,9 +48,8 @@ use std::collections::BTreeMap;
 use anyhow::{Result, anyhow};
 use arkret_core::canonical::{canonical_json_bytes, sha256_digest};
 use arkret_core::{
-    ERROR_CODE_HISTORICAL_ONLY, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST,
-    HEADER_SOURCE_TRUST_DOMAIN, Hash, REASON_CROSS_DOMAIN_REPLAY_REJECTED, TypedTrustDomainId,
-    federation_trust_domain_transcript_fragment,
+    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
+    Hash, TypedTrustDomainId, federation_trust_domain_transcript_fragment,
 };
 use serde_json::{Value, json};
 
@@ -164,7 +163,7 @@ impl SimulatedFederationReceiver {
     ) -> Result<Value> {
         if destination_trust_domain != self.configured_trust_domain {
             return Err(anyhow!(
-                "{REASON_CROSS_DOMAIN_REPLAY_REJECTED}: destination_trust_domain {:?} \
+                "cross_domain_replay_rejected: destination_trust_domain {:?} \
                  does not match receiver configuration {:?}",
                 destination_trust_domain,
                 self.configured_trust_domain
@@ -348,10 +347,10 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
         || json!({"ok": true, "side_effect_should_not_fire": true}),
     )?;
     if historical_replay.get("reason_code").and_then(Value::as_str)
-        != Some(ERROR_CODE_HISTORICAL_ONLY)
+        != Some(arkret_core::ErrorCode::HISTORICAL_ONLY)
     {
         return Err(anyhow!(
-            "post-rotation replay MUST carry reason_code={ERROR_CODE_HISTORICAL_ONLY}; got {:?}",
+            "post-rotation replay MUST carry reason_code=historical_only; got {:?}",
             historical_replay
         ));
     }
@@ -383,11 +382,11 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
         Err(err)
             if err
                 .to_string()
-                .contains(REASON_CROSS_DOMAIN_REPLAY_REJECTED) => {}
+                .contains(arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED) => {}
         other => {
             return Err(anyhow!(
                 "wrong destination MUST be rejected with \
-                 {REASON_CROSS_DOMAIN_REPLAY_REJECTED}; got {other:?}"
+                 cross_domain_replay_rejected; got {other:?}"
             ));
         }
     }
@@ -497,7 +496,10 @@ mod tests {
     /// gate catches.
     #[test]
     fn historical_only_reason_pin_matches_sdk_constant() {
-        assert_eq!(HISTORICAL_ONLY_REASON, ERROR_CODE_HISTORICAL_ONLY);
+        assert_eq!(
+            HISTORICAL_ONLY_REASON,
+            arkret_core::ErrorCode::HISTORICAL_ONLY
+        );
     }
 
     /// Live multi-server e2e — boots real soland + teabay processes via

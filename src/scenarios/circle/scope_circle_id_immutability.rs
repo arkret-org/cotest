@@ -20,7 +20,6 @@
 //! locally that any future SDK helper / reducer SHOULD match bit-for-bit.
 
 use anyhow::{Result, anyhow};
-use arkret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
 use arkret_core::{CircleId, Did, RealmId, Strand, StrandId};
 use serde_json::Value;
 
@@ -66,24 +65,24 @@ fn actor() -> Result<Did> {
 /// helper assumes default profile (rebind forbidden).
 ///
 /// Returns `Err` whose message contains the
-/// [`REASON_SCOPE_REBIND_FORBIDDEN`] reason code so callers can match on
+/// [`arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN`] reason code so callers can match on
 /// the wire reason.
 fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) -> Result<()> {
     match (prev, next) {
         (None, None) => Ok(()),
         (Some(a), Some(b)) if a.as_str() == b.as_str() => Ok(()),
         (None, Some(b)) => Err(anyhow!(
-            "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
+            "reason=scope_rebind_forbidden: scope_circle_id rebind \
              from Realm-default to circle_id={} forbidden (AKP-0007 §3.4)",
             b.as_str()
         )),
         (Some(a), None) => Err(anyhow!(
-            "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
+            "reason=scope_rebind_forbidden: scope_circle_id rebind \
              from circle_id={} to Realm-default forbidden (AKP-0007 §3.4)",
             a.as_str()
         )),
         (Some(a), Some(b)) => Err(anyhow!(
-            "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
+            "reason=scope_rebind_forbidden: scope_circle_id rebind \
              from circle_id={} to circle_id={} forbidden (AKP-0007 §3.4)",
             a.as_str(),
             b.as_str()
@@ -151,9 +150,9 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(REASON_SCOPE_REBIND_FORBIDDEN) {
+            if !msg.contains(arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
                 return Err(anyhow!(
-                    "expected reason={REASON_SCOPE_REBIND_FORBIDDEN} in error; got: {msg}"
+                    "expected reason=scope_rebind_forbidden in error; got: {msg}"
                 ));
             }
         }
@@ -173,9 +172,9 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(REASON_SCOPE_REBIND_FORBIDDEN) {
+            if !msg.contains(arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
                 return Err(anyhow!(
-                    "expected reason={REASON_SCOPE_REBIND_FORBIDDEN}; got: {msg}"
+                    "expected reason=scope_rebind_forbidden; got: {msg}"
                 ));
             }
         }
@@ -190,9 +189,9 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(REASON_SCOPE_REBIND_FORBIDDEN) {
+            if !msg.contains(arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
                 return Err(anyhow!(
-                    "expected reason={REASON_SCOPE_REBIND_FORBIDDEN}; got: {msg}"
+                    "expected reason=scope_rebind_forbidden; got: {msg}"
                 ));
             }
         }

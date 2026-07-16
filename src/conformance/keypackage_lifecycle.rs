@@ -4,16 +4,10 @@
 //! Welcome digest binding against the spec artifact fixture.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::error::{
-    ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED, ERROR_CODE_KEYPACKAGE_UNKNOWN,
-    REASON_KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
-};
 use arkret_core::{
     DeviceId, Did, Hash, KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome,
-    KeyPackagesUploadOutcome, MlsKeypackagePayload, MlsWelcomePayload, OP_KEYS_KEYPACKAGES_CLAIM,
-    OP_KEYS_KEYPACKAGES_CONSUME, OP_KEYS_KEYPACKAGES_REVOKE, OP_KEYS_KEYPACKAGES_UPLOAD, RealmId,
-    validate_mls_welcome_claim_envelope,
-};
+    KeyPackagesUploadOutcome, MlsKeypackagePayload, MlsWelcomePayload, RealmId,
+    validate_mls_welcome_claim_envelope};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
@@ -52,9 +46,6 @@ const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
-const REASON_LAST_RESORT_NOT_SUPPORTED: &str = "last_resort_not_supported";
-const REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION: &str = "last_resort_realm_affinity_violation";
-const REASON_LAST_RESORT_ROTATION_REQUIRED: &str = "last_resort_rotation_required";
 
 fn keypackage_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(KEYPACKAGE_LIFECYCLE_FIXTURE_FILE)?;
@@ -96,10 +87,10 @@ fn validate_keypackage_lifecycle_fixture_metadata(fixture: &Value) -> Result<()>
     }
 
     for op in [
-        OP_KEYS_KEYPACKAGES_UPLOAD,
-        OP_KEYS_KEYPACKAGES_CLAIM,
-        OP_KEYS_KEYPACKAGES_CONSUME,
-        OP_KEYS_KEYPACKAGES_REVOKE,
+        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
+        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM,
+        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
+        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
     ] {
         if !op.starts_with("ak.self.keys.keypackages.") {
             bail!("keypackage operation id namespace drifted: {op}");
@@ -383,14 +374,14 @@ impl MiniKeypackage {
         if self.last_resort && &self.intended_realm_id != realm_id {
             return Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
-                REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION,
+                arkret_core::error::ReasonCode::LAST_RESORT_REALM_AFFINITY_VIOLATION,
             ));
         }
         if !self.last_resort && now > self.expires_at {
             self.state = MiniKeypackageState::Revoked;
             return Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
-                ERROR_CODE_KEYPACKAGE_UNKNOWN,
+                arkret_core::error::ErrorCode::KEYPACKAGE_UNKNOWN,
             ));
         }
         match (self.last_resort, self.state) {
@@ -410,14 +401,17 @@ impl MiniKeypackage {
             }
             (false, MiniKeypackageState::Consumed) => Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
-                ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED,
+                arkret_core::error::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED,
             )),
-            (_, MiniKeypackageState::Revoked | MiniKeypackageState::Consumed) => Ok(
-                consume_failure_outcome_value(&self.keypackage_ref, ERROR_CODE_KEYPACKAGE_UNKNOWN),
-            ),
+            (_, MiniKeypackageState::Revoked | MiniKeypackageState::Consumed) => {
+                Ok(consume_failure_outcome_value(
+                    &self.keypackage_ref,
+                    arkret_core::error::ErrorCode::KEYPACKAGE_UNKNOWN,
+                ))
+            }
             (false, MiniKeypackageState::Published) => Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
-                ERROR_CODE_KEYPACKAGE_UNKNOWN,
+                arkret_core::error::ErrorCode::KEYPACKAGE_UNKNOWN,
             )),
         }
     }
@@ -440,7 +434,7 @@ fn claim_from_pool(
 
     if explicit_last_resort_fallback && !feature_supported {
         return Ok(claim_failure_outcome_value(
-            REASON_LAST_RESORT_NOT_SUPPORTED,
+            arkret_core::error::ReasonCode::LAST_RESORT_NOT_SUPPORTED,
             Some(0),
         ));
     }
@@ -456,7 +450,7 @@ fn claim_from_pool(
     }
 
     Ok(claim_failure_outcome_value(
-        ERROR_CODE_KEYPACKAGE_UNKNOWN,
+        arkret_core::error::ErrorCode::KEYPACKAGE_UNKNOWN,
         Some(0),
     ))
 }
@@ -531,7 +525,7 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         bail!("rate-limit control must exceed the allowed claim count");
     }
     let rate_limited = parse_claim_outcome(claim_failure_outcome_value(
-        ERROR_CODE_KEYPACKAGE_UNKNOWN,
+        arkret_core::error::ErrorCode::KEYPACKAGE_UNKNOWN,
         Some(available_count),
     ))?;
     if rate_limited.failures.len() != 1 || !rate_limited.claims.is_empty() {
@@ -668,7 +662,9 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
     if last_resort.audit_records.len() as u64 != expected_u64(vector, "audit_records")? {
         bail!("last-resort consume audit record count drifted");
     }
-    if expected_str(vector, "forbidden_reason")? != ERROR_CODE_KEYPACKAGE_ALREADY_CONSUMED {
+    if expected_str(vector, "forbidden_reason")?
+        != arkret_core::error::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED
+    {
         bail!("last-resort forbidden reason constant drifted");
     }
     Ok(())
@@ -723,7 +719,9 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     if commits.len() as u64 != expected_u64(vector, "self_update_commits")? {
         bail!("rotation did not emit one MLS self-update per joined group");
     }
-    if expected_str(vector, "rotation_reason")? != REASON_LAST_RESORT_ROTATION_REQUIRED {
+    if expected_str(vector, "rotation_reason")?
+        != arkret_core::error::ReasonCode::LAST_RESORT_ROTATION_REQUIRED
+    {
         bail!("last-resort rotation reason drifted");
     }
 
@@ -1045,7 +1043,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             None,
         )
         .is_err(),
-        Err(reason) => reason == REASON_KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
+        Err(reason) => {
+            reason == arkret_core::error::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH
+        }
     };
     if !claim_ref_rejected {
         bail!("mismatched claim_ref keypackage_digest was accepted");
@@ -1142,7 +1142,9 @@ fn parse_welcome_with_early_binding_rejection(
                 .to_string()
                 .contains("claim bindings do not match top-level fields") =>
         {
-            Ok(Err(REASON_KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH))
+            Ok(Err(
+                arkret_core::error::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
+            ))
         }
         Err(error) => Err(error.into()),
     }

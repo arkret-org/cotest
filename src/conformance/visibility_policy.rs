@@ -6,11 +6,6 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::error::{
-    ERROR_CODE_HISTORY_NOT_VISIBLE, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
-    REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE, REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
-    REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
-};
 use arkret_core::{
     CircleScopeError, EncryptionFloor, EncryptionProfile, validate_circle_encryption_floor,
     validate_content_encryption_floor, validate_content_encryption_floor_ratchet,
@@ -179,7 +174,9 @@ pub fn run_content_floor_downgrade_rejected_vector() -> Result<()> {
         EncryptionFloor::E2eeRequired,
     )?;
 
-    if REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE != expected_reason(vector)? {
+    if arkret_core::error::ReasonCode::CONTENT_ENCRYPTION_FLOOR_DOWNGRADE
+        != expected_reason(vector)?
+    {
         bail!("content floor downgrade reason constant drifted");
     }
     Ok(())
@@ -204,7 +201,9 @@ pub fn run_metadata_floor_downgrade_rejected_vector() -> Result<()> {
         EncryptionFloor::E2eeRequired,
     )?;
 
-    if REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE != expected_reason(vector)? {
+    if arkret_core::error::ReasonCode::METADATA_ENCRYPTION_FLOOR_DOWNGRADE
+        != expected_reason(vector)?
+    {
         bail!("metadata floor downgrade reason constant drifted");
     }
     Ok(())
@@ -229,7 +228,7 @@ pub fn run_in_place_e2ee_enable_vector() -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("in-place E2EE case missing plaintext failure reason"))?;
     expect_circle_reason(plaintext_error, expected)?;
-    if expected != REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION {
+    if expected != arkret_core::error::ReasonCode::CONTENT_ENCRYPTION_FLOOR_VIOLATION {
         bail!("content floor violation reason constant drifted");
     }
 
@@ -254,7 +253,9 @@ pub fn run_circle_content_floor_below_realm_rejected_vector() -> Result<()> {
         validate_circle_encryption_floor(&realm_profile, realm_floor, &circle_profile).unwrap_err(),
         expected_reason(vector)?,
     )?;
-    if expected_reason(vector)? != REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR {
+    if expected_reason(vector)?
+        != arkret_core::error::ReasonCode::CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR
+    {
         bail!("circle floor reason constant drifted");
     }
 
@@ -551,7 +552,7 @@ pub fn run_history_visibility_joined_prejoin_denied_vector() -> Result<()> {
     if vector
         .pointer("/expected/prejoin_error")
         .and_then(Value::as_str)
-        != Some(ERROR_CODE_HISTORY_NOT_VISIBLE)
+        != Some(arkret_core::error::ErrorCode::HISTORY_NOT_VISIBLE)
     {
         bail!("joined pre-join denial error code drifted");
     }

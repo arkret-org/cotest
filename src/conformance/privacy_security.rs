@@ -16,7 +16,6 @@ use arkret::mls::{
     AuthorGroupStateView, AuthorLeaf, AuthorLeafCredential, MinimalMetadataAuthorClaim,
     verify_minimal_metadata_author,
 };
-use arkret_core::REASON_MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -255,7 +254,8 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                 };
                 if let Some(expected_reason) = mutation_case.expected.reason_code.as_deref() {
                     if error.reason_code() != expected_reason
-                        || expected_reason != REASON_MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID
+                        || expected_reason
+                            != arkret_core::ReasonCode::MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID
                     {
                         bail!(
                             "case {} rejected with {} (expected {expected_reason})",

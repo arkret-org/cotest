@@ -6,14 +6,11 @@
 //! provision, grant-before-pairing) MUST be rejected.
 
 use anyhow::{Result, anyhow};
-use arkret_core::events::kinds::AGENT_PAUSE;
-use arkret_core::{OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_GRANT_ATTACH, OP_AGENT_PROVISION};
-
 /// Canonical landing order. Index = step number.
 const SPEC_ORDER: &[&str] = &[
-    OP_AGENT_PROVISION,
-    OP_ACCOUNT_AGENT_KEY_PAIR,
-    OP_AGENT_GRANT_ATTACH,
+    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
+    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+    arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
 ];
 
 pub async fn provisioning_pairing_grant_order_run() -> Result<()> {
@@ -32,9 +29,9 @@ pub async fn provisioning_pairing_grant_order_run() -> Result<()> {
             "duplicate steps in provisioning sequence: {SPEC_ORDER:?}"
         ));
     }
-    if AGENT_PAUSE != "ak.self.agent.pause" {
+    if arkret_core::events::EventKind::SELF_AGENT_PAUSE != "ak.self.agent.pause" {
         return Err(anyhow!(
-            "AGENT_PAUSE event kind drifted; reducer pause invariant cannot anchor"
+            "arkret_core::events::EventKind::SELF_AGENT_PAUSE event kind drifted; reducer pause invariant cannot anchor"
         ));
     }
     // TODO(P4-impl): walk a real envelope sequence:

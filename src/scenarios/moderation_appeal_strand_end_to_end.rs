@@ -25,9 +25,7 @@
 //! Anchor batch → close.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    REASON_APPEAL_OVERTURN_MISSING_LIFT, REASON_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
-};
+use arkret_core::TypedAppealId;
 use arkret_schema::embedded_error_code_identifiers;
 
 pub const APPEAL_KIND_SUBMIT: &str = "ak.moderation.appeal.submit";
@@ -49,17 +47,17 @@ pub const EXPECTED_SELF_REVIEW_FORBIDDEN: &str = "appeal_self_review_forbidden";
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
 /// `ak:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
-    if REASON_APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
+    if arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
         return Err(anyhow!(
-            "SDK REASON_APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
-            REASON_APPEAL_OVERTURN_MISSING_LIFT,
+            "SDK arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
+            arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
             EXPECTED_OVERTURN_MISSING_LIFT,
         ));
     }
-    if REASON_APPEAL_SELF_REVIEW_FORBIDDEN != EXPECTED_SELF_REVIEW_FORBIDDEN {
+    if arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN != EXPECTED_SELF_REVIEW_FORBIDDEN {
         return Err(anyhow!(
-            "SDK REASON_APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
-            REASON_APPEAL_SELF_REVIEW_FORBIDDEN,
+            "SDK arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
+            arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
             EXPECTED_SELF_REVIEW_FORBIDDEN,
         ));
     }
@@ -68,14 +66,14 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
     // codes-only `KNOWN_ERROR_CODES` table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(REASON_APPEAL_OVERTURN_MISSING_LIFT) {
+    if !registry_identifiers.contains(arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {REASON_APPEAL_OVERTURN_MISSING_LIFT}"
+            "error-code-registry missing reason code appeal_overturn_missing_lift"
         ));
     }
-    if !registry_identifiers.contains(REASON_APPEAL_SELF_REVIEW_FORBIDDEN) {
+    if !registry_identifiers.contains(arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {REASON_APPEAL_SELF_REVIEW_FORBIDDEN}"
+            "error-code-registry missing reason code appeal_self_review_forbidden"
         ));
     }
     // Typed appeal id round-trip.

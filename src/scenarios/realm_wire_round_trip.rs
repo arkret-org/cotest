@@ -10,7 +10,7 @@
 //!
 //! 1. Round-trip parses back into the same `(kind, realm_id, payload)` triple (the wire bytes any
 //!    other project — soland / inkson / federation peer — would receive).
-//! 2. [`arkret_core::events::classify_event_kind`] recognises the new kinds in their new family
+//! 2. [`arkret_core::events::event_product_class`] recognises the new kinds in their new family
 //!    (Realm / Space-container).
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no
 //! binary, no network — the round-trip is entirely against the SDK so
@@ -19,9 +19,7 @@
 use anyhow::{Result, anyhow};
 use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_core::events::{
-    EventClass, REALM_CREATE, REALM_DELIVERY_BINDING_POLICY, REALM_LINK, SPACE_CREATE,
-    classify_event_kind,
-};
+    EventProductClass, event_product_class};
 use arkret_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
@@ -38,13 +36,13 @@ fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> 
         .map_err(|err| anyhow!("failed to build event: {err}"))
 }
 
-/// One vector: input kind + payload, expected `EventClass`, and a label
+/// One vector: input kind + payload, expected `EventProductClass`, and a label
 /// for failure reporting.
 struct WireVector {
     label: &'static str,
     kind: &'static str,
     payload: Value,
-    expected_class: EventClass,
+    expected_class: EventProductClass,
 }
 
 /// Positive vectors — every kind listed here MUST round-trip cleanly
@@ -54,33 +52,33 @@ fn positive_vectors() -> Vec<WireVector> {
     vec![
         WireVector {
             label: "ak.realm.create",
-            kind: REALM_CREATE,
+            kind: arkret_core::events::EventKind::REALM_CREATE,
             payload: json!({"action": "create", "title": "Engineering Realm"}),
-            expected_class: EventClass::Realm,
+            expected_class: EventProductClass::Realm,
         },
         WireVector {
             label: "ak.space.create (container)",
-            kind: SPACE_CREATE,
+            kind: arkret_core::events::EventKind::SPACE_CREATE,
             payload: json!({"title": "Launch Board", "kind": "board"}),
-            expected_class: EventClass::Space,
+            expected_class: EventProductClass::Space,
         },
         WireVector {
             label: "ak.realm.delivery_binding_policy",
-            kind: REALM_DELIVERY_BINDING_POLICY,
+            kind: arkret_core::events::EventKind::REALM_DELIVERY_BINDING_POLICY,
             payload: json!({
                 "allowed_recipient_services": ["did:web:soland.example"],
                 "binding_source_policy": "endorsed_only",
             }),
-            expected_class: EventClass::Realm,
+            expected_class: EventProductClass::Realm,
         },
         WireVector {
             label: "ak.realm.link",
-            kind: REALM_LINK,
+            kind: arkret_core::events::EventKind::REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
                 "target_realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",
             }),
-            expected_class: EventClass::Realm,
+            expected_class: EventProductClass::Realm,
         },
     ]
 }
@@ -132,10 +130,10 @@ fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String
     if parsed_payload != &vector.payload {
         return Err(anyhow!("round-tripped {}: payload drifted", vector.label,));
     }
-    let class = classify_event_kind(parsed_kind);
+    let class = event_product_class(parsed_kind);
     if class != vector.expected_class {
         return Err(anyhow!(
-            "round-tripped {}: classify_event_kind drifted: got {:?}, want {:?}",
+            "round-tripped {}: event_product_class drifted: got {:?}, want {:?}",
             vector.label,
             class,
             vector.expected_class

@@ -5,12 +5,10 @@
 //! reject with HTTP 409 + errcode `series_chain_broken`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::error::REASON_SERIES_CHAIN_BROKEN;
-
 pub async fn series_chain_broken_run() -> Result<()> {
-    if REASON_SERIES_CHAIN_BROKEN != "series_chain_broken" {
+    if arkret_core::error::ReasonCode::SERIES_CHAIN_BROKEN != "series_chain_broken" {
         return Err(anyhow!(
-            "REASON_SERIES_CHAIN_BROKEN spelling drifted: {REASON_SERIES_CHAIN_BROKEN}"
+            "arkret_core::error::ReasonCode::SERIES_CHAIN_BROKEN spelling drifted: series_chain_broken"
         ));
     }
     // Negative-shape pin: a mismatched supersedes_digest MUST be

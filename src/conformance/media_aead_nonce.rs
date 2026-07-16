@@ -10,10 +10,6 @@ use arkret::{
     AeadNonceReplayTracker, Error, compose_aead_nonce, derive_aead_sender_nonce_prefix,
     verify_aead_nonce_derivation, verify_aead_sender_nonce,
 };
-use arkret_core::error::{
-    REASON_AEAD_NONCE_COUNTER_REPLAY, REASON_AEAD_NONCE_DERIVATION_INVALID,
-    REASON_AEAD_NONCE_SENDER_DOMAIN_COLLISION,
-};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_AEAD_NONCE_SENDER_DOMAIN_COLLISION: &str =
@@ -161,7 +157,7 @@ pub fn run_aead_nonce_sender_domain_collision_vector() -> Result<()> {
             None,
         )
         .unwrap_err(),
-        REASON_AEAD_NONCE_SENDER_DOMAIN_COLLISION,
+        arkret_core::error::ReasonCode::AEAD_NONCE_SENDER_DOMAIN_COLLISION,
     )?;
 
     Ok(())
@@ -196,7 +192,7 @@ pub fn run_aead_nonce_counter_replay_vector() -> Result<()> {
             Some(&mut tracker),
         )
         .unwrap_err(),
-        REASON_AEAD_NONCE_COUNTER_REPLAY,
+        arkret_core::error::ReasonCode::AEAD_NONCE_COUNTER_REPLAY,
     )?;
 
     let nonce_counter_ten = compose_aead_nonce(&prefix, 10);
@@ -247,7 +243,7 @@ pub fn run_aead_nonce_random_rejected_vector() -> Result<()> {
     }
     expect_reason(
         verify_aead_nonce_derivation(&expected_nonce, &random_nonce).unwrap_err(),
-        REASON_AEAD_NONCE_DERIVATION_INVALID,
+        arkret_core::error::ReasonCode::AEAD_NONCE_DERIVATION_INVALID,
     )?;
 
     Ok(())

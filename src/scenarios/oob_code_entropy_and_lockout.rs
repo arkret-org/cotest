@@ -35,7 +35,7 @@
 //! / lockout coverage; a live behavioural test is a tracked follow-up.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{ERROR_CODE_NOT_FOUND, ERROR_CODE_SCHEMA_VIOLATION, is_known_error_code};
+use arkret_core::is_known_error_code;
 
 /// Minimum acceptable length for an offline-verifiable OOB code.
 /// 22 chars base32 ≈ 110 bits entropy with disambiguated alphabet.
@@ -62,22 +62,22 @@ pub const EXPECTED_UNIFIED_NOT_FOUND: &str = "not_found";
 /// `schema_violation` and `not_found` agree with cotest pins and the
 /// canonical registry recognises both. Also pin the entropy floor.
 pub async fn oob_code_low_entropy_run() -> Result<()> {
-    if ERROR_CODE_SCHEMA_VIOLATION != EXPECTED_LOW_ENTROPY_REASON {
+    if arkret_core::ErrorCode::SCHEMA_VIOLATION != EXPECTED_LOW_ENTROPY_REASON {
         return Err(anyhow!(
-            "SDK ERROR_CODE_SCHEMA_VIOLATION ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_SCHEMA_VIOLATION,
+            "SDK arkret_core::ErrorCode::SCHEMA_VIOLATION ({}) drifted from cotest pin ({}).",
+            arkret_core::ErrorCode::SCHEMA_VIOLATION,
             EXPECTED_LOW_ENTROPY_REASON,
         ));
     }
-    if ERROR_CODE_NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
+    if arkret_core::ErrorCode::NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
         return Err(anyhow!(
-            "SDK ERROR_CODE_NOT_FOUND ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_NOT_FOUND,
+            "SDK arkret_core::ErrorCode::NOT_FOUND ({}) drifted from cotest pin ({}).",
+            arkret_core::ErrorCode::NOT_FOUND,
             EXPECTED_UNIFIED_NOT_FOUND,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_SCHEMA_VIOLATION)
-        || !is_known_error_code(ERROR_CODE_NOT_FOUND)
+    if !is_known_error_code(arkret_core::ErrorCode::SCHEMA_VIOLATION)
+        || !is_known_error_code(arkret_core::ErrorCode::NOT_FOUND)
     {
         return Err(anyhow!(
             "SDK KNOWN_ERROR_CODES table missing schema_violation or not_found"
@@ -106,10 +106,10 @@ pub async fn oob_code_lookup_three_strike_invalidate_run() -> Result<()> {
             "OOB unified response timing budget must be ≤50ms (spec T15); got {OOB_RESPONSE_TIMING_BUDGET_MS}ms"
         ));
     }
-    if ERROR_CODE_NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
+    if arkret_core::ErrorCode::NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
         return Err(anyhow!(
-            "SDK ERROR_CODE_NOT_FOUND ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_NOT_FOUND,
+            "SDK arkret_core::ErrorCode::NOT_FOUND ({}) drifted from cotest pin ({}).",
+            arkret_core::ErrorCode::NOT_FOUND,
             EXPECTED_UNIFIED_NOT_FOUND,
         ));
     }
