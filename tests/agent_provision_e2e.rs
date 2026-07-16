@@ -1942,8 +1942,8 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
     let mut authorize_event = arkret::agent::build_agent_key_authorize_event(
         &authorize_payload,
         provisioned.principal_control_realm_id().clone(),
-        agent_id,
-        controller_id,
+        agent_id.clone(),
+        controller_id.clone(),
         provisioned.controller_authorization_ref(),
         actor_seq,
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
@@ -1956,7 +1956,45 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         &format!("{ALICE_DID}#cotest"),
         arkret::signatures::SignEventOptions::new().with_created_at(canonical_now()),
     )?;
-    Ok(builder.build_key_pair_request(authorize_event)?.body)
+    let disclosure_issued_at = canonical_now();
+    let requested_scope = test_agent_requested_scope();
+    let requested_scope_digest =
+        arkret::agent_requested_scope_digest(&agent_id, &controller_id, &requested_scope)?;
+    let pairing_request_uuid = pairing_request_id
+        .strip_prefix("agent_pairing_request:")
+        .ok_or_else(|| anyhow!("pairing_request_id has an invalid prefix"))?;
+    let mut requested_scope_disclosure = arkret::AgentRequestedScopeDisclosure {
+        schema: arkret::AGENT_REQUESTED_SCOPE_DISCLOSURE_SCHEMA.to_owned(),
+        request_id: arkret::RequestId::new(format!("ak:request:{pairing_request_uuid}"))?,
+        agent_id,
+        controller_id,
+        requested_scope,
+        requested_scope_digest,
+        verifier_did: arkret::Did::new(server.service_id().to_owned())?,
+        audience: arkret::NonEmptyString::new(
+            arkret::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+        )
+        .map_err(|reason| anyhow!(reason))?,
+        challenge: arkret::NonEmptyString::new(pairing_request_id)
+        .map_err(|reason| anyhow!(reason))?,
+        issued_at: disclosure_issued_at,
+        expires_at: disclosure_issued_at + chrono::Duration::minutes(5),
+        proofs: vec![arkret::Proof {
+            kind: "detached_jws".to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: format!("{ALICE_DID}#cotest"),
+            event_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            created_at: disclosure_issued_at,
+            domain: None,
+            audience: None,
+            jws: "eyJhbGciOiJFZERTQSJ9..AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ".to_owned(),
+        }],
+    };
+    requested_scope_disclosure.proofs[0].event_digest =
+        requested_scope_disclosure.payload_digest()?;
+    Ok(builder
+        .build_key_pair_request(requested_scope_disclosure, authorize_event)?
+        .body)
 }
 
 async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Result<String> {

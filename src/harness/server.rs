@@ -23,6 +23,8 @@ use super::canonical_device_id;
 use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_handle};
 
+pub(crate) const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
+
 pub struct ArkretServer {
     handle: SutHandle,
     base_url: Url,
@@ -150,6 +152,10 @@ impl ArkretServer {
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_FIRST_PROVISIONING", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
+            .env(
+                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                EMBEDDED_WEBVH_REGISTRATION_BEARER,
+            )
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
@@ -231,6 +237,10 @@ impl ArkretServer {
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_FIRST_PROVISIONING", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
+            .env(
+                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                EMBEDDED_WEBVH_REGISTRATION_BEARER,
+            )
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
@@ -318,6 +328,10 @@ impl ArkretServer {
             .arg("SOLAND_FIRST_PROVISIONING=1")
             .arg("--env")
             .arg("SOLAND_SEED_DEMO_DATA=1")
+            .arg("--env")
+            .arg(format!(
+                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={EMBEDDED_WEBVH_REGISTRATION_BEARER}"
+            ))
             .arg("--env")
             .arg("SOLAND_BLOB_ROOT=/tmp/soland-blobs");
         for &(key, value) in extra_env {
