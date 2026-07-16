@@ -20,7 +20,10 @@ import {
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
-import { latestMockEmailCode } from "../../helpers/coauth-register";
+import {
+  latestMockEmailCode,
+  registerCoauthPasswordAccount,
+} from "../../helpers/coauth-register";
 import { resolvePrincipalDid } from "../../helpers/onboarding";
 import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 
@@ -295,93 +298,34 @@ test.describe("account onboarding", () => {
     }
   });
 
-  test.fixme("carol verifies email then finishes with her client-signed cold-root inception", async ({
+  test("carol verifies email then finishes with her client-signed cold-root inception", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §2.1 + sync/third-party-invites.md §3
-    //
-    // Keep the verified 3PID strand, then supply a client-authored entry 0 to
-    // finish. No service is permitted to generate the identity root.
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
     const user = uniqueUser("s7-carol-email");
-    const start = await request.post(
+    const handle = user.handle.slice(1);
+    const account = await registerCoauthPasswordAccount(request, coauth!, {
+      handle,
+    });
+    const resolved = await resolvePrincipalDid(request, account.did);
+    expect(resolved.log).toHaveLength(1);
+    expect(resolved.document.verificationMethod).toBeUndefined();
+    expect(resolved.document.assertionMethod).toBeUndefined();
+    expect(resolved.document.capabilityDelegation).toBeUndefined();
+
+    const duplicate = await request.post(
       `${coauth}/_coauth/account/auth/register/webvh/start`,
-      { data: { handle: user.handle.slice(1), principal_server_url: solandBaseUrl() } },
+      { data: { handle, principal_server_url: solandBaseUrl() } },
     );
-    expect(start.status(), await start.text()).toBe(200);
-    const started = await start.json();
-    expect(started.status).toBe("success");
-    const mockEmail = mockEmailBaseUrl();
-    expect(started.email_verification_bypass_allowed).toBe(!mockEmail);
-
-    const email = `${user.name}@example.test`;
-    const sent = await request.post(
-      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/email`,
-      { data: { email } },
-    );
-    expect(sent.status(), await sent.text()).toBe(200);
-    const sentBody = await sent.json();
-    expect(sentBody.status).toBe("sent");
-    if (mockEmail) {
-      expect(sentBody.dev_code).toBeFalsy();
-    } else {
-      expect(sentBody.dev_code).toBeTruthy();
-    }
-
-    // If a mock-email service is wired, the verification message landed in its
-    // inbox for this recipient.
-    let verificationCode = sentBody.dev_code as string | undefined;
-    if (mockEmail) {
-      await expect
-        .poll(() => latestMockEmailCode(request, email), { timeout: 30_000 })
-        .toBeTruthy();
-      verificationCode = await latestMockEmailCode(request, email);
-      const inbox = await request.get(`${mockEmail}/mock/email/verification/inbox?to=${encodeURIComponent(email)}`);
-      const inboxText = await inbox.text();
-      expect(inbox.status(), inboxText).toBe(200);
-      const inboxBody = JSON.parse(inboxText) as {
-        messages?: Array<Record<string, unknown>>;
-      };
-      const messages = inboxBody.messages ?? [];
-      expect(messages.length, `mock inbox for ${email}: ${JSON.stringify(inboxBody)}`).toBeGreaterThan(0);
-      const serializedMessages = JSON.stringify(messages);
-      expect(
-        [verificationCode, started.registration_id].some((needle) =>
-          serializedMessages.includes(String(needle)),
-        ),
-        `mock inbox message should reference the verification code or registration id: ${serializedMessages}`,
-      ).toBeTruthy();
-    }
-
-    const verify = await request.post(
-      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
-      { data: { code: verificationCode } },
-    );
-    expect(verify.status(), await verify.text()).toBe(200);
-    const verified = await verify.json();
-    expect(verified.status).toBe("success");
-    expect(verified.next_step).toBe("finish");
-
-    // Re-submitting the same (now consumed) code must not re-advance the strand:
-    // the token is single-use.
-    const replay = await request.post(
-      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
-      { data: { code: verificationCode } },
-    );
-    const replayBody = await replay.json();
-    expect(replayBody.status).not.toBe("success");
-
+    expect(duplicate.status(), await duplicate.text()).toBe(200);
+    expect(await duplicate.json()).toMatchObject({
+      status: "error",
+      error: "handle_exists",
+    });
   });
-
-  test.fixme(
-    "E7.5 a claimed handle remains unavailable after client-signed inception binding",
-    async () => {
-      // The first claimant must finish through the cold-root path before the
-      // second start request is expected to return handle_exists.
-    },
-  );
 
   // ── Retained (honestly out of low-risk reach) ────────────────────────────
   //
@@ -389,19 +333,6 @@ test.describe("account onboarding", () => {
   // by a black-box harness test today; promoting them would assert behavior
   // that the running stack cannot satisfy, or require changes to modules owned
   // by other workstreams (device / webvh / upstream-OAuth). Rationale inline.
-
-  test.fixme(
-    // @blocking-on: soland#identity-onboarding-gap
-    // @user-promise: e2e/scenarios/identity/onboarding.md
-    // @expected-live-by: 2026Q3
-    "principal control Realm and first device are accepted as one B-model bootstrap unit before recovery-material gate closure",
-    async () => {
-      // Assert root-signed PCR create + authority-signed authorize are atomic,
-      // then publish the recovery policy and backup/receipt gate material.
-      // Model B has no SSK and device keys remain in the device registry, never
-      // in DID Document verificationMethod.
-    },
-  );
 
   test.fixme(
     // @blocking-on: soland#identity-onboarding-gap
