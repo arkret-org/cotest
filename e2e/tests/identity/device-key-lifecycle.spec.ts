@@ -429,8 +429,15 @@ async function assertCardDescription(
   await expect(page.getByTestId("kanban-card-redacted").filter({ hasText: cardTitle })).toHaveCount(
     0,
   );
-  await card.click();
+  // The encrypted-write backup prompt is scheduled asynchronously and can
+  // appear after the page-level cleanup above. Use the bounded prompt-aware
+  // click so a prompt racing this interaction is dismissed and retried.
+  await userPage.clickWithPassivePromptRetry(card);
   await expect(page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+  // The first accepted encrypted write can legitimately trigger the MLS
+  // backup prompt after the earlier page-level prompt cleanup. Dismiss that
+  // newly-created modal before interacting with the card detail underneath.
+  await dismissBlockingEncryptedPrompts(userPage);
   await page.getByTestId("card-detail-tab-description").click();
   await expect(page.getByTestId("card-description-panel")).toContainText(description, {
     timeout: 120_000,
