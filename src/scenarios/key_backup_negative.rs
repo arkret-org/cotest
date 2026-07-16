@@ -169,7 +169,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(actor.to_owned())?,
-                device_id: device_id.to_owned(),
+                device_id: Some(device_id.to_owned()),
                 backup_class: BackupClass::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,

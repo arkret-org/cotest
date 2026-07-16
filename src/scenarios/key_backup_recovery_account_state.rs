@@ -202,7 +202,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(principal_id.to_owned())?,
-                device_id: DEVICE_A.to_owned(),
+                device_id: Some(DEVICE_A.to_owned()),
                 backup_class: BackupClass::DidRecovery,
                 backup_version: "kb_1".to_owned(),
                 created_at,
