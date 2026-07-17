@@ -1439,14 +1439,25 @@ pub fn prepare_actor_inception_for_service(
     actor: &str,
 ) -> Result<PreparedPrincipalInception> {
     let service_host = did_host_from_service_id(service_id);
-    let webvh_host = if service_host.contains('.') {
-        service_host
+    let service_authority = did_web_host_to_url_authority(&service_host);
+    let webvh_host = if service_authority.contains('.') {
+        service_authority
     } else {
-        format!("{service_host}.cotest.local")
+        format!("{service_authority}.cotest.local")
     };
     test_principal_inception(&webvh_host, actor).with_context(|| {
         format!("prepare test principal inception for local id {actor:?} at {webvh_host:?}")
     })
+}
+
+/// Convert the percent-encoded port separator required by `did:web` method
+/// identifiers back into the HTTP authority form expected by `Url`.
+///
+/// Keep this conversion local to principal URL construction: federation trust
+/// domains continue to use the canonical DID host spelling returned by
+/// `did_host_from_service_id`.
+fn did_web_host_to_url_authority(host: &str) -> String {
+    host.replace("%3A", ":").replace("%3a", ":")
 }
 
 fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrincipalInception> {

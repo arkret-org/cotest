@@ -57,6 +57,7 @@ fn build_realm(
         encryption_profile: EncryptionProfile::None,
         content_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
         metadata_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
+        agent_participation: None,
         content_scheme: None,
         durability_policy: None,
         federation_policy,
