@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use super::assertions::expect_json;
 use super::proof::refresh_event_proof;
-use super::server::{ArkretServer, EMBEDDED_WEBVH_REGISTRATION_BEARER};
+use super::server::ArkretServer;
 use super::{
     NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
 };
@@ -50,11 +50,7 @@ pub async fn register_account_with_handle(
         body["handle"] = json!(handle);
     }
     expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
-            .json(&body),
+        server.account_registration_request().json(&body),
         StatusCode::OK,
     )
     .await?;

@@ -19,14 +19,11 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     let server = ArkretServer::spawn("session-grant-presentation").await?;
 
     expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .json(&json!({
-                "principal_id": principal_id,
-                "display_name": "Alice Session Grant",
-                "device_id": device_id
-            })),
+        server.account_registration_request().json(&json!({
+            "principal_id": principal_id,
+            "display_name": "Alice Session Grant",
+            "device_id": device_id
+        })),
         StatusCode::OK,
     )
     .await?;

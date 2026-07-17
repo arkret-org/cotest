@@ -26,8 +26,7 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
     .await?;
     expect_api_error(
         server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
+            .account_registration_request()
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -43,8 +42,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 
     expect_api_error(
         server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
+            .account_registration_request()
             .json(&json!({"principal_id": "bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"})),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -52,28 +50,22 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     .await?;
 
     let registered = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .json(&json!({
-                "principal_id": "did:web:alice-auth.example",
-                "display_name": "alice-auth",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
-            })),
+        server.account_registration_request().json(&json!({
+            "principal_id": "did:web:alice-auth.example",
+            "display_name": "alice-auth",
+            "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
+        })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(registered["principal_id"], "did:web:alice-auth.example");
 
     let second_device = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .json(&json!({
-                "principal_id": "did:web:alice-auth.example",
-                "display_name": "alice-auth",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a2"
-            })),
+        server.account_registration_request().json(&json!({
+            "principal_id": "did:web:alice-auth.example",
+            "display_name": "alice-auth",
+            "device_id": "ak:device:01904100-0000-7000-8000-0000000000a2"
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -140,14 +132,11 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 pub async fn contact_edges_are_rejected() -> Result<()> {
     let server = ArkretServer::spawn("contact-edges").await?;
     let alice = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .json(&json!({
-                "principal_id": "did:web:alice-contact.example",
-                "display_name": "Alice",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
-            })),
+        server.account_registration_request().json(&json!({
+            "principal_id": "did:web:alice-contact.example",
+            "display_name": "Alice",
+            "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -168,14 +157,11 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let alice_token = alice["session_credential"].as_str().unwrap();
 
     let bob = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .json(&json!({
-                "principal_id": "did:web:bob-contact.example",
-                "display_name": "Bob",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000b0"
-            })),
+        server.account_registration_request().json(&json!({
+            "principal_id": "did:web:bob-contact.example",
+            "display_name": "Bob",
+            "device_id": "ak:device:01904100-0000-7000-8000-0000000000b0"
+        })),
         StatusCode::OK,
     )
     .await?;

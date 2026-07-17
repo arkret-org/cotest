@@ -23,7 +23,7 @@ use super::canonical_device_id;
 use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_handle};
 
-pub(crate) const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
+const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
 
 pub struct ArkretServer {
     handle: SutHandle,
@@ -384,6 +384,15 @@ impl ArkretServer {
 
     pub fn http(&self) -> HttpClient {
         HttpClient::new()
+    }
+
+    /// Build an authenticated request for the harness-only embedded WebVH
+    /// registration gate. Keeping the credential here prevents direct fixture
+    /// requests from silently bypassing the bootstrap authentication contract.
+    pub fn account_registration_request(&self) -> reqwest::RequestBuilder {
+        self.http()
+            .post(self.url("/_arkret/gate/account/register"))
+            .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
     }
 
     pub fn sdk(&self) -> Result<SdkClient> {

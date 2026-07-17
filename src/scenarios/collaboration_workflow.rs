@@ -32,14 +32,11 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
 
     let bob_second_device = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/register"))
-            .json(&json!({
-                "principal_id": BOB_DID,
-                "display_name": BOB_HANDLE.trim_start_matches('@'),
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
-            })),
+        server.account_registration_request().json(&json!({
+            "principal_id": BOB_DID,
+            "display_name": BOB_HANDLE.trim_start_matches('@'),
+            "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
+        })),
         StatusCode::OK,
     )
     .await?;
