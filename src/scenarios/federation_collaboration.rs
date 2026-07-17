@@ -534,6 +534,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                 "messages": {
                     bob_did.clone(): {
                         "ak:device:01904100-0000-7000-8000-0000000000bb": {
+                            "message_id": "ak:device_message:01904100-0000-7000-8000-0000000000b1",
                             "kind": "ak.mls.welcome",
                             "content": encrypted_envelope("ak.mls.welcome", "opaque-cross-server-welcome"),
                             "expires_at": "2026-12-31T00:00:00Z"

@@ -17,7 +17,7 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    TestServerGroup, eventually, expect_response, invite_create_payload,
+    TestServerGroup, eventually, expect_account_subscribe_delta, invite_create_payload,
     member_join_payload_with_invite_ref, message_create_text_payload,
 };
 
@@ -457,41 +457,13 @@ async fn fetch_account_subscribe(
     actor: &crate::harness::TestActorClient,
     query: &str,
 ) -> Result<Value> {
-    Ok(fetch_account_subscribe_with_size(actor, query).await?.0)
-}
-
-async fn fetch_account_subscribe_with_size(
-    actor: &crate::harness::TestActorClient,
-    query: &str,
-) -> Result<(Value, usize)> {
-    let response = expect_response(
+    expect_account_subscribe_delta(
         actor
             .get(&format!("/_arkret/self/account/subscribe?{query}"))
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )
-    .await?;
-    let body = response.text();
-    let bytes = body.len();
-    let frame = parse_delta_frame(&body)?;
-    Ok((frame, bytes))
-}
-
-fn parse_delta_frame(ndjson: &str) -> Result<Value> {
-    for line in ndjson
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-    {
-        let frame: Value = serde_json::from_str(line)
-            .map_err(|error| anyhow!("invalid subscribe frame `{line}`: {error}"))?;
-        if frame.get("kind").and_then(Value::as_str) == Some("delta") {
-            return Ok(frame);
-        }
-    }
-    Err(anyhow!(
-        "account subscribe NDJSON missing delta frame: {ndjson:?}"
-    ))
+    .await
 }
 
 fn cursor_from_sync(sync: &Value) -> Result<String> {

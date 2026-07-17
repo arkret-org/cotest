@@ -39,9 +39,46 @@ pub async fn expect_account_subscribe_delta(
     builder: reqwest::RequestBuilder,
     status: StatusCode,
 ) -> Result<Value> {
-    let response =
-        expect_response(builder.header("accept", "application/x-ndjson"), status).await?;
-    account_subscribe_delta_from_text(&response.text())
+    let mut response = builder
+        .header("accept", "application/x-ndjson")
+        .send()
+        .await
+        .context("send account subscribe request")?;
+    if response.status() != status {
+        let actual = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(anyhow!("expected HTTP {status}, got {actual}:\n{body}"));
+    }
+
+    tokio::time::timeout(Duration::from_secs(15), async move {
+        let mut pending = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .context("read account subscribe frame")?
+        {
+            pending.extend_from_slice(&chunk);
+            while let Some(newline) = pending.iter().position(|byte| *byte == b'\n') {
+                let line = pending.drain(..=newline).collect::<Vec<_>>();
+                let line = std::str::from_utf8(&line)
+                    .context("account subscribe frame is not UTF-8")?
+                    .trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let frame: Value = serde_json::from_str(line)
+                    .with_context(|| format!("invalid subscribe frame: {line}"))?;
+                if frame.get("kind").and_then(Value::as_str) == Some("delta") {
+                    return Ok(frame.get("payload").cloned().unwrap_or(frame));
+                }
+            }
+        }
+        Err(anyhow!(
+            "account subscribe response ended without a delta frame"
+        ))
+    })
+    .await
+    .context("timed out waiting for account subscribe delta")?
 }
 
 pub fn account_subscribe_delta_from_text(ndjson: &str) -> Result<Value> {
