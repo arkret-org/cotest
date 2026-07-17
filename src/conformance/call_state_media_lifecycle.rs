@@ -27,9 +27,10 @@ use anyhow::{Result, bail};
 use arkret_core::{
     BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
-    CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingRetention,
-    CallStatePayload, CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, Did,
-    EventId, GrantId, Hash, PolicyId, RealmId,
+    CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingId,
+    CallRecordingRetention, CallStatePayload, CallStatePayloadRecordingResult,
+    CallStatePayloadTranscriptResult, Did, EventId, GrantId, Hash, PolicyId, RealmId,
+    RecordingStartPayload,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -220,11 +221,13 @@ fn hash(ch: char) -> Hash {
 }
 
 fn valid_recording_artifact() -> CallRecordingArtifact {
+    let recording_id =
+        CallRecordingId::new("rtc-recording-019a7360-0000-7000-8000-000000000002").unwrap();
     CallRecordingArtifact {
         schema: CallRecordingArtifact::SCHEMA.to_owned(),
         realm_id: realm_id(),
         call_id: call_id(),
-        recording_id: "rtc-recording-019a7360-0000-7000-8000-000000000002".to_owned(),
+        recording_id: recording_id.clone(),
         recording_start_event_id: start_event_id(),
         artifact_kind: CallRecordingArtifactKind::Recording,
         blob_ref: BlobRef::new("ak:blob:019a7360-0000-7000-8000-000000000004").unwrap(),
@@ -240,7 +243,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
                 realm_id: realm_id(),
                 call_id: call_id(),
                 focus_id: "fra-1".to_owned(),
-                recording_id: "rtc-recording-019a7360-0000-7000-8000-000000000002".to_owned(),
+                recording_id,
                 media_service_id: Did::new("did:web:recorder.example").unwrap(),
                 recording_start_event_id: start_event_id(),
             },
@@ -466,6 +469,26 @@ fn transcript_key_source_ok(
 }
 
 pub fn run_transcribe_lifecycle_vector() -> Result<()> {
+    let start_value = json!({
+        "call_id": call_id().to_string(),
+        "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
+        "recording_agent": "did:web:recorder.example",
+        "capture_kind": "transcript",
+        "mode": "audio"
+    });
+    serde_json::from_value::<RecordingStartPayload>(start_value.clone())
+        .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
+    let mut missing_mode = start_value.clone();
+    missing_mode.as_object_mut().unwrap().remove("mode");
+    if serde_json::from_value::<RecordingStartPayload>(missing_mode).is_ok() {
+        bail!("recording start without mode must be schema_violation");
+    }
+    let mut noncanonical_recording_id = start_value;
+    noncanonical_recording_id["recording_id"] = json!("transcript id");
+    if serde_json::from_value::<RecordingStartPayload>(noncanonical_recording_id).is_ok() {
+        bail!("recording start with noncanonical recording_id must be schema_violation");
+    }
+
     // Step 1 — transcribe without capability is denied.
     match transcribe_authorised(false) {
         Err(code) if code == arkret_core::error::ReasonCode::TRANSCRIPTION_DENIED => {}
@@ -529,6 +552,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
                 consent_confirmed: Some(true),
             }),
             transcript_start_event_id: Some(start_event_id()),
+            failure_reason_code: None,
         }),
     };
     ready
@@ -545,6 +569,26 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
     });
     if serde_json::from_value::<CallStatePayload>(bypass).is_ok() {
         bail!("transcript_result must reject backend-hosted artifact URLs");
+    }
+
+    let failed = json!({
+        "call_id": call_id().to_string(),
+        "state": "ended",
+        "transcript_state": "failed",
+        "transcript_result": {
+            "transcript_start_event_id": start_event_id().to_string(),
+            "failure_reason_code": "storage_failed"
+        }
+    });
+    let failed_payload: CallStatePayload = serde_json::from_value(failed.clone())
+        .map_err(|error| anyhow::anyhow!("registered transcript failure rejected: {error}"))?;
+    failed_payload
+        .validate_transcript_result_storage()
+        .map_err(|code| anyhow::anyhow!("registered transcript failure invalid: {code}"))?;
+    let mut unknown_failure = failed;
+    unknown_failure["transcript_result"]["failure_reason_code"] = json!("vendor_timeout");
+    if serde_json::from_value::<CallStatePayload>(unknown_failure).is_ok() {
+        bail!("unregistered transcript failure reason must be schema_violation");
     }
 
     // The three labels are mutually distinct (no cross-label reuse).

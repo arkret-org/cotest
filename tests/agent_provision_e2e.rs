@@ -201,6 +201,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                     issuer: arkret::Did::new(ALICE_DID)?,
                     subject: arkret::CapabilitySubject::Did(arkret::Did::new(agent_did.clone())?),
                     actions: vec!["ak.event.read".to_owned()],
+                    capability_action_registry_digest: None,
                     resources: vec![serde_json::from_value(json!({
                         "kind": "realm",
                         "realm_id": realm_id
