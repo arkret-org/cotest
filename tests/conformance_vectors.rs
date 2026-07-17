@@ -14,13 +14,64 @@ use cotest::conformance::{
     ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
     load_local_fixture_value, run_agent_vector_suite, run_call_signal_vector_suite,
-    run_call_state_media_lifecycle_vector_suite, run_cursor_vector_suite,
-    run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
-    run_media_binding_vector_suite, run_member_identity_vector_suite,
-    run_member_roster_vector_suite, run_mention_rendering_vector_suite,
-    run_object_addressing_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
+    run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
+    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
+    run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_mention_rendering_vector_suite, run_object_addressing_vector_suite,
+    run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
+
+#[test]
+fn domain_wire_constraint_vectors_reject_drift() {
+    let checks = json!({
+        "append_only": true,
+        "seal_signatures": true,
+        "dag_edges_verified": true,
+        "set_root_monotonic": true,
+        "completeness_monotonic": true
+    });
+    serde_json::from_value::<arkret::SealTransparencyChecks>(checks.clone())
+        .expect("all required transparency checks set to true must pass");
+
+    let mut missing_dag_edges = checks.clone();
+    missing_dag_edges
+        .as_object_mut()
+        .expect("checks fixture is an object")
+        .remove("dag_edges_verified");
+    assert!(
+        serde_json::from_value::<arkret::SealTransparencyChecks>(missing_dag_edges).is_err(),
+        "missing dag_edges_verified must fail closed"
+    );
+
+    let mut false_dag_edges = checks;
+    false_dag_edges["dag_edges_verified"] = json!(false);
+    assert!(
+        serde_json::from_value::<arkret::SealTransparencyChecks>(false_dag_edges).is_err(),
+        "false dag_edges_verified must fail closed"
+    );
+
+    let consent = json!({
+        "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
+        "peer": "did:webvh:z6mkfixture:bob.example",
+        "consent_scope": "direct_message"
+    });
+    serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())
+        .expect("typed UUIDv7 consent identifier must pass");
+    let mut untyped_consent = consent;
+    untyped_consent["consent_id"] = json!("cid");
+    assert!(
+        serde_json::from_value::<arkret::ConsentGrantPayload>(untyped_consent).is_err(),
+        "untyped consent identifier must fail"
+    );
+}
+
+#[test]
+fn container_realm_control_payload_vector_suite_runs_clean() {
+    run_container_realm_control_payload_suite()
+        .expect("container and Realm control payload vectors must pass");
+}
 
 // ─── P0 / VECT-MB-1..10 — media binding vectors ─────────────────────────────
 

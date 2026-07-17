@@ -140,6 +140,7 @@
     }
   ],
   "direct_conversation_vectors": {
+    "trust_domain": "ak:trust_domain:example.test",
     "resolve_request": {
       "peer": "did:web:bob.example",
       "create": true,
@@ -154,10 +155,10 @@
     },
     "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501",
     "binding_payload": {
-      "pair_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
       "participants_unordered": [
-        "did:web:alice.example",
-        "did:web:bob.example"
+        "did:webvh:z6mkfixture:alice.example",
+        "did:webvh:z6mkfixture:bob.example"
       ],
       "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
       "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",

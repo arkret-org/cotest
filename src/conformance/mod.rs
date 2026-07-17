@@ -142,7 +142,10 @@ pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
 };
-pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
+pub use envelope::{
+    run_container_realm_control_payload_suite, run_deprecated_event_alias_suite,
+    run_event_envelope_fixture_suite,
+};
 pub use federation::run_federation_fixture_suite;
 pub use final_conformance_closure::{
     ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS,
