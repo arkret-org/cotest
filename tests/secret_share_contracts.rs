@@ -122,7 +122,10 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     {
         keys.insert(key.as_str());
     }
-    assert_eq!(keys, BTreeSet::from(["content", "expires_at", "kind"]));
+    assert_eq!(
+        keys,
+        BTreeSet::from(["content", "expires_at", "kind", "message_id"])
+    );
 
     Ok(())
 }
