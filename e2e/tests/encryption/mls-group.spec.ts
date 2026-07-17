@@ -1129,7 +1129,7 @@ test.describe("MLS group encryption", () => {
     expect((await ackWelcome.json()).ok).toBe(true);
 
     const pendingAfterAck = await request.get(
-      `${solandBaseUrl()}/_arkret/self/device_messages?from=${encodeURIComponent(
+      `${solandBaseUrl()}/_arkret/self/device_messages?after=${encodeURIComponent(
         String(pendingAfterWelcomeBody.next_cursor),
       )}`,
       {

@@ -112,7 +112,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     .await?;
 
     // ── Step 7: bob reconnects, polls WITHOUT acking the step-3 cursor.
-    // Soland's GET /_arkret/self/device_messages without `?from=` defaults to
+    // Soland's GET /_arkret/self/device_messages without `?after=` defaults to
     // ack_position=0, returning all queued events. msg 1 may still be in
     // the queue (un-acked); msg 2 and 3 are definitely there.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
