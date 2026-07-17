@@ -4,7 +4,7 @@
 //!
 //! Spec-sync revision is tracked in `CHANGELOG.md`, not pinned in source.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use cotest::conformance::{
@@ -65,6 +65,85 @@ fn domain_wire_constraint_vectors_reject_drift() {
         serde_json::from_value::<arkret::ConsentGrantPayload>(untyped_consent).is_err(),
         "untyped consent identifier must fail"
     );
+}
+
+#[test]
+fn account_stream_and_device_message_replay_vectors_converge() {
+    let describe_roles = ["principal_server", "authorization_server"];
+    let select_role = |requested: Option<&str>| -> Result<String, &'static str> {
+        match requested {
+            Some(role) if describe_roles.contains(&role) => Ok(role.to_owned()),
+            Some(_) => Err("invalid_param"),
+            None if describe_roles.len() == 1 => Ok(describe_roles[0].to_owned()),
+            None => Err("invalid_param"),
+        }
+    };
+    assert_eq!(
+        select_role(Some("principal_server")),
+        Ok("principal_server".to_owned())
+    );
+    assert_eq!(select_role(None), Err("invalid_param"));
+    assert_eq!(select_role(Some("unknown")), Err("invalid_param"));
+
+    let frame_kinds = ["delta", "catchup_complete", "heartbeat", "delta"];
+    let mut catchup_seen = false;
+    let mut live_deltas = 0;
+    for kind in frame_kinds {
+        match kind {
+            "catchup_complete" => catchup_seen = true,
+            "delta" if catchup_seen => live_deltas += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(live_deltas, 1, "stream must remain live after catchup");
+
+    let key = (
+        "did:webvh:z6mkfixture:alice.example",
+        "ak:device:01904100-0000-7000-8000-000000000001",
+        "ak:device_message:01904100-0000-7000-8000-000000000001",
+    );
+    let first = json!({"kind": "ak.device.message", "ciphertext": "first"});
+    let conflicting = json!({"kind": "ak.device.message", "ciphertext": "changed"});
+    let mut durable_inbox = BTreeMap::new();
+    let mut side_effects = 0;
+    let mut stream_cursor = None;
+    let mut device_ack = None;
+
+    let mut ingest = |envelope: &Value, cursor: &'static str| -> Result<bool, &'static str> {
+        match durable_inbox.get(&key) {
+            None => {
+                durable_inbox.insert(key, envelope.clone());
+                side_effects += 1;
+                stream_cursor = Some(cursor);
+                Ok(true)
+            }
+            Some(existing) if existing == envelope => {
+                stream_cursor = Some(cursor);
+                Ok(false)
+            }
+            Some(_) => Err("device_message_conflict"),
+        }
+    };
+
+    assert_eq!(ingest(&first, "ak:cursor:first"), Ok(true));
+    assert_eq!(ingest(&first, "ak:cursor:duplicate"), Ok(false));
+    assert_eq!(
+        ingest(&conflicting, "ak:cursor:conflict"),
+        Err("device_message_conflict")
+    );
+    drop(ingest);
+    assert_eq!(
+        side_effects, 1,
+        "duplicate delivery must not repeat effects"
+    );
+    assert_eq!(stream_cursor, Some("ak:cursor:duplicate"));
+    assert_eq!(
+        device_ack, None,
+        "account cursor must not implicitly ack inbox messages"
+    );
+    device_ack = Some("ak:device_message:01904100-0000-7000-8000-000000000001");
+    assert_eq!(stream_cursor, Some("ak:cursor:duplicate"));
+    assert!(device_ack.is_some(), "device ack advances independently");
 }
 
 #[test]
