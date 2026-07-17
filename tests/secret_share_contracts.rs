@@ -58,6 +58,9 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
 
     let request_content = request_content(&request, &requester_pk)?;
     let request_target = DeviceMessageTarget {
+        message_id: arkret_sdk::DeviceMessageId::new(
+            "ak:device_message:0196419b-0000-7000-8000-000000000091",
+        )?,
         kind: ProtocolKind::new(REQUEST_KIND).map_err(anyhow::Error::msg)?,
         content: serde_json::from_value(serde_json::to_value(&request_content)?)?,
         expires_at: parse_utc(EXPIRES_AT)?,
@@ -87,6 +90,9 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
 
     let send_content = seal_secret_send(&parsed_request, ACCOUNT_SECRET, 7, EXPIRES_AT)?;
     let send_target = DeviceMessageTarget {
+        message_id: arkret_sdk::DeviceMessageId::new(
+            "ak:device_message:0196419b-0000-7000-8000-000000000092",
+        )?,
         kind: ProtocolKind::new(SEND_KIND).map_err(anyhow::Error::msg)?,
         content: serde_json::from_value(serde_json::to_value(&send_content)?)?,
         expires_at: parse_utc(EXPIRES_AT)?,
@@ -328,6 +334,9 @@ fn device_message_body(
 
 fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<DeviceMessageEnvelope> {
     Ok(DeviceMessageEnvelope {
+        message_id: arkret_sdk::DeviceMessageId::new(
+            "ak:device_message:0196419b-0000-7000-8000-000000000099",
+        )?,
         kind: ProtocolKind::new(SEND_KIND).map_err(anyhow::Error::msg)?,
         sender_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
         sender_device_id: device_id(OLD_DEVICE)?,

@@ -240,7 +240,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         server
             .http()
             .get(server.url(&format!(
-                "/_arkret/self/device_messages?from={}",
+                "/_arkret/self/device_messages?after={}",
                 delivered["next_cursor"].as_str().unwrap()
             )))
             .bearer_auth(&token),
