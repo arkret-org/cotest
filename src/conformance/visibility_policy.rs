@@ -301,7 +301,7 @@ fn realm_member_preview_projection() -> Projection {
                 }
             },
             "member_count_bucket": "10_49",
-            "join_rule": "request",
+            "join_rule": "knock",
             "opaque_commitment": PREVIEW_OPAQUE_COMMITMENT
         }),
         timing_bucket: "circle_realm_member_preview_v1",

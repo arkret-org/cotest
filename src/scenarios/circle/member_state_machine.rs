@@ -12,7 +12,7 @@
 //!     none    → invited
 //!     left    → invited                (re-invitation)
 //!     invited → active
-//!     none    → active                 (only when `join_rule=open`;
+//!     none    → active                 (only when `join_rule=public`;
 //!                                        otherwise illegal — `none → invited`
 //!                                        is the required path)
 //!     active  → left
@@ -26,11 +26,11 @@
 //!   illegal:
 //!     banned  → active                 (no direct path; MUST go via
 //!                                        invited / left first)
-//!     none    → active                 with `join_rule != open`
+//!     none    → active                 with `join_rule != public`
 //!                                       (must transit `invited` first)
 //!     active  → invited                (regression; not in the spec table)
 //!     left    → active                 (cannot self-rejoin without an
-//!                                        invitation or open join_rule)
+//!                                        invitation or public join_rule)
 //!
 //! These match `spec/v1/proposals/0007-circle-primitive.md` §3.6 membership
 //! transition table. Each transition is also forced through a JSON wire
@@ -54,8 +54,8 @@ const NONE: &str = "none";
 
 /// `ak.circle.member.state` payload `join_rule` enum values that affect
 /// what transitions are legal. The state machine only differs on
-/// `join_rule=open`.
-const JOIN_RULE_OPEN: &str = "open";
+/// `join_rule=public`.
+const JOIN_RULE_PUBLIC: &str = "public";
 const JOIN_RULE_INVITE: &str = "invite";
 
 /// Reducer-pure validator: returns Ok(()) iff `from → to` is a legal
@@ -75,12 +75,12 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
              (AKP-0007 §3.6)"
         ));
     }
-    // `none → active` requires `join_rule=open`; otherwise the actor MUST
+    // `none → active` requires `join_rule=public`; otherwise the actor MUST
     // pass through `invited`.
-    if from == NONE && to == "active" && join_rule != JOIN_RULE_OPEN {
+    if from == NONE && to == "active" && join_rule != JOIN_RULE_PUBLIC {
         return Err(anyhow!(
             "illegal transition none → active with join_rule=`{join_rule}`: \
-             only `join_rule=open` permits self-join without prior invite \
+             only `join_rule=public` permits self-join without prior invite \
              (AKP-0007 §3.6)"
         ));
     }
@@ -93,10 +93,10 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         ));
     }
     // `left → active` directly is illegal: actor MUST be re-invited
-    // (left → invited) and then transition `invited → active`. Open
+    // (left → invited) and then transition `invited → active`. Public
     // join_rule callers should still pass through `invited` for parity
     // with the spec table.
-    if from == "left" && to == "active" && join_rule != JOIN_RULE_OPEN {
+    if from == "left" && to == "active" && join_rule != JOIN_RULE_PUBLIC {
         return Err(anyhow!(
             "illegal transition left → active with join_rule=`{join_rule}`: \
              actor MUST be re-invited (left → invited) before becoming \
@@ -118,7 +118,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         ("left", "invited"),
         ("banned", "invited"),
         ("invited", "active"),
-        (NONE, "active"), // only under open join_rule; guard above catches non-open
+        (NONE, "active"), // only under public join_rule; guard above catches non-public
         ("active", "left"),
         ("invited", "left"),
         ("banned", "left"),
@@ -206,9 +206,9 @@ pub async fn member_state_machine_run() -> Result<()> {
         })?;
     }
 
-    // ── Legal transition unique to join_rule=open: none → active.
-    validate_member_transition(NONE, "active", JOIN_RULE_OPEN)
-        .map_err(|e| anyhow!("expected none → active under join_rule=open; got: {e}"))?;
+    // ── Legal transition unique to join_rule=public: none → active.
+    validate_member_transition(NONE, "active", JOIN_RULE_PUBLIC)
+        .map_err(|e| anyhow!("expected none → active under join_rule=public; got: {e}"))?;
 
     // ── Illegal transitions: banned → active (terminal wall).
     match validate_member_transition("banned", "active", JOIN_RULE_INVITE) {
@@ -225,10 +225,10 @@ pub async fn member_state_machine_run() -> Result<()> {
             }
         }
     }
-    // ── Illegal: banned → active even with join_rule=open.
-    if validate_member_transition("banned", "active", JOIN_RULE_OPEN).is_ok() {
+    // ── Illegal: banned → active even with join_rule=public.
+    if validate_member_transition("banned", "active", JOIN_RULE_PUBLIC).is_ok() {
         return Err(anyhow!(
-            "expected reject banned → active under join_rule=open; got accept"
+            "expected reject banned → active under join_rule=public; got accept"
         ));
     }
 
@@ -253,7 +253,7 @@ pub async fn member_state_machine_run() -> Result<()> {
         ));
     }
 
-    // ── Illegal: left → active under non-open join_rule (must re-invite).
+    // ── Illegal: left → active under non-public join_rule (must re-invite).
     if validate_member_transition("left", "active", JOIN_RULE_INVITE).is_ok() {
         return Err(anyhow!(
             "expected reject left → active under join_rule=invite; got accept"
