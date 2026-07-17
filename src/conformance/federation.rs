@@ -130,42 +130,39 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 );
             }
             // ak.vector.federation.reducer_profile_digest.v1 — positive leg:
-            // the §4.1.1 computation over the fixture's canonical_input MUST
-            // reproduce expected_digest, and the fixture input MUST be exactly
-            // the published reducer-profile-registry.json digest_input row
+            // the §4.1.1 computation over the registry's resolved_digest_input
+            // MUST reproduce expected_digest, and the fixture source descriptor
+            // MUST name the published content-addressed registry field
             // ("canonical_digest_matches_reducer_profile_registry_row").
             "reducer_profile_digest_federation_minimal" => {
-                let canonical_input = case
-                    .canonical_input
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("{} case lacks canonical_input", case.name))?;
+                let source = case.resolved_digest_input_source.as_ref().ok_or_else(|| {
+                    anyhow!("{} case lacks resolved_digest_input_source", case.name)
+                })?;
+                if source.registry != "registry/reducer-profile-registry.json"
+                    || source.field != "resolved_digest_input"
+                    || !source.recompute_from_local_contracts
+                {
+                    bail!(
+                        "federation fixture {} has unsupported resolved digest input source",
+                        case.name
+                    );
+                }
                 let expected_digest = case
                     .expected_digest
                     .as_deref()
                     .ok_or_else(|| anyhow!("{} case lacks expected_digest", case.name))?;
-                let computed = reducer_profile_digest_for_input(canonical_input)?;
+                let registry = load_artifact_json(&source.registry)?;
+                let resolved_input = reducer_profile_digest_input(&registry, &source.profile_id)?;
+                let computed = reducer_profile_digest_for_input(&resolved_input)?;
                 if computed != expected_digest {
                     bail!(
                         "federation fixture {}: computed digest {computed} != expected {expected_digest}",
                         case.name
                     );
                 }
-                let profile_id = canonical_input
-                    .get("profile_id")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("{} canonical_input lacks profile_id", case.name))?;
-                let registry = load_artifact_json("registry/reducer-profile-registry.json")?;
-                let registry_input = reducer_profile_digest_input(&registry, profile_id)?;
-                if canonical_json(&registry_input)? != canonical_json(canonical_input)? {
-                    bail!(
-                        "federation fixture {}: canonical_input drifted from \
-                         reducer-profile-registry.json digest_input for {profile_id}",
-                        case.name
-                    );
-                }
                 record_vector_event(
                     "federation.reducer_profile_digest_federation_minimal",
-                    &json!({"profile_id": profile_id}),
+                    &json!({"profile_id": source.profile_id}),
                     &json!({"expected_digest": expected_digest}),
                     &json!({
                         "computed_digest": computed,

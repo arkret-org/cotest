@@ -4,10 +4,11 @@
 //! only machine-readable source for the digest is
 //! `spec/v1/artifacts/registry/reducer-profile-registry.json`. Senders MUST
 //! resolve the registry row whose `profile_id` equals the Realm's declared
-//! reducer profile and hash **only** that row's `digest_input` object:
+//! reducer profile and hash **only** that row's content-addressed
+//! `resolved_digest_input` object:
 //!
 //! ```text
-//! reducer_profile_digest = "sha256:" || lowercase_hex(sha256(canonical_json(digest_input)))
+//! reducer_profile_digest = "sha256:" || lowercase_hex(sha256(canonical_json(resolved_digest_input)))
 //! ```
 //!
 //! Registered conformance vector: `ak.vector.federation.reducer_profile_digest.v1`
@@ -35,11 +36,11 @@ pub const FEDERATION_MINIMAL_PROFILE_ID: &str = "ak.profile.federation_minimal.v
 /// suite is not `sha256` — mirroring the receiver-side MUSTs.
 pub fn reducer_profile_digest(profile_id: &str) -> Result<String> {
     let registry = load_artifact_json(REDUCER_PROFILE_REGISTRY)?;
-    let digest_input = reducer_profile_digest_input(&registry, profile_id)?;
-    reducer_profile_digest_for_input(&digest_input)
+    let resolved_digest_input = reducer_profile_digest_input(&registry, profile_id)?;
+    reducer_profile_digest_for_input(&resolved_digest_input)
 }
 
-/// Resolve the `digest_input` object for `profile_id`, enforcing the
+/// Resolve the generated `resolved_digest_input` object for `profile_id`, enforcing the
 /// fail-closed preconditions of federation.md §4.1.1.
 pub(crate) fn reducer_profile_digest_input(registry: &Value, profile_id: &str) -> Result<Value> {
     let canonicalization = registry
@@ -72,15 +73,17 @@ pub(crate) fn reducer_profile_digest_input(registry: &Value, profile_id: &str) -
     if row.get("status").and_then(Value::as_str) != Some("active") {
         bail!("reducer profile {profile_id} registry row is not active; fail closed");
     }
-    row.get("digest_input")
-        .cloned()
-        .ok_or_else(|| anyhow!("reducer profile {profile_id} registry row lacks digest_input"))
+    row.get("resolved_digest_input").cloned().ok_or_else(|| {
+        anyhow!("reducer profile {profile_id} registry row lacks resolved_digest_input")
+    })
 }
 
-/// Hash an already-resolved `digest_input` object (used by the fixture-driven
-/// conformance case, which carries the canonical input inline).
-pub(crate) fn reducer_profile_digest_for_input(digest_input: &Value) -> Result<String> {
-    Ok(sha256_prefixed(canonical_json(digest_input)?.as_bytes()))
+/// Hash an already-resolved `resolved_digest_input` object (used by the fixture-driven
+/// conformance case after resolving its typed registry source descriptor).
+pub(crate) fn reducer_profile_digest_for_input(resolved_digest_input: &Value) -> Result<String> {
+    Ok(sha256_prefixed(
+        canonical_json(resolved_digest_input)?.as_bytes(),
+    ))
 }
 
 #[cfg(test)]
