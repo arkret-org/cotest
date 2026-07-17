@@ -92,6 +92,10 @@ fn run_case(case: &Value) -> Result<()> {
             validate_chunk_request_matrix(case, generator)?;
             return Ok(());
         }
+        "decoded_canonical_size_matrix" => {
+            validate_decoded_canonical_size_matrix(case, generator)?;
+            return Ok(());
+        }
         other => bail!("{name} uses unknown generated limit kind {other}"),
     };
     let expected = case
@@ -100,6 +104,88 @@ fn run_case(case: &Value) -> Result<()> {
         .ok_or_else(|| anyhow!("{name} missing expected.decision"))?;
     if actual != expected {
         bail!("{name} decision drifted: expected {expected}, got {actual}");
+    }
+    Ok(())
+}
+
+fn validate_decoded_canonical_size_matrix(case: &Value, generator: &Value) -> Result<()> {
+    const EXPECTED_DIMENSIONS: &[(&str, u64, &str)] = &[
+        ("cursor_payload", 65_536, "invalid_param"),
+        ("resource_selector", 65_536, "selector_too_complex"),
+        (
+            "resource_selector.unknown_field_count",
+            256,
+            "selector_too_complex",
+        ),
+        ("resource_selector.requires_claims", 32, "schema_violation"),
+        (
+            "resource_selector.requires_claims[].trusted_issuers",
+            16,
+            "schema_violation",
+        ),
+    ];
+
+    let name = required_str(case, "name")?;
+    let dimensions = generator
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{name} missing generated decoded-size cases[]"))?;
+    if dimensions.len() != EXPECTED_DIMENSIONS.len() {
+        bail!(
+            "{name} decoded-size dimension count drifted: expected {}, got {}",
+            EXPECTED_DIMENSIONS.len(),
+            dimensions.len()
+        );
+    }
+    for dimension in dimensions {
+        let field = required_str(dimension, "field")?;
+        let (expected_field, expected_limit, expected_error) = EXPECTED_DIMENSIONS
+            .iter()
+            .find(|(expected_field, ..)| *expected_field == field)
+            .ok_or_else(|| anyhow!("{name} has unknown decoded-size dimension {field}"))?;
+        let limit = dimension
+            .get("limit_bytes")
+            .or_else(|| dimension.get("limit"))
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("{name} dimension {field} has no integer limit"))?;
+        if limit != *expected_limit
+            || dimension.get("over_error_code").and_then(Value::as_str) != Some(*expected_error)
+        {
+            bail!("{name} dimension {expected_field} limit or error code drifted");
+        }
+        let values = dimension
+            .get("values")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{name} dimension {field} missing values[]"))?
+            .iter()
+            .map(|value| {
+                value
+                    .as_u64()
+                    .ok_or_else(|| anyhow!("{name} dimension {field} has a non-integer value"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let expected_values = [limit - 1, limit, limit + 1];
+        if values.as_slice() != expected_values {
+            bail!(
+                "{name} dimension {field} must generate limit-1/limit/limit+1: expected {expected_values:?}, got {values:?}"
+            );
+        }
+    }
+    if case
+        .pointer("/expected/limit_minus_one")
+        .and_then(Value::as_str)
+        != Some("accept")
+        || case.pointer("/expected/limit").and_then(Value::as_str) != Some("accept")
+        || case
+            .pointer("/expected/limit_plus_one")
+            .and_then(Value::as_str)
+            != Some("reject_without_partial_parse")
+        || case
+            .pointer("/expected/unknown_fields_count_toward_canonical_bytes")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        bail!("{name} decoded canonical size expectations drifted");
     }
     Ok(())
 }

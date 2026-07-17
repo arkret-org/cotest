@@ -48,7 +48,9 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_notary_fault = false;
     let mut seen_threshold_forensics = false;
     let mut seen_concurrent_revocation = false;
+    let mut seen_actor_chain_realm_scope = false;
     let mut seen_conflict_recovery = false;
+    let mut seen_same_seal_bottom_serialization = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -443,6 +445,23 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "actor_chain_realm_scope" => {
+                validate_actor_chain_realm_scope(vector, name)?;
+                seen_actor_chain_realm_scope = true;
+                record_vector_event(
+                    "state_resolution.cba.actor_chain_realm_scope",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "cross_realm_same_sequence": "independent",
+                        "same_realm_siblings": "fork",
+                        "cross_realm_predecessor": "reject",
+                    }),
+                    &json!({
+                        "actor_id": pointer_str(vector, "/actor_id"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
             "conflict_recovery_move" => {
                 validate_conflict_recovery_move(vector, name)?;
                 seen_conflict_recovery = true;
@@ -455,6 +474,23 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                     &json!({
                         "cell": pointer_str(vector, "/cell"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "same_seal_bottom_reject_serialization" => {
+                validate_same_seal_bottom_reject_serialization(vector, name)?;
+                seen_same_seal_bottom_serialization = true;
+                record_vector_event(
+                    "state_resolution.cba.same_seal_bottom_reject_serialization",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "one_included_one_rejected": "accept_seal",
+                        "both_in_same_seal": "rejected_seal",
+                        "unreachable_leaves": "bottom_conflict",
+                    }),
+                    &json!({
+                        "cell": pointer_str(vector, "/cell/id"),
                         "case_count": required_array(vector, "/cases", name)?.len(),
                     }),
                 );
@@ -478,18 +514,185 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_notary_fault
         && seen_threshold_forensics
         && seen_concurrent_revocation
-        && seen_conflict_recovery)
+        && seen_actor_chain_realm_scope
+        && seen_conflict_recovery
+        && seen_same_seal_bottom_serialization)
     {
         bail!(
-            "cba lattice fixture must cover all 16 normative vectors \
+            "cba lattice fixture must cover all 18 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / \
-              threshold_forensics / concurrent_revocation / conflict_recovery)"
+              threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
+              conflict_recovery / same_seal_bottom_serialization)"
         );
     }
 
     Ok(())
+}
+
+fn validate_same_seal_bottom_reject_serialization(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(vector, "/cell/lattice", "cas_register", vector_name)?;
+    require_str_eq(vector, "/cell/bottom", "reject", vector_name)?;
+    let frozen_revision = required_u64(
+        vector,
+        "/cell/frozen_predecessor_value/revision",
+        vector_name,
+    )?;
+    let moves = required_array(vector, "/moves", vector_name)?;
+    if moves.len() != 2 {
+        bail!("vector {vector_name} must define exactly two competing moves");
+    }
+    let mut move_ids = BTreeSet::new();
+    let mut revisions = BTreeSet::new();
+    for movement in moves {
+        let id = required_pointer_str(movement, "/id", vector_name)?;
+        if !move_ids.insert(id.to_owned())
+            || required_u64(movement, "/precondition/head_eq", vector_name)? != frozen_revision
+            || !revisions.insert(required_u64(movement, "/set/revision", vector_name)?)
+        {
+            bail!("vector {vector_name} competing move definitions drifted");
+        }
+    }
+
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "one_included_one_rejected" => {
+                let included = string_vec_at(case, "/same_seal_included", vector_name)?
+                    .into_iter()
+                    .map(ToOwned::to_owned)
+                    .collect::<BTreeSet<_>>();
+                let rejected = required_array(case, "/signed_rejected", vector_name)?;
+                if included.len() != 1
+                    || rejected.len() != 1
+                    || !move_ids.contains(required_pointer_str(&rejected[0], "/id", vector_name)?)
+                    || included.contains(required_pointer_str(&rejected[0], "/id", vector_name)?)
+                {
+                    bail!("vector {vector_name} serialized acceptance inputs drifted");
+                }
+                require_str_eq(&rejected[0], "/reason_code", "cas_conflict", vector_name)?;
+                require_str_eq(case, "/expected", "accept_seal", vector_name)?;
+            }
+            "both_in_same_seal" => {
+                let included = string_vec_at(case, "/same_seal_included", vector_name)?
+                    .into_iter()
+                    .map(ToOwned::to_owned)
+                    .collect::<BTreeSet<_>>();
+                if included != move_ids {
+                    bail!("vector {vector_name} invalid same-Seal case must include both moves");
+                }
+                require_str_eq(case, "/expected", "rejected_seal", vector_name)?;
+            }
+            "moves_on_unreachable_seal_leaves" => {
+                let leaves = required_array(case, "/unreachable_leaf_included", vector_name)?;
+                let leaf_moves = leaves
+                    .iter()
+                    .flat_map(|leaf| leaf.as_array().into_iter().flatten())
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<BTreeSet<_>>();
+                if leaves.len() != 2 || leaf_moves != move_ids {
+                    bail!("vector {vector_name} unreachable leaf inputs drifted");
+                }
+                require_str_eq(case, "/expected", "bottom_conflict", vector_name)?;
+            }
+            _ => bail!("vector {vector_name} unknown same-Seal serialization case {case_name}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "one_included_one_rejected",
+            "both_in_same_seal",
+            "moves_on_unreachable_seal_leaves",
+        ],
+    )
+}
+
+fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result<()> {
+    let actor_id = required_pointer_str(vector, "/actor_id", vector_name)?;
+    if !actor_id.starts_with("did:") {
+        bail!("vector {vector_name} actor_id must be a DID");
+    }
+
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "same_actor_and_seq_across_realms" => {
+                let events = required_array(case, "/events", vector_name)?;
+                if events.len() != 2 {
+                    bail!("vector {vector_name} cross-Realm sequence case needs two Events");
+                }
+                let left_realm = required_pointer_str(&events[0], "/realm_id", vector_name)?;
+                let right_realm = required_pointer_str(&events[1], "/realm_id", vector_name)?;
+                if left_realm == right_realm
+                    || required_u64(&events[0], "/actor_seq", vector_name)?
+                        != required_u64(&events[1], "/actor_seq", vector_name)?
+                    || required_pointer_str(&events[0], "/event_digest", vector_name)?
+                        == required_pointer_str(&events[1], "/event_digest", vector_name)?
+                {
+                    bail!("vector {vector_name} cross-Realm sequence inputs drifted");
+                }
+                require_bool_eq(case, "/expected/sibling_fork", false, vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/sequence_counters_are_independent",
+                    true,
+                    vector_name,
+                )?;
+            }
+            "same_actor_and_seq_in_one_realm" => {
+                let events = required_array(case, "/events", vector_name)?;
+                if events.len() != 2
+                    || required_pointer_str(&events[0], "/realm_id", vector_name)?
+                        != required_pointer_str(&events[1], "/realm_id", vector_name)?
+                    || required_u64(&events[0], "/actor_seq", vector_name)?
+                        != required_u64(&events[1], "/actor_seq", vector_name)?
+                    || events[0].pointer("/prev_refs") != events[1].pointer("/prev_refs")
+                    || required_pointer_str(&events[0], "/event_digest", vector_name)?
+                        == required_pointer_str(&events[1], "/event_digest", vector_name)?
+                {
+                    bail!("vector {vector_name} same-Realm sibling inputs drifted");
+                }
+                require_bool_eq(case, "/expected/sibling_fork", true, vector_name)?;
+                if case.pointer("/expected/bucket_key")
+                    != Some(&json!([
+                        "realm_id",
+                        "actor_id",
+                        "actor_seq",
+                        "prev_refs_digest"
+                    ]))
+                {
+                    bail!("vector {vector_name} sibling bucket key drifted");
+                }
+            }
+            "cross_realm_predecessor" => {
+                if required_pointer_str(case, "/event_realm_id", vector_name)?
+                    == required_pointer_str(case, "/predecessor_realm_id", vector_name)?
+                {
+                    bail!("vector {vector_name} cross-Realm predecessor must cross Realms");
+                }
+                require_str_eq(case, "/expected/result", "reject", vector_name)?;
+                require_str_eq(case, "/expected/reason", "schema_violation", vector_name)?;
+            }
+            _ => bail!("vector {vector_name} unknown actor-chain scope case {case_name}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "same_actor_and_seq_across_realms",
+            "same_actor_and_seq_in_one_realm",
+            "cross_realm_predecessor",
+        ],
+    )
 }
 
 fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) -> Result<()> {
