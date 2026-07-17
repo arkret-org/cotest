@@ -37,6 +37,117 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
     Ok(())
 }
 
+pub fn run_container_realm_control_payload_suite() -> Result<()> {
+    let vectors = [
+        (
+            "ak.cotest_vector.container.move_item.accept.v1",
+            "ak.container.move_item",
+            json!({
+                "item_ref": "ak:morph:01904100-0000-7000-8000-000000000201",
+                "container_ref": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "relation_kind": "contains",
+                "rank": "A"
+            }),
+            true,
+        ),
+        (
+            "ak.cotest_vector.container.move_item.legacy_rejected.v1",
+            "ak.container.move_item",
+            json!({
+                "object_ref": "ak:morph:01904100-0000-7000-8000-000000000201",
+                "to_container_id": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "relation_kind": "contains",
+                "rank": "A"
+            }),
+            false,
+        ),
+        (
+            "ak.cotest_vector.container.rebalance.accept.v1",
+            "ak.container.rebalance",
+            json!({
+                "container_ref": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "relation_kind": "contains",
+                "positions": [
+                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000201", "rank": "A"},
+                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000202", "rank": "B"}
+                ],
+                "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }),
+            true,
+        ),
+        (
+            "ak.cotest_vector.container.rebalance.duplicate_rank_rejected.v1",
+            "ak.container.rebalance",
+            json!({
+                "container_ref": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "relation_kind": "contains",
+                "positions": [
+                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000201", "rank": "A"},
+                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000202", "rank": "A"}
+                ],
+                "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }),
+            false,
+        ),
+        (
+            "ak.cotest_vector.realm.notary.accept.v1",
+            "ak.realm.notary",
+            json!({
+                "realm_id": "ak:realm:01904100-0000-7000-8000-cfc039892036",
+                "notary": {"type": "single_did", "did": "did:web:notary.example"}
+            }),
+            true,
+        ),
+        (
+            "ak.cotest_vector.realm.digest_transition.accept.v1",
+            "ak.realm.digest_suite_transition",
+            json!({
+                "from_digest_algorithm": "sha256",
+                "to_digest_algorithm": "blake3",
+                "transition_snapshot_ref": "ak:snapshot:01904100-0000-7000-8000-000000000301",
+                "snapshot_commitment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }),
+            true,
+        ),
+        (
+            "ak.cotest_vector.realm.digest_transition.downgrade_rejected.v1",
+            "ak.realm.digest_suite_transition",
+            json!({
+                "from_digest_algorithm": "blake3",
+                "to_digest_algorithm": "sha256",
+                "transition_snapshot_ref": "ak:snapshot:01904100-0000-7000-8000-000000000302",
+                "snapshot_commitment": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }),
+            false,
+        ),
+        (
+            "ak.cotest_vector.realm.digest_transition.noop_rejected.v1",
+            "ak.realm.digest_suite_transition",
+            json!({
+                "from_digest_algorithm": "sha256",
+                "to_digest_algorithm": "sha256",
+                "transition_snapshot_ref": "ak:snapshot:01904100-0000-7000-8000-000000000303",
+                "snapshot_commitment": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }),
+            false,
+        ),
+    ];
+
+    for (id, kind, payload, expected_accept) in vectors {
+        let accepted = validate_event_payload(kind, &payload).is_none();
+        if accepted != expected_accept {
+            bail!("{id} expected accept={expected_accept}, got accept={accepted}");
+        }
+        record_vector_event(
+            id,
+            &json!({"kind": kind, "payload": payload}),
+            &json!({"accept": expected_accept}),
+            &json!({"accept": accepted}),
+        );
+    }
+    Ok(())
+}
+
 pub fn run_deprecated_event_alias_suite() -> Result<()> {
     let event_kind_registry = load_artifact_json("registry/event-kind-registry.json")?;
     let event_kinds = event_kind_metadata(&event_kind_registry)?;
@@ -798,9 +909,30 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
         "ak.strand.reorder" => {
             missing_payload_fields(content, &["board_id", "strand_id", "list_id", "rank"])
         }
-        "ak.container.rebalance" => {
-            missing_payload_fields(content, &["board_id", "list_id", "rank"])
+        "ak.container.move_item" => {
+            serde_json::from_value::<arkret_core::ContainerMoveItemPayload>(content.clone())
+                .map_err(|error| error.to_string())
+                .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
+                .err()
         }
+        "ak.container.rebalance" => {
+            serde_json::from_value::<arkret_core::ContainerRebalancePayload>(content.clone())
+                .map_err(|error| error.to_string())
+                .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
+                .err()
+        }
+        "ak.realm.notary" => {
+            serde_json::from_value::<arkret_core::RealmNotaryPayload>(content.clone())
+                .map_err(|error| error.to_string())
+                .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
+                .err()
+        }
+        "ak.realm.digest_suite_transition" => serde_json::from_value::<
+            arkret_core::RealmDigestSuiteTransitionPayload,
+        >(content.clone())
+        .map_err(|error| error.to_string())
+        .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
+        .err(),
         "ak.member.state" => {
             if let Some(err) = missing_payload_fields(content, &["membership"]) {
                 return Some(err);

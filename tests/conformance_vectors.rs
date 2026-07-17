@@ -14,13 +14,20 @@ use cotest::conformance::{
     ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
     load_local_fixture_value, run_agent_vector_suite, run_call_signal_vector_suite,
-    run_call_state_media_lifecycle_vector_suite, run_cursor_vector_suite,
-    run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
-    run_media_binding_vector_suite, run_member_identity_vector_suite,
-    run_member_roster_vector_suite, run_mention_rendering_vector_suite,
-    run_object_addressing_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
+    run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
+    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
+    run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_mention_rendering_vector_suite, run_object_addressing_vector_suite,
+    run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 use serde_json::Value;
+
+#[test]
+fn container_realm_control_payload_vector_suite_runs_clean() {
+    run_container_realm_control_payload_suite()
+        .expect("container and Realm control payload vectors must pass");
+}
 
 // ─── P0 / VECT-MB-1..10 — media binding vectors ─────────────────────────────
 
