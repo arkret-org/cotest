@@ -53,6 +53,7 @@ struct PrivacyPayloadVector {
 
 #[derive(Debug, Deserialize)]
 struct DirectConversationVectors {
+    trust_domain: String,
     resolve_request: Value,
     resolve_response: Value,
     binding_event_ref: String,
@@ -411,7 +412,11 @@ fn validate_privacy_payload_vectors(vectors: &[PrivacyPayloadVector]) -> Result<
 fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> Result<()> {
     validate_resolve_request_shape(&vectors.resolve_request)?;
     validate_resolve_response_shape(&vectors.resolve_response)?;
-    validate_binding_payload(&vectors.binding_event_ref, &vectors.binding_payload)?;
+    validate_binding_payload(
+        &vectors.trust_domain,
+        &vectors.binding_event_ref,
+        &vectors.binding_payload,
+    )?;
     validate_resolver_uses_binding_main_strand(vectors)?;
     validate_contact_list_row(vectors)?;
     validate_pending_contact_negative(&vectors.pending_contact_negative)?;
@@ -482,7 +487,11 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_binding_payload(binding_event_ref: &str, payload: &Value) -> Result<()> {
+fn validate_binding_payload(
+    trust_domain: &str,
+    binding_event_ref: &str,
+    payload: &Value,
+) -> Result<()> {
     validate_event_id(binding_event_ref)?;
     assert_allowed_object_fields(
         "direct conversation binding payload",
@@ -513,14 +522,30 @@ fn validate_binding_payload(binding_event_ref: &str, payload: &Value) -> Result<
         bail!("direct conversation binding must have exactly two participants");
     }
     let mut seen = BTreeSet::new();
+    let mut typed_participants = Vec::with_capacity(2);
     for participant in participants {
         let did = participant
             .as_str()
             .ok_or_else(|| anyhow!("participant must be a DID string"))?;
-        Did::new(did.to_owned()).map_err(|err| anyhow!("invalid participant DID: {err}"))?;
-        if !seen.insert(did) {
+        let did =
+            Did::new(did.to_owned()).map_err(|err| anyhow!("invalid participant DID: {err}"))?;
+        if !seen.insert(did.clone()) {
             bail!("direct conversation participants must be unique");
         }
+        typed_participants.push(did);
+    }
+    let [left, right]: [Did; 2] = typed_participants
+        .try_into()
+        .map_err(|_| anyhow!("direct conversation requires two participants"))?;
+    let trust_domain = arkret::TypedTrustDomainId::new(trust_domain.to_owned())
+        .map_err(|err| anyhow!("invalid trust domain: {err}"))?;
+    let expected_pair_key = arkret::direct_conversation_pair_key(
+        trust_domain,
+        arkret::DirectConversationPairKeyParticipant::unmapped(left),
+        arkret::DirectConversationPairKeyParticipant::unmapped(right),
+    )?;
+    if pair_key != expected_pair_key.as_str() {
+        bail!("direct conversation pair_key does not match the canonical participant pair");
     }
 
     validate_event_ref_array(payload, "contact_refs", 2)?;
