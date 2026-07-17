@@ -379,14 +379,114 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         bail!("runtime-key-binding canonical JSON drifted");
     }
 
+    let pairing = case
+        .get("pairing_request_binding_input")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("pairing_request_binding_input missing"))?;
+    let controller_id = Did::new(
+        pairing
+            .get("controller_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("pairing controller_id missing"))?,
+    )?;
+    let pairing_agent_id = Did::new(
+        pairing
+            .get("agent_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("pairing agent_id missing"))?,
+    )?;
+    let expiry_inputs = pairing
+        .get("pairing_expires_at_inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("pairing_expires_at_inputs missing"))?;
+    if expiry_inputs.len() < 3 {
+        bail!(
+            "pairing timestamp normalization vector needs canonical, microsecond and offset inputs"
+        );
+    }
+    let expected_pairing_digest = case
+        .get("expected_pairing_request_binding_digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("expected pairing request binding digest missing"))?;
+    let verification_method = pairing
+        .get("verification_method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("pairing verification_method missing"))?;
+    let pairing_request_id = pairing
+        .get("pairing_request_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("pairing_request_id missing"))?;
+    let pairing_code = pairing
+        .get("pairing_code")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("pairing_code missing"))?;
+    let audience = pairing
+        .get("audience")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("pairing audience missing"))?;
+    let canonical_pairing_expires_at = case
+        .get("canonical_pairing_expires_at")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("canonical pairing expiry missing"))?;
+    let canonical_pairing_binding = serde_json::json!({
+        "agent_id": pairing_agent_id,
+        "audience": audience,
+        "controller_id": controller_id,
+        "expires_at": canonical_pairing_expires_at,
+        "kind": "ak.agent.key_pairing_request_binding.v1",
+        "operation_id": arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+        "pairing_code": pairing_code,
+        "pairing_request_id": pairing_request_id,
+        "runtime_public_key_digest": public_digest,
+        "verification_method": verification_method,
+    });
+    let canonical_pairing_binding = String::from_utf8(
+        arkret_core::canonical::canonical_json_bytes(&canonical_pairing_binding)?,
+    )?;
+    if case
+        .get("canonical_pairing_request_binding_json")
+        .and_then(Value::as_str)
+        != Some(canonical_pairing_binding.as_str())
+    {
+        bail!("pairing request binding canonical JSON drifted");
+    }
+    for expires_at in expiry_inputs {
+        let expires_at = expires_at
+            .as_str()
+            .ok_or_else(|| anyhow!("pairing expiry input must be a string"))?;
+        let digest = arkret_core::agent_key_pairing_request_binding_digest(
+            &controller_id,
+            &pairing_agent_id,
+            verification_method,
+            &public_digest,
+            pairing_request_id,
+            pairing_code,
+            expires_at,
+            audience,
+        )?;
+        if digest.as_str() != expected_pairing_digest {
+            bail!(
+                "pairing request binding timestamp normalization drifted for {expires_at}: {}",
+                digest.as_str()
+            );
+        }
+    }
+
     let first_ids = (
         "approval-1",
         "ak:notification:01964137-0000-7000-8000-000000000001",
     );
-    let retry_ids = if binding.as_str() == case["expected_binding_digest"].as_str().unwrap() {
+    let restart_binding = arkret_core::agent_runtime_key_binding_digest(
+        &agent_id,
+        "pairing_request:01964137-0000-7000-8000-000000000000",
+        "did:webvh:z6mkagent:agent.example#runtime-1",
+        public_key,
+        attestation,
+    )?;
+    let retry_ids = if restart_binding == binding {
         first_ids
     } else {
-        bail!("same binding retry was classified as a conflict")
+        bail!("persisted runtime key changed its binding across restart")
     };
     if retry_ids != first_ids {
         bail!("same binding retry changed stable projection ids");

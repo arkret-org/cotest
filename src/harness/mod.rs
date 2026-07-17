@@ -19,8 +19,9 @@ mod server;
 
 pub use assertions::{
     RecordedResponse, account_subscribe_delta_from_text, eventually,
-    expect_account_subscribe_delta, expect_api_error, expect_audit_action,
-    expect_indistinguishable_api_errors, expect_json, expect_response, expect_status, expect_text,
+    expect_account_subscribe_delta, expect_account_subscribe_realm_delta, expect_api_error,
+    expect_audit_action, expect_indistinguishable_api_errors, expect_json, expect_response,
+    expect_status, expect_text,
 };
 pub use client::TestActorClient;
 pub use event_builder::{
