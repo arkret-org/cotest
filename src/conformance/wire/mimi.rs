@@ -28,7 +28,7 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
     if required_str(&fixture, "suite")? != "mimi_interop" {
         bail!("mimi interop fixture suite drifted");
     }
-    if fixture_runner_entrypoint(&fixture)? != "cotest::conformance::mimi_interop" {
+    if fixture_runner_entrypoint(&fixture)? != "ak.suite.interop.mimi.v1" {
         bail!("mimi interop fixture runner drifted");
     }
 

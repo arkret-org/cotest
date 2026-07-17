@@ -236,18 +236,31 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .is_none()
     );
 
+    let ack = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/device_messages/ack"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "ack_token": delivered["ack_token"].as_str().unwrap()
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(ack["ok"], true);
+
     let drained = expect_json(
         server
             .http()
-            .get(server.url(&format!(
-                "/_arkret/self/device_messages?after={}",
-                delivered["next_cursor"].as_str().unwrap()
-            )))
+            .get(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token),
         StatusCode::OK,
     )
     .await?;
-    assert!(drained["messages"].as_array().unwrap().is_empty());
+    assert!(
+        drained["messages"].as_array().unwrap().is_empty(),
+        "acknowledged messages were delivered again: first={delivered}, next={drained}"
+    );
 
     Ok(())
 }

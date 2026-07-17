@@ -111,36 +111,18 @@ fn wire_round_trip(policy: &ChildScopePolicy, expected_kind: &str) -> Result<()>
 
 pub async fn child_scope_policy_run() -> Result<()> {
     // ── Wire shape pin for each variant.
-    wire_round_trip(
-        &ChildScopePolicy::AllowAny {
-            metadata_encryption_floor: None,
-        },
-        "allow_any",
-    )?;
-    wire_round_trip(
-        &ChildScopePolicy::RequireE2ee {
-            metadata_encryption_floor: None,
-        },
-        "require_e2ee",
-    )?;
-    wire_round_trip(
-        &ChildScopePolicy::RequireSameScope {
-            metadata_encryption_floor: None,
-        },
-        "require_same_scope",
-    )?;
+    wire_round_trip(&ChildScopePolicy::AllowAny {}, "allow_any")?;
+    wire_round_trip(&ChildScopePolicy::RequireE2ee {}, "require_e2ee")?;
+    wire_round_trip(&ChildScopePolicy::RequireSameScope {}, "require_same_scope")?;
     wire_round_trip(
         &ChildScopePolicy::RequireScopeCircleId {
             scope_circle_id: circle_a()?,
-            metadata_encryption_floor: None,
         },
         "require_scope_circle_id",
     )?;
 
     // ── allow_any: accepts both unscoped and any Circle scope.
-    let allow_any = ChildScopePolicy::AllowAny {
-        metadata_encryption_floor: None,
-    };
+    let allow_any = ChildScopePolicy::AllowAny {};
     enforce_child_scope_policy(&allow_any, None, None, EncryptionProfile::None)
         .map_err(|e| anyhow!("allow_any MUST accept unscoped child; got: {e}"))?;
     enforce_child_scope_policy(
@@ -155,9 +137,7 @@ pub async fn child_scope_policy_run() -> Result<()> {
     //    accept: child has a Circle scope (regardless of Realm profile).
     //    accept: child is Realm-default AND Realm.encryption_profile=MlsRfc9420.
     //    reject: child is Realm-default AND Realm.encryption_profile=None.
-    let require_e2ee = ChildScopePolicy::RequireE2ee {
-        metadata_encryption_floor: None,
-    };
+    let require_e2ee = ChildScopePolicy::RequireE2ee {};
     enforce_child_scope_policy(
         &require_e2ee,
         Some(&circle_a()?),
@@ -186,9 +166,7 @@ pub async fn child_scope_policy_run() -> Result<()> {
     //    accept: parent_space=None,     child=None.
     //    reject: parent_space=circle_a, child=circle_b.
     //    reject: parent_space=circle_a, child=None.
-    let require_same = ChildScopePolicy::RequireSameScope {
-        metadata_encryption_floor: None,
-    };
+    let require_same = ChildScopePolicy::RequireSameScope {};
     enforce_child_scope_policy(
         &require_same,
         Some(&circle_a()?),
@@ -229,7 +207,6 @@ pub async fn child_scope_policy_run() -> Result<()> {
     //    reject: child=None.
     let require_id = ChildScopePolicy::RequireScopeCircleId {
         scope_circle_id: circle_a()?,
-        metadata_encryption_floor: None,
     };
     enforce_child_scope_policy(
         &require_id,

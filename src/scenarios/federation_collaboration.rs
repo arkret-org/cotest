@@ -1438,7 +1438,7 @@ pub fn prepare_actor_inception_for_service(
     service_id: &str,
     actor: &str,
 ) -> Result<PreparedPrincipalInception> {
-    let service_host = did_host_from_service_id(service_id);
+    let service_host = did_authority_from_service_id(service_id);
     let service_authority = did_web_host_to_url_authority(&service_host);
     let webvh_host = if service_authority.contains('.') {
         service_authority
@@ -1506,6 +1506,19 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
 /// `did:key:` fallback are kept for the negative/no-history fixtures that still
 /// mint those forms.
 fn did_host_from_service_id(service_id: &str) -> String {
+    let authority = did_authority_from_service_id(service_id);
+    authority
+        .split("%3a")
+        .next()
+        .unwrap_or(&authority)
+        .trim_end_matches('.')
+        .to_owned()
+}
+
+/// Extract the DID method authority while retaining an encoded local port.
+/// Principal inception needs the port to address the local WebVH endpoint;
+/// trust-domain derivation strips it in `did_host_from_service_id`.
+fn did_authority_from_service_id(service_id: &str) -> String {
     if let Some(rest) = service_id.strip_prefix("did:webvh:") {
         let mut parts = rest.split(':');
         let scid = parts.next().unwrap_or_default();

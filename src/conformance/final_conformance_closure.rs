@@ -152,9 +152,7 @@ fn validate_final_conformance_closure_fixture_metadata(fixture: &Value) -> Resul
     if fixture.get("suite").and_then(Value::as_str) != Some("final_conformance_closure") {
         bail!("final conformance closure fixture suite drifted");
     }
-    if super::fixture_runner_entrypoint(fixture)?
-        != "cotest::conformance::final_conformance_closure"
-    {
+    if super::fixture_runner_entrypoint(fixture)? != "ak.suite.conformance.final_closure.v1" {
         bail!("final conformance closure fixture runner drifted");
     }
 
