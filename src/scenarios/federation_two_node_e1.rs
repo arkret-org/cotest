@@ -387,14 +387,26 @@ fn did_host_from_service_id(service_id: &str) -> String {
         let scid = parts.next().unwrap_or_default();
         if let Some(host) = parts.next() {
             if !scid.is_empty() && !host.is_empty() {
-                return host.to_ascii_lowercase();
+                let host = host.to_ascii_lowercase();
+                return host
+                    .split("%3a")
+                    .next()
+                    .unwrap_or(&host)
+                    .trim_end_matches('.')
+                    .to_owned();
             }
         }
     }
     if let Some(rest) = service_id.strip_prefix("did:web:") {
         if let Some(host) = rest.split(':').next() {
             if !host.is_empty() {
-                return host.to_ascii_lowercase();
+                let host = host.to_ascii_lowercase();
+                return host
+                    .split("%3a")
+                    .next()
+                    .unwrap_or(&host)
+                    .trim_end_matches('.')
+                    .to_owned();
             }
         }
     }

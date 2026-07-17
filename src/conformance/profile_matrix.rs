@@ -15,6 +15,7 @@ const PROFILE_LIST_FIELDS: &[&str] = &[
     "encoding_extension_profiles",
     "hash_extension_profiles",
     "signature_extension_profiles",
+    "mls_ciphersuite_extension_profiles",
     // 2026-06: the spec's conformance-profiles.json added a
     // `kem_extension_profiles` catalog group (e.g. `ak.profile.hpke.p256.v1`,
     // `ak.profile.kem.hybrid_xwing.v1`). Without it the dependency-graph node

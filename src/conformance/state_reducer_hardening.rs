@@ -395,11 +395,11 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
     if event.get("cell_family").and_then(Value::as_str) != Some(STRAND_TRACKS_CELL_FAMILY) {
         bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} cell family drifted");
     }
-    if event.get("lattice").and_then(Value::as_str) != Some("cas_register") {
-        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} lattice must remain cas_register");
+    if event.get("lattice").and_then(Value::as_str) != Some("mv_register") {
+        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} lattice must remain mv_register");
     }
-    if event.get("bottom").and_then(Value::as_str) != Some("reject") {
-        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} bottom policy must remain reject");
+    if event.get("bottom").and_then(Value::as_str) != Some("expose") {
+        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} bottom policy must remain expose");
     }
     if event.get("reducer_input").and_then(Value::as_bool) != Some(true) {
         bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} must remain reducer_input");
