@@ -39,6 +39,27 @@ pub async fn expect_account_subscribe_delta(
     builder: reqwest::RequestBuilder,
     status: StatusCode,
 ) -> Result<Value> {
+    expect_account_subscribe_delta_matching(builder, status, |_| true).await
+}
+
+pub async fn expect_account_subscribe_realm_delta(
+    builder: reqwest::RequestBuilder,
+    status: StatusCode,
+) -> Result<Value> {
+    expect_account_subscribe_delta_matching(builder, status, |delta| {
+        delta
+            .get("realms")
+            .and_then(Value::as_object)
+            .is_some_and(|realms| !realms.is_empty())
+    })
+    .await
+}
+
+async fn expect_account_subscribe_delta_matching(
+    builder: reqwest::RequestBuilder,
+    status: StatusCode,
+    matches: impl Fn(&Value) -> bool,
+) -> Result<Value> {
     let mut response = builder
         .header("accept", "application/x-ndjson")
         .send()
@@ -69,7 +90,10 @@ pub async fn expect_account_subscribe_delta(
                 let frame: Value = serde_json::from_str(line)
                     .with_context(|| format!("invalid subscribe frame: {line}"))?;
                 if frame.get("kind").and_then(Value::as_str) == Some("delta") {
-                    return Ok(frame.get("payload").cloned().unwrap_or(frame));
+                    let delta = frame.get("payload").cloned().unwrap_or(frame);
+                    if matches(&delta) {
+                        return Ok(delta);
+                    }
                 }
             }
         }

@@ -17,7 +17,8 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    TestServerGroup, eventually, expect_account_subscribe_delta, invite_create_payload,
+    TestServerGroup, eventually, expect_account_subscribe_delta,
+    expect_account_subscribe_realm_delta, invite_create_payload,
     member_join_payload_with_invite_ref, message_create_text_payload,
 };
 
@@ -126,7 +127,15 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
     });
 
     let wake_start = Instant::now();
-    let woken = fetch_account_subscribe(&alice, &format!("catchup=true&after={cursor}")).await?;
+    let woken = expect_account_subscribe_realm_delta(
+        alice
+            .get(&format!(
+                "/_arkret/self/account/subscribe?catchup=true&after={cursor}"
+            ))
+            .header("accept", "application/x-ndjson"),
+        StatusCode::OK,
+    )
+    .await?;
     let wake_elapsed = wake_start.elapsed();
     let sent_event = waker.await.expect("waker task did not panic")?;
     let sent_event_id = submitted_event_id(&sent_event)
