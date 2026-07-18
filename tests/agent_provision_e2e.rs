@@ -1707,7 +1707,7 @@ async fn provision_agent(
         slug: slug.to_owned(),
         avatar_blob_ref: None,
         requested_scope,
-        provision_events: events,
+        provision_events: Box::new(events),
         pairing_ttl_ms,
     };
     let committed = client.agent_provision(&commit).await?;
