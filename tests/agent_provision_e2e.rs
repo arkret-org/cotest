@@ -1467,7 +1467,9 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         frontier_ref: Some(KeyBackupFrontierRef {
             frontier_digest: frontier.control_event_set_root.clone(),
             seal_ref: Some(frontier.seal_id.as_str().to_owned()),
-            ssk_generation: Some(1),
+            generation: arkret::KeyBackupFrontierGeneration::SskGeneration(
+                std::num::NonZeroU64::new(1).expect("non-zero generation"),
+            ),
         }),
         recovery_policy_ref: Some(RecoveryPolicyRef {
             policy_id: PolicyId::new(RECOVERY_POLICY_ID.to_owned())?,
