@@ -25,18 +25,20 @@ pub use assertions::{
 };
 pub use client::TestActorClient;
 pub use event_builder::{
-    add_member, create_realm, dev_login, encrypted_envelope, event_envelope, register_account,
-    send_message, submit_event,
+    add_member, add_member_with_signing_seed, create_realm, create_realm_with_signing_seed,
+    dev_login, encrypted_envelope, event_envelope, event_envelope_with_signing_seed,
+    register_account, send_message, submit_event, submit_event_with_signing_seed,
+    submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
     invite_create_payload, member_join_payload_value, member_join_payload_with_delivery_binding,
     member_join_payload_with_invite_ref, member_transition_payload, message_create_text_payload,
     message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
-    parse_strand_id,
+    parse_strand_id, register_event_signing_identity,
 };
 pub use proof::{
     attach_ephemeral_proof, attach_ephemeral_proof_value, ephemeral_proof_placeholder,
-    refresh_event_proof,
+    refresh_event_proof, refresh_event_proof_with_signing_seed,
 };
 pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};

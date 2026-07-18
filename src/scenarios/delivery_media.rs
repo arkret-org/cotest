@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use crate::harness::{
     ArkretServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
-    member_join_payload_value, refresh_event_proof, register_account,
+    member_join_payload_value, register_account,
 };
 use crate::scenarios::federation_collaboration::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
@@ -505,28 +505,32 @@ fn signed_event(
     kind: &str,
     payload: Value,
 ) -> Result<Value> {
-    let mut event = json!({
-        "event_id": event_id,
-        "kind": kind,
-        "realm_id": realm_id,
-        "actor_id": actor_id,
-        "actor_seq": actor_seq,
-        "created_at": "2026-05-02T00:00:00Z",
-        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
-        "prev_refs": [],
-        "refs": [],
-        "payload": payload,
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{actor_id}#cotest"),
-            "event_digest": "",
-            "created_at": "2026-05-02T00:00:00Z",
-            "jws": "a..b",
-        }],
-    });
-    refresh_event_proof(&mut event);
-    Ok(event)
+    let created_at =
+        chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")?.with_timezone(&chrono::Utc);
+    let actor = arkret::Did::new(actor_id.to_owned())?;
+    let verification_method = format!("{actor_id}#cotest");
+    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        arkret::signatures::development_signing_key_seed(&verification_method),
+        actor.clone(),
+        verification_method.clone(),
+    );
+    let mut event = arkret::Event::new_with_id_at(
+        arkret::EventId::new(event_id.to_owned())?,
+        kind,
+        arkret::RealmId::new(realm_id.to_owned())?,
+        actor,
+        actor_seq,
+        arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
+        payload,
+        created_at,
+    )?;
+    arkret::signatures::sign_event(
+        &mut event,
+        &signer,
+        &verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )?;
+    Ok(serde_json::to_value(event)?)
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {

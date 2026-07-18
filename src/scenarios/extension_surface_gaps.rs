@@ -116,7 +116,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     assert!(empty_list["agents"].as_array().unwrap().is_empty());
 
     let requested_operation = "ak.self.events.command.submit";
-    let provision = AgentProvisionRequestBody {
+    let provision = AgentProvisionRequestBody::Prepare {
         display_name: Some("Planner".to_owned()),
         slug: "planner".to_owned(),
         avatar_blob_ref: None,
@@ -135,7 +135,6 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
             }],
             constraints: Vec::new(),
         },
-        accountability: None,
         pairing_ttl_ms: None,
     };
     expect_api_error(

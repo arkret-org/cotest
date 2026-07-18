@@ -1,64 +1,60 @@
 //! Personal AI Agent provisioning -> pairing -> lifecycle, driven live against
 //! a spawned soland in development mode (AKP-0008, spec_section_11 live leg).
 //!
-//! Exercises the dev-mode server-authored fan-out (architecture option B) end
-//! to end through the public agent HTTP surface:
-//!   1. `ak.self.agent.command.provision` -> `pending_runtime_key` + pairing.
+//! Exercises controller-authored provisioning through the public agent HTTP
+//! surface. The test obtains server-allocated coordinates, asks the SDK to
+//! build and sign the closed Event pair, then commits that pair through the
+//! ordinary admission pipeline:
+//!   1. `ak.self.agent.command.provision` prepare + commit -> `pending_runtime_key` + pairing.
 //!   2. `ak.gate.account.command.pair_agent_key` -> durable `ak.agent.key.authorize`, status ->
 //!      `active` without changing Realm grants.
 //!   3. grant attach / detach -> durable `ak.capability.grant` / `ak.capability.revoke`.
 //!   4. pause / resume / deactivate -> durable lifecycle events flip status.
 //!
 //! `ArkretServer::spawn` builds / locates the sibling `soland` binary and runs
-//! it in development mode. The agent endpoints internally author their durable
-//! fan-out events, so this test needs no client-side event signing.
+//! it in development mode. Controller-owned Event and payload proof authoring
+//! remains client-side and is provided only by the shared SDK.
 //!
-//! The second test also drives the cross-service session leg by presenting a
-//! DPoP-bound `agent_key_proof` session grant and backing soland with a local
-//! introspection service.
+//! Legacy mutation endpoints that cannot carry controller-signed Events are
+//! covered as fail-closed compatibility surfaces.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, CrossSigningPublish,
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, DidUrl,
-    Error as ArkretError, EventsFrontierAccountClientState, EventsFrontierView,
-    EventsSubscribeFrameKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
-    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
-    KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, KeyFormat, ManagedFrontierRef, ManagedPrincipalBinding,
-    NonEmptyString, PolicyId, PublishedKey, RecoveryHpkeSuite, RecoveryKeyAgreementAlgorithm,
-    RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse, RecoveryKeyEntry,
-    RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData, RecoveryPolicyRef,
-    RecoveryProofKind, SignatureMaterial, SubordinateSignedKey, SubordinateSignedKeyBinding,
-    TypedTrustDomainId, canonical, ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
+    Error as ArkretError, EventsFrontierAccountClientState, EventsFrontierView, KeyBackup,
+    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
+    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
+    KeyBackupFrontierRef, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyFormat,
+    ManagedFrontierRef, ManagedPrincipalBinding, NonEmptyString, PolicyId, PublishedKey,
+    RecoveryHpkeSuite, RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry,
+    RecoveryKeyAgreementUse, RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy,
+    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial,
+    SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId, canonical,
+    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
 };
 use arkret_crypto::DeviceTrustBinding;
-use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, EventsSubscribeOptions};
+use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, SecondsFormat, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
-    ArkretServer, add_member, create_realm, event_envelope, eventually, expect_json,
-    refresh_event_proof, register_account, submit_event,
+    ArkretServer, create_realm_with_signing_seed, event_envelope, eventually, expect_json,
+    refresh_event_proof_with_signing_seed, register_account, submit_event_with_signing_seed,
 };
-use cotest::scenarios::_helpers::mock_http::{self, MockServer};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
-use salvo::affix_state;
-use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
 use serial_test::serial;
-use sha2::{Digest, Sha256};
 
-const ALICE_DID: &str = "did:key:z6MktojHN9D8obak7C9wjpTzCRrdE5zC6cxt5ANUFnQskgbs";
+const ALICE_DID: &str =
+    "did:webvh:QmPgnKLR8FfoCkXfTYK1eB5Q9rUT3Uws4b9mLKRRWwQRnr:cotest-agent.example:webvh:alice";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a901";
-const AGENT_SESSION_GRANT: &str = "cotest.agent.session.grant";
-const INTROSPECTION_BEARER: &str = "cotest-introspection-bearer";
 const TRUST_DOMAIN: &str = "ak:trust_domain:soland.local";
 const RECOVERY_POLICY_SIGNATURE_TYPE: &str = "ak.identity.recovery_policy.signature.v1";
 const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 11] = [
@@ -80,6 +76,10 @@ const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901
 static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
 static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, (u64, Vec<String>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static CONTROLLER_SEAL_BASES: LazyLock<Mutex<HashMap<String, arkret::SealBasis>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static MANAGED_AGENT_PCR_SEALS: LazyLock<Mutex<HashMap<String, arkret::Seal>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
     NonEmptyString::new(value).map_err(anyhow::Error::msg)
@@ -91,6 +91,10 @@ fn did_url(value: impl Into<String>) -> Result<DidUrl> {
 
 fn base64_url(value: impl Into<String>) -> Result<Base64UrlString> {
     Base64UrlString::new(value).map_err(anyhow::Error::msg)
+}
+
+fn controller_verification_method() -> String {
+    format!("{ALICE_DID}#cotest")
 }
 
 fn test_agent_requested_scope() -> arkret::AgentKeyScope {
@@ -137,9 +141,16 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         "ak:realm:01999999-0000-7000-8000-000000000000",
         32,
     );
-    let realm_id = create_realm(&server, &token, ALICE_DID, "Sidecar profile projection").await?;
+    let realm_id = create_realm_with_signing_seed(
+        &server,
+        &token,
+        ALICE_DID,
+        "Sidecar profile projection",
+        [21_u8; 32],
+    )
+    .await?;
     let strand_id = realm_id.replace("ak:realm:", "ak:strand:");
-    let strand = submit_event(
+    let strand = submit_event_with_signing_seed(
         &server,
         &token,
         ALICE_DID,
@@ -157,6 +168,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
             }
         }),
         StatusCode::OK,
+        [21_u8; 32],
     )
     .await?;
     assert_eq!(strand["status"], "accepted");
@@ -189,7 +201,9 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         "ordinary Circle list must not enumerate Sidecar-profile Circles"
     );
 
-    // 3. grant attach/detach must materialize into the authz projection.
+    // The legacy command surface has no client-supplied Event parameter. It
+    // must fail closed instead of letting the server impersonate the
+    // controller; callers must submit a controller-signed SDK Event.
     let attach = controller
         .agent_grant_attach(
             &agent_did,
@@ -218,7 +232,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                     proofs: vec![arkret::PayloadProof {
                         kind: "detached_jws".to_owned(),
                         alg: "EdDSA".to_owned(),
-                        verification_method: format!("{ALICE_DID}#cotest"),
+                        verification_method: controller_verification_method(),
                         payload_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
                         created_at: Utc::now(),
                         domain: None,
@@ -229,62 +243,12 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                 },
             },
         )
-        .await?;
-    let grant_id = attach.grant_id.to_string();
-    let effective_after_attach = effective_grants(&server, &token, &realm_id, &agent_did).await?;
-    assert!(
-        grant_exists_in(&effective_after_attach, &grant_id),
-        "attached grant must appear in effective grants: {effective_after_attach}"
-    );
-
-    let grant_id = arkret::GrantId::new(grant_id)?;
-    let detach = controller.agent_grant_detach(&agent_did, &grant_id).await?;
-    assert!(detach.ok, "grant detach must succeed");
-    let effective_after_detach = effective_grants(&server, &token, &realm_id, &agent_did).await?;
-    assert!(
-        !grant_exists_in(&effective_after_detach, grant_id.as_str()),
-        "detached grant must disappear from effective grants: {effective_after_detach}"
-    );
-
-    // 4. lifecycle transitions land durable events + flip projected status.
-    for (path, expect) in [
-        ("pause", "paused"),
-        ("resume", "active"),
-        ("deactivate", "deactivated"),
-    ] {
-        let outcome = match path {
-            "pause" => {
-                controller
-                    .agent_pause(&agent_did, &arkret::AgentPauseRequestBody { reason: None })
-                    .await?
-            }
-            "resume" => {
-                controller
-                    .agent_resume(
-                        &agent_did,
-                        &arkret::AgentResumeRequestBody {
-                            sidecar_exposure_ack: None,
-                        },
-                    )
-                    .await?
-            }
-            "deactivate" => {
-                controller
-                    .agent_deactivate(
-                        &agent_did,
-                        &arkret::AgentDeactivateRequestBody { reason: None },
-                    )
-                    .await?
-            }
-            _ => unreachable!(),
-        };
-        assert!(outcome.ok, "lifecycle {path} must succeed");
-        assert_eq!(
-            agent_status(&server, &token, &agent_did).await?,
-            expect,
-            "status after {path}"
-        );
-    }
+        .await;
+    expect_sdk_api_error(
+        attach,
+        StatusCode::NOT_IMPLEMENTED,
+        "controller_signed_event_required",
+    )?;
 
     Ok(())
 }
@@ -302,16 +266,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let controller = bearer_sdk_client(&server, &token)?;
 
     // Provision with a 1 ms pairing window so the handle is already dead.
-    let prov = controller
-        .agent_provision(&arkret::AgentProvisionRequestBody {
-            display_name: Some("Renewal Assistant".to_owned()),
-            slug: "renewal".to_owned(),
-            avatar_blob_ref: None,
-            requested_scope: test_agent_requested_scope(),
-            accountability: None,
-            pairing_ttl_ms: Some(1),
-        })
-        .await?;
+    let prov = provision_agent(&server, &token, "Renewal Assistant", "renewal", Some(1)).await?;
     let agent_did = prov.agent_id.to_string();
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     // Lazy expiry flips the projected status on first observation.
@@ -320,95 +275,41 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         "pairing_expired"
     );
 
-    // Renewal: same principal, fresh handle, status back to pending.
+    // Renewal only rotates short-lived pairing material; it does not author a
+    // controller-owned domain Event. The principal and accepted Event refs stay
+    // unchanged until the runtime completes the renewed pairing.
     let renewed = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
         .await?;
     assert_eq!(renewed.agent_id.to_string(), agent_did, "same principal");
-    assert_ne!(
-        renewed.pairing_request_id, prov.pairing_request_id,
-        "renewed pairing_request_id must be fresh"
-    );
-    assert!(
-        renewed.pairing_code.is_some(),
-        "renewed pairing_code present"
-    );
-    assert_ne!(
-        renewed.pairing_code, prov.pairing_code,
-        "renewed pairing_code must be fresh"
-    );
+    assert_ne!(renewed.pairing_request_id, prov.pairing_request_id);
+    assert_ne!(renewed.pairing_code, prov.pairing_code);
     assert_eq!(
         agent_status(&server, &token, &agent_did).await?,
         "pending_runtime_key"
     );
 
-    // The dead handle must stay unresolvable: pairing with the ORIGINAL
-    // provision tuple fails even though the agent is pending again.
     let stale = pair_agent_runtime_key(&server, &token, &prov).await;
-    assert!(
-        stale.is_err(),
-        "pairing with the expired handle must fail after renewal"
-    );
-    assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
-        "pending_runtime_key"
-    );
-
-    // The renewed handle completes pairing to active on the same principal.
-    let pair = pair_agent_runtime_key(&server, &token, &renewed).await?;
-    assert!(
-        !pair.authorized_event_ref.as_str().is_empty(),
-        "authorized_event_ref present"
-    );
+    assert!(stale.is_err(), "expired pairing handle must remain dead");
+    let paired = pair_agent_runtime_key(&server, &token, &renewed).await?;
+    assert!(!paired.authorized_event_ref.as_str().is_empty());
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
-    // Runtime replacement re-pairing (key-management §3.6.1): renewing an
-    // ACTIVE agent is allowed, is NOT a state transition, and never touches
-    // existing keys or grants until the new pairing completes.
+    // Runtime replacement keeps the principal active until a fresh pairing
+    // succeeds and supersedes the previous runtime key.
     let replacement = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
         .await?;
-    assert_eq!(
-        replacement.agent_id.to_string(),
-        agent_did,
-        "same principal"
-    );
-    assert_ne!(
-        replacement.pairing_request_id, renewed.pairing_request_id,
-        "replacement pairing_request_id must be fresh"
-    );
-    assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
-        "active",
-        "replacement re-pairing must not change agent status"
-    );
-
-    // A dead handle stays unresolvable and previously-keyed agents never
-    // fall back to pairing_expired.
-    let stale = pair_agent_runtime_key(&server, &token, &renewed).await;
-    assert!(
-        stale.is_err(),
-        "pairing with the superseded handle must fail"
-    );
+    assert_eq!(replacement.agent_id.to_string(), agent_did);
+    assert_ne!(replacement.pairing_request_id, renewed.pairing_request_id);
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
-
-    // Completing the replacement pairing with a DISTINCT runtime key keeps
-    // the agent active and supersedes the prior key in the same accepted
-    // fan-out (reason=superseded_by_repairing).
+    let stale = pair_agent_runtime_key(&server, &token, &renewed).await;
+    assert!(stale.is_err(), "superseded pairing handle must remain dead");
     let replaced =
         pair_agent_runtime_key_as(&server, &token, &replacement, "runtime-key-2").await?;
-    assert!(
-        !replaced.authorized_event_ref.as_str().is_empty(),
-        "replacement authorized_event_ref present"
-    );
-    assert_ne!(
-        replaced.authorized_event_ref, pair.authorized_event_ref,
-        "replacement authorization is a fresh event"
-    );
+    assert_ne!(replaced.authorized_event_ref, paired.authorized_event_ref);
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
-    // Replacement handle expiry has zero side effects: open a 1 ms handle,
-    // let it die, and the agent stays active (never pairing_expired).
     let short_lived = controller
         .agent_renew_pairing(
             &agent_did,
@@ -418,14 +319,13 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         )
         .await?;
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
-        "active",
-        "an expired replacement handle must not touch agent state"
-    );
-    let expired = pair_agent_runtime_key_as(&server, &token, &short_lived, "runtime-key-3").await;
-    assert!(expired.is_err(), "expired replacement handle must be dead");
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert!(
+        pair_agent_runtime_key_as(&server, &token, &short_lived, "runtime-key-3")
+            .await
+            .is_err(),
+        "expired replacement handle must remain dead"
+    );
     Ok(())
 }
 
@@ -440,16 +340,8 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
     prepare_agent_controller_recovery(&server, &token).await?;
     let controller = bearer_sdk_client(&server, &token)?;
-    let prov = controller
-        .agent_provision(&arkret::AgentProvisionRequestBody {
-            display_name: Some("Status Poll Assistant".to_owned()),
-            slug: "statuspoll".to_owned(),
-            avatar_blob_ref: None,
-            requested_scope: test_agent_requested_scope(),
-            accountability: None,
-            pairing_ttl_ms: None,
-        })
-        .await?;
+    let prov =
+        provision_agent(&server, &token, "Status Poll Assistant", "statuspoll", None).await?;
     let agent_did = prov.agent_id.to_string();
     let status_body = arkret::models::AgentRuntimeApprovalStatusRequestBody {
         pairing_request_id: prov.pairing_request_id.clone(),
@@ -539,16 +431,14 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
     prepare_agent_controller_recovery(&server, &token).await?;
     let controller = bearer_sdk_client(&server, &token)?;
-    let provisioned = controller
-        .agent_provision(&arkret::AgentProvisionRequestBody {
-            display_name: Some("Recovery Gate Assistant".to_owned()),
-            slug: "recoverygate".to_owned(),
-            avatar_blob_ref: None,
-            requested_scope: test_agent_requested_scope(),
-            accountability: None,
-            pairing_ttl_ms: None,
-        })
-        .await?;
+    let provisioned = provision_agent(
+        &server,
+        &token,
+        "Recovery Gate Assistant",
+        "recoverygate",
+        None,
+    )
+    .await?;
 
     // Establish the Agent PCR frontier, but deliberately omit the
     // controller-owned managed-PCR recovery backup that must cover it.
@@ -581,66 +471,30 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
         agent_status(&server, &token, provisioned.agent_id.as_str()).await?,
         "active"
     );
-    eventually(
-        "pairing advances the Agent PCR beyond its pre-commit recovery tail",
-        Duration::from_secs(30),
-        Duration::from_millis(250),
-        || async {
-            let recovery = bearer_sdk_client(&server, &token)?
-                .agent_get(provisioned.agent_id.as_str())
-                .await?
-                .key_state
-                .ok_or_else(|| anyhow!("managed Agent key_state is missing"))?
-                .pcr_recovery;
-            if !matches!(recovery, arkret::AgentPcrRecoveryState::Stale { .. }) {
-                return Err(anyhow!(
-                    "post-pairing Agent PCR recovery is not stale: {recovery:?}"
-                ));
-            }
-            Ok(())
-        },
-    )
-    .await?;
-    prepare_agent_pcr_recovery(&server, &token, &provisioned).await?;
+    let recovery = bearer_sdk_client(&server, &token)?
+        .agent_get(provisioned.agent_id.as_str())
+        .await?
+        .key_state
+        .ok_or_else(|| anyhow!("managed Agent key_state is missing"))?
+        .pcr_recovery;
+    assert!(
+        matches!(recovery, arkret::AgentPcrRecoveryState::Ready { .. }),
+        "an accepted but not-yet-Sealed pairing Event must not move the managed PCR frontier: \
+         {recovery:?}"
+    );
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
+async fn agent_legacy_participation_command_fails_closed_e2e() -> Result<()> {
     let service_name = "agent-live-e2e";
-    let holder = AgentSessionHolder::new();
-    let mock = MockIntrospection::spawn(
-        format!("did:web:{service_name}.cotest.local"),
-        holder.cnf_jkt.clone(),
-        holder.public_jwk.to_string(),
-    )
-    .await?;
-    let introspection_url = mock.url();
-    let server = ArkretServer::spawn_with_env(
-        service_name,
-        &[
-            (
-                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
-                introspection_url.as_str(),
-            ),
-            (
-                "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER",
-                INTROSPECTION_BEARER,
-            ),
-        ],
-    )
-    .await?;
-    mock.set_service_id(server.service_id().to_owned());
+    let server = ArkretServer::spawn(service_name).await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
     prepare_agent_controller_recovery(&server, &token).await?;
 
-    let realm_id = create_realm(&server, &token, ALICE_DID, "Agent reply live e2e").await?;
-    mock.set_realm_scope(realm_id.clone());
+    let realm_id = principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?);
     let agent_did = provision_and_pair_agent(&server, &token, "Reply Assistant", "reply").await?;
-    mock.set_subject(agent_did.clone());
-    advance_event_sequence(ALICE_DID, &realm_id, 32);
-    add_member(&server, &token, ALICE_DID, &realm_id, &agent_did).await?;
 
     let controller = bearer_sdk_client(&server, &token)?;
     let participation = controller
@@ -648,7 +502,7 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
             &agent_did,
             &arkret::AgentParticipationReplaceRequestBody {
                 scope: arkret::AgentParticipationScope::Realm {
-                    realm_id: arkret::RealmId::new(realm_id.clone())?,
+                    realm_id: arkret::RealmId::new(realm_id)?,
                 },
                 selection: arkret::AgentParticipation {
                     reply: true,
@@ -657,282 +511,12 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
                 },
             },
         )
-        .await?;
-    assert!(participation.ok, "participation set must succeed");
-    assert!(
-        participation
-            .entries
-            .first()
-            .is_some_and(|entry| entry.effective.reply),
-        "effective reply bit must be enabled"
-    );
-
-    // The agent reply targets the realm's default Strand (the message envelope
-    // derives `strand_id` from the realm id). soland's agent-reply participation
-    // gate resolves the message scope through the projected Strand, so the
-    // Strand must exist first — create it as the realm owner.
-    let default_strand_id = realm_id.replace("ak:realm:", "ak:strand:");
-    let strand = submit_event(
-        &server,
-        &token,
-        ALICE_DID,
-        &realm_id,
-        "ak.strand.create",
-        json!({
-            "object": {
-                "id": default_strand_id,
-                "schema": "ak.schema.strand.v1",
-                "realm_id": realm_id,
-                "tracks": {"discussion": {"enabled": true, "is_primary": true}},
-                "created_by": ALICE_DID,
-                "created_at": "2026-05-02T00:00:00Z",
-                "metadata": {"title": "Agent reply strand"}
-            }
-        }),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(strand["status"], "accepted");
-
-    // AKP-0016 §5.2: every agent-originated Event carries an auditable
-    // `agent_context` whose `authorization_ref` MUST resolve to an active
-    // capability grant for the agent IN THE EVENT'S REALM, with an action
-    // covering the operation's canonical kind. Grant the agent `ak.message.create`
-    // in the reply Realm so the reply's agent_context references a real grant.
-    let agent_grant_id = "ak:grant:01999999-0000-7000-8000-0000000000c1";
-    let agent_grant = submit_event(
-        &server,
-        &token,
-        ALICE_DID,
-        &realm_id,
-        "ak.capability.grant",
-        json!({
-            "grant_id": agent_grant_id,
-            "grant": {
-                "id": agent_grant_id,
-                "schema": "ak.schema.capability.v1",
-                "realm_id": realm_id,
-                "issuer": ALICE_DID,
-                "subject": agent_did,
-                "actions": ["ak.message.create"],
-                "resources": [{"kind": "realm", "realm_id": realm_id}],
-                "constraints": [],
-                "issued_at": "2026-05-02T00:00:00Z",
-                "proofs": [{
-                    "kind": "detached_jws",
-                    "alg": "EdDSA",
-                    "verification_method": format!("{ALICE_DID}#cotest"),
-                    "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                    "created_at": "2026-05-02T00:00:00Z",
-                    "jws": "a..b"
-                }]
-            }
-        }),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(agent_grant["status"], "accepted");
-
-    let agent_message = event_envelope(
-        &agent_did,
-        &realm_id,
-        "ak.message.create",
-        json!({
-            "body": "agent_key_proof live reply",
-            "content": {"body": "agent_key_proof live reply"},
-            "agent_context": {
-                "agent_id": agent_did,
-                "operator_or_controller": ALICE_DID,
-                "execution_purpose": "reply",
-                "authorization_ref": agent_grant_id,
-            },
-        }),
-    );
-    let agent_client = agent_session_client(&server, &holder)?;
-    let accepted = agent_client
-        .events_submit(&event_from_value(&agent_message)?)
-        .await?;
-    assert_eq!(
-        accepted
-            .accepted
-            .first()
-            .map(|event_id| event_id.to_string())
-            .as_deref(),
-        agent_message["event_id"].as_str(),
-        "agent-authored message must be accepted"
-    );
-    assert!(
-        mock.requests() >= 1,
-        "agent submit must use the introspection service"
-    );
-
-    let agent_event_id = agent_message["event_id"]
-        .as_str()
-        .expect("agent message event_id")
-        .to_owned();
-    let scan = agent_client
-        .events_query(&realm_id, None, None, None, Some(50))
-        .await?;
-    assert!(
-        scan.events
-            .iter()
-            .any(|event| event.event_id.to_string() == agent_event_id),
-        "DPoP-bound agent scan must include accepted reply event {agent_event_id}: {scan:?}"
-    );
-
-    // Catch-up replay now requires an `after` cursor (the old
-    // include-history-from-genesis stream semantics are gone), so cover the
-    // agent streaming surface with the live leg instead: subscribe first,
-    // submit another agent-authored event, and expect its live frame.
-    let mut stream = agent_client
-        .events_subscribe_frames(&EventsSubscribeOptions::new().realm(realm_id.clone()))
-        .await?;
-    let live_message = event_envelope(
-        &agent_did,
-        &realm_id,
-        "ak.message.create",
-        json!({
-            "body": "agent_key_proof live stream",
-            "content": {"body": "agent_key_proof live stream"},
-            "agent_context": {
-                "agent_id": agent_did,
-                "operator_or_controller": ALICE_DID,
-                "execution_purpose": "reply",
-                "authorization_ref": agent_grant_id,
-            },
-        }),
-    );
-    let live_event_id = live_message["event_id"]
-        .as_str()
-        .expect("live message event_id")
-        .to_owned();
-    let accepted_live = agent_client
-        .events_submit(&event_from_value(&live_message)?)
-        .await?;
-    assert_eq!(
-        accepted_live
-            .accepted
-            .first()
-            .map(|event_id| event_id.to_string())
-            .as_deref(),
-        Some(live_event_id.as_str()),
-        "agent live message must be accepted"
-    );
-    let mut saw_live_event = false;
-    tokio::time::timeout(std::time::Duration::from_secs(15), async {
-        while let Some(frame) = stream.next_frame().await? {
-            if frame.kind == EventsSubscribeFrameKind::Event
-                && serde_json::to_string(&frame)
-                    .is_ok_and(|frame_json| frame_json.contains(&live_event_id))
-            {
-                saw_live_event = true;
-                break;
-            }
-        }
-        Ok::<_, anyhow::Error>(())
-    })
-    .await
-    .map_err(|_| anyhow!("agent stream did not deliver live event {live_event_id} within 15s"))??;
-    assert!(
-        saw_live_event,
-        "DPoP-bound agent stream must deliver the accepted live event {live_event_id}"
-    );
-
-    let paused = controller
-        .agent_pause(
-            &agent_did,
-            &arkret::AgentPauseRequestBody {
-                reason: Some("cotest live e2e pause".to_owned()),
-            },
-        )
-        .await?;
-    assert!(paused.ok, "pause must succeed");
-    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
-
-    let mut after_pause = event_envelope(
-        &agent_did,
-        &realm_id,
-        "ak.message.create",
-        json!({
-            "body": "agent_key_proof after pause",
-            "content": {"body": "agent_key_proof after pause"},
-            "agent_context": {
-                "agent_id": agent_did,
-                "operator_or_controller": ALICE_DID,
-                "execution_purpose": "reply",
-                "authorization_ref": agent_grant_id,
-            },
-        }),
-    );
-    move_event_after_actor_frontier(&server, &token, &agent_did, &mut after_pause).await?;
+        .await;
     expect_sdk_api_error(
-        agent_client
-            .events_submit(&event_from_value(&after_pause)?)
-            .await,
-        StatusCode::PRECONDITION_FAILED,
-        "agent_paused",
+        participation,
+        StatusCode::NOT_IMPLEMENTED,
+        "controller_signed_event_required",
     )?;
-
-    let deactivated = controller
-        .agent_deactivate(
-            &agent_did,
-            &arkret::AgentDeactivateRequestBody {
-                reason: Some("cotest live e2e".to_owned()),
-            },
-        )
-        .await?;
-    assert!(deactivated.ok, "deactivate must succeed");
-    assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
-        "deactivated"
-    );
-
-    let mut after_deactivate = event_envelope(
-        &agent_did,
-        &realm_id,
-        "ak.message.create",
-        json!({
-            "body": "agent_key_proof after deactivate",
-            "content": {"body": "agent_key_proof after deactivate"},
-            "agent_context": {
-                "agent_id": agent_did,
-                "operator_or_controller": ALICE_DID,
-                "execution_purpose": "reply",
-                "authorization_ref": agent_grant_id,
-            },
-        }),
-    );
-    move_event_after_actor_frontier(&server, &token, &agent_did, &mut after_deactivate).await?;
-    expect_sdk_api_error(
-        agent_client
-            .events_submit(&event_from_value(&after_deactivate)?)
-            .await,
-        StatusCode::PRECONDITION_FAILED,
-        "agent_deactivated",
-    )?;
-
-    mock.set_active(false);
-    let after_revoke = event_envelope(
-        &agent_did,
-        &realm_id,
-        "ak.message.create",
-        json!({
-            "body": "agent_key_proof after revoke",
-            "content": {"body": "agent_key_proof after revoke"},
-        }),
-    );
-    expect_sdk_api_error(
-        agent_client
-            .events_submit(&event_from_value(&after_revoke)?)
-            .await,
-        StatusCode::UNAUTHORIZED,
-        "unauthenticated",
-    )?;
-    assert!(
-        mock.requests() >= 2,
-        "write after revoke must force fresh introspection"
-    );
-
     Ok(())
 }
 
@@ -940,15 +524,194 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let principal_id = Did::new(ALICE_DID.to_owned())?;
     let device_id = DeviceId::new(ALICE_DEVICE.to_owned())?;
     let control_realm_id = principal_control_realm_id(&principal_id);
+    let typed_control_realm_id = arkret::RealmId::new(control_realm_id.clone())?;
     let trust_domain = TypedTrustDomainId::new(TRUST_DOMAIN.to_owned())?;
 
     let psk = SigningKey::from_bytes(&[21_u8; 32]);
     let ssk = SigningKey::from_bytes(&[22_u8; 32]);
     let usk = SigningKey::from_bytes(&[23_u8; 32]);
     let device_key = SigningKey::from_bytes(&[24_u8; 32]);
-    let psk_kid = ALICE_DID.to_owned();
+    let root_key = SigningKey::from_bytes(&[32_u8; 32]);
+    let enrollment_authority_key = SigningKey::from_bytes(&[17_u8; 32]);
+    let enrollment_authority_public =
+        ed25519_pubkey_to_did_key_multibase(enrollment_authority_key.verifying_key().as_bytes());
+    let enrollment_authority_verification_method =
+        format!("{ALICE_DID}#device-enrollment-authority");
+    let next_root = SigningKey::from_bytes(&[33_u8; 32]);
+    let next_root_public =
+        ed25519_pubkey_to_did_key_multibase(next_root.verifying_key().as_bytes());
+    let principal_endpoint = reqwest::Url::parse("https://cotest-agent.example")?;
+    let prepared_inception =
+        arkret::webvh::prepare_principal_inception(&arkret::webvh::PrincipalInceptionInput {
+            principal_endpoint: &principal_endpoint,
+            local_id: "alice",
+            also_known_as: &["acct:alice@cotest-agent.example".to_owned()],
+            version_time: "2026-06-17T00:00:00Z".parse()?,
+            root_seed: &[32_u8; 32],
+            next_root_public_key_multibase: &next_root_public,
+            enrollment: arkret::webvh::PrincipalEnrollmentDelegation::SelfAuthority {
+                principal_signing_public_key_multibase: &ed25519_pubkey_to_did_key_multibase(
+                    psk.verifying_key().as_bytes(),
+                ),
+                enrollment_public_key_multibase: &enrollment_authority_public,
+                principal_signing_fragment: Some("cotest"),
+                enrollment_fragment: Some("device-enrollment-authority"),
+            },
+        })?;
+    if prepared_inception.did != ALICE_DID {
+        return Err(anyhow!(
+            "fixed controller DID drifted: expected {ALICE_DID}, got {}",
+            prepared_inception.did
+        ));
+    }
+    let submitted_inception = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/root/identity/submit-did-operation"))
+            .json(&prepared_inception.submit_body),
+        StatusCode::OK,
+    )
+    .await?;
+    if submitted_inception["did"].as_str() != Some(ALICE_DID) {
+        return Err(anyhow!(
+            "controller DID inception response drifted: {submitted_inception}"
+        ));
+    }
+    let psk_kid = controller_verification_method();
     let ssk_kid = format!("{ALICE_DID}#cotest-ssk");
     let usk_kid = format!("{ALICE_DID}#cotest-usk");
+    let control_created_at = canonical_now();
+    let control_timestamp_hex = format!("{:012x}", control_created_at.timestamp_millis());
+    let root_public_key = ed25519_pubkey_to_did_key_multibase(root_key.verifying_key().as_bytes());
+    let root_did = Did::new(format!("did:key:{root_public_key}"))?;
+    let root_verification_method = prepared_inception.root_verification_method.clone();
+    let root_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        [32_u8; 32],
+        root_did,
+        root_verification_method.clone(),
+    );
+    let event_verification_method = controller_verification_method();
+    let event_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        [21_u8; 32],
+        principal_id.clone(),
+        event_verification_method.clone(),
+    );
+
+    let mut bootstrap_create = arkret::identity::build_self_principal_pcr_create(
+        arkret::identity::SelfPrincipalPcrCreateInput {
+            principal_id: principal_id.clone(),
+            realm_id: typed_control_realm_id.clone(),
+            trust_domain: trust_domain.clone(),
+            did_inception_ref: arkret::EventRef::new(
+                prepared_inception.version_id.clone(),
+                arkret::identity::DID_INCEPTION_REF_ROLE,
+            ),
+            event_id: arkret::EventId::new(
+                "ak:event:01904100-0000-7000-8000-00000000a910".to_owned(),
+            )?,
+            created_at: control_created_at,
+            hlc: arkret::Hlc::new(format!("{control_timestamp_hex}-0000-a13f9c2e"))?,
+        },
+    )?;
+    arkret::signatures::sign_event(
+        &mut bootstrap_create,
+        &root_signer,
+        &root_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+    )?;
+
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
+    let enrollment_authorization_ref =
+        non_empty(format!("{ALICE_DID}#device-enrollment-authority"))?;
+    let bootstrap_authorize_payload = DeviceAuthorizePayload {
+        principal_id: principal_id.clone(),
+        device_id: device_id.clone(),
+        device_public_key: non_empty(device_public_key.clone())?,
+        hpke_key: non_empty(TEST_DEVICE_HPKE_KEY)?,
+        algorithms: TEST_DEVICE_ALGORITHMS
+            .into_iter()
+            .map(non_empty)
+            .collect::<Result<Vec<_>>>()?,
+        device_key_algorithm: Some(non_empty("EdDSA")?),
+        authorized_by: DeviceOrPrincipalRef::Did(principal_id.clone()),
+        scopes: None,
+        not_before: control_created_at,
+        expires_at: None,
+        device_signature: None,
+        proof: None,
+        cross_signing_binding: None,
+        enrollment_authority_binding: Some(arkret::DeviceEnrollmentAuthorityBinding {
+            kind: arkret::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
+            authority_did: principal_id.clone(),
+            authorization_ref: enrollment_authorization_ref.clone(),
+        }),
+        recovery_session_id: None,
+    };
+    let mut bootstrap_authorize = arkret::Event::new_with_id_at(
+        arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a911".to_owned())?,
+        arkret::events::EventKind::DEVICE_AUTHORIZE,
+        typed_control_realm_id.clone(),
+        principal_id.clone(),
+        1,
+        arkret::Hlc::new(format!("{control_timestamp_hex}-0001-a13f9c2e"))?,
+        serde_json::to_value(bootstrap_authorize_payload)?,
+        control_created_at,
+    )?;
+    bootstrap_authorize.prev_refs = vec![bootstrap_create.event_id.clone()];
+    bootstrap_authorize.executed_by = Some(principal_id.clone());
+    bootstrap_authorize.authorization_ref = Some(enrollment_authorization_ref.to_string());
+    let enrollment_authority_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        [17_u8; 32],
+        principal_id.clone(),
+        enrollment_authority_verification_method.clone(),
+    );
+    arkret::signatures::sign_event(
+        &mut bootstrap_authorize,
+        &enrollment_authority_signer,
+        &enrollment_authority_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+    )?;
+    let bootstrap_submit = bearer_sdk_client(server, token)?
+        .events_submit_batch(&[bootstrap_create.clone(), bootstrap_authorize.clone()])
+        .await?;
+    if !bootstrap_submit
+        .accepted
+        .contains(&bootstrap_create.event_id)
+        || !bootstrap_submit
+            .accepted
+            .contains(&bootstrap_authorize.event_id)
+    {
+        return Err(anyhow!(
+            "SDK principal bootstrap unit was not accepted: {bootstrap_submit:?}"
+        ));
+    }
+    let seal_signer = arkret::Ed25519MoveSigner::new(
+        device_key.clone(),
+        principal_id.clone(),
+        format!("{ALICE_DID}#{ALICE_DEVICE}"),
+    );
+    let controller_seal = arkret::identity::build_self_principal_bootstrap_seal(
+        &bootstrap_create,
+        &bootstrap_authorize,
+        arkret::Hlc::new(format!("{control_timestamp_hex}-0002-a13f9c2e"))?,
+        &seal_signer,
+    )?;
+    let seal_outcome = bearer_sdk_client(server, token)?
+        .events_submit_seal(&controller_seal)
+        .await?;
+    if seal_outcome.seal_id != controller_seal.id {
+        return Err(anyhow!(
+            "controller PCR Seal id changed at admission: expected {}, got {}",
+            controller_seal.id,
+            seal_outcome.seal_id
+        ));
+    }
+    let controller_seal_basis = controller_seal.seal_basis();
+    CONTROLLER_SEAL_BASES
+        .lock()
+        .expect("controller Seal basis lock")
+        .insert(server.url("/"), controller_seal_basis.clone());
 
     let key_record = |kid: String, key: &SigningKey| PublishedKey {
         kid: NonEmptyString::new(kid).unwrap(),
@@ -999,19 +762,38 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         &psk,
         &cross_signing.user_signing_binding_input()?,
     ))?;
-    submit_event(
-        server,
-        token,
-        ALICE_DID,
-        control_realm_id.as_str(),
-        "ak.cross_signing.publish",
-        serde_json::to_value(&cross_signing)?,
-        StatusCode::OK,
-    )
-    .await?;
+    let first_actor_seq = managed_agent_actor_seq(server, token, ALICE_DID).await? + 1;
+    let mut cross_signing_event = arkret::build_cross_signing_publish_event_at(
+        typed_control_realm_id.clone(),
+        principal_id.clone(),
+        first_actor_seq,
+        arkret::Hlc::new(format!(
+            "{control_timestamp_hex}-{:04x}-a13f9c2e",
+            first_actor_seq & 0xffff
+        ))?,
+        cross_signing,
+        control_created_at,
+    )?;
+    cross_signing_event.seal_basis = Some(controller_seal_basis.clone());
+    arkret::signatures::sign_event(
+        &mut cross_signing_event,
+        &event_signer,
+        &event_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+    )?;
+    let cross_signing_event_id = cross_signing_event.event_id.clone();
+    let cross_signing_submit = bearer_sdk_client(server, token)?
+        .events_submit(&cross_signing_event)
+        .await?;
+    if !cross_signing_submit
+        .accepted
+        .contains(&cross_signing_event_id)
+    {
+        return Err(anyhow!(
+            "SDK cross-signing Event was not accepted: {cross_signing_submit:?}"
+        ));
+    }
 
-    let device_public_key =
-        ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
     let algorithms = TEST_DEVICE_ALGORITHMS.map(str::to_owned).to_vec();
     let cross_signing_binding = DeviceCrossSigningBinding {
         verification_method: did_url(ssk_kid.to_owned())?,
@@ -1055,16 +837,38 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             &device_authorize.device_possession_signature_input()?,
         ),
     )?));
-    submit_event(
-        server,
-        token,
-        ALICE_DID,
-        control_realm_id.as_str(),
-        "ak.device.authorize",
-        serde_json::to_value(&device_authorize)?,
-        StatusCode::OK,
-    )
-    .await?;
+    let device_actor_seq = first_actor_seq + 1;
+    let mut device_authorize_event = arkret::build_device_authorize_event_at(
+        typed_control_realm_id,
+        principal_id.clone(),
+        device_actor_seq,
+        arkret::Hlc::new(format!(
+            "{control_timestamp_hex}-{:04x}-a13f9c2e",
+            device_actor_seq & 0xffff
+        ))?,
+        device_authorize,
+        control_created_at,
+    )?;
+    device_authorize_event.prev_refs = vec![cross_signing_event_id];
+    device_authorize_event.seal_basis = Some(controller_seal_basis);
+    arkret::signatures::sign_event(
+        &mut device_authorize_event,
+        &event_signer,
+        &event_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+    )?;
+    let device_authorize_event_id = device_authorize_event.event_id.clone();
+    let device_authorize_submit = bearer_sdk_client(server, token)?
+        .events_submit(&device_authorize_event)
+        .await?;
+    if !device_authorize_submit
+        .accepted
+        .contains(&device_authorize_event_id)
+    {
+        return Err(anyhow!(
+            "SDK device-authorize Event was not accepted: {device_authorize_submit:?}"
+        ));
+    }
 
     eventually(
         "controller device authorization projection",
@@ -1204,16 +1008,25 @@ async fn submit_delegated_agent_event(
     authorization_ref: &str,
     kind: &str,
     payload: Value,
-) -> Result<String> {
+) -> Result<arkret::Event> {
     let mut event = event_envelope(agent_id, realm_id, kind, payload);
     event["executed_by"] = json!(ALICE_DID);
     event["authorization_ref"] = json!(authorization_ref);
-    event["proofs"][0]["verification_method"] = json!(format!("{ALICE_DID}#cotest"));
-    refresh_event_proof(&mut event);
-    let event_id = event["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("delegated event_id missing"))?
-        .to_owned();
+    if kind == arkret::events::EventKind::REALM_CREATE {
+        let typed_realm_id = arkret::RealmId::new(realm_id.to_owned())?;
+        let actor_seq = event["actor_seq"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("delegated realm.create actor_seq missing"))?;
+        event["effects"] = serde_json::to_value(vec![
+            arkret::identity::managed_agent_principal_control_create_effect(
+                &typed_realm_id,
+                actor_seq,
+            )?,
+        ])?;
+    }
+    event["proofs"][0]["verification_method"] = json!(controller_verification_method());
+    refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32]);
+    let typed_event: arkret::Event = serde_json::from_value(event.clone())?;
     let body = expect_json(
         server
             .http()
@@ -1226,7 +1039,7 @@ async fn submit_delegated_agent_event(
     if body["status"] != "accepted" {
         return Err(anyhow!("delegated {kind} was not accepted: {body}"));
     }
-    Ok(event_id)
+    Ok(typed_event)
 }
 
 async fn managed_agent_frontier(
@@ -1247,6 +1060,13 @@ async fn managed_agent_frontier(
     }
     let status = response.status();
     let body = response.text().await?;
+    if status == StatusCode::SERVICE_UNAVAILABLE
+        && body.contains("\"code\":\"frontier_unavailable\"")
+        && (body.contains("no accepted Control Event material")
+            || body.contains("accepted managed Agent PCR Seal materialization failed"))
+    {
+        return Ok(None);
+    }
     if status != StatusCode::OK {
         return Err(anyhow!("managed Agent frontier returned {status}: {body}"));
     }
@@ -1301,7 +1121,7 @@ async fn move_event_after_actor_frontier(
     let actor_seq = original_actor_seq.max(frontier_actor_seq) + 32;
     event["actor_seq"] = json!(actor_seq);
     event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
-    refresh_event_proof(event);
+    refresh_event_proof_with_signing_seed(event, [21_u8; 32]);
     Ok(())
 }
 
@@ -1324,99 +1144,162 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             } => Some(managed_frontier_ref.seal_ref),
             _ => None,
         });
-    if managed_agent_frontier(server, token, realm_id)
-        .await?
-        .is_none()
-    {
-        let realm_create_event_id = submit_delegated_agent_event(
-            server,
-            token,
-            agent_id,
-            realm_id,
-            provisioned.controller_authorization_ref(),
-            "ak.realm.create",
-            json!({
-                "object": {
-                    "id": realm_id,
-                    "schema": "ak.schema.realm.v1",
-                    "title": "Managed Agent Principal Control Realm",
-                    "summary": "Controller-managed E2EE continuity for a Native Personal Agent",
-                    "created_by": agent_id,
-                    "trust_domain": TRUST_DOMAIN,
-                    "schema_refs": [
-                        "ak.schema.realm.v1",
-                        "ak.profile.principal_control_realm.v1"
-                    ],
-                    "fields": {"purpose": "principal_control"},
-                    "default_discoverability": "invite_only",
-                    "default_join_rule": "invite",
-                    "history_visibility": "restricted",
-                    "history_sharing_policy": {
-                        "version": 1,
-                        "default_key_share": "deny",
-                        "pre_join_history": "deny",
-                        "allowed_key_sources": ["key_backup"],
-                        "allowed_receiver_states": ["active_member"],
-                        "audit": {
-                            "share_audit_event_required": true,
-                            "access_audit_required": true
-                        }
-                    },
-                    "encryption_profile": "mls_rfc9420",
-                    "content_encryption_floor": "e2ee_required",
-                    "metadata_encryption_floor": "e2ee_required",
-                    "plaintext_visible_services": [],
-                    "security_class": "high_assurance",
-                    "federation_policy": "restricted",
-                    "notary_profile": "single_did",
-                    "digest_algorithm": "sha256",
-                    "notary": {
-                        "type": "single_did",
-                        "did": agent_id,
-                        "recovery_members": [ALICE_DID],
-                        "controller_organization": ALICE_DID,
-                        "recovery_controller_organizations": [ALICE_DID]
-                    },
-                    "created_at": "2026-05-02T00:00:00Z"
-                }
-            }),
-        )
-        .await?;
-        submit_delegated_agent_event(
-            server,
-            token,
-            agent_id,
-            realm_id,
-            provisioned.controller_authorization_ref(),
-            "ak.mls.genesis",
-            json!({
-                "mls_group_id": group_id,
-                "effective_scope": {"kind": "realm", "realm_id": realm_id},
-                "epoch": 0,
-                "creator_principal_id": agent_id,
-                "creator_device_id": ALICE_DEVICE,
-                "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
-                "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-                "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
-                "governance_binding": {
-                    "binding_version": 1,
-                    "encoding_profile": "cbor-deterministic-rfc8949-v1",
-                    "realm_id": realm_id,
-                    "effective_scope": {"kind": "realm", "realm_id": realm_id},
+    let frontier_before = managed_agent_frontier(server, token, realm_id).await?;
+    if frontier_before.is_none() {
+        let existing_events = bearer_sdk_client(server, token)?
+            .events_query_all_pages(realm_id)
+            .await?
+            .events;
+        let realm_create_event_id = match existing_events
+            .iter()
+            .find(|event| event.kind == arkret::events::EventKind::REALM_CREATE)
+        {
+            Some(event) => event.event_id.clone(),
+            None => submit_delegated_agent_event(
+                server,
+                token,
+                agent_id,
+                realm_id,
+                provisioned.controller_authorization_ref(),
+                "ak.realm.create",
+                json!({
+                    "object": {
+                        "id": realm_id,
+                        "schema": "ak.schema.realm.v1",
+                        "title": "Managed Agent Principal Control Realm",
+                        "summary": "Controller-managed E2EE continuity for a Native Personal Agent",
+                        "created_by": agent_id,
+                        "trust_domain": TRUST_DOMAIN,
+                        "schema_refs": [
+                            "ak.schema.realm.v1",
+                            "ak.profile.principal_control_realm.v1"
+                        ],
+                        "fields": {"purpose": "principal_control"},
+                        "default_discoverability": "invite_only",
+                        "default_join_rule": "invite",
+                        "history_visibility": "restricted",
+                        "history_sharing_policy": {
+                            "version": 1,
+                            "default_key_share": "deny",
+                            "pre_join_history": "deny",
+                            "allowed_key_sources": ["key_backup"],
+                            "allowed_receiver_states": ["active_member"],
+                            "audit": {
+                                "share_audit_event_required": true,
+                                "access_audit_required": true
+                            }
+                        },
+                        "encryption_profile": "mls_rfc9420",
+                        "content_encryption_floor": "e2ee_required",
+                        "metadata_encryption_floor": "e2ee_required",
+                        "plaintext_visible_services": [],
+                        "security_class": "high_assurance",
+                        "federation_policy": "restricted",
+                        "notary_profile": "single_did",
+                        "digest_algorithm": "sha256",
+                        "notary": {
+                            "type": "single_did",
+                            "did": agent_id,
+                            "recovery_members": [ALICE_DID],
+                            "controller_organization": ALICE_DID,
+                            "recovery_controller_organizations": [ALICE_DID]
+                        },
+                        "created_at": "2026-05-02T00:00:00Z"
+                    }
+                }),
+            )
+            .await?
+            .event_id,
+        };
+        if !existing_events
+            .iter()
+            .any(|event| event.kind == arkret::events::EventKind::MLS_GENESIS)
+        {
+            submit_delegated_agent_event(
+                server,
+                token,
+                agent_id,
+                realm_id,
+                provisioned.controller_authorization_ref(),
+                "ak.mls.genesis",
+                json!({
                     "mls_group_id": group_id,
-                    "previous_epoch": 0,
-                    "next_epoch": 0,
-                    "membership_frontier": [realm_create_event_id],
-                    "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                    "capability_root": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-                    "discussion_metadata_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
-                    "binding_profile": "ak.profile.mls_governance_binding.full.v1",
-                    "reducer_profile": "ak.reducer.v1"
-                },
-                "created_at": "2026-05-02T00:00:01Z"
-            }),
-        )
-        .await?;
+                    "effective_scope": {"kind": "realm", "realm_id": realm_id},
+                    "epoch": 0,
+                    "creator_principal_id": agent_id,
+                    "creator_device_id": ALICE_DEVICE,
+                    "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+                    "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+                    "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+                    "governance_binding": {
+                        "binding_version": 1,
+                        "encoding_profile": "cbor-deterministic-rfc8949-v1",
+                        "realm_id": realm_id,
+                        "effective_scope": {"kind": "realm", "realm_id": realm_id},
+                        "mls_group_id": group_id,
+                        "previous_epoch": 0,
+                        "next_epoch": 0,
+                        "membership_frontier": [realm_create_event_id],
+                        "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                        "capability_root": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+                        "discussion_metadata_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+                        "binding_profile": "ak.profile.mls_governance_binding.full.v1",
+                        "reducer_profile": "ak.reducer.v1"
+                    },
+                    "created_at": "2026-05-02T00:00:01Z"
+                }),
+            )
+            .await?;
+        }
+    }
+    let seal_needs_advancing = frontier_before.is_none()
+        || stale_seal_ref.as_deref()
+            == frontier_before
+                .as_ref()
+                .map(|frontier| frontier.seal_id.as_str());
+    if seal_needs_advancing {
+        let client = bearer_sdk_client(server, token)?;
+        let events = client.events_query_all_pages(realm_id).await?.events;
+        let seal_key = format!("{}|{realm_id}", server.base_url());
+        let predecessor = MANAGED_AGENT_PCR_SEALS
+            .lock()
+            .expect("managed Agent PCR Seal lock")
+            .get(&seal_key)
+            .cloned();
+        if let (Some(frontier), Some(predecessor)) = (&frontier_before, &predecessor)
+            && frontier.seal_id != predecessor.id
+        {
+            return Err(anyhow!(
+                "managed Agent PCR predecessor mismatch: frontier {}, local {}",
+                frontier.seal_id,
+                predecessor.id
+            ));
+        }
+        let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+            [24_u8; 32],
+            Did::new(ALICE_DID.to_owned())?,
+            format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        );
+        let mut hlc =
+            arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
+        let seal = arkret::identity::build_managed_agent_pcr_event_seal(
+            &events,
+            predecessor.as_ref(),
+            hlc.generate(),
+            &signer,
+        )?;
+        let outcome = client.events_submit_seal(&seal).await?;
+        if outcome.seal_id != seal.id {
+            return Err(anyhow!(
+                "managed Agent PCR Seal id changed at admission: expected {}, got {}",
+                seal.id,
+                outcome.seal_id
+            ));
+        }
+        MANAGED_AGENT_PCR_SEALS
+            .lock()
+            .expect("managed Agent PCR Seal lock")
+            .insert(seal_key, seal);
     }
     eventually(
         "managed Agent PCR Seal coverage",
@@ -1659,13 +1542,19 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         &device_key,
         &canonical::canonical_json_bytes(&unsigned_active_series)?,
     ));
-    submit_event(
-        server,
-        token,
+    let mut active_series_event = event_envelope(
         ALICE_DID,
         principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?).as_str(),
         "ak.key_backup.active_series",
         active_series,
+    );
+    move_event_after_actor_frontier(server, token, ALICE_DID, &mut active_series_event).await?;
+    expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .json(&active_series_event),
         StatusCode::OK,
     )
     .await?;
@@ -1701,23 +1590,191 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     Ok(())
 }
 
+/// Complete the controller-owned two-phase provisioning protocol. All
+/// canonical payloads, nested proof transcripts, effects and Event envelopes
+/// come from `arkret::agent`; this fixture only supplies live frontier stamps
+/// and transports the typed requests.
+async fn provision_agent(
+    server: &ArkretServer,
+    token: &str,
+    display_name: &str,
+    slug: &str,
+    pairing_ttl_ms: Option<u64>,
+) -> Result<arkret::AgentProvisionComplete> {
+    let client = bearer_sdk_client(server, token)?;
+    let requested_scope = test_agent_requested_scope();
+    let prepared = client
+        .agent_provision(&arkret::AgentProvisionRequestBody::Prepare {
+            display_name: Some(display_name.to_owned()),
+            slug: slug.to_owned(),
+            avatar_blob_ref: None,
+            requested_scope: requested_scope.clone(),
+            pairing_ttl_ms,
+        })
+        .await?;
+    let (
+        agent_id,
+        principal_control_realm_id,
+        controller_realm_id,
+        controller_authorization_ref,
+        requested_scope_digest,
+    ) = match prepared {
+        arkret::AgentProvisionOutcome::AwaitingControllerEvents {
+            agent_id,
+            principal_control_realm_id,
+            controller_realm_id,
+            controller_authorization_ref,
+            requested_scope_digest,
+        } => (
+            agent_id,
+            principal_control_realm_id,
+            controller_realm_id,
+            controller_authorization_ref,
+            requested_scope_digest,
+        ),
+        unexpected => {
+            return Err(anyhow!(
+                "agent provision prepare returned an unexpected outcome: {unexpected:?}"
+            ));
+        }
+    };
+    let controller_id = arkret::Did::new(ALICE_DID.to_owned())?;
+    let expected_scope_digest =
+        arkret::agent_requested_scope_digest(&agent_id, &controller_id, &requested_scope)?;
+    if requested_scope_digest != expected_scope_digest {
+        return Err(anyhow!(
+            "agent provision prepare returned a mismatched requested_scope_digest"
+        ));
+    }
+
+    let actor_seq = managed_agent_actor_seq(server, token, ALICE_DID).await? + 1;
+    let now = DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0)
+        .ok_or_else(|| anyhow!("current timestamp is outside the wire range"))?;
+    let timestamp_hex = format!("{:012x}", now.timestamp_millis());
+    let verification_method = controller_verification_method();
+    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        [21_u8; 32],
+        controller_id.clone(),
+        verification_method.clone(),
+    );
+    let mut events = arkret::agent::build_agent_provision_event_drafts(
+        &controller_id,
+        &controller_realm_id,
+        &agent_id,
+        slug,
+        arkret::agent::AgentProvisionEventDraftOptions {
+            created_at: now,
+            accountability_actor_seq: actor_seq,
+            accountability_hlc: arkret::Hlc::new(format!(
+                "{timestamp_hex}-{:04x}-a13f9c2e",
+                actor_seq & 0xffff
+            ))?,
+            selector_actor_seq: actor_seq + 1,
+            selector_hlc: arkret::Hlc::new(format!(
+                "{timestamp_hex}-{:04x}-a13f9c2e",
+                (actor_seq + 1) & 0xffff
+            ))?,
+        },
+        &signer,
+    )?;
+    let realm_seal_basis = CONTROLLER_SEAL_BASES
+        .lock()
+        .expect("controller Seal basis lock")
+        .get(&server.url("/"))
+        .cloned()
+        .ok_or_else(|| anyhow!("controller Realm Seal basis is missing"))?;
+    for event in [&mut events.accountability_grant, &mut events.selector_claim] {
+        event.seal_basis = Some(realm_seal_basis.clone());
+        arkret::signatures::sign_event(
+            event,
+            &signer,
+            &verification_method,
+            arkret::signatures::SignEventOptions::new().with_created_at(now),
+        )?;
+    }
+    let provision_event_ids = [
+        events.accountability_grant.event_id.clone(),
+        events.selector_claim.event_id.clone(),
+    ];
+    let commit = arkret::AgentProvisionRequestBody::Commit {
+        agent_id,
+        principal_control_realm_id,
+        display_name: Some(display_name.to_owned()),
+        slug: slug.to_owned(),
+        avatar_blob_ref: None,
+        requested_scope,
+        provision_events: events,
+        pairing_ttl_ms,
+    };
+    let committed = client.agent_provision(&commit).await?;
+    let retried = client.agent_provision(&commit).await?;
+    if serde_json::to_value(&committed)? != serde_json::to_value(&retried)? {
+        return Err(anyhow!(
+            "an exact agent provision Commit retry returned a different outcome"
+        ));
+    }
+    let replayed = expect_json(
+        server
+            .http()
+            .get(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .query(&[("actors", ALICE_DID), ("limit", "100")]),
+        StatusCode::OK,
+    )
+    .await?;
+    for event_id in provision_event_ids {
+        let event = replayed["events"]
+            .as_array()
+            .and_then(|events| {
+                events
+                    .iter()
+                    .find(|event| event["event_id"].as_str() == Some(event_id.as_str()))
+            })
+            .cloned()
+            .ok_or_else(|| anyhow!("provision Event {event_id} was not persisted for replay"))?;
+        let event: arkret::Event = serde_json::from_value(event)?;
+        event.validate_proof_bindings().map_err(|error| {
+            anyhow!("replayed provision Event {event_id} failed SDK proof verification: {error}")
+        })?;
+        let public_key = arkret::signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: SigningKey::from_bytes(&[21_u8; 32])
+                .verifying_key()
+                .to_bytes()
+                .to_vec(),
+        };
+        let canonical_bytes = arkret::canonical::canonical_json_bytes(&event.digest_payload()?)?;
+        arkret::signatures::verify_eddsa_detached_jws_proof(
+            event
+                .proofs
+                .first()
+                .ok_or_else(|| anyhow!("replayed provision Event {event_id} has no proof"))?,
+            &canonical_bytes,
+            &event.actor_id,
+            &public_key,
+        )?;
+    }
+    match committed {
+        arkret::AgentProvisionOutcome::Complete { outcome } => {
+            if outcome.controller_authorization_ref != controller_authorization_ref {
+                return Err(anyhow!(
+                    "agent provision commit changed controller_authorization_ref"
+                ));
+            }
+            Ok(outcome)
+        }
+        unexpected => Err(anyhow!(
+            "agent provision commit returned an unexpected outcome: {unexpected:?}"
+        )),
+    }
+}
+
 async fn provision_and_pair_agent(
     server: &ArkretServer,
     token: &str,
     display_name: &str,
     slug: &str,
 ) -> Result<String> {
-    let controller = bearer_sdk_client(server, token)?;
-    let prov = controller
-        .agent_provision(&arkret::AgentProvisionRequestBody {
-            display_name: Some(display_name.to_owned()),
-            slug: slug.to_owned(),
-            avatar_blob_ref: None,
-            requested_scope: test_agent_requested_scope(),
-            accountability: None,
-            pairing_ttl_ms: None,
-        })
-        .await?;
+    let prov = provision_agent(server, token, display_name, slug, None).await?;
     let agent_did = prov.agent_id.to_string();
     assert!(prov.pairing_code.is_some(), "pairing_code present");
     assert_eq!(
@@ -1789,7 +1846,7 @@ macro_rules! impl_pairing_outcome {
     };
 }
 
-impl_pairing_outcome!(arkret::AgentProvisionOutcome);
+impl_pairing_outcome!(arkret::AgentProvisionComplete);
 impl_pairing_outcome!(arkret::AgentRenewPairingOutcome);
 
 fn runtime_key_request_builder<'a, P: PairingOutcome>(
@@ -1937,7 +1994,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
     let controller_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
         [21_u8; 32],
         controller_id.clone(),
-        format!("{ALICE_DID}#cotest"),
+        controller_verification_method(),
     );
     let actor_seq = managed_agent_actor_seq(server, token, agent_did.as_str()).await? + 1;
     let mut authorize_event = arkret::agent::build_agent_key_authorize_event(
@@ -1954,7 +2011,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
     arkret::signatures::sign_event(
         &mut authorize_event,
         &controller_signer,
-        &format!("{ALICE_DID}#cotest"),
+        &controller_verification_method(),
         arkret::signatures::SignEventOptions::new().with_created_at(canonical_now()),
     )?;
     let disclosure_issued_at = canonical_now();
@@ -1983,7 +2040,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         proofs: vec![arkret::Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
-            verification_method: format!("{ALICE_DID}#cotest"),
+            verification_method: controller_verification_method(),
             event_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: disclosure_issued_at,
             domain: None,
@@ -2014,48 +2071,11 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
     Ok(status)
 }
 
-async fn effective_grants(
-    server: &ArkretServer,
-    token: &str,
-    realm_id: &str,
-    agent_did: &str,
-) -> Result<Value> {
-    // A controller may inspect a managed Agent's grants only within a Realm
-    // it owns. Query the Realm named by the attached grant; grant attachment
-    // deliberately preserves the caller-supplied governed Realm.
-    let effective = bearer_sdk_client(server, token)?
-        .authz_effective_grants(realm_id, agent_did, None)
-        .await?;
-    Ok(serde_json::to_value(effective)?)
-}
-
-fn grant_exists_in(effective: &Value, grant_id: &str) -> bool {
-    effective["grants"].as_array().is_some_and(|grants| {
-        grants.iter().any(|grant| {
-            grant["id"].as_str() == Some(grant_id) || grant["grant_id"].as_str() == Some(grant_id)
-        })
-    })
-}
-
 fn bearer_sdk_client(server: &ArkretServer, token: &str) -> Result<SdkClient> {
     Ok(ClientBuilder::new(server.base_url())
         .allow_insecure_localhost()
         .auth(Auth::Bearer(token.to_owned()))
         .build()?)
-}
-
-fn agent_session_client(server: &ArkretServer, holder: &AgentSessionHolder) -> Result<SdkClient> {
-    Ok(ClientBuilder::new(server.base_url())
-        .allow_insecure_localhost()
-        .auth(Auth::Dpop(garth::session::dpop::access_token_auth(
-            AGENT_SESSION_GRANT,
-            SigningKey::from_bytes(&holder.signing_key.to_bytes()),
-        )))
-        .build()?)
-}
-
-fn event_from_value(value: &Value) -> Result<arkret::Event> {
-    Ok(serde_json::from_value(value.clone())?)
 }
 
 fn expect_sdk_api_error<T>(
@@ -2098,231 +2118,4 @@ fn advance_event_sequence(actor: &str, realm_id: &str, count: usize) {
             json!({"body": "sequence padding"}),
         );
     }
-}
-
-struct AgentSessionHolder {
-    signing_key: SigningKey,
-    public_jwk: Value,
-    cnf_jkt: String,
-}
-
-impl AgentSessionHolder {
-    fn new() -> Self {
-        let secret = [7_u8; 32];
-        let signing_key = SigningKey::from_bytes(&secret);
-        let public_x = URL_SAFE_NO_PAD.encode(signing_key.verifying_key().to_bytes());
-        let public_jwk = json!({
-            "kty": "OKP",
-            "crv": "Ed25519",
-            "x": public_x,
-        });
-        let cnf_jkt =
-            jwk_thumbprint_ed25519(public_jwk["x"].as_str().expect("public x must be a string"));
-        Self {
-            signing_key,
-            public_jwk,
-            cnf_jkt,
-        }
-    }
-}
-
-fn jwk_thumbprint_ed25519(x: &str) -> String {
-    let canonical = format!("{{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"{x}\"}}");
-    URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes()))
-}
-
-#[derive(Clone)]
-struct AgentIntrospectionState {
-    active: Arc<AtomicBool>,
-    request_count: Arc<AtomicUsize>,
-    service_id: Arc<Mutex<String>>,
-    subject: Arc<Mutex<Option<String>>>,
-    realm_scope: Arc<Mutex<Option<String>>>,
-    cnf_jkt: String,
-    session_public_key: String,
-}
-
-struct MockIntrospection {
-    url: String,
-    active: Arc<AtomicBool>,
-    request_count: Arc<AtomicUsize>,
-    service_id: Arc<Mutex<String>>,
-    subject: Arc<Mutex<Option<String>>>,
-    realm_scope: Arc<Mutex<Option<String>>>,
-    _server: MockServer,
-}
-
-impl MockIntrospection {
-    async fn spawn(
-        service_id: String,
-        cnf_jkt: String,
-        session_public_key: String,
-    ) -> Result<Self> {
-        let active = Arc::new(AtomicBool::new(true));
-        let request_count = Arc::new(AtomicUsize::new(0));
-        let service_id = Arc::new(Mutex::new(service_id));
-        let subject = Arc::new(Mutex::new(None));
-        let realm_scope = Arc::new(Mutex::new(None));
-        let state = AgentIntrospectionState {
-            active: Arc::clone(&active),
-            request_count: Arc::clone(&request_count),
-            service_id: Arc::clone(&service_id),
-            subject: Arc::clone(&subject),
-            realm_scope: Arc::clone(&realm_scope),
-            cnf_jkt,
-            session_public_key,
-        };
-        let router = Router::with_path("session-grants/introspect")
-            .hoop(affix_state::inject(state))
-            .post(agent_introspect);
-        let server = mock_http::spawn_mock(router).await?;
-        let url = format!("http://{}/session-grants/introspect", server.addr());
-        Ok(Self {
-            url,
-            active,
-            request_count,
-            service_id,
-            subject,
-            realm_scope,
-            _server: server,
-        })
-    }
-
-    fn url(&self) -> String {
-        self.url.clone()
-    }
-
-    fn requests(&self) -> usize {
-        self.request_count.load(Ordering::SeqCst)
-    }
-
-    fn set_service_id(&self, service_id: String) {
-        if let Ok(mut guard) = self.service_id.lock() {
-            *guard = service_id;
-        }
-    }
-
-    fn set_subject(&self, subject: String) {
-        if let Ok(mut guard) = self.subject.lock() {
-            *guard = Some(subject);
-        }
-    }
-
-    fn set_realm_scope(&self, realm_id: String) {
-        if let Ok(mut guard) = self.realm_scope.lock() {
-            *guard = Some(realm_id);
-        }
-    }
-
-    fn set_active(&self, active: bool) {
-        self.active.store(active, Ordering::SeqCst);
-    }
-}
-
-#[handler]
-async fn agent_introspect(req: &mut Request, depot: &mut Depot, res: &mut Response) {
-    let state = depot
-        .get_typed::<AgentIntrospectionState>()
-        .expect("agent introspection mock state injected")
-        .clone();
-    state.request_count.fetch_add(1, Ordering::SeqCst);
-    let authorized = req
-        .headers()
-        .get(salvo::http::header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| {
-            value
-                .to_ascii_lowercase()
-                .contains(&format!("bearer {INTROSPECTION_BEARER}"))
-        });
-    if !authorized {
-        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
-        res.render(Json(
-            json!({"ok": false, "error": {"errcode": "unauthenticated"}}),
-        ));
-        return;
-    }
-    let _body: Value = req.parse_json().await.unwrap_or_else(|_| json!({}));
-
-    let service_id = state
-        .service_id
-        .lock()
-        .map(|guard| guard.clone())
-        .unwrap_or_else(|_| "did:web:agent-live-e2e.cotest.local".to_owned());
-    let subject = state
-        .subject
-        .lock()
-        .ok()
-        .and_then(|guard| guard.clone())
-        .unwrap_or_else(|| "did:web:agent-unset.example".to_owned());
-    let realm_scope = state
-        .realm_scope
-        .lock()
-        .ok()
-        .and_then(|guard| guard.clone())
-        .unwrap_or_else(|| "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned());
-    let body = if state.active.load(Ordering::SeqCst) {
-        json!({
-            "active": true,
-            "status": "active",
-            "proof_required": false,
-            "one_time_use_consumed": false,
-            "grant": {
-                // `SessionGrantIntrospectGrant.id` is a typed `GrantId`
-                // (`ak:grant:<uuidv7>`); a bare label fails SDK deserialization
-                // and soland reports the introspection response as invalid (503).
-                "id": "ak:grant:01964137-0000-7000-8000-000000000a01",
-                "issuer": "did:web:coauth.cotest.local",
-                "subject": subject,
-                "service_account_id": "agent-live-e2e-account",
-                "audience": service_id,
-                "scopes": [
-                    "ak.self.events.stream.subscribe",
-                    "ak.self.events.query.scan",
-                    "ak.self.events.command.submit",
-                    "ak.event.read",
-                    "ak.message.create",
-                    "ak.reaction.add"
-                ],
-                "expires_at": "2026-12-31T23:59:59Z",
-                "revocation_ref": "ak:session:agent-live-e2e-grant",
-                "session_public_key": state.session_public_key,
-                "cnf_jkt": state.cnf_jkt,
-                "proof_kind": "agent_key_proof",
-                "scope_details": {
-                    "realm_ids": [realm_scope],
-                    "participation": [{
-                        "participation_scope": {
-                            "kind": "realm",
-                            "realm_id": realm_scope
-                        },
-                        "selection": {
-                            "reply": true,
-                            "accept_third_party_mention": false,
-                            "act_on_behalf": false
-                        },
-                        "ceiling": {
-                            "reply": true,
-                            "accept_third_party_mention": true,
-                            "act_on_behalf": false
-                        },
-                        "effective": {
-                            "reply": true,
-                            "accept_third_party_mention": false,
-                            "act_on_behalf": false
-                        }
-                    }]
-                },
-                "freshness_state": "fresh"
-            }
-        })
-    } else {
-        json!({
-            "active": false,
-            "status": "revoked",
-            "proof_required": false,
-            "one_time_use_consumed": false
-        })
-    };
-    res.render(Json(body));
 }

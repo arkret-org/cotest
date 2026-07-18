@@ -5,6 +5,7 @@ use serde_json::Value;
 /// encoding so every Arkret implementation agrees on the bytes. Shared by all
 /// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
 /// which preserves insertion order and would diverge from the SDK.
+#[cfg(test)]
 pub(crate) fn canonical_event_digest(event: &Value) -> String {
     let mut typed_value = event.clone();
     if let Value::Object(object) = &mut typed_value {
@@ -41,12 +42,47 @@ pub(crate) fn canonical_event_digest(event: &Value) -> String {
         .expect("event envelope digest is canonicalizable")
 }
 
-/// Fill `proofs[0].event_digest` with the canonical Event digest. The canonical
-/// `event_proof` schema (`additionalProperties:false`) only carries
-/// `event_digest`; there is no proof-level `payload_digest`.
+/// Re-sign a mutated cotest Event through the SDK's canonical Event-proof
+/// transcript using the SDK's deterministic development identity.
 pub fn refresh_event_proof(event: &mut Value) {
-    let digest = canonical_event_digest(event);
-    event["proofs"][0]["event_digest"] = Value::String(digest);
+    let verification_method = event
+        .pointer("/proofs/0/verification_method")
+        .and_then(Value::as_str)
+        .expect("cotest Event proof verification_method")
+        .to_owned();
+    let signing_seed = arkret::signatures::development_signing_key_seed(&verification_method);
+    refresh_event_proof_with_signing_seed(event, signing_seed);
+}
+
+/// Re-sign a mutated Event with an explicitly provisioned fixture key. Formal
+/// DID-history E2E tests use this for their registered controller key.
+pub fn refresh_event_proof_with_signing_seed(event: &mut Value, signing_seed: [u8; 32]) {
+    let verification_method = event
+        .pointer("/proofs/0/verification_method")
+        .and_then(Value::as_str)
+        .expect("cotest Event proof verification_method")
+        .to_owned();
+    let mut typed: arkret_core::Event =
+        serde_json::from_value(event.clone()).expect("event envelope matches SDK Event wire shape");
+    let signer_did = typed
+        .executed_by
+        .clone()
+        .unwrap_or_else(|| typed.actor_id.clone());
+    let created_at = typed.created_at;
+    typed.proofs.clear();
+    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        signing_seed,
+        signer_did,
+        verification_method.clone(),
+    );
+    arkret::signatures::sign_event(
+        &mut typed,
+        &signer,
+        &verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .expect("SDK Event signer accepts mutated cotest envelope");
+    *event = serde_json::to_value(typed).expect("SDK Event serializes");
 }
 
 #[cfg(test)]
@@ -61,7 +97,7 @@ mod tests {
             "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
-            "created_at": "2026-07-07T00:00:00Z",
+            "created_at": "2026-07-07T00:00:00.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
             "prev_refs": [],
             "refs": [],
@@ -79,7 +115,7 @@ mod tests {
                 "alg": "EdDSA",
                 "verification_method": "did:web:alice.example#device",
                 "event_digest": "",
-                "created_at": "2026-07-07T00:00:00Z",
+                "created_at": "2026-07-07T00:00:00.000Z",
                 "jws": "placeholder"
             }]
         });

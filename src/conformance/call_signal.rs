@@ -153,13 +153,13 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 
     // 1. Envelope without proof.
     let created_at = Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 0).unwrap();
-    let created_at_str = created_at.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let sent_at_str = created_at.to_rfc3339_opts(SecondsFormat::Secs, true);
     let mut envelope = json!({
         "kind": "ak.call.signal",
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": actor_id,
         "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
-        "sent_at": created_at_str,
+        "sent_at": &sent_at_str,
         "expires_at": Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 30).unwrap()
             .to_rfc3339_opts(SecondsFormat::Secs, true),
         "payload": {
@@ -175,9 +175,9 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         .map_err(|err| anyhow!("envelope JCS failed: {err}"))?;
     let event_digest = arkret_core::canonical::sha256_digest(&canonical_bytes);
 
-    // 3. JWS transcript = protected `.` base64url(JCS(binding object)). The binding object is the
-    //    §5.1 {event_digest, actor_id, verification_method, created_at} — byte-identical to the
-    //    SDK's `Proof::canonical_binding_bytes`.
+    // 3. JWS transcript = protected `.` base64url(SDK canonical proof binding). The SDK is the only
+    //    implementation of the binding object and its timestamp projection; cotest deliberately
+    //    does not duplicate it.
     // SDK-canonical protected header is EXACTLY `{"alg":"EdDSA"}` — the
     // verifier deserialises it with deny-unknown-fields, so a `kid` (or any
     // extra member) breaks verification. The verification_method is carried in
@@ -187,38 +187,31 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         &arkret_core::canonical::canonical_json_bytes(&header)
             .map_err(|err| anyhow!("header JCS failed: {err}"))?,
     );
-    // encoding.md §2: the Event proof binding carries the fixed context tag
-    // "ak.event-proof-v1" (domain separation); the SDK verifier reconstructs it
-    // and the signature must cover it.
-    let binding = json!({
-        "context": "ak.event-proof-v1",
-        "event_digest": event_digest,
-        "actor_id": actor_id,
-        "verification_method": verification_method,
-        "created_at": created_at_str,
-    });
+    let did = arkret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
+    let mut proof = Proof {
+        kind: "detached_jws".to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: verification_method.clone(),
+        event_digest: arkret_core::Hash::new(event_digest.clone())
+            .map_err(|err| anyhow!("event digest: {err}"))?,
+        created_at,
+        domain: None,
+        audience: None,
+        jws: String::new(),
+    };
     let binding_b64 = b64url(
-        &arkret_core::canonical::canonical_json_bytes(&binding)
-            .map_err(|err| anyhow!("binding JCS failed: {err}"))?,
+        &proof
+            .canonical_binding_bytes(&did)
+            .map_err(|err| anyhow!("SDK proof binding failed: {err}"))?,
     );
     let signing_input = format!("{header_b64}.{binding_b64}");
     let signature = signing_key.sign(signing_input.as_bytes());
-    let jws = format!("{header_b64}..{}", b64url(&signature.to_bytes()));
-
-    envelope["proof"] = json!({
-        "kind": "detached_jws",
-        "alg": "EdDSA",
-        "verification_method": verification_method,
-        "event_digest": event_digest,
-        "created_at": created_at_str,
-        "jws": jws,
-    });
+    proof.jws = format!("{header_b64}..{}", b64url(&signature.to_bytes()));
+    envelope["proof"] =
+        serde_json::to_value(&proof).map_err(|err| anyhow!("proof serialisation failed: {err}"))?;
 
     // 4. Verify via the SDK receiver path. `canonical_bytes` is the envelope-without-proof (the
     //    verifier recomputes event_digest from it).
-    let proof: Proof = serde_json::from_value(envelope["proof"].clone())
-        .map_err(|err| anyhow!("proof deserialise failed: {err}"))?;
-    let did = arkret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
     verify_eddsa_detached_jws_proof(&proof, &canonical_bytes, &did, &public)
         .map_err(|err| anyhow!("the e2e-style detached-JWS proof MUST verify: {err}"))?;
 
@@ -271,7 +264,7 @@ fn call_signal_envelope_value(signal_type: &str, seq: u64) -> Value {
             "alg": "EdDSA",
             "verification_method": "did:web:alice.example.com#device",
             "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": "2026-04-26T00:00:00Z",
+            "created_at": "2026-04-26T00:00:00.000Z",
             "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
         }
     })

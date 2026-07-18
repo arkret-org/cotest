@@ -1087,6 +1087,11 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
             .is_some_and(|methods| methods.iter().any(|method| method["id"] == psk_kid)),
         "installed principal control key is absent from resolved DID document: {resolved}"
     );
+    crate::harness::register_event_signing_identity(
+        actor,
+        [0x51; 32],
+        format!("{actor}#cotest-principal-signing-key"),
+    );
     Ok(())
 }
 
@@ -1094,7 +1099,7 @@ async fn publish_test_cross_signing(server: &ArkretServer, token: &str, actor: &
     install_test_principal_control_document(server, actor).await?;
     let principal = Did::new(actor.to_owned()).context("invalid cross-signing principal")?;
     let principal_realm = principal_control_realm_id(&principal);
-    let accepted = submit_event(
+    let accepted = crate::harness::submit_event_with_signing_seed_and_verification_method(
         server,
         token,
         actor,
@@ -1102,6 +1107,8 @@ async fn publish_test_cross_signing(server: &ArkretServer, token: &str, actor: &
         "ak.cross_signing.publish",
         serde_json::to_value(test_cross_signing_publish(actor)?)?,
         StatusCode::OK,
+        [0x51; 32],
+        &format!("{actor}#cotest-principal-signing-key"),
     )
     .await?;
     assert_eq!(accepted["status"], "accepted");
@@ -1130,7 +1137,7 @@ pub(crate) async fn authorize_additional_device_public_key(
     let principal =
         Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
     let principal_realm = principal_control_realm_id(&principal);
-    let accepted = submit_event(
+    let accepted = crate::harness::submit_event_with_signing_seed_and_verification_method(
         server,
         token,
         actor,
@@ -1138,6 +1145,8 @@ pub(crate) async fn authorize_additional_device_public_key(
         "ak.device.authorize",
         bootstrap_device_authorize_payload(actor, device_id, device_signing_key)?,
         StatusCode::OK,
+        [0x51; 32],
+        &format!("{actor}#cotest-principal-signing-key"),
     )
     .await?;
     assert_eq!(

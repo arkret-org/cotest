@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use base64::Engine as _;
-use chrono::{Duration as ChronoDuration, SecondsFormat};
+use chrono::Duration as ChronoDuration;
 use reqwest::StatusCode;
 use serde_json::Value;
 
@@ -563,7 +563,7 @@ async fn submit_event_now(
     kind: &str,
     payload: Value,
 ) -> Result<Value> {
-    let created_at = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let created_at = arkret_core::canonical::format_timestamp_millis_canonical(chrono::Utc::now());
     let mut event = crate::harness::event_envelope(&actor.actor, realm_id, kind, payload);
     event["created_at"] = Value::String(created_at.clone());
     if let Some(proof) = event
