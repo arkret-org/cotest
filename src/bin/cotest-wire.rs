@@ -3,7 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_core::{
-    CrossSigningPublish, DeviceId, Did, Event, Hash, Proof, canonical, principal_control_realm_id,
+    Audience, ConsentId, CrossSigningPublish, DeviceId, Did, Event, Hash, MimiConsentDecision,
+    MimiUpdateConsentRequestBody, PayloadProof, Proof, canonical, principal_control_realm_id,
     proof_kind,
 };
 use arkret_crypto::DeviceTrustBinding;
@@ -25,6 +26,16 @@ struct EventProofInput {
     verification_method: String,
     created_at: String,
     event: Value,
+    signing_seed_b64url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MimiConsentProofInput {
+    request: Value,
+    verification_method: String,
+    created_at: String,
+    domain: String,
+    audience: String,
     signing_seed_b64url: Option<String>,
 }
 
@@ -99,6 +110,7 @@ fn main() -> Result<()> {
         "sha256-canonical-json" => sha256_canonical_json(input)?,
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
+        "mimi-consent-proof" => mimi_consent_proof(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
@@ -409,6 +421,73 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         .map_err(|err| anyhow::anyhow!("sign event proof: {err}"))?;
 
     serde_json::to_value(proof).context("serialize event proof")
+}
+
+fn mimi_consent_proof(input: Value) -> Result<Value> {
+    let input: MimiConsentProofInput =
+        serde_json::from_value(input).context("parse MIMI consent proof input")?;
+    let created_at = DateTime::parse_from_rfc3339(&input.created_at)
+        .with_context(|| format!("parse proof created_at {:?}", input.created_at))?
+        .with_timezone(&Utc);
+    let consent_id = input
+        .request
+        .get("consent_id")
+        .and_then(Value::as_str)
+        .context("MIMI consent request requires consent_id")?;
+    let decision = input
+        .request
+        .get("decision")
+        .cloned()
+        .context("MIMI consent request requires decision")?;
+    let actor_id = input
+        .request
+        .get("actor_id")
+        .and_then(Value::as_str)
+        .context("MIMI consent request requires actor_id")?;
+    let reason = input
+        .request
+        .get("reason")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let expires_at = input
+        .request
+        .get("expires_at")
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .context("parse MIMI consent expires_at")?;
+    let mut request = MimiUpdateConsentRequestBody {
+        consent_id: ConsentId::new(consent_id.to_owned()).context("parse consent id")?,
+        decision: serde_json::from_value::<MimiConsentDecision>(decision)
+            .context("parse consent decision")?,
+        actor_id: Did::new(actor_id.to_owned()).context("parse consent actor DID")?,
+        signature: PayloadProof {
+            kind: proof_kind::DETACHED_JWS.to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: input.verification_method.clone(),
+            payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .context("build placeholder payload digest")?,
+            created_at,
+            domain: Some(input.domain),
+            audience: Some(Audience::Single(input.audience)),
+            proof_purpose: None,
+            jws: "pending".to_owned(),
+        },
+        reason,
+        expires_at,
+    };
+    request.signature.payload_digest =
+        request.payload_digest().context("digest consent request")?;
+    let binding = request
+        .signature_binding_bytes()
+        .context("encode MIMI consent proof binding")?;
+    let signing_key = match input.signing_seed_b64url.as_deref() {
+        Some(seed) => signing_key_from_seed(seed).context("parse MIMI consent signing seed")?,
+        None => development_event_signing_key(&input.verification_method),
+    };
+    request.signature.jws =
+        arkret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding)
+            .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
+    serde_json::to_value(request.signature).context("serialize MIMI consent proof")
 }
 
 fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {

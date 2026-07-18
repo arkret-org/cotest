@@ -14,18 +14,6 @@
 
 ## 剩余问题
 
-### RC-5：MIMI consent update 使用错误 proof 类型
-
-`mimi-operations.schema.json#/$defs/signature` 是非 Event generic detached proof，使用 `payload_digest`。但 `arkret-rust-sdk/crates/core/src/http/bodies.rs::MimiUpdateConsentRequestBody.signature` 当前类型是 Event `Proof`，要求 `event_digest` 且拒绝未知字段。Soland 的强类型 `JsonBody<MimiUpdateConsentRequestBody>` 因而在业务处理前对 spec-correct body 返回 422。
-
-待完成：
-
-1. SDK 字段改为与 schema 完全同构的 generic detached payload proof 类型，不能把测试改成 `event_digest`。
-2. 明确并验证 MIMI object-family signing context、canonical payload、actor/consent/request/replay、domain/audience binding。
-3. SDK 增加 schema round-trip/unknown-field tests。
-4. Soland 增加 `payload_digest` 成功、`event_digest` 失败、digest/binding/replay 失败的集成测试。
-5. cotest 使用真实签名，不让 bearer session 分支掩盖 proof 验证。
-
 ### RC-6：invite locator 测试要求接受被 spec 禁止的 token
 
 `invites/invite-addressing.spec.ts` 自行构造 `base64url(JSON({subject_id, nonce, expires_at}))` 并直接调用 open resolve。`sync/invite-addressing.md` 明确要求 token 是 CSPRNG 生成的不透明 bearer secret，服务端只保存 digest，并明确禁止可解码的 `base64url(JSON)`。
@@ -39,7 +27,6 @@
 
 ## 执行顺序
 
-1. RC-5 MIMI payload proof typed DTO。
-2. RC-6 invite locator 生命周期。
-3. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
-4. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。
+1. RC-6 invite locator 生命周期。
+2. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
+3. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。

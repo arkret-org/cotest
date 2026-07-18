@@ -2344,6 +2344,7 @@ type CotestWireCommand =
   | "sha256-canonical-json"
   | "event-proof"
   | "event-envelope-proof"
+  | "mimi-consent-proof"
   | "principal-control-realm-id"
   | "account-handoff-request"
   | "principal-registration-fixture"
@@ -2483,6 +2484,25 @@ function sdkEventEnvelopeProof(args: {
     event: args.event,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,
+    signing_seed_b64url: args.signingSeedB64url,
+  });
+}
+
+export function sdkMimiConsentProof(args: {
+  request: Record<string, unknown>;
+  verificationMethod: string;
+  createdAt: string;
+  domain: string;
+  audience: string;
+  signingSeedB64url?: string;
+}): Record<string, unknown> {
+  assertJsonTransportable(args.request, "$.request");
+  return cotestWire<Record<string, unknown>>("mimi-consent-proof", {
+    request: args.request,
+    verification_method: args.verificationMethod,
+    created_at: args.createdAt,
+    domain: args.domain,
+    audience: args.audience,
     signing_seed_b64url: args.signingSeedB64url,
   });
 }

@@ -11,6 +11,7 @@ import {
   createRealmApi,
   expectJsonOk,
   signedEventEnvelope,
+  sdkMimiConsentProof,
   submitSignedEventApi,
   typedId,
 } from "../../helpers/soland-api";
@@ -322,6 +323,13 @@ test.describe("consent grant", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
+    const describe = await expectJsonOk<{
+      service_id: string;
+      trust_domain: string;
+    }>(
+      await request.get(`${solandBaseUrl()}/_arkret/describe`),
+      "MIMI consent destination describe",
+    );
 
     const open = await request.post(
       `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
@@ -339,23 +347,63 @@ test.describe("consent grant", () => {
     expect(openBody.status).toBe("requested");
     expect(openBody.consent_id).toMatch(/^ak:consent:/);
 
-    const update = await request.post(
-      `${solandBaseUrl()}/_arkret/open/mimi/consent/update`,
-      {
-        headers: authHeaders(aliceToken),
-        data: {
-          consent_id: openBody.consent_id,
-          decision: "accept",
-          actor_id: alice.did,
-          signature: detachedProof(alice.did),
-        },
+    const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/consent/update`;
+    const unsignedUpdate = {
+      consent_id: openBody.consent_id,
+      decision: "accept",
+      actor_id: alice.did,
+    };
+    const signature = sdkMimiConsentProof({
+      request: unsignedUpdate,
+      verificationMethod: `${alice.did}#mimi-consent`,
+      createdAt: canonicalTimestamp(),
+      domain: describe.trust_domain,
+      audience: describe.service_id,
+    });
+
+    const eventProofShape: Record<string, unknown> = {
+      ...signature,
+      event_digest: signature.payload_digest,
+    };
+    delete eventProofShape.payload_digest;
+    const wrongFamily = await request.post(updateUrl, {
+      headers: authHeaders(aliceToken),
+      data: { ...unsignedUpdate, signature: eventProofShape },
+    });
+    expect(wrongFamily.status()).toBe(422);
+
+    const tampered = await request.post(updateUrl, {
+      headers: authHeaders(aliceToken),
+      data: {
+        ...unsignedUpdate,
+        decision: "revoke",
+        signature,
       },
-    );
+    });
+    expect(tampered.status()).toBe(400);
+    const tamperedBody = await tampered.json();
+    expect(tamperedBody.error?.code ?? tamperedBody.code).toBe("invalid_proof");
+
+    const signedUpdate = { ...unsignedUpdate, signature };
+    const update = await request.post(updateUrl, {
+      headers: authHeaders(aliceToken),
+      data: signedUpdate,
+    });
     expect(update.status()).toBe(200);
     const updateBody = await update.json();
     expect(updateBody.status).toBe("accepted");
     expect(typeof updateBody.updated_at).toBe("string");
     expect(updateBody.event_ref).toMatch(/^ak:event:/);
+
+    const replay = await request.post(updateUrl, {
+      headers: authHeaders(aliceToken),
+      data: signedUpdate,
+    });
+    expect(replay.status()).toBe(409);
+    const replayBody = await replay.json();
+    expect(replayBody.error?.code ?? replayBody.code).toBe(
+      "duplicate_conflict",
+    );
   });
 
   test("ak.consent.grant event projects consent cell and contact gate", async ({
@@ -971,14 +1019,3 @@ test.describe("consent grant", () => {
     }
   });
 });
-
-function detachedProof(actorDid: string): Record<string, unknown> {
-  return {
-    kind: "detached_jws",
-    verification_method: `${actorDid}#mimi-consent`,
-    alg: "EdDSA",
-    payload_digest: `sha256:${"0".repeat(64)}`,
-    created_at: canonicalTimestamp(),
-    jws: "header.payload.signature",
-  };
-}
