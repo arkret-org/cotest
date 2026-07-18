@@ -1503,6 +1503,10 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     .await?;
     assert_eq!(put["status"], "accepted");
 
+    let controller_realm = principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?);
+    let controller_frontier = managed_agent_frontier(server, token, controller_realm.as_str())
+        .await?
+        .ok_or_else(|| anyhow!("controller principal-control stream has no accepted Seal"))?;
     let mut active_series = json!({
         "schema": "ak.schema.key_backup_active_series.v1",
         "actor_id": ALICE_DID,
@@ -1511,8 +1515,8 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         "series_pointer_version": series_pointer_version,
         "previous_series_ids": previous_series_ids,
         "frontier_ref": {
-            "frontier_digest": frontier.control_event_set_root,
-            "seal_ref": frontier.seal_id,
+            "frontier_digest": controller_frontier.control_event_set_root,
+            "seal_ref": controller_frontier.seal_id,
             "ssk_generation": 1
         },
         "issued_at": canonical_now(),

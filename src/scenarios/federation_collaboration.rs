@@ -19,9 +19,13 @@ use arkret_signatures::webvh::{
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use reqwest::StatusCode;
 use serde::Serialize;
+
+fn multicodec_ed25519_public_key(key: &VerifyingKey) -> String {
+    arkret::ed25519_pubkey_to_did_key_multibase(key.as_bytes())
+}
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
