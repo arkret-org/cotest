@@ -2011,6 +2011,29 @@ try {
         }
     }
 
+    if (-not $SkipBuild -and $StartStarid -and -not $StaridBin -and -not $env:STARID_BIN) {
+        $defaultStaridBinary = Join-Path $workspaceRoot "starid\target\debug\starid.exe"
+        $staridFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $defaultStaridBinary `
+            -RepositoryRoots @(
+                (Join-Path $workspaceRoot "starid"),
+                (Join-Path $workspaceRoot "arkret-rust-sdk")
+            )
+        if (-not $staridFreshness.Fresh) {
+            Write-Host "Preparing starid binary: $($staridFreshness.Detail)"
+            $started = Get-Date
+            $staridManifest = Join-Path $workspaceRoot "starid\Cargo.toml"
+            $service = Start-ManagedCommand `
+                -Name "prepare-starid" `
+                -Command ("cargo build --manifest-path {0} --bin starid" -f (Quote-PsLiteral $staridManifest)) `
+                -WorkingDirectory (Split-Path -Parent $staridManifest) `
+                -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "starid"; Service = $service; Started = $started; Artifact = $defaultStaridBinary })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "starid"; status = "cache-hit"; duration_seconds = 0; detail = $staridFreshness.Detail })
+        }
+    }
+
     if (-not $SkipBuild -and $willStartDefaultInkson) {
         $inksonWasm = Join-Path $inksonStaticRoot "wasm\inkson_bg.wasm"
         $inksonFreshness = Get-ArtifactFreshness `
@@ -2239,7 +2262,10 @@ try {
         # closed on that one too and demands `COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP`;
         # without it coauth panics on boot ("password-bootstrap scaffold is for dev/test
         # only") and the whole joint suite never starts.
-        $CoauthCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        # Coauth's production client is HTTPS/public-egress only. The joint stack
+        # intentionally binds every dependency to loopback over HTTP, so enable
+        # the debug-only, loopback-only transport seam alongside test endpoints.
+        $CoauthCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
