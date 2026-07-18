@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use arkret_core::events::kinds;
 use arkret_core::models::{
     DraftKind, MessageId, RealmId, draft_account_data_key, saved_account_data_key,
     scheduled_send_account_data_key, search_index_manifest_account_data_key,

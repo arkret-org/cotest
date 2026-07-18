@@ -11,10 +11,10 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     ArkretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
-    refresh_event_proof,
+    refresh_event_proof_with_signing_seed,
 };
 use crate::scenarios::federation_collaboration::{
-    authorize_device_public_key, signed_keys_upload_body,
+    TEST_PRINCIPAL_SIGNING_KEY_SEED, authorize_device_public_key, signed_keys_upload_body,
 };
 
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
@@ -129,7 +129,7 @@ fn signed_realm_create_event(
         "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
-        "created_at": "2026-05-02T00:00:00Z",
+        "created_at": "2026-05-02T00:00:00.000Z",
         "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
         "refs": [],
@@ -143,13 +143,13 @@ fn signed_realm_create_event(
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
-            "verification_method": format!("{actor_id}#cotest"),
+            "verification_method": format!("{actor_id}#cotest-principal-signing-key"),
             "event_digest": "",
-            "created_at": "2026-05-02T00:00:00Z",
+            "created_at": "2026-05-02T00:00:00.000Z",
             "jws": "a..b",
         }],
     });
-    refresh_event_proof(&mut event);
+    refresh_event_proof_with_signing_seed(&mut event, TEST_PRINCIPAL_SIGNING_KEY_SEED)?;
     Ok(event)
 }
 
@@ -172,7 +172,7 @@ fn signed_message_event(
         "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
-        "created_at": "2026-05-02T00:00:00Z",
+        "created_at": "2026-05-02T00:00:00.000Z",
         "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
         "refs": [],
@@ -186,13 +186,13 @@ fn signed_message_event(
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
-            "verification_method": format!("{actor_id}#cotest"),
+            "verification_method": format!("{actor_id}#cotest-principal-signing-key"),
             "event_digest": "",
-            "created_at": "2026-05-02T00:00:00Z",
+            "created_at": "2026-05-02T00:00:00.000Z",
             "jws": "a..b",
         }],
     });
-    refresh_event_proof(&mut event);
+    refresh_event_proof_with_signing_seed(&mut event, TEST_PRINCIPAL_SIGNING_KEY_SEED)?;
     Ok(event)
 }
 

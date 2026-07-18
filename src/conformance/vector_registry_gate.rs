@@ -159,14 +159,26 @@ pub fn validate_vector_registry_gate_report_with_mode(
         return Ok(());
     }
 
-    let mut lines = Vec::with_capacity(failures.len());
+    let mut grouped = BTreeMap::<String, Vec<&str>>::new();
     for entry in failures {
         let reason = entry.reason.as_deref().unwrap_or("missing evidence");
-        lines.push(format!("{}: {reason}", entry.vector_id));
+        grouped
+            .entry(reason.to_owned())
+            .or_default()
+            .push(entry.vector_id.as_str());
+    }
+    let mut lines = Vec::with_capacity(grouped.len());
+    for (reason, vector_ids) in grouped {
+        lines.push(format!(
+            "{reason}\n  affected vectors ({}): {}",
+            vector_ids.len(),
+            vector_ids.join(", ")
+        ));
     }
     bail!(
-        "vector registry gate ({}) found {} failing entries:\n{}",
+        "vector registry gate ({}) found {} failing entries in {} root-cause groups:\n{}",
         mode.as_str(),
+        report.validation_failed_entries(mode).count(),
         lines.len(),
         lines.join("\n")
     )
@@ -450,7 +462,7 @@ fn validate_fixture_digest(
             path.display()
         )
     })?;
-    let actual = sha256_hex(&bytes);
+    let actual = fixture_digest_hex(&bytes);
     if actual != *expected {
         return Ok(Err(format!(
             "{fixture_ref} (fixture digest drift: expected {expected}, actual {actual})"
@@ -469,6 +481,27 @@ fn sha256_hex(bytes: &[u8]) -> String {
         let _ = write!(out, "{byte:02x}");
     }
     out
+}
+
+/// Producer-compatible fixture digest. Spec fixture manifests normalize CRLF
+/// and lone CR to LF before hashing so checkout line-ending policy cannot
+/// create false drift.
+pub fn fixture_digest_hex(bytes: &[u8]) -> String {
+    let mut normalized = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'\r' {
+            normalized.push(b'\n');
+            index += 1;
+            if index < bytes.len() && bytes[index] == b'\n' {
+                index += 1;
+            }
+        } else {
+            normalized.push(bytes[index]);
+            index += 1;
+        }
+    }
+    sha256_hex(&normalized)
 }
 
 fn collect_vector_evidence(

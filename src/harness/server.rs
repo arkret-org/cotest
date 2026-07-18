@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
+use arkret::TypedTrustDomainId;
 use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -21,7 +22,7 @@ use url::Url;
 use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
-use super::event_builder::{dev_login, register_account, register_account_with_handle};
+use super::event_builder::{dev_login, register_account, register_account_with_localpart};
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
 
@@ -29,6 +30,7 @@ pub struct ArkretServer {
     handle: SutHandle,
     base_url: Url,
     service_id: String,
+    trust_domain: TypedTrustDomainId,
     notary_signing_key_seed: [u8; 32],
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
@@ -152,6 +154,7 @@ impl ArkretServer {
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_FIRST_PROVISIONING", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
+            .env("SOLAND_TRUST_DOMAIN", test_trust_domain(name))
             .env(
                 "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
                 EMBEDDED_WEBVH_REGISTRATION_BEARER,
@@ -179,12 +182,13 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
-        let service_id = fetch_service_id(&base_url).await?;
+        let (service_id, trust_domain) = fetch_service_identity(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
             base_url,
             service_id,
+            trust_domain,
             notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
@@ -237,6 +241,7 @@ impl ArkretServer {
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_FIRST_PROVISIONING", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
+            .env("SOLAND_TRUST_DOMAIN", test_trust_domain(name))
             .env(
                 "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
                 EMBEDDED_WEBVH_REGISTRATION_BEARER,
@@ -259,12 +264,13 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
-        let service_id = fetch_service_id(&base_url).await?;
+        let (service_id, trust_domain) = fetch_service_identity(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
             base_url,
             service_id,
+            trust_domain,
             notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
@@ -329,6 +335,8 @@ impl ArkretServer {
             .arg("--env")
             .arg("SOLAND_SEED_DEMO_DATA=1")
             .arg("--env")
+            .arg(format!("SOLAND_TRUST_DOMAIN={}", test_trust_domain(name)))
+            .arg("--env")
             .arg(format!(
                 "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={EMBEDDED_WEBVH_REGISTRATION_BEARER}"
             ))
@@ -357,12 +365,13 @@ impl ArkretServer {
             };
             return Err(anyhow!("{error}{log_suffix}"));
         }
-        let service_id = fetch_service_id(&base_url).await?;
+        let (service_id, trust_domain) = fetch_service_identity(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
             base_url,
             service_id,
+            trust_domain,
             notary_signing_key_seed,
             blob_root: None,
             log_path,
@@ -376,6 +385,10 @@ impl ArkretServer {
 
     pub fn service_id(&self) -> &str {
         &self.service_id
+    }
+
+    pub fn trust_domain(&self) -> &TypedTrustDomainId {
+        &self.trust_domain
     }
 
     pub(crate) fn notary_signing_key_seed(&self) -> &[u8; 32] {
@@ -454,25 +467,30 @@ impl ArkretServer {
         self.actor_client(did, &canonical_device_id(device_id), token)
     }
 
-    /// Like [`register_client`] but also publishes a primary localpart binding
-    /// via the canonical `<localpart>:<domain>` `published_handle`, so the
-    /// account resolves a directory handle instead of `null`.
-    pub async fn register_client_with_handle(
+    /// Register account-first, then publish a primary localpart through the
+    /// service-authenticated account-localpart lifecycle.
+    pub async fn register_client_with_localpart(
         &self,
         did: &str,
         display_handle: &str,
-        published_handle: &str,
+        localpart: &str,
         device_id: &str,
     ) -> Result<TestActorClient> {
-        let token = register_account_with_handle(
-            self,
-            did,
-            display_handle,
-            Some(published_handle),
-            device_id,
-        )
-        .await?;
+        let token =
+            register_account_with_localpart(self, did, display_handle, localpart, device_id)
+                .await?;
         self.actor_client(did, &canonical_device_id(device_id), token)
+    }
+
+    pub(crate) fn account_localpart_request(&self, did: &str) -> Result<reqwest::RequestBuilder> {
+        let mut url = self.base_url();
+        url.path_segments_mut()
+            .map_err(|_| anyhow!("SUT base URL cannot carry path segments"))?
+            .extend(["_soland", "accounts", did, "localparts"]);
+        Ok(self
+            .http()
+            .post(url)
+            .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER))
     }
 
     fn actor_client(&self, actor: &str, device_id: &str, token: String) -> Result<TestActorClient> {
@@ -1026,7 +1044,14 @@ async fn wait_until_healthy(base_url: Url) -> Result<()> {
     Err(last_error.unwrap_or_else(|| anyhow!("server did not become healthy")))
 }
 
-async fn fetch_service_id(base_url: &Url) -> Result<String> {
+fn test_trust_domain(name: &str) -> String {
+    format!(
+        "ak:trust_domain:{}.cotest.local",
+        sanitize_runtime_name(name)
+    )
+}
+
+async fn fetch_service_identity(base_url: &Url) -> Result<(String, TypedTrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
     let response = HttpClient::new()
         .get(url.clone())
@@ -1036,9 +1061,17 @@ async fn fetch_service_id(base_url: &Url) -> Result<String> {
         .error_for_status()
         .with_context(|| format!("service describe failed at {url}"))?;
     let body: Value = response.json().await?;
-    body.get("service_id")
+    let service_id = body
+        .get("service_id")
         .and_then(Value::as_str)
         .filter(|value| value.starts_with("did:"))
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("service describe at {url} omitted a valid service_id"))
+        .ok_or_else(|| anyhow!("service describe at {url} omitted a valid service_id"))?;
+    let trust_domain = body
+        .get("trust_domain")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("service describe at {url} omitted trust_domain"))?;
+    let trust_domain = TypedTrustDomainId::new(trust_domain.to_owned())
+        .with_context(|| format!("service describe at {url} returned invalid trust_domain"))?;
+    Ok((service_id, trust_domain))
 }

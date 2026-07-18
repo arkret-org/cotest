@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_core::{
-    CrossSigningPublish, DeviceId, Did, Hash, Proof, canonical, principal_control_realm_id,
+    CrossSigningPublish, DeviceId, Did, Event, Hash, Proof, canonical, principal_control_realm_id,
     proof_kind,
 };
 use arkret_crypto::DeviceTrustBinding;
@@ -389,7 +389,7 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         Hash::new(event_digest(&input.event, digest_mode)?).context("parse event digest")?;
     let signing_key = match input.signing_seed_b64url.as_deref() {
         Some(seed) => signing_key_from_seed(seed).context("parse event signing seed")?,
-        None => development_event_signing_key(&input.actor_did),
+        None => development_event_signing_key(&input.verification_method),
     };
 
     let mut proof = Proof {
@@ -412,24 +412,24 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
 }
 
 fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
+    // Use the SDK projection that every verifier uses. Deserializing before
+    // hashing is significant: wire defaults such as EventRef.critical=true
+    // are part of Event::digest_payload even when the producer omitted them.
     let mut event = event.clone();
-    if let Value::Object(map) = &mut event {
-        map.remove("proofs");
-        map.remove("unsigned");
-        map.remove("effective_scope");
-        map.remove("actor_kind");
-        map.remove("canonical_digest");
-        map.remove("canonical_hash");
+    if let Value::Object(object) = &mut event {
+        object
+            .entry("proofs")
+            .or_insert_with(|| Value::Array(Vec::new()));
     }
-    canonical::canonical_sha256(&event).context("hash event digest payload")
+    let event: Event = serde_json::from_value(event).context("parse SDK Event digest payload")?;
+    let payload = event
+        .digest_payload()
+        .context("build SDK Event digest payload")?;
+    canonical::canonical_sha256(&payload).context("hash event digest payload")
 }
 
-fn development_event_signing_key(service_id: &str) -> SigningKey {
-    let mut hasher = Sha256::new();
-    hasher.update(b"soland:anchorer-ephemeral:");
-    hasher.update(service_id.as_bytes());
-    let seed: [u8; 32] = hasher.finalize().into();
-    SigningKey::from_bytes(&seed)
+fn development_event_signing_key(verification_method: &str) -> SigningKey {
+    arkret_signatures::development_signing_key(verification_method)
 }
 
 #[cfg(test)]
@@ -444,7 +444,7 @@ mod tests {
             "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
-            "created_at": "2026-07-07T05:45:49Z",
+            "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
             "prev_refs": [],
             "refs": [],
@@ -469,16 +469,66 @@ mod tests {
         });
 
         let digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
-        let mut producer_event = event.clone();
-        let map = producer_event.as_object_mut().unwrap();
-        map.remove("proofs");
-        map.remove("unsigned");
-        map.remove("effective_scope");
-        map.remove("actor_kind");
+        let producer_event: Event = serde_json::from_value(event).unwrap();
+        let producer_event = producer_event.digest_payload().unwrap();
 
         assert_eq!(
             digest,
             canonical::canonical_sha256(&producer_event).unwrap()
+        );
+    }
+
+    #[test]
+    fn event_digest_materializes_sdk_ref_defaults() {
+        let event = json!({
+            "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "kind": "ak.morph.schema_migrate",
+            "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+            "actor_seq": 1,
+            "created_at": "2026-07-07T05:45:49.000Z",
+            "hlc": "019f3b1c76c8-0000-ac7eadec",
+            "prev_refs": [],
+            "refs": [{
+                "role": "authorized_by",
+                "id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7185"
+            }],
+            "requirements": {"schema": ["ak.schema.event_payload.v1"]},
+            "payload": {
+                "morph_id": "ak:morph:019f3b1c-784d-7fc0-965f-0550baae7186",
+                "from_schema_refs": ["ak.schema.morph.customer_risk.v1"],
+                "to_schema_refs": ["ak.schema.morph.customer_risk.ext.v1"],
+                "compatibility_class": "transformation"
+            }
+        });
+        let raw_digest = canonical::canonical_sha256(&event).unwrap();
+        let sdk_digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
+        let mut event_with_proofs = event;
+        event_with_proofs["proofs"] = json!([]);
+        let sdk_event: Event = serde_json::from_value(event_with_proofs).unwrap();
+        let sdk_payload = sdk_event.digest_payload().unwrap();
+
+        assert_eq!(sdk_payload["refs"][0]["critical"], json!(true));
+        assert_ne!(sdk_digest, raw_digest);
+        assert_eq!(
+            sdk_digest,
+            canonical::canonical_sha256(&sdk_payload).unwrap()
+        );
+    }
+
+    #[test]
+    fn fallback_event_signer_uses_sdk_method_bound_development_key() {
+        let method = "did:webvh:z6mkfixture:alice.example#device";
+
+        assert_eq!(
+            development_event_signing_key(method).verifying_key(),
+            arkret_signatures::development_verifying_key(method)
+        );
+        assert_ne!(
+            development_event_signing_key(method).verifying_key(),
+            arkret_signatures::development_verifying_key(
+                "did:webvh:z6mkfixture:alice.example#other-device"
+            )
         );
     }
 }

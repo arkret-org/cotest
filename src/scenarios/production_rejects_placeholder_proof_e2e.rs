@@ -50,15 +50,36 @@ use crate::scenarios::_helpers::external_binary::{
 
 /// Soland production target MUST refuse the inkson dev-proof placeholder.
 pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
+    let production_state =
+        tempfile::tempdir().context("create isolated production soland state directory")?;
+    let key_store_path = production_state.path().join("keystore.v1");
+    let key_store_path = key_store_path
+        .to_str()
+        .context("production soland KeyStore path is not UTF-8")?;
+
     // Spawn soland with `SOLAND_DEVELOPMENT_MODE=false`. The dynamic
     // env entry takes precedence over `SOLAND_SPEC.extra_env` (which
     // hardcodes `=1` for the rest of the suite), so the same binary
-    // boots in production posture for this scenario only.
+    // boots in production posture for this scenario only. Production
+    // startup also requires durable key custody and an explicitly authorized
+    // first service-identity provisioning. The encrypted KeyStore lives only
+    // for this test run and still exercises the production startup gates.
     let Some(proc) = try_spawn_with_extra_env(
         &SOLAND_SPEC,
         &[
             ("SOLAND_DEVELOPMENT_MODE", "false"),
             ("SOLAND_METRICS_BIND", "127.0.0.1:0"),
+            ("SOLAND_FIRST_PROVISIONING", "true"),
+            ("SOLAND_KEYSTORE_BACKEND", "encrypted_file"),
+            ("SOLAND_KEYSTORE_PATH", key_store_path),
+            (
+                "SOLAND_KEYSTORE_MASTER_KEY",
+                "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+            ),
+            (
+                "SOLAND_NOTARY_SIGNING_KEY",
+                "ERERERERERERERERERERERERERERERERERERERERERE=",
+            ),
         ],
     )
     .await

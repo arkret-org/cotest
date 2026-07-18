@@ -1,3 +1,4 @@
+use anyhow::{Context, Result, anyhow};
 use serde_json::Value;
 
 /// Canonical `event_digest` over an Event envelope with `proofs`/`unsigned`
@@ -6,7 +7,17 @@ use serde_json::Value;
 /// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
 /// which preserves insertion order and would diverge from the SDK.
 #[cfg(test)]
-pub(crate) fn canonical_event_digest(event: &Value) -> String {
+pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
+    let typed_value = event_value_with_parseable_proof_digests(event);
+    let label = event_fixture_label(event);
+    let typed: arkret_core::Event = serde_json::from_value(typed_value)
+        .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
+    typed
+        .event_digest()
+        .with_context(|| format!("Event fixture {label} is not canonicalizable"))
+}
+
+fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
     let mut typed_value = event.clone();
     if let Value::Object(object) = &mut typed_value {
         match object.get_mut("proofs") {
@@ -35,35 +46,37 @@ pub(crate) fn canonical_event_digest(event: &Value) -> String {
             }
         }
     }
-    let typed: arkret_core::Event =
-        serde_json::from_value(typed_value).expect("event envelope matches SDK Event wire shape");
-    typed
-        .event_digest()
-        .expect("event envelope digest is canonicalizable")
+    typed_value
 }
 
 /// Re-sign a mutated cotest Event through the SDK's canonical Event-proof
 /// transcript using the SDK's deterministic development identity.
-pub fn refresh_event_proof(event: &mut Value) {
+pub fn refresh_event_proof(event: &mut Value) -> Result<()> {
+    let label = event_fixture_label(event);
     let verification_method = event
         .pointer("/proofs/0/verification_method")
         .and_then(Value::as_str)
-        .expect("cotest Event proof verification_method")
+        .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?
         .to_owned();
     let signing_seed = arkret::signatures::development_signing_key_seed(&verification_method);
-    refresh_event_proof_with_signing_seed(event, signing_seed);
+    refresh_event_proof_with_signing_seed(event, signing_seed)
 }
 
 /// Re-sign a mutated Event with an explicitly provisioned fixture key. Formal
 /// DID-history E2E tests use this for their registered controller key.
-pub fn refresh_event_proof_with_signing_seed(event: &mut Value, signing_seed: [u8; 32]) {
+pub fn refresh_event_proof_with_signing_seed(
+    event: &mut Value,
+    signing_seed: [u8; 32],
+) -> Result<()> {
+    let label = event_fixture_label(event);
     let verification_method = event
         .pointer("/proofs/0/verification_method")
         .and_then(Value::as_str)
-        .expect("cotest Event proof verification_method")
+        .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?
         .to_owned();
     let mut typed: arkret_core::Event =
-        serde_json::from_value(event.clone()).expect("event envelope matches SDK Event wire shape");
+        serde_json::from_value(event_value_with_parseable_proof_digests(event))
+            .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
     let signer_did = typed
         .executed_by
         .clone()
@@ -81,8 +94,19 @@ pub fn refresh_event_proof_with_signing_seed(event: &mut Value, signing_seed: [u
         &verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
-    .expect("SDK Event signer accepts mutated cotest envelope");
-    *event = serde_json::to_value(typed).expect("SDK Event serializes");
+    .with_context(|| format!("SDK Event signer rejected fixture {label}"))?;
+    *event = serde_json::to_value(typed)
+        .with_context(|| format!("SDK Event fixture {label} failed to serialize"))?;
+    Ok(())
+}
+
+fn event_fixture_label(event: &Value) -> String {
+    event
+        .get("event_id")
+        .and_then(Value::as_str)
+        .or_else(|| event.get("kind").and_then(Value::as_str))
+        .unwrap_or("<unknown Event>")
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -120,7 +144,7 @@ mod tests {
             }]
         });
 
-        let digest = super::canonical_event_digest(&event);
+        let digest = super::canonical_event_digest(&event).unwrap();
         let mut parseable = event.clone();
         parseable["proofs"][0]["event_digest"] =
             json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");

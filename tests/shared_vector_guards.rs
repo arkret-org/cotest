@@ -16,17 +16,6 @@ struct PrincipalControlRealmVector {
     principal_control_realm_id: String,
 }
 
-#[derive(Deserialize)]
-struct ReducerProfileDigestVectors {
-    vectors: Vec<ReducerProfileDigestVector>,
-}
-
-#[derive(Deserialize)]
-struct ReducerProfileDigestVector {
-    profile_id: String,
-    expected_digest: String,
-}
-
 #[test]
 fn principal_control_realm_vectors_match_sdk() -> Result<()> {
     let fixture: PrincipalControlRealmVectors =
@@ -48,12 +37,6 @@ fn principal_control_realm_vectors_match_sdk() -> Result<()> {
 
 #[test]
 fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
-    let fixture: ReducerProfileDigestVectors =
-        read_json_fixture("reducer-profile-digest-vectors.json")?;
-    assert!(
-        !fixture.vectors.is_empty(),
-        "reducer profile digest vector fixture is empty"
-    );
     let registry: Value = serde_json::from_str(&fs::read_to_string(
         manifest_dir()
             .parent()
@@ -66,30 +49,36 @@ fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
             .join("reducer-profile-registry.json"),
     )?)?;
 
-    let vectors = fixture
-        .vectors
-        .into_iter()
-        .map(|vector| (vector.profile_id, vector.expected_digest))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    for row in registry
+    let active_rows = registry
         .get("profiles")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
         .filter(|row| row.get("status").and_then(Value::as_str) == Some("active"))
-    {
+        .collect::<Vec<_>>();
+    assert!(!active_rows.is_empty(), "active reducer registry is empty");
+
+    for row in active_rows {
         let profile_id = row
             .get("profile_id")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("active reducer profile lacks profile_id"))?;
-        let expected = vectors
-            .get(profile_id)
-            .ok_or_else(|| anyhow!("missing reducer digest vector for {profile_id}"))?;
+        let expected = row
+            .get("reducer_profile_digest")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("active reducer profile {profile_id} lacks generated digest"))?;
         let actual = cotest::conformance::reducer_profile_digest(profile_id)?;
         assert_eq!(
-            actual, *expected,
+            actual, expected,
             "reducer profile digest drift for {profile_id}"
         );
+        if profile_id == cotest::conformance::FEDERATION_MINIMAL_PROFILE_ID {
+            assert_eq!(
+                actual,
+                arkret::FEDERATION_MINIMAL_REDUCER_PROFILE_DIGEST,
+                "Spec, SDK, Soland consumer, and Cotest federation digest must share one generated value"
+            );
+        }
     }
     Ok(())
 }

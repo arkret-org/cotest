@@ -3,9 +3,8 @@
 
 use anyhow::Result;
 use reqwest::StatusCode;
-use serde_json::json;
 
-use crate::harness::{ArkretServer, encrypted_envelope, expect_json};
+use crate::harness::{ArkretServer, device_message_send_request, encrypted_envelope, expect_json};
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     send_application_message(server, token, actor_id).await?;
@@ -26,17 +25,15 @@ async fn send_application_message(
             .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-txn")
-            .json(&json!({
-                "messages": {
-                    (actor_id): {
-                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ak.mls.application",
-                            "content": encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
-                            "expires_at": "2026-12-31T00:00:00Z"
-                        }
-                    }
-                }
-            })),
+            .json(&device_message_send_request(
+                actor_id,
+                "ak:device:01904100-0000-7000-8000-0000000000a1",
+                "ak:device_message:0196419b-0000-7000-8000-00000000f201",
+                "ak.mls.application",
+                encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
+                chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+                    .with_timezone(&chrono::Utc),
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -55,24 +52,22 @@ async fn duplicate_send_is_idempotent(
             .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-txn")
-            .json(&json!({
-                "messages": {
-                    (actor_id): {
-                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ak.mls.application",
-                            "content": encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
-                            "expires_at": "2026-12-31T00:00:00Z"
-                        }
-                    }
-                }
-            })),
+            .json(&device_message_send_request(
+                actor_id,
+                "ak:device:01904100-0000-7000-8000-0000000000a1",
+                "ak:device_message:0196419b-0000-7000-8000-00000000f201",
+                "ak.mls.application",
+                encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
+                chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+                    .with_timezone(&chrono::Utc),
+            )?),
         StatusCode::OK,
     )
     .await?;
-    assert!(
-        duplicate_send["delivered"]
-            .as_object()
-            .is_none_or(serde_json::Map::is_empty)
+    assert_eq!(duplicate_send["ok"], true);
+    assert_eq!(
+        duplicate_send["delivered"][actor_id][0],
+        "ak:device:01904100-0000-7000-8000-0000000000a1"
     );
     Ok(())
 }
@@ -103,20 +98,18 @@ async fn send_verification_message(
             .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-verification-txn")
-            .json(&json!({
-                "messages": {
-                    (actor_id): {
-                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ak.key.verification.request",
-                            "content": encrypted_envelope(
-                                "ak.key.verification.request",
-                                "base64url-opaque-verification-ciphertext"
-                            ),
-                            "expires_at": "2026-12-31T00:00:00Z"
-                        }
-                    }
-                }
-            })),
+            .json(&device_message_send_request(
+                actor_id,
+                "ak:device:01904100-0000-7000-8000-0000000000a1",
+                "ak:device_message:0196419b-0000-7000-8000-00000000f202",
+                "ak.key.verification.request",
+                encrypted_envelope(
+                    "ak.key.verification.request",
+                    "base64url-opaque-verification-ciphertext",
+                ),
+                chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+                    .with_timezone(&chrono::Utc),
+            )?),
         StatusCode::OK,
     )
     .await?;

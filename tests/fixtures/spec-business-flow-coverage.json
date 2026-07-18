@@ -200,7 +200,6 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/api_contracts_auth.rs",
           "markers": [
-            "/_arkret/gate/account/register",
             "/_arkret/gate/account/session-grants/revoke"
           ]
         },
@@ -1013,18 +1012,12 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/extensions/applet_bridge/endpoints.rs",
-          "markers": [
-            "ak.edge.applet.query.describe",
-            "ak.edge.applet.command.transaction"
-          ]
-        },
-        {
-          "kind": "ordinary",
           "path": "../soland/crates/server/tests/extensions_smoke.rs",
           "markers": [
+            "applet_protocol_describe_smoke",
             "applet_install_package_registers_bot_projection_smoke",
-            "applet_ghost_actor_provision_writes_durable_profile_and_grant_events"
+            "applet_ghost_actor_provision_writes_durable_profile_and_grant_events",
+            "applet_bridge_register_ghost_route_revoke_smoke"
           ]
         },
         {
@@ -1032,13 +1025,6 @@
           "path": "src/conformance/wire/mimi.rs",
           "markers": [
             "ak.open.mimi.exchange.request_key_material"
-          ]
-        },
-        {
-          "kind": "conformance_fixture",
-          "path": "src/conformance/final_conformance_closure.rs",
-          "markers": [
-            "ak.edge.applet.command.transaction"
           ]
         }
       ]

@@ -26,7 +26,6 @@
 
 use anyhow::{Result, anyhow};
 use arkret_core::TypedAppealId;
-use arkret_core::events::EventKind;
 use arkret_schema::embedded_error_code_identifiers;
 
 pub const APPEAL_SCHEMA: &str = "ak.schema.moderation_appeal.v1";
@@ -85,6 +84,8 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use arkret_core::events::EventKind;
+
     use super::*;
 
     #[tokio::test]

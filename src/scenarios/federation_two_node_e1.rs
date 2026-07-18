@@ -35,6 +35,7 @@ use url::Url;
 
 use crate::harness::{TestServerGroup, expect_json};
 use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
+use crate::scenarios::federation_collaboration::actor_did_for_service;
 
 /// Spawns two `soland` instances (pre-built binary, located via SOLAND_BIN
 /// env or sibling checkout) and runs the round-26 federation real Move-
@@ -84,18 +85,9 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("ak:device:");
-    // alice is homed on server_a, so her DID MUST live under server_a's trust
-    // domain. Use a did:web DID whose host is the service trust-domain scope;
-    // this also works when the harness service identity is a durable did:key.
-    // Federation admission binds the relayed actor to the relaying server:
-    // `federation_actor_origin_acceptable`
-    // accepts an inbound event only when the actor's home trust domain equals the
-    // asserted `source-trust-domain` (or the actor is already a known member).
-    // A DID under an unrelated domain is rejected `capability_denied` on push.
-    let alice_did = format!(
-        "did:web:{}:alice-e2",
-        did_host_from_service_id(server_a.service_id())
-    );
+    // The actor DID is hosted by server_a's service authority. Deployment trust
+    // domains are independent ServiceDescribe claims and are not DID hosts.
+    let alice_did = actor_did_for_service(server_a.service_id(), "alice-e2")?;
     let actor_a = server_a
         .register_client(&alice_did, "@alice-e2", &device_alice)
         .await
@@ -189,31 +181,28 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         Some("cotest-two-node-peer-events"),
     )?;
 
-    // server_b must accept the push and respond 200/202/204 OR a 4xx if the
-    // Realm is unknown there (peer not yet introduced) — both are acceptable
-    // signals that the federation surface is wired. The hard requirement is
-    // the endpoint exists and returns structured JSON / no panics.
     let push_url = format!(
         "{}/_arkret/peer/events",
         server_b.base_url().as_str().trim_end_matches('/')
     );
-    let push_response = with_peer_post_headers(
-        server_b.http().post(&push_url).json(&push_body),
-        &push_url,
-        server_a,
-        server_b,
-        &push_body,
-    )?
-    .send()
+    let push_result = expect_json(
+        with_peer_post_headers(
+            server_b.http().post(&push_url).json(&push_body),
+            &push_url,
+            server_a,
+            server_b,
+            &push_body,
+        )?,
+        StatusCode::OK,
+    )
     .await
     .context("push peer events to server_b")?;
-    let status = push_response.status();
-    if !status.is_success() {
-        let body = push_response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!(
-            "server_b federation push returned unexpected status {status}: {body}"
-        ));
-    }
+    anyhow::ensure!(
+        push_result["accepted"]
+            .as_array()
+            .is_some_and(|accepted| !accepted.is_empty()),
+        "server_b did not accept any pushed federation Event: {push_result}"
+    );
 
     // ── Step 5: confirm server_b's peer frontier endpoint is reachable ──
     let frontier_b_url = format!(
@@ -295,8 +284,8 @@ fn with_peer_headers_for_digest(
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_id = source.service_id();
     let destination_service_id = destination.service_id();
-    let source_trust_domain = trust_domain_for(source_service_id);
-    let destination_trust_domain = trust_domain_for(destination_service_id);
+    let source_trust_domain = source.trust_domain().as_str();
+    let destination_trust_domain = destination.trust_domain().as_str();
 
     let parsed_url = Url::parse(target_url)?;
     let authority = parsed_url
@@ -367,52 +356,4 @@ fn with_peer_headers_for_digest(
             .header("Request-Canonical-Digest", request_canonical_digest);
     }
     Ok(builder)
-}
-
-fn trust_domain_for(service_id: &str) -> String {
-    format!("ak:trust_domain:{}", did_host_from_service_id(service_id))
-}
-
-/// Extract the HTTP authority (host) a service DID's trust domain is scoped to,
-/// mirroring soland's `trust_domain_from_service_id`.
-///
-/// For `did:webvh:<scid>:<host>[:...]` the host is the segment *after* the SCID,
-/// so the SCID must not leak into the trust domain (soland test
-/// `trust_domain_derives_webvh_host_not_scid`). `did:web:<host>[:...]` and the
-/// `did:key:` fallback are kept for the negative/no-history fixtures that still
-/// mint those forms.
-fn did_host_from_service_id(service_id: &str) -> String {
-    if let Some(rest) = service_id.strip_prefix("did:webvh:") {
-        let mut parts = rest.split(':');
-        let scid = parts.next().unwrap_or_default();
-        if let Some(host) = parts.next() {
-            if !scid.is_empty() && !host.is_empty() {
-                let host = host.to_ascii_lowercase();
-                return host
-                    .split("%3a")
-                    .next()
-                    .unwrap_or(&host)
-                    .trim_end_matches('.')
-                    .to_owned();
-            }
-        }
-    }
-    if let Some(rest) = service_id.strip_prefix("did:web:") {
-        if let Some(host) = rest.split(':').next() {
-            if !host.is_empty() {
-                let host = host.to_ascii_lowercase();
-                return host
-                    .split("%3a")
-                    .next()
-                    .unwrap_or(&host)
-                    .trim_end_matches('.')
-                    .to_owned();
-            }
-        }
-    }
-    service_id
-        .strip_prefix("did:key:")
-        .unwrap_or(service_id)
-        .to_ascii_lowercase()
-        .replace(':', ".")
 }

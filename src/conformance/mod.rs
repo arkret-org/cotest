@@ -316,8 +316,9 @@ pub use sync::{run_stream_frame_sequence_vector, run_sync_fixture_suite};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
     VectorRegistryGateStatus, build_vector_registry_gate_report,
-    build_vector_registry_gate_report_from_paths, validate_vector_registry_gate,
-    validate_vector_registry_gate_report, validate_vector_registry_gate_report_with_mode,
+    build_vector_registry_gate_report_from_paths, fixture_digest_hex,
+    validate_vector_registry_gate, validate_vector_registry_gate_report,
+    validate_vector_registry_gate_report_with_mode,
 };
 pub use visibility_policy::{
     ALL_VISIBILITY_POLICY_VECTOR_IDS, run_circle_content_floor_below_realm_rejected_vector,

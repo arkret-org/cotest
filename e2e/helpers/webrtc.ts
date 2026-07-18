@@ -17,6 +17,7 @@ import {
   base64url,
   base64urlJsonCanonical,
   buildDetachedJwsProof,
+  canonicalEventTimestamp,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
@@ -217,7 +218,7 @@ export function buildCallSignalEnvelope(args: {
   // fixture below the protocol's five-minute hard ceiling while leaving a
   // full minute for clock and scheduling skew.
   const expiresAt = new Date(sentAt.getTime() + (args.lifetimeMs ?? 240_000));
-  const createdAt = canonicalTimestamp(sentAt);
+  const createdAt = canonicalEventTimestamp(sentAt);
 
   const envelope: Record<string, unknown> = {
     kind: "ak.call.signal",

@@ -25,23 +25,22 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    // Publish bob's primary handle so directory search resolves a concrete
-    // `localpart:host` rather than `null` (soland leaves the handle unpublished
-    // when registration omits it). The authority is the SUT's bind host, which
-    // soland derives via `service_handle_domain` (host of SOLAND_PUBLIC_BASE_URL).
-    let service_host = server
-        .base_url()
-        .host_str()
-        .expect("server base_url must have a host")
-        .to_owned();
+    // Register account-first, then publish bob's primary localpart through the
+    // authenticated localpart lifecycle. Soland derives the canonical handle
+    // domain and signed handle claim from that binding.
     let bob = server
-        .register_client_with_handle(
+        .register_client_with_localpart(
             "did:web:bob-privacy.example",
             "@bob-privacy",
-            &format!("bob-privacy-example:{service_host}"),
+            "bob-privacy-example",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
+    let service_host = server
+        .base_url()
+        .host_str()
+        .ok_or_else(|| anyhow!("server base_url omitted its host"))?
+        .to_owned();
 
     let public_realm = alice
         .create_realm_with(json!({

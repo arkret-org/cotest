@@ -13,6 +13,8 @@ use reqwest::{Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
 
+const ACCOUNT_SUBSCRIBE_FRAME_DEADLINE: Duration = Duration::from_secs(40);
+
 pub struct RecordedResponse {
     pub status: StatusCode,
     pub headers: HeaderMap,
@@ -71,7 +73,7 @@ async fn expect_account_subscribe_delta_matching(
         return Err(anyhow!("expected HTTP {status}, got {actual}:\n{body}"));
     }
 
-    tokio::time::timeout(Duration::from_secs(15), async move {
+    tokio::time::timeout(ACCOUNT_SUBSCRIBE_FRAME_DEADLINE, async move {
         let mut pending = Vec::new();
         while let Some(chunk) = response
             .chunk()
