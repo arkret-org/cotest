@@ -1345,11 +1345,15 @@ export async function completePendingPrincipalBootstrap(
   await page.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
   const pending = page.page.getByTestId("pending-principal-bootstrap");
   await expect(pending).toBeVisible({ timeout: 120_000 });
+  const completed = pending.getByTestId("onboarding-complete");
+  if (await completed.isVisible()) {
+    return;
+  }
   await page.page
     .getByTestId("bootstrap-recovery-key")
     .fill(recoveryKey);
   await page.page.getByTestId("bootstrap-submit").click();
-  await expect(pending).toHaveCount(0, { timeout: 120_000 });
+  await expect(completed).toBeVisible({ timeout: 120_000 });
 }
 
 export function selfPathHeadersForDpopSession(
