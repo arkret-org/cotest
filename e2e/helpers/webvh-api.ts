@@ -46,6 +46,23 @@ export type BuiltPrincipalGenesis = {
   enrollmentKeyId: string;
 };
 
+export type WebvhGenesisInput = {
+  baseUrl: string;
+  localId: string;
+  rootKey: WebvhKey;
+  nextRootKey: WebvhKey;
+  document: (did: string) => Record<string, unknown>;
+  versionTime?: string;
+};
+
+export type BuiltWebvhGenesis = {
+  did: string;
+  scid: string;
+  versionId: string;
+  entry: Record<string, unknown>;
+  didDocument: Record<string, unknown>;
+};
+
 export function generateWebvhKey(): WebvhKey {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const jwk = publicKey.export({ format: "jwk" }) as { x?: string };
@@ -182,6 +199,27 @@ export function buildPrincipalGenesisEntry(
     throw new Error("principal root, next root, signing, and enrollment keys must be distinct");
   }
 
+  const built = buildWebvhGenesisEntry({
+    baseUrl: input.baseUrl,
+    localId: input.localId,
+    rootKey: input.rootKey,
+    nextRootKey: input.nextRootKey,
+    document: (did) => principalDocument(did, input),
+    versionTime: input.versionTime,
+  });
+  return {
+    ...built,
+    principalSigningKeyId: `${built.did}#principal-signing-key`,
+    enrollmentKeyId: `${built.did}#device-enrollment-authority`,
+  };
+}
+
+export function buildWebvhGenesisEntry(
+  input: WebvhGenesisInput,
+): BuiltWebvhGenesis {
+  if (input.rootKey.multibase === input.nextRootKey.multibase) {
+    throw new Error("active and next WebVH root keys must be distinct");
+  }
   const methodAuthority = webvhMethodAuthority(input.baseUrl);
   const placeholderDid = formatWebvhDid(
     methodAuthority,
@@ -199,7 +237,7 @@ export function buildPrincipalGenesisEntry(
         sha256MultihashBase58btc(Buffer.from(input.nextRootKey.multibase, "utf8")),
       ],
     },
-    state: principalDocument(placeholderDid, input),
+    state: input.document(placeholderDid),
   };
   const scid = sha256MultihashBase58btc(canonicalBytes(entrySkeleton));
   const did = formatWebvhDid(methodAuthority, scid, input.localId);
@@ -215,15 +253,13 @@ export function buildPrincipalGenesisEntry(
     versionId,
     entry,
     didDocument: entry.state as Record<string, unknown>,
-    principalSigningKeyId: `${did}#principal-signing-key`,
-    enrollmentKeyId: `${did}#device-enrollment-authority`,
   };
 }
 
 export async function submitPrincipalGenesisEntry(
   request: APIRequestContext,
   baseUrl: string,
-  built: BuiltPrincipalGenesis,
+  built: BuiltWebvhGenesis,
 ): Promise<void> {
   const response = await request.post(
     `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/submit-did-operation`,

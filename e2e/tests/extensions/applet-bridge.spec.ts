@@ -2,12 +2,13 @@
 // Contract: e2e/scenarios/extensions/applet-bridge.md
 // Spec: extensions/applet-integration.md §3-§5, extensions/applet-schema.md
 
-import { createHash, createPrivateKey, sign } from "node:crypto";
+import { createHash, createPrivateKey, sign, type KeyObject } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mockAppletRegistryBaseUrl, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   addRealmMemberApi,
   authHeaders,
+  canonicalEventTimestamp,
   canonicalTimestamp,
   canonicalJson,
   createRealmApi,
@@ -23,6 +24,12 @@ import {
   openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import {
+  buildWebvhGenesisEntry,
+  generateWebvhKey,
+  submitPrincipalGenesisEntry,
+  type BuiltWebvhGenesis,
+} from "../../helpers/webvh-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -39,6 +46,8 @@ type SignedPackage = {
   package_digest: string;
   signing_did: string;
   service_id_document?: Record<string, unknown>;
+  service_id_operation?: BuiltWebvhGenesis;
+  service_signing_private_key?: KeyObject;
 };
 
 type AppletRegistration = {
@@ -467,6 +476,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     appletId?: string;
     authorizationRef?: string;
     strandId?: string;
+    signingKey?: KeyObject;
   }) {
     const sourceServiceId = args.sourceServiceId ?? "did:web:applet-bridge.joint-e2e.local";
     const realmId = args.realmId ?? typedId("realm");
@@ -477,7 +487,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       realm_id: realmId,
       actor_id: actorDid,
       actor_seq: 1,
-      created_at: canonicalTimestamp(),
+      created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
       prev_refs: [],
       refs: [],
@@ -503,7 +513,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       events: [
         {
           ...event,
-          proofs: [appletEventProof(sourceServiceId, event)],
+          proofs: [appletEventProof(sourceServiceId, event, args.signingKey)],
         },
       ],
     };
@@ -552,19 +562,16 @@ test.describe("applet inbound transaction push — per-delivery source signature
       discoverability: "listed",
       history_visibility: "joined",
     });
-    const sourceServiceId =
-      `did:webvh:z6mkfixture:applet-inbound-${stamp}.joint-e2e.local`;
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,
-      service_id: sourceServiceId,
       capabilities: ["message:write"],
       webhook_auth: {
         type: "http_message_signature",
-        key_ref: `${sourceServiceId}#applet-service-key`,
         accepted_algs: ["EdDSA"],
       },
     });
+    const sourceServiceId = signed.applet_package.service_id;
     const registration = await installApplet(request, token, signed, realmId, `inbound-install-${stamp}`);
     await addRealmMemberApi(request, token, realmId, registration.bot_actor_id);
 
@@ -577,6 +584,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       appletId: registration.applet_id,
       authorizationRef: registration.capability_grant_refs[0],
       strandId: await resolveDefaultStrandId(request, token, realmId),
+      signingKey: signed.service_signing_private_key,
     });
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
     const resp = await request.post(targetUri, {
@@ -588,6 +596,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           sourceServiceId,
           destinationServiceId: solandServiceId(),
           idempotencyKey,
+          signingKey: signed.service_signing_private_key,
         }),
       },
       data: body,
@@ -681,6 +690,7 @@ function signedAppletTransactionHeaders(args: {
   idempotencyKey: string;
   created?: number;
   expires?: number;
+  signingKey?: KeyObject;
 }): Record<string, string> {
   const canonicalBody = Buffer.from(canonicalJson(args.body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
@@ -704,7 +714,7 @@ function signedAppletTransactionHeaders(args: {
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),
-    developmentAppletPrivateKey(keyid),
+    args.signingKey ?? developmentAppletPrivateKey(keyid),
   );
   return {
     "content-digest": contentDigest,
@@ -743,9 +753,59 @@ async function signPackage(
   registryBase: string,
   data: Record<string, unknown>,
 ): Promise<SignedPackage> {
-  const response = await request.post(`${registryBase}/sign-package`, { data });
+  const serviceSigningKey = generateWebvhKey();
+  const versionTime = canonicalTimestamp();
+  const servicePublicJwk = {
+    crv: "Ed25519",
+    kty: "OKP",
+    x: serviceSigningKey.publicKey.toString("base64url"),
+  };
+  const built = buildWebvhGenesisEntry({
+    baseUrl: solandBaseUrl(),
+    localId: `applet-${typedId("operation").split(":").at(-1)}`,
+    rootKey: generateWebvhKey(),
+    nextRootKey: generateWebvhKey(),
+    versionTime,
+    document: (did) => ({
+      "@context": ["https://www.w3.org/ns/did/v1"],
+      id: did,
+      verificationMethod: {
+        [`${did}#applet-service-key`]: canonicalJson(servicePublicJwk),
+      },
+      updated: versionTime,
+    }),
+  });
+  const requestedWebhookAuth =
+    data.webhook_auth && typeof data.webhook_auth === "object"
+      ? (data.webhook_auth as Record<string, unknown>)
+      : {};
+  const response = await request.post(`${registryBase}/sign-package`, {
+    data: {
+      ...data,
+      service_id: built.did,
+      service_id_document: built.didDocument,
+      service_id_method_version_evidence: {
+        method: "did:webvh",
+        version_id: built.versionId,
+        version_time: versionTime,
+        unversioned_refetch: false,
+      },
+      service_signing_public_jwk: servicePublicJwk,
+      service_signing_private_jwk: serviceSigningKey.privateKey.export({ format: "jwk" }),
+      webhook_auth: {
+        type: "http_message_signature",
+        accepted_algs: ["EdDSA"],
+        ...requestedWebhookAuth,
+        key_ref: `${built.did}#applet-service-key`,
+      },
+    },
+  });
   expect(response.status()).toBe(200);
-  return (await response.json()) as SignedPackage;
+  return {
+    ...((await response.json()) as SignedPackage),
+    service_id_operation: built,
+    service_signing_private_key: serviceSigningKey.privateKey,
+  };
 }
 
 // Deep-clone a controller-signed package and mutate its `applet_package` body
@@ -756,7 +816,9 @@ function tamperSignedPackage(
   signed: SignedPackage,
   mutate: (appletPackage: SignedPackage["applet_package"]) => void,
 ): SignedPackage {
-  const cloned = structuredClone(signed);
+  const { service_signing_private_key: serviceSigningPrivateKey, ...wirePackage } = signed;
+  const cloned = structuredClone(wirePackage) as SignedPackage;
+  cloned.service_signing_private_key = serviceSigningPrivateKey;
   mutate(cloned.applet_package);
   return cloned;
 }
@@ -828,33 +890,10 @@ async function publishAppletServiceIdDocument(
   request: APIRequestContext,
   signed: SignedPackage,
 ): Promise<void> {
-  if (!signed.service_id_document) {
+  if (!signed.service_id_operation) {
     return;
   }
-  const response = await request.post(
-    `${solandBaseUrl()}/_arkret/root/identity/submit-did-operation`,
-    {
-      data: {
-        did: signed.applet_package.service_id,
-        did_method: didMethod(signed.applet_package.service_id),
-        operation: {
-          type: "replace",
-          state: signed.service_id_document,
-        },
-        proofs: [],
-      },
-    },
-  );
-  const responseText = await response.text();
-  expect(response.status(), responseText).toBe(200);
-}
-
-function didMethod(did: string): string {
-  const match = /^did:([^:]+):/.exec(did);
-  if (!match) {
-    throw new Error(`invalid DID: ${did}`);
-  }
-  return `did:${match[1]}`;
+  await submitPrincipalGenesisEntry(request, solandBaseUrl(), signed.service_id_operation);
 }
 
 function installRegistrationFromResponse(
@@ -883,15 +922,33 @@ function typedAppletId(): string {
 function appletEventProof(
   sourceServiceId: string,
   event: Record<string, unknown>,
+  signingKey?: KeyObject,
 ): Record<string, unknown> {
-  const eventDigest = `sha256:${createHash("sha256").update(canonicalJson(event)).digest("hex")}`;
+  const canonicalEvent = canonicalJson(event);
+  const eventDigest = `sha256:${createHash("sha256").update(canonicalEvent).digest("hex")}`;
+  const verificationMethod = `${sourceServiceId}#applet-service-key`;
+  const createdAt = canonicalEventTimestamp();
+  const binding = canonicalJson({
+    context: "ak.event-proof-v1",
+    event_digest: eventDigest,
+    actor_id: event.actor_id,
+    verification_method: verificationMethod,
+    created_at: canonicalTimestamp(new Date(createdAt)),
+  });
+  const jwsHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const signingInput = `${jwsHeader}.${Buffer.from(binding, "utf8").toString("base64url")}`;
+  const signature = sign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    signingKey ?? developmentAppletPrivateKey(verificationMethod),
+  );
   return {
     kind: "detached_jws",
     alg: "EdDSA",
-    verification_method: `${sourceServiceId}#applet-service-key`,
+    verification_method: verificationMethod,
     event_digest: eventDigest,
-    created_at: canonicalTimestamp(),
-    jws: Buffer.from(`${eventDigest}:joint-e2e`).toString("base64url"),
+    created_at: createdAt,
+    jws: `${jwsHeader}..${signature.toString("base64url")}`,
   };
 }
 
@@ -914,14 +971,12 @@ async function didDocument(
   expect(response.status(), responseText).toBe(200);
   const body = JSON.parse(responseText) as Record<string, unknown>;
   const didDocument = body.did_document;
-  if (
-    didDocument &&
-    typeof didDocument === "object" &&
-    "document" in didDocument &&
-    (didDocument as Record<string, unknown>).document &&
-    typeof (didDocument as Record<string, unknown>).document === "object"
-  ) {
-    return (didDocument as Record<string, unknown>).document as Record<string, unknown>;
+  if (didDocument && typeof didDocument === "object") {
+    const record = didDocument as Record<string, unknown>;
+    if (record.document && typeof record.document === "object") {
+      return record.document as Record<string, unknown>;
+    }
+    return record;
   }
   return body;
 }
