@@ -70,6 +70,7 @@ param(
     [string]$TeabayDatabaseUrl,
     [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
     [string]$SolandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
+    [string]$SolandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
@@ -92,6 +93,7 @@ param(
     [switch]$RunnerSelfTest,
     [switch]$DualSoland,
     [string]$SolandBetaNotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
+    [string]$SolandBetaKeyStoreMasterKey = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -1413,11 +1415,13 @@ function Start-ManagedDockerSoland {
         [Parameter(Mandatory = $true)][int]$HostPort,
         [Parameter(Mandatory = $true)][int]$ContainerPort,
         [Parameter(Mandatory = $true)][string]$ObjectsRoot,
+        [Parameter(Mandatory = $true)][string]$StateRoot,
         [Parameter(Mandatory = $true)][string]$LogDirectory,
         [Parameter(Mandatory = $true)]$Environment
     )
 
     $null = New-Item -ItemType Directory -Force -Path $ObjectsRoot
+    $null = New-Item -ItemType Directory -Force -Path $StateRoot
     $null = New-Item -ItemType Directory -Force -Path $LogDirectory
 
     $safeName = ($Name.ToLowerInvariant() -replace '[^a-z0-9_.-]', '-')
@@ -1434,6 +1438,7 @@ function Start-ManagedDockerSoland {
         "--add-host", "host.docker.internal:host-gateway",
         "-p", ("127.0.0.1:{0}:{1}" -f $HostPort, $ContainerPort),
         "-v", ("{0}:/tmp/soland-blobs" -f $ObjectsRoot),
+        "-v", ("{0}:/tmp/soland-state" -f $StateRoot),
         "-v", ("{0}:/cotest-logs" -f $LogDirectory)
     )
     foreach ($key in $Environment.Keys) {
@@ -2292,6 +2297,7 @@ try {
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
+            [Parameter(Mandatory = $true)][string]$KeyStoreMasterKey,
             [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
@@ -2307,6 +2313,12 @@ try {
             SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
             SOLAND_DEVELOPMENT_MODE = "true"
+            SOLAND_FIRST_PROVISIONING = "true"
+            SOLAND_KEYSTORE_BACKEND = "encrypted_file"
+            SOLAND_KEYSTORE_PATH = "/tmp/soland-state/keystore.v1"
+            SOLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
+            SOLAND_SERVICE_IDENTITY_BUNDLE_DIR = "/tmp/soland-state/identity-bundle"
+            SOLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
             SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             SOLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
@@ -2353,19 +2365,28 @@ try {
             [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
+            [Parameter(Mandatory = $true)][string]$StateRoot,
             [Parameter(Mandatory = $true)][int]$Port,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFile,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
+            [Parameter(Mandatory = $true)][string]$KeyStoreMasterKey,
             [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
+        $null = New-Item -ItemType Directory -Force -Path $StateRoot
         $rustLog = if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) { $env:RUST_LOG } else { "info" }
         $values = [ordered]@{
             RUST_LOG = $rustLog
             DATABASE_URL = ""
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
             SOLAND_DEVELOPMENT_MODE = "true"
+            SOLAND_FIRST_PROVISIONING = "true"
+            SOLAND_KEYSTORE_BACKEND = "encrypted_file"
+            SOLAND_KEYSTORE_PATH = (Join-Path $StateRoot "keystore.v1")
+            SOLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
+            SOLAND_SERVICE_IDENTITY_BUNDLE_DIR = (Join-Path $StateRoot "identity-bundle")
+            SOLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
             SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
             SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
             SOLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
@@ -2426,10 +2447,12 @@ try {
             -ConfigPath (Join-Path $jointDir "soland.env") `
             -BaseUrl $SolandBaseUrl `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
+            -StateRoot (Join-Path $jointDir "soland-state") `
             -Port $solandPort `
             -MetricsPort $solandMetricsPort `
             -LogFile $solandTraceFile `
             -CorsAllowOrigin $solandCorsAllowOrigin `
+            -KeyStoreMasterKey $SolandKeyStoreMasterKey `
             -NotarySigningKey $SolandNotarySigningKey `
             -FederationPeers $alphaPeer
     }
@@ -2445,6 +2468,7 @@ try {
             -MetricsPort $solandMetricsPort `
             -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
             -CorsAllowOrigin $solandCorsAllowOrigin `
+            -KeyStoreMasterKey $SolandKeyStoreMasterKey `
             -NotarySigningKey $SolandNotarySigningKey `
             -FederationPeers $alphaPeer
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
@@ -2454,6 +2478,7 @@ try {
                     -HostPort $solandPort `
                     -ContainerPort $SolandContainerPort `
                     -ObjectsRoot (Join-Path $jointDir "soland-objects") `
+                    -StateRoot (Join-Path $jointDir "soland-state") `
                     -LogDirectory $serviceLogDir `
                     -Environment $solandDockerEnv))
     }
@@ -2470,6 +2495,7 @@ try {
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
+                -KeyStoreMasterKey $SolandBetaKeyStoreMasterKey `
                 -NotarySigningKey $SolandBetaNotarySigningKey `
                 -FederationPeers $SolandBaseUrl
             $managedServices.Add((Start-ManagedDockerSoland `
@@ -2478,6 +2504,7 @@ try {
                         -HostPort $solandBetaPort `
                         -ContainerPort $SolandContainerPort `
                         -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
+                        -StateRoot (Join-Path $jointDir "soland-beta-state") `
                         -LogDirectory $serviceLogDir `
                         -Environment $solandBetaDockerEnv))
         } else {
@@ -2486,10 +2513,12 @@ try {
                 -ConfigPath (Join-Path $jointDir "soland-beta.env") `
                 -BaseUrl $solandBetaBaseUrl `
                 -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
+                -StateRoot (Join-Path $jointDir "soland-beta-state") `
                 -Port $solandBetaPort `
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFile $solandBetaTraceFile `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
+                -KeyStoreMasterKey $SolandBetaKeyStoreMasterKey `
                 -NotarySigningKey $SolandBetaNotarySigningKey `
                 -FederationPeers $SolandBaseUrl
             $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
