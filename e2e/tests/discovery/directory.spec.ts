@@ -123,14 +123,12 @@ test.describe("discovery", () => {
     }
   });
 
-  test("bob updates profile (display_name/bio); alice sees the change in directory results within 30s", async ({
+  test("profile update stays on the canonical account surface without implying directory disclosure", async ({
     request,
   }) => {
-    // spec: discovery/profiles-presence.md §2 — actor profile updates
-    // fan out through the directory's actor projection. We assert via
-    // `POST /_arkret/find/directory/search-actors` (the same endpoint inkson's
-    // tab-actors hits) rather than driving the inkson profile-edit UI
-    // because the inkson profile form is not in scope here.
+    // Account profile updates do not implicitly announce a discoverable
+    // Directory projection. The canonical profile is read back from the
+    // account surface, while an unrelated actor must not gain visibility.
     const stamp = Date.now();
     const alice = uniqueUser(`s24-profile-alice-${stamp}`);
     const bob = uniqueUser(`s24-profile-bob-${stamp}`);
@@ -161,24 +159,9 @@ test.describe("discovery", () => {
     expect(updateBody.profile?.display_name).toBe(newDisplay);
     expect(updateBody.profile?.profile_fields?.bio).toBe(newBio);
 
-    // Directory search filters actors to the caller's accepted contacts
-    // (or self) — establish a contact relationship so alice can see bob.
-    const { outcome: aliceReq } = await requestContactArkret(
-      request,
-      aliceToken,
-      bob.did,
-      { requestedScopes: ["direct_message"] },
-    );
-    expect(aliceReq.state).toBe("pending_outgoing");
-    const bobAccept = await respondContactArkret(request, bobToken, {
-      requestId: aliceReq.request_event_ref,
-      requester: alice.did,
-      action: "accept",
-      grantedScopes: ["direct_message"],
-    });
-    expect(bobAccept.state).toBe("accepted");
-
-    // alice searches actors — bob's directory row carries the new fields.
+    // A profile write is not an implicit Directory announce. Alice has no
+    // contact or other disclosure relationship with Bob, so searching by the
+    // new display name must not surface Bob or his private biography.
     const search = await request.post(
       `${solandBaseUrl()}/_arkret/find/directory/search-actors`,
       {
@@ -188,17 +171,9 @@ test.describe("discovery", () => {
     );
     expect(search.status()).toBe(200);
     const body = await search.json();
-    const bobEnvelope = (
-      body.actors as Array<{
-        actor_id?: string;
-        display_name?: string;
-        preview?: { did?: string; display_name?: string; bio?: string };
-      }>
-    ).find((r) => r.actor_id === bob.did || r.preview?.did === bob.did);
-    const bobRow = bobEnvelope?.preview ?? bobEnvelope;
-    expect(bobRow, "bob must appear in directory search results").toBeTruthy();
-    expect((bobRow as { display_name: string }).display_name).toBe(newDisplay);
-    expect((bobRow as { bio?: string }).bio).toBe(newBio);
+    const actors = (body.actors ?? []) as Array<{ actor_id?: string }>;
+    expect(actors.some((actor) => actor.actor_id === bob.did)).toBe(false);
+    expect(JSON.stringify(actors)).not.toContain(newBio);
 
     // /account/viewer reflects new fields on the canonical account surface.
     const me = await request.get(
@@ -210,6 +185,7 @@ test.describe("discovery", () => {
     expect(me.ok()).toBeTruthy();
     const meBody = await me.json();
     expect(meBody.profile?.display_name).toBe(newDisplay);
+    expect(meBody.profile?.profile_fields?.bio).toBe(newBio);
   });
 
   test("presence: bob closes tab → alice's directory shows presence-offline; bob reopens → presence-online within 5s", async ({

@@ -14,21 +14,6 @@
 
 ## 剩余问题
 
-### RC-3：Directory 测试把 profile update 误当作隐式 announce
-
-`discovery/directory.spec.ts` 更新 account profile 后要求 Directory actor row 顶层出现 `bio`。`arkret-spec/spec/v1/zh/sync/service-http-binding.md` 明确规定：
-
-- `ak.self.account.command.update_profile` 写入/等价产生 `ak.profile.update`；
-- 它不隐式触发 `ak.find.directory.command.announce` 或 `ak.account_data.set`；
-- 需要可发现 profile 时必须显式走 Directory announce；
-- `bio` 的 ActorProfile canonical 落点是 `profile_fields.bio`，Directory projection 仍受 schema、授权和隐私策略限制。
-
-待完成：
-
-1. account profile 用例只在 `/_arkret/self/account/viewer` 验证 canonical profile。
-2. Directory 可发现性用例显式 announce，并只断言对应 discovery profile 允许公开的字段。
-3. 不得通过让 Soland 隐式公开 bio 来迎合测试。
-
 ### RC-4：account_data REST 写未进入 initial-sync durable Event 来源
 
 `governance/personal-blocklist.spec.ts` 的 PUT、GET、list 均能看到最新值，但 initial `GET /_arkret/self/account/subscribe?catchup=true` 的 `account_data.events` 找不到该 key。
@@ -73,9 +58,8 @@
 
 ## 执行顺序
 
-1. RC-3 Directory 测试契约。
-2. RC-4 account_data durable sync。
-3. RC-5 MIMI payload proof typed DTO。
-4. RC-6 invite locator 生命周期。
-5. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
-6. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。
+1. RC-4 account_data durable sync。
+2. RC-5 MIMI payload proof typed DTO。
+3. RC-6 invite locator 生命周期。
+4. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
+5. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。
