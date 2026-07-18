@@ -129,12 +129,17 @@ test.describe("personal blocklist", () => {
       | { events?: Array<Record<string, unknown>> }
       | undefined;
     const syncEntries = (accountData?.events ?? []).filter(
-      (entry) => entry.data_type === dataType,
+      (entry) =>
+        entry.kind === "ak.account_data.set" &&
+        (entry.payload as Record<string, unknown> | undefined)?.key === dataType,
     );
     expect(syncEntries).toHaveLength(1);
     const syncEntry = syncEntries[0];
     expect(syncEntry).toBeTruthy();
-    expect(syncEntry!.content).toMatchObject(second);
+    expect(
+      (syncEntry!.payload as Record<string, unknown>).body,
+    ).toMatchObject(second);
+    expect(syncEntry!.proofs).toEqual(expect.any(Array));
     expect(JSON.stringify(syncEntry)).not.toContain(first.label);
   });
 

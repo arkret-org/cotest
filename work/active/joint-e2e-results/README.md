@@ -14,25 +14,6 @@
 
 ## 剩余问题
 
-### RC-4：account_data REST 写未进入 initial-sync durable Event 来源
-
-`governance/personal-blocklist.spec.ts` 的 PUT、GET、list 均能看到最新值，但 initial `GET /_arkret/self/account/subscribe?catchup=true` 的 `account_data.events` 找不到该 key。
-
-实现差异：
-
-- `routing/identity/account_data.rs` 的 REST PUT 只写 `account_data_application()` 并发送低延迟 actor-private update；
-- `routing/events/sync/snapshot.rs::account_data_events()` 只从 `events_store()` 中的 `EventKind::ACCOUNT_DATA_SET` 重建 baseline；
-- REST write 没有持久化规范所要求的 `ak.account_data.set` actor-private Event。
-
-测试也把 `account_data.events[]` 当作 REST DTO，读取根级 `entry.data_type` / `entry.content`；规范和 schema 定义这里是 EventContainer，应该读取 `event.kind` 与 `event.payload.key/body/tombstone`。
-
-待完成：
-
-1. REST replace/delete 经统一 Event acceptance 管线事务性持久化 actor-private Event，并更新 application projection/发送 wakeup。
-2. initial baseline 从 durable authority 重建最新 key，服务重启后结果不丢失。
-3. 测试改为 canonical Event shape。
-4. 覆盖 overwrite、另一设备 live fanout、restart baseline、delete tombstone、敏感 key encrypted carrier。
-
 ### RC-5：MIMI consent update 使用错误 proof 类型
 
 `mimi-operations.schema.json#/$defs/signature` 是非 Event generic detached proof，使用 `payload_digest`。但 `arkret-rust-sdk/crates/core/src/http/bodies.rs::MimiUpdateConsentRequestBody.signature` 当前类型是 Event `Proof`，要求 `event_digest` 且拒绝未知字段。Soland 的强类型 `JsonBody<MimiUpdateConsentRequestBody>` 因而在业务处理前对 spec-correct body 返回 422。
@@ -58,8 +39,7 @@
 
 ## 执行顺序
 
-1. RC-4 account_data durable sync。
-2. RC-5 MIMI payload proof typed DTO。
-3. RC-6 invite locator 生命周期。
-4. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
-5. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。
+1. RC-5 MIMI payload proof typed DTO。
+2. RC-6 invite locator 生命周期。
+3. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
+4. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。
