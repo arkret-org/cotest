@@ -307,6 +307,20 @@ function New-CargoTestArgs {
     return $args
 }
 
+function ConvertTo-NativeCommandLineArgument {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Argument)
+
+    if ($Argument.Length -gt 0 -and $Argument -notmatch '[\s"]') {
+        return $Argument
+    }
+
+    # Follow CommandLineToArgvW quoting: double backslashes before a quote and
+    # before the closing quote, then escape the embedded quote itself.
+    $quoted = [regex]::Replace($Argument, '(\\*)"', '$1$1\"')
+    $quoted = [regex]::Replace($quoted, '(\\+)$', '$1$1')
+    return '"' + $quoted + '"'
+}
+
 function Invoke-CargoTestInvocation {
     param(
         [Parameter(Mandatory = $true)][string[]]$CargoArgs,
@@ -319,39 +333,47 @@ function Invoke-CargoTestInvocation {
     Write-Host $header
     Write-Host ("Running cargo {0}" -f ($CargoArgs -join " "))
 
-    $safeLabel = ($Label -replace '[^A-Za-z0-9_.-]', '_')
-    $stdoutPath = Join-Path ([System.IO.Path]::GetDirectoryName($RawLog)) "cargo-$safeLabel.stdout.log"
-    $stderrPath = Join-Path ([System.IO.Path]::GetDirectoryName($RawLog)) "cargo-$safeLabel.stderr.log"
+    $process = $null
     try {
-        $process = Start-Process `
-            -FilePath "cargo" `
-            -ArgumentList $CargoArgs `
-            -NoNewWindow `
-            -PassThru `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath
+        $cargo = (Get-Command cargo -CommandType Application -ErrorAction Stop).Source
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $cargo
+        $startInfo.Arguments = (($CargoArgs | ForEach-Object {
+                    ConvertTo-NativeCommandLineArgument -Argument $_
+                }) -join ' ')
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
 
-        # `Start-Process -Wait` waits for the entire descendant process tree on
-        # Windows. Cargo test binaries spawn and tear down real SUT processes;
-        # even after Cargo and every visible child have exited, the tree wait
-        # can remain attached to an inherited handle and prevent report
-        # generation. Wait for the directly launched Cargo proxy instead.
-        Wait-Process -Id $process.Id | Out-Null
-        $process.Refresh()
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) {
+            throw "failed to start cargo invocation '$Label'"
+        }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
 
-        foreach ($path in @($stderrPath, $stdoutPath)) {
-            if (-not (Test-Path $path)) {
-                continue
-            }
-            foreach ($line in Get-Content $path) {
+        # Wait only for the directly launched Cargo process. Reading both
+        # redirected streams asynchronously prevents either pipe from filling
+        # while the test suite is still running.
+        $process.WaitForExit()
+        $invocationExitCode = $process.ExitCode
+        $stdout = $stdoutTask.GetAwaiter().GetResult()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+
+        foreach ($content in @($stderr, $stdout)) {
+            foreach ($line in @($content -split '\r?\n')) {
                 Add-RawLogLine -Path $RawLog -Value $line
                 Write-Host $line
             }
         }
-        return $process.ExitCode
+        return [int]$invocationExitCode
     }
     finally {
-        Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
     }
 }
 

@@ -35,7 +35,10 @@ use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, dev_login, encrypted_envelope, expect_json};
+use crate::harness::{
+    ArkretServer, dev_login, device_message_send_request, encrypted_envelope, expect_api_error,
+    expect_json,
+};
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
@@ -68,6 +71,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &alice_token,
         bob_did,
         bob_device,
+        "ak:device_message:0196419b-0000-7000-8000-00000000c101",
         "ct10-msg-1",
         "ciphertext-msg-1",
         true,
@@ -95,6 +99,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &alice_token,
         bob_did,
         bob_device,
+        "ak:device_message:0196419b-0000-7000-8000-00000000c102",
         "ct10-msg-2",
         "ciphertext-msg-2",
         true,
@@ -105,6 +110,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &alice_token,
         bob_did,
         bob_device,
+        "ak:device_message:0196419b-0000-7000-8000-00000000c103",
         "ct10-msg-3",
         "ciphertext-msg-3",
         true,
@@ -153,9 +159,10 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &alice_token,
         bob_did,
         bob_device,
-        "ct10-msg-2",
-        "ciphertext-msg-2-redux", // intentionally different ciphertext
-        false,
+        "ak:device_message:0196419b-0000-7000-8000-00000000c102",
+        "ct10-msg-2-replay",
+        "ciphertext-msg-2",
+        true,
     )
     .await?;
     let after_replay = poll_to_device(&server, &bob_token, None).await?;
@@ -164,10 +171,29 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         .cloned()
         .unwrap_or_default();
     if !replay_events.is_empty() {
-        bail!(
-            "duplicate send under same Idempotency-Key MUST NOT re-deliver, got {replay_events:?}"
-        );
+        bail!("logical message replay after ack MUST NOT re-deliver, got {replay_events:?}");
     }
+
+    let conflicting = device_message_send_request(
+        bob_did,
+        bob_device,
+        "ak:device_message:0196419b-0000-7000-8000-00000000c102",
+        "ak.mls.application",
+        encrypted_envelope("ak.mls.application", "ciphertext-msg-2-conflict"),
+        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+            .with_timezone(&chrono::Utc),
+    )?;
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/device_messages"))
+            .bearer_auth(&alice_token)
+            .header("Idempotency-Key", "ct10-msg-2-conflict")
+            .json(&conflicting),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
 
     Ok(())
 }
@@ -177,21 +203,20 @@ async fn send_to_device(
     sender_token: &str,
     recipient: &str,
     device_id: &str,
+    message_id: &str,
     idempotency_key: &str,
     ciphertext: &str,
     expect_delivery: bool,
 ) -> Result<Value> {
-    let body = json!({
-        "messages": {
-            recipient: {
-                device_id: {
-                    "kind": "ak.mls.application",
-                    "content": encrypted_envelope("ak.mls.application", ciphertext),
-                    "expires_at": "2026-12-31T00:00:00Z",
-                }
-            }
-        }
-    });
+    let body = device_message_send_request(
+        recipient,
+        device_id,
+        message_id,
+        "ak.mls.application",
+        encrypted_envelope("ak.mls.application", ciphertext),
+        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+            .with_timezone(&chrono::Utc),
+    )?;
     let response = expect_json(
         server
             .http()

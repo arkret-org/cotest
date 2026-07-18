@@ -106,31 +106,168 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .input
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
-                let contact_count = input
-                    .get("contacts")
+                let blinded_count = input
+                    .pointer("/blind_request/blinded_elements")
                     .and_then(Value::as_array)
-                    .map_or(0, Vec::len);
-                let target_batch_size = input
-                    .pointer("/padding/target_batch_size")
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing blinded elements", case.name)
+                    })?
+                    .len();
+                let derived_prefix_count = input
+                    .pointer("/match_request/derived_prefixes")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing derived prefixes", case.name)
+                    })?
+                    .len();
+                let provider_enforced_batch_size = input
+                    .get("provider_enforced_batch_size")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("privacy fixture {} missing target batch", case.name))?;
-                if target_batch_size <= contact_count as u64 {
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "privacy fixture {} missing provider-enforced batch size",
+                            case.name
+                        )
+                    })?;
+                if blinded_count == 0
+                    || derived_prefix_count != blinded_count
+                    || provider_enforced_batch_size <= blinded_count as u64
+                {
                     bail!(
-                        "privacy fixture {} does not pad contact discovery",
+                        "privacy fixture {} does not preserve and pad PSI cardinality",
                         case.name
                     );
+                }
+                let expected = case.expected.as_ref().ok_or_else(|| {
+                    anyhow!("privacy fixture {} missing expected claims", case.name)
+                })?;
+                for claim in [
+                    "evaluated_elements_same_length_and_order_as_blinded_elements",
+                    "hit_bitmap_cardinality_is_provider_enforced_batch_size",
+                    "result_count_does_not_reveal_match_count",
+                    "no_raw_connection_identifier",
+                    "handoff_stubs_if_present_same_cardinality_dummy_padded",
+                    "per_target_policy_denied_and_no_match_byte_indistinguishable_in_hit_bitmap",
+                ] {
+                    if expected.get(claim).and_then(Value::as_bool) != Some(true) {
+                        bail!(
+                            "privacy fixture {} missing required claim {claim}",
+                            case.name
+                        );
+                    }
                 }
                 record_vector_event(
                     "privacy.private_contact_discovery_padding_and_cardinality",
                     &json!({
-                        "contacts": contact_count,
-                        "target_batch_size": target_batch_size,
+                        "blinded_elements": blinded_count,
+                        "derived_prefixes": derived_prefix_count,
+                        "provider_enforced_batch_size": provider_enforced_batch_size,
                     }),
-                    &json!({"target_batch_size_gt_contacts": true}),
                     &json!({
-                        "target_batch_size": target_batch_size,
-                        "contact_count": contact_count,
-                        "target_batch_size_gt_contacts": target_batch_size > contact_count as u64,
+                        "derived_prefixes_match_blinded_elements": true,
+                        "provider_enforced_batch_size_gt_submitted_elements": true,
+                    }),
+                    &json!({
+                        "derived_prefixes_match_blinded_elements": derived_prefix_count == blinded_count,
+                        "provider_enforced_batch_size_gt_submitted_elements":
+                            provider_enforced_batch_size > blinded_count as u64,
+                    }),
+                );
+            }
+            "private_contact_discovery_quota_blind_phase_denial" => {
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
+                let expected = case.expected.as_ref().ok_or_else(|| {
+                    anyhow!("privacy fixture {} missing expected claims", case.name)
+                })?;
+                let maximum = input
+                    .pointer("/quota_state/max_psi_queries_per_window")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing quota maximum", case.name)
+                    })?;
+                let already_charged = input
+                    .pointer("/quota_state/queries_already_charged_in_window")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing quota usage", case.name))?;
+                let seconds_until_roll = input
+                    .pointer("/quota_state/seconds_until_window_roll")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing quota rollover", case.name)
+                    })?;
+                let retry_after = expected
+                    .get("retry_after_seconds")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing retry-after", case.name))?;
+                let retry_quantum = expected
+                    .get("retry_after_quantum_seconds")
+                    .and_then(Value::as_u64)
+                    .filter(|quantum| *quantum > 0)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} has invalid retry quantum", case.name)
+                    })?;
+                let rounded_retry_after =
+                    seconds_until_roll.div_ceil(retry_quantum) * retry_quantum;
+                let body_shape = expected
+                    .get("body_shape")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing body shape", case.name))?;
+                let required_body_fields = ["ok", "error.code", "error.message", "request_id"];
+                let body_shape_matches = required_body_fields.iter().all(|required| {
+                    body_shape
+                        .iter()
+                        .any(|field| field.as_str() == Some(required))
+                });
+                let blinded_elements_present = input
+                    .pointer("/blind_request/blinded_elements")
+                    .and_then(Value::as_array)
+                    .is_some_and(|elements| !elements.is_empty());
+                let required_true_claims = [
+                    "same_size_bucket_as_success_path",
+                    "same_delay_class_as_success_path",
+                    "not_disguised_as_no_match_outcome",
+                    "admitted_batch_match_request_not_quota_denied",
+                    "no_per_target_information_in_denial",
+                ];
+                let claims_hold = required_true_claims
+                    .iter()
+                    .all(|claim| expected.get(claim).and_then(Value::as_bool) == Some(true));
+                let valid = case.operation_id.as_deref()
+                    == Some("ak.find.directory.query.private_contact_discovery")
+                    && input
+                        .pointer("/blind_request/phase")
+                        .and_then(Value::as_str)
+                        == Some("blind")
+                    && input.get("match_request").is_none()
+                    && blinded_elements_present
+                    && already_charged >= maximum
+                    && expected.get("denial_phase").and_then(Value::as_str) == Some("blind")
+                    && expected.get("http_status").and_then(Value::as_u64) == Some(429)
+                    && expected.get("error_code").and_then(Value::as_str)
+                        == Some("psi_quota_exhausted")
+                    && retry_after == rounded_retry_after
+                    && body_shape_matches
+                    && claims_hold;
+                if !valid {
+                    bail!(
+                        "privacy fixture {} no longer proves blind-phase quota denial",
+                        case.name
+                    );
+                }
+                record_vector_event(
+                    "privacy.private_contact_discovery_quota_blind_phase_denial",
+                    input,
+                    expected,
+                    &json!({
+                        "denial_phase": "blind",
+                        "http_status": 429,
+                        "error_code": "psi_quota_exhausted",
+                        "retry_after_seconds": rounded_retry_after,
+                        "body_shape_matches": body_shape_matches,
+                        "privacy_claims_hold": claims_hold,
                     }),
                 );
             }

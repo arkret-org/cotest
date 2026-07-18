@@ -8,10 +8,10 @@ use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
 use arkret_core::{
-    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId, Hash,
-    Hlc, KeyFormat, KeyOperationSignature, KeysUploadRequestBody, NonEmptyString, Proof,
-    PublishedKey, RealmId, SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
-    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id, proof_kind,
+    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId, Hlc,
+    KeyFormat, KeyOperationSignature, KeysUploadRequestBody, NonEmptyString, PublishedKey, RealmId,
+    SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
+    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
 };
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
@@ -19,13 +19,9 @@ use arkret_signatures::webvh::{
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde::Serialize;
-
-fn multicodec_ed25519_public_key(key: &VerifyingKey) -> String {
-    arkret::ed25519_pubkey_to_did_key_multibase(key.as_bytes())
-}
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -38,6 +34,8 @@ use crate::harness::{
 use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
 };
+
+pub(crate) const TEST_PRINCIPAL_SIGNING_KEY_SEED: [u8; 32] = [0x51; 32];
 
 const ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 const BOB_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000bb";
@@ -70,6 +68,10 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let alice =
         register_account(server_a, &alice_did, "@cotest-fed-alice", ALICE_DEVICE_ID).await?;
     let bob = register_account(server_b, &bob_did, "@cotest-fed-bob", BOB_DEVICE_ID).await?;
+    install_test_principal_control_document(server_a, &alice_did).await?;
+    install_test_principal_control_document(server_b, &bob_did).await?;
+    install_test_principal_control_document(server_b, &alice_did).await?;
+    install_test_principal_control_document(server_a, &bob_did).await?;
 
     let describe_a = expect_json(
         server_a.http().get(server_a.url("/_arkret/describe")),
@@ -93,6 +95,21 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )
     .await?;
     assert_eq!(bob_document["did_document"]["id"], bob_did);
+    let alice_document = expect_json(
+        server_b
+            .http()
+            .post(server_b.url("/_arkret/root/identity/resolve"))
+            .json(&json!({"did": alice_did})),
+        StatusCode::OK,
+    )
+    .await?;
+    let alice_psk = format!("{alice_did}#cotest-principal-signing-key");
+    anyhow::ensure!(
+        alice_document["did_document"]["verificationMethod"]
+            .as_array()
+            .is_some_and(|methods| methods.iter().any(|method| method["id"] == alice_psk)),
+        "remote Alice principal signing key is absent: {alice_document}"
+    );
 
     let visible_services = vec![
         server_a.service_id().to_owned(),
@@ -312,7 +329,6 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
     let alice_principal_realm =
         principal_control_realm_id(&Did::new(alice_did.clone()).context("invalid alice did")?);
-    install_test_principal_control_document(server_b, &alice_did).await?;
     let alice_cross_signing = signed_federation_event(
         ALICE_CROSS_SIGNING_EVENT_ID,
         "ak.cross_signing.publish",
@@ -333,9 +349,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         EventId::new(ALICE_CROSS_SIGNING_EVENT_ID.to_owned())
             .context("invalid alice cross-signing event id")?,
     ];
-    let authorize_digest =
-        Hash::new(alice_device_authorize.event_digest()?).context("invalid device event digest")?;
-    alice_device_authorize.proofs[0].event_digest = authorize_digest;
+    sign_federation_event(&mut alice_device_authorize)?;
     let alice_device_body = peer_events_submit_body(
         &alice_principal_realm,
         vec![alice_cross_signing, alice_device_authorize],
@@ -993,7 +1007,7 @@ fn test_self_signing_key() -> SigningKey {
 }
 
 fn test_principal_signing_key() -> SigningKey {
-    SigningKey::from_bytes(&[0x51; 32])
+    SigningKey::from_bytes(&TEST_PRINCIPAL_SIGNING_KEY_SEED)
 }
 
 fn test_cross_signing_publish(actor: &str) -> Result<CrossSigningPublish> {
@@ -1078,7 +1092,10 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(accepted["status"], "accepted");
+    anyhow::ensure!(
+        matches!(accepted["status"].as_str(), Some("accepted" | "duplicate")),
+        "principal inception was not accepted idempotently: {accepted}"
+    );
     let resolved = expect_json(
         server
             .http()
@@ -1095,7 +1112,7 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
     );
     crate::harness::register_event_signing_identity(
         actor,
-        [0x51; 32],
+        TEST_PRINCIPAL_SIGNING_KEY_SEED,
         format!("{actor}#cotest-principal-signing-key"),
     );
     Ok(())
@@ -1113,7 +1130,7 @@ async fn publish_test_cross_signing(server: &ArkretServer, token: &str, actor: &
         "ak.cross_signing.publish",
         serde_json::to_value(test_cross_signing_publish(actor)?)?,
         StatusCode::OK,
-        [0x51; 32],
+        TEST_PRINCIPAL_SIGNING_KEY_SEED,
         &format!("{actor}#cotest-principal-signing-key"),
     )
     .await?;
@@ -1151,7 +1168,7 @@ pub(crate) async fn authorize_additional_device_public_key(
         "ak.device.authorize",
         bootstrap_device_authorize_payload(actor, device_id, device_signing_key)?,
         StatusCode::OK,
-        [0x51; 32],
+        TEST_PRINCIPAL_SIGNING_KEY_SEED,
         &format!("{actor}#cotest-principal-signing-key"),
     )
     .await?;
@@ -1282,19 +1299,26 @@ fn signed_federation_event(
         .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
-    let event_digest =
-        Hash::new(event.event_digest()?).context("invalid federation event digest")?;
-    event.proofs.push(Proof {
-        kind: proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: format!("{actor_id}#01904100-0000-7000-8000-fedc00000011"),
-        event_digest,
-        created_at: event.created_at,
-        domain: None,
-        audience: None,
-        jws: "dev-cotest-federation".to_owned(),
-    });
+    sign_federation_event(&mut event)?;
     Ok(event)
+}
+
+fn sign_federation_event(event: &mut Event) -> Result<()> {
+    let verification_method = format!("{}#cotest-principal-signing-key", event.actor_id);
+    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        test_principal_signing_key().to_bytes(),
+        event.actor_id.clone(),
+        verification_method.clone(),
+    );
+    let created_at = event.created_at;
+    event.proofs.clear();
+    arkret::signatures::sign_event(
+        event,
+        &signer,
+        &verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .context("sign federation Event with the provisioned principal key")
 }
 
 fn with_federation_trust_headers(
@@ -1329,8 +1353,8 @@ fn with_federation_trust_headers_empty(
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_id = source.service_id();
     let destination_service_id = destination.service_id();
-    let source_trust_domain = trust_domain_for(source_service_id);
-    let destination_trust_domain = trust_domain_for(destination_service_id);
+    let source_trust_domain = source.trust_domain().as_str();
+    let destination_trust_domain = destination.trust_domain().as_str();
 
     let parsed_url = Url::parse(target_url)?;
     let authority = parsed_url
@@ -1386,8 +1410,8 @@ fn with_federation_trust_headers_for_digest(
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_id = source.service_id();
     let destination_service_id = destination.service_id();
-    let source_trust_domain = trust_domain_for(source_service_id);
-    let destination_trust_domain = trust_domain_for(destination_service_id);
+    let source_trust_domain = source.trust_domain().as_str();
+    let destination_trust_domain = destination.trust_domain().as_str();
 
     let parsed_url = Url::parse(target_url)?;
     let authority = parsed_url
@@ -1436,10 +1460,6 @@ fn with_federation_trust_headers_for_digest(
         .header("Signature", format!("sig1=:{signature}:")))
 }
 
-fn trust_domain_for(service_id: &str) -> String {
-    format!("ak:trust_domain:{}", did_host_from_service_id(service_id))
-}
-
 /// Mint a distinct, fully verifiable `did:webvh` principal for a test service.
 /// When the harness service still uses `did:key`, its stable multibase value is
 /// placed under the reserved `.cotest.local` suffix so the resulting method
@@ -1470,9 +1490,8 @@ pub fn prepare_actor_inception_for_service(
 /// Convert the percent-encoded port separator required by `did:web` method
 /// identifiers back into the HTTP authority form expected by `Url`.
 ///
-/// Keep this conversion local to principal URL construction: federation trust
-/// domains continue to use the canonical DID host spelling returned by
-/// `did_host_from_service_id`.
+/// Keep this conversion local to principal URL construction; federation trust
+/// domains come directly from each service's typed describe response.
 fn did_web_host_to_url_authority(host: &str) -> String {
     host.replace("%3A", ":").replace("%3a", ":")
 }
@@ -1517,27 +1536,8 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
     })
 }
 
-/// Extract the HTTP authority (host) a service DID's trust domain is scoped to,
-/// mirroring soland's `trust_domain_from_service_id`.
-///
-/// For `did:webvh:<scid>:<host>[:...]` the host is the segment *after* the SCID,
-/// so the SCID must not leak into the trust domain (soland test
-/// `trust_domain_derives_webvh_host_not_scid`). `did:web:<host>[:...]` and the
-/// `did:key:` fallback are kept for the negative/no-history fixtures that still
-/// mint those forms.
-fn did_host_from_service_id(service_id: &str) -> String {
-    let authority = did_authority_from_service_id(service_id);
-    authority
-        .split("%3a")
-        .next()
-        .unwrap_or(&authority)
-        .trim_end_matches('.')
-        .to_owned()
-}
-
 /// Extract the DID method authority while retaining an encoded local port.
-/// Principal inception needs the port to address the local WebVH endpoint;
-/// trust-domain derivation strips it in `did_host_from_service_id`.
+/// Principal inception needs the port to address the local WebVH endpoint.
 fn did_authority_from_service_id(service_id: &str) -> String {
     if let Some(rest) = service_id.strip_prefix("did:webvh:") {
         let mut parts = rest.split(':');

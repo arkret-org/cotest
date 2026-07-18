@@ -4,11 +4,10 @@ use std::path::Path;
 use anyhow::Result;
 use cotest::conformance::{
     VectorRegistryGateMode, VectorRegistryGateStatus, build_vector_registry_gate_report_from_paths,
-    validate_vector_registry_gate, validate_vector_registry_gate_report,
+    fixture_digest_hex, validate_vector_registry_gate, validate_vector_registry_gate_report,
     validate_vector_registry_gate_report_with_mode,
 };
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 #[test]
 fn active_vector_with_missing_artifact_evidence_fails() -> Result<()> {
@@ -207,6 +206,17 @@ fn fixture_backed_active_vector_with_digest_drift_fails() -> Result<()> {
             .to_string();
     assert!(error.contains("fixture digest drift"));
     Ok(())
+}
+
+#[test]
+fn fixture_digest_normalizes_lf_crlf_and_cr() {
+    let lf = b"{\n  \"vector_id\": \"ak.vector.fixture_backed.v1\"\n}\n";
+    let crlf = b"{\r\n  \"vector_id\": \"ak.vector.fixture_backed.v1\"\r\n}\r\n";
+    let cr = b"{\r  \"vector_id\": \"ak.vector.fixture_backed.v1\"\r}\r";
+
+    assert_eq!(fixture_digest_hex(lf), fixture_digest_hex(crlf));
+    assert_eq!(fixture_digest_hex(lf), fixture_digest_hex(cr));
+    assert_ne!(fixture_digest_hex(lf), fixture_digest_hex(b"different\n"));
 }
 
 #[test]
@@ -425,7 +435,7 @@ fn write_fixture_digest_report(artifacts_root: &Path, fixture_refs: &[&str]) -> 
             let bytes = fs::read(path)?;
             Ok(json!({
                 "path": fixture_ref,
-                "sha256": sha256_hex(&bytes),
+                "sha256": fixture_digest_hex(&bytes),
             }))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -438,15 +448,4 @@ fn write_fixture_digest_report(artifacts_root: &Path, fixture_refs: &[&str]) -> 
             "files": files,
         }),
     )
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-
-    let digest = Sha256::digest(bytes);
-    let mut out = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
 }

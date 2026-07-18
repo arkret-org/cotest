@@ -57,37 +57,75 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     let manage_grant_id = "ak:grant:01999999-0000-7000-8000-0000000000a1";
+    let actions = vec!["ak.realm.admin".to_owned()];
+    let current_registry_digest = arkret::current_capability_action_registry_digest()?;
+    let missing_basis = arkret::validate_capability_action_registry_binding(&actions, None)
+        .expect_err("aggregate-admin grant without registry basis must fail closed");
+    assert!(
+        missing_basis
+            .to_string()
+            .contains("capability_registry_basis_unavailable")
+    );
+    let wrong_registry_digest = arkret_core::Hash::new(format!("sha256:{}", "f".repeat(64)))?;
+    let wrong_basis =
+        arkret::validate_capability_action_registry_binding(&actions, Some(&wrong_registry_digest))
+            .expect_err("aggregate-admin grant with unknown registry basis must fail closed");
+    assert!(
+        wrong_basis
+            .to_string()
+            .contains("capability_registry_basis_unavailable")
+    );
+    arkret::validate_capability_action_registry_binding(&actions, Some(&current_registry_digest))?;
+    let grant_id = arkret_core::GrantId::new(manage_grant_id.to_owned())?;
+    let issued_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
+    let typed_grant = arkret_core::CapabilityGrant {
+        id: grant_id.clone(),
+        schema: "ak.schema.capability.v1".to_owned(),
+        realm_id: Some(arkret_core::RealmId::new(realm_id.clone())?),
+        issuer: arkret_core::Did::new(alice.actor.clone())?,
+        subject: arkret_core::CapabilitySubject::Did(arkret_core::Did::new(bob.actor.clone())?),
+        actions,
+        resources: vec![serde_json::from_value(json!({
+            "kind": "realm",
+            "realm_id": realm_id
+        }))?],
+        capability_action_registry_digest: Some(current_registry_digest),
+        constraints: Vec::new(),
+        parent_grant_id: None,
+        issued_at,
+        not_before: None,
+        expires_at: None,
+        updated_by: None,
+        updated_at: None,
+        revoked_by: None,
+        revoked_at: None,
+        proofs: vec![arkret_core::PayloadProof {
+            kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: format!("{}#cotest", alice.actor),
+            payload_digest: arkret_core::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            created_at: issued_at,
+            domain: None,
+            audience: None,
+            proof_purpose: None,
+            jws: "a..b".to_owned(),
+        }],
+    };
+    let grant_payload = arkret_core::CapabilityGrantPayload {
+        grant: Some(typed_grant),
+        grant_id,
+        subject: None,
+        actions: None,
+        resources: None,
+    };
     let manage_grant = submit_event(
         &server,
         &alice.token,
         &alice.actor,
         &realm_id,
         "ak.capability.grant",
-        json!({
-            "grant_id": manage_grant_id,
-            "grant": {
-                "id": manage_grant_id,
-                "schema": "ak.schema.capability.v1",
-                "realm_id": realm_id,
-                "issuer": alice.actor,
-                "subject": bob.actor,
-                "actions": ["ak.realm.admin"],
-                "resources": [{
-                    "kind": "realm",
-                    "realm_id": realm_id
-                }],
-                "constraints": [],
-                "issued_at": "2026-05-02T00:00:00Z",
-                "proofs": [{
-                    "kind": "detached_jws",
-                    "alg": "EdDSA",
-                    "verification_method": format!("{}#cotest", alice.actor),
-                    "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                    "created_at": "2026-05-02T00:00:00Z",
-                    "jws": "a..b"
-                }]
-            }
-        }),
+        serde_json::to_value(grant_payload)?,
         StatusCode::OK,
     )
     .await?;

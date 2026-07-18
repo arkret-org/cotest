@@ -26,9 +26,9 @@ pub use assertions::{
 pub use client::TestActorClient;
 pub use event_builder::{
     add_member, add_member_with_signing_seed, create_realm, create_realm_with_signing_seed,
-    dev_login, encrypted_envelope, event_envelope, event_envelope_with_signing_seed,
-    register_account, send_message, submit_event, submit_event_with_signing_seed,
-    submit_event_with_signing_seed_and_verification_method,
+    dev_login, device_message_send_request, encrypted_envelope, event_envelope,
+    event_envelope_with_signing_seed, register_account, send_message, submit_event,
+    submit_event_with_signing_seed, submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
     invite_create_payload, member_join_payload_value, member_join_payload_with_delivery_binding,

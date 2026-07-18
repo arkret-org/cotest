@@ -1,9 +1,10 @@
 use anyhow::{Context, Result, anyhow};
+use arkret::TypedTrustDomainId;
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use arkret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
-use arkret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
+use arkret_core::{Did, Event, EventId, Hlc, RealmId};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -19,12 +20,27 @@ use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
 };
 
+struct FederationSource<'a> {
+    service_id: &'a str,
+    trust_domain: TypedTrustDomainId,
+}
+
+impl<'a> FederationSource<'a> {
+    fn new(service_id: &'a str, trust_domain: &str) -> Result<Self> {
+        Ok(Self {
+            service_id,
+            trust_domain: TypedTrustDomainId::new(trust_domain.to_owned())
+                .with_context(|| format!("invalid test source trust domain `{trust_domain}`"))?,
+        })
+    }
+}
+
 fn with_signed_federation_request(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
     destination: &ArkretServer,
-    source_service_id: &str,
+    source: &FederationSource<'_>,
     body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
     let body_bytes = canonical_json_bytes(body)?;
@@ -36,9 +52,10 @@ fn with_signed_federation_request(
         method,
         target_url,
         destination,
-        source_service_id,
+        source,
         content_digest,
         request_canonical_digest,
+        None,
     )
 }
 
@@ -47,7 +64,7 @@ fn with_signed_federation_empty_request(
     method: &str,
     target_url: &str,
     destination: &ArkretServer,
-    source_service_id: &str,
+    source: &FederationSource<'_>,
 ) -> Result<reqwest::RequestBuilder> {
     let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = sha256_digest([]);
@@ -56,9 +73,30 @@ fn with_signed_federation_empty_request(
         method,
         target_url,
         destination,
-        source_service_id,
+        source,
         content_digest,
         request_canonical_digest,
+        None,
+    )
+}
+
+fn with_signed_federation_empty_request_for_destination(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    destination: &ArkretServer,
+    source: &FederationSource<'_>,
+    destination_trust_domain: &str,
+) -> Result<reqwest::RequestBuilder> {
+    with_signed_federation_request_digests(
+        builder,
+        method,
+        target_url,
+        destination,
+        source,
+        ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value,
+        sha256_digest([]),
+        Some(destination_trust_domain),
     )
 }
 
@@ -67,13 +105,16 @@ fn with_signed_federation_request_digests(
     method: &str,
     target_url: &str,
     destination: &ArkretServer,
-    source_service_id: &str,
+    source: &FederationSource<'_>,
     content_digest: String,
     request_canonical_digest: String,
+    destination_trust_domain_override: Option<&str>,
 ) -> Result<reqwest::RequestBuilder> {
-    let source_trust_domain = trust_domain_from_service_id(source_service_id);
+    let source_service_id = source.service_id;
+    let source_trust_domain = source.trust_domain.as_str();
     let destination_service_id = destination.service_id();
-    let destination_trust_domain = trust_domain_from_service_id(destination_service_id);
+    let destination_trust_domain =
+        destination_trust_domain_override.unwrap_or_else(|| destination.trust_domain().as_str());
 
     let parsed_url = Url::parse(target_url)?;
     let authority = parsed_url
@@ -155,36 +196,6 @@ fn with_signed_federation_request_digests(
     Ok(builder)
 }
 
-fn trust_domain_from_service_id(service_id: &str) -> String {
-    // Mirror soland's `trust_domain_from_service_id`: for
-    // `did:webvh:<scid>:<host>[:...]` the trust domain is scoped to the host
-    // segment *after* the SCID, so the SCID must not leak in (soland test
-    // `trust_domain_derives_webvh_host_not_scid`). `did:web:` and `did:key:`
-    // are kept for negative/no-history fixtures that still mint those forms.
-    if let Some(rest) = service_id.strip_prefix("did:webvh:") {
-        let mut parts = rest.split(':');
-        let scid = parts.next().unwrap_or_default();
-        if let Some(host) = parts.next() {
-            if !scid.is_empty() && !host.is_empty() {
-                return format!("ak:trust_domain:{}", host.to_ascii_lowercase());
-            }
-        }
-    }
-    if let Some(rest) = service_id.strip_prefix("did:web:") {
-        if let Some(host) = rest.split(':').next() {
-            if !host.is_empty() {
-                return format!("ak:trust_domain:{}", host.to_ascii_lowercase());
-            }
-        }
-    }
-    let scope = service_id
-        .strip_prefix("did:key:")
-        .unwrap_or(service_id)
-        .to_ascii_lowercase()
-        .replace(':', ".");
-    format!("ak:trust_domain:{scope}")
-}
-
 fn development_service_signing_key(service_id: &str) -> arkret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
@@ -234,22 +245,29 @@ fn signed_federation_event(
         .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
-    let event_digest =
-        Hash::new(event.event_digest()?).context("invalid federation event digest")?;
-    event.proofs.push(Proof {
-        kind: proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: format!("{actor_id}#01904100-0000-7000-8000-fedc00000011"),
-        event_digest,
-        created_at: event.created_at,
-        domain: None,
-        audience: None,
-        jws: "dev-cotest-federation".to_owned(),
-    });
+    let verification_method = format!("{actor_id}#cotest");
+    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        arkret::signatures::development_signing_key_seed(&verification_method),
+        event.actor_id.clone(),
+        verification_method.clone(),
+    );
+    let created_at = event.created_at;
+    arkret::signatures::sign_event(
+        &mut event,
+        &signer,
+        &verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .context("sign federation contract Event with the provisioned development key")?;
     Ok(event)
 }
 
-fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&str]) -> Value {
+fn federation_realm_payload(
+    realm_id: &str,
+    creator: &str,
+    trust_domain: &TypedTrustDomainId,
+    visible_services: &[&str],
+) -> Value {
     // Structured `plaintext_visible_services` entries (`{service_id,
     // data_classes}`) are required for the receiving service to hold the
     // `message_content` plaintext class — bare DIDs only populate the legacy
@@ -273,7 +291,7 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
             "schema": "ak.schema.realm.v1",
             "title": "Federation Contract Realm",
             "summary": "federation contract fixture",
-            "trust_domain": trust_domain_from_service_id(creator),
+            "trust_domain": trust_domain,
             "created_by": creator,
             "schema_refs": ["ak.schema.realm.v1"],
             "default_discoverability": "invite_only",
@@ -299,6 +317,10 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
 
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     let server = ArkretServer::spawn("federation-invalid").await?;
+    let invalid_source = FederationSource::new(
+        "did:web:invalid-shape.remote",
+        "ak:trust_domain:invalid-shape.remote",
+    )?;
 
     // A body that is not even parseable JSON fails at the JSON layer and is
     // reported as `bad_json`.
@@ -330,6 +352,36 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
         "schema_violation",
     )
     .await?;
+    let valid_realms_url =
+        server.url("/_arkret/peer/events?realms=ak:realm:0196419b-0000-7000-8000-00000000f0aa");
+    expect_api_error(
+        with_signed_federation_empty_request_for_destination(
+            server.http().get(&valid_realms_url),
+            "GET",
+            &valid_realms_url,
+            &server,
+            &invalid_source,
+            "ak:trust_domain:bad%3a443",
+        )?,
+        StatusCode::BAD_REQUEST,
+        "schema_violation",
+    )
+    .await?;
+    let mismatched_destination =
+        TypedTrustDomainId::new("ak:trust_domain:other.cotest.local".to_owned())?;
+    expect_api_error(
+        with_signed_federation_empty_request_for_destination(
+            server.http().get(&valid_realms_url),
+            "GET",
+            &valid_realms_url,
+            &server,
+            &invalid_source,
+            mismatched_destination.as_str(),
+        )?,
+        StatusCode::CONFLICT,
+        "cross_domain_replay_rejected",
+    )
+    .await?;
     let invalid_realms_url = server.url("/_arkret/peer/events?realms=bad");
     expect_api_error(
         with_signed_federation_empty_request(
@@ -337,7 +389,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             "GET",
             &invalid_realms_url,
             &server,
-            "did:web:invalid-shape.remote",
+            &invalid_source,
         )?,
         StatusCode::BAD_REQUEST,
         "invalid_param",
@@ -366,6 +418,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let invalid_event_id = "ak:event:0196419b-0000-7000-8000-00000000f102";
     let redaction_event_id = "ak:event:0196419b-0000-7000-8000-00000000f103";
     let remote_service_id = "did:web:remote.example";
+    let remote_source = FederationSource::new(remote_service_id, "ak:trust_domain:remote.example")?;
 
     let realm_create = signed_federation_event(
         realm_create_event_id,
@@ -376,6 +429,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         federation_realm_payload(
             realm_id,
             remote_service_id,
+            &remote_source.trust_domain,
             &[remote_service_id, server.service_id()],
         ),
     )?;
@@ -441,7 +495,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &first_push_url,
             &server,
-            remote_service_id,
+            &remote_source,
             &first_push_body,
         )?,
         StatusCode::OK,
@@ -458,7 +512,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &pulled_url,
             &server,
-            remote_service_id,
+            &remote_source,
         )?,
         StatusCode::OK,
     )
@@ -475,7 +529,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &snapshot_head_url,
             &server,
-            remote_service_id,
+            &remote_source,
         )?,
         StatusCode::NOT_IMPLEMENTED,
         "not_implemented",
@@ -498,7 +552,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &replay_url,
             &server,
-            remote_service_id,
+            &remote_source,
             &replay_body,
         )?,
         StatusCode::OK,
@@ -514,7 +568,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &after_replay_pull_url,
             &server,
-            remote_service_id,
+            &remote_source,
         )?,
         StatusCode::OK,
     )
@@ -553,7 +607,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &invalid_push_url,
             &server,
-            remote_service_id,
+            &remote_source,
             &invalid_push_body,
         )?,
         StatusCode::OK,
@@ -593,7 +647,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &redaction_push_url,
             &server,
-            remote_service_id,
+            &remote_source,
             &redaction_push_body,
         )?,
         StatusCode::OK,
@@ -612,7 +666,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "GET",
             &redacted_pull_url,
             &server,
-            remote_service_id,
+            &remote_source,
         )?,
         StatusCode::OK,
     )
@@ -631,6 +685,10 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
 pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<()> {
     let server = ArkretServer::spawn("federation-project").await?;
+    let remote_source = FederationSource::new(
+        "did:web:remote-server.example",
+        "ak:trust_domain:remote-server.example",
+    )?;
     let alice = dev_login(
         &server,
         "did:web:alice.example",
@@ -644,7 +702,12 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "did:web:alice.example",
         realm_id,
         "ak.realm.create",
-        federation_realm_payload(realm_id, "did:web:alice.example", &[server.service_id()]),
+        federation_realm_payload(
+            realm_id,
+            "did:web:alice.example",
+            server.trust_domain(),
+            &[server.service_id()],
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -741,7 +804,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
             "POST",
             &txn_url,
             &server,
-            "did:web:remote-server.example",
+            &remote_source,
             &txn_body,
         )?,
         StatusCode::OK,

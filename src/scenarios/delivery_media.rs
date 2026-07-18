@@ -4,9 +4,9 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
-    expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
-    member_join_payload_value, register_account,
+    ArkretServer, TestActorClient, dev_login, device_message_send_request, encrypted_envelope,
+    expect_api_error, expect_indistinguishable_api_errors, expect_json, expect_response,
+    expect_text, member_join_payload_value, register_account,
 };
 use crate::scenarios::federation_collaboration::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
@@ -167,23 +167,23 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     )
     .await?;
 
+    let expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
+    let request = device_message_send_request(
+        "did:web:alice.example",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device_message:0196419b-0000-7000-8000-00000000d201",
+        "ak.mls.application",
+        encrypted_envelope("ak.mls.application", "opaque-to-device"),
+        expires_at,
+    )?;
     let send = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-idempotent-txn")
-            .json(&json!({
-                "messages": {
-                    "did:web:alice.example": {
-                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ak.mls.application",
-                            "content": encrypted_envelope("ak.mls.application", "opaque-to-device"),
-                            "expires_at": "2026-12-31T00:00:00Z"
-                        }
-                    }
-                }
-            })),
+            .json(&request),
         StatusCode::OK,
     )
     .await?;
@@ -198,24 +198,13 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .post(server.url("/_arkret/self/device_messages"))
             .bearer_auth(&token)
             .header("Idempotency-Key", "device-idempotent-txn")
-            .json(&json!({
-                "messages": {
-                    "did:web:alice.example": {
-                        "ak:device:01904100-0000-7000-8000-0000000000a1": {
-                            "kind": "ak.mls.application",
-                            "content": encrypted_envelope("ak.mls.application", "opaque-to-device"),
-                            "expires_at": "2026-12-31T00:00:00Z"
-                        }
-                    }
-                }
-            })),
+            .json(&request),
         StatusCode::OK,
     )
     .await?;
-    assert!(
-        duplicate["delivered"]
-            .as_object()
-            .is_none_or(serde_json::Map::is_empty)
+    assert_eq!(
+        duplicate, send,
+        "request replay must return the stored outcome"
     );
 
     let delivered = expect_json(
@@ -261,6 +250,53 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         drained["messages"].as_array().unwrap().is_empty(),
         "acknowledged messages were delivered again: first={delivered}, next={drained}"
     );
+
+    let message_replay = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/device_messages"))
+            .bearer_auth(&token)
+            .header("Idempotency-Key", "device-logical-replay-txn")
+            .json(&request),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(message_replay, send);
+    let after_message_replay = expect_json(
+        server
+            .http()
+            .get(server.url("/_arkret/self/device_messages"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(
+        after_message_replay["messages"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    let mut conflicting_request = request;
+    conflicting_request
+        .messages
+        .values_mut()
+        .next()
+        .and_then(|devices| devices.values_mut().next())
+        .expect("typed request contains one target")
+        .content
+        .insert("ciphertext".to_owned(), json!("different-opaque-bytes"));
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/self/device_messages"))
+            .bearer_auth(&token)
+            .header("Idempotency-Key", "device-logical-conflict-txn")
+            .json(&conflicting_request),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
 
     Ok(())
 }

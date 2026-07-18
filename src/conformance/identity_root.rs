@@ -11,7 +11,6 @@ use arkret::identity_root::{
     bip39_identity_recovery_secret, derive_identity_recovery_key_material,
     derive_identity_recovery_key_material_from_bip39,
 };
-use arkret_core::events::kinds;
 use arkret_core::{
     Audience, Base64UrlString, DeviceAuthorizePayload, DeviceEnrollmentAuthorityBinding,
     DeviceEnrollmentAuthorityBindingKind, DeviceGenerationState, DeviceGenerationStatus, DeviceId,

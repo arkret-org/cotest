@@ -16,6 +16,7 @@ use serde_json::{Map, Value, json};
 use serial_test::serial;
 
 const MOCK_PARITY_ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
+const MOCK_PARITY_ALICE_SIGNING_SEED: [u8; 32] = [0x5f; 32];
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -138,7 +139,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         &alice_token,
         &alice_did,
         MOCK_PARITY_ALICE_DEVICE_ID,
-        &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+        &ed25519_dalek::SigningKey::from_bytes(&MOCK_PARITY_ALICE_SIGNING_SEED),
     )
     .await?;
     let ctx = TemplateContext {
@@ -164,7 +165,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         }
 
         let rendered_path = render_str(&case.path, &ctx);
-        let rendered_body = render_body(case, &ctx);
+        let rendered_body = render_body(case, &ctx)?;
         let mock = normalize_snapshot(
             &case.id,
             call_mock_contract(
@@ -279,7 +280,7 @@ fn assert_mock_contract_format(
 ) -> Result<()> {
     for case in &fixture.cases {
         let rendered_path = render_str(&case.path, ctx);
-        let rendered_body = render_body(case, ctx);
+        let rendered_body = render_body(case, ctx)?;
         let snapshot = call_mock_contract(contract_path, case, &rendered_path, rendered_body, ctx)
             .with_context(|| format!("format smoke for {}", case.id))?;
         if snapshot.status == 599 {
@@ -362,7 +363,7 @@ fn assert_mock_contract_artifact_gate(
                 );
             }
             if operation.request_schema_ref.is_some() {
-                let body = render_body(case, ctx);
+                let body = render_body(case, ctx)?;
                 let request_shape = schema.request.as_ref().ok_or_else(|| {
                     anyhow!(
                         "schema index missing request shape for fixture case `{}` ({})",
@@ -373,7 +374,7 @@ fn assert_mock_contract_artifact_gate(
                 assert_json_shape_required_fields(case, "request", request_shape, body.as_ref())?;
             }
             if operation.response_schema_ref.is_some() {
-                let body = render_body(case, ctx);
+                let body = render_body(case, ctx)?;
                 let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                     .with_context(|| {
                     format!("mock response for artifact gate case `{}`", case.id)
@@ -401,7 +402,7 @@ fn assert_mock_contract_artifact_gate(
                 )?;
             }
         } else {
-            let body = render_body(case, ctx);
+            let body = render_body(case, ctx)?;
             let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                 .with_context(|| format!("mock response for artifact gate case `{}`", case.id))?;
             assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
@@ -708,26 +709,26 @@ fn extract_after<'a>(line: &'a str, prefix: &str, suffix: &str) -> Option<&'a st
     Some(&rest[..end])
 }
 
-fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
-    match case.body_template.as_deref() {
+fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>> {
+    Ok(match case.body_template.as_deref() {
         Some("realm_create_event") => Some(realm_create_event(
             ctx,
             "ak:realm:01999999-0000-7000-8000-000000000451",
             "Mock parity setup",
             9_000_000_000_000_451,
-        )),
+        )?),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
             "ak:realm:01999999-0000-7000-8000-000000000452",
             "Mock Parity Realm",
             9_000_000_000_000_452,
-        )),
+        )?),
         Some("realm_create_event_3") => Some(realm_create_event(
             ctx,
             "ak:realm:01999999-0000-7000-8000-000000000453",
             "Mock Parity Space",
             9_000_000_000_000_453,
-        )),
+        )?),
         Some("typing_ephemeral") => {
             let sent_at = Utc::now();
             let expires_at = sent_at + Duration::seconds(30);
@@ -756,9 +757,9 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
             );
             Some(envelope)
         }
-        Some(other) => panic!("unknown body_template {other}"),
+        Some(other) => bail!("unknown body_template {other}"),
         None => case.body.as_ref().map(|body| render_value(body, ctx)),
-    }
+    })
 }
 
 fn render_value(value: &Value, ctx: &TemplateContext) -> Value {
@@ -788,7 +789,12 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
         .replace("${space_id}", &ctx.space_id)
 }
 
-fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_seq: u64) -> Value {
+fn realm_create_event(
+    ctx: &TemplateContext,
+    realm_id: &str,
+    title: &str,
+    actor_seq: u64,
+) -> Result<Value> {
     let cell = format!("ak:cell:ak.component.realm.create.v1:{realm_id}");
     let payload = json!({
         "object": {
@@ -829,7 +835,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "realm_id": realm_id,
         "actor_id": ctx.alice_did,
         "actor_seq": actor_seq,
-        "created_at": "2026-05-22T10:00:00Z",
+        "created_at": "2026-05-22T10:00:00.000Z",
         "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
         "refs": [],
@@ -858,14 +864,17 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
-            "verification_method": format!("{}#device", ctx.alice_did),
+            "verification_method": format!("{}#{}", ctx.alice_did, MOCK_PARITY_ALICE_DEVICE_ID),
             "event_digest": "",
-            "created_at": "2026-05-22T10:00:00Z",
+            "created_at": "2026-05-22T10:00:00.000Z",
             "jws": "placeholder"
         }]
     });
-    cotest::harness::refresh_event_proof(&mut event);
-    event
+    cotest::harness::refresh_event_proof_with_signing_seed(
+        &mut event,
+        MOCK_PARITY_ALICE_SIGNING_SEED,
+    )?;
+    Ok(event)
 }
 
 fn call_mock_contract(

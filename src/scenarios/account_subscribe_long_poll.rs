@@ -22,6 +22,8 @@ use crate::harness::{
     member_join_payload_with_invite_ref, message_create_text_payload,
 };
 
+const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
+
 pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result<()> {
     let group = TestServerGroup::single("account-subscribe-quiet-realm").await?;
     let server = group.server(0);
@@ -47,8 +49,8 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         .to_owned();
 
     let quiet = tokio::time::timeout(
-        Duration::from_secs(30),
-        fetch_account_subscribe(&alice, &format!("catchup=true&after={cursor}")),
+        QUIET_LONG_POLL_TEST_DEADLINE,
+        fetch_account_subscribe_frontier(&alice, &format!("catchup=true&after={cursor}")),
     )
     .await
     .map_err(|_| anyhow!("quiet incremental subscribe exceeded its controlled deadline"))??;
@@ -61,14 +63,13 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         cursor_frontier_handle(&cursor)?,
         "an empty incremental response MUST preserve the cursor frontier: {quiet}"
     );
-    let quiet_realms = quiet["realms"]
-        .as_object()
-        .ok_or_else(|| anyhow!("quiet incremental response missing realms object: {quiet}"))?;
-    let realm_keys = quiet_realms.keys().cloned().collect::<Vec<_>>();
     assert_eq!(
-        realm_keys,
-        Vec::<String>::new(),
-        "unchanged incremental response MUST omit every quiet realm, including {realm_id}: {quiet}"
+        quiet["kind"], "frontier",
+        "quiet poll must end with frontier"
+    );
+    assert!(
+        quiet.get("realms").is_none_or(Value::is_null),
+        "frontier MUST omit every quiet realm, including {realm_id}: {quiet}"
     );
 
     Ok(())
@@ -475,6 +476,34 @@ async fn fetch_account_subscribe(
     .await
 }
 
+async fn fetch_account_subscribe_frontier(
+    actor: &crate::harness::TestActorClient,
+    query: &str,
+) -> Result<Value> {
+    let response = actor
+        .get(&format!("/_arkret/self/account/subscribe?{query}"))
+        .header("accept", "application/x-ndjson")
+        .send()
+        .await?;
+    if response.status() != StatusCode::OK {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(anyhow!(
+            "expected quiet subscribe HTTP 200, got {status}: {body}"
+        ));
+    }
+    let body = response.text().await?;
+    for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let frame: Value = serde_json::from_str(line)?;
+        if frame.get("kind").and_then(Value::as_str) == Some("frontier") {
+            return Ok(frame);
+        }
+    }
+    Err(anyhow!(
+        "quiet account subscribe ended without a frontier frame: {body}"
+    ))
+}
+
 fn cursor_from_sync(sync: &Value) -> Result<String> {
     sync["cursor"]
         .as_str()
@@ -573,7 +602,7 @@ async fn submit_event_now(
     {
         proof["created_at"] = Value::String(created_at);
     }
-    crate::harness::refresh_event_proof(&mut event);
+    crate::harness::refresh_event_proof(&mut event)?;
     let mut response = crate::harness::expect_json(
         actor.post("/_arkret/self/events").json(&event),
         StatusCode::OK,

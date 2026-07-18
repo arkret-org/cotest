@@ -1025,7 +1025,7 @@ async fn submit_delegated_agent_event(
         ])?;
     }
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
-    refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32]);
+    refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
     let typed_event: arkret::Event = serde_json::from_value(event.clone())?;
     let body = expect_json(
         server
@@ -1121,7 +1121,7 @@ async fn move_event_after_actor_frontier(
     let actor_seq = original_actor_seq.max(frontier_actor_seq) + 32;
     event["actor_seq"] = json!(actor_seq);
     event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
-    refresh_event_proof_with_signing_seed(event, [21_u8; 32]);
+    refresh_event_proof_with_signing_seed(event, [21_u8; 32])?;
     Ok(())
 }
 

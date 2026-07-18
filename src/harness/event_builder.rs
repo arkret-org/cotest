@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::Ordering;
 use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Result, anyhow};
+use arkret::{
+    DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
+};
 use arkret_core::{
     ContentBlock, DeliveryStatus, Did, EventId, Hash, InviteCreatePayload, InviteDeliveryTarget,
     InviteId, MemberDeliveryBinding, MembershipInviteRef, MembershipPayload,
@@ -54,30 +57,12 @@ pub async fn register_account(
     handle: &str,
     device_id: &str,
 ) -> Result<String> {
-    register_account_with_handle(server, did, handle, None, device_id).await
-}
-
-/// Register an account and, when `published_handle` is `Some`, also publish a
-/// primary localpart binding via the canonical `<localpart>:<domain>` handle.
-/// soland leaves an account with no published handle when the registration
-/// omits `handle`, so directory/handle assertions that expect a resolvable
-/// `localpart:host` must opt in here.
-pub async fn register_account_with_handle(
-    server: &ArkretServer,
-    did: &str,
-    display_handle: &str,
-    published_handle: Option<&str>,
-    device_id: &str,
-) -> Result<String> {
     let device_id = canonical_device_id(device_id);
-    let mut body = json!({
+    let body = json!({
         "principal_id": did,
-        "display_name": display_handle.trim_start_matches('@'),
+        "display_name": handle.trim_start_matches('@'),
         "device_id": device_id
     });
-    if let Some(handle) = published_handle {
-        body["handle"] = json!(handle);
-    }
     expect_json(
         server.account_registration_request().json(&body),
         StatusCode::OK,
@@ -85,6 +70,24 @@ pub async fn register_account_with_handle(
     .await?;
 
     dev_login(server, did, &device_id).await
+}
+
+pub async fn register_account_with_localpart(
+    server: &ArkretServer,
+    did: &str,
+    display_handle: &str,
+    localpart: &str,
+    device_id: &str,
+) -> Result<String> {
+    let token = register_account(server, did, display_handle, device_id).await?;
+    expect_json(
+        server
+            .account_localpart_request(did)?
+            .json(&json!({ "localpart": localpart, "is_primary": true })),
+        StatusCode::OK,
+    )
+    .await?;
+    Ok(token)
 }
 
 pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> Result<String> {
@@ -105,6 +108,33 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
         .as_str()
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow!("login response did not include session_credential: {login}"))
+}
+
+pub fn device_message_send_request(
+    recipient: &str,
+    device_id: &str,
+    message_id: &str,
+    kind: &str,
+    content: Value,
+    expires_at: DateTime<Utc>,
+) -> Result<DeviceMessagesSendRequestBody> {
+    let content = content
+        .as_object()
+        .ok_or_else(|| anyhow!("device-message content must be an object"))?
+        .clone()
+        .into_iter()
+        .collect();
+    let target = DeviceMessageTarget {
+        message_id: DeviceMessageId::new(message_id.to_owned())?,
+        kind: ProtocolKind::new(kind.to_owned()).map_err(anyhow::Error::msg)?,
+        content,
+        expires_at,
+    };
+    let mut devices = BTreeMap::new();
+    devices.insert(DeviceId::new(device_id.to_owned())?, target);
+    let mut messages = BTreeMap::new();
+    messages.insert(Did::new(recipient.to_owned())?, devices);
+    Ok(DeviceMessagesSendRequestBody { messages })
 }
 
 pub async fn create_realm(
