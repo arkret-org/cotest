@@ -1982,7 +1982,7 @@ try {
                 -Command ("cargo build --manifest-path {0} --bin soland" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary })
+            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "soland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
         }
@@ -2005,7 +2005,7 @@ try {
                 -Command ("cargo build --manifest-path {0} --bin coauth" -f (Quote-PsLiteral $coauthManifest)) `
                 -WorkingDirectory (Split-Path -Parent $coauthManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; Service = $service; Started = $started; Artifact = $defaultCoauthBinary })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; Service = $service; Started = $started; Artifact = $defaultCoauthBinary; AllowUnchangedArtifact = $true })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFreshness.Detail })
         }
@@ -2028,7 +2028,7 @@ try {
                 -Command ("cargo build --manifest-path {0} --bin starid" -f (Quote-PsLiteral $staridManifest)) `
                 -WorkingDirectory (Split-Path -Parent $staridManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "starid"; Service = $service; Started = $started; Artifact = $defaultStaridBinary })
+            $preparationTasks.Add([pscustomobject]@{ Name = "starid"; Service = $service; Started = $started; Artifact = $defaultStaridBinary; AllowUnchangedArtifact = $true })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "starid"; status = "cache-hit"; duration_seconds = 0; detail = $staridFreshness.Detail })
         }
@@ -2059,7 +2059,7 @@ try {
                 -Command $buildCommand `
                 -WorkingDirectory $InksonRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; Service = $service; Started = $started; Artifact = $inksonStaticIndex })
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "inkson"; status = "cache-hit"; duration_seconds = 0; detail = $inksonFreshness.Detail })
         }
@@ -2075,10 +2075,22 @@ try {
         $artifactExists = Test-Path -LiteralPath $task.Artifact -PathType Leaf
         $artifactUpdated = $artifactExists -and `
             (Get-Item -LiteralPath $task.Artifact).LastWriteTimeUtc -ge $task.Started.ToUniversalTime().AddSeconds(-2)
-        if (($null -ne $exitCode -and $exitCode -ne 0) -or -not $artifactUpdated) {
+        if (($null -ne $exitCode -and $exitCode -ne 0) -or -not $artifactExists) {
             throw "preparing $($task.Name) failed (exit=$exitCode, artifact_updated=$artifactUpdated); see $($task.Service.Stdout) and $($task.Service.Stderr)"
         }
-        $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = "built"; duration_seconds = $duration; detail = $task.Artifact })
+        $status = "built"
+        if (-not $artifactUpdated) {
+            if (-not $task.AllowUnchangedArtifact) {
+                throw "preparing $($task.Name) failed (exit=$exitCode, artifact_updated=False); see $($task.Service.Stdout) and $($task.Service.Stderr)"
+            }
+            # Cargo may prove the current source tree already matches an existing
+            # executable and exit successfully without relinking it. Refresh the
+            # filesystem timestamp only after that successful build so the HEAD
+            # freshness gate records this explicit verification.
+            (Get-Item -LiteralPath $task.Artifact).LastWriteTimeUtc = [DateTime]::UtcNow
+            $status = "verified-cargo-cache-hit"
+        }
+        $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = $status; duration_seconds = $duration; detail = $task.Artifact })
     }
     ConvertTo-Json -InputObject @($preparationTimings.ToArray()) -Depth 4 |
         Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8
