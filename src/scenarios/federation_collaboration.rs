@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use arkret::identity::binding::multicodec_ed25519_public_key;
 use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
@@ -12,7 +11,7 @@ use arkret_core::{
     AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId, Hash,
     Hlc, KeyFormat, KeyOperationSignature, KeysUploadRequestBody, NonEmptyString, Proof,
     PublishedKey, RealmId, SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
-    principal_control_realm_id, proof_kind,
+    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id, proof_kind,
 };
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
@@ -912,7 +911,8 @@ pub(crate) fn bootstrap_device_authorize_payload(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<Value> {
-    let device_public_key = multicodec_ed25519_public_key(&device_signing_key.verifying_key());
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
     let principal = Did::new(principal_id.to_owned())
         .with_context(|| format!("invalid principal DID `{principal_id}`"))?;
     let device = arkret_core::DeviceId::new(device_id.to_owned()).context("invalid device id")?;
@@ -1003,8 +1003,10 @@ fn test_cross_signing_publish(actor: &str) -> Result<CrossSigningPublish> {
     let key_record = |kid: String, key: &SigningKey| PublishedKey {
         kid: NonEmptyString::new(kid).expect("test key id is non-empty"),
         alg: NonEmptyString::new("EdDSA".to_owned()).unwrap(),
-        public_key: NonEmptyString::new(multicodec_ed25519_public_key(&key.verifying_key()))
-            .unwrap(),
+        public_key: NonEmptyString::new(ed25519_pubkey_to_did_key_multibase(
+            &key.verifying_key().to_bytes(),
+        ))
+        .unwrap(),
         key_format: KeyFormat::Multibase,
     };
     let ssk_record = key_record(ssk_kid.clone(), &ssk);
@@ -1167,7 +1169,8 @@ pub(crate) fn signed_keys_upload_body(
     let fallback_keys = signed_algorithm_key_records(actor, fallback_keys, true)?;
     let signing_input = keys_upload_signing_input(device_id, &one_time_keys, &fallback_keys)?;
     let signature = signing_key.sign(&signing_input);
-    let device_public_key = multicodec_ed25519_public_key(&signing_key.verifying_key());
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(&signing_key.verifying_key().to_bytes());
     Ok(KeysUploadRequestBody {
         device_id: DeviceId::new(device_id.to_owned()).context("invalid keys/upload device id")?,
         one_time_keys,
@@ -1481,10 +1484,13 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
         Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
     let next_root = SigningKey::from_bytes(&next_root_seed);
     let enrollment = SigningKey::from_bytes(&enrollment_seed);
-    let next_root_multibase = multicodec_ed25519_public_key(&next_root.verifying_key());
-    let principal_signing_multibase =
-        multicodec_ed25519_public_key(&test_principal_signing_key().verifying_key());
-    let enrollment_multibase = multicodec_ed25519_public_key(&enrollment.verifying_key());
+    let next_root_multibase =
+        ed25519_pubkey_to_did_key_multibase(&next_root.verifying_key().to_bytes());
+    let principal_signing_multibase = ed25519_pubkey_to_did_key_multibase(
+        &test_principal_signing_key().verifying_key().to_bytes(),
+    );
+    let enrollment_multibase =
+        ed25519_pubkey_to_did_key_multibase(&enrollment.verifying_key().to_bytes());
     prepare_principal_inception(&PrincipalInceptionInput {
         principal_endpoint: &endpoint,
         local_id,
