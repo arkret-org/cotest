@@ -714,6 +714,7 @@ test.describe("multi-device pairing + revocation", () => {
           messages: {
             [alice.did]: {
               [device2Id]: {
+                message_id: typedId("device_message"),
                 kind: "ak.key.verification.request",
                 expires_at: new Date(Date.now() + 10 * 60_000)
                   .toISOString()
@@ -1207,6 +1208,7 @@ async function deliverPairingRequest(
         messages: {
           [user.did]: {
             [user.deviceId]: {
+              message_id: typedId("device_message"),
               kind: "ak.key.verification.request",
               expires_at: expiresAt,
               content: {
