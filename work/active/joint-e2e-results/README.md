@@ -14,24 +14,6 @@
 
 ## 剩余问题
 
-### RC-2：coauth WebAuthn origin 仍无效
-
-标准拓扑中的 coauth 已能访问 loopback Soland，`/_arkret/describe` 返回 200；原先的 principal discovery 503 不再存在。但 coauth 仍持续记录：
-
-```text
-webauthn_rs: rp_id is not an effective_domain of rp_origin
-rp_id=127.0.0.1, rp_origin=http://127.0.0.1:<port>/
-```
-
-证据：[`coauth.stderr.log`](../../../artifacts/runs/20260719-042118/joint-e2e/services/coauth.stderr.log)。
-
-待完成：
-
-1. 找到 WebAuthn library 对 loopback RP ID/origin 的确切约束，不能只删除字符串尾斜杠后假定正确。
-2. coauth 对 `public_base` 派生 RP origin 时必须得到 canonical origin（scheme + host + optional port，无 path/query/fragment）。
-3. 增加 config/service 单测，覆盖 production HTTPS domain 与 debug loopback HTTP；非法 path/query/fragment 必须 fail closed。
-4. 标准 joint runner 中 WebAuthn service 必须可用，coauth 日志不得再出现该错误。
-
 ### RC-3：Directory 测试把 profile update 误当作隐式 announce
 
 `discovery/directory.spec.ts` 更新 account profile 后要求 Directory actor row 顶层出现 `bio`。`arkret-spec/spec/v1/zh/sync/service-http-binding.md` 明确规定：
@@ -89,23 +71,11 @@ rp_id=127.0.0.1, rp_origin=http://127.0.0.1:<port>/
 3. 验证 query/path 泄漏拒绝、unknown token 不可枚举、rotate/revoke、TTL、one-time 并发、`Cache-Control: private, no-store`。
 4. 验证存储、audit 和日志中不出现 raw token。
 
-## 当前版本
-
-| 组件 | revision |
-|---|---|
-| cotest | `b8dbdece7c2e4a03a7c8ef281fd470a1da58cfe7` |
-| arkret-spec | `5dddf685f98005da63aaa9ec488df1531fe70181` |
-| arkret-rust-sdk | `4e118ac6936e43fd4aac5c76419bce8f198caf43` |
-| soland | `0acc1b1f60244e812e4cd7667f5a57edb850e7d3` |
-| coauth | `b198983ae00a412816053cd25cd2626f2bc06f6a` |
-| inkson | `c702c72994d1d3a3aaae48371b504c2cb92f9b27` |
-
 ## 执行顺序
 
-1. RC-2 coauth WebAuthn origin。
-2. RC-3 Directory 测试契约。
-3. RC-4 account_data durable sync。
-4. RC-5 MIMI payload proof typed DTO。
-5. RC-6 invite locator 生命周期。
-6. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
-7. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。
+1. RC-3 Directory 测试契约。
+2. RC-4 account_data durable sync。
+3. RC-5 MIMI payload proof typed DTO。
+4. RC-6 invite locator 生命周期。
+5. 对最新全量运行新增的失败继续按 spec 真源聚类、修复、复核和提交。
+6. 标准 `joint-full` 达到所有可执行用例通过、仅保留有明确 profile 原因的 expected skip 后，删除本文件。

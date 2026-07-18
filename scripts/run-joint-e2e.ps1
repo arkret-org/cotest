@@ -1809,7 +1809,11 @@ if ($StartCoauth -and $CoauthCommand) {
 }
 if ($StartCoauth -and -not $CoauthBaseUrl) {
     $coauthPort = Get-FreeTcpPort
-    $CoauthBaseUrl = "http://127.0.0.1:$coauthPort"
+    # WebAuthn RP IDs are effective domains. An IP-literal origin has no
+    # effective domain in url/webauthn-rs, while localhost is the standard
+    # secure-context exception for loopback development. Keep the listener
+    # bound to 127.0.0.1 below, but advertise a WebAuthn-valid public origin.
+    $CoauthBaseUrl = "http://localhost:$coauthPort"
 } else {
     $coauthPort = $null
 }
