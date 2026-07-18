@@ -1328,7 +1328,9 @@ export async function currentActorDidApi(
 export function signedEventEnvelope(
   args: SignedEventEnvelopeArgs,
 ): Record<string, unknown> {
-  const createdAt = args.createdAt ?? canonicalTimestamp();
+  const createdAt = canonicalEventTimestamp(
+    args.createdAt === undefined ? undefined : new Date(args.createdAt),
+  );
   const hlc = args.hlc ?? nextEnvelopeHlc(args.realmId, createdAt);
   const payload = stripUndefined(args.payload) as Record<string, unknown>;
   const event = stripUndefined({
@@ -1400,7 +1402,7 @@ export function eventProof(args: {
     registeredSigner?.verificationMethod ??
     `${args.actorDid}#device`;
   const eventDigest = `sha256:${sha256CanonicalJson(args.event)}`;
-  const createdAt = canonicalTimestamp();
+  const createdAt = canonicalEventTimestamp();
 
   if (mode === "dev-proof") {
     return {
@@ -1433,7 +1435,7 @@ function eventEnvelopeProof(args: {
     args.verificationMethod ??
     registeredSigner?.verificationMethod ??
     `${args.actorDid}#device`;
-  const createdAt = canonicalTimestamp();
+  const createdAt = canonicalEventTimestamp();
 
   if (mode === "dev-proof") {
     const eventDigest = `sha256:${sha256CanonicalJson(args.event)}`;
@@ -1630,6 +1632,16 @@ export function deriveDefaultStrandId(realmId: string): string {
 
 export function canonicalTimestamp(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+export function canonicalEventTimestamp(date: Date = new Date()): string {
+  // Event Envelope `created_at` is canonical only with exactly three UTC
+  // fractional digits (`YYYY-MM-DDTHH:mm:ss.SSSZ`). `Date#toISOString`
+  // already emits precisely that wire form.
+  if (!Number.isFinite(date.getTime())) {
+    throw new TypeError("invalid Event Envelope created_at");
+  }
+  return date.toISOString();
 }
 
 const cotestHlcNodeSecret = randomBytes(16).toString("hex");
