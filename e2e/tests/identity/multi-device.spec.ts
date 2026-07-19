@@ -703,6 +703,26 @@ test.describe("multi-device pairing + revocation", () => {
     );
 
     // Device 1 (verified, first device) queues a to-device message for Device 2.
+    const messageId = typedId("device_message");
+    const target = {
+      message_id: messageId,
+      kind: "ak.key.verification.request",
+      expires_at: new Date(Date.now() + 10 * 60_000)
+        .toISOString()
+        .replace(/\.\d{3}Z$/, "Z"),
+      content: {
+        transaction_id: `grace-${device2Id}`,
+        from_device: alice.deviceId,
+        timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      },
+    };
+    const sendBody = {
+      messages: {
+        [alice.did]: {
+          [device2Id]: target,
+        },
+      },
+    };
     const sendResp = await request.post(
       `${solandBaseUrl()}/_arkret/self/device_messages`,
       {
@@ -710,29 +730,53 @@ test.describe("multi-device pairing + revocation", () => {
           ...authHeaders(device1Token),
           "Idempotency-Key": `grace-drop-${device2Id}`,
         },
-        data: {
-          messages: {
-            [alice.did]: {
-              [device2Id]: {
-                kind: "ak.key.verification.request",
-                expires_at: new Date(Date.now() + 10 * 60_000)
-                  .toISOString()
-                  .replace(/\.\d{3}Z$/, "Z"),
-                content: {
-                  transaction_id: `grace-${device2Id}`,
-                  from_device: alice.deviceId,
-                  timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-                },
-              },
-            },
-          },
-        },
+        data: sendBody,
       },
     );
     expect(
       sendResp.ok(),
       `to-device send returned ${sendResp.status()}: ${await sendResp.text()}`,
     ).toBeTruthy();
+
+    // A new HTTP idempotency key with the same canonical target remains the
+    // same logical message and MUST NOT enqueue a second copy.
+    const retry = await request.post(
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
+      {
+        headers: {
+          ...authHeaders(device1Token),
+          "Idempotency-Key": `grace-drop-retry-${device2Id}`,
+        },
+        data: sendBody,
+      },
+    );
+    expect(retry.ok(), await retry.text()).toBeTruthy();
+
+    // Reusing sender-scoped message_id for different canonical content is a
+    // protocol conflict, never an overwrite or a second enqueue.
+    const conflict = await request.post(
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
+      {
+        headers: {
+          ...authHeaders(device1Token),
+          "Idempotency-Key": `grace-drop-conflict-${device2Id}`,
+        },
+        data: {
+          messages: {
+            [alice.did]: {
+              [device2Id]: {
+                ...target,
+                content: { ...target.content, transaction_id: "conflict" },
+              },
+            },
+          },
+        },
+      },
+    );
+    expect(conflict.status()).toBe(409);
+    const conflictBody = await conflict.json();
+    expect(wireErrCode(conflictBody)).toBe("duplicate_conflict");
+    expect(wireErrReason(conflictBody)).toBe("message_id_conflict");
 
     // Before revocation Device 2 can drain the queued message.
     const beforeDrop = await request.get(
@@ -741,14 +785,20 @@ test.describe("multi-device pairing + revocation", () => {
     );
     expect(beforeDrop.ok()).toBeTruthy();
     const beforeBody = (await beforeDrop.json()) as {
-      messages?: Array<{ kind?: string }>;
+      messages?: Array<{ message_id?: string; kind?: string }>;
     };
+    const queuedCopies = (beforeBody.messages ?? []).filter(
+      (message) => message.message_id === messageId,
+    );
     expect(
-      (beforeBody.messages ?? []).some(
-        (message) => message.kind === "ak.key.verification.request",
-      ),
-      `Device 2 should see the queued request before revoke: ${JSON.stringify(beforeBody)}`,
-    ).toBeTruthy();
+      queuedCopies,
+      `Device 2 should see exactly one stable envelope before revoke: ${JSON.stringify(beforeBody)}`,
+    ).toEqual([
+      expect.objectContaining({
+        message_id: messageId,
+        kind: "ak.key.verification.request",
+      }),
+    ]);
 
     // Device 1 revokes Device 2 — this drops the queued to-device message.
     const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -782,6 +832,29 @@ test.describe("multi-device pairing + revocation", () => {
       `revoked Device 2 device_messages pull should be rejected, got ${afterDrop.status()}`,
     ).toBeFalsy();
     expect([401, 403]).toContain(afterDrop.status());
+
+    // Auth rejection alone does not prove physical queue deletion. The
+    // accepted revoke audit records the durable purge count.
+    const audit = await request.get(
+      `${solandBaseUrl()}/_soland/admin/audit/events?actor=${encodeURIComponent(alice.did)}&limit=100`,
+      { headers: authHeaders(device1Token) },
+    );
+    expect(audit.ok(), await audit.text()).toBeTruthy();
+    const auditBody = (await audit.json()) as {
+      events?: Array<{
+        action?: string;
+        payload?: {
+          revoked_device_id?: string;
+          to_device_messages_dropped?: number;
+        };
+      }>;
+    };
+    const revokeAudit = (auditBody.events ?? []).find(
+      (entry) =>
+        entry.action === "device.revoke" &&
+        entry.payload?.revoked_device_id === device2Id,
+    );
+    expect(revokeAudit?.payload?.to_device_messages_dropped).toBe(1);
   });
 
   // ── Pairing-approval UX (inkson surfaces; device-lifecycle.md §2.1/§7) ──
