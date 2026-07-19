@@ -2,7 +2,6 @@
 // Contract: e2e/scenarios/discovery/directory.md
 // Spec: discovery/discovery-directory.md, discovery/profiles-presence.md, identity/identity-handles.md
 
-import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { cssStringEscape } from "../../helpers/dom";
 import { solandBaseUrl } from "../../helpers/env";
@@ -19,7 +18,7 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-import { canonicalJson, createRealmApi } from "../../helpers/soland-api";
+import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -231,102 +230,169 @@ test.describe("discovery", () => {
   });
 
   test("presence: bob closes tab → alice's directory shows presence-offline; bob reopens → presence-online within 5s", async ({
+    browser,
     request,
   }) => {
-    // spec: profiles-presence.md §3 — presence is ephemeral and projects into
-    // the directory actor row. A client signals `online` while its tab is open
-    // by broadcasting `ak.presence` on `POST /_arkret/self/ephemeral`;
-    // closing the tab stops the refresh and the row decays to `offline`
-    // (mirroring the Sync presence projection's stale-online TTL). Reopening
-    // re-asserts `online`. We drive this through the API rather than the inkson
-    // UI because the directory's presence projection — not the renderer — is
-    // what this scenario pins.
+    // profiles-presence.md §3 requires an active device-bound proof on every
+    // presence broadcast. Use Inkson's real event signer and heartbeat rather
+    // than a dev session or a synthetic proof, then close and reopen the actual
+    // browser tab so the online -> expired/offline -> online lifecycle is real.
     const stamp = Date.now();
-    const alice = uniqueUser(`s24-presence-alice-${stamp}`);
-    const bob = uniqueUser(`s24-presence-bob-${stamp}`);
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      openDpopUserPage(browser, request, `s24-presence-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s24-presence-bob-${stamp}`),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
-    const presenceRealmId = await createRealmApi(request, bobToken, {
-      title: `S24 Presence ${stamp}`,
-      discoverability: "unlisted",
-      history_visibility: "joined",
-      encryption_profile: "none",
-    });
+    if (!aliceSession || !bobSession) {
+      assertJointStackNotRequired("directory presence browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceSession.user;
+    const alicePage = aliceSession.page;
+    const bob = bobSession.user;
+    const bobPage = bobSession.page;
 
-    // Directory search filters actors to the caller's accepted contacts;
-    // establish the contact edge so alice can see bob's row at all.
-    const { outcome: aliceReq } = await requestContactArkret(
-      request,
-      aliceToken,
-      bob.did,
-      { requestedScopes: ["direct_message"] },
-    );
-    expect(aliceReq.state).toBe("pending_outgoing");
-    const bobAccept = await respondContactArkret(request, bobToken, {
-      requestId: aliceReq.request_event_ref,
-      requester: alice.did,
-      action: "accept",
-      grantedScopes: ["direct_message"],
-    });
-    expect(bobAccept.state).toBe("accepted");
+    try {
+      // Directory disclosure is contact-scoped, so establish the accepted edge
+      // through the product surface before observing Bob's row.
+      await alicePage.gotoDirectory();
+      const aliceContact = alicePage.page.getByTestId(
+        "directory-contact-tools",
+      );
+      await alicePage.fillWithPassivePromptRetry(
+        aliceContact.getByTestId("contact-target-did-input"),
+        bob.did,
+      );
+      await alicePage.clickWithPassivePromptRetry(
+        aliceContact.getByTestId("request-contact-button"),
+      );
+      await expect(aliceContact).toContainText(/pending/i, { timeout: 30_000 });
 
-    const bobPresenceFromSearch = async (): Promise<string | undefined> => {
-      const search = await request.post(
-        `${solandBaseUrl()}/_arkret/find/directory/search-actors`,
-        {
-          headers: { authorization: `Bearer ${aliceToken}` },
+      await bobPage.gotoDirectory();
+      const bobContact = bobPage.page.getByTestId("directory-contact-tools");
+      await bobPage.clickWithPassivePromptRetry(
+        bobContact.getByTestId("list-contacts-button"),
+      );
+      await expect(bobContact).toContainText(alice.did, { timeout: 30_000 });
+      await bobPage.fillWithPassivePromptRetry(
+        bobContact.getByTestId("contact-requester-did-input"),
+        alice.did,
+      );
+      await bobPage.clickWithPassivePromptRetry(
+        bobContact.getByTestId("accept-contact-button"),
+      );
+      await expect(bobContact).toContainText(/accepted/i, { timeout: 30_000 });
+
+      // Browser bootstrap must have projected Bob's exact event-signing key as
+      // an active device before the first presence heartbeat is admissible.
+      const bobViewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+      await expect
+        .poll(
+          async () => {
+            const viewer = await request.get(bobViewerUrl, {
+              headers: selfPathHeadersForDpopSession(
+                bobSession.session,
+                "GET",
+                bobViewerUrl,
+              ),
+            });
+            if (!viewer.ok()) return undefined;
+            const body = (await viewer.json()) as {
+              devices?: Array<{ device_id?: string; status?: string }>;
+            };
+            return (body.devices ?? []).find(
+              (device) => device.device_id === bob.deviceId,
+            )?.status;
+          },
+          { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+        )
+        .toBe("active");
+
+      const presenceRealmId = await bobPage.createRealm({
+        title: `S24 Presence ${stamp}`,
+        discoverability: "unlisted",
+        historyVisibility: "joined",
+        encryptionProfile: "none",
+      });
+      await bobPage.gotoTimelineRealm(presenceRealmId);
+
+      // A structurally valid proof from a different key must still fail closed.
+      const sentAt = new Date();
+      const ephemeralUrl = `${solandBaseUrl()}/_arkret/self/ephemeral`;
+      const forged = await request.post(ephemeralUrl, {
+        headers: selfPathHeadersForDpopSession(
+          bobSession.session,
+          "POST",
+          ephemeralUrl,
+        ),
+        data: withBroadcastEphemeralProof({
+          kind: "ak.presence",
+          realm_id: presenceRealmId,
+          actor_id: bob.did,
+          device_id: bob.deviceId,
+          sent_at: sentAt.toISOString(),
+          expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
+          payload: {
+            realm_id: presenceRealmId,
+            actor_id: bob.did,
+            state: "dnd",
+            ttl_ms: 30_000,
+          },
+        }),
+      });
+      const forgedText = await forged.text();
+      expect(forged.status(), forgedText).toBe(400);
+      expect(JSON.parse(forgedText)).toMatchObject({
+        error: { details: { reason_code: "proof_invalid" } },
+      });
+
+      const bobPresenceFromSearch = async (): Promise<string | undefined> => {
+        const searchUrl = `${solandBaseUrl()}/_arkret/find/directory/search-actors`;
+        const search = await request.post(searchUrl, {
+          headers: selfPathHeadersForDpopSession(
+            aliceSession.session,
+            "POST",
+            searchUrl,
+          ),
           data: { query: bob.did },
-        },
-      );
-      expect(search.status()).toBe(200);
-      const body = await search.json();
-      const row = (
-        body.actors as Array<{
-          actor_id?: string;
-          preview?: { did?: string; presence?: { status?: string } };
-        }>
-      ).find((r) => r.actor_id === bob.did || r.preview?.did === bob.did);
-      return row?.preview?.presence?.status;
-    };
+        });
+        const searchText = await search.text();
+        expect(search.status(), searchText).toBe(200);
+        const body = JSON.parse(searchText);
+        const row = (
+          body.actors as Array<{
+            actor_id?: string;
+            preview?: { did?: string; presence?: { status?: string } };
+          }>
+        ).find((r) => r.actor_id === bob.did || r.preview?.did === bob.did);
+        return row?.preview?.presence?.status;
+      };
 
-    const broadcastBobPresence = async (state: "online" | "offline") => {
-      const response = await request.post(
-        `${solandBaseUrl()}/_arkret/self/ephemeral`,
-        {
-          headers: { authorization: `Bearer ${bobToken}` },
-          data: presenceEnvelope(bob.did, bob.deviceId, presenceRealmId, state),
-        },
-      );
-      const text = await response.text();
-      expect(
-        response.ok(),
-        `presence ${state} returned ${response.status()}: ${text}`,
-      ).toBeTruthy();
-    };
+      await expect
+        .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
+        .toBe("online");
 
-    // bob's tab is open → presence refreshed to online.
-    await broadcastBobPresence("online");
-    await expect
-      .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
-      .toBe("online");
+      // Closing the actual tab stops the heartbeat. Once the 30-second signal
+      // expires, the deterministic multi-device aggregation becomes offline.
+      const bobContext = bobPage.session.context;
+      await bobPage.page.close();
+      await expect
+        .poll(bobPresenceFromSearch, {
+          timeout: 45_000,
+          intervals: [500, 1_000],
+        })
+        .toBe("offline");
 
-    // bob closes the tab → presence refresh stops. We model the closed tab by
-    // explicitly flipping presence offline (the same wire the client emits on
-    // teardown); the directory row MUST reflect offline.
-    await broadcastBobPresence("offline");
-    await expect
-      .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
-      .toBe("offline");
-
-    // bob reopens → presence-online MUST surface within 5s.
-    await broadcastBobPresence("online");
-    await expect
-      .poll(bobPresenceFromSearch, { timeout: 5_000, intervals: [500] })
-      .toBe("online");
+      // Reuse the same browser context/device credentials, just as reopening a
+      // closed tab does. The first fresh heartbeat must project within 5s.
+      bobPage.session.page = await bobContext.newPage();
+      await bobPage.gotoTimelineRealm(presenceRealmId);
+      await expect
+        .poll(bobPresenceFromSearch, { timeout: 5_000, intervals: [250, 500] })
+        .toBe("online");
+    } finally {
+      await Promise.allSettled([alicePage.close(), bobPage.close()]);
+    }
   });
 
   test("E24.2 reject contact: alice's request rejected by bob → status=rejected; alice cannot re-request until cooldown", async ({
@@ -459,33 +525,3 @@ test.describe("discovery", () => {
   });
 });
 
-function presenceEnvelope(
-  actorDid: string,
-  deviceId: string,
-  realmId: string,
-  state: "online" | "offline",
-): Record<string, unknown> {
-  const sentAt = new Date();
-  const expiresAt = new Date(sentAt.getTime() + 30_000);
-  const envelope: Record<string, unknown> = {
-    kind: "ak.presence",
-    realm_id: realmId,
-    actor_id: actorDid,
-    device_id: deviceId,
-    sent_at: sentAt.toISOString(),
-    expires_at: expiresAt.toISOString(),
-    payload: { state },
-  };
-  const eventDigest = `sha256:${createHash("sha256")
-    .update(canonicalJson(envelope))
-    .digest("hex")}`;
-  envelope.proof = {
-    kind: "detached_jws",
-    alg: "EdDSA",
-    verification_method: `${actorDid}#${deviceId}`,
-    event_digest: eventDigest,
-    created_at: sentAt.toISOString(),
-    jws: "eyJhbGciOiJFZERTQSJ9..c2ln",
-  };
-  return envelope;
-}
