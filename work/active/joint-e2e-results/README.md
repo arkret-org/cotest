@@ -13,7 +13,7 @@
 本轮其余 JUnit 直接失败信号包括：
 
 - account-data / UI projection：personal blocklist、consent、support escalation；
-- session/sync：terminal auth polling 计数、quiet long-poll 首帧、offline queue 状态；
+- session/sync：terminal auth polling 计数、offline queue 状态；
 - Realm/Kanban：跨成员加密投影、列拖放/邀请状态；
 - messaging：reaction/reply/mention routing 投影；
 - invite/workflow：admin invite 状态、多个 workflow 的 invite/join、offline 或 redaction 前置项；
