@@ -217,6 +217,7 @@ def main() -> int:
         f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
         "  deployment_profile: organization\n"
         "  principal_method: \"did:webvh\"\n"
+        "  trust_domain: ak:trust_domain:local.host\n"
         f"  admin_audience: {yaml_string(admin_audience)}\n"
         "  password_login_session_grants_enabled: true\n"
     )
