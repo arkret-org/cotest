@@ -27,12 +27,11 @@
 //! soland-side `realm_policy_components_check` reducer (no drift).
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::Did;
-use arkret_core::error::Error;
 use arkret_core::models::{
     MediaDecryptPolicyValue, MediaPlaintextService, derive_media_decrypt_metadata_digest,
     verify_media_decrypt_metadata,
 };
+use arkret_core::{Did, WireError};
 use arkret_schema::embedded_error_code_identifiers;
 
 /// Wire-level executable check: the SDK constants for both media
@@ -143,7 +142,7 @@ pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
         Ok(()) => bail!(
             "member recompute mismatch MUST be refused (mls_governance_binding_stale), got Ok",
         ),
-        Err(Error::Protocol(msg)) => {
+        Err(WireError::Protocol(msg)) => {
             if !msg.contains(arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE) {
                 bail!(
                     "mismatch refusal must carry error code `mls_governance_binding_stale`, \
