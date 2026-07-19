@@ -157,6 +157,7 @@ test.describe("account onboarding", () => {
   }) => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
+    const coauthOrigin = new URL(coauth!).origin;
 
     const user = uniqueUser("s7-cold-root");
     const handle = user.handle.slice(1);
@@ -190,7 +191,39 @@ test.describe("account onboarding", () => {
         verificationCode = (await latestMockEmailCode(request, email))!;
       }
       await page.locator("#register-email-verify-code").fill(verificationCode);
-      await page.getByRole("button", { name: "Verify", exact: true }).click();
+      const verifyEmailButton = page.getByRole("button", {
+        name: "Verify",
+        exact: true,
+      });
+      const verificationDeadline = Date.now() + 30_000;
+      let emailVerified = false;
+      do {
+        const verificationResponse = page.waitForResponse((response) => {
+          const url = new URL(response.url());
+          return (
+            url.origin === coauthOrigin &&
+            url.pathname.endsWith("/verify-email") &&
+            response.request().method() === "POST"
+          );
+        });
+        await verifyEmailButton.click();
+        const response = await verificationResponse;
+        expect(response.status(), await response.text()).toBe(200);
+        const outcome = (await response.json()) as {
+          status?: string;
+          error?: string;
+        };
+        if (outcome.status === "success") {
+          emailVerified = true;
+          break;
+        }
+        expect(outcome).toEqual({ status: "error", error: "invalid_code" });
+        await page.waitForTimeout(250);
+      } while (Date.now() < verificationDeadline);
+      expect(
+        emailVerified,
+        "dev email verification code was not persisted before the retry deadline",
+      ).toBe(true);
       const displayName = page.locator('input[autocomplete="name"]');
       if (await displayName.isVisible({ timeout: 10_000 }).catch(() => false)) {
         await displayName.fill(user.displayName);
@@ -210,22 +243,47 @@ test.describe("account onboarding", () => {
         timeout: 120_000,
       });
       await expect(page.getByTestId("account-handoff-onboarding")).toBeVisible();
-      await page.getByTestId("onboarding-generate-recovery-key").click();
+      await page.getByTestId("choose-new-identity").click();
       const generated = page.getByTestId("onboarding-recovery-key-display");
       await expect(generated).toBeVisible();
-      const recoveryKey = (await generated.inputValue()).trim();
-      const recoveryWords = recoveryKey.split(/\s+/);
+      const recoveryWords = (await generated.locator("li").allTextContents()).map(
+        (word) => word.trim(),
+      );
       expect(recoveryWords).toHaveLength(24);
-      const confirmations = page.getByTestId("custody-word-confirmation");
-      await expect(confirmations).toHaveCount(3);
-      for (let slot = 0; slot < 3; slot += 1) {
-        const label = await confirmations.nth(slot).locator("xpath=preceding-sibling::label[1]").innerText();
-        const position = Number(label.match(/#(\d+)/)?.[1]);
-        expect(position).toBeGreaterThanOrEqual(1);
-        await confirmations.nth(slot).fill(recoveryWords[position - 1]);
-      }
+      const recoveryKey = recoveryWords.join(" ");
+      await page
+        .getByTestId("onboarding-recovery-key-confirm")
+        .fill(recoveryKey);
+      const sealResponsePromise = page.waitForResponse(
+        (response) => {
+          const url = new URL(response.url());
+          return (
+            url.origin === new URL(solandBaseUrl()).origin &&
+            url.pathname === "/_arkret/self/events/seals" &&
+            response.request().method() === "POST"
+          );
+        },
+        { timeout: 120_000 },
+      );
+      const backupResponsePromise = page.waitForResponse(
+        (response) => {
+          const url = new URL(response.url());
+          return (
+            url.origin === new URL(solandBaseUrl()).origin &&
+            url.pathname.startsWith("/_arkret/self/keys/backups/") &&
+            response.request().method() === "PUT"
+          );
+        },
+        { timeout: 120_000 },
+      );
       await page.getByTestId("onboarding-bind-identity").click();
-      await expect(page.getByTestId("pending-principal-bootstrap")).toBeVisible();
+      const [sealResponse, backupResponse] = await Promise.all([
+        sealResponsePromise,
+        backupResponsePromise,
+      ]);
+      await expect(page.getByTestId("onboarding-complete")).toBeVisible({
+        timeout: 120_000,
+      });
       const principalDid = await page.evaluate(() => {
         const config = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}");
         return String(config.account_did ?? "");
@@ -246,17 +304,6 @@ test.describe("account onboarding", () => {
         ]),
       );
 
-      await page.getByTestId("bootstrap-recovery-key").fill(recoveryKey);
-      const sealResponsePromise = page.waitForResponse((response) => {
-        const url = new URL(response.url());
-        return (
-          url.origin === new URL(solandBaseUrl()).origin &&
-          url.pathname === "/_arkret/self/events/seals" &&
-          response.request().method() === "POST"
-        );
-      });
-      await page.getByTestId("bootstrap-submit").click();
-      const sealResponse = await sealResponsePromise;
       expect(sealResponse.status(), await sealResponse.text()).toBe(200);
       const submittedSeal = sealResponse.request().postDataJSON() as {
         id: string;
@@ -278,15 +325,14 @@ test.describe("account onboarding", () => {
         accepted_event_digests: submittedSeal.delta,
         post_state_root: submittedSeal.state_root,
       });
-      await expect(page.getByTestId("pending-principal-bootstrap")).toHaveCount(0, {
-        timeout: 120_000,
+      expect(backupResponse.ok(), await backupResponse.text()).toBe(true);
+      expect(backupResponse.request().postDataJSON()).toMatchObject({
+        actor_id: principalDid,
+        backup_class: "did_recovery",
+        encryption: {
+          recipient_method: "recovery_public_key",
+        },
       });
-      await page.getByRole("tab", { name: "3. Atomic bootstrap" }).click();
-      await expect(page.getByTestId("onboarding-first-backup-gate")).toHaveAttribute(
-        "data-gate-state",
-        "satisfied",
-        { timeout: 60_000 },
-      );
     } finally {
       await jointPage.close();
     }
