@@ -16,6 +16,7 @@ import {
   ensureRegistered,
   issueDevSession,
   openDpopUserPage,
+  selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 import { canonicalJson, createRealmApi } from "../../helpers/soland-api";
@@ -99,6 +100,47 @@ test.describe("discovery", () => {
       );
       await expect(bobContact).toContainText(alice.did);
       await expect(bobContact).toContainText(/contacts 1/i);
+
+      // The accepted edge must project symmetrically before Directory uses
+      // Alice's local contact index as the DID-disclosure basis.
+      const aliceContactsUrl = `${solandBaseUrl()}/_arkret/self/contacts`;
+      const aliceContacts = await request.get(aliceContactsUrl, {
+        headers: selfPathHeadersForDpopSession(
+          aliceSession.session,
+          "GET",
+          aliceContactsUrl,
+        ),
+      });
+      const aliceContactsText = await aliceContacts.text();
+      expect(aliceContacts.status(), aliceContactsText).toBe(200);
+      const aliceContactsBody = JSON.parse(aliceContactsText) as {
+        contacts?: Array<{ peer?: string; state?: string }>;
+      };
+      expect(aliceContactsBody.contacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ peer: bob.did, state: "accepted" }),
+        ]),
+      );
+
+      const searchActorsUrl = `${solandBaseUrl()}/_arkret/find/directory/search-actors`;
+      const searchActors = await request.post(searchActorsUrl, {
+        headers: selfPathHeadersForDpopSession(
+          aliceSession.session,
+          "POST",
+          searchActorsUrl,
+        ),
+        data: { query: bob.did },
+      });
+      const searchActorsText = await searchActors.text();
+      expect(searchActors.status(), searchActorsText).toBe(200);
+      const searchActorsBody = JSON.parse(searchActorsText) as {
+        actors?: Array<{ actor_id?: string; did?: string }>;
+      };
+      expect(searchActorsBody.actors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ actor_id: bob.did }),
+        ]),
+      );
 
       // Post-contact: alice's directory search now sees bob.
       await alicePage.gotoDirectory();
