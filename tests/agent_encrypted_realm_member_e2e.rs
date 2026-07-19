@@ -9,7 +9,7 @@
 use anyhow::{Result, bail};
 use arkret::{
     ArkretMlsGroup, ArkretMlsIdentity, CryptoStore, DeviceId, Did, MemoryCryptoStore,
-    MlsDeviceWorkflowAction, MlsRecoveryAction, late_device_join_steps,
+    MlsDeviceWorkflowAction, MlsGroupStateSink, MlsRecoveryAction, late_device_join_steps,
 };
 use arkret_core::MlsKeyPackageState;
 use serde_json::Value;
