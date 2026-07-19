@@ -20,7 +20,7 @@ fn client_claiming_gateway_profile_is_rejected() {
     let claims = vec![
         (
             "ak.profile.chat_mvp.v1".to_owned(),
-            ClaimKind::CotestVerified,
+            ClaimKind::ConformanceVerified,
         ),
         (
             "ak.profile.push_gateway.v1".to_owned(),
@@ -52,12 +52,12 @@ fn interop_profile_is_always_acceptable() {
         // claimable from every role (gateway, server, client, …).
         (
             "ak.profile.mimi_interop.v1".to_owned(),
-            ClaimKind::CotestVerified,
+            ClaimKind::ConformanceVerified,
         ),
         // `matrix_compat` is also interop.
         (
             "ak.profile.matrix_compat.v1".to_owned(),
-            ClaimKind::CotestVerified,
+            ClaimKind::ConformanceVerified,
         ),
     ];
     for role in [
@@ -88,11 +88,11 @@ fn client_claiming_chat_and_kanban_mvp_passes() {
     let claims = vec![
         (
             "ak.profile.chat_mvp.v1".to_owned(),
-            ClaimKind::CotestVerified,
+            ClaimKind::ConformanceVerified,
         ),
         (
             "ak.profile.kanban_mvp.v1".to_owned(),
-            ClaimKind::CotestVerified,
+            ClaimKind::ConformanceVerified,
         ),
     ];
     let outcome = validate_profile_claims(&claims, ServiceRole::Client, &table);
@@ -120,9 +120,12 @@ fn describe_payload_validates_via_supported_profiles() {
             "ak.profile.mimi_interop.v1",
         ],
     });
-    let outcome =
-        validate_describe_profile_claims(&describe, ServiceRole::Client, ClaimKind::CotestVerified)
-            .expect("validator loads artifact");
+    let outcome = validate_describe_profile_claims(
+        &describe,
+        ServiceRole::Client,
+        ClaimKind::ConformanceVerified,
+    )
+    .expect("validator loads artifact");
     assert!(outcome.is_compliant());
     assert_eq!(outcome.accepted.len(), 3);
     assert!(outcome.has_interop_bridge());

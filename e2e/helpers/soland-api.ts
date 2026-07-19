@@ -1091,6 +1091,7 @@ export async function accountSubscribeDeltaApi(
     server?: SolandKey;
     filter?: Record<string, unknown>;
     catchup?: boolean;
+    after?: string;
     timeoutMs?: number;
     headers?: Record<string, string>;
   } = {},
@@ -1108,6 +1109,7 @@ export async function accountSubscribeFramesApi(
     server?: SolandKey;
     filter?: Record<string, unknown>;
     catchup?: boolean;
+    after?: string;
     timeoutMs?: number;
     headers?: Record<string, string>;
   } = {},
@@ -1121,6 +1123,9 @@ export async function accountSubscribeFramesApi(
   }
   if (opts.filter) {
     url.searchParams.set("filter", JSON.stringify(opts.filter));
+  }
+  if (opts.after) {
+    url.searchParams.set("after", opts.after);
   }
 
   const controller = new AbortController();

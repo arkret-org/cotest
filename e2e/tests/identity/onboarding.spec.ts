@@ -225,10 +225,9 @@ test.describe("account onboarding", () => {
         "dev email verification code was not persisted before the retry deadline",
       ).toBe(true);
       const displayName = page.locator('input[autocomplete="name"]');
-      if (await displayName.isVisible({ timeout: 10_000 }).catch(() => false)) {
-        await displayName.fill(user.displayName);
-        await page.getByRole("button", { name: /continue/i }).click();
-      }
+      await expect(displayName).toBeVisible({ timeout: 60_000 });
+      await displayName.fill(user.displayName);
+      await page.getByRole("button", { name: /continue/i }).click();
       const approve = page.getByTestId("coauth-oauth-approve");
       if (
         await approve

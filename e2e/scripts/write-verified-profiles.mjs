@@ -113,9 +113,11 @@ function printUsage() {
       '        "spec_file": "cotest/e2e/tests/conformance/profile-gates.spec.ts",',
       '        "artifact_digest": "sha256:<hex>",',
       '        "artifact_ref": "file:///.../verified-profiles.json",',
-      '        "cotest_issuer_did": "did:...",',
+      '        "claim_kind": "conformance_verified",',
+      '        "verification_run_id": "<run id>",',
+      '        "verifier_did": "did:...",',
       '        "signature": "eddsa-jcs-b64url:<signature>",',
-      '        "valid_until": "<RFC3339 optional>"',
+      '        "expires_at": "<RFC3339 optional>"',
       '      }',
       '    ]',
       '  }',
@@ -250,14 +252,15 @@ function loadSigningConfig() {
 function signedProfileStatement(entry) {
   const statement = {
     profile_id: entry.profile_id,
-    cotest_run_id: entry.cotest_run_id,
+    claim_kind: entry.claim_kind,
+    verification_run_id: entry.verification_run_id,
     artifact_digest: entry.artifact_digest,
     artifact_ref: entry.artifact_ref,
-    cotest_issuer_did: entry.cotest_issuer_did,
+    verifier_did: entry.verifier_did,
     timestamp: entry.timestamp,
   };
-  if (entry.valid_until) {
-    statement.valid_until = entry.valid_until;
+  if (entry.expires_at) {
+    statement.expires_at = entry.expires_at;
   }
   return statement;
 }
@@ -347,16 +350,18 @@ function main(argv) {
       });
       const entry = {
         profile_id,
+        claim_kind: 'conformance_verified',
+        verification_run_id: runId,
         service_role,
         test_count: agg.passed,
         spec_file: specFile,
         artifact_digest: `sha256:${sha256Hex(hashInput)}`,
         artifact_ref: artifactRef,
-        cotest_issuer_did: signingConfig.issuerDid,
+        verifier_did: signingConfig.issuerDid,
         timestamp: generatedAt,
       };
       if (signingConfig.validUntil) {
-        entry.valid_until = signingConfig.validUntil;
+        entry.expires_at = signingConfig.validUntil;
       }
       entry.signature = signProfileEntry(signingConfig.privateKey, entry);
       verified.push(entry);

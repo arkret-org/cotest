@@ -76,8 +76,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 2. 断言 `claimed_profiles` 是数组,每条 entry MUST 有 `profile_id` + `claim_kind`
 3. 断言 `claimed_profiles[].claim_kind` 全部等于 `self_claimed`(`verified` 只能由
    cotest verifier 写入 `verified_profiles`)
-4. 断言 `verified_profiles` 是数组;若 entries 非空,每条 MUST 携带 `cotest_run_id`
-   + `artifact_digest` + `artifact_ref` + `cotest_issuer_did` + `signature`
+4. 断言 `verified_profiles` 是数组;若 entries 非空,每条 MUST 携带 `verification_run_id`
+   + `artifact_digest` + `artifact_ref` + `verifier_did` + `signature`
    + `timestamp`(`VerifiedProfileDescriptor` schema)
 5. 集合断言 `set(claimed_profiles[].profile_id) ∩ set(verified_profiles[].profile_id)
    === ∅`(违反则违反 §3.0 partition 语义)
@@ -143,8 +143,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
   (T6.3) — 子测试断言两个数组都为 `[]`,确保 coauth 没有 silent claim
   `ak.profile.identity_registry.v1`(对应 G3.C3 跟踪项)
 - **E2 verified_profiles entry shape**:一旦 cotest verifier 写入 `verified_profiles`,
-  每条 entry MUST 携带 `cotest_run_id` / `artifact_digest` / `artifact_ref` /
-  `cotest_issuer_did` / `signature` / `timestamp`;Phase A 的 entry-shape 断言提前钉住未来形态
+  每条 entry MUST 携带 `verification_run_id` / `artifact_digest` / `artifact_ref` /
+  `verifier_did` / `signature` / `timestamp`;Phase A 的 entry-shape 断言提前钉住未来形态
 - **E3 `unsupported_profiles` 不参与 claim**:Phase E 验证
   `ak.profile.soland_limited_server.v1` 等 limitation descriptor **不**在
   `claimed_profiles` 中,且**不**要求出现在 catalog 中

@@ -84,27 +84,12 @@ export type MintDpopGrantOpts = {
 
 /// Generate a fresh Ed25519 device key and its public JWK + RFC 7638 thumbprint.
 export function generateDpopDeviceKey(): DpopDeviceKey {
-  let privateKey: KeyObject;
-  let publicKey: KeyObject;
-  let exported: { kty?: string; crv?: string; x?: string };
-  // Regenerate if the base64url public-key x-coordinate begins with `z`. coauth's
-  // device-enroll `decode_device_public_key` treats a leading `z` as the
-  // MULTIBASE base58btc prefix and tries to base58-decode the remainder, which
-  // fails (`invalid base58btc`) whenever the base64url tail contains a
-  // base58-excluded char (0/O/I/l). That misdetection makes device enrollment —
-  // and therefore the whole MLS path — flake ~1/64 of the time; sidestep it by
-  // only ever handing the endpoint an unambiguous (non-`z`-prefixed) base64url.
-  for (;;) {
-    ({ privateKey, publicKey } = generateKeyPairSync("ed25519"));
-    exported = publicKey.export({ format: "jwk" }) as {
-      kty?: string;
-      crv?: string;
-      x?: string;
-    };
-    if (exported.x && !exported.x.startsWith("z")) {
-      break;
-    }
-  }
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const exported = publicKey.export({ format: "jwk" }) as {
+    kty?: string;
+    crv?: string;
+    x?: string;
+  };
   if (exported.kty !== "OKP" || exported.crv !== "Ed25519" || !exported.x) {
     throw new Error(
       `unexpected Ed25519 public JWK shape: ${JSON.stringify(exported)}`,

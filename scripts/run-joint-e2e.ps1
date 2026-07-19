@@ -1103,14 +1103,34 @@ function Invoke-CoauthMigrations {
     param(
         [Parameter(Mandatory = $true)][string]$CoauthBinary,
         [Parameter(Mandatory = $true)][string]$ConfigPath,
-        [Parameter(Mandatory = $true)][string]$LogDirectory
+        [Parameter(Mandatory = $true)][string]$LogDirectory,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
     )
 
     $migrateLog = Join-Path $LogDirectory "coauth-migrate.log"
-    $migrateOutput = & $CoauthBinary database migrate -c $ConfigPath --no-env-overrides 2>&1
-    $migrateOutput | Set-Content -Path $migrateLog -Encoding UTF8
-    if ($LASTEXITCODE -ne 0) {
-        throw "coauth database migrate failed; see $migrateLog"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $attempt = 0
+    $attemptLogs = [System.Collections.Generic.List[string]]::new()
+    while ($true) {
+        $attempt++
+        $migrateOutput = & $CoauthBinary database migrate -c $ConfigPath --no-env-overrides 2>&1
+        $exitCode = $LASTEXITCODE
+        $attemptLogs.Add("attempt $attempt (exit $exitCode)")
+        foreach ($line in $migrateOutput) {
+            $attemptLogs.Add([string]$line)
+        }
+        if ($exitCode -eq 0) {
+            $attemptLogs | Set-Content -Path $migrateLog -Encoding UTF8
+            return
+        }
+
+        $failureText = $migrateOutput -join "`n"
+        $transientConnectionFailure = $failureText -match "(?i)(connection (closed|refused|timed out)|could not connect to server|server closed the connection unexpectedly|the database system is starting up)"
+        if (-not $transientConnectionFailure -or (Get-Date) -ge $deadline) {
+            $attemptLogs | Set-Content -Path $migrateLog -Encoding UTF8
+            throw "coauth database migrate failed after $attempt attempt(s); see $migrateLog"
+        }
+        Start-Sleep -Milliseconds 500
     }
 }
 
@@ -2260,7 +2280,7 @@ try {
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
-        Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
+        Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir -TimeoutSeconds $StartupTimeoutSeconds
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
         # so the joint harness can mint real DPoP-bound ak.session.grants instead
