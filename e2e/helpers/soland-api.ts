@@ -451,6 +451,7 @@ export async function grantRealmReviewCapabilityApi(
     issuer: args.ownerDid,
     subject: args.subjectDid,
     actions: ["ak.realm.join.review"],
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
   };
@@ -509,6 +510,7 @@ export async function grantServiceDelegationApi(
     issuer: args.ownerDid,
     subject: args.subjectServiceId,
     actions: [action],
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
   };
@@ -585,6 +587,7 @@ export function buildCapabilityGrantEnvelope(
     issuer: args.ownerDid,
     subject: args.subjectDid,
     actions: args.actions,
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     ...(args.expiresAt ? { expires_at: args.expiresAt } : {}),
@@ -2349,6 +2352,7 @@ function nextActorSeq(): number {
 type CotestWireCommand =
   | "canonical-json"
   | "sha256-canonical-json"
+  | "capability-action-registry-digest"
   | "event-proof"
   | "event-envelope-proof"
   | "mimi-consent-proof"
@@ -2362,6 +2366,7 @@ type CotestWireCommand =
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
+type CotestWireCapabilityRegistryDigest = { digest: string };
 type CotestWirePrincipalControlRealm = { realm_id: string };
 type CotestWireCrossSigningBindingInput = {
   self_signing_input_b64: string;
@@ -2444,6 +2449,17 @@ export function sdkDeviceTrustBindingInput(args: {
 /// replacement for the per-helper `canonicalBytes` thin wrappers.
 export function canonicalBytes(value: unknown): Buffer {
   return Buffer.from(canonicalJson(value), "utf8");
+}
+
+let capabilityActionRegistryDigest: string | undefined;
+
+/** The digest of the SDK-embedded complete capability-action registry. */
+export function sdkCapabilityActionRegistryDigest(): string {
+  capabilityActionRegistryDigest ??= cotestWire<CotestWireCapabilityRegistryDigest>(
+    "capability-action-registry-digest",
+    {},
+  ).digest;
+  return capabilityActionRegistryDigest;
 }
 
 /// base64url of the *canonical* (JCS) JSON encoding of `value`. Use this for any

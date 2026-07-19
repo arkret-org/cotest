@@ -108,6 +108,7 @@ fn main() -> Result<()> {
     let output = match command.as_str() {
         "canonical-json" => canonical_json(input)?,
         "sha256-canonical-json" => sha256_canonical_json(input)?,
+        "capability-action-registry-digest" => capability_action_registry_digest()?,
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
@@ -123,6 +124,12 @@ fn main() -> Result<()> {
 
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+fn capability_action_registry_digest() -> Result<Value> {
+    let digest = arkret::current_capability_action_registry_digest()
+        .context("load SDK capability-action registry digest")?;
+    Ok(json!({ "digest": digest.as_str() }))
 }
 
 fn principal_registration_fixture(input: Value) -> Result<Value> {
@@ -609,6 +616,14 @@ mod tests {
                 "did:webvh:z6mkfixture:alice.example#other-device"
             )
         );
+    }
+
+    #[test]
+    fn capability_registry_digest_is_sdk_authoritative() {
+        let output = capability_action_registry_digest().unwrap();
+        let expected = arkret::current_capability_action_registry_digest().unwrap();
+
+        assert_eq!(output["digest"], expected.as_str());
     }
 
     #[test]
