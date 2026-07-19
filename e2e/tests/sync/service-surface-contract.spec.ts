@@ -178,6 +178,22 @@ test.describe("describes soland surface @fully-implemented", () => {
       contentType: "application/json",
     });
   });
+
+  test("soland describe accepts only its registered role selector", async ({
+    request,
+  }) => {
+    const selected = await request.get(
+      `${solandBaseUrl()}/_arkret/describe?service_type=principal_server`,
+    );
+    expect(selected.status()).toBe(200);
+    expect((await selected.json()).service_type).toBe("principal_server");
+
+    const rejected = await request.get(
+      `${solandBaseUrl()}/_arkret/describe?service_type=auth_server`,
+    );
+    expect(rejected.status()).toBe(400);
+    expect(wireErrCode(await rejected.json())).toBe("invalid_param");
+  });
 });
 
 test.describe("describes coauth surface @fully-implemented", () => {
@@ -240,6 +256,25 @@ test.describe("describes coauth surface @fully-implemented", () => {
       body: JSON.stringify(body, null, 2),
       contentType: "application/json",
     });
+  });
+
+  test("coauth describe accepts only its registered role selector", async ({
+    request,
+  }) => {
+    const baseUrl = coauthBaseUrl();
+    test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
+
+    const selected = await request.get(
+      `${baseUrl}/_arkret/describe?service_type=auth_server`,
+    );
+    expect(selected.status()).toBe(200);
+    expect((await selected.json()).service_type).toBe("auth_server");
+
+    const rejected = await request.get(
+      `${baseUrl}/_arkret/describe?service_type=principal_server`,
+    );
+    expect(rejected.status()).toBe(400);
+    expect(wireErrCode(await rejected.json())).toBe("invalid_param");
   });
 });
 
