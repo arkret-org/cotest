@@ -1330,14 +1330,14 @@ export async function openDpopUserPageForAccount(
   return openDpopUserPageFromSession(browser, session, opts);
 }
 
-async function openDpopUserPageFromSession(
+export async function openDpopUserPageFromSession(
   browser: Browser,
   session: DpopUserSession | undefined,
   opts: {
     server?: SolandKey;
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
-  },
+  } = {},
 ): Promise<DpopUserPageSession | undefined> {
   if (!session) {
     return undefined;
@@ -1685,7 +1685,9 @@ export async function openUserPage(
     resolvedOpts.pendingPrincipalRegistration &&
     resolvedOpts.recoveryKey
   ) {
-    await userPage.gotoHome();
+    // Load the pending bootstrap route directly. Navigating through `/` first
+    // can tear down session-boot WebSocket/IndexedDB callbacks while they are
+    // still resolving, which aborts the WASM runtime before onboarding mounts.
     await completePendingPrincipalBootstrap(
       userPage,
       resolvedOpts.recoveryKey,

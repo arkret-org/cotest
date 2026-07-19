@@ -69,6 +69,17 @@ export function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
   return der.subarray(der.length - 32);
 }
 
+/// Export the raw 32-byte seed from an Ed25519 private KeyObject as
+/// base64url without padding. Node's private OKP JWK represents that seed in
+/// the `d` member.
+export function ed25519PrivateKeySeedB64url(privateKey: KeyObject): string {
+  const jwk = privateKey.export({ format: "jwk" }) as { d?: string };
+  if (!jwk.d) {
+    throw new Error("Ed25519 private key export did not contain a seed");
+  }
+  return jwk.d;
+}
+
 /// Authoritative base64url (no padding) encoder. Node's `Buffer.toString
 /// ("base64url")` already omits padding, so this is the single thin wrapper the
 /// harness shares instead of re-defining `b64url`/`b64urlNoPad`/`base64url`

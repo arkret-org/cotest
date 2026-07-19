@@ -31,7 +31,7 @@ jointTest.describe("Circle and Sidecar projection boundary @fully-implemented", 
       const circleId = decodeURIComponent(page.url().split("/").at(-1) ?? "");
       const created = await getCircle(request, jointRealm.aliceSession, circleId);
       expect(created.profile_ref).toBeUndefined();
-      expect(created.join_rule).toBe("open");
+      expect(created.join_rule).toBe("public");
       expect(created.display.short_name).toBeTruthy();
       expect(created.display.color_token).toBeTruthy();
       expect(created.display.symbol).toBeTruthy();

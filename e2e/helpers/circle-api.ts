@@ -25,6 +25,7 @@ import {
   canonicalTimestamp,
   expectJsonOk,
   signedEventEnvelope,
+  sdkCapabilityActionRegistryDigest,
   submitSignedEventApi,
   typedId,
 } from "./soland-api";
@@ -84,6 +85,7 @@ export async function grantCircleMemberManageCapability(
     issuer: args.ownerDid,
     subject: args.subjectDid,
     actions: ["ak.circle.member.manage"],
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
     ],
@@ -147,6 +149,7 @@ export async function grantCircleManageCapability(
     issuer: args.ownerDid,
     subject: args.subjectDid,
     actions: ["ak.circle.manage"],
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
     ],

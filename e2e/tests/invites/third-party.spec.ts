@@ -11,6 +11,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
+  registerEventSigner,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -210,6 +211,12 @@ test.describe("third-party invite", () => {
     const aliceToken = await issueDevSession(request, alice);
     // dev-login auto-provisions the did:key account for bob.
     const bobToken = await issueDevSession(request, bob);
+    registerEventSigner({
+      actorDid: bob.did,
+      deviceId: bob.deviceId,
+      verificationMethod: bobIdentity.verificationMethod,
+      signingSeedB64url: bobIdentity.signingSeedB64url,
+    });
     const realmId = await createRealmApi(request, aliceToken, {
       title: `3PID invite reducer ${opts.seed}`,
       ownerDid: alice.did,
@@ -484,6 +491,12 @@ test.describe("third-party invite", () => {
       const malloryIdentity = generateDidKeyIdentity();
       const mallory = didKeyUser("s3-mallory", malloryIdentity);
       const malloryToken = await issueDevSession(request, mallory);
+      registerEventSigner({
+        actorDid: mallory.did,
+        deviceId: mallory.deviceId,
+        verificationMethod: malloryIdentity.verificationMethod,
+        signingSeedB64url: malloryIdentity.signingSeedB64url,
+      });
 
       const claimNonce = `claim-${randomUUID()}`;
       // Verification service still signs a binding_proof for the legitimate
