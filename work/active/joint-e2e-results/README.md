@@ -3,35 +3,35 @@
 ## 当前基线
 
 - 命令：`./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall`
-- 完整运行：`artifacts/runs/20260719-132626/joint-e2e`
-- 476 tests：268 passed，27 failed，107 expected/profile skipped，74 因 serial 前置失败未运行。
-- 测试阶段耗时 25.6 分钟，runner 总耗时 1570.71 秒；托管服务失败数为 0。
-- 与 `20260719-120727` 相比：通过数 +7、失败数 -3、未运行数 -4；JUnit 首轮失败 testcase 从 21 降到 19。已解决的 `joint/contact-agent-sidebar.spec.ts` 422 `missing phase` 完全消失。
+- 完整运行：`artifacts/runs/20260719-141911/joint-e2e`
+- 476 tests：264 passed，30 failed，107 expected/profile skipped，75 因 serial 前置失败未运行。
+- 测试阶段耗时 26.3 分钟，runner 总耗时 1598.98 秒；托管服务失败数为 0。
+- 已解决的 contact 接受后 Directory 精确 DID 行失败消失；`discovery` serial suite 解锁到下一条 presence 场景。总体统计中的其它变化来自既有时序用例波动，按 JUnit testcase 集合分别归类。
 
-## RC-12：contact 接受后 Directory 可见性/投影断裂
+## RC-13：presence 场景使用未授权 device 与占位 proof
 
 ### 现象
 
-`discovery/directory.spec.ts` 已连续多轮稳定失败。Alice 向 Bob 发起 contact request，Bob 接受，双方 contact list 和 direct conversation 前置断言均完成；Alice 随后在 Directory 搜索 Bob 时，30 秒内找不到精确 DID 行：
+`discovery/directory.spec.ts` 的 presence 场景首次被串行解锁后，在第一次发送 `ak.presence` 时返回：
 
 ```text
-actor-result-did[title="<bob did>"] not visible
+HTTP 400 invalid_param
+ephemeral proof device is not active and authorized
+reason_code=proof_invalid
 ```
 
-失败发生在 UI 搜索结果可见性，而不是 contact request/accept HTTP 状态。
+### 初步归类
 
-### 待确认的根因边界与近期更新相关性
+- 场景用 `ensureRegistered` + dev session 创建用户，却没有证明 `device_id` 已完成 active authorization。
+- `presenceEnvelope` 只计算 `event_digest`，JWS 固定为占位字符串 `eyJhbGciOiJFZERTQSJ9..c2ln`；它不是由对应 device event signer 生成的可验证签名。
+- Soland fail closed 符合 presence/ephemeral proof 安全边界；当前证据指向 cotest fixture/签名数据问题，不支持放松服务端 proof 校验。
 
-- 先核对 spec 对 `direct_message` contact 接受后 directory discoverability 的要求：它是必须立即进入联系人可见集合、依赖独立 directory/profile publication，还是旧测试把 contact graph 与 public directory 错误耦合。
-- 对照 Soland 的 contact projection、directory/search API 响应和 Inkson Directory 过滤逻辑，确定数据在哪一层丢失；不得用延长 locator timeout 掩盖缺失投影。
-- 审计 arkret-spec、Soland、Inkson 和 SDK 最近关于 contact graph、directory privacy、handle/profile publication 的提交，区分直接相关变更与无关依赖更新。
-- 若 API 已返回 Bob 而 UI 不渲染，归类为 Inkson 实现问题；若 API 未返回但 spec 要求返回，归类为 Soland 投影问题；若 spec 明确要求独立 publication，修正 cotest 场景前置条件。
+### 近期更新相关性与复核要求
 
-### 复核要求
-
-- 定向场景必须同时断言 contact graph、directory/search 原始 API 结果与 UI 精确 DID 行，建立端到端因果链。
-- 验证非 contact principal 不因修复而被泄露，保留 directory privacy/fail-closed 边界。
-- 定向场景与标准全量复核均通过后，删除本节并提交相关独立仓库。
+- 审计 Arkret device authorization、ephemeral proof 和 Inkson presence emitter 的近期提交，确认服务端何时从 shape-only 升级为 active-device + real-JWS 验证，以及 cotest 为何未同步。
+- 复用 cotest/SDK 已有的真实 event signer 与 device enrollment helper，不在场景中手工伪造 proof transcript。
+- 验证 online → offline → online 投影，并保留 accepted-contact 可见性前置；另加未授权 device/伪造 proof 的负向拒绝断言，不能只让 happy path 通过。
+- 定向场景与标准全量复核均通过后，删除本节并提交。
 
 ## 尚待聚类的失败信号
 
@@ -42,4 +42,4 @@ actor-result-did[title="<bob did>"] not visible
 - UI/同步：离线队列、redaction tombstone、Kanban 拖拽等超时或投影断言。
 - 个别 MLS 登录、account-data、recovery 和 workflow 串行断言。
 
-这些信号尚未假定为同一根因；RC-12 提交后继续逐类分析。
+这些信号尚未假定为同一根因；RC-13 提交后继续逐类分析。
