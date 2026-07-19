@@ -34,7 +34,7 @@ import {
   type DpopDeviceKey,
 } from "./session-grant-dpop";
 import { enrollOnboardedDeviceSigningKey } from "./device-holder-proof";
-import { registerEventSigner } from "./soland-api";
+import { authHeaders, registerEventSigner } from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -137,19 +137,27 @@ export type CreateRealmOpts = {
   completeRecoveryKeySetup?: boolean;
 };
 
-function buildInviteLocatorUrl(serverUrl: string, subjectDid: string): string {
-  const expiresAt = new Date(Date.now() + 15 * 60_000)
-    .toISOString()
-    .replace(/\.\d{3}Z$/, "Z");
-  const locatorToken = Buffer.from(
-    JSON.stringify({
-      subject_id: subjectDid,
-      nonce: randomBytes(18).toString("base64url"),
-      expires_at: expiresAt,
-    }),
-  ).toString("base64url");
+function buildInviteLocatorUrl(serverUrl: string, locatorToken: string): string {
   const base = serverUrl.replace(/\/$/, "");
   return `${base}/_arkret/open/invite-locators/resolve#token=${locatorToken}`;
+}
+
+export async function issueInviteLocatorToken(
+  request: APIRequestContext,
+  sessionToken: string,
+  server: SolandKey = "alpha",
+): Promise<string> {
+  const response = await request.post(
+    `${solandBaseUrl(server)}/_arkret/self/invite-locators`,
+    {
+      headers: authHeaders(sessionToken),
+      data: { ttl_seconds: 900 },
+    },
+  );
+  expect(response.status(), await response.text()).toBe(200);
+  expect(response.headers()["cache-control"]).toBe("private, no-store");
+  const body = (await response.json()) as { locator_token: string };
+  return body.locator_token;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -799,7 +807,22 @@ export class JointUserPage {
     realmId: string,
     targetDid: string,
     expectedDisplayLabel?: string,
+    locator?: { token: string; serverUrl?: string },
   ): Promise<string> {
+    let targetInput: string;
+    if (locator) {
+      targetInput = buildInviteLocatorUrl(
+        locator.serverUrl ?? this.serverUrl,
+        locator.token,
+      );
+    } else {
+      const describe = await this.session.context.request.get(
+        `${this.serverUrl.replace(/\/$/, "")}/_arkret/describe`,
+      );
+      expect(describe.status(), await describe.text()).toBe(200);
+      const service = (await describe.json()) as { service_id: string };
+      targetInput = `did=${targetDid} server=${service.service_id}`;
+    }
     await this.gotoRealmAdminSection(realmId, "members");
     const members = this.page.getByTestId("realm-members-panel");
     await expect(members).toBeVisible({ timeout: 120_000 });
@@ -808,7 +831,7 @@ export class JointUserPage {
     await expect(invite).toBeVisible({ timeout: 30_000 });
     await invite
       .getByTestId("invite-target-input")
-      .fill(buildInviteLocatorUrl(this.serverUrl, targetDid));
+      .fill(targetInput);
     await invite.getByTestId("send-invite-button").click();
     const status = members.getByTestId("realm-members-status");
     const displayLabel = expectedDisplayLabel ?? displayLabelForDid(targetDid);

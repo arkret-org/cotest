@@ -49,6 +49,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
+  issueInviteLocatorToken,
   issueDevSession,
   openUserPage,
   uniqueUser,
@@ -286,6 +287,12 @@ test.describe("cross-server federation", () => {
     const aliceToken = await issueDevSession(request, alice, {
       server: "alpha",
     });
+    const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    const bobLocatorToken = await issueInviteLocatorToken(
+      request,
+      bobToken,
+      "beta",
+    );
 
     const alicePage = await openUserPage(browser, alice, {
       sessionCredential: aliceToken,
@@ -299,7 +306,10 @@ test.describe("cross-server federation", () => {
         joinRule: "invite",
         historyVisibility: "joined",
       });
-      await alicePage.inviteFromAdmin(realmId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.did, undefined, {
+        token: bobLocatorToken,
+        serverUrl: solandBaseUrl("beta"),
+      });
       await stepShot(alicePage.page, testInfo, "alpha-invite-issued");
 
       // The invite MUST be visible in α's space-invites list right after issuing.
@@ -326,7 +336,6 @@ test.describe("cross-server federation", () => {
     await ensureRegistered(request, bob, { server: "beta" });
     await issueDevSession(request, alice, { server: "alpha" });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
-
     const alphaDescribe = await request.get(
       `${solandBaseUrl("alpha")}/_arkret/describe`,
     );
@@ -422,6 +431,11 @@ test.describe("cross-server federation", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    const bobLocatorToken = await issueInviteLocatorToken(
+      request,
+      bobToken,
+      "beta",
+    );
 
     const alicePage = await openUserPage(browser, alice, {
       sessionCredential: aliceToken,
@@ -435,7 +449,10 @@ test.describe("cross-server federation", () => {
         joinRule: "invite",
         historyVisibility: "joined",
       });
-      await alicePage.inviteFromAdmin(realmId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.did, undefined, {
+        token: bobLocatorToken,
+        serverUrl: solandBaseUrl("beta"),
+      });
       await stepShot(alicePage.page, testInfo, "alpha-auto-invite-issued");
 
       const betaInvite = await waitForInvite(

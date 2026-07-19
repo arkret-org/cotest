@@ -81,7 +81,7 @@ test.describe("contact graph federation (α/β)", () => {
     // The beta default invite/contact policy quarantines explicit-address
     // requests. Resolve a signed principal locator so the peer can notify and
     // project the pending_incoming row (invite-addressing.md Â§5).
-    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta");
+    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta", bobToken);
 
     const { outcome } = await requestContactArkret(
       request,
@@ -173,7 +173,7 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta");
+    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta", bobToken);
 
     // Federated direct_message contact handshake (same path as S1-fed, but with
     // direct_message scope so the resolver's consent precondition is met).
@@ -373,7 +373,7 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta");
+    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta", bobToken);
 
     // Federated accepted handshake (reuse S1-fed path).
     const { outcome } = await requestContactArkret(request, aliceToken, bob.did, {

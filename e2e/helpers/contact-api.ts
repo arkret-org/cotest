@@ -190,26 +190,28 @@ export async function resolvePrincipalLocator(
   request: APIRequestContext,
   subjectDid: string,
   server: SolandKey,
+  sessionToken: string,
 ): Promise<Record<string, unknown>> {
-  const expiresAt = canonicalTimestamp(new Date(Date.now() + 15 * 60 * 1000));
-  const locatorToken = Buffer.from(
-    JSON.stringify({
-      subject_id: subjectDid,
-      nonce: Buffer.from(`cotest-contact-locator-${Date.now()}`).toString(
-        "base64url",
-      ),
-      expires_at: expiresAt,
-    }),
-    "utf8",
-  ).toString("base64url");
+  const issue = await request.post(
+    `${solandBaseUrl(server)}/_arkret/self/invite-locators`,
+    {
+      headers: authHeaders(sessionToken),
+      data: { ttl_seconds: 900 },
+    },
+  );
+  const issued = await expectJsonOk<{
+    locator_token: string;
+  }>(issue, `issue principal locator for ${subjectDid}`);
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/open/invite-locators/resolve`,
-    { data: { locator_token: locatorToken } },
+    { data: { locator_token: issued.locator_token } },
   );
-  return await expectJsonOk<Record<string, unknown>>(
+  const locator = await expectJsonOk<Record<string, unknown>>(
     response,
     `resolve principal locator for ${subjectDid}`,
   );
+  expect(locator.subject_id).toBe(subjectDid);
+  return locator;
 }
 
 export async function respondContactArkret(
