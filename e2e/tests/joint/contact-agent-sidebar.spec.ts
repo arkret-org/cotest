@@ -5,6 +5,7 @@ import { test as jointTest } from "../../helpers/joint-fixture";
 import {
   selfPathHeadersForDpopSession,
   type DpopUserSession,
+  type JointUserPage,
 } from "../../helpers/users";
 
 jointTest.describe.configure({ mode: "serial" });
@@ -15,12 +16,11 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
     async ({ jointRealm, request }) => {
       jointTest.setTimeout(360_000);
       const stamp = Date.now();
-      const displayName = `Contacts Assistant ${stamp}`;
       const slug = `contacts-${stamp.toString(36)}`;
-      await provisionPendingAgent(
+      const pendingAgentId = await provisionPendingAgent(
         request,
         jointRealm.aliceSession,
-        displayName,
+        jointRealm.alicePage,
         slug,
       );
 
@@ -66,9 +66,9 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         ),
       ).toBeVisible({ timeout: 30_000 });
       await expect(
-        aliceSelfGroup
-          .getByTestId("contact-sidebar-agent-row")
-          .filter({ hasText: displayName }),
+        aliceSelfGroup.locator(
+          `[data-testid="contact-sidebar-agent-row"][data-agent="${pendingAgentId}"]`,
+        ),
       ).toHaveCount(0);
       await expect(aliceSelfGroup).not.toContainText("Agents");
 
@@ -140,43 +140,176 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
   );
 });
 
-type ProvisionedAgent = {
+type AgentProvisionPreparation = {
+  status: "awaiting_controller_events";
   agent_id: string;
+  principal_control_realm_id: string;
+  controller_realm_id: string;
+  requested_scope_digest: string;
+};
+
+type AgentProvisionEvent = {
+  event_id: string;
+  kind: string;
+  actor_id: string;
+  realm_id: string;
+  payload: Record<string, unknown> & { source_refs?: string[] };
+  proofs?: unknown[];
+};
+
+type AgentProvisionCommit = {
+  phase: "commit";
+  agent_id: string;
+  principal_control_realm_id: string;
+  slug: string;
+  requested_scope: Record<string, unknown>;
+  provision_events: {
+    accountability_grant: AgentProvisionEvent;
+    selector_claim: AgentProvisionEvent;
+  };
+};
+
+type AgentProvisionComplete = {
+  status: "complete";
+  agent_id: string;
+  principal_control_realm_id: string;
+  requested_scope_digest: string;
   pairing_request_id: string;
+  pairing_code: string;
   expires_at: string;
 };
 
 async function provisionPendingAgent(
   request: APIRequestContext,
   controller: DpopUserSession,
-  displayName: string,
+  controllerPage: JointUserPage,
   agentSlug: string,
-): Promise<ProvisionedAgent> {
+): Promise<string> {
   const url = `${solandBaseUrl()}/_arkret/self/agents`;
-  const response = await request.post(url, {
-    headers: selfPathHeadersForDpopSession(controller, "POST", url),
-    data: {
-      display_name: displayName,
-      slug: agentSlug,
-      requested_scope: {
-        actions: ["ak.self.events.stream.subscribe"],
-        resources: [
-          {
-            kind: "operation",
-            operation: "ak.self.events.stream.subscribe",
-          },
-        ],
-        constraints: [],
-      },
-      accountability: null,
-    },
+  const page = controllerPage.page;
+  await controllerPage.gotoSettings();
+  await page.getByTestId("settings-nav-item-agents").click();
+  await expect(page).toHaveURL(/\/settings\/agents(?:\?|$)/);
+  await page.getByTestId("agent-admin-create-open-button").click();
+  await expect(page.getByTestId("agent-admin-provision")).toBeVisible();
+  await page.getByTestId("agent-admin-provision-agent-slug").fill(agentSlug);
+  await expect(page.getByTestId("agent-admin-provision-button")).toBeEnabled();
+
+  let releaseCommit = () => {};
+  const commitGate = new Promise<void>((resolve) => {
+    releaseCommit = resolve;
   });
-  const responseText = await response.text();
-  expect(response.status(), responseText).toBe(201);
-  const body = JSON.parse(responseText) as ProvisionedAgent;
-  expect(body.agent_id).toMatch(/^did:/);
-  expect(body.pairing_request_id).toBeTruthy();
-  return body;
+  let observeCommit = (_body: AgentProvisionCommit) => {};
+  const commitObserved = new Promise<AgentProvisionCommit>((resolve) => {
+    observeCommit = resolve;
+  });
+  const holdCommit = async (route: Parameters<Parameters<typeof page.route>[1]>[0]) => {
+    const intercepted = route.request();
+    if (intercepted.method() === "POST") {
+      const body = intercepted.postDataJSON() as { phase?: string };
+      if (body.phase === "commit") {
+        observeCommit(body as AgentProvisionCommit);
+        await commitGate;
+      }
+    }
+    await route.continue();
+  };
+  await page.route("**/_arkret/self/agents", holdCommit);
+
+  try {
+    const prepareResponsePromise = page.waitForResponse((response) => {
+      const outgoing = response.request();
+      return (
+        outgoing.method() === "POST" &&
+        new URL(outgoing.url()).pathname === "/_arkret/self/agents" &&
+        (outgoing.postDataJSON() as { phase?: string }).phase === "prepare"
+      );
+    });
+    await page.getByTestId("agent-admin-provision-button").click();
+    const prepareResponse = await prepareResponsePromise;
+    const prepareText = await prepareResponse.text();
+    expect(prepareResponse.status(), prepareText).toBe(200);
+    const preparation = JSON.parse(prepareText) as AgentProvisionPreparation;
+    expect(preparation.status).toBe("awaiting_controller_events");
+    expect(preparation.agent_id).toMatch(/^did:/);
+    expect(preparation.principal_control_realm_id).toMatch(/^ak:realm:/);
+    expect(preparation.controller_realm_id).toMatch(/^ak:realm:/);
+    expect(preparation.requested_scope_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    const commit = await commitObserved;
+    expect(commit.agent_id).toBe(preparation.agent_id);
+    expect(commit.principal_control_realm_id).toBe(
+      preparation.principal_control_realm_id,
+    );
+    expect(commit.slug).toBe(agentSlug);
+    const accountability = commit.provision_events.accountability_grant;
+    const selector = commit.provision_events.selector_claim;
+    expect(accountability.kind).toBe("ak.identity.accountability_grant");
+    expect(selector.kind).toBe("ak.agent.selector_claim");
+    for (const event of [accountability, selector]) {
+      expect(event.actor_id).toBe(controller.user.did);
+      expect(event.realm_id).toBe(preparation.controller_realm_id);
+      expect(event.proofs).not.toHaveLength(0);
+    }
+    expect(selector.payload.source_refs).toContain(accountability.event_id);
+
+    // prepare is allocation-only: before commit is released, the Agent MUST
+    // not exist in the durable self projection and no pairing handle exists.
+    const beforeCommit = await request.get(url, {
+      headers: selfPathHeadersForDpopSession(controller, "GET", url),
+    });
+    const beforeCommitText = await beforeCommit.text();
+    expect(beforeCommit.status(), beforeCommitText).toBe(200);
+    const beforeCommitBody = JSON.parse(beforeCommitText) as {
+      agents?: Array<{ agent_id?: string }>;
+    };
+    expect(
+      (beforeCommitBody.agents ?? []).some(
+        (agent) => agent.agent_id === preparation.agent_id,
+      ),
+    ).toBeFalsy();
+
+    const commitResponsePromise = page.waitForResponse((response) => {
+      const outgoing = response.request();
+      return (
+        outgoing.method() === "POST" &&
+        new URL(outgoing.url()).pathname === "/_arkret/self/agents" &&
+        (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
+      );
+    });
+    releaseCommit();
+    const commitResponse = await commitResponsePromise;
+    const commitText = await commitResponse.text();
+    expect(commitResponse.status(), commitText).toBe(201);
+    const completed = JSON.parse(commitText) as AgentProvisionComplete;
+    expect(completed.status).toBe("complete");
+    expect(completed.agent_id).toBe(preparation.agent_id);
+    expect(completed.principal_control_realm_id).toBe(
+      preparation.principal_control_realm_id,
+    );
+    expect(completed.requested_scope_digest).toBe(
+      preparation.requested_scope_digest,
+    );
+    expect(completed.pairing_request_id).toBeTruthy();
+    expect(completed.pairing_code).toBeTruthy();
+
+    // Exact commit replay is protocol idempotency, independent of the HTTP
+    // Idempotency-Key header and without minting a second pairing handle.
+    const retry = await request.post(url, {
+      headers: selfPathHeadersForDpopSession(controller, "POST", url),
+      data: commit,
+    });
+    const retryText = await retry.text();
+    expect(retry.status(), retryText).toBe(201);
+    expect(JSON.parse(retryText)).toEqual(completed);
+    await expect(page.getByTestId("agent-admin-pairing-card")).toBeVisible({
+      timeout: 120_000,
+    });
+    return completed.agent_id;
+  } finally {
+    releaseCommit();
+    await page.unroute("**/_arkret/self/agents", holdCommit);
+  }
 }
 
 async function establishDirectMessageContact(
