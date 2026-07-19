@@ -3,39 +3,33 @@
 ## 当前基线
 
 - 命令：`./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall`
-- 完整运行：`artifacts/runs/20260719-095243/joint-e2e`
-- 476 tests：261 passed，30 failed，104 expected/profile skipped，81 因 serial 前置失败未运行。
-- JUnit：9 errors、21 failures；本轮使用 4 workers，测试阶段 25.1 分钟。
+- 完整运行：`artifacts/runs/20260719-104636/joint-e2e`
+- 476 tests：264 passed，30 failed，104 expected/profile skipped，78 因 serial 前置失败未运行。
+- 测试阶段耗时 26.2 分钟；托管服务失败数为 0。
+- RC-8 的原始 `supported_operations` 失败已消失；同一串行套件继续执行后暴露了下面的 RC-9，因此失败总数暂时仍为 30。
 
-## RC-8：service describe 未声明 canonical account-handoff operation
+## RC-9：joint-full 未提供可读取的邮箱验证码
 
 ### 现象
 
-`identity/onboarding.spec.ts` 在读取 coauth `/_arkret/describe` 后失败：
+`identity/onboarding.spec.ts` 的 account-first PCR bootstrap 场景完成账户创建后停留在 coauth 邮箱验证页：
 
 ```text
-Expected supported_operations to contain:
-ak.gate.account.exchange.create_handoff
+Incorrect code. Please try again.
+expected getByTestId("onboarding-panel") to be visible
 ```
 
-实际 account-handoff endpoint 可用且其独立协议组全部通过，但 describe operation catalog 未包含该 operation。
+测试仅在 `COTEST_MOCK_EMAIL_BASE_URL` 可用时读取实际验证码；本次标准 `joint-full` 未启动或注入 mock email，因此测试退回硬编码 `123456`，而 coauth 实际生成随机验证码。
 
-### 初步归类
+### 待确认
 
-- spec 的 service HTTP binding 已定义 canonical authentication-handoff endpoint 与 outcome。
-- 测试断言使用 registry 中的 canonical operation 名称，不是测试自造 wire 值。
-- 当前证据指向 coauth 的 service-describe 实现/registry 同步遗漏，而不是 endpoint 行为失败。
-- 是否与近期 registry/contract 库更新相关，需在本类中通过 spec registry、SDK 常量、coauth catalog blame 和依赖提交差异确认。
-
-### 复核要求
-
-- operation catalog 与 spec/SDK registry 一致；不得仅删除断言或改成旧 operation 名称。
-- onboarding 定向用例、service-describe 单元测试和标准全量复跑均不再出现该遗漏。
-- 本类完全通过并提交后，从本报告移除 RC-8。
+- 对照 account-first registration spec，确认邮箱验证是必须真实完成的前置步骤，不能绕过或放松断言。
+- 核对 cotest joint profile、mock-email 启动逻辑及近期依赖/配置更新，确定是运行编排缺口、测试数据错误还是 coauth 行为变化。
+- 修复后必须覆盖验证码获取、PCR bootstrap 完整链路，并保证标准全量命令不依赖偶然的固定验证码。
 
 ## 尚待聚类的失败信号
 
-其余失败将在 RC-8 提交后逐类确认，目前可见的信号包括：
+其余失败仍需逐类核对 spec、实现、测试数据和近期库更新，包括：
 
 - schema drift：to-device 缺 `message_id`、某请求缺 `phase`；
 - proof/admission：多处 Event proof JWS verification failed；
@@ -43,4 +37,4 @@ ak.gate.account.exchange.create_handoff
 - UI/同步：locator 可见性、离线队列、redaction tombstone、Kanban 拖拽等超时或投影断言；
 - 个别 idempotency conflict、MLS 登录和 account-data 断言。
 
-这些信号尚未假定为同一根因；后续必须分别核对 spec、实现、测试数据与近期库更新。
+这些信号尚未假定为同一根因；RC-9 提交后继续逐类分析。
