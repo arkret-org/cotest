@@ -41,7 +41,7 @@ import {
 } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
-import { canonicalJson, canonicalTimestamp, readJson } from "./_shared/http.mjs";
+import { canonicalJson, readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 
@@ -145,7 +145,7 @@ function registrationEpochHash(packageBase, evidence) {
 }
 
 function rfc3339Now() {
-  return canonicalTimestamp();
+  return new Date().toISOString();
 }
 
 function developmentAppletPrivateKey(verificationMethod) {
@@ -262,7 +262,7 @@ function signedGhostMessageEvent({
     applet_id: packageInfo.appletId,
     external_ref: {
       protocol: "bridge",
-      network_id: "joint-e2e",
+      instance_id: "joint-e2e",
       external_id: externalId,
     },
     payload: {
@@ -384,28 +384,33 @@ function signedPackage(body) {
     key_ref: `${serviceId}#applet-service-key`,
     accepted_algs: ["EdDSA"],
   };
-  const webhookPublicJwk = developmentAppletPublicJwk(webhookAuth.key_ref);
+  const webhookPublicJwk =
+    body.service_signing_public_jwk ?? developmentAppletPublicJwk(webhookAuth.key_ref);
   const webhookPublicKeyMaterial = canonicalJson(webhookPublicJwk);
-  const serviceIdDocument = {
-    id: serviceId,
-    verificationMethod: {
-      [webhookAuth.key_ref]: webhookPublicKeyMaterial,
-    },
-    updated: createdAt,
-  };
+  const serviceIdDocument =
+    body.service_id_document ??
+    {
+      id: serviceId,
+      verificationMethod: {
+        [webhookAuth.key_ref]: webhookPublicKeyMaterial,
+      },
+      updated: createdAt,
+    };
   const registrationEpochEvidence = {
     service_id: serviceId,
     did_document_digest: canonicalHash(serviceIdDocument),
-    method_version_evidence: serviceId.startsWith("did:webvh:")
-      ? {
-          method: "did:webvh",
-          version_time: createdAt,
-          unversioned_refetch: false,
-        }
-      : {
-          method: `did:${String(serviceId).split(":")[1]}`,
-          unversioned_refetch: true,
-        },
+    method_version_evidence:
+      body.service_id_method_version_evidence ??
+      (serviceId.startsWith("did:webvh:")
+        ? {
+            method: "did:webvh",
+            version_time: createdAt,
+            unversioned_refetch: false,
+          }
+        : {
+            method: `did:${String(serviceId).split(":")[1]}`,
+            unversioned_refetch: true,
+          }),
     accepted_signing_keys: [
       {
         key_ref: webhookAuth.key_ref,
@@ -515,7 +520,9 @@ function signedPackage(body) {
     safe,
     serviceId,
     verificationMethod: webhookAuth.key_ref,
-    signingKey: developmentAppletPrivateKey(webhookAuth.key_ref),
+    signingKey: body.service_signing_private_jwk
+      ? createPrivateKey({ key: body.service_signing_private_jwk, format: "jwk" })
+      : developmentAppletPrivateKey(webhookAuth.key_ref),
   });
   return {
     applet_package: appletPackage,
@@ -644,7 +651,7 @@ const server = createServer(async (req, res) => {
               realm_id: body.realm_id,
               external_ref: {
                 protocol: "bridge",
-                network_id: "joint-e2e",
+                instance_id: "joint-e2e",
                 external_id: externalId,
               },
             }),

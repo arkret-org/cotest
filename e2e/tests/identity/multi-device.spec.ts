@@ -17,6 +17,7 @@ import {
   generateCrossSigningIdentity,
 } from "../../helpers/cross-signing-harness";
 import {
+  accountSubscribeFramesApi,
   authHeaders,
   b64url,
   canonicalBytes,
@@ -714,6 +715,7 @@ test.describe("multi-device pairing + revocation", () => {
           messages: {
             [alice.did]: {
               [device2Id]: {
+                message_id: typedId("device_message"),
                 kind: "ak.key.verification.request",
                 expires_at: new Date(Date.now() + 10 * 60_000)
                   .toISOString()
@@ -782,6 +784,112 @@ test.describe("multi-device pairing + revocation", () => {
       `revoked Device 2 device_messages pull should be rejected, got ${afterDrop.status()}`,
     ).toBeFalsy();
     expect([401, 403]).toContain(afterDrop.status());
+  });
+
+  test("device-message request and message idempotency survive account cursor replay and ACK", async ({
+    request,
+  }) => {
+    const alice = uniqueUser(`device-message-idempotency-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const device2Id = typedId("device");
+    const device2Token = await issueDevSession(request, alice, {
+      deviceId: device2Id,
+    });
+    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+
+    const messageId = typedId("device_message");
+    const original = deviceMessageIdempotencyBody(
+      alice.did,
+      alice.deviceId,
+      device2Id,
+      messageId,
+      "246810",
+    );
+    const changed = structuredClone(original);
+    const changedTarget = (
+      changed.messages as Record<string, Record<string, Record<string, unknown>>>
+    )[alice.did][device2Id];
+    (changedTarget.content as Record<string, unknown>).pairing_code = "135791";
+    const send = (idempotencyKey: string, body: Record<string, unknown>) =>
+      request.post(`${solandBaseUrl()}/_arkret/self/device_messages`, {
+        headers: {
+          ...authHeaders(device1Token),
+          "Idempotency-Key": idempotencyKey,
+        },
+        data: body,
+      });
+
+    const first = await send(`request-1-${messageId}`, original);
+    expect(first.status()).toBe(200);
+    const firstBody = await first.json();
+
+    const requestReplay = await send(`request-1-${messageId}`, original);
+    expect(requestReplay.status()).toBe(200);
+    expect(await requestReplay.json()).toEqual(firstBody);
+
+    const requestConflict = await send(`request-1-${messageId}`, changed);
+    expect(requestConflict.status()).toBe(409);
+    expect(wireErrCode(await requestConflict.json())).toBe("duplicate_conflict");
+
+    const messageReplay = await send(`request-2-${messageId}`, original);
+    expect(messageReplay.status()).toBe(200);
+    expect(await messageReplay.json()).toEqual(firstBody);
+
+    const messageConflict = await send(`request-conflict-${messageId}`, changed);
+    expect(messageConflict.status()).toBe(409);
+    const conflictBody = await messageConflict.json();
+    expect(wireErrCode(conflictBody)).toBe("duplicate_conflict");
+    expect(wireErrReason(conflictBody)).toBe("message_id_conflict");
+
+    const firstSync = await accountSubscribeFramesApi(request, device2Token);
+    const firstDelta = firstSync.find((frame) => frame.kind === "delta");
+    const firstCursor = firstDelta?.cursor;
+    expect(typeof firstCursor).toBe("string");
+    expect(
+      ((firstDelta?.to_device as { messages?: Array<{ message_id?: string }> })?.messages ?? [])
+        .map((message) => message.message_id),
+    ).toEqual([messageId]);
+
+    const cursorReplay = await accountSubscribeFramesApi(request, device2Token, {
+      after: firstCursor as string,
+    });
+    const replayDelta = cursorReplay.find((frame) => frame.kind === "delta");
+    const replayDelivery = replayDelta?.to_device as
+      | { messages?: Array<Record<string, unknown>>; ack_token?: string }
+      | undefined;
+    expect(replayDelivery?.messages).toHaveLength(1);
+    expect(replayDelivery?.messages?.[0]).toMatchObject({
+      message_id: messageId,
+      kind: "ak.key.verification.request",
+      sender_principal_id: alice.did,
+      sender_device_id: alice.deviceId,
+      recipient_principal_id: alice.did,
+      recipient_device_id: device2Id,
+      content: { pairing_code: "246810" },
+    });
+    expect(replayDelivery?.ack_token).toBeTruthy();
+
+    const ack = await request.post(
+      `${solandBaseUrl()}/_arkret/self/device_messages/ack`,
+      {
+        headers: authHeaders(device2Token),
+        data: { ack_token: replayDelivery?.ack_token },
+      },
+    );
+    expect(ack.status()).toBe(200);
+    expect(await ack.json()).toMatchObject({ ok: true, pruned_count: 1 });
+
+    const replayAfterAck = await send(`request-3-${messageId}`, original);
+    expect(replayAfterAck.status()).toBe(200);
+    expect(await replayAfterAck.json()).toEqual(firstBody);
+
+    const afterAck = await request.get(
+      `${solandBaseUrl()}/_arkret/self/device_messages`,
+      { headers: authHeaders(device2Token) },
+    );
+    expect(afterAck.status()).toBe(200);
+    expect((await afterAck.json()).messages).toEqual([]);
   });
 
   // ── Pairing-approval UX (inkson surfaces; device-lifecycle.md §2.1/§7) ──
@@ -1083,6 +1191,34 @@ test.describe("multi-device pairing + revocation", () => {
   });
 });
 
+function deviceMessageIdempotencyBody(
+  principalId: string,
+  senderDeviceId: string,
+  recipientDeviceId: string,
+  messageId: string,
+  pairingCode: string,
+): Record<string, unknown> {
+  return {
+    messages: {
+      [principalId]: {
+        [recipientDeviceId]: {
+          message_id: messageId,
+          kind: "ak.key.verification.request",
+          expires_at: new Date(Date.now() + 10 * 60_000)
+            .toISOString()
+            .replace(/\.\d{3}Z$/, "Z"),
+          content: {
+            transaction_id: `txn-${messageId}`,
+            from_device: senderDeviceId,
+            pairing_code: pairingCode,
+            timestamp: canonicalTimestamp(),
+          },
+        },
+      },
+    },
+  };
+}
+
 /// Promote `deviceId` to `verified` in the device inventory through the real
 /// §5.1/§5.2 ingest path (`ak.cross_signing.publish` + a `ak.device.authorize`
 /// carrying a genuine SSK-signed `cross_signing_binding`). soland's
@@ -1207,6 +1343,7 @@ async function deliverPairingRequest(
         messages: {
           [user.did]: {
             [user.deviceId]: {
+              message_id: typedId("device_message"),
               kind: "ak.key.verification.request",
               expires_at: expiresAt,
               content: {

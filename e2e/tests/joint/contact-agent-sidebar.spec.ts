@@ -15,14 +15,22 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
     async ({ jointRealm, request }) => {
       jointTest.setTimeout(360_000);
       const stamp = Date.now();
-      const displayName = `Contacts Assistant ${stamp}`;
       const slug = `contacts-${stamp.toString(36)}`;
-      await provisionPendingAgent(
-        request,
-        jointRealm.aliceSession,
-        displayName,
-        slug,
+      const alicePage = jointRealm.alicePage.page;
+      await alicePage.goto("/settings/agents", { waitUntil: "domcontentloaded" });
+      await expect(alicePage.getByTestId("agent-admin-list")).toBeVisible({
+        timeout: 120_000,
+      });
+      await alicePage.getByTestId("agent-admin-create-open-button").click();
+      await alicePage.getByTestId("agent-admin-provision-agent-slug").fill(slug);
+      await alicePage.getByTestId("agent-admin-provision-button").click();
+      await expect(alicePage.getByTestId("agent-admin-last-op")).toContainText(
+        "Created",
+        { timeout: 120_000 },
       );
+      await expect(
+        alicePage.getByTestId("agent-admin-row").filter({ hasText: slug }),
+      ).toBeVisible();
 
       await establishDirectMessageContact(
         request,
@@ -38,7 +46,6 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       );
       expect(realAliceRow?.agents ?? []).toHaveLength(0);
 
-      const alicePage = jointRealm.alicePage.page;
       await alicePage.getByTestId("realm-sidebar-tab-direct").click();
 
       const aliceGroups = alicePage.locator(".contact-sidebar-group");
@@ -68,7 +75,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       await expect(
         aliceSelfGroup
           .getByTestId("contact-sidebar-agent-row")
-          .filter({ hasText: displayName }),
+          .filter({ hasText: slug }),
       ).toHaveCount(0);
       await expect(aliceSelfGroup).not.toContainText("Agents");
 
@@ -139,45 +146,6 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
     },
   );
 });
-
-type ProvisionedAgent = {
-  agent_id: string;
-  pairing_request_id: string;
-  expires_at: string;
-};
-
-async function provisionPendingAgent(
-  request: APIRequestContext,
-  controller: DpopUserSession,
-  displayName: string,
-  agentSlug: string,
-): Promise<ProvisionedAgent> {
-  const url = `${solandBaseUrl()}/_arkret/self/agents`;
-  const response = await request.post(url, {
-    headers: selfPathHeadersForDpopSession(controller, "POST", url),
-    data: {
-      display_name: displayName,
-      slug: agentSlug,
-      requested_scope: {
-        actions: ["ak.self.events.stream.subscribe"],
-        resources: [
-          {
-            kind: "operation",
-            operation: "ak.self.events.stream.subscribe",
-          },
-        ],
-        constraints: [],
-      },
-      accountability: null,
-    },
-  });
-  const responseText = await response.text();
-  expect(response.status(), responseText).toBe(201);
-  const body = JSON.parse(responseText) as ProvisionedAgent;
-  expect(body.agent_id).toMatch(/^did:/);
-  expect(body.pairing_request_id).toBeTruthy();
-  return body;
-}
 
 async function establishDirectMessageContact(
   request: APIRequestContext,

@@ -177,9 +177,7 @@ test.describe("mimi federation", () => {
     const events = await queryRealmEventsApi(request, token, realmId);
     const downgradeEvent = eventById(events, String(downgradeBody.event_ref));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
-    expect(nested(downgradeEvent, "payload", "content", "ak.morph.e2ee_downgrade")).toBe(
-      "mimi_bridge",
-    );
+    expect(nested(downgradeEvent, "payload", "content", "e2ee_downgrade")).toBe("mimi_bridge");
     expect(nested(downgradeEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
       "explicit_downgrade",
     );
@@ -194,7 +192,7 @@ test.describe("mimi federation", () => {
     );
   });
 
-  test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + ak.morph.unknown_content_kind", async ({
+  test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + content.unknown_content_kind", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -225,9 +223,9 @@ test.describe("mimi federation", () => {
 
     const events = await queryRealmEventsApi(request, token, realmId);
     const event = eventById(events, String(body.event_ref));
-    expect(nested(event, "payload", "content", "kind")).toBe("ak.content.unsupported");
+    expect(nested(event, "payload", "content", "kind")).toBe("ak.content.text");
     expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
-    expect(nested(event, "payload", "content", "ak.morph.unknown_content_kind")).toBe(
+    expect(nested(event, "payload", "content", "unknown_content_kind")).toBe(
       "m.location.share.live",
     );
     expect(nested(event, "payload", "quarantine", "unknown_content_kind")).toBe(

@@ -109,8 +109,8 @@
 ## Edge cases / sub-tests
 
 - **E5.1 MIMI endpoint 不可达 → federation fallback (本地停留)**:alice 发 `M1` 时 facade 不可达 (timeout / 5xx);消息应该正常存入 soland 本地、对 Arkret 成员可见,但不投递到 MIMI;消息上挂 `ak.morph.federation_outbound_status = "deferred"`,等 facade 恢复后重试
-- **E5.2 E2EE 在 MIMI 中的转换**:MIMI 可能使用不同的 group encryption (e.g., MLS via IETF profile);Arkret 的 E2EE message 进入 MIMI 时,要么有 transcript binding 桥(两套 group key 都能解密),要么留下明确的 `ak.morph.e2ee_downgrade = "mimi_bridge"` 标记;两种情况都不能静默泄露明文
-- **E5.3 content type 差异:unknown content kind quarantine**:bob_mimi 经 MIMI 发了一条 content type 是 Arkret 不支持的 (e.g., MIMI 特有的 `m.location.share.live`);facade 翻译时无法映射,该消息进入 soland 时被 quarantine,挂 `ak.morph.unknown_content_kind = "<mimi.type>"`;timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃也不是渲染原始 payload
+- **E5.2 E2EE 在 MIMI 中的转换**:MIMI 可能使用不同的 group encryption (e.g., MLS via IETF profile);Arkret 的 E2EE message 进入 MIMI 时,要么有 transcript binding 桥(两套 group key 都能解密),要么在 canonical content 中留下明确的 `e2ee_downgrade = "mimi_bridge"` 标记;两种情况都不能静默泄露明文
+- **E5.3 content type 差异:unknown content kind quarantine**:bob_mimi 经 MIMI 发了一条 content type 是 Arkret 不支持的 (e.g., MIMI 特有的 `m.location.share.live`);facade 翻译时无法映射,该消息进入 soland 时被 quarantine,canonical content 挂 `unknown_content_kind = "<mimi.type>"`;timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃也不是渲染原始 payload
 
 后两条建议拆成独立的小 spec(`extensions/mimi-federation.e2ee`、`extensions/mimi-federation.content`),保持主 scenario 紧凑。
 
