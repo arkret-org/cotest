@@ -5,7 +5,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{
-    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, Error, KeyRefObject, SCHEME_STREAM,
+    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, KeyRefObject, SCHEME_STREAM,
     StreamDecryptor, StreamEncryptParams, decrypt_stream, encrypt_stream,
 };
 use serde_json::{Value, json};
@@ -91,14 +91,16 @@ fn params() -> StreamEncryptParams {
     }
 }
 
-fn protocol_reason(error: Error) -> Result<String> {
+fn protocol_reason(error: arkret_crypto::Error) -> Result<String> {
     match error {
-        Error::Protocol(message) => Ok(message.split(':').next().unwrap_or("").to_owned()),
+        arkret_crypto::Error::Protocol(message) => {
+            Ok(message.split(':').next().unwrap_or("").to_owned())
+        }
         other => bail!("expected protocol error, got {other:?}"),
     }
 }
 
-fn expect_reason(error: Error, expected: &str) -> Result<()> {
+fn expect_reason(error: arkret_crypto::Error, expected: &str) -> Result<()> {
     let actual = protocol_reason(error)?;
     if actual != expected {
         bail!("expected reason {expected}, got {actual}");
