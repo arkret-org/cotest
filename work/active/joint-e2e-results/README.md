@@ -10,10 +10,9 @@
 
 ## 后续待聚类信号
 
-除 RC-15 外，本轮 JUnit 的直接失败信号包括：
+本轮其余 JUnit 直接失败信号包括：
 
 - account-data / UI projection：personal blocklist、consent、support escalation；
-- moderation UI projection：registry grant 修复后解锁的 appellant 入口没有随已同步的 `ak.moderation.decision` 显示；
 - session/sync：terminal auth polling 计数、quiet long-poll 首帧、offline queue 状态；
 - Realm/Kanban：Sidecar discoverability 值漂移、跨成员加密投影、列拖放/邀请状态；
 - messaging：reaction/reply/mention routing 投影；

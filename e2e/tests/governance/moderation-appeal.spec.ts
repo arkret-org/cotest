@@ -85,10 +85,10 @@ test.describe("moderation appeal", () => {
     );
     const decisionNotice = await sendPlaintextMessageViaApi(
       request,
-      reviewerToken,
+      appellantToken,
       realmId,
       `Moderation decision: account restricted pending appeal ${stamp}`,
-      { actorDid: reviewer.did },
+      { actorDid: appellant.did },
     );
     const targetRef = decisionNotice.event_id.replace(/^ak:event:/, "ak:message:");
     const decision = await issueDecision(
@@ -121,6 +121,11 @@ test.describe("moderation appeal", () => {
       const body = await realmAfterBan.json();
       expect(body.members ?? []).not.toContain(appellant.did);
 
+      await expect(appellantPage.page.getByTestId("chat-panel")).toHaveAttribute(
+        "data-moderation-appeal-count",
+        "1",
+        { timeout: 30_000 },
+      );
       const entrypoint = appellantPage.page.getByTestId("moderation-appeal-entrypoint");
       await expect(entrypoint).toBeVisible({ timeout: 30_000 });
       await expect(entrypoint.getByTestId("moderation-appeal-reason")).toBeVisible();
