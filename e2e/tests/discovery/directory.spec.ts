@@ -229,7 +229,7 @@ test.describe("discovery", () => {
     expect(meBody.profile?.profile_fields?.bio).toBe(newBio);
   });
 
-  test("presence: bob closes tab → alice's directory shows presence-offline; bob reopens → presence-online within 5s", async ({
+  test("presence: bob closes tab → alice's Realm participant view shows offline; bob reopens → online within 5s", async ({
     browser,
     request,
   }) => {
@@ -238,11 +238,23 @@ test.describe("discovery", () => {
     // than a dev session or a synthetic proof, then close and reopen the actual
     // browser tab so the online -> expired/offline -> online lifecycle is real.
     const stamp = Date.now();
-    const [aliceSession, bobSession] = await Promise.all([
-      openDpopUserPage(browser, request, `s24-presence-alice-${stamp}`),
-      openDpopUserPage(browser, request, `s24-presence-bob-${stamp}`),
-    ]);
-    if (!aliceSession || !bobSession) {
+    const aliceSession = await openDpopUserPage(
+      browser,
+      request,
+      `s24-presence-alice-${stamp}`,
+      { prepareMlsDevice: false },
+    );
+    if (!aliceSession) {
+      assertJointStackNotRequired("directory presence browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bobSession = await openDpopUserPage(
+      browser,
+      request,
+      `s24-presence-bob-${stamp}`,
+    );
+    if (!bobSession) {
       assertJointStackNotRequired("directory presence browser login");
       test.skip(true, "coauth DPoP session-grant login is unavailable");
       return;
@@ -253,36 +265,6 @@ test.describe("discovery", () => {
     const bobPage = bobSession.page;
 
     try {
-      // Directory disclosure is contact-scoped, so establish the accepted edge
-      // through the product surface before observing Bob's row.
-      await alicePage.gotoDirectory();
-      const aliceContact = alicePage.page.getByTestId(
-        "directory-contact-tools",
-      );
-      await alicePage.fillWithPassivePromptRetry(
-        aliceContact.getByTestId("contact-target-did-input"),
-        bob.did,
-      );
-      await alicePage.clickWithPassivePromptRetry(
-        aliceContact.getByTestId("request-contact-button"),
-      );
-      await expect(aliceContact).toContainText(/pending/i, { timeout: 30_000 });
-
-      await bobPage.gotoDirectory();
-      const bobContact = bobPage.page.getByTestId("directory-contact-tools");
-      await bobPage.clickWithPassivePromptRetry(
-        bobContact.getByTestId("list-contacts-button"),
-      );
-      await expect(bobContact).toContainText(alice.did, { timeout: 30_000 });
-      await bobPage.fillWithPassivePromptRetry(
-        bobContact.getByTestId("contact-requester-did-input"),
-        alice.did,
-      );
-      await bobPage.clickWithPassivePromptRetry(
-        bobContact.getByTestId("accept-contact-button"),
-      );
-      await expect(bobContact).toContainText(/accepted/i, { timeout: 30_000 });
-
       // Browser bootstrap must have projected Bob's exact event-signing key as
       // an active device before the first presence heartbeat is admissible.
       const bobViewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
@@ -314,7 +296,12 @@ test.describe("discovery", () => {
         historyVisibility: "joined",
         encryptionProfile: "none",
       });
-      await bobPage.gotoTimelineRealm(presenceRealmId);
+      await bobPage.inviteFromAdmin(presenceRealmId, alice.did);
+      await alicePage.acceptInviteFromNotifications(presenceRealmId);
+      await Promise.all([
+        alicePage.gotoTimelineRealm(presenceRealmId),
+        bobPage.gotoTimelineRealm(presenceRealmId),
+      ]);
 
       // A structurally valid proof from a different key must still fail closed.
       const sentAt = new Date();
@@ -346,50 +333,34 @@ test.describe("discovery", () => {
         error: { details: { reason_code: "proof_invalid" } },
       });
 
-      const bobPresenceFromSearch = async (): Promise<string | undefined> => {
-        const searchUrl = `${solandBaseUrl()}/_arkret/find/directory/search-actors`;
-        const search = await request.post(searchUrl, {
-          headers: selfPathHeadersForDpopSession(
-            aliceSession.session,
-            "POST",
-            searchUrl,
-          ),
-          data: { query: bob.did },
-        });
-        const searchText = await search.text();
-        expect(search.status(), searchText).toBe(200);
-        const body = JSON.parse(searchText);
-        const row = (
-          body.actors as Array<{
-            actor_id?: string;
-            preview?: { did?: string; presence?: { status?: string } };
-          }>
-        ).find((r) => r.actor_id === bob.did || r.preview?.did === bob.did);
-        return row?.preview?.presence?.status;
-      };
-
-      await expect
-        .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
-        .toBe("online");
+      const bobPresenceRow = alicePage.page.locator(
+        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,
+      );
+      await expect(bobPresenceRow).toHaveAttribute(
+        "data-presence-state",
+        "online",
+        { timeout: 10_000 },
+      );
 
       // Closing the actual tab stops the heartbeat. Once the 30-second signal
       // expires, the deterministic multi-device aggregation becomes offline.
       const bobContext = bobPage.session.context;
       await bobPage.page.close();
-      await expect
-        .poll(bobPresenceFromSearch, {
-          timeout: 45_000,
-          intervals: [500, 1_000],
-        })
-        .toBe("offline");
+      await expect(bobPresenceRow).toHaveAttribute(
+        "data-presence-state",
+        "offline",
+        { timeout: 45_000 },
+      );
 
       // Reuse the same browser context/device credentials, just as reopening a
       // closed tab does. The first fresh heartbeat must project within 5s.
       bobPage.session.page = await bobContext.newPage();
       await bobPage.gotoTimelineRealm(presenceRealmId);
-      await expect
-        .poll(bobPresenceFromSearch, { timeout: 5_000, intervals: [250, 500] })
-        .toBe("online");
+      await expect(bobPresenceRow).toHaveAttribute(
+        "data-presence-state",
+        "online",
+        { timeout: 5_000 },
+      );
     } finally {
       await Promise.allSettled([alicePage.close(), bobPage.close()]);
     }

@@ -3,43 +3,46 @@
 ## 当前基线
 
 - 命令：`./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall`
-- 完整运行：`artifacts/runs/20260719-141911/joint-e2e`
-- 476 tests：264 passed，30 failed，107 expected/profile skipped，75 因 serial 前置失败未运行。
-- 测试阶段耗时 26.3 分钟，runner 总耗时 1598.98 秒；托管服务失败数为 0。
-- 已解决的 contact 接受后 Directory 精确 DID 行失败消失；`discovery` serial suite 解锁到下一条 presence 场景。总体统计中的其它变化来自既有时序用例波动，按 JUnit testcase 集合分别归类。
+- 完整运行：`artifacts/runs/20260719-173740/joint-e2e`
+- 480 tests：272 passed，27 failed，107 expected/profile skipped，74 因 serial 前置失败未运行。
+- 测试阶段耗时 26.0 分钟，runner 总耗时 1582.3 秒；托管服务失败数为 0。
+- JUnit 记录 18 个直接失败；Playwright 汇总中的另外 9 个是 serial suite 前置失败后的派生失败/未完成项，不能重复作为独立根因计数。
+- 已解决的 RC-13 presence 场景在定向干净复跑和本次全量中均通过，已从报告移除。
 
-## RC-13：presence 场景使用未授权 device 与占位 proof
+## RC-14：Event proof JWS transcript / signer 漂移
 
 ### 现象
 
-`discovery/directory.spec.ts` 的 presence 场景首次被串行解锁后，在第一次发送 `ak.presence` 时返回：
+本次全量有三处直接返回相同服务端判定：
 
-```text
-HTTP 400 invalid_param
-ephemeral proof device is not active and authorized
-reason_code=proof_invalid
-```
+- `identity/contact-graph.spec.ts`：publish cross-signing 返回 `400 invalid_proof`；
+- `invites/third-party.spec.ts`：`ak.invite.claim` 被拒绝，`event proof JWS verification failed`；
+- `joint/joint-inkson-smoke.spec.ts`：提交 `ak.member.state` 返回 `400 invalid_proof`。
+
+这三条覆盖不同业务域，却在 Event proof 的通用验证边界失败，优先按共享 signer / canonical transcript 漂移聚类，而不是分别修改业务 reducer。
 
 ### 初步归类
 
-- 场景用 `ensureRegistered` + dev session 创建用户，却没有证明 `device_id` 已完成 active authorization。
-- `presenceEnvelope` 只计算 `event_digest`，JWS 固定为占位字符串 `eyJhbGciOiJFZERTQSJ9..c2ln`；它不是由对应 device event signer 生成的可验证签名。
-- Soland fail closed 符合 presence/ephemeral proof 安全边界；当前证据指向 cotest fixture/签名数据问题，不支持放松服务端 proof 校验。
+- Soland 在 proof JWS 校验失败时 fail closed 符合 spec；没有证据支持放宽服务端校验。
+- 失败发生在 reducer/admission 之前，业务 payload 本身尚未成为决定因素。
+- RC-13 已发现 7 月 SDK 把 ephemeral proof 切换到专用 canonical binding；RC-14 需独立审计近期 Event proof API、domain/audience、created_at 规范化和 fixture signer 调用是否也发生过类似迁移，不能直接套用 ephemeral 修复。
 
-### 近期更新相关性与复核要求
+### 复核要求
 
-- 审计 Arkret device authorization、ephemeral proof 和 Inkson presence emitter 的近期提交，确认服务端何时从 shape-only 升级为 active-device + real-JWS 验证，以及 cotest 为何未同步。
-- 复用 cotest/SDK 已有的真实 event signer 与 device enrollment helper，不在场景中手工伪造 proof transcript。
-- 验证 online → offline → online 投影，并保留 accepted-contact 可见性前置；另加未授权 device/伪造 proof 的负向拒绝断言，不能只让 happy path 通过。
-- 定向场景与标准全量复核均通过后，删除本节并提交。
+- 找出三条场景使用的共享/不同签名 helper，逐字节比较客户端签名 transcript 与 Soland verifier transcript。
+- 用 SDK verifier 为 cotest 生成的真实 proof 增加互操作回归；保留篡改 proof 的负向拒绝断言。
+- 不通过固定占位签名、跳过验证或放宽 Soland admission 让测试变绿。
+- 三条直接失败的定向场景全部通过，并复核受其 serial 阻塞的后续场景；标准全量无该类别失败后提交并从报告移除。
 
-## 尚待聚类的失败信号
+## 后续待聚类信号
 
-其余失败仍需逐类核对 spec、实现、测试数据和近期库更新，包括：
+除 RC-14 外，本轮 JUnit 的直接失败信号包括：
 
-- proof/admission：多处 Event proof JWS verification failed。
-- capability basis：circle/moderation grant 返回 `capability_registry_basis_unavailable`。
-- UI/同步：离线队列、redaction tombstone、Kanban 拖拽等超时或投影断言。
-- 个别 MLS 登录、account-data、recovery 和 workflow 串行断言。
+- capability basis：moderation appeal、Circle lifecycle 的 grant 返回 `412 capability_registry_basis_unavailable`；
+- account-data / UI projection：personal blocklist、consent、support escalation；
+- session/sync：terminal auth polling 计数、quiet long-poll 首帧、offline queue 状态；
+- Realm/Kanban：Sidecar discoverability 值漂移、create Realm 404、跨成员加密投影超时；
+- messaging：reaction/reply 投影、read receipt 400；
+- workflow 的其余失败需在上游 serial 前置项解锁后重新确认，不能基于当前派生失败过早归因。
 
-这些信号尚未假定为同一根因；RC-13 提交后继续逐类分析。
+这些信号尚未假定为同一根因；RC-14 提交后继续逐类分析。

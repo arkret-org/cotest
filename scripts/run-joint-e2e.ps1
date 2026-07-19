@@ -1961,6 +1961,13 @@ $preflightJson = Join-Path $jointDir "preflight.json"
 $preflightMd = Join-Path $jointDir "preflight.md"
 $managedServiceFailuresJson = Join-Path $jointDir "managed-service-failures.json"
 $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
+# The harness serves a static bundle, not a Dioxus devserver. A debug bundle
+# enables dioxus-web devtools and repeatedly opens `/_dioxus` hot-reload
+# WebSockets; the static server cannot satisfy that protocol and the failed
+# CloseEvent path can corrupt the wasm callback heap. Inkson's joint-e2e profile
+# compiles out devtools while retaining the cotest-only session injection feature.
+# Dioxus places every non-release custom profile under its `debug` web output
+# directory even though Cargo itself uses the named `joint-e2e` profile.
 $inksonStaticRoot = Join-Path $InksonRoot "target\dx\inkson\debug\web\public"
 $inksonStaticIndex = Join-Path $inksonStaticRoot "index.html"
 $playwrightProjects = Resolve-PlaywrightProjects `
@@ -2076,7 +2083,7 @@ try {
             Write-Host "Preparing inkson web bundle: $($inksonFreshness.Detail)"
             $started = Get-Date
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
-                -Command "dx build --platform web --features experimental-agents,wasm-localstorage-secrets-test" `
+                -Command "dx build --profile joint-e2e --platform web --features experimental-agents,wasm-localstorage-secrets-test" `
                 -ProjectRoot $InksonRoot
             $service = Start-ManagedCommand `
                 -Name "prepare-inkson" `

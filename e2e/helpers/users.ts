@@ -1685,7 +1685,9 @@ export async function openUserPage(
     resolvedOpts.pendingPrincipalRegistration &&
     resolvedOpts.recoveryKey
   ) {
-    await userPage.gotoHome();
+    // Load the pending bootstrap route directly. Navigating through `/` first
+    // can tear down session-boot WebSocket/IndexedDB callbacks while they are
+    // still resolving, which aborts the WASM runtime before onboarding mounts.
     await completePendingPrincipalBootstrap(
       userPage,
       resolvedOpts.recoveryKey,
