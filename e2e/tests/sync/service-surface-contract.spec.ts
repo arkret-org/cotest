@@ -157,7 +157,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     expect(Array.isArray(body.experimental_features), "experimental_features array").toBe(true);
     expect(Array.isArray(body.compat_surfaces), "compat_surfaces array").toBe(true);
 
-    // §3.0 — self-claim has claim_kind === "self_claimed"; cotest_verified MUST live
+    // §3.0 — self-claim has claim_kind === "self_claimed"; conformance_verified MUST live
     // only under verified_profiles, never copied into claimed_profiles.
     for (const entry of body.claimed_profiles as Array<{ claim_kind?: string }>) {
       expect(entry.claim_kind, "claimed_profiles[*].claim_kind").toBe("self_claimed");
@@ -252,10 +252,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
       type ProfileClaim = {
         profile_id?: unknown;
         claim_kind?: unknown;
-        cotest_run_id?: unknown;
+        verification_run_id?: unknown;
         artifact_digest?: unknown;
         artifact_ref?: unknown;
-        cotest_issuer_did?: unknown;
+        verifier_did?: unknown;
         signature?: unknown;
         timestamp?: unknown;
       };
@@ -274,8 +274,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
         const profileId = entry.profile_id as string;
         expect(profileId, "claimed profile_id is non-empty").not.toBe("");
         expect(entry.claim_kind, `claimed ${profileId} claim_kind`).toBe("self_claimed");
-        expect(entry.claim_kind, `claimed ${profileId} must not be cotest_verified`).not.toBe(
-          "cotest_verified",
+        expect(entry.claim_kind, `claimed ${profileId} must not be conformance_verified`).not.toBe(
+          "conformance_verified",
         );
         expect(claimedIds.has(profileId), `claimed ${profileId} appears once`).toBe(false);
         claimedIds.add(profileId);
@@ -286,12 +286,12 @@ test.describe("service surface contract — error envelope, pagination, idempote
         expect(typeof entry.profile_id, "verified profile_id").toBe("string");
         const profileId = entry.profile_id as string;
         expect(profileId, "verified profile_id is non-empty").not.toBe("");
-        expect(entry.claim_kind, `verified ${profileId} claim_kind`).toBe("cotest_verified");
+        expect(entry.claim_kind, `verified ${profileId} claim_kind`).toBe("conformance_verified");
         for (const field of [
-          "cotest_run_id",
+          "verification_run_id",
           "artifact_digest",
           "artifact_ref",
-          "cotest_issuer_did",
+          "verifier_did",
           "signature",
           "timestamp",
         ] as const) {

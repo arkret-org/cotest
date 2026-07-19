@@ -57,13 +57,13 @@ type ClaimedProfileEntry = {
 type VerifiedProfileEntry = {
   profile_id?: string;
   claim_kind?: string;
-  cotest_run_id?: string;
+  verification_run_id?: string;
   artifact_digest?: string;
   artifact_ref?: string;
-  cotest_issuer_did?: string;
+  verifier_did?: string;
   signature?: string;
   timestamp?: string;
-  valid_until?: string;
+  expires_at?: string;
 };
 
 type DescribeResponse = {
@@ -101,8 +101,8 @@ test.describe("conformance profile gates @fully-implemented", () => {
     //       service-surface.md §3.0 (claim_kind enum; partition invariant).
     //
     // claimed_profiles[].claim_kind MUST be "self_claimed" for every entry.
-    // verified_profiles entries, if present, MUST carry cotest_run_id / artifact_digest /
-    //   artifact_ref / cotest_issuer_did / signature / timestamp.
+    // verified_profiles entries, if present, MUST carry verification_run_id / artifact_digest /
+    //   artifact_ref / verifier_did / signature / timestamp.
     // The two profile_id sets MUST be disjoint — a profile cannot be simultaneously
     // self-claimed and cotest-verified.
     const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
@@ -127,10 +127,11 @@ test.describe("conformance profile gates @fully-implemented", () => {
 
     for (const entry of verified) {
       expect(entry.profile_id, "verified entry profile_id present").toBeTruthy();
-      expect(entry.cotest_run_id, "verified entry cotest_run_id present").toBeTruthy();
+      expect(entry.claim_kind, "verified entry claim_kind").toBe("conformance_verified");
+      expect(entry.verification_run_id, "verified entry verification_run_id present").toBeTruthy();
       expect(entry.artifact_digest, "verified entry artifact_digest present").toBeTruthy();
       expect(entry.artifact_ref, "verified entry artifact_ref present").toBeTruthy();
-      expect(entry.cotest_issuer_did, "verified entry cotest_issuer_did present").toBeTruthy();
+      expect(entry.verifier_did, "verified entry verifier_did present").toBeTruthy();
       expect(entry.signature, "verified entry signature present").toBeTruthy();
       expect(entry.timestamp, "verified entry timestamp present").toBeTruthy();
     }
@@ -325,7 +326,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       expect(entry.claim_kind).toBe("self_claimed");
     }
     for (const entry of body.verified_profiles ?? []) {
-      expect(entry.claim_kind).toBe("cotest_verified");
+      expect(entry.claim_kind).toBe("conformance_verified");
       expect(claimedIds.has(entry.profile_id)).toBe(false);
     }
   });

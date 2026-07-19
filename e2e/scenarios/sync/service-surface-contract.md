@@ -64,7 +64,7 @@
    - `protocol_version === "1.0"`
    - `supported_bindings[0].kind === "http_json"`、`supported_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
    - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` 全部存在且是数组
-   - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `cotest_verified`)
+   - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `conformance_verified`)
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
    - `supported_operations` 至少含 `ak.server.query.describe` 与 `ak.self.events.command.submit`(spec §4.2 + service-api-schema §2.1 `/events POST`)
 3. `GET ${coauthBaseUrl()}/_arkret/describe`(仅当 `coauthBaseUrl()` 已配置)
@@ -158,7 +158,7 @@
 
 ## Edge cases / sub-tests
 
-- **E1 profile partition leak**:claim_kind 不混淆 — `claimed_profiles[*].claim_kind` MUST 全部是 `"self_claimed"`;任何 `cotest_verified` 条目 MUST 只出现在 `verified_profiles` 数组中(spec §3.0 第 2 + 4 条);当前已 live,并在 `verified_profiles` 非空时校验 cotest artifact 元数据与 profile_id 分区
+- **E1 profile partition leak**:claim_kind 不混淆 — `claimed_profiles[*].claim_kind` MUST 全部是 `"self_claimed"`;任何 `conformance_verified` 条目 MUST 只出现在 `verified_profiles` 数组中(spec §3.0 第 2 + 4 条);当前已 live,并在 `verified_profiles` 非空时校验 cotest artifact 元数据与 profile_id 分区
 - **E2 dev_mode invariant**:`development_mode === true` + 非空 `verified_profiles` 是 invalid describe(SDK / conformance tooling 必须 fail);harness 不能模拟服务端违规,所以以 fixme 钉住 spec 合约,等 production-mode CI 落地后做 live 反例测试
 - **E3 cursor TTL 上限**:stream cursor TTL MUST ≤ 7 天(api-conventions §7 TTL 硬上限);本测试无法在 e2e 内等 7 天,但可以 fixme 钉住 spec,后续在 cotest fixture 里塞一个 8 天前签发的 cursor 验证 `cursor_expired`
 - **E4 idempotency cross-actor 隔离**:同一 `Idempotency-Key` 由 bob 重复提交 MUST NOT 命中 alice 的缓存项(否则可被用作 oracle);fixme 钉住,等 G3.S0 / multi-user soland scaffold 稳定后 live

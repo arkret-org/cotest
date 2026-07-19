@@ -10,7 +10,7 @@
 //! Three claim provenances are supported:
 //!
 //! * [`ClaimKind::SelfClaimed`]    — implementor self-attests.
-//! * [`ClaimKind::CotestVerified`] — claim was produced by a successful `cotest` suite run.
+//! * [`ClaimKind::ConformanceVerified`] — claim was produced by a successful conformance run.
 //! * [`ClaimKind::Experimental`]   — claim is intentionally outside the v1 conformance catalogue;
 //!   role partitioning still applies when the id is in the spec.
 //!
@@ -29,7 +29,7 @@
 //! let outcome = validate_describe_profile_claims(
 //!     &describe,
 //!     ServiceRole::Client,
-//!     ClaimKind::CotestVerified,
+//!     ClaimKind::ConformanceVerified,
 //! )
 //! .expect("artifact loads");
 //! assert!(outcome.is_compliant());
@@ -85,7 +85,7 @@ impl ServiceRole {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ClaimKind {
     SelfClaimed,
-    CotestVerified,
+    ConformanceVerified,
     Experimental,
 }
 
@@ -93,7 +93,7 @@ impl ClaimKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SelfClaimed => "self_claimed",
-            Self::CotestVerified => "cotest_verified",
+            Self::ConformanceVerified => "conformance_verified",
             Self::Experimental => "experimental",
         }
     }
@@ -282,7 +282,7 @@ pub fn validate_profile_claims(
                         .experimental_unknown_allowed
                         .push(profile_id.clone());
                 }
-                ClaimKind::SelfClaimed | ClaimKind::CotestVerified => {
+                ClaimKind::SelfClaimed | ClaimKind::ConformanceVerified => {
                     outcome.failures.push(ProfileClaimFailure::UnknownProfile {
                         profile_id: profile_id.clone(),
                     });
