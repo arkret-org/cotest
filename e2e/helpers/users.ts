@@ -1330,14 +1330,14 @@ export async function openDpopUserPageForAccount(
   return openDpopUserPageFromSession(browser, session, opts);
 }
 
-async function openDpopUserPageFromSession(
+export async function openDpopUserPageFromSession(
   browser: Browser,
   session: DpopUserSession | undefined,
   opts: {
     server?: SolandKey;
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
-  },
+  } = {},
 ): Promise<DpopUserPageSession | undefined> {
   if (!session) {
     return undefined;

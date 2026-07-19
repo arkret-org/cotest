@@ -32,6 +32,7 @@ import {
   currentActorDidApi,
   expectJsonOk,
   principalControlRealmForDid,
+  registerEventSigner,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
@@ -39,7 +40,10 @@ import {
   type InviteDeliveryRequestBody,
 } from "./soland-api";
 import type { JointUser } from "./users";
-import { encodeEd25519PubkeyMultibase } from "./encoding";
+import {
+  ed25519PrivateKeySeedB64url,
+  encodeEd25519PubkeyMultibase,
+} from "./encoding";
 import {
   buildPrincipalGenesisEntry,
   generateWebvhKey,
@@ -353,6 +357,12 @@ export async function prepareDirectConversationIdentityArkret(
     solandBaseUrl(opts.server),
     built,
   );
+  registerEventSigner({
+    actorDid: built.did,
+    deviceId: user.deviceId,
+    verificationMethod: `${built.did}#principal-signing-key`,
+    signingSeedB64url: ed25519PrivateKeySeedB64url(principalSigningKey.privateKey),
+  });
   return {
     user: { ...user, did: built.did },
     principalSigningKey: {

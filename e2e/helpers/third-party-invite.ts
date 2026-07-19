@@ -23,7 +23,11 @@ import {
   canonicalTimestamp,
   sha256CanonicalJson,
 } from "./soland-api";
-import { encodeEd25519PubkeyMultibase, rawEd25519PublicKey } from "./encoding";
+import {
+  ed25519PrivateKeySeedB64url,
+  encodeEd25519PubkeyMultibase,
+  rawEd25519PublicKey,
+} from "./encoding";
 
 // Domain separators — must match soland invite_claim_proofs.rs verbatim,
 // trailing "\n" included.
@@ -35,6 +39,7 @@ export type DidKeyIdentity = {
   did: string;
   verificationMethod: string;
   publicKeyMultibase: string;
+  signingSeedB64url: string;
   privateKey: KeyObject;
 };
 
@@ -60,6 +65,7 @@ export function generateDidKeyIdentity(): DidKeyIdentity {
     did,
     verificationMethod: `${did}#${multibase}`,
     publicKeyMultibase: multibase,
+    signingSeedB64url: ed25519PrivateKeySeedB64url(privateKey),
     privateKey,
   };
 }

@@ -10,6 +10,7 @@ import {
   createDpopUserSession,
   type DpopUserSession,
   openDpopUserPage,
+  openDpopUserPageFromSession,
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 
@@ -38,126 +39,142 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     });
   });
 
-  test("groups an agent with a visible reply and offers the @me selector", async ({
+  test("does not promote mention audit metadata to Agent identity", async ({
+    browser,
     jointRealm,
     request,
   }) => {
     test.setTimeout(360_000);
     const stamp = Date.now();
     const slug = `summary${stamp.toString(36)}`;
-    const displayName = `Summary Agent ${stamp}`;
+    const forgedDisplayName = `Forged Summary Agent ${stamp}`;
     const controllerHandle = canonicalHandle(
       jointRealm.alice.handle,
       jointRealm.alicePage.serverUrl,
     );
-    const agentSession = await createDpopUserSession(request, `joint-agent-${stamp}`, {
-      skipDeviceEnrollment: true,
-    });
-    expect(agentSession, "joint agent DPoP session").toBeTruthy();
-    const agentId = agentSession!.user.did;
+    const participantSession = await createDpopUserSession(
+      request,
+      `joint-participant-${stamp}`,
+      { skipDeviceEnrollment: true },
+    );
+    expect(participantSession, "joint participant DPoP session").toBeTruthy();
+    const participantId = participantSession!.user.did;
+    const participantFlow = await openDpopUserPageFromSession(
+      browser,
+      participantSession,
+      { prepareMlsDevice: false },
+    );
+    expect(participantFlow, "joint participant browser enrollment flow").toBeTruthy();
+    await participantFlow!.page.gotoHome();
 
-    const strandId = await resolveDefaultStrandId(
-      request,
-      jointRealm.aliceSession,
-      jointRealm.alicePage.serverUrl,
-      jointRealm.realmId,
-    );
-    const actorSeq = 8_500_000_000_000_000 + (stamp % 100_000);
-    await submitSignedEvent(
-      request,
-      jointRealm.aliceSession,
-      jointRealm.alice.did,
-      jointRealm.alicePage.serverUrl,
-      jointRealm.realmId,
-      "ak.member.state",
-      {
-        realm_id: jointRealm.realmId,
-        actor_id: agentId,
-        membership: "join",
-        delivery_status: "unroutable",
-      },
-      actorSeq,
-    );
-    const controllerMessageId = `ak:message:${uuidV7()}`;
-    await submitSignedEvent(
-      request,
-      jointRealm.aliceSession,
-      jointRealm.alice.did,
-      jointRealm.alicePage.serverUrl,
-      jointRealm.realmId,
-      "ak.message.create",
-      {
-        message_id: controllerMessageId,
-        strand_id: strandId,
-        track_name: "discussion",
-        content: {
-          kind: "ak.content.text",
-          body: `register ${displayName}`,
-          mentions: [
-            {
-              kind: "mention",
-              subject_id: agentId,
-              controller_subject_id: jointRealm.alice.did,
-              controller_handle_at_time: controllerHandle,
-              agent_slug_at_time: slug,
-              display_name_at_time: displayName,
-              mention_text_original: `@${controllerHandle}/${slug}`,
-            },
-          ],
+    try {
+      const strandId = await resolveDefaultStrandId(
+        request,
+        jointRealm.aliceSession,
+        jointRealm.alicePage.serverUrl,
+        jointRealm.realmId,
+      );
+      const actorSeq = 8_500_000_000_000_000 + (stamp % 100_000);
+      await submitSignedEvent(
+        request,
+        jointRealm.aliceSession,
+        jointRealm.alice.did,
+        jointRealm.alicePage.serverUrl,
+        jointRealm.realmId,
+        "ak.member.state",
+        {
+          realm_id: jointRealm.realmId,
+          actor_id: participantId,
+          membership: "join",
+          delivery_status: "unroutable",
         },
-      },
-      actorSeq + 1,
-    );
-    await submitSignedEvent(
-      request,
-      agentSession!,
-      agentId,
-      jointRealm.alicePage.serverUrl,
-      jointRealm.realmId,
-      "ak.message.create",
-      {
-        strand_id: strandId,
-        track_name: "discussion",
-        reply_to: controllerMessageId,
-        content: {
-          kind: "ak.content.text",
-          body: `${displayName} visible reply`,
+        actorSeq,
+      );
+      const controllerMessageId = `ak:message:${uuidV7()}`;
+      await submitSignedEvent(
+        request,
+        jointRealm.aliceSession,
+        jointRealm.alice.did,
+        jointRealm.alicePage.serverUrl,
+        jointRealm.realmId,
+        "ak.message.create",
+        {
+          message_id: controllerMessageId,
+          strand_id: strandId,
+          track_name: "discussion",
+          content: {
+            kind: "ak.content.text",
+            body: `mention ${forgedDisplayName}`,
+            mentions: [
+              {
+                kind: "mention",
+                subject_id: participantId,
+                controller_subject_id: jointRealm.alice.did,
+                controller_handle_at_time: controllerHandle,
+                agent_slug_at_time: slug,
+                display_name_at_time: forgedDisplayName,
+                mention_text_original: `@${controllerHandle}/${slug}`,
+              },
+            ],
+          },
         },
-      },
-      8_400_000_000_000_000 + (stamp % 100_000),
-    );
+        actorSeq + 1,
+      );
+      const replyBody = `${participantSession!.user.displayName} visible reply`;
+      await submitSignedEvent(
+        request,
+        participantSession!,
+        participantId,
+        jointRealm.alicePage.serverUrl,
+        jointRealm.realmId,
+        "ak.message.create",
+        {
+          strand_id: strandId,
+          track_name: "discussion",
+          reply_to: controllerMessageId,
+          content: {
+            kind: "ak.content.text",
+            body: replyBody,
+          },
+        },
+        8_400_000_000_000_000 + (stamp % 100_000),
+      );
 
-    await jointRealm.alicePage.page.goto(`/chat/${jointRealm.realmId}`, {
-      waitUntil: "domcontentloaded",
-    });
-    await expect(jointRealm.alicePage.page.getByTestId("chat-panel")).toBeVisible({
-      timeout: 120_000,
-    });
-    const group = jointRealm.alicePage.page
-      .locator(
-        `[data-testid="participant-agent-group"][data-controller-id="${jointRealm.alice.did}"]`,
-      )
-      .first();
-    await expect(group).toBeVisible({ timeout: 30_000 });
-    await expect(group.getByTestId("participant-self-badge")).toHaveText("ME");
-    await expect(group.getByTestId("participant-agent-group-toggle")).toHaveText("1 agent");
+      await jointRealm.alicePage.page.goto(`/chat/${jointRealm.realmId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(jointRealm.alicePage.page.getByTestId("chat-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(jointRealm.alicePage.timelineEvent(replyBody)).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        jointRealm.alicePage.page.locator(
+          `[data-testid="participant-agent-group"][data-controller-id="${jointRealm.alice.did}"]`,
+        ),
+      ).toHaveCount(0);
 
-    const agentRow = group.getByTestId("discussion-agent-row");
-    await expect(agentRow).toBeHidden();
-    await group.locator(":scope > summary").click();
-    await expect(agentRow).toBeVisible();
-    await expect(agentRow).toContainText(displayName);
-    await expect(agentRow.getByTestId("participant-agent-selector")).toHaveText(
-      `@${controllerHandle}/${slug}`,
-    );
+      const participantRow = jointRealm.alicePage.page
+        .getByTestId("discussion-user-row")
+        .filter({
+          has: jointRealm.alicePage.page.getByTitle(participantId, { exact: true }),
+        });
+      await expect(participantRow).toBeVisible();
+      await expect(participantRow).not.toContainText(forgedDisplayName);
+      await expect(participantRow.getByTestId("member-badge-agent")).toHaveCount(0);
+      await expect(participantRow.getByTestId("participant-agent-selector")).toHaveCount(0);
 
-    const input = jointRealm.alicePage.page.getByTestId("chat-input");
-    await input.fill(`@me/${slug}`);
-    const suggestion = jointRealm.alicePage.page
-      .getByTestId("mention-suggestion")
-      .filter({ hasText: `@me/${slug}` });
-    await expect(suggestion).toBeVisible({ timeout: 30_000 });
-    await expect(suggestion.getByTestId("mention-suggestion-agent-badge")).toBeVisible();
+      const input = jointRealm.alicePage.page.getByTestId("chat-input");
+      await input.fill(`@me/${slug}`);
+      await expect(
+        jointRealm.alicePage.page
+          .getByTestId("mention-suggestion")
+          .filter({ hasText: `@me/${slug}` }),
+      ).toHaveCount(0);
+    } finally {
+      await participantFlow!.page.close();
+    }
   });
 
   // inviteFromAdmin drives the current modal flow: gotoRealmAdminSection

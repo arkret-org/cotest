@@ -62,10 +62,12 @@ const registeredEventSigners = new Map<string, RegisteredEventSigner>();
 export function registerEventSigner(args: {
   actorDid: string;
   deviceId: string;
+  verificationMethod?: string;
   signingSeedB64url: string;
 }): void {
   registeredEventSigners.set(args.actorDid, {
-    verificationMethod: `${args.actorDid}#${args.deviceId}`,
+    verificationMethod:
+      args.verificationMethod ?? `${args.actorDid}#${args.deviceId}`,
     signingSeedB64url: args.signingSeedB64url,
   });
 }

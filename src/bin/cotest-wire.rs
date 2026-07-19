@@ -610,4 +610,64 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn event_proof_with_registered_seed_verifies_through_sdk() {
+        let actor = Did::new("did:webvh:z6mkfixture:alice.example".to_owned()).unwrap();
+        let verification_method = format!("{actor}#principal-signing-key");
+        let seed = [42u8; 32];
+        let signing_key = SigningKey::from_bytes(&seed);
+        let event = json!({
+            "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "kind": "ak.member.state",
+            "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "actor_id": actor,
+            "actor_seq": 1,
+            "created_at": "2026-07-07T05:45:49.000Z",
+            "hlc": "019f3b1c76c8-0000-ac7eadec",
+            "prev_refs": [],
+            "refs": [],
+            "requirements": {
+                "schema": ["ak.schema.event_payload.v1"],
+                "features": [],
+                "critical_extensions": []
+            },
+            "payload": {
+                "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+                "actor_id": actor,
+                "membership": "join"
+            }
+        });
+        let proof_value = event_proof(
+            json!({
+                "actor_did": actor,
+                "verification_method": verification_method,
+                "created_at": "2026-07-07T05:45:49.000Z",
+                "event": event,
+                "signing_seed_b64url": base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .encode(seed)
+            }),
+            EventDigestMode::RawCanonicalJson,
+        )
+        .unwrap();
+        let proof: Proof = serde_json::from_value(proof_value).unwrap();
+
+        let mut event_with_proofs = event;
+        event_with_proofs["proofs"] = json!([]);
+        let sdk_event: Event = serde_json::from_value(event_with_proofs).unwrap();
+        let canonical_bytes =
+            canonical::canonical_json_bytes(&sdk_event.digest_payload().unwrap()).unwrap();
+        let public_key = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
+            bytes: signing_key.verifying_key().to_bytes().to_vec(),
+        };
+
+        assert_eq!(proof.verification_method, verification_method);
+        arkret_signatures::proof::verify_eddsa_detached_jws_proof(
+            &proof,
+            &canonical_bytes,
+            &actor,
+            &public_key,
+        )
+        .unwrap();
+    }
 }
