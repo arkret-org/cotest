@@ -43,6 +43,7 @@ export type SignedEventEnvelopeArgs = {
   sealRef?: string;
   sealBasis?: Record<string, unknown>;
   authContext?: Record<string, unknown>;
+  prevRefs?: string[];
 };
 
 export type EventProofMode = "dev-proof" | "detached-jws";
@@ -285,11 +286,7 @@ export async function createRealmApi(
     created_at: createdAt,
   };
   const realmCreateCell = `ak:cell:ak.component.realm.create.v1:${realmId}`;
-
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
+  const realmCreateEvent = signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
       kind: "ak.realm.create",
@@ -312,7 +309,58 @@ export async function createRealmApi(
         // it (it stays inside `object` below, which is additionalProperties:true).
         object: realmObject,
       },
-    }),
+    });
+  const realmCreateEventId = stringValue(realmCreateEvent.event_id);
+  if (!realmCreateEventId) {
+    throw new Error("Realm create Event is missing event_id");
+  }
+  const foundingGrantId = typedId("grant");
+  const unsignedFoundingGrant: Record<string, unknown> = {
+    id: foundingGrantId,
+    schema: "ak.schema.capability.v1",
+    realm_id: realmId,
+    issuer: ownerDid,
+    subject: ownerDid,
+    actions: [
+      "ak.realm.admin",
+      "ak.capability.grant",
+      "ak.capability.revoke",
+    ],
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
+    resources: [
+      {
+        kind: "realm",
+        realm_id: realmId,
+        match_scope: "realm_wide",
+      },
+    ],
+    issued_at: createdAt,
+  };
+  const foundingGrantEvent = signedEventEnvelope({
+    actorDid: ownerDid,
+    realmId,
+    kind: "ak.capability.grant",
+    createdAt,
+    prevRefs: [realmCreateEventId],
+    payload: {
+      grant_id: foundingGrantId,
+      grant: {
+        ...unsignedFoundingGrant,
+        proofs: [
+          buildDetachedJwsProof({
+            issuerDid: ownerDid,
+            payload: unsignedFoundingGrant,
+            createdAt,
+          }),
+        ],
+      },
+    },
+  });
+
+  await submitSignedEventBatchApi(
+    request,
+    token,
+    [realmCreateEvent, foundingGrantEvent],
     { server: opts.server, context: `create realm ${data.title}` },
   );
 
@@ -1351,7 +1399,7 @@ export function signedEventEnvelope(
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
     hlc,
-    prev_refs: [],
+    prev_refs: args.prevRefs ?? [],
     refs: args.refs ?? [],
     preconditions: args.preconditions,
     effects: args.effects,
@@ -1537,6 +1585,77 @@ export async function submitSignedEventApi(
     await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   }
   throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
+export async function submitSignedEventBatchApi(
+  request: APIRequestContext,
+  token: string,
+  events: Array<Record<string, unknown>>,
+  opts: { server?: SolandKey; context?: string } = {},
+) {
+  if (events.length === 0) {
+    throw new Error("Event batch must contain at least one Event");
+  }
+  const context = opts.context ?? "submit Event batch";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await request.post(
+      `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+      {
+        headers: authHeaders(token),
+        data: { events },
+      },
+    );
+    const text = await response.text();
+    if ([200, 201].includes(response.status())) {
+      return JSON.parse(text) as Record<string, unknown>;
+    }
+    const body = JSON.parse(text) as unknown;
+    const staleActorFrontier =
+      response.status() === 409 &&
+      wireErrCode(body) === "cas_conflict" &&
+      text.includes("actor_seq is older than the accepted actor frontier");
+    if (!staleActorFrontier || attempt === 2) {
+      expect(
+        [200, 201],
+        `${context} returned ${response.status()}: ${text}`,
+      ).toContain(response.status());
+    }
+    await advanceEnvelopeToActorFrontier(
+      request,
+      token,
+      events[0],
+      opts.server,
+    );
+    refreshBatchActorChain(events);
+  }
+  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
+function refreshBatchActorChain(
+  events: Array<Record<string, unknown>>,
+): void {
+  for (let index = 1; index < events.length; index += 1) {
+    const previous = events[index - 1];
+    const current = events[index];
+    const previousActorSeq = previous.actor_seq;
+    const previousEventId = stringValue(previous.event_id);
+    if (
+      typeof previousActorSeq !== "number" ||
+      !Number.isSafeInteger(previousActorSeq) ||
+      !previousEventId
+    ) {
+      throw new Error("Event batch predecessor has an invalid actor chain");
+    }
+    current.actor_seq = previousActorSeq + 1;
+    current.prev_refs = [previousEventId];
+    const proofVerificationMethod = Array.isArray(current.proofs)
+      ? stringValue(
+          (current.proofs[0] as Record<string, unknown> | undefined)
+            ?.verification_method,
+        )
+      : undefined;
+    refreshEventEnvelopeProof(current, proofVerificationMethod);
+  }
 }
 
 async function advanceEnvelopeToActorFrontier(

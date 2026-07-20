@@ -193,24 +193,14 @@ test.describe("account recovery", () => {
     const { session, page } = device;
 
     try {
-      // Drive the recovery settings page: generate a 24-word Recovery Key.
-      // The account-secret envelope uploads automatically (recovery_public_key,
-      // no user passphrase).
-      const recoveryBackupPut = page.page.waitForResponse((response) => {
-        if (
-          response.request().method() !== "PUT" ||
-          !/\/_arkret\/self\/keys\/backups\//.test(response.url())
-        ) {
-          return false;
-        }
-        const postData = response.request().postData() ?? "";
-        return /"recipient_method"\s*:\s*"recovery_public_key"/.test(postData);
-      }, { timeout: 120_000 });
+      // The DPoP bootstrap helper completes the first-device recovery prompt,
+      // which generates the 24-word Recovery Key and uploads the
+      // recovery_public_key envelope before it returns. Verify the durable
+      // result rather than waiting for an already-completed browser request.
       await page.page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
       await expect(page.page.getByTestId("recovery-key-section")).toBeVisible({
         timeout: 120_000,
       });
-      await page.page.getByTestId("recovery-key-regenerate").click();
       await expect
         .poll(
           async () => {
@@ -223,9 +213,6 @@ test.describe("account recovery", () => {
         .toBe(24);
       // §7.7: the recovery UI MUST NOT request a separate vault passphrase.
       await expect(page.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
-
-      const backupPut = await recoveryBackupPut;
-      expect(backupPut.status(), await backupPut.text()).toBe(200);
 
       // Phase A invariant (recovery.md step 6): an active policy AND a
       // did_recovery backup both exist. Read them back over the API.

@@ -135,8 +135,12 @@ test.describe("key backup + restore", () => {
             keyBackupPuts.some(
               (hit) =>
                 hit.status === 200 &&
-                /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData) &&
-                /"recipient_method"\s*:\s*"recovery_public_key"/.test(hit.postData),
+                /"item_type"\s*:\s*"mls_account_secret"/.test(
+                  keyBackupWireData(hit),
+                ) &&
+                /"recipient_method"\s*:\s*"recovery_public_key"/.test(
+                  keyBackupWireData(hit),
+                ),
             ),
           { timeout: 120_000 },
         )
@@ -495,7 +499,9 @@ test.describe("key backup + restore", () => {
             keyBackupPuts.some(
               (hit) =>
                 hit.status === 200 &&
-                /"backup_class"\s*:\s*"mls_history"/.test(hit.postData),
+                /"backup_class"\s*:\s*"mls_history"/.test(
+                  keyBackupWireData(hit),
+                ),
             ),
           { timeout: 120_000 },
         )
@@ -507,7 +513,9 @@ test.describe("key backup + restore", () => {
             keyBackupPuts.some(
               (hit) =>
                 hit.status === 200 &&
-                /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
+                /"item_type"\s*:\s*"mls_account_secret"/.test(
+                  keyBackupWireData(hit),
+                ),
             ),
           { timeout: 120_000 },
         )
@@ -614,6 +622,7 @@ type KeyBackupPut = {
   url: string;
   status: number;
   postData: string;
+  responseData: string;
 };
 
 type PasswordAccount = {
@@ -695,20 +704,26 @@ type SessionGrantHolderProofTrace = {
 
 function collectKeyBackupPuts(page: Page): KeyBackupPut[] {
   const hits: KeyBackupPut[] = [];
-  page.on("response", (response) => {
+  page.on("response", async (response) => {
     if (
       response.request().method() !== "PUT" ||
       !/\/(?:api\/v1|_arkret\/self)\/keys\/backups\//.test(response.url())
     ) {
       return;
     }
+    const responseData = await response.text().catch(() => "");
     hits.push({
       url: response.url(),
       status: response.status(),
       postData: response.request().postData() ?? "",
+      responseData,
     });
   });
   return hits;
+}
+
+function keyBackupWireData(hit: KeyBackupPut): string {
+  return hit.postData || hit.responseData;
 }
 
 function collectSessionGrantHolderProofTrace(
@@ -1047,7 +1062,9 @@ async function expectMlsAccountSecretBackupUploaded(
         keyBackupPuts.some(
           (hit) =>
             hit.status === 200 &&
-            /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
+            /"item_type"\s*:\s*"mls_account_secret"/.test(
+              keyBackupWireData(hit),
+            ),
         ),
       { timeout: 120_000 },
     )
@@ -1058,7 +1075,7 @@ function mlsHistoryBackupPutCount(keyBackupPuts: KeyBackupPut[]): number {
   return keyBackupPuts.filter(
     (hit) =>
       hit.status === 200 &&
-      /"backup_class"\s*:\s*"mls_history"/.test(hit.postData),
+      /"backup_class"\s*:\s*"mls_history"/.test(keyBackupWireData(hit)),
   ).length;
 }
 
@@ -1068,7 +1085,9 @@ function mlsPrivatePlaintextBackupPutCount(
   return keyBackupPuts.filter(
     (hit) =>
       hit.status === 200 &&
-      /"item_type"\s*:\s*"mls_private_plaintext"/.test(hit.postData),
+      /"item_type"\s*:\s*"mls_private_plaintext"/.test(
+        keyBackupWireData(hit),
+      ),
   ).length;
 }
 

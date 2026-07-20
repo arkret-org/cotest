@@ -605,9 +605,21 @@ async function blocklistAccountDataEntry(
   const accountData = body.account_data as
     | { events?: Array<Record<string, unknown>> }
     | undefined;
-  return (accountData?.events ?? []).find(
-    (entry) => entry.data_type === BLOCKLIST_DATA_TYPE,
-  );
+  const entry = (accountData?.events ?? []).find((candidate) => {
+    const payload = candidate.payload as Record<string, unknown> | undefined;
+    return (
+      candidate.kind === "ak.account_data.set" &&
+      payload?.key === BLOCKLIST_DATA_TYPE
+    );
+  });
+  if (!entry) {
+    return undefined;
+  }
+  const payload = entry.payload as Record<string, unknown>;
+  return {
+    ...entry,
+    content: payload.body,
+  };
 }
 
 function accountSubscribeDpopOpts(session: DpopUserSession): AccountSubscribeOpts {
