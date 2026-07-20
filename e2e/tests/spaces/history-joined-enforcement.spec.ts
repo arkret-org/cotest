@@ -3,14 +3,13 @@
 // @blocking-on: soland#history-visibility-read-path
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
   accountSubscribeFramesApi,
   canonicalTimestamp,
-  plaintextVisibleServiceDeclarations,
+  createRealmApi,
   resolveDefaultStrandId,
-  singleDidNotary,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -229,44 +228,20 @@ async function createRealm(
   historyVisibility: "joined" | "shared",
   createdAtValue: string,
 ) {
-  const plaintextVisibleServices = plaintextVisibleServiceDeclarations([
-    solandServiceId(),
-    "did:web:soland.local",
-  ]);
-  await submitSignedEventApi(
+  await createRealmApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid: actor.did,
-      realmId,
-      kind: "ak.realm.create",
-      createdAt: createdAtValue,
-      payload: {
-        // realm_create_payload root is additionalProperties:false; the field
-        // lives on the realm object (additionalProperties:true) below.
-        object: {
-          id: realmId,
-          schema: "ak.schema.realm.v1",
-          title: `history ${historyVisibility} ${Date.now()}`,
-          summary: "cotest joined-history enforcement fixture",
-          created_by: actor.did,
-          trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ak.schema.realm.v1"],
-          default_discoverability: "public",
-          default_join_rule: "invite",
-          history_visibility: historyVisibility,
-          encryption_profile: "none",
-          plaintext_visible_services: plaintextVisibleServices,
-          security_class: "standard",
-          federation_policy: "restricted",
-          notary_profile: "single_did",
-          digest_algorithm: "sha256",
-          notary: singleDidNotary(actor.did),
-          created_at: createdAtValue,
-        },
-      },
-    }),
-    { context: `create ${historyVisibility} realm` },
+    {
+      realm_id: realmId,
+      created_at: createdAtValue,
+      ownerDid: actor.did,
+      title: `history ${historyVisibility} ${Date.now()}`,
+      summary: "cotest joined-history enforcement fixture",
+      discoverability: "public",
+      default_join_rule: "invite",
+      history_visibility: historyVisibility,
+      encryption_profile: "none",
+    },
   );
 }
 
