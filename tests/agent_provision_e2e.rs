@@ -188,7 +188,8 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                 arkret::StrandId::new(strand_id)?,
             ),
         })
-        .await?;
+        .await
+        .context("ensure agent sidecar")?;
     assert!(sidecar.ok, "live Sidecar ensure must succeed");
     assert!(sidecar.sidecar_id.as_str().starts_with("ak:sidecar:"));
     let sidecar_view = controller.agent_sidecar_get(&sidecar.sidecar_id).await?;
@@ -1625,7 +1626,8 @@ async fn provision_agent(
             requested_scope: requested_scope.clone(),
             pairing_ttl_ms,
         })
-        .await?;
+        .await
+        .context("prepare agent provision")?;
     let (
         agent_id,
         principal_control_realm_id,
@@ -1720,8 +1722,14 @@ async fn provision_agent(
         provision_events: Box::new(events),
         pairing_ttl_ms,
     };
-    let committed = client.agent_provision(&commit).await?;
-    let retried = client.agent_provision(&commit).await?;
+    let committed = client
+        .agent_provision(&commit)
+        .await
+        .context("commit agent provision")?;
+    let retried = client
+        .agent_provision(&commit)
+        .await
+        .context("retry agent provision commit")?;
     if serde_json::to_value(&committed)? != serde_json::to_value(&retried)? {
         return Err(anyhow!(
             "an exact agent provision Commit retry returned a different outcome"
@@ -1788,20 +1796,31 @@ async fn provision_and_pair_agent(
     display_name: &str,
     slug: &str,
 ) -> Result<String> {
-    let prov = provision_agent(server, token, display_name, slug, None).await?;
+    let prov = provision_agent(server, token, display_name, slug, None)
+        .await
+        .context("provision agent")?;
     let agent_did = prov.agent_id.to_string();
     assert!(prov.pairing_code.is_some(), "pairing_code present");
     assert_eq!(
-        agent_status(server, token, &agent_did).await?,
+        agent_status(server, token, &agent_did)
+            .await
+            .context("read pending agent status")?,
         "pending_runtime_key"
     );
 
-    let pair = pair_agent_runtime_key(server, token, &prov).await?;
+    let pair = pair_agent_runtime_key(server, token, &prov)
+        .await
+        .context("pair agent runtime key")?;
     assert!(
         !pair.authorized_event_ref.as_str().is_empty(),
         "authorized_event_ref present"
     );
-    assert_eq!(agent_status(server, token, &agent_did).await?, "active");
+    assert_eq!(
+        agent_status(server, token, &agent_did)
+            .await
+            .context("read active agent status")?,
+        "active"
+    );
     Ok(agent_did)
 }
 
