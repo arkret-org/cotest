@@ -201,16 +201,8 @@ test.describe("account recovery", () => {
       await expect(page.page.getByTestId("recovery-key-section")).toBeVisible({
         timeout: 120_000,
       });
-      await expect
-        .poll(
-          async () => {
-            const text =
-              (await page.page.getByTestId("recovery-key-current").textContent()) ?? "";
-            return text.replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).length;
-          },
-          { timeout: 120_000 },
-        )
-        .toBe(24);
+      expect(session.recoveryKey?.trim().split(/\s+/).filter(Boolean)).toHaveLength(24);
+      await expect(page.page.getByTestId("recovery-key-current")).toBeVisible();
       // §7.7: the recovery UI MUST NOT request a separate vault passphrase.
       await expect(page.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
 

@@ -77,15 +77,14 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test("alice generates a 24-word Recovery Key at /settings/recovery (recovery-key-regenerate); account-secret envelopes upload automatically, no user passphrase", async ({
+  test("first-device bootstrap generates a 24-word Recovery Key and durable did_recovery backup; direct replacement requires staged handoff", async ({
     browser,
     request,
   }) => {
     // spec: key-management.md §3.3 / §7.1-§7.2 / §7.7 / §7.10
-    // Beyond A1/A2 (the MlsBackupPrompt path), this covers the settings-page
-    // generation + rotation + recovery-key-sync-badge wiring, and the §7.5.2
-    // recovery_public_key envelope alongside the passphrase_kdf compatibility
-    // envelope. No user passphrase is ever requested.
+    // Beyond A1/A2 (the MlsBackupPrompt path), this covers first-device
+    // recovery bootstrap, the passphrase-free recovery_public_key envelope,
+    // and the staged-handoff-only replacement rule.
     test.setTimeout(240_000);
     const coauth = coauthBaseUrl();
     if (!coauth) {
@@ -111,50 +110,61 @@ test.describe("key backup + restore", () => {
       return;
     }
     const { page: device, session } = deviceFlow;
-    const keyBackupPuts = collectKeyBackupPuts(device.page);
 
     try {
       await device.gotoHome();
       await expectDpopDeviceActive(request, session);
 
-      // Drive /settings/recovery: regenerate produces a fresh 24-word key.
-      const firstKey = await createMlsRecoveryBackupFromRecoverySettings(device.page);
+      // Principal bootstrap already generated and confirmed the first Recovery
+      // Key before openUserPage returned. The write can therefore precede any
+      // response listener registered by this test; verify its durable state.
+      const firstKey = session.recoveryKey ?? "";
       expect(firstKey.split(/\s+/)).toHaveLength(24);
+      await device.page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
+      await expect(device.page.getByTestId("recovery-key-section")).toBeVisible({
+        timeout: 120_000,
+      });
 
       // The settings page MUST NOT ask for a user passphrase.
       await expect(device.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
 
-      // The account-secret envelope uploads automatically (no passphrase).
-      await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
-
-      // §7.5.2: the passphrase-free recovery_public_key account-secret backup
-      // is uploaded alongside the passphrase_kdf compatibility envelope.
+      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_class=did_recovery`;
       await expect
         .poll(
-          () =>
-            keyBackupPuts.some(
-              (hit) =>
-                hit.status === 200 &&
-                /"item_type"\s*:\s*"mls_account_secret"/.test(
-                  keyBackupWireData(hit),
-                ) &&
-                /"recipient_method"\s*:\s*"recovery_public_key"/.test(
-                  keyBackupWireData(hit),
+          async () => {
+            const response = await request.get(backupsUrl, {
+              headers: selfPathHeadersForDpopSession(session, "GET", backupsUrl),
+            });
+            if (!response.ok()) {
+              return false;
+            }
+            const body = await response.json();
+            const backups = Array.isArray(body?.backups)
+              ? body.backups
+              : Array.isArray(body)
+                ? body
+                : [];
+            return backups.some(
+              (backup: any) =>
+                backup?.backup_class === "did_recovery" &&
+                backup?.encryption?.recipient_method === "recovery_public_key" &&
+                Array.isArray(backup?.contents) &&
+                backup.contents.some(
+                  (item: any) => item?.item_type === "recovery_key_share",
                 ),
-            ),
+            );
+          },
           { timeout: 120_000 },
         )
         .toBe(true);
 
-      // The sync badge reflects that the backup reached the server.
-      await expect(device.page.getByTestId("recovery-key-sync-badge")).toBeVisible({
-        timeout: 30_000,
-      });
-
-      // Rotation: a second regenerate yields a different 24-word key.
-      const secondKey = await createMlsRecoveryBackupFromRecoverySettings(device.page);
-      expect(secondKey.split(/\s+/)).toHaveLength(24);
-      expect(secondKey).not.toEqual(firstKey);
+      // Direct replacement was removed by the staged two-entry handoff
+      // protocol. The settings surface must not silently rotate the key.
+      await expect(device.page.getByTestId("recovery-key-regenerate")).toBeDisabled();
+      await expect(device.page.getByTestId("recovery-key-regenerate")).toHaveAttribute(
+        "title",
+        /staged handoff/i,
+      );
     } finally {
       await device.close();
     }

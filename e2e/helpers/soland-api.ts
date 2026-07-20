@@ -239,13 +239,15 @@ export async function createRealmApi(
     audit_disclosure_policy?: Record<string, unknown>;
     retention_policy?: Record<string, unknown>;
     default_join_rule?: string;
+    realm_id?: string;
+    created_at?: string;
   },
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
   const ownerDid =
     data.ownerDid ?? (await currentActorDidApi(request, token, opts));
-  const realmId = typedId("realm");
-  const createdAt = canonicalTimestamp();
+  const realmId = data.realm_id ?? typedId("realm");
+  const createdAt = data.created_at ?? canonicalTimestamp();
   const plaintextVisibleServiceIds =
     data.plaintext_visible_services ??
     (data.encryption_profile === "mls_rfc9420"
@@ -287,29 +289,29 @@ export async function createRealmApi(
   };
   const realmCreateCell = `ak:cell:ak.component.realm.create.v1:${realmId}`;
   const realmCreateEvent = signedEventEnvelope({
-      actorDid: ownerDid,
-      realmId,
-      kind: "ak.realm.create",
-      createdAt,
-      preconditions: [
-        {
-          cell: realmCreateCell,
-          predicate: { op: "head_eq", value: null },
-        },
-      ],
-      effects: [
-        {
-          cell: realmCreateCell,
-          op: { kind: "set", value: realmObject },
-        },
-      ],
-      payload: {
-        // `plaintext_visible_services` lives on the realm object only — the
-        // realm_create_payload root is additionalProperties:false and rejects
-        // it (it stays inside `object` below, which is additionalProperties:true).
-        object: realmObject,
+    actorDid: ownerDid,
+    realmId,
+    kind: "ak.realm.create",
+    createdAt,
+    preconditions: [
+      {
+        cell: realmCreateCell,
+        predicate: { op: "head_eq", value: null },
       },
-    });
+    ],
+    effects: [
+      {
+        cell: realmCreateCell,
+        op: { kind: "set", value: realmObject },
+      },
+    ],
+    payload: {
+      // `plaintext_visible_services` lives on the realm object only — the
+      // realm_create_payload root is additionalProperties:false and rejects
+      // it (it stays inside `object` below, which is additionalProperties:true).
+      object: realmObject,
+    },
+  });
   const realmCreateEventId = stringValue(realmCreateEvent.event_id);
   if (!realmCreateEventId) {
     throw new Error("Realm create Event is missing event_id");
@@ -493,7 +495,6 @@ export async function grantRealmReviewCapabilityApi(
   const issuedAt = canonicalTimestamp();
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
-    grant_id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
@@ -552,7 +553,6 @@ export async function grantServiceDelegationApi(
   const action = args.action ?? "ak.realm.delivery_binding_policy";
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
-    grant_id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
@@ -629,7 +629,6 @@ export function buildCapabilityGrantEnvelope(
   const issuedAt = canonicalTimestamp();
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
-    grant_id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
