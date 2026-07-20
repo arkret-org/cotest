@@ -791,7 +791,7 @@
     },
     {
       "id": "agent_runtime_lifecycle",
-      "title": "Agent provisioning, key pairing, grant lifecycle, sidecar threads, participation, and deactivation",
+      "title": "Agent provisioning, key pairing, grant lifecycle, Sidecar, participation, and deactivation",
       "status": "implemented",
       "surfaces": [
         "agent_runtime",
@@ -859,7 +859,7 @@
           ]
         },
         {
-          "operation_id": "ak.self.agent.sidecar_thread.command.ensure",
+          "operation_id": "ak.self.agent.sidecar.command.ensure",
           "surfaces": [
             "agent_runtime"
           ]
@@ -898,7 +898,7 @@
           "kind": "conformance_fixture",
           "path": "src/scenarios/spec_section_11/mod.rs",
           "markers": [
-            "ak.self.agent.sidecar_thread.command.ensure",
+            "ak.self.agent.sidecar.command.ensure",
             "ak.self.agent.deactivate"
           ]
         }

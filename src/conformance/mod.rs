@@ -304,7 +304,8 @@ pub use service_closure_hardening::{
 pub use sidecar_vectors::{
     ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
-    run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
+    run_sidecar_hosted_projection_vector, run_sidecar_multi_agent_publish_vector,
+    run_sidecar_vector_suite,
 };
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{

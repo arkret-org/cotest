@@ -9,9 +9,9 @@ import {
 
 jointTest.describe.configure({ mode: "serial" });
 
-jointTest.describe("Circle and Sidecar projection boundary @fully-implemented", () => {
+jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () => {
   jointTest(
-    "creates the initial membership and hides a Sidecar-profile Circle from the ordinary UI",
+    "creates ordinary Circle membership and rejects the retired Sidecar endpoint",
     async ({ jointRealm, request }) => {
       jointTest.setTimeout(360_000);
       const page = jointRealm.alicePage.page;
@@ -39,34 +39,19 @@ jointTest.describe("Circle and Sidecar projection boundary @fully-implemented", 
       expect(created.member_count).toBe(1);
       expect(created.viewer_membership).toBe("join");
 
-      const sidecarTitle = `Injected Sidecar ${Date.now()}`;
-      await page.route(
-        ({ pathname }) => pathname === "/_arkret/self/circles",
-        async (route) => {
-          if (route.request().method() !== "GET") {
-            await route.continue();
-            return;
-          }
-          const upstream = await route.fetch();
-          const body = (await upstream.json()) as { circles?: CircleOutcome[] };
-          const sidecar: CircleOutcome = {
-            ...created,
-            circle_id: "ak:circle:01964137-0000-7000-8000-0000000000c1",
-            profile_ref: "ak.profile.agent_sidecar_thread.v1",
-            title: sidecarTitle,
-          };
-          await route.fulfill({
-            response: upstream,
-            json: { ...body, circles: [...(body.circles ?? []), sidecar] },
-          });
-        },
-      );
-
-      await page.goto(`/realms/${encodeURIComponent(jointRealm.realmId)}/circles`, {
-        waitUntil: "domcontentloaded",
+      // Negative migration assertion: the retired thread-shaped path is not
+      // an alias for the first-class Sidecar API.
+      const legacyPath = "/_arkret/self/agent-sidecar-" + "threads:ensure";
+      const legacyUrl = `${solandBaseUrl()}${legacyPath}`;
+      const legacy = await request.post(legacyUrl, {
+        headers: selfPathHeadersForDpopSession(
+          jointRealm.aliceSession,
+          "POST",
+          legacyUrl,
+        ),
+        data: {},
       });
-      await expect(page.getByTestId("circle-list-item").filter({ hasText: title })).toBeVisible();
-      await expect(page.getByText(sidecarTitle, { exact: true })).toHaveCount(0);
+      expect(legacy.status()).toBe(404);
     },
   );
 });

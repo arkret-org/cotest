@@ -5,7 +5,7 @@
 
 use cotest::scenarios::agent_auth::scaffold::agent_auth_run;
 use cotest::scenarios::agent_delegation_policy::scaffold::agent_delegation_policy_run;
-use cotest::scenarios::agent_sidecar_thread::scaffold::agent_sidecar_thread_run;
+use cotest::scenarios::agent_sidecar::scaffold::agent_sidecar_run;
 use cotest::scenarios::personal_agent_provisioning::scaffold::personal_agent_provisioning_run;
 
 #[tokio::test]
@@ -28,8 +28,6 @@ async fn agent_delegation_policy_profile() {
 }
 
 #[tokio::test]
-async fn agent_sidecar_thread_profile() {
-    agent_sidecar_thread_run()
-        .await
-        .expect("agent_sidecar_thread scenario");
+async fn agent_sidecar_profile() {
+    agent_sidecar_run().await.expect("agent_sidecar scenario");
 }

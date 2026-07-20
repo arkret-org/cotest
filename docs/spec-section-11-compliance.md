@@ -39,7 +39,7 @@ cargo test --workspace --test spec_section_11_scenarios
 | V-3  | Replaying a session_grant with the same nonce MUST be rejected.                                           | Reducer returns `already_exists` (idempotent close), not double-grant.     |
 | V-4  | Controller deactivate fans out: `ak.self.agent.deactivate` → `ak.agent.key.revoke` → `ak.capability.revoke`.   | Per-agent fan-out is deterministic and ordered.                            |
 | V-5  | Every act-on-behalf event carries `(executed_by, authorization_ref, actor_kind)`.                         | Validator rejects events missing any of the three fields.                  |
-| V-6  | `ak.self.agent.sidecar_thread.command.ensure(controller, agent)` MUST return the same `sidecar_circle_id` on retry.    | Two consecutive ensure() calls return byte-identical typed-ids.            |
+| V-6  | `ak.self.agent.sidecar.command.ensure(controller, Realm)` MUST return the same first-class `sidecar_id` on retry.    | Two consecutive ensure() calls return byte-identical typed-ids.            |
 | V-7  | A non-controller cannot probe agent existence; not-found is indistinguishable from forbidden.             | `ak.directory.lookup{agent_principal}` returns identical shapes either way.|
 | V-8  | Capability grants have tri-state eligibility (`active` / `paused` / `revoked`); revocation drains cache.  | `ak.capability.cache.invalidate` is emitted on transition.                 |
 | V-9  | Multi-agent publishes preserve per-event attribution (no cross-agent contamination).                      | Consumer reducer renders distinct author panes per event source.           |

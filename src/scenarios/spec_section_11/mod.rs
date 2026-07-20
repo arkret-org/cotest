@@ -21,9 +21,8 @@
 //!      `ak.capability.revoke`, and (d) runtime endpoint revocation. fan-out is deterministic.
 //!   5. [`act_on_behalf_attribution`] — every event executed by an agent on behalf of the
 //!      controller MUST carry (`executed_by`, `authorization_ref`, `actor_kind`).
-//!   6. [`sidecar_circle_idempotent_ensure`] — calling
-//!      `ak.self.agent.sidecar_thread.command.ensure` twice with the same (controller, agent) pair
-//!      MUST return the same `sidecar_circle_id`.
+//!   6. [`sidecar_idempotent_ensure`] — calling `ak.self.agent.sidecar.command.ensure` twice with
+//!      the same (controller, Realm) pair MUST return the same `sidecar_id`.
 //!   7. [`existence_privacy`] — a non-controller cannot probe for the existence of an
 //!      agent_principal; the answer is indistinguishable from a not-found scope.
 //!   8. [`eligibility_tristate_and_revocation`] — a capability grant's eligibility tri-state
@@ -41,4 +40,4 @@ pub mod multi_agent_publish_attribution;
 pub mod pairing_expiry_auto_revoke;
 pub mod provisioning_pairing_grant_order;
 pub mod session_grant_replay_guard;
-pub mod sidecar_circle_idempotent_ensure;
+pub mod sidecar_idempotent_ensure;

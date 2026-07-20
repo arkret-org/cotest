@@ -22,7 +22,7 @@ const PERSONAL_AGENT_OPERATIONS: &[&str] = &[
     arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
     arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
     arkret_core::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
-    arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
+    arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
 ];
 
 pub async fn personal_agent_provisioning_run() -> Result<()> {

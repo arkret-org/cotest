@@ -767,7 +767,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
         arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
         arkret_core::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
-        arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
+        arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
     ] {
         if !op.starts_with("ak.agent.")
             && !op.starts_with("ak.gate.account.")

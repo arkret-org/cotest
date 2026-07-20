@@ -2,7 +2,7 @@ pub mod _helpers;
 pub mod account_subscribe_long_poll;
 pub mod agent_auth;
 pub mod agent_delegation_policy;
-pub mod agent_sidecar_thread;
+pub mod agent_sidecar;
 pub mod alsoknownas_verifier_authority;
 pub mod api_contracts_auth;
 pub mod authz_policy_presence;

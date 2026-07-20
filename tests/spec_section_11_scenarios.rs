@@ -12,7 +12,7 @@ use cotest::scenarios::spec_section_11::multi_agent_publish_attribution::multi_a
 use cotest::scenarios::spec_section_11::pairing_expiry_auto_revoke::pairing_expiry_auto_revoke_run;
 use cotest::scenarios::spec_section_11::provisioning_pairing_grant_order::provisioning_pairing_grant_order_run;
 use cotest::scenarios::spec_section_11::session_grant_replay_guard::session_grant_replay_guard_run;
-use cotest::scenarios::spec_section_11::sidecar_circle_idempotent_ensure::sidecar_circle_idempotent_ensure_run;
+use cotest::scenarios::spec_section_11::sidecar_idempotent_ensure::sidecar_idempotent_ensure_run;
 
 #[tokio::test]
 async fn s11_provisioning_pairing_grant_order() {
@@ -40,8 +40,8 @@ async fn s11_act_on_behalf_attribution() {
 }
 
 #[tokio::test]
-async fn s11_sidecar_circle_idempotent_ensure() {
-    sidecar_circle_idempotent_ensure_run().await.unwrap();
+async fn s11_sidecar_idempotent_ensure() {
+    sidecar_idempotent_ensure_run().await.unwrap();
 }
 
 #[tokio::test]

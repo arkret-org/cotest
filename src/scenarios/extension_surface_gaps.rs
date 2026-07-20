@@ -104,7 +104,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         "ak.self.agent.command.renew_pairing",
         "ak.self.agent.grant.command.attach",
         "ak.self.agent.grant.resource.delete",
-        "ak.self.agent.sidecar_thread.command.ensure",
+        "ak.self.agent.sidecar.command.ensure",
     ] {
         assert!(
             advertised.contains(&required),

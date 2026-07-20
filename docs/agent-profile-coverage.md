@@ -15,7 +15,7 @@ this grid against [`spec-section-11-compliance.md`](spec-section-11-compliance.m
 | P-1 | `ak.profile.personal_agent_provisioning.v1`   | `cotest::scenarios::personal_agent_provisioning`      | `personal_agent_provisioning_profile`           |
 | P-2 | `ak.profile.agent_auth.v1`                    | `cotest::scenarios::agent_auth`                       | `agent_auth_profile`                            |
 | P-3 | `ak.profile.agent_delegation_policy.v1`       | `cotest::scenarios::agent_delegation_policy`          | `agent_delegation_policy_profile`               |
-| P-4 | `ak.profile.agent_sidecar_thread.v1`          | `cotest::scenarios::agent_sidecar_thread`             | `agent_sidecar_thread_profile`                  |
+| P-4 | `ak.profile.agent_sidecar.v1`                 | `cotest::scenarios::agent_sidecar`                    | `agent_sidecar_profile`                         |
 
 ## §11 vectors
 
@@ -48,7 +48,7 @@ A `-` cell means the vector is out of scope for that profile.
 | P-1 `personal_agent_provisioning.v1`               | *   | o   | -   | *   | o   | -   | *   | -   | o   |
 | P-2 `agent_auth.v1`                                | *   | *   | *   | *   | -   | -   | *   | -   | -   |
 | P-3 `agent_delegation_policy.v1`                   | o   | *   | -   | *   | *   | -   | -   | *   | *   |
-| P-4 `agent_sidecar_thread.v1`                      | o   | -   | -   | *   | o   | *   | *   | -   | *   |
+| P-4 `agent_sidecar.v1`                             | o   | -   | -   | *   | o   | *   | *   | -   | *   |
 
 ### Reading the grid
 
@@ -65,7 +65,7 @@ A `-` cell means the vector is out of scope for that profile.
   publish reads delegation-attached identities).
 - **P-4 row** — sidecar gates V-4 (cascade tears down the sidecar
   circle), V-6 (idempotent ensure), V-7 (sidecar membership cannot be
-  probed), and V-9 (multi-agent publish into a sidecar thread).
+  probed), and V-9 (multi-agent publish from a first-class Sidecar).
 
 ## Gating table
 
@@ -105,7 +105,7 @@ Total: 17 normative cells, 17 currently green; 0 deferred to live-stack.
 - `_cotest_todos.md` P4-A (4 profiles) + P4-B (9 vectors).
 - `src/scenarios/personal_agent_provisioning/`,
   `src/scenarios/agent_auth/`, `src/scenarios/agent_delegation_policy/`,
-  `src/scenarios/agent_sidecar_thread/`.
+  `src/scenarios/agent_sidecar/`.
 - `src/scenarios/spec_section_11/`.
 - `tests/agent_profile_scenarios.rs`,
   `tests/spec_section_11_scenarios.rs`.

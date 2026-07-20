@@ -27,19 +27,19 @@ use anyhow::{Result, anyhow};
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, CrossSigningPublish,
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, DidUrl,
-    Error as ArkretError, EventsFrontierAccountClientState, EventsFrontierView, KeyBackup,
-    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
-    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
-    KeyBackupFrontierRef, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyFormat,
-    ManagedFrontierRef, ManagedPrincipalBinding, NonEmptyString, PolicyId, PublishedKey,
-    RecoveryHpkeSuite, RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry,
-    RecoveryKeyAgreementUse, RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy,
-    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial,
-    SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId, canonical,
+    EventsFrontierAccountClientState, EventsFrontierView, KeyBackup, KeyBackupAead,
+    KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
+    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupFrontierRef,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyFormat, ManagedFrontierRef,
+    ManagedPrincipalBinding, NonEmptyString, PolicyId, PublishedKey, RecoveryHpkeSuite,
+    RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse,
+    RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData,
+    RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial, SubordinateSignedKey,
+    SubordinateSignedKeyBinding, TypedTrustDomainId, canonical,
     ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
 };
 use arkret_crypto::DeviceTrustBinding;
-use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder};
+use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, SecondsFormat, TimeDelta, Timelike as _, Utc};
@@ -175,7 +175,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 
     let controller = bearer_sdk_client(&server, &token)?;
     let sidecar = controller
-        .agent_sidecar_thread_ensure(&arkret::AgentSidecarThreadEnsureRequestBody {
+        .agent_sidecar_ensure(&arkret::AgentSidecarEnsureRequestBody {
             controller_id: arkret::Did::new(ALICE_DID)?,
             addressed_agent_ids: Vec::new(),
             context_ref: arkret::AgentSidecarContextRef::strand(
@@ -185,9 +185,12 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         })
         .await?;
     assert!(sidecar.ok, "live Sidecar ensure must succeed");
+    assert!(sidecar.sidecar_id.as_str().starts_with("ak:sidecar:"));
+    let sidecar_view = controller.agent_sidecar_get(&sidecar.sidecar_id).await?;
+    assert_eq!(sidecar_view.sidecar.id, sidecar.sidecar_id);
     expect_sdk_api_error(
         controller
-            .circle_get(sidecar.private_circle_id.as_str())
+            .circle_get(sidecar_view.sidecar.backing_circle_id.as_str())
             .await,
         StatusCode::NOT_FOUND,
         "not_found",
@@ -197,8 +200,8 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         ordinary_circles
             .circles
             .iter()
-            .all(|circle| circle.circle_id != sidecar.private_circle_id),
-        "ordinary Circle list must not enumerate Sidecar-profile Circles"
+            .all(|circle| circle.circle_id != sidecar_view.sidecar.backing_circle_id),
+        "ordinary Circle list must not enumerate Sidecar backing Circles"
     );
 
     // The legacy command surface has no client-supplied Event parameter. It
@@ -2085,7 +2088,7 @@ fn bearer_sdk_client(server: &ArkretServer, token: &str) -> Result<SdkClient> {
 }
 
 fn expect_sdk_api_error<T>(
-    result: arkret_core::Result<T>,
+    result: arkret_http_client::Result<T>,
     status: StatusCode,
     code: &str,
 ) -> Result<()> {

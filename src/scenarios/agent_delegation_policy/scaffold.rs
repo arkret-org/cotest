@@ -6,7 +6,7 @@
 //!   1. the generated type and descriptor cover the same complete registry.
 //!   2. every action is well-formed (snake_case, no whitespace, dot- delimited, prefixed
 //!      `ak.agent.` or `ak.self.agent.`).
-//!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
+//!   3. the three aggregate actions (sidecar.{ensure,write,publish}) are syntactically
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
 //!   4. an accountability grant is referenced through its `ak.identity.accountability_grant` event
 //!      — the `accountability_grant_ref` is an `EventId` that round-trips through the SDK validator
@@ -16,12 +16,12 @@ use anyhow::{Result, anyhow};
 use arkret_core::{CapabilityActionId, EventId};
 use arkret_schema::REGISTERED_CAPABILITY_ACTIONS;
 
-/// The 3 aggregate sidecar-thread actions. Each carries a
+/// The 3 aggregate Sidecar actions. Each carries a
 /// `migration_group` in the spec's registry artifact.
 const AGGREGATE_ACTIONS: &[&str] = &[
-    CapabilityActionId::SELF_AGENT_SIDECAR_THREAD_COMMAND_ENSURE,
-    CapabilityActionId::AGENT_SIDECAR_THREAD_WRITE,
-    CapabilityActionId::AGENT_SIDECAR_THREAD_PUBLISH,
+    CapabilityActionId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
+    CapabilityActionId::AGENT_SIDECAR_WRITE,
+    CapabilityActionId::AGENT_SIDECAR_PUBLISH,
 ];
 
 pub async fn agent_delegation_policy_run() -> Result<()> {
@@ -44,7 +44,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
     // (2) Per-action well-formedness. Agent capability actions live under the
     // agent surface — either the bare `ak.agent.*` namespace or the
     // account-scoped `ak.self.agent.*` trust segment (lifecycle actions such as
-    // provision/pause/resume/deactivate and sidecar_thread.ensure).
+    // provision/pause/resume/deactivate and sidecar.ensure).
     for action in &agent_actions {
         if !(action.starts_with("ak.agent.") || action.starts_with("ak.self.agent.")) {
             return Err(anyhow!(
@@ -73,9 +73,9 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
                 "aggregate capability action is missing from the generated registry"
             ));
         }
-        if !aggregate.contains(".sidecar_thread.") {
+        if !aggregate.contains(".sidecar.") {
             return Err(anyhow!(
-                "aggregate `{aggregate}` is not in the sidecar_thread fan-out group"
+                "aggregate `{aggregate}` is not in the Sidecar fan-out group"
             ));
         }
     }
