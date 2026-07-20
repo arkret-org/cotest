@@ -409,7 +409,7 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
         "local_operation_idempotency_alias".to_owned(),
         json!(format!("ak:operation:{suffix}")),
     );
-    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         signing_seed,
         actor_id,
         verification_method.to_owned(),

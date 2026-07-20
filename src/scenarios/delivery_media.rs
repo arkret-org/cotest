@@ -545,7 +545,7 @@ fn signed_event(
         chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")?.with_timezone(&chrono::Utc);
     let actor = arkret::Did::new(actor_id.to_owned())?;
     let verification_method = format!("{actor_id}#cotest");
-    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         arkret::signatures::development_signing_key_seed(&verification_method),
         actor.clone(),
         verification_method.clone(),

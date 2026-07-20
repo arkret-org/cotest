@@ -83,7 +83,7 @@ pub fn refresh_event_proof_with_signing_seed(
         .unwrap_or_else(|| typed.actor_id.clone());
     let created_at = typed.created_at;
     typed.proofs.clear();
-    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         signing_seed,
         signer_did,
         verification_method.clone(),

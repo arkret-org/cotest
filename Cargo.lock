@@ -134,8 +134,6 @@ dependencies = [
  "arkret-core",
  "arkret-crypto",
  "arkret-egress-policy",
- "arkret-ffi",
- "arkret-http-client",
  "arkret-identity",
  "arkret-keystore",
  "arkret-lattice-registry",
@@ -154,13 +152,11 @@ dependencies = [
  "hkdf 0.13.0",
  "hmac 0.13.0",
  "parking_lot",
- "reqwest",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "subtle",
  "thiserror",
- "tokio",
  "uuid",
  "x25519-dalek",
  "zeroize",
@@ -309,15 +305,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
-]
-
-[[package]]
-name = "arkret-ffi"
-version = "0.3.0"
-dependencies = [
- "arkret-core",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1830,24 +1817,37 @@ dependencies = [
 name = "garth"
 version = "0.3.0"
 dependencies = [
- "arkret",
+ "arkret-auth",
  "arkret-canonical",
- "arkret-core",
+ "arkret-crypto",
  "arkret-event-draft",
+ "arkret-hlc",
  "arkret-http-client",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-keystore",
  "arkret-models-collaboration",
  "arkret-models-crypto",
+ "arkret-models-discovery",
+ "arkret-models-identity",
+ "arkret-models-integration",
  "arkret-policy",
+ "arkret-schema",
  "arkret-signatures",
+ "arkret-state",
  "arkret-wire",
+ "chacha20poly1305",
  "chrono",
  "ed25519-dalek",
  "getrandom 0.4.3",
+ "hkdf 0.13.0",
  "parking_lot",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "thiserror",
+ "url",
  "uuid",
  "zeroize",
 ]

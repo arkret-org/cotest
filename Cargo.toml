@@ -108,7 +108,7 @@ garth = {path = "../garth"}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
 arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
-arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures"}
+arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",features = ["signer"]}
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"

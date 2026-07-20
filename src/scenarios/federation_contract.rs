@@ -246,7 +246,7 @@ fn signed_federation_event(
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
     let verification_method = format!("{actor_id}#cotest");
-    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         arkret::signatures::development_signing_key_seed(&verification_method),
         event.actor_id.clone(),
         verification_method.clone(),

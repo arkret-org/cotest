@@ -1305,7 +1305,7 @@ fn signed_federation_event(
 
 fn sign_federation_event(event: &mut Event) -> Result<()> {
     let verification_method = format!("{}#cotest-principal-signing-key", event.actor_id);
-    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         test_principal_signing_key().to_bytes(),
         event.actor_id.clone(),
         verification_method.clone(),

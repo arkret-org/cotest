@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, CrossSigningPublish,
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, DidUrl,
@@ -128,12 +128,17 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
 #[serial]
 async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
     let server = ArkretServer::spawn("agent-provision-e2e").await?;
-    let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
-    prepare_agent_controller_recovery(&server, &token).await?;
+    let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE)
+        .await
+        .context("register agent controller account")?;
+    prepare_agent_controller_recovery(&server, &token)
+        .await
+        .context("prepare agent controller recovery")?;
 
     // 1-2. provision -> pending_runtime_key + pairing material -> active.
-    let agent_did =
-        provision_and_pair_agent(&server, &token, "Summary Assistant", "summary").await?;
+    let agent_did = provision_and_pair_agent(&server, &token, "Summary Assistant", "summary")
+        .await
+        .context("provision and pair agent")?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
     advance_event_sequence(
@@ -588,13 +593,13 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let root_public_key = ed25519_pubkey_to_did_key_multibase(root_key.verifying_key().as_bytes());
     let root_did = Did::new(format!("did:key:{root_public_key}"))?;
     let root_verification_method = prepared_inception.root_verification_method.clone();
-    let root_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let root_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [32_u8; 32],
         root_did,
         root_verification_method.clone(),
     );
     let event_verification_method = controller_verification_method();
-    let event_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let event_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [21_u8; 32],
         principal_id.clone(),
         event_verification_method.clone(),
@@ -664,7 +669,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     bootstrap_authorize.prev_refs = vec![bootstrap_create.event_id.clone()];
     bootstrap_authorize.executed_by = Some(principal_id.clone());
     bootstrap_authorize.authorization_ref = Some(enrollment_authorization_ref.to_string());
-    let enrollment_authority_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let enrollment_authority_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [17_u8; 32],
         principal_id.clone(),
         enrollment_authority_verification_method.clone(),
@@ -689,7 +694,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             "SDK principal bootstrap unit was not accepted: {bootstrap_submit:?}"
         ));
     }
-    let seal_signer = arkret::Ed25519MoveSigner::new(
+    let seal_signer = arkret_signatures::Ed25519MoveSigner::new(
         device_key.clone(),
         principal_id.clone(),
         format!("{ALICE_DID}#{ALICE_DEVICE}"),
@@ -1278,7 +1283,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                 predecessor.id
             ));
         }
-        let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+        let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
             [24_u8; 32],
             Did::new(ALICE_DID.to_owned())?,
             format!("{ALICE_DID}#{ALICE_DEVICE}"),
@@ -1661,7 +1666,7 @@ async fn provision_agent(
         .ok_or_else(|| anyhow!("current timestamp is outside the wire range"))?;
     let timestamp_hex = format!("{:012x}", now.timestamp_millis());
     let verification_method = controller_verification_method();
-    let signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [21_u8; 32],
         controller_id.clone(),
         verification_method.clone(),
@@ -2000,7 +2005,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         revocation_check_ref: None,
         runtime_attestation: None,
     };
-    let controller_signer = arkret::Ed25519MoveSigner::from_did_key_seed(
+    let controller_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [21_u8; 32],
         controller_id.clone(),
         controller_verification_method(),
