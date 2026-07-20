@@ -129,6 +129,7 @@ version = "0.3.0"
 dependencies = [
  "argon2",
  "arkret-auth",
+ "arkret-bootstrap",
  "arkret-canonical",
  "arkret-core",
  "arkret-crypto",
@@ -137,6 +138,7 @@ dependencies = [
  "arkret-http-client",
  "arkret-identity",
  "arkret-keystore",
+ "arkret-lattice-registry",
  "arkret-mls",
  "arkret-models-crypto",
  "arkret-policy",
@@ -184,6 +186,21 @@ dependencies = [
  "subtle",
  "thiserror",
  "uuid",
+]
+
+[[package]]
+name = "arkret-bootstrap"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-lattice-registry",
+ "arkret-models-collaboration",
+ "arkret-models-identity",
+ "arkret-state",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -286,6 +303,7 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-collaboration",
  "arkret-models-crypto",
+ "arkret-models-integration",
  "arkret-wire",
  "chrono",
  "serde",
@@ -382,6 +400,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-lattice-registry"
+version = "0.3.0"
+dependencies = [
+ "arkret-models-collaboration",
+ "arkret-schema",
+ "arkret-state",
+ "arkret-wire",
+ "serde_json",
+]
+
+[[package]]
 name = "arkret-mls"
 version = "0.3.0"
 dependencies = [
@@ -390,6 +419,7 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-crypto",
  "arkret-models-identity",
+ "arkret-policy",
  "arkret-signatures",
  "arkret-wire",
  "chacha20poly1305",
@@ -487,6 +517,7 @@ version = "0.3.0"
 dependencies = [
  "arkret-canonical",
  "arkret-models-collaboration",
+ "arkret-models-crypto",
  "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
@@ -1800,14 +1831,24 @@ name = "garth"
 version = "0.3.0"
 dependencies = [
  "arkret",
+ "arkret-canonical",
  "arkret-core",
+ "arkret-event-draft",
  "arkret-http-client",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-policy",
+ "arkret-signatures",
+ "arkret-wire",
  "chrono",
  "ed25519-dalek",
  "getrandom 0.4.3",
+ "parking_lot",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",
+ "uuid",
  "zeroize",
 ]
 

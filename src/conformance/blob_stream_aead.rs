@@ -5,8 +5,8 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{
-    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, KeyRefObject, SCHEME_STREAM,
-    StreamDecryptor, StreamEncryptParams, decrypt_stream, encrypt_stream,
+    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, KeyRefObject, SCHEME_STREAM, StreamDecryptor,
+    StreamEncryptParams, decrypt_stream, encrypt_stream,
 };
 use serde_json::{Value, json};
 

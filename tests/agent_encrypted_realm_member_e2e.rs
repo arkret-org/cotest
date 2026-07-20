@@ -8,10 +8,11 @@
 
 use anyhow::{Result, bail};
 use arkret::{
-    ArkretMlsGroup, ArkretMlsIdentity, CryptoStore, DeviceId, Did, MemoryCryptoStore,
-    MlsDeviceWorkflowAction, MlsGroupStateSink, MlsRecoveryAction, late_device_join_steps,
+    ArkretMlsGroup, ArkretMlsIdentity, DeviceId, Did, MlsDeviceWorkflowAction, MlsGroupStateSink,
+    late_device_join_steps,
 };
 use arkret_core::MlsKeyPackageState;
+use garth::{CryptoStore, MemoryCryptoStore, MlsRecoveryAction};
 use serde_json::Value;
 
 const MLS_FIXTURE: &str = include_str!("fixtures/mls_e2ee_basic_fixture.json");
