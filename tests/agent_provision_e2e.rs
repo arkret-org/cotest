@@ -192,8 +192,18 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         .context("ensure agent sidecar")?;
     assert!(sidecar.ok, "live Sidecar ensure must succeed");
     assert!(sidecar.sidecar_id.as_str().starts_with("ak:sidecar:"));
+    assert_eq!(
+        sidecar.access_readiness,
+        arkret::AgentSidecarAccessReadiness::KeyMaterialPending,
+        "ensure must not report ready before a controller-authored MLS genesis exists"
+    );
     let sidecar_view = controller.agent_sidecar_get(&sidecar.sidecar_id).await?;
     assert_eq!(sidecar_view.sidecar.id, sidecar.sidecar_id);
+    assert_eq!(
+        sidecar_view.access_readiness,
+        arkret::AgentSidecarAccessReadiness::KeyMaterialPending
+    );
+    assert!(sidecar_view.effective_agent_ids.is_empty());
     expect_sdk_api_error(
         controller
             .circle_get(sidecar_view.sidecar.backing_circle_id.as_str())
