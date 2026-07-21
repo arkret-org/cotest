@@ -146,6 +146,48 @@
       "create": true,
       "idempotency_key": "dm-resolve-alice-bob-20260606"
     },
+    "resolve_authoring_response": {
+      "state": "authoring_required",
+      "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
+      "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
+      "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501",
+      "created": false,
+      "binding_event": {
+        "event_id": "ak:event:0196b39d-0000-7000-8000-000000000501",
+        "kind": "ak.direct_conversation.bound",
+        "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000701",
+        "actor_id": "did:webvh:z6mkfixture:alice.example",
+        "actor_seq": 0,
+        "created_at": "2026-06-06T00:00:00.000Z",
+        "hlc": "1780704000000:0:fixture",
+        "prev_refs": [],
+        "refs": [],
+        "seal_ref": null,
+        "requirements": {},
+        "redacts": null,
+        "payload": {
+          "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
+          "participants_unordered": [
+            "did:webvh:z6mkfixture:alice.example",
+            "did:webvh:z6mkfixture:bob.example"
+          ],
+          "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
+          "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
+          "contact_refs": [
+            "ak:event:0196b39d-0000-7000-8000-000000000502",
+            "ak:event:0196b39d-0000-7000-8000-000000000503"
+          ],
+          "member_event_refs": [
+            "ak:event:0196b39d-0000-7000-8000-000000000504",
+            "ak:event:0196b39d-0000-7000-8000-000000000505"
+          ],
+          "main_strand_create_ref": "ak:event:0196b39d-0000-7000-8000-000000000506",
+          "created_at": "2026-06-06T00:00:00Z",
+          "binding_state": "active"
+        },
+        "proofs": []
+      }
+    },
     "resolve_response": {
       "state": "found",
       "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
@@ -245,6 +287,37 @@
           "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
           "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
           "binding_ref": "ak:event:0196b39d-0000-7000-8000-000000000501"
+        }
+      },
+      {
+        "name": "authoring_required_rejects_missing_binding_event",
+        "kind": "response",
+        "body": {
+          "state": "authoring_required",
+          "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
+          "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
+          "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501",
+          "created": false
+        }
+      },
+      {
+        "name": "authoring_required_rejects_pre_signed_binding_event",
+        "kind": "response",
+        "body": {
+          "state": "authoring_required",
+          "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
+          "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
+          "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501",
+          "created": false,
+          "binding_event": {
+            "event_id": "ak:event:0196b39d-0000-7000-8000-000000000501",
+            "kind": "ak.direct_conversation.bound",
+            "proofs": [
+              {
+                "type": "DataIntegrityProof"
+              }
+            ]
+          }
         }
       }
     ]

@@ -145,23 +145,19 @@ test.describe("contact graph federation (α/β)", () => {
     expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
   });
 
-  // S3-fed: cross-PS direct conversation resolve (binding leg).
+  // S3-fed: cross-PS direct conversation currently fails closed after the
+  // federated contact leg.
   //
   // The cross-PS contact handshake (S1-fed) federates the accept fact back to
   // α, where projecting it ALSO writes the bob -> alice direct_message consent
   // grant locally on α. That gives α's resolver both preconditions it needs:
   // an accepted contact for the pair AND a peer-granted direct_message
-  // consent. So alice@α can resolve a canonical DM binding (realm_id +
-  // main_strand_id) without any further cross-PS plumbing.
-  //
-  // Scope note (honest): the resulting DM Realm is materialized locally on α
-  // (alice's home PS) with bob added as a member there. A true symmetric
-  // cross-PS DM Realm — where bob@β projects the same realm/strand and the
-  // message timeline replicates both ways — requires cross-PS realm + MLS
-  // group replication, which is out of scope here. This test pins the binding
-  // leg (resolve converges to a canonical realm_id/main_strand_id on α); the
-  // cross-PS message round-trip is documented as out of scope, not asserted.
-  test("S3-fed cross-PS direct conversation resolves a binding on α after federated accept", async ({
+  // consent. Creation still MUST NOT materialize a one-sided Realm on α:
+  // arkret-spec has no peer-service operation for atomically claiming Bob's
+  // remote KeyPackage. Until that protocol gap is normatively closed, Soland
+  // rejects the remote peer instead of creating a shadow local account or an
+  // unverifiable asymmetric MLS group.
+  test("S3-fed cross-PS direct conversation fails closed until remote KeyPackage claim is specified", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -212,9 +208,9 @@ test.describe("contact graph federation (α/β)", () => {
       )
       .toBe("accepted");
 
-    // alice@α resolves the canonical 1:1 DM binding. Preconditions are met on
-    // α: accepted contact + bob -> alice direct_message consent (both projected
-    // from the federated accept fact).
+    // Contact + consent preconditions are met on α, but Bob's cryptographic
+    // device/KeyPackage state is authoritative on β and cannot yet be claimed
+    // through a registered peer-service operation.
     const resolved = await request.post(
       `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
       {
@@ -222,18 +218,15 @@ test.describe("contact graph federation (α/β)", () => {
         data: { peer: bob.did, create: true },
       },
     );
-    expect(resolved.ok()).toBeTruthy();
+    expect(resolved.ok()).toBeFalsy();
     const body = await resolved.json();
-    expect(["created", "found"]).toContain(body.state);
-    expect(body.realm_id).toMatch(/^ak:realm:/);
-    expect(body.main_strand_id).toMatch(/^ak:strand:/);
-    // The cross-PS message round-trip (bob@β reading alice's DM message) is out
-    // of scope: the DM Realm lives on α and is not replicated to β. Documented,
-    // not asserted.
+    expect(body.error?.code).toBe("peer_unresolvable");
+    expect(body.realm_id).toBeUndefined();
+    expect(body.main_strand_id).toBeUndefined();
     test.info().annotations.push({
-      type: "scope",
+      type: "blocker",
       description:
-        "Cross-PS DM Realm replication (symmetric realm/MLS group + two-way message timeline) is out of scope; this pins the binding leg only.",
+        "Blocked by _spec_review/2026-07-21-cross-ps-direct-conversation-keypackage-claim-gap.md: no registered peer-service remote KeyPackage claim operation exists.",
     });
   });
 

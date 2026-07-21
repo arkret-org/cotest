@@ -121,11 +121,17 @@ export type ContactTombstoneOutcome = {
 };
 
 export type DirectConversationResolveOutcome = {
-  state: string;
+  state:
+    | "found"
+    | "authoring_required"
+    | "not_found"
+    | "retired"
+    | "non_canonical";
   realm_id?: string;
   main_strand_id?: string;
   binding_event_ref?: string;
   created?: boolean;
+  binding_event?: Record<string, unknown>;
 };
 
 export type InviteDeliveryOutcome = {

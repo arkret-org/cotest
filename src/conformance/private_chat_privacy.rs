@@ -55,6 +55,7 @@ struct PrivacyPayloadVector {
 struct DirectConversationVectors {
     trust_domain: String,
     resolve_request: Value,
+    resolve_authoring_response: Value,
     resolve_response: Value,
     binding_event_ref: String,
     binding_payload: Value,
@@ -220,9 +221,23 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "main_strand_id",
             "binding_event_ref",
             "created",
+            "binding_event",
         ],
         &["status", "binding_ref", "default_strand_id"],
     )?;
+    let resolver_states = response_def
+        .pointer("/properties/state/enum")
+        .ok_or_else(|| anyhow!("direct conversation resolver state enum is missing"))?;
+    let expected_states = BTreeSet::from([
+        "authoring_required".to_owned(),
+        "found".to_owned(),
+        "non_canonical".to_owned(),
+        "not_found".to_owned(),
+        "retired".to_owned(),
+    ]);
+    if string_set(resolver_states)? != expected_states {
+        bail!("direct conversation resolver state enum drifted");
+    }
 
     let event_payload_schema = load_artifact_json("schemas/event-payload.schema.json")?;
     let binding_def = event_payload_schema
@@ -411,9 +426,15 @@ fn validate_privacy_payload_vectors(vectors: &[PrivacyPayloadVector]) -> Result<
 
 fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> Result<()> {
     validate_resolve_request_shape(&vectors.resolve_request)?;
+    validate_resolve_response_shape(&vectors.resolve_authoring_response)?;
     validate_resolve_response_shape(&vectors.resolve_response)?;
     validate_binding_payload(
         &vectors.trust_domain,
+        &vectors.binding_event_ref,
+        &vectors.binding_payload,
+    )?;
+    validate_binding_event_draft(
+        &vectors.resolve_authoring_response,
         &vectors.binding_event_ref,
         &vectors.binding_payload,
     )?;
@@ -426,6 +447,7 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
         "private_chat_privacy.direct_conversation_vectors",
         &json!({
             "request": &vectors.resolve_request,
+            "authoring_response": &vectors.resolve_authoring_response,
             "response": &vectors.resolve_response,
             "binding_event_ref": &vectors.binding_event_ref,
         }),
@@ -470,19 +492,92 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
             "main_strand_id",
             "binding_event_ref",
             "created",
+            "binding_event",
         ],
     )?;
     let state = required_str(value, "state")?;
     if !matches!(
         state,
-        "found" | "created" | "not_found" | "retired" | "non_canonical"
+        "found" | "authoring_required" | "not_found" | "retired" | "non_canonical"
     ) {
         bail!("unknown direct conversation resolver state `{state}`");
     }
-    if matches!(state, "found" | "created") {
+    if matches!(state, "found" | "authoring_required") {
         validate_realm_id(required_str(value, "realm_id")?)?;
         validate_strand_id(required_str(value, "main_strand_id")?)?;
         validate_event_id(required_str(value, "binding_event_ref")?)?;
+    }
+    if value.get("created").and_then(Value::as_bool) == Some(true) {
+        bail!("resolver must not report created=true before a signed binding is accepted");
+    }
+    match state {
+        "authoring_required" => {
+            let event = value
+                .get("binding_event")
+                .filter(|event| event.is_object())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "authoring_required resolver response must carry an unsigned binding_event draft"
+                    )
+                })?;
+            if required_str(event, "event_id")? != required_str(value, "binding_event_ref")? {
+                bail!("authoring_required binding_event id must match binding_event_ref");
+            }
+            if required_str(event, "kind")? != "ak.direct_conversation.bound" {
+                bail!("authoring_required binding_event kind drifted");
+            }
+            if !value_array(required_field(event, "proofs")?)?.is_empty() {
+                bail!("authoring_required binding_event must be unsigned");
+            }
+        }
+        "found" if value.get("binding_event").is_some() => {
+            bail!("found resolver response must not carry a binding_event draft");
+        }
+        "not_found" | "retired" | "non_canonical" if value.get("binding_event").is_some() => {
+            bail!("inactive resolver response must not carry a binding_event draft");
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_binding_event_draft(
+    response: &Value,
+    binding_event_ref: &str,
+    binding_payload: &Value,
+) -> Result<()> {
+    if required_str(response, "state")? != "authoring_required" {
+        bail!("binding Event draft fixture must use authoring_required state");
+    }
+    let event = required_field(response, "binding_event")?;
+    if required_str(event, "event_id")? != binding_event_ref {
+        bail!("binding Event draft id must match binding_event_ref");
+    }
+    if required_str(event, "kind")? != "ak.direct_conversation.bound" {
+        bail!("binding Event draft kind drifted");
+    }
+    validate_realm_id(required_str(event, "realm_id")?)?;
+    let actor = required_str(event, "actor_id")?;
+    Did::new(actor.to_owned()).map_err(|err| anyhow!("invalid binding Event actor DID: {err}"))?;
+    if !required_field(event, "actor_seq")?.is_u64() {
+        bail!("binding Event draft actor_seq must be an unsigned integer");
+    }
+    if required_str(event, "hlc")?.is_empty() {
+        bail!("binding Event draft hlc must not be empty");
+    }
+    if required_field(event, "payload")? != binding_payload {
+        bail!("binding Event draft payload must equal the validated binding payload");
+    }
+    let proofs = value_array(required_field(event, "proofs")?)?;
+    if !proofs.is_empty() {
+        bail!("authoring_required binding Event draft must be unsigned");
+    }
+    let participants = value_array(required_field(binding_payload, "participants_unordered")?)?;
+    if !participants
+        .iter()
+        .any(|participant| participant.as_str() == Some(actor))
+    {
+        bail!("binding Event draft actor must be one of the two participants");
     }
     Ok(())
 }
