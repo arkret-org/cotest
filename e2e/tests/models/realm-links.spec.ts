@@ -95,7 +95,7 @@ test.describe("realm links", () => {
         kind: "ak.realm.inheritance_policy",
         payload: {
           source_realm_id: govRealmId,
-          inherits: { policy_rules: [] },
+          inherits: { policy_rules: [inheritedPolicyId] },
           mode: "narrow_only",
           max_depth: 1,
         },

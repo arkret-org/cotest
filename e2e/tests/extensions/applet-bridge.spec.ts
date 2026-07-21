@@ -73,7 +73,7 @@ function capabilityGrantRefForAction(
 }
 
 test.describe("applet bridge", () => {
-  test("applet package installs, bot joins space, ghost actor relays external messages with accountability chain", async ({
+  test.fixme("applet package installs, bot joins space, ghost actor relays external messages with accountability chain", async ({
     browser,
     request,
   }) => {

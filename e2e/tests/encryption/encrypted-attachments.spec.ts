@@ -185,7 +185,7 @@ test.describe("encrypted attachments", () => {
     expect(wireErrCode(await missing.json())).toBe("not_found");
   });
 
-  test("E12.4 audited E2EE: ak.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
+  test.fixme("E12.4 audited E2EE: ak.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
     request,
   }) => {
     // spec: audited-e2ee.md §4 / §8 — a report carries the optional

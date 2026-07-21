@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { cssStringEscape } from "../../helpers/dom";
 import {
+  acceptInviteViaApi,
   authHeaders,
   createSharedRealmViaApi,
   listRealmEventsViaApi,
@@ -21,6 +22,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   canonicalJson,
   accountSubscribeFramesApi,
+  createRealmApi,
   resolveDefaultStrandId,
   sendMessageApi,
   signedEventEnvelope,
@@ -381,46 +383,71 @@ test.describe("chat advanced", () => {
   });
 
   test("API typing ephemeral is visible in account subscribe and respects TTL", async ({
+    browser,
     request,
   }) => {
-    const fixture = await createChatApiFixture(request, "typing-api");
-    const strandId = await resolveDefaultStrandId(
+    const stamp = Date.now();
+    const aliceFlow = await openDpopUserPage(
+      browser,
       request,
-      fixture.aliceToken,
-      fixture.realmId,
+      `typing-api-alice-${stamp}`,
+      { prepareMlsDevice: false },
     );
-    const sentAt = new Date();
-    const typing = await request.post(
-      `${solandBaseUrl()}/_arkret/self/ephemeral`,
-      {
-        headers: authHeaders(fixture.aliceToken),
-        data: withBroadcastEphemeralProof({
-          kind: "ak.typing",
-          realm_id: fixture.realmId,
-          actor_id: fixture.alice.did,
-          device_id: fixture.alice.deviceId,
-          sent_at: sentAt.toISOString(),
-          expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-          payload: {
-            typing: true,
-            strand_id: strandId,
-          },
-        }),
-      },
-    );
-    expect(typing.status()).toBe(200);
+    if (!aliceFlow) {
+      assertJointStackNotRequired("typing API device authorization");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bob = uniqueUser(`typing-api-bob-${stamp}`);
+    await ensureRegistered(request, bob);
+    const aliceToken = await issueDevSession(request, aliceFlow.user);
+    const bobToken = await issueDevSession(request, bob);
 
-    const frames = await accountSubscribeFramesApi(request, fixture.bobToken);
-    const frame = frames.find((candidate) => candidate.kind === "delta");
-    expect(frame, "account subscribe delta frame").toBeTruthy();
-    if (!frame) throw new Error("account subscribe delta frame missing");
-    const realms = (frame as { realms?: Record<string, unknown> }).realms ?? {};
-    const realmFrame = realms[fixture.realmId] as
-      | { ephemeral?: unknown }
-      | undefined;
-    const ephemeral = realmFrame?.ephemeral;
-    expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
-    expect(JSON.stringify(ephemeral)).toContain(strandId);
+    try {
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: `typing API ${stamp}`,
+        ownerDid: aliceFlow.user.did,
+        invitees: [bob.did],
+        history_visibility: "shared",
+      });
+      await acceptInviteViaApi(request, bobToken, bob.did, realmId);
+      const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
+      const sentAt = new Date();
+      const typing = await request.post(
+        `${solandBaseUrl()}/_arkret/self/ephemeral`,
+        {
+          headers: authHeaders(aliceToken),
+          data: withBroadcastEphemeralProof({
+            kind: "ak.typing",
+            realm_id: realmId,
+            actor_id: aliceFlow.user.did,
+            device_id: aliceFlow.user.deviceId,
+            sent_at: sentAt.toISOString(),
+            expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
+            payload: {
+              typing: true,
+              strand_id: strandId,
+            },
+          }),
+        },
+      );
+      const typingResponseText = await typing.text();
+      expect(typing.status(), typingResponseText).toBe(200);
+
+      const frames = await accountSubscribeFramesApi(request, bobToken);
+      const frame = frames.find((candidate) => candidate.kind === "delta");
+      expect(frame, "account subscribe delta frame").toBeTruthy();
+      if (!frame) throw new Error("account subscribe delta frame missing");
+      const realms = (frame as { realms?: Record<string, unknown> }).realms ?? {};
+      const realmFrame = realms[realmId] as
+        | { ephemeral?: unknown }
+        | undefined;
+      const ephemeral = realmFrame?.ephemeral;
+      expect(JSON.stringify(ephemeral)).toContain(aliceFlow.user.did);
+      expect(JSON.stringify(ephemeral)).toContain(strandId);
+    } finally {
+      await aliceFlow.page.close();
+    }
   });
 
   test("chat route hydrates the default discussion channel on first mount", async ({

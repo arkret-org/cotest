@@ -204,7 +204,7 @@ test.describe("mimi federation", () => {
     ).toBe("transcript_bound");
   });
 
-  test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + content.unknown_content_kind", async ({
+  test("E5.3 content type mismatch: MIMI-specific content kind -> canonical fallback + quarantine metadata", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -240,7 +240,7 @@ test.describe("mimi federation", () => {
     expect(nested(event, "payload", "content", "unknown_content_kind")).toBe(
       "m.location.share.live",
     );
-    expect(nested(event, "payload", "quarantine", "unknown_content_kind")).toBe(
+    expect(nested(event, "payload", "metadata", "quarantine", "unknown_content_kind")).toBe(
       "m.location.share.live",
     );
     expect(JSON.stringify(event)).not.toContain(rawLocation);

@@ -22,6 +22,7 @@ import {
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
+import { acceptInviteViaApi } from "../../helpers/api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -318,23 +319,7 @@ test.describe("project simulation", () => {
       ownerDid: alice.did,
       invitees: [bob.did],
     });
-    await submitSignedEventApi(
-      request,
-      bobToken,
-      signedEventEnvelope({
-        actorDid: bob.did,
-        realmId,
-        kind: "ak.member.state",
-        payload: {
-          realm_id: realmId,
-          actor_id: bob.did,
-          membership: "join",
-          reason: "invite_accept",
-          delivery_status: "unroutable",
-        },
-      }),
-      { context: "bob joins realm" },
-    );
+    await acceptInviteViaApi(request, bobToken, bob.did, realmId);
 
     const { cardId } = await createBoardWithCard(request, aliceToken, alice.did, realmId, {
       boardTitle: `S16 Board ${stamp}`,
@@ -342,22 +327,24 @@ test.describe("project simulation", () => {
       cardTitle: `Implement login ${stamp}`,
     });
 
-    const relationId = typedId("relation");
+    const assignment = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.relation.create",
+      payload: {
+        kind: "assigned_to",
+        from_ref: cardId,
+        to_ref: bob.did,
+      },
+    });
+    const relationId = String(assignment.event_id).replace(
+      /^ak:event:/,
+      "ak:relation:",
+    );
     await submitSignedEventApi(
       request,
       aliceToken,
-      signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.relation.create",
-        payload: {
-          relation_id: relationId,
-          relation_kind: "assigned_to",
-          from_ref: cardId,
-          to_ref: bob.did,
-          fields: { role: "primary" },
-        },
-      }),
+      assignment,
       { context: "assign Card 1 to bob" },
     );
 

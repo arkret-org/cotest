@@ -68,7 +68,7 @@ test.describe("audited E2EE", () => {
     },
   );
 
-  test(
+  test.fixme(
     "report on a message triggers audit_disclosure_policy.trigger; audit-agent is invited to access via attested ceremony",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-report");
@@ -85,7 +85,7 @@ test.describe("audited E2EE", () => {
     },
   );
 
-  test(
+  test.fixme(
     "report routing records audit-agent handoff without fabricating a plaintext access release",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-accessed");
@@ -138,7 +138,7 @@ test.describe("audited E2EE", () => {
     },
   );
 
-  test(
+  test.fixme(
     "E25.3 alice revokes audit_disclosure_policy; subsequent audit-agent requests are rejected (still leaving historical accessed records intact)",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-revoke");

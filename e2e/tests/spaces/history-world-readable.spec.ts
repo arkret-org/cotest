@@ -4,16 +4,11 @@
 //        §3.1.3 (mls_rfc9420 + world_readable incompatible)
 // E2E-WORLD-READ-1 — soland/_todos.md.
 
-import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { request as playwrightRequest } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   createRealmApi,
-  eventProof,
-  singleDidNotary,
-  wireErrCode,
-  wireErrReason,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -131,64 +126,16 @@ test.describe("world_readable history @fully-implemented", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const event = encryptedWorldReadableRealmCreateEvent(alice.did);
-    const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: { authorization: `Bearer ${aliceToken}` },
-      data: event,
-    });
-    const body = await create.json();
-    expect(create.status()).toBe(412);
-    expect(wireErrCode(body)).toBe("failed_precondition");
-    expect(wireErrReason(body)).toBe(
-      "history_visibility_requires_history_capable_scheme",
-    );
+    await expect(
+      createRealmApi(request, aliceToken, {
+        title: `incompat ${Date.now()}`,
+        ownerDid: alice.did,
+        history_visibility: "world_readable",
+        encryption_profile: "mls_rfc9420",
+      }),
+    ).rejects.toThrow("history_visibility_requires_history_capable_scheme");
   });
 });
-
-function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string, unknown> {
-  const realmId = `ak:realm:${uuidV7()}`;
-  const createdAt = canonicalTimestamp();
-  const payload = {
-    object: {
-      id: realmId,
-      schema: "ak.schema.realm.v1",
-      title: `incompat ${Date.now()}`,
-      created_by: actorDid,
-      trust_domain: "ak:trust_domain:soland.local",
-      schema_refs: ["ak.schema.realm.v1"],
-      default_discoverability: "listed",
-      default_join_rule: "invite",
-      history_visibility: "world_readable",
-      encryption_profile: "mls_rfc9420",
-      security_class: "standard",
-      federation_policy: "restricted",
-      notary_profile: "single_did",
-      digest_algorithm: "sha256",
-      notary: singleDidNotary(actorDid),
-      created_at: createdAt,
-    },
-  };
-  const event = {
-    event_id: `ak:event:${uuidV7()}`,
-    kind: "ak.realm.create",
-    realm_id: realmId,
-    actor_id: actorDid,
-    actor_seq: 1,
-    created_at: createdAt,
-    prev_refs: [],
-    refs: [],
-    requirements: {
-      schema: ["ak.schema.realm.v1"],
-      features: [],
-      critical_extensions: [],
-    },
-    payload,
-  };
-  return {
-    ...event,
-    proofs: [eventProof({ actorDid, event })],
-  };
-}
 
 function expectEventsContainRealmCreate(body: unknown, realmId: string) {
   const events =
@@ -205,21 +152,4 @@ function expectEventsContainRealmCreate(body: unknown, realmId: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function canonicalTimestamp(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-}
-
-function uuidV7(): string {
-  const time = Date.now().toString(16).padStart(12, "0").slice(-12);
-  const random = randomBytes(9).toString("hex");
-  const variant = (8 + (randomBytes(1)[0] & 0x03)).toString(16);
-  return [
-    time.slice(0, 8),
-    time.slice(8, 12),
-    `7${random.slice(0, 3)}`,
-    `${variant}${random.slice(3, 6)}`,
-    random.slice(6, 18),
-  ].join("-");
 }

@@ -23,6 +23,7 @@ import {
   createRealmApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
+  signWithRegisteredEventSigner,
   submitSignedEventApi,
   typedId,
   uuidV7,
@@ -159,16 +160,14 @@ export function withBroadcastEphemeralProof(
     throw new Error("broadcast ephemeral proof requires actor_id and device_id");
   }
   const signer = deviceSigner(actorDid, deviceId);
-  const createdAt =
-    typeof envelope.sent_at === "string"
-      ? envelope.sent_at
-      : canonicalTimestamp(new Date());
+  const createdAt = canonicalEventTimestamp();
   const unsigned = { ...envelope };
   delete unsigned.proof;
   const eventDigest = `sha256:${createHash("sha256")
     .update(canonicalJson(unsigned), "utf8")
     .digest("hex")}`;
   const bindingObject = {
+    context: "ak.ephemeral-proof-v1",
     event_digest: eventDigest,
     actor_id: actorDid,
     verification_method: signer.verificationMethod,
@@ -177,11 +176,16 @@ export function withBroadcastEphemeralProof(
   const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const signature = nodeSign(
-    null,
-    Buffer.from(signingInput, "utf8"),
-    signer.privateKey,
+  const registeredSignature = signWithRegisteredEventSigner(
+    actorDid,
+    signer.verificationMethod,
+    signingInput,
   );
+  const signature =
+    registeredSignature ??
+    base64url(
+      nodeSign(null, Buffer.from(signingInput, "utf8"), signer.privateKey),
+    );
   return {
     ...unsigned,
     proof: {
@@ -190,7 +194,7 @@ export function withBroadcastEphemeralProof(
       verification_method: signer.verificationMethod,
       event_digest: eventDigest,
       created_at: createdAt,
-      jws: `${protectedHeader}..${base64url(signature)}`,
+      jws: `${protectedHeader}..${signature}`,
     },
   };
 }

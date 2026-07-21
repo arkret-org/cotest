@@ -691,7 +691,9 @@ test.describe("MLS group encryption", () => {
     const stamp = Date.now();
     const [aliceFlow, mallorySession] = await Promise.all([
       openDpopUserPage(browser, request, "s11-alice"),
-      createDpopUserSession(request, "s11-mallory"),
+      createDpopUserSession(request, "s11-mallory", {
+        skipDeviceEnrollment: true,
+      }),
     ]);
     if (!aliceFlow || !mallorySession) {
       assertJointStackNotRequired("mls admin controls browser login");
@@ -757,46 +759,14 @@ test.describe("MLS group encryption", () => {
       '"encryption_profile":"mls_rfc9420"',
     );
 
-    const incompatibleRealmId = typedId("realm");
-    const incompatibleCreatedAt = canonicalTimestamp();
-    const incompatible = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: incompatibleRealmId,
-          kind: "ak.realm.create",
-          createdAt: incompatibleCreatedAt,
-          payload: {
-            object: {
-              id: incompatibleRealmId,
-              schema: "ak.schema.realm.v1",
-              title: `S11 MLS incompatible ${stamp}`,
-              created_by: alice.did,
-              trust_domain: "ak:trust_domain:soland.local",
-              schema_refs: ["ak.schema.realm.v1"],
-              default_discoverability: "listed",
-              default_join_rule: "invite",
-              history_visibility: "world_readable",
-              encryption_profile: "mls_rfc9420",
-              security_class: "standard",
-              federation_policy: "restricted",
-              notary_profile: "single_did",
-              digest_algorithm: "sha256",
-              notary: singleDidNotary(alice.did),
-              created_at: incompatibleCreatedAt,
-            },
-          },
-        }),
-      },
-    );
-    const incompatibleBody = await incompatible.json();
-    expect(incompatible.status()).toBe(412);
-    expect(wireErrCode(incompatibleBody)).toBe("failed_precondition");
-    expect(wireErrReason(incompatibleBody)).toBe(
-      "history_visibility_requires_history_capable_scheme",
-    );
+    await expect(
+      createRealmApi(request, aliceToken, {
+        title: `S11 MLS incompatible ${stamp}`,
+        ownerDid: alice.did,
+        history_visibility: "world_readable",
+        encryption_profile: "mls_rfc9420",
+      }),
+    ).rejects.toThrow("history_visibility_requires_history_capable_scheme");
   });
 
   test("alice claims bob's KeyPackage; durable Welcome delivery and commit epoch stay live", async ({

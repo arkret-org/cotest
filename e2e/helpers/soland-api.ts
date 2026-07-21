@@ -88,6 +88,30 @@ function eventSignerFor(
   return registered;
 }
 
+export function signWithRegisteredEventSigner(
+  actorDid: string,
+  verificationMethod: string,
+  signingInput: string,
+): string | undefined {
+  const registered = eventSignerFor(actorDid, verificationMethod);
+  if (!registered) {
+    return undefined;
+  }
+  const seed = Buffer.from(registered.signingSeedB64url, "base64url");
+  if (seed.length !== 32) {
+    throw new Error("registered event signing seed must decode to 32 bytes");
+  }
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  const privateKey = createPrivateKey({
+    key: Buffer.concat([pkcs8Prefix, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+  return sign(null, Buffer.from(signingInput, "utf8"), privateKey).toString(
+    "base64url",
+  );
+}
+
 export function authHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
@@ -732,8 +756,8 @@ export async function submitKnockApi(
   );
 }
 
-// join-policy.md §7.2 — `member.application` carried as a profile-private
-// `application` sub-object on the active `ak.member.state{knock}` event.
+// join-policy.md §7.2 — `member.application` is a candidate concept. The base
+// profile has no registered Event kind or profile-private carrier for it.
 export async function submitApplicationApi(
   request: APIRequestContext,
   token: string,
@@ -746,40 +770,20 @@ export async function submitApplicationApi(
     receiptDigest?: string;
   },
   opts: { server?: SolandKey; createdAt?: string } = {},
-) {
-  const receiptDigest =
-    application.receiptDigest ?? `sha256:${sha256CanonicalJson({ realmId, actorDid, answers: application.answers ?? [] })}`;
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.member.state",
-      createdAt: opts.createdAt,
-      payload: {
-        realm_id: realmId,
-        actor_id: actorDid,
-        membership: "knock",
-        application: {
-          realm_id: realmId,
-          applicant_did: actorDid,
-          knock_ref: application.knockRef,
-          policy_version_digest: application.policyVersionDigest,
-          answers: application.answers ?? [],
-          application_receipt_digest: receiptDigest,
-        },
-      },
-    }),
-    { server: opts.server, context: `application ${realmId}` },
+): Promise<string> {
+  void request;
+  void token;
+  void actorDid;
+  void realmId;
+  void application;
+  void opts;
+  throw new Error(
+    "ak.profile.candidate.join_policy.v1 has no registered profile-private application carrier",
   );
-  return receiptDigest;
 }
 
-// join-policy.md §7.3 — `member.application.review`. The reviewer submits a
-// `ak.member.state` event targeting the applicant; `accept` keeps the
-// applicant in `knock` (the join is later authorised via ak.invite.create),
-// `reject` drives the applicant to `leave` and stamps cooldown_after_reject.
+// join-policy.md §7.3 — `member.application.review` is also candidate-only and
+// cannot be represented as an `ak.member.state` extension in the base profile.
 export async function submitApplicationReviewApi(
   request: APIRequestContext,
   token: string,
@@ -795,47 +799,21 @@ export async function submitApplicationReviewApi(
     reviewReceiptDigest?: string;
   },
   opts: { server?: SolandKey; createdAt?: string } = {},
-) {
-  const reviewReceiptDigest =
-    review.reviewReceiptDigest ??
-    `sha256:${sha256CanonicalJson({ realmId, applicantDid, applicationRef: review.applicationRef, decision: review.decision })}`;
-  const membership = review.decision === "reject" ? "leave" : "knock";
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: reviewerDid,
-      realmId,
-      kind: "ak.member.state",
-      createdAt: opts.createdAt,
-      payload: {
-        realm_id: realmId,
-        actor_id: applicantDid,
-        sender: reviewerDid,
-        membership,
-        application_review: {
-          realm_id: realmId,
-          application_ref: review.applicationRef,
-          decision: review.decision,
-          reason_code: review.reasonCode,
-          reason_text: review.reasonText,
-          reviewer_did: reviewerDid,
-          review_receipt_digest: reviewReceiptDigest,
-          reviewer_capability_proof: review.grantId
-            ? { grant_id: review.grantId }
-            : undefined,
-        },
-      },
-    }),
-    {
-      server: opts.server,
-      context: `review ${review.decision} ${realmId}`,
-    },
+): Promise<string> {
+  void request;
+  void token;
+  void reviewerDid;
+  void applicantDid;
+  void realmId;
+  void review;
+  void opts;
+  throw new Error(
+    "ak.profile.candidate.join_policy.v1 has no registered profile-private review carrier",
   );
-  return reviewReceiptDigest;
 }
 
-// join-policy.md §7.4 — applicant withdraws; drives to leave, no cooldown.
+// join-policy.md §7.4 — cancellation is candidate-only until a private carrier
+// is registered by an implementation profile.
 export async function submitApplicationCancelApi(
   request: APIRequestContext,
   token: string,
@@ -843,26 +821,15 @@ export async function submitApplicationCancelApi(
   realmId: string,
   applicationRef: string,
   opts: { server?: SolandKey } = {},
-) {
-  return await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.member.state",
-      payload: {
-        realm_id: realmId,
-        actor_id: actorDid,
-        membership: "leave",
-        application_cancel: {
-          realm_id: realmId,
-          application_ref: applicationRef,
-          cancelled_by: actorDid,
-        },
-      },
-    }),
-    { server: opts.server, context: `cancel application ${realmId}` },
+): Promise<never> {
+  void request;
+  void token;
+  void actorDid;
+  void realmId;
+  void applicationRef;
+  void opts;
+  throw new Error(
+    "ak.profile.candidate.join_policy.v1 has no registered profile-private cancellation carrier",
   );
 }
 

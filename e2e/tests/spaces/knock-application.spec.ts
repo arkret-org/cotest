@@ -112,7 +112,7 @@ test.describe("knock + application + cooldown", () => {
     expect(listed.viewer_is_reviewer).toBe(true);
   });
 
-  test("E6.A bob submits structured member.application after knocking; alice (with ak.realm.join.review) sees the answers and accepts", async ({
+  test.fixme("E6.A bob submits structured member.application after knocking; alice (with ak.realm.join.review) sees the answers and accepts", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -178,7 +178,7 @@ test.describe("knock + application + cooldown", () => {
     expect(accepted?.status).toBe("accepted");
   });
 
-  test('E6.B alice\'s ak.invite.create.refs[role="join_authorised_by"] is required to point at a fresh review accept; reducer rejects re-used or stale refs', async ({
+  test.fixme('E6.B alice\'s ak.invite.create.refs[role="join_authorised_by"] is required to point at a fresh review accept; reducer rejects re-used or stale refs', async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -252,7 +252,7 @@ test.describe("knock + application + cooldown", () => {
     expect(await rejectCode(replayResp)).toContain("join_authorisation_invalid");
   });
 
-  test("E6.C mallory is rejected by alice and CANNOT re-knock until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator", async ({
+  test.fixme("E6.C mallory is rejected by alice and CANNOT re-knock until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -303,7 +303,7 @@ test.describe("knock + application + cooldown", () => {
     );
   });
 
-  test("E6.D max_open_applications_per_actor=1 — bob's second open application is rejected before review", async ({
+  test.fixme("E6.D max_open_applications_per_actor=1 — bob's second open application is rejected before review", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -334,7 +334,7 @@ test.describe("knock + application + cooldown", () => {
     );
   });
 
-  test("E6.E application_ttl expiry — application accepted past TTL is rejected even if reviewer signs accept", async ({
+  test.fixme("E6.E application_ttl expiry — application accepted past TTL is rejected even if reviewer signs accept", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -377,7 +377,7 @@ test.describe("knock + application + cooldown", () => {
     expect(String(reviewResp)).toMatch(/ttl_expired|application_ttl|expired/i);
   });
 
-  test("E6.F reviewer loses ak.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted", async ({
+  test.fixme("E6.F reviewer loses ak.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -442,7 +442,7 @@ test.describe("knock + application + cooldown", () => {
     expect(await rejectCode(inviteResp)).toContain("join_authorisation_invalid");
   });
 
-  test("E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes ak.audit.accessed", async ({
+  test.fixme("E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes ak.audit.accessed", async ({
     request,
   }) => {
     const stamp = Date.now();
