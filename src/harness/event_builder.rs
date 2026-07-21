@@ -155,13 +155,13 @@ pub async fn create_realm(
             "plaintext_visible_services": [server.service_id()]
         }),
     );
-    submit_event(
-        server,
-        token,
-        actor,
-        &realm_id,
-        "ak.realm.create",
-        payload,
+    let events = realm_bootstrap_event_batch(actor, &realm_id, payload)?;
+    expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .json(&json!({"events": events})),
         StatusCode::OK,
     )
     .await?;
@@ -187,18 +187,112 @@ pub async fn create_realm_with_signing_seed(
             "plaintext_visible_services": [server.service_id()]
         }),
     );
-    submit_event_with_signing_seed(
-        server,
-        token,
+    let events = realm_bootstrap_event_batch_with_signing_seed(
         actor,
         &realm_id,
-        "ak.realm.create",
         payload,
-        StatusCode::OK,
         signing_seed,
+        &format!("{actor}#cotest"),
+    )?;
+    expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .json(&json!({"events": events})),
+        StatusCode::OK,
     )
     .await?;
     Ok(realm_id)
+}
+
+pub(crate) fn realm_bootstrap_event_batch(
+    actor: &str,
+    realm_id: &str,
+    realm_payload: Value,
+) -> Result<Vec<Value>> {
+    let (signing_seed, verification_method) = event_signing_identity(actor);
+    realm_bootstrap_event_batch_with_signing_seed(
+        actor,
+        realm_id,
+        realm_payload,
+        signing_seed,
+        &verification_method,
+    )
+}
+
+fn realm_bootstrap_event_batch_with_signing_seed(
+    actor: &str,
+    realm_id: &str,
+    realm_payload: Value,
+    signing_seed: [u8; 32],
+    verification_method: &str,
+) -> Result<Vec<Value>> {
+    let grant_id = next_typed_id("grant");
+    let realm_event = event_envelope_with_chain_and_signing_identity(
+        actor,
+        realm_id,
+        "ak.realm.create",
+        realm_payload,
+        Some(1),
+        None,
+        signing_seed,
+        verification_method,
+    );
+    let registry_digest = arkret::current_capability_action_registry_digest()?;
+    let mut grant = json!({
+        "id": grant_id,
+        "schema": "ak.schema.capability.v1",
+        "realm_id": realm_id,
+        "issuer": actor,
+        "subject": actor,
+        "actions": [
+            "ak.realm.admin",
+            "ak.capability.grant",
+            "ak.capability.revoke"
+        ],
+        "capability_action_registry_digest": registry_digest,
+        "resources": [{
+            "kind": "realm",
+            "realm_id": realm_id,
+            "match_scope": "realm_wide"
+        }],
+        "issued_at": "2026-05-02T00:00:00Z",
+        "proofs": []
+    });
+    let mut typed_grant: arkret::CapabilityGrant = serde_json::from_value(grant.clone())?;
+    let mut grant_proof = arkret::PayloadProof {
+        kind: arkret::proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: verification_method.to_owned(),
+        payload_digest: typed_grant.payload_digest()?,
+        created_at: DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")?.with_timezone(&Utc),
+        domain: None,
+        audience: None,
+        proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
+        jws: String::new(),
+    };
+    let binding = typed_grant.canonical_proof_binding_bytes(&grant_proof)?;
+    grant_proof.jws = arkret_signatures::sign_eddsa_detached_jws(
+        &ed25519_dalek::SigningKey::from_bytes(&signing_seed),
+        &binding,
+    )?;
+    typed_grant.proofs.push(grant_proof);
+    grant = serde_json::to_value(typed_grant)?;
+    let founding_event = event_envelope_with_chain_and_signing_identity(
+        actor,
+        realm_id,
+        "ak.capability.grant",
+        json!({
+            "grant_id": grant_id,
+            "grant": grant
+        }),
+        Some(2),
+        realm_event["event_id"].as_str(),
+        signing_seed,
+        verification_method,
+    );
+    Ok(vec![realm_event, founding_event])
 }
 
 pub async fn add_member(
@@ -325,11 +419,32 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     signing_seed: [u8; 32],
     verification_method: &str,
 ) -> Result<Value> {
-    let event = event_envelope_with_signing_seed_and_verification_method(
+    let frontier = expect_json(
+        server
+            .http()
+            .get(server.url(&format!(
+                "/_arkret/self/events/frontier?actor_id={actor}&realm_id={realm_id}"
+            )))
+            .bearer_auth(token),
+        StatusCode::OK,
+    )
+    .await?;
+    let accepted_seq = frontier["frontier"]["actor_seq"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("actor Realm frontier missing actor_seq: {frontier}"))?;
+    let prev_event_id = frontier["frontier"]["event_id"].as_str();
+    if (accepted_seq == 0) != prev_event_id.is_none() {
+        return Err(anyhow!(
+            "actor Realm frontier must pair sequence and Event id: {frontier}"
+        ));
+    }
+    let event = event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
+        Some(accepted_seq + 1),
+        prev_event_id,
         signing_seed,
         verification_method,
     );
@@ -381,13 +496,37 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
     actor: &str,
     realm_id: &str,
     kind: &str,
-    mut payload: Value,
+    payload: Value,
     signing_seed: [u8; 32],
     verification_method: &str,
 ) -> Value {
-    let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
-    let hlc_logical = seq & 0xffff;
-    let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
+    event_envelope_with_chain_and_signing_identity(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        None,
+        None,
+        signing_seed,
+        verification_method,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn event_envelope_with_chain_and_signing_identity(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    mut payload: Value,
+    actor_seq: Option<u64>,
+    prev_event_id: Option<&str>,
+    signing_seed: [u8; 32],
+    verification_method: &str,
+) -> Value {
+    let unique_seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    let actor_seq = actor_seq.unwrap_or(unique_seq);
+    let hlc_logical = unique_seq & 0xffff;
+    let suffix = format!("01999999-0000-7000-8000-{unique_seq:012x}");
     normalize_message_payload(kind, realm_id, &mut payload);
     let created_at = DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")
         .expect("static cotest Event timestamp")
@@ -398,13 +537,18 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
         kind,
         RealmId::new(realm_id.to_owned()).expect("cotest Realm id"),
         actor_id.clone(),
-        seq,
+        actor_seq,
         arkret_core::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
             .expect("cotest HLC"),
         payload,
         created_at,
     )
     .expect("SDK Event builder accepts cotest envelope");
+    if let Some(prev_event_id) = prev_event_id {
+        event.prev_refs.push(
+            EventId::new(prev_event_id.to_owned()).expect("accepted actor frontier Event id"),
+        );
+    }
     event.unsigned.insert(
         "local_operation_idempotency_alias".to_owned(),
         json!(format!("ak:operation:{suffix}")),
@@ -422,6 +566,27 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
     )
     .expect("SDK Event signer accepts cotest envelope");
     serde_json::to_value(event).expect("SDK Event serializes")
+}
+
+pub(crate) fn event_envelope_with_chain(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    actor_seq: u64,
+    prev_event_id: Option<&str>,
+) -> Value {
+    let (signing_seed, verification_method) = event_signing_identity(actor);
+    event_envelope_with_chain_and_signing_identity(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        Some(actor_seq),
+        prev_event_id,
+        signing_seed,
+        &verification_method,
+    )
 }
 
 fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {

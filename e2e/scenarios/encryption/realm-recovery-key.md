@@ -87,4 +87,4 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 - `@blocking-on rrk-inkson` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
   epoch 推进时的 eager 封存挂钩、披露横幅
 
-着陆后逐 Phase live 化;实跑见 cotask jobs 的最终集成项。
+着陆后逐 Phase live 化;实跑见 arkret-work jobs 的最终集成项。

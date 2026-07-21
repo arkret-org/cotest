@@ -33,6 +33,7 @@ import {
 import {
   ensureRegistered,
   issueDevSession,
+  openUserPage,
   uniqueUser,
 } from "../../helpers/users";
 import {
@@ -145,19 +146,10 @@ test.describe("contact graph federation (α/β)", () => {
     expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
   });
 
-  // S3-fed: cross-PS direct conversation currently fails closed after the
-  // federated contact leg.
-  //
-  // The cross-PS contact handshake (S1-fed) federates the accept fact back to
-  // α, where projecting it ALSO writes the bob -> alice direct_message consent
-  // grant locally on α. That gives α's resolver both preconditions it needs:
-  // an accepted contact for the pair AND a peer-granted direct_message
-  // consent. Creation still MUST NOT materialize a one-sided Realm on α:
-  // arkret-spec has no peer-service operation for atomically claiming Bob's
-  // remote KeyPackage. Until that protocol gap is normatively closed, Soland
-  // rejects the remote peer instead of creating a shadow local account or an
-  // unverifiable asymmetric MLS group.
-  test("S3-fed cross-PS direct conversation fails closed until remote KeyPackage claim is specified", async ({
+  // S3-fed: cross-PS creation begins with an immutable participant-authorized
+  // remote KeyPackage claim draft. The server must not claim a package or
+  // materialize a one-sided Realm before the client signs this draft.
+  test("S3-fed cross-PS direct conversation returns remote KeyPackage claim authoring", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -208,9 +200,6 @@ test.describe("contact graph federation (α/β)", () => {
       )
       .toBe("accepted");
 
-    // Contact + consent preconditions are met on α, but Bob's cryptographic
-    // device/KeyPackage state is authoritative on β and cannot yet be claimed
-    // through a registered peer-service operation.
     const resolved = await request.post(
       `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
       {
@@ -218,16 +207,189 @@ test.describe("contact graph federation (α/β)", () => {
         data: { peer: bob.did, create: true },
       },
     );
-    expect(resolved.ok()).toBeFalsy();
+    expect(resolved.ok()).toBeTruthy();
     const body = await resolved.json();
-    expect(body.error?.code).toBe("peer_unresolvable");
-    expect(body.realm_id).toBeUndefined();
-    expect(body.main_strand_id).toBeUndefined();
-    test.info().annotations.push({
-      type: "blocker",
-      description:
-        "Blocked by _spec_review/2026-07-21-cross-ps-direct-conversation-keypackage-claim-gap.md: no registered peer-service remote KeyPackage claim operation exists.",
+    expect(body.state).toBe("authoring_required");
+    expect(body.created).toBe(false);
+    expect(body.authoring_kind).toBe("remote_keypackage_claim");
+    expect(body.realm_id).toMatch(/^ak:realm:/);
+    expect(body.main_strand_id).toMatch(/^ak:strand:/);
+    expect(body.materialization_draft).toBeUndefined();
+    const draft = body.claim_authorization_draft;
+    expect(draft?.request?.requester).toBe(alice.did);
+    expect(draft?.request?.target_principal_id).toBe(bob.did);
+    expect(draft?.request?.intended_realm_id).toBe(body.realm_id);
+    expect(draft?.request?.strand_id).toBe(body.main_strand_id);
+    expect(draft?.request?.claim_purpose).toBe("direct_conversation");
+    expect(draft?.transport_binding?.source_service_id).toBe(
+      solandServiceId("alpha"),
+    );
+    expect(draft?.transport_binding?.destination_service_id).toBe(
+      bobLocator.recipient_service_id,
+    );
+
+    const retry = await request.post(
+      `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
+      {
+        headers: authHeaders(aliceToken),
+        data: { peer: bob.did, create: true },
+      },
+    );
+    expect(retry.ok()).toBeTruthy();
+    expect((await retry.json()).claim_authorization_draft).toEqual(draft);
+  });
+
+  test("S3-live cross-PS Inkson materializes one MLS Realm and exchanges encrypted messages", async ({
+    browser,
+    request,
+  }) => {
+    test.setTimeout(480_000);
+    const stamp = Date.now();
+    const alice = uniqueUser(`cgf-live-alice-${stamp}`);
+    const bob = uniqueUser(`cgf-live-bob-${stamp}`);
+    await Promise.all([
+      ensureRegistered(request, alice, { server: "alpha" }),
+      ensureRegistered(request, bob, { server: "beta" }),
+    ]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice, { server: "alpha" }),
+      issueDevSession(request, bob, { server: "beta" }),
+    ]);
+    const alicePage = await openUserPage(browser, alice, {
+      server: "alpha",
+      sessionCredential: aliceToken,
     });
+    const bobPage = await openUserPage(browser, bob, {
+      server: "beta",
+      sessionCredential: bobToken,
+    });
+    try {
+      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
+      const bobLocator = await resolvePrincipalLocator(
+        request,
+        bob.did,
+        "beta",
+        bobToken,
+      );
+      const { outcome } = await requestContactArkret(
+        request,
+        aliceToken,
+        bob.did,
+        {
+          requestedScopes: ["direct_message"],
+          server: "alpha",
+          recipientServiceId: solandServiceId("beta"),
+          introductionEvidence: {
+            kind: "locator_ref",
+            principal_locator: bobLocator,
+          },
+        },
+      );
+      await expect
+        .poll(
+          async () =>
+            (
+              await contactRow(
+                request,
+                bobToken,
+                alice.did,
+                { server: "beta" },
+              )
+            )?.state,
+          { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+        )
+        .toBe("pending_incoming");
+      await respondContactArkret(request, bobToken, {
+        requestId: outcome.request_event_ref,
+        requester: alice.did,
+        action: "accept",
+        grantedScopes: ["direct_message"],
+        server: "beta",
+        requesterServiceId: solandServiceId("alpha"),
+      });
+      await expect
+        .poll(
+          async () =>
+            (
+              await contactRow(
+                request,
+                aliceToken,
+                bob.did,
+                { server: "alpha" },
+              )
+            )?.state,
+          { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+        )
+        .toBe("accepted");
+
+      await alicePage.gotoHome();
+      await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
+      await alicePage.page
+        .locator(
+          `[data-testid="direct-conversation-row"][data-peer="${bob.did}"]`,
+        )
+        .click();
+      await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
+        timeout: 180_000,
+      });
+      const alicePath = new URL(alicePage.page.url()).pathname;
+      const [, , encodedRealmId, encodedStrandId] = alicePath.split("/");
+      const realmId = decodeURIComponent(encodedRealmId);
+      const strandId = decodeURIComponent(encodedStrandId);
+
+      await expect
+        .poll(
+          async () => {
+            const row = await contactRow(
+              request,
+              bobToken,
+              alice.did,
+              { server: "beta" },
+            );
+            return row?.direct_conversation;
+          },
+          { timeout: 90_000, intervals: [500, 1_000, 2_000, 5_000] },
+        )
+        .toMatchObject({ realm_id: realmId, main_strand_id: strandId });
+
+      await bobPage.gotoHome();
+      await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
+      await bobPage.page
+        .locator(
+          `[data-testid="direct-conversation-row"][data-peer="${alice.did}"]`,
+        )
+        .click();
+      await expect
+        .poll(() => decodeURIComponent(new URL(bobPage.page.url()).pathname), {
+          timeout: 120_000,
+          intervals: [500, 1_000, 2_000],
+        })
+        .toBe(`/direct/${realmId}/${strandId}`);
+
+      const aliceMessage = `cross-ps alice ${Date.now()}`;
+      await alicePage.page.getByTestId("chat-input").fill(aliceMessage);
+      await alicePage.page.getByTestId("send-chat-button").click();
+      await expect(
+        bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
+      ).toBeVisible({ timeout: 90_000 });
+
+      const bobMessage = `cross-ps bob ${Date.now()}`;
+      await bobPage.page.getByTestId("chat-input").fill(bobMessage);
+      await bobPage.page.getByTestId("send-chat-button").click();
+      await expect(
+        alicePage.page.getByTestId("chat-message").filter({ hasText: bobMessage }),
+      ).toBeVisible({ timeout: 90_000 });
+
+      await Promise.all([alicePage.page.reload(), bobPage.page.reload()]);
+      await expect(
+        alicePage.page.getByTestId("chat-message").filter({ hasText: bobMessage }),
+      ).toBeVisible({ timeout: 90_000 });
+      await expect(
+        bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
+      ).toBeVisible({ timeout: 90_000 });
+    } finally {
+      await Promise.allSettled([alicePage.close(), bobPage.close()]);
+    }
   });
 
   // S4-fed (core cross-PS closed loop): alice@α pulls bob@β into a realm using

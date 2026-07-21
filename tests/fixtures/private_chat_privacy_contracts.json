@@ -152,7 +152,37 @@
       "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
       "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501",
       "created": false,
-      "binding_event": {
+      "authoring_kind": "direct_conversation_materialization",
+      "materialization_draft": {
+        "materialization_id": "dm-materialization-alice-bob-20260606",
+        "claim_nonce": "ZG0tY2xhaW0tbm9uY2U",
+        "mls_group_id": "AZZBmwAAAACAAAAAAAAAAQ",
+        "mls_genesis_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000510",
+        "mls_commit_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000511",
+        "mls_welcome_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000512",
+        "claimed_keypackage": {},
+        "realm_event": {
+          "event_id": "ak:event:0196b39d-0000-7000-8000-000000000504",
+          "kind": "ak.realm.create",
+          "proofs": []
+        },
+        "founding_grant_event": {
+          "event_id": "ak:event:0196b39d-0000-7000-8000-000000000508",
+          "kind": "ak.capability.grant",
+          "proofs": []
+        },
+        "peer_member_event": {
+          "event_id": "ak:event:0196b39d-0000-7000-8000-000000000505",
+          "kind": "ak.member.state",
+          "proofs": []
+        },
+        "main_strand_event": {
+          "event_id": "ak:event:0196b39d-0000-7000-8000-000000000506",
+          "kind": "ak.strand.create",
+          "proofs": []
+        },
+        "expires_at": "2026-06-06T00:10:00Z",
+        "binding_event": {
         "event_id": "ak:event:0196b39d-0000-7000-8000-000000000501",
         "kind": "ak.direct_conversation.bound",
         "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000701",
@@ -182,10 +212,15 @@
             "ak:event:0196b39d-0000-7000-8000-000000000505"
           ],
           "main_strand_create_ref": "ak:event:0196b39d-0000-7000-8000-000000000506",
+          "mls_group_id": "AZZBmwAAAACAAAAAAAAAAQ",
+          "mls_genesis_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000510",
+          "mls_commit_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000511",
+          "mls_welcome_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000512",
           "created_at": "2026-06-06T00:00:00Z",
           "binding_state": "active"
         },
         "proofs": []
+        }
       }
     },
     "resolve_response": {
@@ -213,6 +248,10 @@
         "ak:event:0196b39d-0000-7000-8000-000000000505"
       ],
       "main_strand_create_ref": "ak:event:0196b39d-0000-7000-8000-000000000506",
+      "mls_group_id": "AZZBmwAAAACAAAAAAAAAAQ",
+      "mls_genesis_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000510",
+      "mls_commit_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000511",
+      "mls_welcome_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000512",
       "created_at": "2026-06-06T00:00:00Z",
       "binding_state": "active"
     },
