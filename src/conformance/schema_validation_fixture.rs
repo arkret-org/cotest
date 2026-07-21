@@ -313,7 +313,9 @@ impl SchemaEnv {
         let registry = builder
             .prepare()
             .map_err(|err| anyhow!("registry prepare failed: {err}"))?;
-        let mut opts = jsonschema::options().with_registry(&registry);
+        let mut opts = jsonschema::options()
+            .with_registry(&registry)
+            .should_validate_formats(true);
         if let Some(base) = base_uri {
             opts = opts.with_base_uri(base);
         }

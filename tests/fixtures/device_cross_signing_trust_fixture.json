@@ -117,7 +117,7 @@
         "alg": "ed25519",
         "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA",
         "revoked": true,
-        "revoked_at": "2026-05-09T00:00:00Z"
+        "revoked_at": "2026-05-09T00:00:00.000Z"
       },
       "alice_user_signing": {
         "key_id": "did:ak:user:alice#user-signing",
@@ -163,7 +163,7 @@
         "alg": "ed25519",
         "public_b64": "Qk9CX1VTSUdfT0xEXzAwMDAwMDAwMDAwMDAwMDAwMDA",
         "rotated": true,
-        "rotated_at": "2026-05-09T00:00:00Z"
+        "rotated_at": "2026-05-09T00:00:00.000Z"
       },
       "bob_user_signing_new": {
         "key_id": "did:ak:user:bob#user-signing",

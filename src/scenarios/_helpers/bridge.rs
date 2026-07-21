@@ -148,7 +148,9 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "device_id": device_id,
             "audience": audience,
             "scopes": ["urn:arkret:principal-server:session.bind"],
-            "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
+            "expires_at": arkret_core::canonical::format_timestamp_canonical(
+                chrono::Utc::now() + chrono::Duration::minutes(10)
+            ),
             "revoked_at": null,
             "revocation_ref": "ak:session:mock",
             // `SessionGrantIntrospectGrant.session_public_key` is a required

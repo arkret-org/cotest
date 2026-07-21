@@ -188,7 +188,7 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
                     "controller_organization": "did:web:event-idempotency.cotest.local",
                     "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
                 },
-                "created_at": "2026-05-02T00:00:00Z"
+                "created_at": "2026-05-02T00:00:00.000Z"
             }
         }),
     );

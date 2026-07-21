@@ -4,7 +4,7 @@
   "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
   "comment": "COT-ORG-02 — protocol-semantic negative vectors for ak.realm.organization (RealmOrganizationPayload). Every vector is consumed by tests/realm_organization_statement_negative.rs which drives the arkret-core EventPayloadValidatorCatalog::validate_payload (strong schema dispatch on `ak.realm.organization`) and the arkret_core::models::realm_governance::verify_realm_organization_statement verifier. `surface=verifier` cases MUST be rejected by verify_realm_organization_statement under the declared resolver, and the verifier error embeds the pinned spec wire reason-code (error-code-registry / reason-code-registry) — the test asserts that exact code token, never a project-private string. `surface=schema` cases MUST be rejected by the strong payload JSON-schema; that validator echoes the schema $id, not the registry token, so for schema cases the test asserts rejection and expected.reason_code stays documentary (it classifies the wire failure as schema_violation). A declared-but-unverified organization (only owning_organizations, no active statement) is NOT modelled here because there is no statement to validate — that gap is covered by the organization-policy e2e (case A).",
   "expected_realm_id": "ak:realm:0196419b-0000-7000-8000-000000000010",
-  "now": "2026-06-25T12:00:00Z",
+  "now": "2026-06-25T12:00:00.000Z",
   "base_active_statement": {
     "statement_id": "org-stmt-1",
     "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000010",
@@ -12,12 +12,12 @@
     "relationship": "owner",
     "status": "active",
     "control_scopes": ["official_badge", "realm_admin"],
-    "issued_at": "2026-06-25T00:00:00Z",
+    "issued_at": "2026-06-25T00:00:00.000Z",
     "authorization": {
       "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
       "issuer_role": "organization_did",
       "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
-      "signed_at": "2026-06-25T00:00:00Z",
+      "signed_at": "2026-06-25T00:00:00.000Z",
       "proof": "c2ln"
     }
   },
@@ -125,7 +125,7 @@
       "name": "expired_statement",
       "surface": "verifier",
       "comment": "expires_at <= now ⇒ the statement is no longer in effect (ttl_expired). An expired endorsement does not grant official badge or governance policy.",
-      "mutation": { "set": { "expires_at": "2026-06-25T06:00:00Z" } },
+      "mutation": { "set": { "expires_at": "2026-06-25T06:00:00.000Z" } },
       "resolver": "no_delegation",
       "expected": { "outcome": "reject", "reason_code": "ttl_expired" }
     },
@@ -133,7 +133,7 @@
       "name": "not_yet_valid_statement",
       "surface": "verifier",
       "comment": "not_before > now ⇒ the statement is not yet in its validity window (failed_precondition).",
-      "mutation": { "set": { "not_before": "2026-06-26T00:00:00Z" } },
+      "mutation": { "set": { "not_before": "2026-06-26T00:00:00.000Z" } },
       "resolver": "no_delegation",
       "expected": { "outcome": "reject", "reason_code": "failed_precondition" }
     },

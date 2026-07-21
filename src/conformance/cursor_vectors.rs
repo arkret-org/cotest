@@ -1,7 +1,7 @@
 //! Cursor opaque vectors.
 //!
 //! `ak.vector.encoding.cursor_opaque.core.v1` covers the default stateful
-//! body `{v, purpose, t, x, h}`.
+//! body `{v, purpose, issued_at, expires_at, h}`.
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
@@ -10,7 +10,7 @@ pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "ak.vector.encoding.cursor_opaque
 
 pub const ALL_CURSOR_VECTOR_IDS: &[&str] = &[VECTOR_ID_CURSOR_OPAQUE_CORE];
 
-/// VECT-CUR-1 — core stateful body `{v, purpose, t, x, h}`. `h` MUST be
+/// VECT-CUR-1 — core stateful body `{v, purpose, issued_at, expires_at, h}`. `h` MUST be
 /// present and the wire body MUST remain closed to inline positions.
 pub fn run_cursor_opaque_core_vector() -> Result<()> {
     let handle = generate_cursor_handle().map_err(|e| anyhow!("cursor handle generation: {e}"))?;
@@ -20,8 +20,8 @@ pub fn run_cursor_opaque_core_vector() -> Result<()> {
     let cursor = Cursor {
         v: "1".to_owned(),
         purpose: CursorPurpose::Stream,
-        t: "2026-05-27T00:00:00Z".to_owned(),
-        x: 1_900_000_000_000,
+        issued_at: arkret_core::canonical::parse_timestamp_canonical("2026-05-27T00:00:00.000Z")?,
+        expires_at: arkret_core::canonical::parse_timestamp_canonical("2026-06-03T00:00:00.000Z")?,
         h: handle.clone(),
     };
     if cursor.h.is_empty() {
@@ -53,7 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn both_cursor_vectors_run_clean() {
+    fn cursor_vector_runs_clean() {
         run_cursor_vector_suite().unwrap();
     }
 }

@@ -549,7 +549,7 @@ fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
     // Non-tautology guards: each failure condition from §4.2 must flip the
     // decision to unauthorized.
     let mut expired = query.clone();
-    expired.request_time = "2026-06-01T00:00:00Z".to_owned();
+    expired.request_time = "2026-06-01T00:00:00.000Z".to_owned();
     if evaluate_chain(base, &delegations, &expired).authorized {
         bail!("delegate_chain: expired temporal window still authorized");
     }

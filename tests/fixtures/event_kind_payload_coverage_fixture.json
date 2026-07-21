@@ -79,12 +79,12 @@
         "relationship": "owner",
         "status": "active",
         "control_scopes": ["official_badge", "realm_admin"],
-        "issued_at": "2026-06-25T00:00:00Z",
+        "issued_at": "2026-06-25T00:00:00.000Z",
         "authorization": {
           "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
           "issuer_role": "organization_did",
           "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
-          "signed_at": "2026-06-25T00:00:00Z",
+          "signed_at": "2026-06-25T00:00:00.000Z",
           "proof": "c2ln"
         }
       }
@@ -103,13 +103,13 @@
         "relationship": "owner",
         "status": "revoked",
         "control_scopes": ["official_badge", "realm_admin"],
-        "issued_at": "2026-06-25T00:00:00Z",
+        "issued_at": "2026-06-25T00:00:00.000Z",
         "revokes_statement_id": "org-stmt-active-1",
         "authorization": {
           "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
           "issuer_role": "organization_did",
           "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
-          "signed_at": "2026-06-25T00:00:00Z",
+          "signed_at": "2026-06-25T00:00:00.000Z",
           "proof": "c2ln"
         }
       }

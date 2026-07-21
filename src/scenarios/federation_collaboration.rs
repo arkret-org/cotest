@@ -154,7 +154,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
                 "service_acceptance_ref": ALICE_DELIVERY_BINDING_EVENT_ID,
-                "resolved_at": "2026-05-02T00:00:00Z"
+                "resolved_at": "2026-05-02T00:00:00.000Z"
             }),
         )?,
         StatusCode::OK,
@@ -554,7 +554,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
                             "message_id": "ak:device_message:01904100-0000-7000-8000-0000000000b1",
                             "kind": "ak.mls.welcome",
                             "content": encrypted_envelope("ak.mls.welcome", "opaque-cross-server-welcome"),
-                            "expires_at": "2026-12-31T00:00:00Z"
+                            "expires_at": "2026-12-31T00:00:00.000Z"
                         }
                     }
                 }
@@ -703,7 +703,7 @@ fn federated_realm_payload(realm_id: &str, alice_did: &str, visible_services: &[
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
-            "created_at": "2026-05-02T00:00:00Z"
+            "created_at": "2026-05-02T00:00:00.000Z"
         }
     })
 }
@@ -718,7 +718,7 @@ fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_id:
             "binding_scope": "realm",
             "binding_source": "explicit",
             "delivery_modes": ["events", "sync", "to_device", "push", "key_packages"],
-            "resolved_at": "2026-05-02T00:00:00Z",
+            "resolved_at": "2026-05-02T00:00:00.000Z",
             "service_acceptance_ref": "ak:event:01904100-0000-7000-8000-fedc00000005"
         }),
     )
@@ -754,7 +754,7 @@ fn federated_e2ee_realm_payload(realm_id: &str, alice_did: &str) -> Value {
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
-            "created_at": "2026-05-02T00:00:00Z"
+            "created_at": "2026-05-02T00:00:00.000Z"
         }
     })
 }
@@ -794,7 +794,7 @@ fn mls_genesis_payload(realm_id: &str, alice_did: &str) -> Value {
         "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
         "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
         "governance_binding": mls_governance_binding(realm_id, 0, 0),
-        "created_at": "2026-05-25T00:00:01Z"
+        "created_at": "2026-05-25T00:00:01.000Z"
     })
 }
 
@@ -824,7 +824,7 @@ fn mls_welcome_payload(
     // it field-for-field (device path → `requester_device_id`, no
     // `ssk_generation`) with the canonical timestamp form the SDK emits.
     let created_at_canonical = format_timestamp_canonical(
-        chrono::DateTime::parse_from_rfc3339("2026-05-25T00:00:02Z")
+        chrono::DateTime::parse_from_rfc3339("2026-05-25T00:00:02.000Z")
             .context("welcome claim envelope timestamp")?
             .with_timezone(&chrono::Utc),
     );
@@ -873,7 +873,7 @@ fn mls_welcome_payload(
         },
         "welcome_ref": "ak:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2",
         "ciphertext": welcome_bytes,
-        "expires_at": "2026-05-25T01:00:00Z",
+        "expires_at": "2026-05-25T01:00:00.000Z",
         "commit_ref": E2EE_MLS_COMMIT_EVENT_ID,
         "governance_binding": mls_governance_binding(realm_id, 0, 0)
     }))
@@ -963,7 +963,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
         device_key_algorithm: Some(arkret_core::NonEmptyString::new("EdDSA").unwrap()),
         authorized_by: arkret_core::DeviceOrPrincipalRef::Did(principal),
         scopes: None,
-        not_before: "2026-05-02T00:00:00Z"
+        not_before: "2026-05-02T00:00:00.000Z"
             .parse()
             .expect("static timestamp parses"),
         expires_at: None,
@@ -1056,7 +1056,7 @@ fn test_cross_signing_publish(actor: &str) -> Result<CrossSigningPublish> {
         },
         expected_previous_generation: 0,
         generation: std::num::NonZeroU64::new(1).unwrap(),
-        issued_at: "2026-05-02T00:00:00Z".parse().unwrap(),
+        issued_at: "2026-05-02T00:00:00.000Z".parse().unwrap(),
     };
     publish.self_signing_key.binding.signature = NonEmptyString::new(
         URL_SAFE_NO_PAD.encode(psk.sign(&publish.self_signing_binding_input()?).to_bytes()),
@@ -1294,7 +1294,7 @@ fn signed_federation_event(
             .context("invalid federation event HLC")?,
         payload,
     )?;
-    event.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")
+    event.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")
         .context("invalid fixed federation event timestamp")?
         .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
@@ -1518,7 +1518,7 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
         principal_endpoint: &endpoint,
         local_id,
         also_known_as: &[],
-        version_time: chrono::DateTime::parse_from_rfc3339("2026-05-01T00:00:00Z")?
+        version_time: chrono::DateTime::parse_from_rfc3339("2026-05-01T00:00:00.000Z")?
             .with_timezone(&chrono::Utc),
         root_seed: &root_seed,
         next_root_public_key_multibase: &next_root_multibase,

@@ -609,7 +609,7 @@ async fn submit_event_now(
             "actor Realm frontier must pair sequence and Event id: {frontier}"
         ));
     }
-    let created_at = arkret_core::canonical::format_timestamp_millis_canonical(chrono::Utc::now());
+    let created_at = arkret_core::canonical::format_timestamp_canonical(chrono::Utc::now());
     let mut event = crate::harness::event_envelope_with_chain(
         &actor.actor,
         realm_id,

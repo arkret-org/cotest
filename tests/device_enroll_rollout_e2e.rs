@@ -236,7 +236,7 @@ async fn register_webvh_principal(
     let next_root = SigningKey::from_bytes(&[33_u8; 32]);
     let next_root_public_key_multibase = multibase_public_key(&next_root);
     let also_known_as = vec![format!("acct:{local_id}@example.com")];
-    let version_time: chrono::DateTime<chrono::Utc> = "2026-06-17T00:00:00Z".parse()?;
+    let version_time: chrono::DateTime<chrono::Utc> = "2026-06-17T00:00:00.000Z".parse()?;
     let prepared = prepare_principal_inception(&PrincipalInceptionInput {
         principal_endpoint: &server.base_url(),
         local_id,
@@ -280,7 +280,7 @@ fn principal_bootstrap_request(
 ) -> Result<EventsSubmitRequestBody> {
     let principal = Did::new(prepared.did.clone())?;
     let realm_id = RealmId::new(arkret_core::principal_control_realm_id(&principal))?;
-    let created_at = "2026-06-17T00:00:00Z".parse()?;
+    let created_at = "2026-06-17T00:00:00.000Z".parse()?;
     let mut create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
         principal_id: principal.clone(),
         realm_id,
@@ -342,7 +342,7 @@ fn service_attested_device_authorize_event(
         device_key_algorithm: Some(non_empty("EdDSA")?),
         authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority_did.clone()),
         scopes: None,
-        not_before: "2026-06-17T00:00:00Z".parse()?,
+        not_before: "2026-06-17T00:00:00.000Z".parse()?,
         expires_at: None,
         device_signature: None,
         proof: None,
@@ -354,7 +354,7 @@ fn service_attested_device_authorize_event(
         }),
         recovery_session_id: None,
     };
-    let created_at = "2026-06-17T00:00:00Z".parse()?;
+    let created_at = "2026-06-17T00:00:00.000Z".parse()?;
     let mut event = Event::new(
         arkret_core::events::EventKind::DEVICE_AUTHORIZE,
         RealmId::new(realm_id)?,

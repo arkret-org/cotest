@@ -164,7 +164,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                     "event_id": sent["event_id"],
                     "hlc": "019041000000-0001-1dae0001"
                 },
-                "updated_at": "2026-05-02T00:00:00Z"
+                "updated_at": "2026-05-02T00:00:00.000Z"
             }),
         )
         .await?;

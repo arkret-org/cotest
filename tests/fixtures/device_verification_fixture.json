@@ -104,7 +104,7 @@
         "alg": "ed25519",
         "public_b64": "T0xEX01BU1RFUl9BTElDRV8wMDAwMDAwMDAwMDAwMDA",
         "revoked": true,
-        "revoked_at": "2026-04-01T00:00:00Z"
+        "revoked_at": "2026-04-01T00:00:00.000Z"
       },
       "self_signing_key": {
         "key_id": "did:ak:user:alice#self-signing",

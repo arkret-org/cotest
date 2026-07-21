@@ -120,7 +120,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunkHashes,
       created_by: "did:web:soland.conformance",
-      created_at: "2026-05-31T00:00:00Z",
+      created_at: "2026-05-31T00:00:00.000Z",
     };
 
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
@@ -160,7 +160,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),
       created_by: signerDid,
-      created_at: "2026-05-31T00:00:00Z",
+      created_at: "2026-05-31T00:00:00.000Z",
       signature: {
         alg: "EdDSA",
         signer_did: signerDid,

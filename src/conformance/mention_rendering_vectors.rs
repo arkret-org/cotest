@@ -100,7 +100,7 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
         "handle_at_time": "alice:acme.example",
         "display_name_at_time": "Alice Zhang",
         "mention_text_original": "@alice:acme.example",
-        "resolved_at": "2026-05-19T10:00:00Z"
+        "resolved_at": "2026-05-19T10:00:00.000Z"
     });
     let mention: Mention =
         serde_json::from_value(value).map_err(|e| anyhow!("new mention shape MUST parse: {e}"))?;

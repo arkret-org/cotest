@@ -72,7 +72,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                                 "did:web:organization.recovery.soland.local"
                             ]
                         },
-                        "created_at": "2026-05-02T00:00:00Z"
+                        "created_at": "2026-05-02T00:00:00.000Z"
                     }
                 }),
             )),

@@ -138,9 +138,9 @@ fn unsigned_recovery_policy(
         trusted_recovery_services: None,
         approval_requirement: None,
         audit: None,
-        issued_at: ts("2026-05-30T00:00:00Z")?,
+        issued_at: ts("2026-05-30T00:00:00.000Z")?,
         not_before: None,
-        expires_at: Some(ts("2026-06-30T00:00:00Z")?),
+        expires_at: Some(ts("2026-06-30T00:00:00.000Z")?),
         auth_data: RecoveryPolicyAuthData {
             verification_method: verification_method.to_owned(),
             signature_algorithm: "EdDSA".to_owned(),
@@ -165,7 +165,7 @@ fn unsigned_recovery_policy(
 }
 
 fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBackup> {
-    let created_at = ts("2026-05-30T00:00:00Z")?;
+    let created_at = ts("2026-05-30T00:00:00.000Z")?;
     Ok(KeyBackup {
         backup_id: BackupId::new(DID_RECOVERY_BACKUP_ID.to_owned())?,
         actor_id: Did::new(principal_id.to_owned())?,
@@ -273,9 +273,8 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value)
+    arkret_core::canonical::parse_timestamp_canonical(value)
         .with_context(|| format!("invalid timestamp {value}"))
-        .map(|dt| dt.with_timezone(&Utc))
 }
 
 async fn expect_api_error_code(

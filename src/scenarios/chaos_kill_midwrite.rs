@@ -172,7 +172,7 @@ fn chaos_realm_event() -> Value {
                     "controller_organization": "did:web:chaos-midwrite.cotest.local",
                     "recovery_controller_organizations": ["did:web:recovery-chaos-org.cotest.local"]
                 },
-                "created_at": "2026-05-02T00:00:00Z"
+                "created_at": "2026-05-02T00:00:00.000Z"
             }
         }),
     )

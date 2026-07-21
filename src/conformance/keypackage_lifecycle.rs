@@ -142,7 +142,7 @@ fn expected_u64(value: &Value, field: &str) -> Result<u64> {
 }
 
 fn parse_time(value: &str) -> Result<DateTime<Utc>> {
-    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
+    Ok(arkret_core::canonical::parse_timestamp_canonical(value)?)
 }
 
 fn did(value: &str) -> Result<Did> {
@@ -190,7 +190,7 @@ fn claim_record_value(
         "capabilities": ["ak.mls.profile.full"],
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "ssk_generation": 7,
-        "expires_at": expires_at.to_rfc3339(),
+        "expires_at": arkret_core::canonical::format_timestamp_canonical(expires_at),
         "device_signature": {
             "kid": format!("{}#{}", principal_id.as_str(), device_id.as_str()),
             "alg": "EdDSA",
@@ -582,7 +582,7 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
     let principal = did(required_str(vector, "target_principal_id")?)?;
     let device = device(required_str(vector, "device_id")?)?;
     let realm = realm(required_str(vector, "intended_realm_id")?)?;
-    let expires_at = parse_time("2100-01-01T00:00:00Z")?;
+    let expires_at = parse_time("2100-01-01T00:00:00.000Z")?;
     let mut pool = vec![
         MiniKeypackage::new_normal(
             required_str(vector, "normal_keypackage_ref")?,
@@ -680,7 +680,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     let principal = did("did:web:alice.example")?;
     let device = device(required_str(vector, "device_id")?)?;
     let realm = realm("ak:realm:0196419b-0000-7000-8000-000000000000")?;
-    let expires_at = parse_time("2100-01-01T00:00:00Z")?;
+    let expires_at = parse_time("2100-01-01T00:00:00.000Z")?;
     let mut old = MiniKeypackage::new_last_resort(
         required_str(vector, "old_last_resort_keypackage_ref")?,
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -764,7 +764,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
     let device = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let r1 = realm(required_str(vector, "realm_r1")?)?;
     let r2 = realm(required_str(vector, "realm_r2")?)?;
-    let expires_at = parse_time("2100-01-01T00:00:00Z")?;
+    let expires_at = parse_time("2100-01-01T00:00:00.000Z")?;
     let mut package = MiniKeypackage::new_last_resort(
         required_str(vector, "last_resort_keypackage_ref")?,
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -842,8 +842,8 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
         "capabilities": ["ak.mls.profile.full"],
         "state": "published",
-        "expires_at": "2100-01-01T00:00:00Z",
-        "created_at": "2026-06-19T00:00:00Z",
+        "expires_at": "2100-01-01T00:00:00.000Z",
+        "created_at": "2026-06-19T00:00:00.000Z",
         "device_signature": {
             "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
             "alg": "EdDSA",
@@ -892,7 +892,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "ssk_generation": fixture.ssk_generation,
             "nonce": fixture.claim_nonce,
             "welcome_digest": fixture.welcome_digest,
-            "created_at": "2026-05-25T00:00:00Z",
+            "created_at": "2026-05-25T00:00:00.000Z",
             "signature": {
                 "kid": "did:web:alice.example#ak_self_signing_v1",
                 "alg": "EdDSA",
@@ -920,7 +920,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "reducer_profile": "ak.reducer.v1"
         },
         "ciphertext": "AQID",
-        "expires_at": "2100-01-01T00:00:00Z"
+        "expires_at": "2100-01-01T00:00:00.000Z"
     })
 }
 
@@ -951,7 +951,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &did("did:web:alice.example")?,
         &device("ak:device:0196419b-0000-7000-8000-000000000001")?,
         false,
-        parse_time("2100-01-01T00:00:00Z")?,
+        parse_time("2100-01-01T00:00:00.000Z")?,
     );
     let claim = parse_claim_outcome(claim_outcome_value(claim_record, 1))?
         .claims

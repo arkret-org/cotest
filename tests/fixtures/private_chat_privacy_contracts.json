@@ -27,8 +27,8 @@
         "verified_owning_organizations_at_save": [
           "did:web:acme.example"
         ],
-        "saved_at": "2026-06-06T00:00:00Z",
-        "updated_at": "2026-06-06T00:00:00Z"
+        "saved_at": "2026-06-06T00:00:00.000Z",
+        "updated_at": "2026-06-06T00:00:00.000Z"
       }
     },
     "negative": {
@@ -50,8 +50,8 @@
         "verified_owning_organizations_at_save": [
           "did:web:acme.example"
         ],
-        "saved_at": "2026-06-06T00:00:00Z",
-        "updated_at": "2026-06-06T00:00:00Z"
+        "saved_at": "2026-06-06T00:00:00.000Z",
+        "updated_at": "2026-06-06T00:00:00.000Z"
       }
     }
   },
@@ -66,7 +66,7 @@
           "title": "Engineering",
           "summary": "Team workspace",
           "discoverability": "listed",
-          "as_of": "2026-06-06T00:00:00Z",
+          "as_of": "2026-06-06T00:00:00.000Z",
           "source_refs": [
             "ak:event:0196b39d-0000-7000-8000-000000000201"
           ],
@@ -216,7 +216,7 @@
           "mls_genesis_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000510",
           "mls_commit_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000511",
           "mls_welcome_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000512",
-          "created_at": "2026-06-06T00:00:00Z",
+          "created_at": "2026-06-06T00:00:00.000Z",
           "binding_state": "active"
         },
         "proofs": []
@@ -252,7 +252,7 @@
       "mls_genesis_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000510",
       "mls_commit_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000511",
       "mls_welcome_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000512",
-      "created_at": "2026-06-06T00:00:00Z",
+      "created_at": "2026-06-06T00:00:00.000Z",
       "binding_state": "active"
     },
     "contact_list_row": {

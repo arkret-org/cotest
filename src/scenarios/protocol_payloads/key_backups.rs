@@ -87,7 +87,7 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
-    let created_at = ts("2026-04-26T00:00:00Z")?;
+    let created_at = ts("2026-04-26T00:00:00.000Z")?;
     let mut envelope = KeyBackup {
         backup_id: backup_id(BACKUP_ID)?,
         actor_id: did(actor_id)?,
@@ -159,7 +159,7 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
             extra: Default::default(),
         }),
         retention: Some(KeyBackupRetention {
-            delete_after: Some(ts("2020-01-01T00:00:00Z")?),
+            delete_after: Some(ts("2020-01-01T00:00:00.000Z")?),
             legal_hold: Some(false),
             extra: BTreeMap::new(),
         }),
@@ -283,7 +283,7 @@ fn unlock_proof(actor_id: &str) -> Result<KeyBackupUnlockProof> {
             "sha256:84a51084210842108421084210842108421084210842108421084210842108aa",
         )?,
         challenge: None,
-        issued_at: ts("2026-04-26T00:00:00Z")?,
+        issued_at: ts("2026-04-26T00:00:00.000Z")?,
         auth_data: KeyBackupUnlockProofAuthData {
             verification_method: DidUrl::new(verification_method)
                 .map_err(|error| anyhow!(error))?,
@@ -348,9 +348,8 @@ fn remove_auth_signature(value: &mut Value) -> Result<()> {
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value)
+    arkret_core::canonical::parse_timestamp_canonical(value)
         .with_context(|| format!("invalid timestamp {value}"))
-        .map(|dt| dt.with_timezone(&Utc))
 }
 
 fn did(value: &str) -> Result<Did> {

@@ -408,7 +408,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
     let actor_id = "did:web:alice.example.com";
     let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
     let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
-    let expires_at = "2026-05-27T12:34:56Z";
+    let expires_at = "2026-05-27T12:34:56.000Z";
     let focus_id = "fra-1";
     let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
     let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000000";
@@ -430,7 +430,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
     // Golden signature pin: the deterministic ed25519 signature over the fixed
     // input MUST reproduce this byte string. A drift in canonical JSON, the
     // label, the 0x00 separator, or the field set changes these bytes.
-    const EXPECTED_SIG_HEX: &str = "53bede6ece7e1211283533ca96301fc07d523b41f65e502a3a34c89b6ee41db15906d2ed57e21c0250dc120fb41ec82f271e6ce7853a1a4dab81070de4cc2b0c";
+    const EXPECTED_SIG_HEX: &str = "8e1fde63287f749c4f09723e218bbb50042a326f3cef2ddd02643436471799c7a5b8f84194df8288a6a82b833611b609e64828045db30c4d7e481e067890fe00";
     let actual_sig_hex = hex_lower(&sig.to_bytes());
     if actual_sig_hex != EXPECTED_SIG_HEX {
         bail!(
@@ -448,7 +448,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
         (actor_id, "did:web:eve.example.com"),
         (call_id, "ak:call:0196441c-0000-7000-8000-00000000dead"),
         (device_id, "ak:device:01964137-0000-7000-8000-00000000dead"),
-        (expires_at, "2099-01-01T00:00:00Z"),
+        (expires_at, "2099-01-01T00:00:00.000Z"),
         (focus_id, "fra-2"),
         (
             participant_identity,

@@ -121,7 +121,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     })?
                     .len();
                 let provider_enforced_batch_size = input
-                    .get("provider_enforced_batch_size")
+                    .pointer("/private_contact_discovery_config/batch_size")
                     .and_then(Value::as_u64)
                     .ok_or_else(|| {
                         anyhow!(
@@ -129,9 +129,19 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                             case.name
                         )
                     })?;
+                let real_identifier_count = input
+                    .get("local_real_identifier_count")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "privacy fixture {} missing real identifier count",
+                            case.name
+                        )
+                    })?;
                 if blinded_count == 0
                     || derived_prefix_count != blinded_count
-                    || provider_enforced_batch_size <= blinded_count as u64
+                    || provider_enforced_batch_size != blinded_count as u64
+                    || provider_enforced_batch_size <= real_identifier_count
                 {
                     bail!(
                         "privacy fixture {} does not preserve and pad PSI cardinality",
@@ -142,8 +152,10 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     anyhow!("privacy fixture {} missing expected claims", case.name)
                 })?;
                 for claim in [
+                    "wire_batch_cardinality_does_not_equal_real_identifier_count",
                     "evaluated_elements_same_length_and_order_as_blinded_elements",
-                    "hit_bitmap_cardinality_is_provider_enforced_batch_size",
+                    "derived_prefixes_and_hit_bitmap_same_length_and_order",
+                    "single_batched_dleq_proof_verified_with_described_public_key",
                     "result_count_does_not_reveal_match_count",
                     "no_raw_connection_identifier",
                     "handoff_stubs_if_present_same_cardinality_dummy_padded",
@@ -162,15 +174,19 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         "blinded_elements": blinded_count,
                         "derived_prefixes": derived_prefix_count,
                         "provider_enforced_batch_size": provider_enforced_batch_size,
+                        "real_identifiers": real_identifier_count,
                     }),
                     &json!({
                         "derived_prefixes_match_blinded_elements": true,
-                        "provider_enforced_batch_size_gt_submitted_elements": true,
+                        "wire_cardinality_matches_advertised_batch_size": true,
+                        "wire_cardinality_hides_real_identifier_count": true,
                     }),
                     &json!({
                         "derived_prefixes_match_blinded_elements": derived_prefix_count == blinded_count,
-                        "provider_enforced_batch_size_gt_submitted_elements":
-                            provider_enforced_batch_size > blinded_count as u64,
+                        "wire_cardinality_matches_advertised_batch_size":
+                            provider_enforced_batch_size == blinded_count as u64,
+                        "wire_cardinality_hides_real_identifier_count":
+                            provider_enforced_batch_size > real_identifier_count,
                     }),
                 );
             }
@@ -226,11 +242,14 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .and_then(Value::as_array)
                     .is_some_and(|elements| !elements.is_empty());
                 let required_true_claims = [
-                    "same_size_bucket_as_success_path",
-                    "same_delay_class_as_success_path",
+                    "content_encoding_header_absent",
+                    "same_advertised_delay_distribution_as_success_path",
                     "not_disguised_as_no_match_outcome",
                     "admitted_batch_match_request_not_quota_denied",
                     "no_per_target_information_in_denial",
+                    "exact_blind_retry_not_recharged_and_returns_cached_outcome",
+                    "exact_match_retry_returns_cached_outcome",
+                    "pinned_epoch_retained_for_full_completion_ttl",
                 ];
                 let claims_hold = required_true_claims
                     .iter()
@@ -249,6 +268,22 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     && expected.get("error_code").and_then(Value::as_str)
                         == Some("psi_quota_exhausted")
                     && retry_after == rounded_retry_after
+                    && expected.get("content_length_bytes").and_then(Value::as_u64)
+                        == input
+                            .pointer(
+                                "/private_contact_discovery_config/blind_response_bucket_bytes",
+                            )
+                            .and_then(Value::as_u64)
+                    && expected.get("cache_control").and_then(Value::as_str)
+                        == Some("no-store, no-transform")
+                    && expected
+                        .get("different_digest_same_batch_id_error_code")
+                        .and_then(Value::as_str)
+                        == Some("duplicate_conflict")
+                    && expected
+                        .get("unknown_wrong_device_or_expired_batch_error_code")
+                        .and_then(Value::as_str)
+                        == Some("psi_batch_unavailable")
                     && body_shape_matches
                     && claims_hold;
                 if !valid {
@@ -591,130 +626,245 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // Handle claims are checked for confusable / mixed-script
-            // collisions before IDNA normalization.  This vector is a pure
-            // wire-policy assertion: the candidates must fail closed with a
-            // stable reason code rather than being normalized into a claim.
-            "reject_handle_homograph_before_idna" => {
+            "prepare_and_validate_internationalized_identifiers" => {
                 let input = case
                     .input
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
-                let candidates = input
-                    .get("candidates")
+                let canonical_handles = input
+                    .get("accepted_canonical_handles")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("privacy fixture {} missing candidates", case.name))?;
-                if candidates.len() < 3 {
-                    bail!(
-                        "privacy fixture {} must cover confusable, mixed-script, and hyphen candidates",
-                        case.name
-                    );
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing canonical handles", case.name)
+                    })?;
+                for value in canonical_handles {
+                    let value = value.as_str().ok_or_else(|| {
+                        anyhow!("privacy fixture {} has non-string handle", case.name)
+                    })?;
+                    arkret_core::Handle::parse(value).map_err(|error| {
+                        anyhow!("privacy fixture {} rejected {value}: {error}", case.name)
+                    })?;
                 }
+
+                let slugs = input
+                    .get("accepted_agent_slugs")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing agent slugs", case.name))?;
+                for value in slugs {
+                    arkret_core::validate_canonical_agent_slug(value.as_str().ok_or_else(
+                        || anyhow!("privacy fixture {} has non-string agent slug", case.name),
+                    )?)?;
+                }
+
+                let display_texts = input
+                    .get("accepted_single_line_display_text")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing display text", case.name))?;
+                for value in display_texts {
+                    arkret_core::validate_single_line_display_text(
+                        value.as_str().ok_or_else(|| {
+                            anyhow!("privacy fixture {} has non-string display text", case.name)
+                        })?,
+                        256,
+                        arkret_core::DISPLAY_TEXT_MAX_UTF8_OCTETS,
+                    )?;
+                }
+
+                let acct_alias = input
+                    .get("accepted_acct_alias")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing acct alias", case.name))?;
+                arkret_core::Handle::from_acct(acct_alias)?;
+
+                let mappings = input
+                    .get("input_to_canonical")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing mappings", case.name))?;
+                for mapping in mappings {
+                    let source = mapping
+                        .get("input")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!("privacy fixture {} mapping missing input", case.name)
+                        })?;
+                    let expected = mapping
+                        .get("canonical")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!("privacy fixture {} mapping missing canonical", case.name)
+                        })?;
+                    let prepared = arkret_core::Handle::prepare(source)?;
+                    if prepared.canonical() != expected {
+                        bail!(
+                            "privacy fixture {} prepared {source} as {}, expected {expected}",
+                            case.name,
+                            prepared.canonical()
+                        );
+                    }
+                }
+
+                for value in input
+                    .get("rejected_identifiers")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing rejected identifiers", case.name)
+                    })?
+                {
+                    let value = value.as_str().ok_or_else(|| {
+                        anyhow!("privacy fixture {} has non-string rejection", case.name)
+                    })?;
+                    if arkret_core::Handle::parse(value).is_ok() {
+                        bail!(
+                            "privacy fixture {} unexpectedly accepted {value}",
+                            case.name
+                        );
+                    }
+                }
+                for value in input
+                    .get("rejected_single_line_display_text")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "privacy fixture {} missing rejected display text",
+                            case.name
+                        )
+                    })?
+                {
+                    let value = value.as_str().ok_or_else(|| {
+                        anyhow!("privacy fixture {} has non-string rejection", case.name)
+                    })?;
+                    if arkret_core::validate_single_line_display_text(value, 256, 1024).is_ok() {
+                        bail!(
+                            "privacy fixture {} unexpectedly accepted display text",
+                            case.name
+                        );
+                    }
+                }
+
+                for pair in input
+                    .get("external_identifier_pairs_not_generically_equal")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "privacy fixture {} missing external identifier pairs",
+                            case.name
+                        )
+                    })?
+                {
+                    let pair = pair.as_array().ok_or_else(|| {
+                        anyhow!(
+                            "privacy fixture {} has malformed identifier pair",
+                            case.name
+                        )
+                    })?;
+                    if pair.len() != 2 || pair[0].as_str() == pair[1].as_str() {
+                        bail!(
+                            "privacy fixture {} generic equality pair drifted",
+                            case.name
+                        );
+                    }
+                }
+
                 let expected = case
                     .expected
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
-                if expected.get("accepted").and_then(Value::as_bool) != Some(false)
-                    || expected.get("error_code").and_then(Value::as_str)
-                        != Some("failed_precondition")
-                    || expected.get("reason_code").and_then(Value::as_str)
-                        != Some("handle_homograph_forbidden")
-                {
-                    bail!(
-                        "privacy fixture {} homograph rejection contract drifted",
-                        case.name
-                    );
-                }
                 let checks = expected
                     .get("checks")
                     .and_then(Value::as_array)
                     .ok_or_else(|| anyhow!("privacy fixture {} missing checks", case.name))?;
                 for required in [
-                    "uts39_confusable_skeleton_collision",
-                    "mixed_script_label",
-                    "hyphen_disallowed_position",
+                    "rfc8265_username_case_mapped",
+                    "canonical_receiver_rejects_noncanonical_wire",
+                    "uts46_nontransitional_std3_bidi_joiner_hyphen_dns_length",
+                    "unicode_code_point_and_utf8_octet_limits",
+                    "single_line_text_nfc_controls_and_whitespace",
+                    "external_identifier_comparison_is_profile_specific",
+                    "rfc7565_utf8_percent_encoding_without_port",
                 ] {
-                    if !checks.iter().any(|v| v.as_str() == Some(required)) {
-                        bail!(
-                            "privacy fixture {} missing homograph check {required}",
-                            case.name
-                        );
+                    if !checks.iter().any(|value| value.as_str() == Some(required)) {
+                        bail!("privacy fixture {} missing check {required}", case.name);
                     }
                 }
+                if expected.get("unicode_data_upgrade").and_then(Value::as_str)
+                    != Some("rebuild_derived_collision_index_without_rewriting_canonical_values")
+                {
+                    bail!(
+                        "privacy fixture {} Unicode upgrade contract drifted",
+                        case.name
+                    );
+                }
                 record_vector_event(
-                    "privacy.reject_handle_homograph_before_idna",
-                    &json!({"candidates": candidates}),
-                    &json!({
-                        "accepted": false,
-                        "error_code": "failed_precondition",
-                        "reason_code": "handle_homograph_forbidden",
-                    }),
-                    &json!({
-                        "accepted": expected.get("accepted").cloned(),
-                        "error_code": expected.get("error_code").cloned(),
-                        "reason_code": expected.get("reason_code").cloned(),
-                    }),
+                    "privacy.prepare_and_validate_internationalized_identifiers",
+                    input,
+                    expected,
+                    expected,
                 );
             }
-            "reject_realm_alias_homograph_before_canonical_alias" => {
+            "uts39_skeleton_is_authority_local_derived_state" => {
                 let input = case
                     .input
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
-                let candidates = input
-                    .get("candidates")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("privacy fixture {} missing candidates", case.name))?;
-                if candidates.len() < 2 {
-                    bail!(
-                        "privacy fixture {} must cover alias confusable candidates",
-                        case.name
-                    );
+                let parse_handle = |field: &str| -> Result<arkret_core::Handle> {
+                    let value = input
+                        .get(field)
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| anyhow!("privacy fixture {} missing {field}", case.name))?;
+                    Ok(arkret_core::Handle::parse(value)?)
+                };
+                let registered = parse_handle("registered")?;
+                let candidate = parse_handle("confusable_candidate")?;
+                let other_authority = parse_handle("same_skeleton_other_authority")?;
+                let alias_value = input
+                    .get("same_string_realm_alias_namespace")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing realm alias", case.name))?;
+                arkret_core::RealmAlias::parse(alias_value)?;
+
+                let registered_skeleton = registered.registration_skeleton()?;
+                if registered_skeleton != candidate.registration_skeleton()?
+                    || registered_skeleton != other_authority.registration_skeleton()?
+                    || registered.domain() != candidate.domain()
+                    || registered.domain() == other_authority.domain()
+                {
+                    bail!("privacy fixture {} collision scoping drifted", case.name);
                 }
                 let expected = case
                     .expected
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
-                if expected.get("accepted").and_then(Value::as_bool) != Some(false)
-                    || expected.get("error_code").and_then(Value::as_str)
-                        != Some("failed_precondition")
-                    || expected.get("reason_code").and_then(Value::as_str)
-                        != Some("realm_alias_homograph_forbidden")
+                if expected
+                    .get("canonical_equality_uses_skeleton")
+                    .and_then(Value::as_bool)
+                    != Some(false)
+                    || expected
+                        .get("skeleton_enters_wire_or_proof")
+                        .and_then(Value::as_bool)
+                        != Some(false)
+                    || expected
+                        .get("same_authority_handle_registration")
+                        .and_then(Value::as_str)
+                        != Some("handle_homograph_forbidden")
+                    || expected
+                        .get("other_authority_handle_registration")
+                        .and_then(Value::as_str)
+                        != Some("not_a_collision")
+                    || expected
+                        .get("realm_alias_registration")
+                        .and_then(Value::as_str)
+                        != Some("not_a_cross_namespace_collision")
                 {
                     bail!(
-                        "privacy fixture {} alias homograph contract drifted",
+                        "privacy fixture {} skeleton wire contract drifted",
                         case.name
                     );
                 }
-                let checks = expected
-                    .get("checks")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("privacy fixture {} missing checks", case.name))?;
-                for required in [
-                    "uts39_confusable_skeleton_collision",
-                    "mixed_script_label",
-                    "hyphen_disallowed_position",
-                ] {
-                    if !checks.iter().any(|v| v.as_str() == Some(required)) {
-                        bail!(
-                            "privacy fixture {} missing alias check {required}",
-                            case.name
-                        );
-                    }
-                }
                 record_vector_event(
-                    "privacy.reject_realm_alias_homograph_before_canonical_alias",
-                    &json!({"candidates": candidates}),
-                    &json!({
-                        "accepted": false,
-                        "error_code": "failed_precondition",
-                        "reason_code": "realm_alias_homograph_forbidden",
-                    }),
-                    &json!({
-                        "accepted": expected.get("accepted").cloned(),
-                        "error_code": expected.get("error_code").cloned(),
-                        "reason_code": expected.get("reason_code").cloned(),
-                    }),
+                    "privacy.uts39_skeleton_is_authority_local_derived_state",
+                    input,
+                    expected,
+                    expected,
                 );
             }
             // §9.14 `ak.vector.identity_link.minimal_metadata_author_credential.v1`

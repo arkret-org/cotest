@@ -57,7 +57,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             "proof": { "detached_jws": "" }
         },
         "source_refs": ["urn:cotest:tb3:source-ref:1"],
-        "as_of": Utc::now().to_rfc3339(),
+        "as_of": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
     });
 
     // Notice: no Signature-Input / Signature / Content-Digest headers. This
