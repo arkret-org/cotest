@@ -46,12 +46,10 @@ export function deviceSigningKeyDid(deviceKey: DpopDeviceKey): string {
   return `did:key:${ed25519MultibaseFromPublicJwkX(deviceKey.publicJwk.x)}`;
 }
 
-/// Whole-second RFC3339 (`…Z`, no fractional part) — the canonical timestamp
-/// form coauth re-serializes a parsed `DateTime<Utc>` into (the device-enroll
-/// path truncates to seconds for the same reason), so the signed claims bytes
-/// round-trip byte-for-byte through coauth's canonicalization.
-function rfc3339Seconds(epochSeconds: number): string {
-  return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z")}`;
+/// Canonical protocol time uses exactly three UTC fractional digits so the
+/// signed claims round-trip byte-for-byte through Coauth's canonicalization.
+function rfc3339Millis(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toISOString();
 }
 
 /// Enrol a post-bootstrap device's DPoP key into the Principal Server's device
@@ -121,8 +119,8 @@ export function buildHolderProofRefreshBody(args: {
   challenge: string;
 }): HolderProofBody {
   const now = Math.floor(Date.now() / 1000);
-  const issuedAt = rfc3339Seconds(now);
-  const expiresAt = rfc3339Seconds(now + 120);
+  const issuedAt = rfc3339Millis(now);
+  const expiresAt = rfc3339Millis(now + 120);
   const holderKeyId = deviceSigningKeyDid(args.deviceKey);
 
   // request_canonical_digest binds the proof to this concrete restore request

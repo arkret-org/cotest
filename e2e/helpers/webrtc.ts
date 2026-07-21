@@ -16,7 +16,7 @@ import {
   accountSubscribeFramesApi,
   base64url,
   base64urlJsonCanonical,
-  buildDetachedJwsProof,
+  buildCapabilityGrantProof,
   canonicalEventTimestamp,
   canonicalJson,
   canonicalTimestamp,
@@ -332,7 +332,7 @@ export async function grantCallCapability(
   const grant = {
     ...unsignedGrant,
     proofs: [
-      buildDetachedJwsProof({
+      buildCapabilityGrantProof({
         issuerDid: ownerDid,
         payload: unsignedGrant,
         createdAt: issuedAt,

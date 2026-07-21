@@ -164,22 +164,19 @@ test.describe("multi-device pairing + revocation", () => {
     // 1) Publish the cross-signing identity (PSK→SSK / PSK→USK bindings). soland
     //    anchors the PSK (did:key), verifies both §5.1 bindings, and runs the
     //    CAS check (expected_previous_generation=0 → generation=1).
-    const publish = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+    await submitSignedEventApi(
+      request,
+      device1Token,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.cross_signing.publish",
+        payload: buildCrossSigningPublishPayload(identity),
+      }),
       {
-        headers: authHeaders(device1Token),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.cross_signing.publish",
-          payload: buildCrossSigningPublishPayload(identity),
-        }),
+        context: "publish ak.cross_signing.publish",
       },
     );
-    expect(
-      [200, 201],
-      `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
-    ).toContain(publish.status());
 
     // 2) Authorize Device 2 with a real SSK-signed cross_signing_binding over
     //    the §5.2 ak-device-trust-bind-v1 input. soland verifies the binding at
@@ -193,42 +190,39 @@ test.describe("multi-device pairing + revocation", () => {
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
     });
-    const authorizeNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const authorize = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+    const authorizeNotBefore = new Date().toISOString();
+    await submitSignedEventApi(
+      request,
+      device1Token,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.device.authorize",
+        payload: {
+          principal_id: alice.did,
+          device_id: device2Id,
+          device_public_key: device2Key.multibase,
+          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+          algorithms: TEST_DEVICE_ALGORITHMS,
+          device_key_algorithm: "EdDSA",
+          device_signature: deviceAuthorizeSignature({
+            identity,
+            principalId: alice.did,
+            deviceId: device2Id,
+            devicePublicKeyMultibase: device2Key.multibase,
+            authorizedBy: alice.deviceId,
+            notBefore: authorizeNotBefore,
+            privateKey: device2Key.privateKey,
+          }),
+          authorized_by: alice.deviceId,
+          not_before: authorizeNotBefore,
+          cross_signing_binding: goodBinding,
+        },
+      }),
       {
-        headers: authHeaders(device1Token),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.device.authorize",
-          payload: {
-            principal_id: alice.did,
-            device_id: device2Id,
-            device_public_key: device2Key.multibase,
-            hpke_key: "z6LSCotestE2eDeviceHpkeKey",
-            algorithms: TEST_DEVICE_ALGORITHMS,
-            device_key_algorithm: "EdDSA",
-            device_signature: deviceAuthorizeSignature({
-              identity,
-              principalId: alice.did,
-              deviceId: device2Id,
-              devicePublicKeyMultibase: device2Key.multibase,
-              authorizedBy: alice.deviceId,
-              notBefore: authorizeNotBefore,
-              privateKey: device2Key.privateKey,
-            }),
-            authorized_by: alice.deviceId,
-            not_before: authorizeNotBefore,
-            cross_signing_binding: goodBinding,
-          },
-        }),
+        context: "authorize Device 2 with cross_signing_binding",
       },
     );
-    expect(
-      [200, 201],
-      `ak.device.authorize with valid cross_signing_binding returned ${authorize.status()}: ${await authorize.text()}`,
-    ).toContain(authorize.status());
 
     // The authorized device surfaces in alice's device-set projection.
     const deadline = Date.now() + 30_000;
@@ -271,7 +265,7 @@ test.describe("multi-device pairing + revocation", () => {
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
     });
-    const staleNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    const staleNotBefore = new Date().toISOString();
     const staleAuthorize = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
@@ -323,7 +317,7 @@ test.describe("multi-device pairing + revocation", () => {
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
     });
-    const forgedNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    const forgedNotBefore = new Date().toISOString();
     const forgedAuthorize = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
@@ -708,13 +702,11 @@ test.describe("multi-device pairing + revocation", () => {
     const target = {
       message_id: messageId,
       kind: "ak.key.verification.request",
-      expires_at: new Date(Date.now() + 10 * 60_000)
-        .toISOString()
-        .replace(/\.\d{3}Z$/, "Z"),
+      expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
       content: {
         transaction_id: `grace-${device2Id}`,
         from_device: alice.deviceId,
-        timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+        timestamp: new Date().toISOString(),
       },
     };
     const sendBody = {
@@ -1276,9 +1268,7 @@ function deviceMessageIdempotencyBody(
         [recipientDeviceId]: {
           message_id: messageId,
           kind: "ak.key.verification.request",
-          expires_at: new Date(Date.now() + 10 * 60_000)
-            .toISOString()
-            .replace(/\.\d{3}Z$/, "Z"),
+          expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
           content: {
             transaction_id: `txn-${messageId}`,
             from_device: senderDeviceId,
@@ -1331,7 +1321,7 @@ async function promoteDeviceToVerified(
     hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
-  const authorizeNotBefore = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const authorizeNotBefore = new Date().toISOString();
   const authorize = await request.post(eventsUrl, {
       headers: selfPathHeaders(headersSource, "POST", eventsUrl),
       data: signedEventEnvelope({
@@ -1397,9 +1387,7 @@ async function deliverPairingRequest(
     alg: "EdDSA",
     public_key: newDeviceKey.multibase,
   };
-  const expiresAt = new Date(Date.now() + 10 * 60_000)
-    .toISOString()
-    .replace(/\.\d{3}Z$/, "Z");
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
   const sendResp = await request.post(
     `${solandBaseUrl()}/_arkret/self/device_messages`,
     {
@@ -1430,7 +1418,7 @@ async function deliverPairingRequest(
                   display_name: opts.displayName ?? "New device",
                 },
                 expires_at: expiresAt,
-                timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+                timestamp: new Date().toISOString(),
               },
             },
           },

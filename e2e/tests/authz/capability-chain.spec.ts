@@ -28,9 +28,7 @@ import {
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
 function plusSeconds(deltaSec: number): string {
-  return new Date(Date.now() + deltaSec * 1000)
-    .toISOString()
-    .replace(/\.\d{3}Z$/, "Z");
+  return new Date(Date.now() + deltaSec * 1000).toISOString();
 }
 
 // POST /_arkret/self/authz/check — spec AuthzCheckOutcome: five-valued

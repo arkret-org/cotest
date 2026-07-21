@@ -21,7 +21,7 @@ import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
 import {
   authHeaders,
-  buildDetachedJwsProof,
+  buildCapabilityGrantProof,
   canonicalTimestamp,
   expectJsonOk,
   signedEventEnvelope,
@@ -109,7 +109,7 @@ export async function grantCircleMemberManageCapability(
         grant: {
           ...unsignedGrant,
           proofs: [
-            buildDetachedJwsProof({
+            buildCapabilityGrantProof({
               issuerDid: args.ownerDid,
               payload: unsignedGrant,
               createdAt: issuedAt,
@@ -172,7 +172,7 @@ export async function grantCircleManageCapability(
         grant: {
           ...unsignedGrant,
           proofs: [
-            buildDetachedJwsProof({
+            buildCapabilityGrantProof({
               issuerDid: args.ownerDid,
               payload: unsignedGrant,
               createdAt: issuedAt,

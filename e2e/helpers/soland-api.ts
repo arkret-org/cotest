@@ -316,6 +316,7 @@ export async function createRealmApi(
     actorDid: ownerDid,
     realmId,
     kind: "ak.realm.create",
+    actorSeq: 1,
     createdAt,
     preconditions: [
       {
@@ -366,6 +367,7 @@ export async function createRealmApi(
     actorDid: ownerDid,
     realmId,
     kind: "ak.capability.grant",
+    actorSeq: 2,
     createdAt,
     prevRefs: [realmCreateEventId],
     payload: {
@@ -373,7 +375,7 @@ export async function createRealmApi(
       grant: {
         ...unsignedFoundingGrant,
         proofs: [
-          buildDetachedJwsProof({
+          buildCapabilityGrantProof({
             issuerDid: ownerDid,
             payload: unsignedFoundingGrant,
             createdAt,
@@ -541,7 +543,7 @@ export async function grantRealmReviewCapabilityApi(
         grant: {
           ...unsignedGrant,
           proofs: [
-            buildDetachedJwsProof({
+            buildCapabilityGrantProof({
               issuerDid: args.ownerDid,
               payload: unsignedGrant,
               createdAt: issuedAt,
@@ -599,7 +601,7 @@ export async function grantServiceDelegationApi(
         grant: {
           ...unsignedGrant,
           proofs: [
-            buildDetachedJwsProof({
+            buildCapabilityGrantProof({
               issuerDid: args.ownerDid,
               payload: unsignedGrant,
               createdAt: issuedAt,
@@ -677,7 +679,7 @@ export function buildCapabilityGrantEnvelope(
       grant: {
         ...unsignedGrant,
         proofs: [
-          buildDetachedJwsProof({
+          buildCapabilityGrantProof({
             issuerDid: args.ownerDid,
             payload: unsignedGrant,
             createdAt: issuedAt,
@@ -1478,42 +1480,54 @@ function eventEnvelopeProof(args: {
   });
 }
 
-// Generic detached-JWS proof over an arbitrary canonical payload (Seal
-// signature, capability grant, identity-link, etc. — NOT the Event-bound
-// `eventProof`). The JWS transcript signs the `{payload_digest, did,
-// verification_method, created_at}` binding object; the protected header is
-// exactly `{"alg":"EdDSA"}` (the SDK verifier deserialises with
-// deny-unknown-fields). circle-api.ts and webrtc.ts previously each inlined an
-// identical `genericDetachedJwsProof`.
-export function buildDetachedJwsProof(args: {
+// Capability grants have a dedicated SDK transcript; they must not reuse a
+// generic payload-proof binding because the issuer, subject and fixed context
+// are part of the signed bytes.
+export function buildCapabilityGrantProof(args: {
   issuerDid: string;
   payload: Record<string, unknown>;
   createdAt: string;
   verificationMethod?: string;
 }): Record<string, unknown> {
+  const registeredSigner = eventSignerFor(
+    args.issuerDid,
+    args.verificationMethod,
+  );
   const verificationMethod =
-    args.verificationMethod ?? `${args.issuerDid}#device`;
+    args.verificationMethod ??
+    registeredSigner?.verificationMethod ??
+    `${args.issuerDid}#device`;
   const payloadDigest = `sha256:${sha256CanonicalJson(args.payload)}`;
   const bindingObject = {
+    context: "ak.capability-grant-proof-v1",
     payload_digest: payloadDigest,
-    did: args.issuerDid,
+    issuer: args.issuerDid,
+    subject: args.payload.subject,
     verification_method: verificationMethod,
     created_at: args.createdAt,
   };
   const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
-  const signature = sign(
-    null,
-    Buffer.from(`${protectedHeader}.${bindingPayload}`, "utf8"),
-    developmentServicePrivateKey(args.issuerDid),
-  );
+  const signingInput = `${protectedHeader}.${bindingPayload}`;
+  const signature =
+    signWithRegisteredEventSigner(
+      args.issuerDid,
+      verificationMethod,
+      signingInput,
+    ) ??
+    sign(
+      null,
+      Buffer.from(signingInput, "utf8"),
+      developmentProtocolPrivateKey(verificationMethod),
+    ).toString("base64url");
   return {
     kind: "detached_jws",
     alg: "EdDSA",
     verification_method: verificationMethod,
     payload_digest: payloadDigest,
     created_at: args.createdAt,
-    jws: `${protectedHeader}..${signature.toString("base64url")}`,
+    proof_purpose: "issuer_attestation",
+    jws: `${protectedHeader}..${signature}`,
   };
 }
 
@@ -1537,11 +1551,14 @@ export async function submitSignedEventApi(
       return JSON.parse(text) as Record<string, unknown>;
     }
     const body = JSON.parse(text) as unknown;
-    const staleActorFrontier =
-      response.status() === 409 &&
-      wireErrCode(body) === "cas_conflict" &&
-      text.includes("actor_seq is older than the accepted actor frontier");
-    if (!staleActorFrontier || attempt === 2) {
+    const actorFrontierRefreshRequired =
+      (response.status() === 409 &&
+        wireErrCode(body) === "cas_conflict" &&
+        text.includes("actor_seq is older than the accepted actor frontier")) ||
+      (response.status() === 400 &&
+        wireErrCode(body) === "schema_violation" &&
+        text.includes("actor-chain genesis must use actor_seq=1"));
+    if (!actorFrontierRefreshRequired || attempt === 2) {
       expect(
         [200, 201],
         `${context} returned ${response.status()}: ${text}`,
@@ -1575,11 +1592,14 @@ export async function submitSignedEventBatchApi(
       return JSON.parse(text) as Record<string, unknown>;
     }
     const body = JSON.parse(text) as unknown;
-    const staleActorFrontier =
-      response.status() === 409 &&
-      wireErrCode(body) === "cas_conflict" &&
-      text.includes("actor_seq is older than the accepted actor frontier");
-    if (!staleActorFrontier || attempt === 2) {
+    const actorFrontierRefreshRequired =
+      (response.status() === 409 &&
+        wireErrCode(body) === "cas_conflict" &&
+        text.includes("actor_seq is older than the accepted actor frontier")) ||
+      (response.status() === 400 &&
+        wireErrCode(body) === "schema_violation" &&
+        text.includes("actor-chain genesis must use actor_seq=1"));
+    if (!actorFrontierRefreshRequired || attempt === 2) {
       expect(
         [200, 201],
         `${context} returned ${response.status()}: ${text}`,
@@ -1725,7 +1745,10 @@ export function deriveDefaultStrandId(realmId: string): string {
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+  if (!Number.isFinite(date.getTime())) {
+    throw new TypeError("invalid canonical timestamp");
+  }
+  return date.toISOString();
 }
 
 export function canonicalEventTimestamp(date: Date = new Date()): string {
@@ -2341,20 +2364,10 @@ function eventProofMode(): EventProofMode {
   return mode;
 }
 
-// FIXTURE ONLY — publicly derivable, MUST NOT be trusted by any non-test code.
-// The private key is `sha256("soland:anchorer-ephemeral:" + serviceId)`, so
-// anyone who knows the serviceId can recompute it. This intentionally mirrors
-// soland's *dev* anchorer-ephemeral derivation (soland: federation.rs /
-// state.rs) so the mock's federation signatures verify against a dev soland —
-// production soland MUST reject keys produced by this convention.
-//
-// Exported as the single source of truth for the dev actor/anchorer-ephemeral
-// key: circle-api.ts and webrtc.ts previously each re-derived this same
-// `sha256("soland:anchorer-ephemeral:" + did)` PKCS#8 ed25519 key.
-export function developmentServicePrivateKey(serviceId: string) {
+function developmentProtocolPrivateKey(verificationMethod: string) {
   const seed = createHash("sha256")
-    .update("soland:anchorer-ephemeral:")
-    .update(serviceId)
+    .update("arkret-sdk:development-signing-key-v1\0")
+    .update(verificationMethod)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({

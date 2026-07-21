@@ -26,7 +26,7 @@
 
 import { generateKeyPairSync, sign } from "node:crypto";
 import { encodeEd25519PubkeyMultibase } from "./encoding";
-import { canonicalJson } from "./soland-api";
+import { canonicalJson, canonicalTimestamp } from "./soland-api";
 
 /// A freshly-generated Ed25519 cross-signing key, carrying its raw public key,
 /// the `z…` multibase rendering soland projects, and did:key identifiers.
@@ -258,7 +258,7 @@ export function buildCrossSigningPublishPayload(
     },
     expected_previous_generation: expectedPrevious,
     generation: identity.generation,
-    issued_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    issued_at: canonicalTimestamp(),
   };
 }
 
