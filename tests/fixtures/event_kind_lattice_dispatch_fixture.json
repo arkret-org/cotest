@@ -101,6 +101,7 @@
     "ordered_log_families": [
       "ak.component.applet.bridge_error.v1",
       "ak.component.audit.access_log.v1",
+      "ak.component.sidecar.create.v1",
       "ak.component.identity.disclosure_receipt.v1",
       "ak.component.identity.presentation.v1",
       "ak.component.identity.proof_log.v1",
