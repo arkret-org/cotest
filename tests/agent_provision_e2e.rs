@@ -304,21 +304,25 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     assert!(!paired.authorized_event_ref.as_str().is_empty());
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
-    // Runtime replacement keeps the principal active until a fresh pairing
-    // succeeds and supersedes the previous runtime key.
+    // Runtime replacement requires an explicit pause. Pairing supersedes the
+    // old runtime key while the principal stays paused until an explicit resume.
+    pause_agent_runtime(&server, &token, &renewed).await?;
     let replacement = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
         .await?;
     assert_eq!(replacement.agent_id.to_string(), agent_did);
     assert_ne!(replacement.pairing_request_id, renewed.pairing_request_id);
-    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
     let stale = pair_agent_runtime_key(&server, &token, &renewed).await;
     assert!(stale.is_err(), "superseded pairing handle must remain dead");
     let replaced =
         pair_agent_runtime_key_as(&server, &token, &replacement, "runtime-key-2").await?;
     assert_ne!(replaced.authorized_event_ref, paired.authorized_event_ref);
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
+    resume_agent_runtime(&server, &token, &replacement).await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
+    pause_agent_runtime(&server, &token, &replacement).await?;
     let short_lived = controller
         .agent_renew_pairing(
             &agent_did,
@@ -328,7 +332,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         )
         .await?;
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
     assert!(
         pair_agent_runtime_key_as(&server, &token, &short_lived, "runtime-key-3")
             .await
@@ -1134,26 +1138,137 @@ async fn managed_agent_actor_frontier(
     }
 }
 
+fn managed_agent_seal_basis(server: &ArkretServer, realm_id: &str) -> Result<arkret::SealBasis> {
+    let seal_key = format!("{}|{realm_id}", server.base_url());
+    MANAGED_AGENT_PCR_SEALS
+        .lock()
+        .expect("managed Agent PCR Seal lock")
+        .get(&seal_key)
+        .map(arkret::Seal::seal_basis)
+        .ok_or_else(|| anyhow!("managed Agent PCR Seal basis is missing"))
+}
+
+async fn pause_agent_runtime<P: PairingOutcome>(
+    server: &ArkretServer,
+    token: &str,
+    pairing: &P,
+) -> Result<()> {
+    let agent_id = pairing.agent_id().clone();
+    let realm_id = pairing.principal_control_realm_id().clone();
+    let frontier =
+        managed_agent_actor_frontier(server, token, agent_id.as_str(), realm_id.as_str()).await?;
+    let actor_seq = frontier.actor_seq + 1;
+    let changed_at = canonical_now();
+    let mut event = arkret::agent::build_agent_pause_event(
+        agent_id.clone(),
+        Did::new(ALICE_DID.to_owned())?,
+        realm_id.clone(),
+        pairing.controller_authorization_ref(),
+        Some("runtime_replacement".to_owned()),
+        actor_seq,
+        arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
+        changed_at,
+    )?;
+    event.prev_refs = frontier.event_id.into_iter().collect();
+    event.seal_basis = Some(managed_agent_seal_basis(server, realm_id.as_str())?);
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+        [21_u8; 32],
+        Did::new(ALICE_DID.to_owned())?,
+        controller_verification_method(),
+    );
+    arkret::signatures::sign_event(
+        &mut event,
+        &signer,
+        &controller_verification_method(),
+        arkret::signatures::SignEventOptions::new().with_created_at(changed_at),
+    )?;
+    let outcome = bearer_sdk_client(server, token)?
+        .agent_pause(
+            agent_id.as_str(),
+            &arkret::AgentPauseRequestBody {
+                reason: Some("runtime_replacement".to_owned()),
+                lifecycle_event: event,
+            },
+        )
+        .await?;
+    if outcome.status.as_wire_str() != "paused" {
+        return Err(anyhow!(
+            "Agent pause returned {}",
+            outcome.status.as_wire_str()
+        ));
+    }
+    Ok(())
+}
+
+async fn resume_agent_runtime<P: PairingOutcome>(
+    server: &ArkretServer,
+    token: &str,
+    pairing: &P,
+) -> Result<()> {
+    let agent_id = pairing.agent_id().clone();
+    let realm_id = pairing.principal_control_realm_id().clone();
+    let frontier =
+        managed_agent_actor_frontier(server, token, agent_id.as_str(), realm_id.as_str()).await?;
+    let actor_seq = frontier.actor_seq + 1;
+    let changed_at = canonical_now();
+    let mut event = arkret::agent::build_agent_resume_event(
+        agent_id.clone(),
+        Did::new(ALICE_DID.to_owned())?,
+        realm_id.clone(),
+        pairing.controller_authorization_ref(),
+        None,
+        actor_seq,
+        arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
+        changed_at,
+    )?;
+    event.prev_refs = frontier.event_id.into_iter().collect();
+    event.seal_basis = Some(managed_agent_seal_basis(server, realm_id.as_str())?);
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+        [21_u8; 32],
+        Did::new(ALICE_DID.to_owned())?,
+        controller_verification_method(),
+    );
+    arkret::signatures::sign_event(
+        &mut event,
+        &signer,
+        &controller_verification_method(),
+        arkret::signatures::SignEventOptions::new().with_created_at(changed_at),
+    )?;
+    let outcome = bearer_sdk_client(server, token)?
+        .agent_resume(
+            agent_id.as_str(),
+            &arkret::AgentResumeRequestBody {
+                sidecar_exposure_ack: None,
+                lifecycle_event: event,
+            },
+        )
+        .await?;
+    if outcome.status.as_wire_str() != "active" {
+        return Err(anyhow!(
+            "Agent resume returned {}",
+            outcome.status.as_wire_str()
+        ));
+    }
+    Ok(())
+}
+
 async fn move_event_after_actor_frontier(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
     event: &mut Value,
 ) -> Result<()> {
-    let original_actor_seq = event["actor_seq"].as_u64().unwrap_or_default();
     let realm_id = event["realm_id"]
         .as_str()
         .ok_or_else(|| anyhow!("event realm_id missing before actor-frontier move"))?;
-    let frontier_actor_seq = managed_agent_actor_frontier(server, token, actor_id, realm_id)
-        .await?
-        .actor_seq;
-    // Lifecycle commands author a bounded fan-out of Agent control events. On
-    // deactivation the controller also loses visibility of the terminal Agent
-    // PCR frontier, so a rejection probe needs headroom beyond both its local
-    // sequence and the last caller-visible frontier.
-    let actor_seq = original_actor_seq.max(frontier_actor_seq) + 32;
+    let frontier = managed_agent_actor_frontier(server, token, actor_id, realm_id).await?;
+    let actor_seq = frontier.actor_seq + 1;
     event["actor_seq"] = json!(actor_seq);
     event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
+    event["prev_refs"] = frontier
+        .event_id
+        .map(|event_id| json!([event_id]))
+        .unwrap_or_else(|| json!([]));
     refresh_event_proof_with_signing_seed(event, [21_u8; 32])?;
     Ok(())
 }
@@ -1576,7 +1691,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             "seal_ref": controller_frontier.seal_id,
             "ssk_generation": 1
         },
-        "issued_at": canonical_now(),
+        "issued_at": arkret::canonical::format_timestamp_canonical(canonical_now()),
         "auth_data": {
             "verification_method": format!("did:key:{device_multibase}#{device_multibase}"),
             "signature_algorithm": "Ed25519",

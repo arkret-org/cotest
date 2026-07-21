@@ -257,7 +257,7 @@ fn realm_bootstrap_event_batch_with_signing_seed(
             "realm_id": realm_id,
             "match_scope": "realm_wide"
         }],
-        "issued_at": "2026-05-02T00:00:00Z",
+        "issued_at": "2026-05-02T00:00:00.000Z",
         "proofs": []
     });
     let mut typed_grant: arkret::CapabilityGrant = serde_json::from_value(grant.clone())?;
@@ -266,7 +266,7 @@ fn realm_bootstrap_event_batch_with_signing_seed(
         alg: "EdDSA".to_owned(),
         verification_method: verification_method.to_owned(),
         payload_digest: typed_grant.payload_digest()?,
-        created_at: DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")?.with_timezone(&Utc),
+        created_at: DateTime::parse_from_rfc3339("2026-05-02T00:00:00.001Z")?.with_timezone(&Utc),
         domain: None,
         audience: None,
         proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
