@@ -402,7 +402,6 @@ test.describe("morph schema migration @fully-implemented", () => {
         kind: "ak.realm.update",
         payload: {
           target_ref: realmId,
-          active_profiles: [MIGRATION_PROFILE_ID],
           patch: {
             active_profiles: { $op: "set", value: [MIGRATION_PROFILE_ID] },
           },
@@ -491,7 +490,6 @@ test.describe("morph schema migration @fully-implemented", () => {
         kind: "ak.realm.update",
         payload: {
           target_ref: realmId,
-          active_profiles: [MIGRATION_PROFILE_ID],
           patch: { active_profiles: { $op: "set", value: [MIGRATION_PROFILE_ID] } },
         },
       }),

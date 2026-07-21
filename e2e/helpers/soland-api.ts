@@ -698,7 +698,6 @@ export async function revokeCapabilityApi(
       kind: "ak.capability.revoke",
       payload: {
         grant_id: args.grantId,
-        realm_id: args.realmId,
       },
     }),
     { server: args.server, context: `revoke grant ${args.grantId}` },

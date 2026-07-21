@@ -614,7 +614,7 @@ async function createDiscussionCircleViaApi(
           display: {
             short_name: "DISC",
             color_token: "indigo",
-            symbol: { kind: "glyph", glyph: "lock" },
+            symbol: { glyph: "lock" },
           },
           directory_visibility: "members",
           join_rule: "invite",
@@ -700,11 +700,6 @@ async function submitCircleMemberStateViaApi(
         circle_id: circleId,
         actor_id: memberDid,
         membership,
-        actor_capability: {
-          action: "ak.circle.member.manage",
-          circle_id: circleId,
-          allowed: true,
-        },
       },
     }),
     { context: `circle ${circleId} member ${memberDid} -> ${membership}` },

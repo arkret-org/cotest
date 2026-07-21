@@ -79,7 +79,6 @@ export async function grantCircleMemberManageCapability(
   const issuedAt = canonicalTimestamp();
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
-    grant_id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
@@ -143,7 +142,6 @@ export async function grantCircleManageCapability(
   const issuedAt = canonicalTimestamp();
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
-    grant_id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,

@@ -178,18 +178,30 @@ test.describe("mimi federation", () => {
     const downgradeEvent = eventById(events, String(downgradeBody.event_ref));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
     expect(nested(downgradeEvent, "payload", "content", "e2ee_downgrade")).toBe("mimi_bridge");
-    expect(nested(downgradeEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
-      "explicit_downgrade",
-    );
+    expect(
+      nested(
+        downgradeEvent,
+        "payload",
+        "metadata",
+        "mimi_policy",
+        "e2ee_boundary",
+      ),
+    ).toBe("explicit_downgrade");
 
     const transcriptEvent = eventById(events, String(transcriptBody.event_ref));
     expect(nested(transcriptEvent, "payload", "content", "body")).toBe(transcriptText);
     expect(
       nested(transcriptEvent, "payload", "content", "transcript_binding", "transcript_hash"),
     ).toBe(transcriptHash);
-    expect(nested(transcriptEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
-      "transcript_bound",
-    );
+    expect(
+      nested(
+        transcriptEvent,
+        "payload",
+        "metadata",
+        "mimi_policy",
+        "e2ee_boundary",
+      ),
+    ).toBe("transcript_bound");
   });
 
   test("E5.3 content type mismatch: MIMI-specific content kind -> quarantine + content.unknown_content_kind", async ({

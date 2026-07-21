@@ -184,9 +184,7 @@ test.describe("moderation and ban", () => {
       kind: "ak.message.redact",
       payload: {
         target_event_id: sent.event_id,
-        redacts: sent.event_id,
         reason: "moderator_redaction",
-        actor: alice.did,
       },
     });
     await submitSignedEventApi(request, aliceToken, redactEvent, {

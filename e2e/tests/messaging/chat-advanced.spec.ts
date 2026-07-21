@@ -191,7 +191,7 @@ test.describe("chat advanced", () => {
     });
   });
 
-  test("API mention payload persists mention routing metadata", async ({
+  test("API mention payload persists canonical mention metadata", async ({
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "mention-api");
@@ -222,9 +222,6 @@ test.describe("chat advanced", () => {
               },
             ],
           },
-          mention_routing_hint: {
-            mentioned: [fixture.bob.did],
-          },
         },
       }),
       { context: "mention message" },
@@ -246,11 +243,11 @@ test.describe("chat advanced", () => {
           { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
         ],
       },
-      mention_routing_hint: { mentioned: [fixture.bob.did] },
     });
+    expect(mention?.payload).not.toHaveProperty("mention_routing_hint");
   });
 
-  test("API sync projection exposes active reactions, reply relation, and mention routing hint", async ({
+  test("API sync timeline preserves canonical mentions, reactions, and reply events", async ({
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "sync-projection-api");
@@ -273,9 +270,6 @@ test.describe("chat advanced", () => {
           mentions: [
             { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
           ],
-        },
-        mention_routing_hint: {
-          mentioned: [fixture.bob.did],
         },
       },
     });
@@ -342,19 +336,36 @@ test.describe("chat advanced", () => {
       (event) => event.event_id === rootEventId,
     );
     expect(rootProjection).toMatchObject({
-      mention_routing_hint: { mentioned: [fixture.bob.did] },
-      mentions: [{ did: fixture.bob.did }],
-      reaction_summary: { "+1": [fixture.alice.did] },
+      payload: {
+        content: {
+          mentions: [{ did: fixture.bob.did }],
+        },
+      },
     });
-    expect(JSON.stringify(rootProjection?.reaction_summary)).not.toContain(
-      fixture.bob.did,
+    expect(rootProjection?.payload).not.toHaveProperty("mention_routing_hint");
+
+    const reactionEvents = events.filter(
+      (event) =>
+        (event.kind === "ak.reaction.add" ||
+          event.kind === "ak.reaction.remove") &&
+        (event.payload as { target_ref?: string })?.target_ref === rootMessageRef,
     );
-    expect(rootProjection?.reactions).toEqual(
+    expect(reactionEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actor: fixture.alice.did,
-          key: "+1",
-          active: true,
+          actor_id: fixture.alice.did,
+          kind: "ak.reaction.add",
+          payload: expect.objectContaining({ key: "+1" }),
+        }),
+        expect.objectContaining({
+          actor_id: fixture.bob.did,
+          kind: "ak.reaction.add",
+          payload: expect.objectContaining({ key: "+1" }),
+        }),
+        expect.objectContaining({
+          actor_id: fixture.bob.did,
+          kind: "ak.reaction.remove",
+          payload: expect.objectContaining({ key: "+1" }),
         }),
       ]),
     );
@@ -363,13 +374,9 @@ test.describe("chat advanced", () => {
       (event) => event.event_id === reply.event_id,
     );
     expect(replyProjection).toMatchObject({
-      reply_to: rootMessageRef,
-      relations: [
-        expect.objectContaining({
-          kind: "reply_to",
-          target_ref: rootMessageRef,
-        }),
-      ],
+      payload: {
+        reply_to: rootMessageRef,
+      },
     });
   });
 

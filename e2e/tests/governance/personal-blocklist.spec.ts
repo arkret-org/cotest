@@ -347,9 +347,7 @@ test.describe("personal blocklist", () => {
       kind: "ak.message.redact",
       payload: {
         target_event_id: sent.event_id,
-        redacts: sent.event_id,
         reason: "moderation_quarantine_equivalent",
-        actor: alice.did,
       },
     });
     await submitSignedEventApi(request, aliceToken, redactEvent, {
