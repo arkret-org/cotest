@@ -31,10 +31,11 @@ pub use event_builder::{
     submit_event_with_signing_seed, submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
-    invite_create_payload, member_join_payload_value, member_join_payload_with_delivery_binding,
-    member_join_payload_with_invite_ref, member_transition_payload, message_create_text_payload,
-    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
-    parse_strand_id, register_event_signing_identity,
+    event_envelope_with_chain, invite_create_payload, member_join_payload_value,
+    member_join_payload_with_delivery_binding, member_join_payload_with_invite_ref,
+    member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
+    message_redact_payload, message_revise_text_payload, parse_strand_id,
+    register_event_signing_identity,
 };
 pub use proof::{
     attach_ephemeral_proof, attach_ephemeral_proof_value, ephemeral_proof_placeholder,
@@ -235,7 +236,7 @@ fn realm_create_payload(actor: &str, service_id: &str, realm_id: &str, input: &V
                 "did:webvh:z6mkfixture:organization.recovery.soland.local"
             ],
         },
-        "created_at": "2026-05-02T00:00:00Z",
+        "created_at": "2026-05-02T00:00:00.000Z",
     });
     // Realm-level `sync_endpoints` (ak.schema.realm.v1#/properties/sync_endpoints):
     // shared notary / sync / mirror / federation-peer service bindings. Passed

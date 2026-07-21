@@ -58,8 +58,8 @@ fn vectors() -> Vec<CanonicalVector> {
                     "binding_source": "organization_policy",
                     "delivery_modes": ["events"],
                 },
-                "issued_at": "2026-05-20T00:00:00Z",
-                "expires_at": "2026-05-20T00:05:00Z",
+                "issued_at": "2026-05-20T00:00:00.000Z",
+                "expires_at": "2026-05-20T00:05:00.000Z",
             }),
             // R3.1 digest — recomputed after the `handle_uri` → `handle`
             // wire rename. Source of truth: SDK's
@@ -101,7 +101,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // stripping `proof[]` from a webvh log entry.
             payload: json!({
                 "versionId": "1-abc",
-                "versionTime": "2026-05-06T00:00:00Z",
+                "versionTime": "2026-05-06T00:00:00.000Z",
                 "parameters": {
                     "method": "did:webvh:1.0",
                     "scid": "ztest",
@@ -139,8 +139,8 @@ fn vectors() -> Vec<CanonicalVector> {
                     "binding_source": "organization_policy",
                     "delivery_modes": ["events"],
                 },
-                "issued_at": "2026-05-20T00:00:00Z",
-                "expires_at": "2026-05-20T00:05:00Z",
+                "issued_at": "2026-05-20T00:00:00.000Z",
+                "expires_at": "2026-05-20T00:05:00.000Z",
             }),
             // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.

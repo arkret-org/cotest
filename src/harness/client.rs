@@ -5,7 +5,9 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
-use super::event_builder::{ensure_submit_event_id, event_envelope};
+use super::event_builder::{
+    ensure_submit_event_id, event_envelope_with_chain, realm_bootstrap_event_batch,
+};
 use super::{
     member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
 };
@@ -75,9 +77,13 @@ impl TestActorClient {
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| next_typed_id("realm"));
         let payload = realm_create_payload(&self.actor, &self.service_id, &realm_id, &body);
-        let event_response = self
-            .submit_event(&realm_id, "ak.realm.create", payload)
-            .await?;
+        let events = realm_bootstrap_event_batch(&self.actor, &realm_id, payload)?;
+        let event_response = expect_json(
+            self.post("/_arkret/self/events")
+                .json(&json!({"events": events})),
+            StatusCode::OK,
+        )
+        .await?;
         Ok(json!({
             "realm_id": realm_id,
             "event_response": event_response,
@@ -108,7 +114,31 @@ impl TestActorClient {
     }
 
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
-        let event = event_envelope(&self.actor, realm_id, kind, payload);
+        let frontier = expect_json(
+            self.get(&format!(
+                "/_arkret/self/events/frontier?actor_id={}&realm_id={realm_id}",
+                self.actor
+            )),
+            StatusCode::OK,
+        )
+        .await?;
+        let accepted_seq = frontier["frontier"]["actor_seq"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("actor Realm frontier missing actor_seq: {frontier}"))?;
+        let prev_event_id = frontier["frontier"]["event_id"].as_str();
+        if (accepted_seq == 0) != prev_event_id.is_none() {
+            return Err(anyhow!(
+                "actor Realm frontier must pair sequence and Event id: {frontier}"
+            ));
+        }
+        let event = event_envelope_with_chain(
+            &self.actor,
+            realm_id,
+            kind,
+            payload,
+            accepted_seq + 1,
+            prev_event_id,
+        );
         let mut body = expect_json(
             self.post("/_arkret/self/events").json(&event),
             StatusCode::OK,

@@ -166,7 +166,7 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
                 kind,
                 1,
                 "01970e589d21-0001-a13f9c2e",
-                "2026-05-02T00:00:00Z",
+                "2026-05-02T00:00:00.000Z",
                 json!({
                     "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
                     "body": "legacy alias"
@@ -429,7 +429,7 @@ fn validate_synthetic_event_envelope_negatives(
         "ak.message.create",
         1,
         "01970e589d21-0001-a13f9c2e",
-        "2026-05-02T00:00:00Z",
+        "2026-05-02T00:00:00.000Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
@@ -456,7 +456,7 @@ fn validate_synthetic_event_envelope_negatives(
         "ak.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
-        "2026-05-02T00:00:01Z",
+        "2026-05-02T00:00:01.000Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
@@ -469,7 +469,7 @@ fn validate_synthetic_event_envelope_negatives(
         "ak.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
-        "2026-05-02T00:00:01Z",
+        "2026-05-02T00:00:01.000Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
@@ -491,7 +491,7 @@ fn validate_synthetic_event_envelope_negatives(
         "ak.message.create",
         3,
         "01970e700000-0001-a13f9c2e",
-        "2026-05-02T00:30:00Z",
+        "2026-05-02T00:30:00.000Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
@@ -511,13 +511,13 @@ fn validate_synthetic_event_envelope_negatives(
     let mut revoked_context = EventEnvelopeContext::default_for_durable_history();
     revoked_context.revoked_at_by_actor.insert(
         "did:web:alice.example".to_owned(),
-        "2026-05-02T00:05:00Z".to_owned(),
+        "2026-05-02T00:05:00.000Z".to_owned(),
     );
     let backdated = sample_envelope_event(
         "ak.message.create",
         4,
         "01970e589d23-0001-a13f9c2e",
-        "2026-05-02T00:00:02Z",
+        "2026-05-02T00:00:02.000Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
@@ -541,7 +541,7 @@ fn validate_synthetic_event_envelope_negatives(
         "ak.message.create",
         5,
         "01970e589d24-0001-a13f9c2e",
-        "2026-05-02T00:00:03Z",
+        "2026-05-02T00:00:03.000Z",
         json!({
             "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
             "content": {

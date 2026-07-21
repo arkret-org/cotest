@@ -31,7 +31,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             "proof": { "detached_jws": "unused-by-transport-negative" }
         },
         "source_refs": ["urn:cotest:d5:source-ref:1"],
-        "as_of": Utc::now().to_rfc3339(),
+        "as_of": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
     }))?;
 
     let now = Utc::now().timestamp();

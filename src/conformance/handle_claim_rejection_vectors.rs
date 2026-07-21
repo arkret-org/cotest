@@ -90,8 +90,8 @@ fn base_claim() -> Value {
         "issuer": "did:web:coauth.acme.example",
         "binding_state": "verified",
         "claim_kind": "handle_binding",
-        "created_at": "2026-05-20T00:00:00Z",
-        "expires_at": "2026-06-20T00:00:00Z",
+        "created_at": "2026-05-20T00:00:00.000Z",
+        "expires_at": "2026-06-20T00:00:00.000Z",
         "proofs": [
             {
                 "kind": "detached_jws",
@@ -99,7 +99,7 @@ fn base_claim() -> Value {
                 "verification_method": "did:web:coauth.acme.example#key-1",
                 "payload_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": "2026-05-20T00:00:00Z",
+                "created_at": "2026-05-20T00:00:00.000Z",
                 "jws": "eyJhbGciOiJFZERTQSJ9..signature"
             },
             // binding_state=verified claims MUST also carry a
@@ -111,7 +111,7 @@ fn base_claim() -> Value {
                 "proof_purpose": "holder_acceptance",
                 "payload_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": "2026-05-20T00:00:00Z",
+                "created_at": "2026-05-20T00:00:00.000Z",
                 "jws": "eyJhbGciOiJFZERTQSJ9..signature"
             }
         ]

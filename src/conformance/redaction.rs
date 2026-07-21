@@ -397,7 +397,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
-        "completed_at": "2026-04-29T00:00:00Z",
+        "completed_at": "2026-04-29T00:00:00.000Z",
         "event_digest": event_digest,
         "redaction_authorization_ref": redaction_event_id,
     });
@@ -430,7 +430,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "erased_classes": ["canonical_payload_bytes", "derived_plaintext"],
         "retained_stub_digest": digest,
         "retained_stub": stub,
-        "completed_at": "2026-04-29T00:00:00Z",
+        "completed_at": "2026-04-29T00:00:00.000Z",
         "proofs": [{
             "verification_method": "did:web:erasure.example.com#erasure-key-1",
             "payload_digest": digest,
@@ -452,7 +452,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "subject": {"kind": "event", "subject_ref": "ak:event:01970e58-0004-7000-8000-0000000000ff"},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
-        "completed_at": "2026-04-29T00:00:00Z",
+        "completed_at": "2026-04-29T00:00:00.000Z",
         "event_digest": event_digest,
         "redaction_authorization_ref": redaction_event_id,
     });
@@ -515,7 +515,7 @@ fn sample_event() -> Value {
 fn sample_event_with_id(event_id: &str) -> Value {
     json!({
         "event_id": event_id,
-        "created_at": "2026-04-29T00:00:00Z",
+        "created_at": "2026-04-29T00:00:00.000Z",
         "actor_id": "did:web:alice.example",
         "kind": "ak.message.create",
         "content": {"kind": "ak.content.text", "body": "secret"},

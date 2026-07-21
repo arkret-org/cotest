@@ -131,7 +131,11 @@ export type DirectConversationResolveOutcome = {
   main_strand_id?: string;
   binding_event_ref?: string;
   created?: boolean;
-  binding_event?: Record<string, unknown>;
+  authoring_kind?:
+    | "remote_keypackage_claim"
+    | "direct_conversation_materialization";
+  claim_authorization_draft?: Record<string, unknown>;
+  materialization_draft?: Record<string, unknown>;
 };
 
 export type InviteDeliveryOutcome = {

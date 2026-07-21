@@ -134,7 +134,7 @@ async fn reject_digest_mismatch_on_put(
 }
 
 fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
-    let created_at = ts("2026-05-18T00:00:00Z")?;
+    let created_at = ts("2026-05-18T00:00:00.000Z")?;
     let backup = KeyBackup {
         backup_id: BackupId::new(backup_id.to_owned())?,
         actor_id: Did::new(actor.to_owned())?,
@@ -240,9 +240,8 @@ fn key_backup_signed_fields() -> Vec<String> {
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value)
+    arkret_core::canonical::parse_timestamp_canonical(value)
         .with_context(|| format!("invalid timestamp {value}"))
-        .map(|dt| dt.with_timezone(&Utc))
 }
 
 async fn expect_backup_error(

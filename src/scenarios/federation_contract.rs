@@ -240,7 +240,7 @@ fn signed_federation_event(
             .context("invalid federation event HLC")?,
         payload,
     )?;
-    event.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")
+    event.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")
         .context("invalid fixed federation event timestamp")?
         .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
@@ -310,7 +310,7 @@ fn federation_realm_payload(
                 "controller_organization": creator,
                 "recovery_controller_organizations": ["did:web:recovery-org-federation-contract.cotest.local"]
             },
-            "created_at": "2026-05-02T00:00:00Z"
+            "created_at": "2026-05-02T00:00:00.000Z"
         }
     })
 }
@@ -465,7 +465,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
                 "service_acceptance_ref": realm_create_event_id,
-                "resolved_at": "2026-05-02T00:00:00Z"
+                "resolved_at": "2026-05-02T00:00:00.000Z"
             }),
         )?,
     )?;
@@ -757,7 +757,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
                 "service_acceptance_ref": "ak:event:0196419b-0000-7000-8000-00000000fe10",
-                "resolved_at": "2026-05-02T00:00:00Z"
+                "resolved_at": "2026-05-02T00:00:00.000Z"
             }),
         )?,
         StatusCode::OK,

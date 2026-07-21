@@ -139,7 +139,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
                 "key": "ak.push_rules",
                 "owner": bob.actor.as_str(),
                 "body": push_rules_carrier.clone(),
-                "updated_at": "2026-05-02T00:00:00Z"
+                "updated_at": "2026-05-02T00:00:00.000Z"
             }),
         )
         .await?;
@@ -161,7 +161,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
                 "key": "ak.push_rules",
                 "owner": bob.actor.as_str(),
                 "tombstone": true,
-                "updated_at": "2026-05-02T00:00:01Z"
+                "updated_at": "2026-05-02T00:00:01.000Z"
             }),
         )
         .await?;
@@ -204,7 +204,7 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
                     "realm_id": realm_id,
                     "tracks": {"discussion": {"enabled": true, "is_primary": true}},
                     "created_by": client.actor,
-                    "created_at": "2026-05-02T00:00:00Z"
+                    "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
         )

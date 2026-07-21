@@ -10,7 +10,6 @@
 // New `requested_scopes:[...]` contract (NOT the legacy `/_soland` + `scope`
 // surface that consent-grant.spec.ts exercises).
 
-import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -20,11 +19,7 @@ import {
 } from "../../helpers/users";
 import {
   authHeaders,
-  canonicalJson,
   createRealmApi,
-  queryRealmEventsApi,
-  signedEventEnvelope,
-  submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
   acceptInviteArkret,
@@ -138,9 +133,10 @@ test.describe("contact graph (same principal server)", () => {
     expect(bobRow?.bidirectional_scopes ?? []).toHaveLength(0);
   });
 
-  // S3: already friends (direct_message) -> resolve direct conversation
-  // (create=true) -> realm_id + main_strand_id -> exchange a message.
-  test("S3 friends via direct_message -> resolve direct conversation (realm_id + main_strand_id, both sides converge)", async ({
+  // S3: the API resolver reserves one immutable authoring plan. A headless
+  // API test must not fake RFC 9420 ciphertext or treat authoring_required as
+  // success; Inkson owns participant signing and MLS materialization.
+  test("S3 friends via direct_message -> immutable participant-authoring plan", async ({
     request,
   }) => {
     const [aliceIdentity, bobIdentity] = await Promise.all([
@@ -197,63 +193,31 @@ test.describe("contact graph (same principal server)", () => {
       bob.did,
       { create: true },
     );
-    expect(["created", "found"]).toContain(resolved.state);
+    expect(resolved.state).toBe("authoring_required");
+    expect(resolved.created).toBe(false);
+    expect(resolved.authoring_kind).toBe("direct_conversation_materialization");
     expect(resolved.realm_id).toMatch(/^ak:realm:/);
     expect(resolved.main_strand_id).toMatch(/^ak:strand:/);
-    const realmId = resolved.realm_id!;
-
-    // Both sides converge on the same canonical 1:1 binding (same realm_id +
-    // main_strand_id), and the binding is surfaced on each contact row's
-    // direct_conversation summary.
-    const bobResolved = await resolveDirectConversationArkret(
-      request,
-      bobToken,
-      alice.did,
-      { create: true },
+    const draft = resolved.materialization_draft as Record<string, any>;
+    expect(draft).toBeTruthy();
+    expect(draft.realm_event?.proofs).toEqual([]);
+    expect(draft.founding_grant_event?.proofs).toEqual([]);
+    expect(draft.peer_member_event?.proofs).toEqual([]);
+    expect(draft.main_strand_event?.proofs).toEqual([]);
+    expect(draft.binding_event?.proofs).toEqual([]);
+    expect(draft.binding_event?.payload?.realm_id).toBe(resolved.realm_id);
+    expect(draft.binding_event?.payload?.main_strand_id).toBe(
+      resolved.main_strand_id,
     );
-    expect(bobResolved.realm_id).toBe(realmId);
-    expect(bobResolved.main_strand_id).toBe(resolved.main_strand_id);
+    expect(draft.binding_event?.payload?.mls_group_id).toBe(draft.mls_group_id);
 
-    const aliceRow = await contactRow(request, aliceToken, bob.did);
-    expect(aliceRow?.direct_conversation?.realm_id).toBe(realmId);
-    expect(aliceRow?.direct_conversation?.state).toBe("active");
-
-    // Message leg (live): direct conversations are private Realms, so message
-    // content must be carried as encrypted_content unless the Realm explicitly
-    // lists a plaintext-visible service. The peer still reads the canonical
-    // event envelope and ciphertext through the standard event API.
-    const plaintext = `dm body ${Date.now()}`;
-    const ciphertext = Buffer.from(
-      `opaque-direct-ciphertext-${Date.now()}`,
-      "utf8",
-    ).toString("base64url");
-    const envelope = signedEventEnvelope({
-      actorDid: alice.did,
-      realmId,
-      kind: "ak.message.create",
-      payload: {
-        strand_id: resolved.main_strand_id!,
-        track_name: "discussion",
-        encrypted_content: encryptedEnvelope(ciphertext, realmId),
-      },
-    });
-    await submitSignedEventApi(
+    const retry = await resolveDirectConversationArkret(
       request,
       aliceToken,
-      envelope,
-      { context: "dm message into direct realm" },
+      bob.did,
+      { create: true },
     );
-    // The peer (bob) reads the message back through the bound realm: a real
-    // bidirectional round-trip through the canonical 1:1 direct conversation.
-    const events = await queryRealmEventsApi(request, bobToken, realmId, {
-      limit: 50,
-    });
-    const serverView = JSON.stringify(events);
-    expect(serverView).toContain(String(envelope.event_id));
-    expect(serverView).toContain("encrypted_content");
-    expect(serverView).toContain("payload_digest");
-    expect(serverView).toContain(ciphertext);
-    expect(serverView).not.toContain(plaintext);
+    expect(retry.materialization_draft).toEqual(resolved.materialization_draft);
   });
 
   // S4 (core closed loop): already friends (invite scope) -> use
@@ -546,44 +510,3 @@ test.describe("contact graph (same principal server)", () => {
     void request;
   });
 });
-
-function encryptedEnvelope(
-  ciphertext: string,
-  realmId: string,
-): Record<string, unknown> {
-  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
-  const payloadMetadata = {
-    scheme: "mls-rfc9420",
-    version: "1.0",
-    group_id: "mls_test",
-    epoch: 1,
-    content_type: "application/vnd.arkret.message+json",
-    aad_visibility_event_id: "hidden",
-    aad,
-    key_ref: {
-      algorithm: "MLS",
-      group_state_ref:
-        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    },
-  };
-  return {
-    ...payloadMetadata,
-    ciphertext,
-    aad_digest: sha256Digest(canonicalJson(aad)),
-    payload_digest: encryptedPayloadDigest(payloadMetadata, ciphertext),
-  };
-}
-
-function sha256Digest(value: string): string {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
-
-function encryptedPayloadDigest(
-  metadata: Record<string, unknown>,
-  ciphertext: string,
-): string {
-  const hash = createHash("sha256");
-  hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
-  hash.update(Buffer.from(ciphertext, "base64url"));
-  return `sha256:${hash.digest("hex")}`;
-}

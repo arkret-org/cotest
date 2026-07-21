@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
-use chrono::{Duration, SecondsFormat, Utc};
+use chrono::{Duration, Utc};
 use cotest::harness::{ArkretServer, register_account};
 use cotest::scenarios::federation_collaboration::{
     actor_did_for_service, authorize_device_public_key,
@@ -740,8 +740,8 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
                 "realm_id": ctx.realm_id,
                 "actor_id": ctx.alice_did,
                 "device_id": MOCK_PARITY_ALICE_DEVICE_ID,
-                "sent_at": sent_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-                "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+                "sent_at": arkret_core::canonical::format_timestamp_canonical(sent_at),
+                "expires_at": arkret_core::canonical::format_timestamp_canonical(expires_at),
                 "payload": {
                     "actor_id": ctx.alice_did,
                     "realm_id": ctx.realm_id,
@@ -820,7 +820,7 @@ fn realm_create_event(
                 "controller_organization": "did:web:mock-parity.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
-            "created_at": "2026-05-22T10:00:00Z"
+            "created_at": "2026-05-22T10:00:00.000Z"
         }
     });
     let event_id = format!(

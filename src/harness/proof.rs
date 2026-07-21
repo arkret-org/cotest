@@ -160,8 +160,8 @@ mod tests {
             "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
-            "sent_at": "2026-07-07T00:00:00Z",
-            "expires_at": "2026-07-07T00:00:15Z",
+            "sent_at": "2026-07-07T00:00:00.000Z",
+            "expires_at": "2026-07-07T00:00:15.000Z",
             "payload": {
                 "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001",
                 "typing": true

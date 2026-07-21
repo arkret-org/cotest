@@ -249,7 +249,7 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
 
 fn validate_bootstrap_helpers() -> Result<()> {
     let principal = Did::new("did:webvh:z6mkfixture:alice.example")?;
-    let created_at = "2026-07-15T00:00:00Z".parse()?;
+    let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let realm_id = RealmId::new(arkret_core::principal_control_realm_id(&principal))?;
     let create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
         principal_id: principal.clone(),

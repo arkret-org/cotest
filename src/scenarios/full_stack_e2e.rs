@@ -252,7 +252,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
         "actor_seq": 1,
         "realm_id": TARGET_REALM_ID,
         "strand_id": STABLE_STRAND_ID,
-        "created_at": Utc::now().to_rfc3339(),
+        "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
         "hlc": "1747613100000-0-cotest-inkson",
         "prev_refs": [],
         "refs": [],
@@ -263,7 +263,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
             "verification_method": format!("{BOB_DID}#inkson"),
             "event_digest":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            "created_at": Utc::now().to_rfc3339(),
+            "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
             "jws": "y0u.gen.mock"
         }]
     });
@@ -591,7 +591,7 @@ async fn live_stack_probe() -> Result<()> {
             "actor_id": ALICE_DID,
             "actor_seq": 1,
             "realm_id": TARGET_REALM_ID,
-            "created_at": Utc::now().to_rfc3339(),
+            "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
             "hlc": "1747613100000-0-cotest",
             "prev_refs": [],
             "refs": [],
@@ -602,7 +602,7 @@ async fn live_stack_probe() -> Result<()> {
                 "verification_method": format!("{ALICE_DID}#inkson"),
                 "event_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": Utc::now().to_rfc3339(),
+                "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
                 "jws": "a..b",
             }]
         });
@@ -682,7 +682,7 @@ fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Pr
         alg: "EdDSA".to_owned(),
         verification_method: "did:web:principal.acme.example#key-1".to_owned(),
         event_digest: Hash::new(digest.to_owned())?,
-        created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00Z")?.with_timezone(&Utc),
+        created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00.000Z")?.with_timezone(&Utc),
         domain: None,
         audience: Some(Audience::Single(audience.to_owned())),
         jws: jws.to_owned(),

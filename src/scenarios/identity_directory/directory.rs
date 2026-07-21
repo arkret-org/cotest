@@ -88,8 +88,8 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let secret_realm_id = realm_id_from(&secret_realm, "secret")?;
 
     let introduction_evidence = json!({"kind": "same_principal_server"});
-    let invite_expires_at =
-        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00Z")?.with_timezone(&chrono::Utc);
+    let invite_expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
     let invite_event = alice
         .submit_event(
             &invite_only_realm_id,

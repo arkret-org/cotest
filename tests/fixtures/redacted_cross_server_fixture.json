@@ -21,7 +21,7 @@
       "viewer_is_author": false,
       "redaction": {
         "redacted_by": "did:web:admin.example",
-        "redacted_at": "2026-05-10T00:00:00Z",
+        "redacted_at": "2026-05-10T00:00:00.000Z",
         "reason": "spam"
       },
       "expected": {
@@ -41,7 +41,7 @@
       "viewer_is_author": true,
       "redaction": {
         "redacted_by": "did:web:admin.example",
-        "redacted_at": "2026-05-10T00:00:00Z",
+        "redacted_at": "2026-05-10T00:00:00.000Z",
         "reason": "spam"
       },
       "expected": {
@@ -62,12 +62,12 @@
       "redaction_then_un_redaction": true,
       "redaction": {
         "redacted_by": "did:web:admin.example",
-        "redacted_at": "2026-05-10T00:00:00Z",
+        "redacted_at": "2026-05-10T00:00:00.000Z",
         "reason": "spam"
       },
       "un_redaction": {
         "un_redacted_by": "did:web:admin.example",
-        "un_redacted_at": "2026-05-10T01:00:00Z"
+        "un_redacted_at": "2026-05-10T01:00:00.000Z"
       },
       "expected": {
         "outcome": "accept",

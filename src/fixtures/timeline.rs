@@ -250,8 +250,8 @@ pub fn install_failure_dump_hook() {
 mod tests {
     use super::*;
 
-    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_arkret/self/events","headers":{},"body":{"event_id":"ak:event:01999999-0000-7000-8000-000000000001","kind":"ak.message.create","actor_id":"did:webvh:z6mkfixture:alice.example","realm_id":"ak:realm:abc","prev_refs":["ak:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ak:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
-    const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/_arkret/self/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
+    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00.000Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_arkret/self/events","headers":{},"body":{"event_id":"ak:event:01999999-0000-7000-8000-000000000001","kind":"ak.message.create","actor_id":"did:webvh:z6mkfixture:alice.example","realm_id":"ak:realm:abc","prev_refs":["ak:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ak:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
+    const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01.000Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/_arkret/self/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
 
     #[test]
     fn parses_event_envelope_and_get_request() {

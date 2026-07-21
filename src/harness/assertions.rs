@@ -255,7 +255,7 @@ async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
                 "transport_error": truncate_string(&error.to_string(), 512),
             });
             let _ = append_transcript_entry(&json!({
-                "timestamp": Utc::now().to_rfc3339(),
+                "timestamp": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
                 "duration_ms": started.elapsed().as_millis(),
                 "request": request,
                 "error": error_snapshot,
@@ -273,7 +273,7 @@ async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
     let response_snapshot = snapshot_response(status, &headers, &body);
     let context = format_exchange_context(&request, &response_snapshot);
     let _ = append_transcript_entry(&json!({
-        "timestamp": Utc::now().to_rfc3339(),
+        "timestamp": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
         "duration_ms": started.elapsed().as_millis(),
         "request": request,
         "response": response_snapshot,

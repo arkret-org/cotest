@@ -9,7 +9,7 @@ use arkret_core::{
 };
 use arkret_crypto::DeviceTrustBinding;
 use base64::Engine as _;
-use chrono::{DateTime, Timelike as _, Utc};
+use chrono::{Timelike as _, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -220,7 +220,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "recovery_key_fingerprint": recovery_key_fingerprint,
         "did_operation": did_operation,
         "bootstrap_create_event_id": arkret_core::new_prefixed_uuid7("ak:event:"),
-        "bootstrap_created_at": created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "bootstrap_created_at": arkret_core::canonical::format_timestamp_canonical(created_at),
         "bootstrap_hlc": hlc.generate().to_string(),
         "binding_receipt": null,
         "stage": "custody_confirmed",
@@ -286,9 +286,8 @@ fn pre_registration_session_request(input: Value) -> Result<Value> {
     let input: PreRegistrationSessionFixtureInput =
         serde_json::from_value(input).context("parse pre-registration session input")?;
     let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
-    let expires_at = DateTime::parse_from_rfc3339(&input.expires_at)
-        .context("parse pre-registration proof expiry")?
-        .with_timezone(&Utc);
+    let expires_at = canonical::parse_timestamp_canonical(&input.expires_at)
+        .context("parse pre-registration proof expiry")?;
     let request = garth::pre_registration_session_grant_request(
         Did::new(input.principal_id).context("parse session principal")?,
         Some(DeviceId::new(input.device_id).context("parse session device id")?),
@@ -401,9 +400,8 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
     let actor = Did::new(input.actor_did.clone()).context("parse actor DID")?;
-    let created_at = DateTime::parse_from_rfc3339(&input.created_at)
-        .with_context(|| format!("parse proof created_at {:?}", input.created_at))?
-        .with_timezone(&Utc);
+    let created_at = canonical::parse_timestamp_canonical(&input.created_at)
+        .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
     let event_digest =
         Hash::new(event_digest(&input.event, digest_mode)?).context("parse event digest")?;
     let signing_key = match input.signing_seed_b64url.as_deref() {
@@ -433,9 +431,8 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
 fn mimi_consent_proof(input: Value) -> Result<Value> {
     let input: MimiConsentProofInput =
         serde_json::from_value(input).context("parse MIMI consent proof input")?;
-    let created_at = DateTime::parse_from_rfc3339(&input.created_at)
-        .with_context(|| format!("parse proof created_at {:?}", input.created_at))?
-        .with_timezone(&Utc);
+    let created_at = canonical::parse_timestamp_canonical(&input.created_at)
+        .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
     let consent_id = input
         .request
         .get("consent_id")

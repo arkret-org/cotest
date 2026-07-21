@@ -592,8 +592,32 @@ async fn submit_event_now(
     kind: &str,
     payload: Value,
 ) -> Result<Value> {
-    let created_at = arkret_core::canonical::format_timestamp_millis_canonical(chrono::Utc::now());
-    let mut event = crate::harness::event_envelope(&actor.actor, realm_id, kind, payload);
+    let frontier = crate::harness::expect_json(
+        actor.get(&format!(
+            "/_arkret/self/events/frontier?actor_id={}&realm_id={realm_id}",
+            actor.actor
+        )),
+        StatusCode::OK,
+    )
+    .await?;
+    let accepted_seq = frontier["frontier"]["actor_seq"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("actor Realm frontier missing actor_seq: {frontier}"))?;
+    let prev_event_id = frontier["frontier"]["event_id"].as_str();
+    if (accepted_seq == 0) != prev_event_id.is_none() {
+        return Err(anyhow::anyhow!(
+            "actor Realm frontier must pair sequence and Event id: {frontier}"
+        ));
+    }
+    let created_at = arkret_core::canonical::format_timestamp_canonical(chrono::Utc::now());
+    let mut event = crate::harness::event_envelope_with_chain(
+        &actor.actor,
+        realm_id,
+        kind,
+        payload,
+        accepted_seq + 1,
+        prev_event_id,
+    );
     event["created_at"] = Value::String(created_at.clone());
     if let Some(proof) = event
         .get_mut("proofs")
