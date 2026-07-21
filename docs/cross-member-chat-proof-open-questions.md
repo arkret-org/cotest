@@ -44,7 +44,7 @@
 
 > **更新(2026-07-05)—— 结构性根因已落决策。** 本 gap 的公共病灶 = **holder/DPoP
 > key 与设备身份 key(§5.2 `device_public_key`)塌缩成同一 Ed25519 seed + device_id 漂移**,
-> 已抽象为 `cotask/decisions/0004-holder-key-vs-device-identity-key-lifecycle-separation.md`。
+> 已抽象为 `arkret-work/decisions/0004-holder-key-vs-device-identity-key-lifecycle-separation.md`。
 > 关键订正:矛盾 B 把"signing seed == DPoP seed"当成**测试注入路径的 quirk**,但 0004 证明
 > 这是 **inkson 生产设计**——`auth_dpop.rs:341` `ensure_device_key` 从同一 `signing_seed`
 > **既建 DpopHandle 又 `activate_device_signer_from_seed`**。故生产里这两把 key 本就是**同一份

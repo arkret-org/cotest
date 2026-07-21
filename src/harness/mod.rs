@@ -235,7 +235,7 @@ fn realm_create_payload(actor: &str, service_id: &str, realm_id: &str, input: &V
                 "did:webvh:z6mkfixture:organization.recovery.soland.local"
             ],
         },
-        "created_at": "2026-05-02T00:00:00Z",
+        "created_at": "2026-05-02T00:00:00.000Z",
     });
     // Realm-level `sync_endpoints` (ak.schema.realm.v1#/properties/sync_endpoints):
     // shared notary / sync / mirror / federation-peer service bindings. Passed

@@ -498,7 +498,7 @@ fn signed_realm_create_event(
                 "controller_organization": "did:web:delivery-media.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
-            "created_at": "2026-05-02T00:00:00Z"
+            "created_at": "2026-05-02T00:00:00.000Z"
         }
     });
     signed_event(
@@ -541,8 +541,8 @@ fn signed_event(
     kind: &str,
     payload: Value,
 ) -> Result<Value> {
-    let created_at =
-        chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")?.with_timezone(&chrono::Utc);
+    let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
     let actor = arkret::Did::new(actor_id.to_owned())?;
     let verification_method = format!("{actor_id}#cotest");
     let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(

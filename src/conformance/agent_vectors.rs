@@ -519,8 +519,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
                 "kind": "agent_runtime_approval",
                 "approval_request_id": "agent_runtime_approval:01964137-0000-7000-8000-000000000000",
                 "agent_id": "did:webvh:z6mkagent:agent.example",
-                "requested_at": "2026-07-13T10:00:00Z",
-                "expires_at": "2026-07-13T10:15:00Z"
+                "requested_at": "2026-07-13T10:00:00.000Z",
+                "expires_at": "2026-07-13T10:15:00.000Z"
             })
         };
         Ok(serde_json::from_value(serde_json::json!({
@@ -690,7 +690,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
             "resources": [{"kind": "realm", "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001"}]
         },
         "audience": ["did:web:soland.example"],
-        "issued_at": "2026-07-12T00:00:00Z",
+        "issued_at": "2026-07-12T00:00:00.000Z",
         "approval_evidence": {
             "kind": "approval_event",
             "evidence_ref": "ak:event:01990000-0000-7000-8000-000000000001"
@@ -712,14 +712,14 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "issuer": "did:web:alice.example",
         "subject": "did:web:agent.example",
         "accountability_scope": "agent_operator",
-        "not_before": "2026-07-12T00:00:00Z",
+        "not_before": "2026-07-12T00:00:00.000Z",
         "grant_status": "active",
         "proof": {
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:alice.example#key-1",
             "payload_digest": format!("sha256:{}", "0".repeat(64)),
-            "created_at": "2026-07-12T00:00:00Z",
+            "created_at": "2026-07-12T00:00:00.000Z",
             "proof_purpose": "issuer_attestation",
             "jws": "eyJhbGciOiJFZERTQSJ9..sig"
         }

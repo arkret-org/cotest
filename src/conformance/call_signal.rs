@@ -21,7 +21,7 @@ use arkret_core::{
     validate_call_signal_envelope, validate_signal_seq,
 };
 use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
-use chrono::{SecondsFormat, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 
@@ -153,15 +153,16 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 
     // 1. Envelope without proof.
     let created_at = Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 0).unwrap();
-    let sent_at_str = created_at.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let sent_at_str = arkret_core::canonical::format_timestamp_canonical(created_at);
     let mut envelope = json!({
         "kind": "ak.call.signal",
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": actor_id,
         "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
         "sent_at": &sent_at_str,
-        "expires_at": Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 30).unwrap()
-            .to_rfc3339_opts(SecondsFormat::Secs, true),
+        "expires_at": arkret_core::canonical::format_timestamp_canonical(
+            Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 30).unwrap()
+        ),
         "payload": {
             "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
             "signal_type": "invite",
@@ -251,8 +252,8 @@ fn call_signal_envelope_value(signal_type: &str, seq: u64) -> Value {
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": "did:web:alice.example.com",
         "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
-        "sent_at": "2026-04-26T00:00:00Z",
-        "expires_at": "2026-04-26T00:00:30Z",
+        "sent_at": "2026-04-26T00:00:00.000Z",
+        "expires_at": "2026-04-26T00:00:30.000Z",
         "payload": {
             "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
             "signal_type": signal_type,

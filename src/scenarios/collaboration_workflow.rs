@@ -322,7 +322,7 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
                         "controller_organization": "did:web:collaboration-workflow.cotest.local",
                         "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
                     },
-                    "created_at": "2026-05-02T00:00:00Z"
+                    "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
         )

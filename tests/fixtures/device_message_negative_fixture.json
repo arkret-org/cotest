@@ -106,7 +106,7 @@
         "outcome": "reject",
         "reason_code": "session_grant_expired",
         "stage": "envelope_validation",
-        "rationale": "session_grant_proof.expires_at (2026-05-08T16:00:00Z) is before recv_time (2026-05-09T12:00:00Z). Reject."
+        "rationale": "session_grant_proof.expires_at (2026-05-08T16:00:00.000Z) is before recv_time (2026-05-09T12:00:00.000Z). Reject."
       }
     },
     {

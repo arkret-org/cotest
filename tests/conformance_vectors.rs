@@ -548,7 +548,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     let stateless = serde_json::json!({
         "v": "1",
         "purpose": CursorPurpose::Stream,
-        "t": "2026-05-27T00:00:00Z",
+        "t": "2026-05-27T00:00:00.000Z",
         "s": {},
         "x": 1_900_000_000_000_i64,
         "issuer_kid": "did:web:server.example#cursor-1",
@@ -631,7 +631,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
             },
             // Fixed RFC3339 constant — conformance vectors must be
             // deterministic and reproducible across runs (not wall-clock).
-            asserted_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")
+            asserted_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")
                 .expect("static rfc3339")
                 .with_timezone(&chrono::Utc),
             expires_at: None,
@@ -762,9 +762,9 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         issuer_service_id: principal,
         audience: "ak:realm:01904100-0000-7000-8000-test8audience".to_owned(),
         // Fixed RFC3339 constants — vectors are deterministic, not wall-clock.
-        expires_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00Z")?
+        expires_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00.000Z")?
             .with_timezone(&chrono::Utc),
-        issued_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
+        issued_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
             .with_timezone(&chrono::Utc),
         source_refs: vec![EventId::new(
             "ak:event:01904100-0000-7000-8000-000000000001",
@@ -776,7 +776,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             event_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",
             )?,
-            created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
+            created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
                 .with_timezone(&chrono::Utc),
             domain: None,
             audience: Some(Audience::Single(

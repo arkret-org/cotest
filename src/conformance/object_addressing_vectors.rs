@@ -499,13 +499,13 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             "object_id": format!("ak:strand:{F}"),
             "object_kind": "strand",
             "title": "Launch planning",
-            "as_of": "2026-05-27T00:00:00Z",
+            "as_of": "2026-05-27T00:00:00.000Z",
             "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
             "policy_revision": "rev-7",
             "stale": false
         },
         "join_rule": "knock",
-        "as_of": "2026-05-27T00:00:00Z",
+        "as_of": "2026-05-27T00:00:00.000Z",
         "source_refs": [
             "ak:event:01904100-0000-7000-8000-0000000000e1",
             "ak:event:01904100-0000-7000-8000-0000000000e2"
@@ -521,8 +521,8 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "priority": 0,
                 "source": "directory_ingest",
                 "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
-                "as_of": "2026-05-27T00:00:00Z",
-                "expires_at": "2026-05-27T00:15:00Z",
+                "as_of": "2026-05-27T00:00:00.000Z",
+                "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
                     "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
                     "control_event_set_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -539,8 +539,8 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "priority": 1,
                 "source": "directory_ingest",
                 "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e2"],
-                "as_of": "2026-05-27T00:00:00Z",
-                "expires_at": "2026-05-27T00:15:00Z",
+                "as_of": "2026-05-27T00:00:00.000Z",
+                "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
                     "leaves": ["ak:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
                     "control_event_set_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
@@ -603,12 +603,12 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         "realm_preview": {
             "realm_id": format!("ak:realm:{R}"),
             "title": "Acme HQ",
-            "as_of": "2026-05-27T00:00:00Z",
+            "as_of": "2026-05-27T00:00:00.000Z",
             "policy_revision": "rev-1",
             "preview": { "member_count": 42 }
         },
         "join_rule": "invite",
-        "as_of": "2026-05-27T00:00:00Z",
+        "as_of": "2026-05-27T00:00:00.000Z",
         "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
         "join_candidates": [],
         "policy_revision": "rev-1"

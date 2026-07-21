@@ -85,7 +85,7 @@
             "matched": true,
             "invite_handoff_stub": {
               "kind": "minimal_consent_handoff",
-              "expires_at": "2026-06-19T10:00:00Z"
+              "expires_at": "2026-06-19T10:00:00.000Z"
             }
           }
         ],

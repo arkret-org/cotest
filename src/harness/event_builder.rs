@@ -389,7 +389,7 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
     let hlc_logical = seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
     normalize_message_payload(kind, realm_id, &mut payload);
-    let created_at = DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")
+    let created_at = DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")
         .expect("static cotest Event timestamp")
         .with_timezone(&Utc);
     let actor_id = Did::new(actor.to_owned()).expect("cotest actor DID");

@@ -199,9 +199,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
 // ─── §12.16.1 — recording_result_artifact_shape ────────────────────────────
 
 fn ts(value: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(value)
-        .unwrap()
-        .with_timezone(&Utc)
+    arkret_core::canonical::parse_timestamp_canonical(value).unwrap()
 }
 
 fn realm_id() -> RealmId {
@@ -253,7 +251,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
             PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
         ),
         retention: CallRecordingRetention {
-            retention_expires_at: Some(ts("2026-06-20T00:00:00Z")),
+            retention_expires_at: Some(ts("2026-06-20T00:00:00.000Z")),
             deletion_trigger: Some(CallRecordingDeletionTrigger::RetentionExpiry),
             audit_lock: Some(false),
             consent_confirmed: Some(true),
@@ -263,14 +261,14 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
             "ak:grant:019a7360-0000-7000-8000-000000000006",
         )
         .unwrap(),
-        created_at: ts("2026-06-19T00:00:00Z"),
+        created_at: ts("2026-06-19T00:00:00.000Z"),
         deletion_audit: Some(CallRecordingDeletionAudit {
             trigger: CallRecordingDeletionTrigger::RetentionExpiry,
             outcome: CallRecordingDeletionOutcome::Completed,
             requested_by: None,
             trigger_event_id: None,
-            requested_at: ts("2026-06-20T00:00:00Z"),
-            completed_at: Some(ts("2026-06-20T00:00:01Z")),
+            requested_at: ts("2026-06-20T00:00:00.000Z"),
+            completed_at: Some(ts("2026-06-20T00:00:01.000Z")),
             erasure_receipt_ref: Some("ak:receipt:019a7360-0000-7000-8000-000000000007".to_owned()),
             legal_hold_ref: None,
             failure_reason_code: None,
@@ -546,7 +544,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
                 PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
             ),
             retention: Some(CallRecordingRetention {
-                retention_expires_at: Some(ts("2026-06-20T00:00:00Z")),
+                retention_expires_at: Some(ts("2026-06-20T00:00:00.000Z")),
                 deletion_trigger: Some(CallRecordingDeletionTrigger::RetentionExpiry),
                 audit_lock: Some(false),
                 consent_confirmed: Some(true),

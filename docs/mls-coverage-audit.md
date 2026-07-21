@@ -71,7 +71,7 @@
 ## 5. 实测挖出的两个确认 bug(已 park 为 test.fixme,待修)
 
 ### A. 加密 discussion/chat 消息在 inkson 端从未端到端可用 —— ✅ 已修复(2026-06-01,E15.9 实测真绿)
-> 修复方案与执行记录见 `cotask/tasks/encrypt_fix.md` / `encrypt_fix_todos.md`。要点:
+> 修复方案与执行记录见 `arkret-work/tasks/encrypt_fix.md` / `encrypt_fix_todos.md`。要点:
 > SDK 使用唯一权威合规类型 `EncryptedEnvelope`（精确匹配 `ak.schema.encrypted_envelope.v1`，单测绿）；
 > soland 移除手写 `validate_encrypted_payload_envelope` 对消息的校验、改由注册 spec schema 唯一把关
 > (464+ 测试零回归);inkson 新增 `encrypt_message_with_device_snapshot`(带 aad)+ chat 用

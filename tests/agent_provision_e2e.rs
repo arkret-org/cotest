@@ -42,7 +42,7 @@ use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::{DateTime, SecondsFormat, TimeDelta, Timelike as _, Utc};
+use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope, eventually, expect_json,
     refresh_event_proof_with_signing_seed, register_account, submit_event_with_signing_seed,
@@ -168,7 +168,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                 "realm_id": realm_id,
                 "tracks": {"discussion": {"enabled": true, "is_primary": true}},
                 "created_by": ALICE_DID,
-                "created_at": "2026-05-02T00:00:00Z",
+                "created_at": "2026-05-02T00:00:00.000Z",
                 "metadata": {"title": "Sidecar context"}
             }
         }),
@@ -341,7 +341,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
 /// AKP-0008 runtime-side approval status poll
 /// (`ak.open.agent_pairing.query.runtime_key_request_status`): the runtime
 /// learns the controller decision after submitting a runtime key request
-/// (cotask 2026-07-10-agent-runtime-approval-status-closure acceptance #5).
+/// (arkret-work 2026-07-10-agent-runtime-approval-status-closure acceptance #5).
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
@@ -555,7 +555,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             principal_endpoint: &principal_endpoint,
             local_id: "alice",
             also_known_as: &["acct:alice@cotest-agent.example".to_owned()],
-            version_time: "2026-06-17T00:00:00Z".parse()?,
+            version_time: "2026-06-17T00:00:00.000Z".parse()?,
             root_seed: &[32_u8; 32],
             next_root_public_key_multibase: &next_root_public,
             enrollment: arkret::webvh::PrincipalEnrollmentDelegation::SelfAuthority {
@@ -1213,7 +1213,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                             "controller_organization": ALICE_DID,
                             "recovery_controller_organizations": [ALICE_DID]
                         },
-                        "created_at": "2026-05-02T00:00:00Z"
+                        "created_at": "2026-05-02T00:00:00.000Z"
                     }
                 }),
             )
@@ -1255,7 +1255,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         "binding_profile": "ak.profile.mls_governance_binding.full.v1",
                         "reducer_profile": "ak.reducer.v1"
                     },
-                    "created_at": "2026-05-02T00:00:01Z"
+                    "created_at": "2026-05-02T00:00:01.000Z"
                 }),
             )
             .await?;
@@ -1962,9 +1962,8 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
     let pairing_code = provisioned
         .pairing_code()
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
-    let pairing_expires_at = provisioned
-        .expires_at()
-        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    let pairing_expires_at =
+        arkret::canonical::format_timestamp_canonical(provisioned.expires_at());
     let agent_id = provisioned.agent_id().clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
@@ -1997,7 +1996,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         audience: vec![server.service_id().to_owned()],
         issued_at: canonical_now(),
         expires_at: Some(
-            chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00Z")?.with_timezone(&Utc),
+            chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc),
         ),
         approval_evidence: arkret::AgentKeyApprovalEvidence {
             kind: arkret::AgentKeyApprovalEvidenceKind::PairingRequest,

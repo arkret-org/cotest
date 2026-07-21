@@ -531,7 +531,7 @@ fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Pr
         alg: "EdDSA".to_owned(),
         verification_method: "did:web:principal.acme.example#key-1".to_owned(),
         event_digest: Hash::new(digest.to_owned())?,
-        created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00Z")?.with_timezone(&Utc),
+        created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00.000Z")?.with_timezone(&Utc),
         domain: None,
         audience: Some(Audience::Single(audience.to_owned())),
         jws: jws.to_owned(),

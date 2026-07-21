@@ -51,7 +51,7 @@ pub async fn starid_rejects_replayed_inception_run() -> Result<()> {
         "update_public_key_multibase": "z6MkrJVnaZkeFzdQDPj9hf3wHd1qxqEsktRkPmCnaGc4MwS5",
         "did_key_id": "did-key-1",
         "update_key_id": "update-key-1",
-        "version_time": "2026-01-01T00:00:00Z",
+        "version_time": "2026-01-01T00:00:00.000Z",
     });
 
     // First submission: must succeed.

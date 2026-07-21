@@ -25,7 +25,7 @@ const SEND_KIND: &str = "ak.secret.send";
 const REQUEST_KIND: &str = "ak.secret.request";
 const SCHEME: &str = "ak.hpke_x25519_aead_chacha20poly1305.v1";
 const HPKE_INFO: &[u8] = b"ak.secret-share/v1";
-const EXPIRES_AT: &str = "2026-06-10T00:30:00Z";
+const EXPIRES_AT: &str = "2026-06-10T00:30:00.000Z";
 const ACCOUNT_SECRET: &str = "base64url-account-mls-root-secret";
 
 #[derive(Clone, Debug)]
@@ -259,7 +259,7 @@ fn open_secret_send(
     let aad = send_aad(
         envelope.sender_device_id.as_str(),
         envelope.recipient_device_id.as_str(),
-        &envelope.expires_at.to_rfc3339(),
+        &arkret_core::canonical::format_timestamp_canonical(envelope.expires_at),
     )?;
     let enc = URL_SAFE_NO_PAD.decode(content.enc.as_bytes())?;
     let ciphertext = URL_SAFE_NO_PAD.decode(content.ciphertext.as_bytes())?;
@@ -309,14 +309,14 @@ fn send_aad(
     recipient_device_id: &str,
     expires_at: &str,
 ) -> Result<Vec<u8>> {
-    let expires_at_unix = DateTime::parse_from_rfc3339(expires_at)?.timestamp();
+    arkret_core::canonical::validate_timestamp_canonical(expires_at)?;
     Ok(canonical_json_bytes(&json!({
         "kind": SEND_KIND,
         "sender_principal_id": ACCOUNT_DID,
         "sender_device_id": sender_device_id,
         "recipient_principal_id": ACCOUNT_DID,
         "recipient_device_id": recipient_device_id,
-        "expires_at_unix": expires_at_unix,
+        "expires_at": expires_at,
     }))?)
 }
 
@@ -339,7 +339,7 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
         sender_device_id: device_id(OLD_DEVICE)?,
         recipient_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
         recipient_device_id: device_id(NEW_DEVICE)?,
-        sent_at: parse_utc("2026-06-10T00:00:00Z")?,
+        sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,
         expires_at: parse_utc(expires_at)?,
         content: serde_json::from_value(content)?,
         device_proof: None,
@@ -348,7 +348,7 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
 }
 
 fn parse_utc(value: &str) -> Result<DateTime<Utc>> {
-    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
+    Ok(arkret_core::canonical::parse_timestamp_canonical(value)?)
 }
 
 fn device_id(value: &str) -> Result<DeviceId> {

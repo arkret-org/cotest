@@ -18,8 +18,8 @@
         "subtype": "window",
         "effect": "allow",
         "evaluation_class": "stateless",
-        "not_before": "2026-05-09T00:00:00Z",
-        "expires_at": "2026-12-31T23:59:59Z"
+        "not_before": "2026-05-09T00:00:00.000Z",
+        "expires_at": "2026-12-31T23:59:59.000Z"
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "stateless", "fast_path_eligible": true }
     },
@@ -185,8 +185,8 @@
         "subtype": "resource",
         "effect": "deny",
         "evaluation_class": "space_state",
-        "not_before": "2026-05-09T00:00:00Z",
-        "expires_at": "2026-12-31T23:59:59Z",
+        "not_before": "2026-05-09T00:00:00.000Z",
+        "expires_at": "2026-12-31T23:59:59.000Z",
         "max_resources": 50
       },
       "expected": {
@@ -268,7 +268,7 @@
         "subtype": "claim",
         "effect": "allow",
         "evaluation_class": "external",
-        "expires_at": "2027-01-01T00:00:00Z",
+        "expires_at": "2027-01-01T00:00:00.000Z",
         "max_delegation_depth": 4,
         "encryption_required": true,
         "requires_claims": [

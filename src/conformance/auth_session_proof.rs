@@ -146,7 +146,7 @@ fn required_string_array(value: &Value, field: &str) -> Result<Vec<String>> {
 }
 
 fn parse_time(value: &str) -> Result<DateTime<Utc>> {
-    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
+    Ok(canonical::parse_timestamp_canonical(value)?)
 }
 
 fn did(value: &str) -> Result<Did> {
@@ -199,7 +199,7 @@ fn session_grant_request_value(
             "challenge": required_str(vector, "challenge")?,
             "request_canonical_digest": request_canonical_digest.as_str(),
             "audience": audience,
-            "expires_at": expires_at.to_rfc3339(),
+            "expires_at": arkret_core::canonical::format_timestamp_canonical(expires_at),
             "signature": "detached-proof-placeholder"
         }
     }))
@@ -524,7 +524,7 @@ fn classify_public_metadata_bare_bearer() -> &'static str {
 pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
     let fixture = auth_session_proof_fixture()?;
     let vector = case(&fixture, VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING)?;
-    let now = parse_time("2026-06-19T00:00:00Z")?;
+    let now = parse_time("2026-06-19T00:00:00.000Z")?;
     let target_audience = required_str(vector, "target_audience")?;
     let binding = session_grant_binding_payload(vector, target_audience)?;
     let expected_digest = digest_value(&binding)?;
@@ -617,7 +617,7 @@ pub fn run_auth_soft_logout_did_proof_vector() -> Result<()> {
         }
     }
 
-    let now = parse_time("2026-06-19T00:00:00Z")?;
+    let now = parse_time("2026-06-19T00:00:00.000Z")?;
     let expires_at =
         now + Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64);
     let request_digest = did_proof_request_digest(
