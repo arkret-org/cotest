@@ -1438,7 +1438,7 @@ test.describe("MLS group encryption", () => {
     expect(aliceEventIds).toContain(postJoinEventId);
   });
 
-  test("alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms", async ({
+  test("alice bans bob → client pauses until the MLS Remove commit covers the membership frontier", async ({
     browser,
     request,
   }, testInfo) => {
@@ -1534,16 +1534,25 @@ test.describe("MLS group encryption", () => {
       const epochBanner = alicePage.page.getByTestId(
         "epoch-update-required-banner",
       );
-      await expect(epochBanner).toBeVisible({ timeout: 30_000 });
-      await expect(epochBanner).toContainText("epoch_update_required");
-      await expect(
-        alicePage.page.getByTestId("send-chat-button"),
-      ).toBeDisabled();
+      const sendButton = alicePage.page.getByTestId("send-chat-button");
+      // The admin action already asserted that fail-closed was entered. The
+      // background committer may finish before navigation reaches the
+      // timeline, so the transient banner is optional at this exact instant.
+      if (await epochBanner.isVisible()) {
+        await expect(epochBanner).toContainText("epoch_update_required");
+        await expect(sendButton).toBeDisabled();
+      }
       await stepShot(
         alicePage.page,
         testInfo,
         "epoch-update-required-after-ban",
       );
+
+      // Regression guard: membership Event effectiveness alone is not enough;
+      // the client must submit and observe the covering MLS Remove commit,
+      // clear the reconciliation gate, and restore encrypted sending.
+      await expect(epochBanner).toBeHidden({ timeout: 120_000 });
+      await expect(sendButton).toBeEnabled({ timeout: 120_000 });
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
