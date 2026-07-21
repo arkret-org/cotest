@@ -74,7 +74,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         jointRealm.alicePage.serverUrl,
         jointRealm.realmId,
       );
-      const actorSeq = 8_500_000_000_000_000 + (stamp % 100_000);
       await submitSignedEvent(
         request,
         jointRealm.aliceSession,
@@ -88,7 +87,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
           membership: "join",
           delivery_status: "unroutable",
         },
-        actorSeq,
       );
       const controllerMessageId = `ak:message:${uuidV7()}`;
       await submitSignedEvent(
@@ -118,7 +116,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
             ],
           },
         },
-        actorSeq + 1,
       );
       const replyBody = `${participantSession!.user.displayName} visible reply`;
       await submitSignedEvent(
@@ -137,7 +134,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
             body: replyBody,
           },
         },
-        8_400_000_000_000_000 + (stamp % 100_000),
       );
 
       await jointRealm.alicePage.page.goto(`/chat/${jointRealm.realmId}`, {
@@ -306,16 +302,23 @@ async function submitSignedEvent(
   realmId: string,
   kind: string,
   payload: Record<string, unknown>,
-  actorSeq: number,
 ): Promise<string> {
   const url = `${serverUrl}/_arkret/self/events`;
   const eventId = `ak:event:${uuidV7()}`;
+  const frontier = await readRealmActorFrontier(
+    request,
+    session,
+    actorDid,
+    serverUrl,
+    realmId,
+  );
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
     eventId,
     kind,
-    actorSeq,
+    actorSeq: frontier.actorSeq + 1,
+    prevRefs: frontier.eventId ? [frontier.eventId] : [],
     payload,
   });
   const response = await request.post(url, {
@@ -328,6 +331,54 @@ async function submitSignedEvent(
     `submit ${kind} returned ${response.status()}: ${text}`,
   ).toContain(response.status());
   return eventId;
+}
+
+async function readRealmActorFrontier(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  actorDid: string,
+  serverUrl: string,
+  realmId: string,
+): Promise<{ actorSeq: number; eventId?: string }> {
+  const url = new URL("/_arkret/self/events/frontier", serverUrl);
+  url.searchParams.set("actor_id", actorDid);
+  url.searchParams.set("realm_id", realmId);
+  const href = url.toString();
+  const response = await request.get(href, {
+    headers: selfPathHeadersForDpopSession(session, "GET", href),
+  });
+  const text = await response.text();
+  expect(
+    response.ok(),
+    `read actor frontier returned ${response.status()}: ${text}`,
+  ).toBeTruthy();
+  const body = JSON.parse(text) as {
+    frontier?: {
+      actor_id?: unknown;
+      actor_seq?: unknown;
+      event_id?: unknown;
+    };
+  };
+  const frontier = body.frontier;
+  expect(frontier?.actor_id, "actor frontier identity").toBe(actorDid);
+  const actorSeq = frontier?.actor_seq;
+  expect(
+    typeof actorSeq === "number" &&
+      Number.isSafeInteger(actorSeq) &&
+      actorSeq >= 0,
+    `actor frontier sequence is invalid: ${text}`,
+  ).toBeTruthy();
+  if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq) || actorSeq < 0) {
+    throw new Error(`actor frontier sequence is invalid: ${text}`);
+  }
+  const eventId = frontier?.event_id;
+  if (actorSeq > 0) {
+    expect(typeof eventId, "non-empty actor frontier event id").toBe("string");
+  }
+  return {
+    actorSeq,
+    eventId: typeof eventId === "string" ? eventId : undefined,
+  };
 }
 
 function canonicalHandle(handle: string, serverUrl: string): string {
