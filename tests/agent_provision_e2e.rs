@@ -341,7 +341,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
 /// AKP-0008 runtime-side approval status poll
 /// (`ak.open.agent_pairing.query.runtime_key_request_status`): the runtime
 /// learns the controller decision after submitting a runtime key request
-/// (cotask 2026-07-10-agent-runtime-approval-status-closure acceptance #5).
+/// (arkret-work 2026-07-10-agent-runtime-approval-status-closure acceptance #5).
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
