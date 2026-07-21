@@ -476,7 +476,7 @@ gap-coverage gaps deferred to R4.
 | Spec section | Subject | cotest vector(s) | Stage |
 |---|---|---|---|
 | **§7 media binding** — `ak.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
-| **§8 handles** — NFC normalization + UTS#39 confusable skeleton | Confusable handle rejected before rate-limit; mixed-script rejected | `e2e/handle/homograph_forbidden.rs`, `e2e/handle/mixed_script_rejects.rs`, `e2e/handle/nfc_round_trip.rs` | Active |
+| **§8 handles** — RFC 8265 preparation + UTS #46 domains + authority-local UTS #39 collision index | Internationalized canonical handles are accepted; rewritable wire values are rejected; skeleton collisions are scoped by authority and namespace | `privacy-security-fixture.json` via `run_privacy_security_fixture_suite` | Active |
 | **§9 agent** — FSM (Active/Paused/Deactivated) + pairing | Pause/resume/deactivate transitions; pairing window expiry; proof verification | `e2e/agent/fsm_transitions.rs`, `e2e/agent/pairing_window_expires.rs`, `e2e/agent/pairing_proof_invalid.rs`, `e2e/agent/verification_method_principal_mismatch.rs` | Active |
 | **§9 agent** — actor-private event kinds | `ak.agent.draft.propose`, `ak.agent.action_request`, `ak.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
 | **§10 call.media** — token exchange | `ak.self.call.media.exchange.issue_token` round-trip; TTL gate; backend type enum reject | `e2e/call_media/token_exchange_round_trip.rs`, `e2e/call_media/token_ttl_exceeded.rs`, `e2e/call_media/unknown_focus_type_rejects.rs` | Active |
@@ -488,10 +488,6 @@ gap-coverage gaps deferred to R4.
 
 ### Coverage gaps (deferred)
 
-- **Full UTS#39 confusable table** — cotest exercises a minimal
-  confusable skeleton (matching the SDK's R3 implementation). The full
-  Unicode Technical Standard 39 confusable-set is deferred to R3.1
-  along with the SDK rollout.
 - **Per-arm recovery proof verification** — `RecoveryProofKind`
   arms (`DeviceQuorum`, `RecoveryUnlock`, `TrustedRecoveryService`,
   `PrincipalSigning`) are exercised at the structural level only. The
@@ -527,4 +523,4 @@ For each new error code introduced in R3, the canonical vector is:
 | `recording_artifact_pipeline_bypassed` | `e2e/call_media/recording_pipeline_bypassed.rs` |
 | `focus_unavailable_for_client` | `e2e/call_media/focus_unavailable_for_client.rs` |
 | `recovery_witness_revoke_lagging` | `e2e/recovery/witness_revoke_lagging.rs` |
-| `handle_homograph_forbidden` | `e2e/handle/homograph_forbidden.rs` |
+| `handle_homograph_forbidden` | `ak.vector.identity.authority_local_skeleton_collision.v1` in `privacy-security-fixture.json` |

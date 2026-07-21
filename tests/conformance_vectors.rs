@@ -589,21 +589,11 @@ fn test_5_recovery_policy_state_machine_live() {
     unreachable!("integration target gated on B-model registry/re-anchor harness");
 }
 
-// ─── P0 / TEST-6 — Handle homograph reject ─────────────────────────────────
+// ─── P0 / TEST-6 — Internationalized identifier profiles ───────────────────
 
-/// Gating: R3.1 — soland / starid / teabay wire-level homograph reject not
-/// yet implemented.
-/// Tier: live
 #[test]
-#[ignore = "R3.1: soland / starid / teabay wire-level homograph reject not yet implemented"]
-fn test_6_handle_homograph_script_mix_or_nfc_variant_reject() {
-    // Live integration:
-    //   1. POST handle claim `аlice` (Cyrillic а + Latin lice) → 412 handle_homograph_forbidden.
-    //   2. POST handle claim with NFC-variant that folds onto an existing claim → 412
-    //      handle_homograph_forbidden.
-    //   3. Display-layer mitigation MUST still surface a confusable hint when the canonical compare
-    //      passes.
-    unreachable!("integration target gated on starid / teabay P2-impl");
+fn test_6_internationalized_identifier_profiles_and_collision_scope() -> Result<()> {
+    cotest::conformance::run_privacy_security_fixture_suite()
 }
 
 // ─── R3.1 / TEST-7 — `ak.member.identity.update` end-to-end ───────────────
