@@ -6,7 +6,12 @@ use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
 
-pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+pub async fn run(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+    target_event_id: &str,
+) -> Result<()> {
     let report = expect_json(
         server
             .http()
@@ -16,7 +21,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
                 // soland validates that the reported target exists; point at the
                 // adapter message Event authored in the events/keys setup phase.
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000101",
-                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
+                "target_ref": target_event_id,
                 "report_reason_code": "spam",
                 "reporter": actor_id
             })),

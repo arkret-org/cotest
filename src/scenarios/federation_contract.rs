@@ -14,7 +14,7 @@ use url::Url;
 use crate::harness::{
     ArkretServer, dev_login, expect_api_error, expect_json, expect_response,
     member_join_payload_with_delivery_binding, message_create_text_payload, message_redact_payload,
-    submit_event,
+    realm_bootstrap_event_batch, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
@@ -47,7 +47,7 @@ fn with_signed_federation_request(
     let content_digest =
         ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = canonical_sha256(body)?;
-    with_signed_federation_request_digests(
+    let builder = with_signed_federation_request_digests(
         builder,
         method,
         target_url,
@@ -56,7 +56,8 @@ fn with_signed_federation_request(
         content_digest,
         request_canonical_digest,
         None,
-    )
+    )?;
+    Ok(builder.body(body_bytes))
 }
 
 fn with_signed_federation_empty_request(
@@ -696,18 +697,22 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     )
     .await?;
     let realm_id = "ak:realm:0196419b-0000-7000-8000-00000000fe20";
-    let created = submit_event(
-        &server,
-        &alice,
+    let realm_events = realm_bootstrap_event_batch(
         "did:web:alice.example",
         realm_id,
-        "ak.realm.create",
         federation_realm_payload(
             realm_id,
             "did:web:alice.example",
             server.trust_domain(),
             &[server.service_id()],
         ),
+    )?;
+    let created = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(&alice)
+            .json(&json!({"events": realm_events})),
         StatusCode::OK,
     )
     .await?;

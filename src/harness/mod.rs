@@ -35,7 +35,7 @@ pub(crate) use event_builder::{
     member_join_payload_with_delivery_binding, member_join_payload_with_invite_ref,
     member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
     message_redact_payload, message_revise_text_payload, parse_strand_id,
-    register_event_signing_identity,
+    realm_bootstrap_event_batch, register_event_signing_identity,
 };
 pub use proof::{
     attach_ephemeral_proof, attach_ephemeral_proof_value, ephemeral_proof_placeholder,

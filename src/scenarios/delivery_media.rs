@@ -1,20 +1,18 @@
 use anyhow::Result;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::harness::{
     ArkretServer, TestActorClient, dev_login, device_message_send_request, encrypted_envelope,
     expect_api_error, expect_indistinguishable_api_errors, expect_json, expect_response,
-    expect_text, member_join_payload_value, register_account,
+    expect_text, register_account,
 };
 use crate::scenarios::federation_collaboration::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
 };
 
 const BLOB_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-00000000d101";
-const BLOB_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000000d100";
-const BLOB_REALM_MEMBER_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-00000000d102";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("delivery-keys").await?;
@@ -432,141 +430,23 @@ async fn create_blob_access_realm(
     alice: &TestActorClient,
     bob: &TestActorClient,
 ) -> Result<String> {
-    let realm_create = signed_realm_create_event(
-        BLOB_REALM_CREATE_EVENT_ID,
-        1,
-        BLOB_REALM_ID,
-        &alice.actor,
-        "Blob Access Space",
-        alice.service_id(),
-    )?;
-    let create = expect_json(
-        alice.post("/_arkret/self/events").json(&realm_create),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(create["status"], "accepted");
+    let create = alice
+        .create_realm_with(json!({
+            "realm_id": BLOB_REALM_ID,
+            "title": "Blob Access Space",
+            "public": true,
+            "discoverability": "public",
+            "join_rule": "public",
+            "history_visibility": "world_readable",
+            "plaintext_visible_services": [alice.service_id()]
+        }))
+        .await?;
+    assert_eq!(create["realm_id"], BLOB_REALM_ID);
 
-    let bob_member = signed_membership_event(
-        BLOB_REALM_MEMBER_EVENT_ID,
-        2,
-        BLOB_REALM_ID,
-        &alice.actor,
-        &bob.actor,
-        "join",
-    )?;
-    let member = expect_json(
-        alice.post("/_arkret/self/events").json(&bob_member),
-        StatusCode::OK,
-    )
-    .await?;
+    let member = alice.add_member(BLOB_REALM_ID, bob).await?;
     assert_eq!(member["status"], "accepted");
 
     Ok(BLOB_REALM_ID.to_owned())
-}
-
-fn signed_realm_create_event(
-    event_id: &str,
-    actor_seq: u64,
-    realm_id: &str,
-    actor_id: &str,
-    title: &str,
-    service_id: &str,
-) -> Result<Value> {
-    let payload = json!({
-        "object": {
-            "id": realm_id,
-            "schema": "ak.schema.realm.v1",
-            "title": title,
-            "summary": title,
-            "trust_domain": "ak:trust_domain:delivery-media.cotest.local",
-            "created_by": actor_id,
-            "schema_refs": ["ak.schema.realm.v1"],
-            "default_discoverability": "public",
-            "default_join_rule": "public",
-            "history_visibility": "world_readable",
-            "encryption_profile": "none",
-            "security_class": "standard",
-            "federation_policy": "open",
-            "notary_profile": "single_did",
-            "digest_algorithm": "sha256",
-            "plaintext_visible_services": [service_id],
-            "notary": {
-                "type": "single_did",
-                "did": actor_id,
-                "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
-                "controller_organization": "did:web:delivery-media.cotest.local",
-                "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
-            },
-            "created_at": "2026-05-02T00:00:00.000Z"
-        }
-    });
-    signed_event(
-        event_id,
-        actor_seq,
-        realm_id,
-        actor_id,
-        "ak.realm.create",
-        payload,
-    )
-}
-
-fn signed_membership_event(
-    event_id: &str,
-    actor_seq: u64,
-    realm_id: &str,
-    actor_id: &str,
-    member_actor: &str,
-    membership: &str,
-) -> Result<Value> {
-    let payload = match membership {
-        "join" => member_join_payload_value(realm_id, member_actor)?,
-        other => anyhow::bail!("unsupported signed membership fixture state: {other}"),
-    };
-    signed_event(
-        event_id,
-        actor_seq,
-        realm_id,
-        actor_id,
-        "ak.member.state",
-        payload,
-    )
-}
-
-fn signed_event(
-    event_id: &str,
-    actor_seq: u64,
-    realm_id: &str,
-    actor_id: &str,
-    kind: &str,
-    payload: Value,
-) -> Result<Value> {
-    let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
-    let actor = arkret::Did::new(actor_id.to_owned())?;
-    let verification_method = format!("{actor_id}#cotest");
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
-        arkret::signatures::development_signing_key_seed(&verification_method),
-        actor.clone(),
-        verification_method.clone(),
-    );
-    let mut event = arkret::Event::new_with_id_at(
-        arkret::EventId::new(event_id.to_owned())?,
-        kind,
-        arkret::RealmId::new(realm_id.to_owned())?,
-        actor,
-        actor_seq,
-        arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
-        payload,
-        created_at,
-    )?;
-    arkret::signatures::sign_event(
-        &mut event,
-        &signer,
-        &verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
-    )?;
-    Ok(serde_json::to_value(event)?)
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {

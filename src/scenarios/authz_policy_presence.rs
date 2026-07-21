@@ -79,7 +79,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let grant_id = arkret_core::GrantId::new(manage_grant_id.to_owned())?;
     let issued_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
-    let typed_grant = arkret_core::CapabilityGrant {
+    let verification_method = format!("{}#cotest", alice.actor);
+    let mut typed_grant = arkret_core::CapabilityGrant {
         id: grant_id.clone(),
         schema: "ak.schema.capability.v1".to_owned(),
         realm_id: Some(arkret_core::RealmId::new(realm_id.clone())?),
@@ -100,18 +101,27 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         updated_at: None,
         revoked_by: None,
         revoked_at: None,
-        proofs: vec![arkret_core::PayloadProof {
-            kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
-            alg: "EdDSA".to_owned(),
-            verification_method: format!("{}#cotest", alice.actor),
-            payload_digest: arkret_core::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-            created_at: issued_at,
-            domain: None,
-            audience: None,
-            proof_purpose: None,
-            jws: "a..b".to_owned(),
-        }],
+        proofs: Vec::new(),
     };
+    let mut grant_proof = arkret_core::PayloadProof {
+        kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: verification_method.clone(),
+        payload_digest: typed_grant.payload_digest()?,
+        created_at: issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: Some(arkret_core::PayloadProofPurpose::IssuerAttestation),
+        jws: String::new(),
+    };
+    let grant_binding = typed_grant.canonical_proof_binding_bytes(&grant_proof)?;
+    grant_proof.jws = arkret_signatures::sign_eddsa_detached_jws(
+        &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
+            &verification_method,
+        )),
+        &grant_binding,
+    )?;
+    typed_grant.proofs.push(grant_proof);
     let grant_payload = arkret_core::CapabilityGrantPayload {
         grant: Some(typed_grant),
         grant_id,

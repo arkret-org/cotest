@@ -422,9 +422,8 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     let frontier = expect_json(
         server
             .http()
-            .get(server.url(&format!(
-                "/_arkret/self/events/frontier?actor_id={actor}&realm_id={realm_id}"
-            )))
+            .get(server.url("/_arkret/self/events/frontier"))
+            .query(&[("actor_id", actor), ("realm_id", realm_id)])
             .bearer_auth(token),
         StatusCode::OK,
     )

@@ -178,7 +178,7 @@ fn d2d_root_secret_share_rejects_unsolicited_or_tampered_sends() -> Result<()> {
 }
 
 #[test]
-fn d2d_root_secret_aad_is_stable_across_rfc3339_utc_forms() -> Result<()> {
+fn d2d_root_secret_aad_requires_canonical_millisecond_timestamps() -> Result<()> {
     let (requester_sk, requester_pk) = derive_keypair(0x44)?;
     let request = PendingRequest {
         request_id: REQUEST_ID.to_owned(),
@@ -187,14 +187,13 @@ fn d2d_root_secret_aad_is_stable_across_rfc3339_utc_forms() -> Result<()> {
     };
     let parsed_request = request_content(&request, &requester_pk)?;
     let send = seal_secret_send(&parsed_request, ACCOUNT_SECRET, 11, EXPIRES_AT)?;
-    let envelope =
-        materialized_send_envelope(serde_json::to_value(&send)?, "2026-06-10T00:30:00+00:00")?;
+    let envelope = materialized_send_envelope(serde_json::to_value(&send)?, EXPIRES_AT)?;
 
     let opened = open_secret_send(&request, &envelope)?;
     assert_eq!(opened.secret_version, 11);
-    assert_eq!(
-        send_aad(OLD_DEVICE, NEW_DEVICE, EXPIRES_AT)?,
-        send_aad(OLD_DEVICE, NEW_DEVICE, "2026-06-10T00:30:00+00:00")?
+    assert!(
+        send_aad(OLD_DEVICE, NEW_DEVICE, "2026-06-10T00:30:00+00:00").is_err(),
+        "non-canonical RFC 3339 spelling must not enter the signed AAD"
     );
     Ok(())
 }

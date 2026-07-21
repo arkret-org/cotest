@@ -29,7 +29,7 @@ use url::Url;
 use crate::harness::{
     ArkretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
     expect_json, expect_text, member_join_payload_value, member_join_payload_with_delivery_binding,
-    message_create_text_payload, register_account, submit_event,
+    message_create_text_payload, realm_bootstrap_event_batch, register_account, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::{
     peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
@@ -645,13 +645,17 @@ async fn create_federated_realm(
     visible_services: &[String],
 ) -> Result<String> {
     let realm_id = "ak:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
-    let created = submit_event(
-        server,
-        alice,
+    let events = realm_bootstrap_event_batch(
         alice_did,
         &realm_id,
-        "ak.realm.create",
         federated_realm_payload(&realm_id, alice_did, visible_services),
+    )?;
+    let created = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(alice)
+            .json(&json!({"events": events})),
         StatusCode::OK,
     )
     .await?;
@@ -1333,7 +1337,7 @@ fn with_federation_trust_headers(
     let content_digest =
         ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = canonical_sha256(body)?;
-    with_federation_trust_headers_for_digest(
+    let builder = with_federation_trust_headers_for_digest(
         builder,
         method,
         target_url,
@@ -1341,7 +1345,8 @@ fn with_federation_trust_headers(
         destination,
         content_digest,
         request_canonical_digest,
-    )
+    )?;
+    Ok(builder.body(body_bytes))
 }
 
 fn with_federation_trust_headers_empty(

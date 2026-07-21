@@ -3,9 +3,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, event_envelope, expect_json,
-    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
-    parse_strand_id,
+    TestActorClient, TestServerGroup, expect_json, message_create_text_payload_for_strand,
+    message_redact_payload, message_revise_text_payload, parse_strand_id,
 };
 
 pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<()> {
@@ -23,15 +22,16 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         "Event Idempotency Replay",
     )
     .await?;
-    let event = event_envelope(
-        &alice.actor,
-        &realm_id,
-        "ak.message.create",
-        message_create_text_payload_for_strand(
-            parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
-            "idempotent replay body",
-        )?,
-    );
+    let event = alice
+        .author_event(
+            &realm_id,
+            "ak.message.create",
+            message_create_text_payload_for_strand(
+                parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
+                "idempotent replay body",
+            )?,
+        )
+        .await?;
 
     let first = expect_json(
         alice.post("/_arkret/self/events").json(&event),
@@ -87,39 +87,42 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         "Event Idempotency Edit Redact",
     )
     .await?;
-    let create_event = event_envelope(
-        &alice.actor,
-        &realm_id,
-        "ak.message.create",
-        message_create_text_payload_for_strand(
-            parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
-            "message before edit/redact replay",
-        )?,
-    );
+    let create_event = alice
+        .author_event(
+            &realm_id,
+            "ak.message.create",
+            message_create_text_payload_for_strand(
+                parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
+                "message before edit/redact replay",
+            )?,
+        )
+        .await?;
 
     let created = submit_and_duplicate(&alice, &create_event).await?;
     let create_event_id = submitted_event_id(&created)
         .ok_or_else(|| anyhow!("create response missing event id: {created}"))?;
     assert_projected_kind_count(&alice, &realm_id, "ak.message.create", 1).await?;
 
-    let revise_event = event_envelope(
-        &alice.actor,
-        &realm_id,
-        "ak.message.revise",
-        message_revise_text_payload(create_event_id, "message after idempotent edit replay")?,
-    );
+    let revise_event = alice
+        .author_event(
+            &realm_id,
+            "ak.message.revise",
+            message_revise_text_payload(create_event_id, "message after idempotent edit replay")?,
+        )
+        .await?;
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
     let revise_event_id = submitted_event_id(&revised)
         .ok_or_else(|| anyhow!("revise response missing event id: {revised}"))?;
     assert_projected_event_count(&alice, &realm_id, revise_event_id, 1).await?;
     assert_projected_kind_count(&alice, &realm_id, "ak.message.revise", 1).await?;
 
-    let redact_event = event_envelope(
-        &alice.actor,
-        &realm_id,
-        "ak.message.redact",
-        message_redact_payload(create_event_id, Some("idempotent_redaction_replay"))?,
-    );
+    let redact_event = alice
+        .author_event(
+            &realm_id,
+            "ak.message.redact",
+            message_redact_payload(create_event_id, Some("idempotent_redaction_replay"))?,
+        )
+        .await?;
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
     let redact_event_id = submitted_event_id(&redacted)
         .ok_or_else(|| anyhow!("redact response missing event id: {redacted}"))?;
@@ -159,45 +162,19 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
 }
 
 async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str) -> Result<String> {
-    let event = event_envelope(
-        &alice.actor,
-        realm_id,
-        "ak.realm.create",
-        json!({
-            "object": {
-                "id": realm_id,
-                "schema": "ak.schema.realm.v1",
-                "title": title,
-                "summary": title,
-                "trust_domain": "ak:trust_domain:event-idempotency.cotest.local",
-                "created_by": &alice.actor,
-                "schema_refs": ["ak.schema.realm.v1"],
-                "default_discoverability": "public",
-                "default_join_rule": "public",
-                "history_visibility": "world_readable",
-                "encryption_profile": "none",
-                "security_class": "standard",
-                "federation_policy": "open",
-                "notary_profile": "single_did",
-                "digest_algorithm": "sha256",
-                "plaintext_visible_services": [alice.service_id()],
-                "notary": {
-                    "type": "single_did",
-                    "did": &alice.actor,
-                    "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
-                    "controller_organization": "did:web:event-idempotency.cotest.local",
-                    "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
-                },
-                "created_at": "2026-05-02T00:00:00.000Z"
-            }
-        }),
-    );
-    let response = expect_json(
-        alice.post("/_arkret/self/events").json(&event),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(response["status"], "accepted");
+    let response = alice
+        .create_realm_with(json!({
+            "realm_id": realm_id,
+            "title": title,
+            "summary": title,
+            "public": true,
+            "discoverability": "public",
+            "join_rule": "public",
+            "history_visibility": "world_readable",
+            "plaintext_visible_services": [alice.service_id()]
+        }))
+        .await?;
+    assert_eq!(response["realm_id"], realm_id);
     Ok(realm_id.to_owned())
 }
 

@@ -146,25 +146,21 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
         )
         .unwrap();
     // `grace_ms` is a message-expiry field, not a realm disappearing-policy
-    // field. The payload validator is forward-compatible: an unknown field on an
-    // `additionalProperties:false` schema surfaces as a validation WARNING, not a
-    // hard error, so assert the warning rather than an Err.
-    let disappearing_warnings = catalog
-        .validate_payload_with_warnings(
-            arkret_core::events::EventKind::REALM_DISAPPEARING_POLICY,
-            &json!({
-                "enabled": true,
-                "max_ttl_ms": 3600000,
-                "allowed_triggers": ["on_send"],
-                "grace_ms": 0
-            }),
-        )
-        .expect("known realm-policy kind must resolve to a payload validator");
+    // field. The payload is selected through a closed `oneOf`, so the unknown
+    // field prevents either branch from matching and must fail validation.
     assert!(
-        disappearing_warnings
-            .iter()
-            .any(|warning| warning.contains("grace_ms")),
-        "grace_ms (a message-expiry field) must be flagged as an unknown realm-policy field: {disappearing_warnings:?}"
+        catalog
+            .validate_payload(
+                arkret_core::events::EventKind::REALM_DISAPPEARING_POLICY,
+                &json!({
+                    "enabled": true,
+                    "max_ttl_ms": 3600000,
+                    "allowed_triggers": ["on_send"],
+                    "grace_ms": 0
+                }),
+            )
+            .is_err(),
+        "grace_ms (a message-expiry field) must not validate as realm policy"
     );
 
     catalog

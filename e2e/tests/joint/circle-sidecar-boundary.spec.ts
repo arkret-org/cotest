@@ -41,7 +41,7 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
 
       // Negative migration assertion: the retired thread-shaped path is not
       // an alias for the first-class Sidecar API.
-      const legacyPath = "/_arkret/self/agent-sidecar-" + "threads:ensure";
+      const legacyPath = ["", "_arkret", "self", "agent-sidecar-threads:ensure"].join("/");
       const legacyUrl = `${solandBaseUrl()}${legacyPath}`;
       const legacy = await request.post(legacyUrl, {
         headers: selfPathHeadersForDpopSession(

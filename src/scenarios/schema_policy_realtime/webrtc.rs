@@ -79,7 +79,10 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert_eq!(ice["device_id"], alice.device_id);
     assert_eq!(ice["ttl_seconds"], 300);
     assert_eq!(ice["refresh_lead_seconds"], 75);
-    assert_eq!(ice["force_turn"], false);
+    assert!(
+        ice.get("force_turn").is_none(),
+        "the default false value is omitted from the canonical response"
+    );
     assert!(ice["issued_at"].is_string());
     assert!(ice["expires_at"].is_string());
     assert!(ice["signature"].is_object());

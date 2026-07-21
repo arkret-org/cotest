@@ -258,14 +258,15 @@ fn with_peer_post_headers(
     let content_digest =
         ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = canonical_sha256(body)?;
-    with_peer_headers_for_digest(
+    let builder = with_peer_headers_for_digest(
         builder,
         "POST",
         target_url,
         source,
         destination,
         Some((content_digest, request_canonical_digest)),
-    )
+    )?;
+    Ok(builder.body(body_bytes))
 }
 
 /// Sign a federation peer request. `body_digest` is `Some((content_digest,

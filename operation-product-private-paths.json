@@ -95,6 +95,13 @@
     },
     {
       "source": "cotest",
+      "method": "PUT",
+      "path": "/_arkret/self/keys/backups",
+      "classification": "product-private",
+      "reason": "Playwright response predicate prefix in identity/onboarding.spec.ts; the actual request always targets the registered /_arkret/self/keys/backups/{backup_id} operation."
+    },
+    {
+      "source": "cotest",
       "method": "GET",
       "path": "/_arkret/self/notifications",
       "classification": "product-private",

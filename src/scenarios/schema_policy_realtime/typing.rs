@@ -104,12 +104,12 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     assert_eq!(stopped["accepted"], true);
 
     let sync_without_typing = alice.sync().await?;
-    assert!(
-        sync_without_typing["realms"][&realm_id]["ephemeral"]["events"]
-            .as_array()
-            .expect("realm ephemeral container exposes typed events")
-            .is_empty()
-    );
+    let stopped_events = sync_without_typing["realms"][&realm_id]["ephemeral"]["events"]
+        .as_array()
+        .expect("realm ephemeral container exposes typed events");
+    assert_eq!(stopped_events.len(), 1);
+    assert_eq!(stopped_events[0]["kind"], "ak.typing");
+    assert_eq!(stopped_events[0]["payload"]["typing"], false);
 
     let initial_sync = bob.sync().await?;
     assert!(

@@ -283,51 +283,18 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
     let realm_id = "ak:realm:01904100-0000-7000-8000-c011ab000001".to_owned();
     let created = alice
-        .submit_event(
-            &realm_id,
-            "ak.realm.create",
-            json!({
-                "object": {
-                    "id": &realm_id,
-                    "schema": "ak.schema.realm.v1",
-                    "title": "Collaboration Workflow Space",
-                    "summary": "single server collaboration",
-                    "trust_domain": "ak:trust_domain:collaboration-workflow.cotest.local",
-                    "created_by": &alice.actor,
-                    "schema_refs": ["ak.schema.realm.v1"],
-                    "default_discoverability": "invite_only",
-                    "default_join_rule": "invite",
-                    "history_visibility": "shared",
-                    "encryption_profile": "none",
-                    "security_class": "standard",
-                    "federation_policy": "restricted",
-                    "notary_profile": "single_did",
-                    "digest_algorithm": "sha256",
-                    "plaintext_visible_services": [{
-                        "service_id": alice.service_id(),
-                        "service_type": "principal_server",
-                        "data_classes": [
-                            "message_content", "strand_content", "attachment_plaintext",
-                            "attachment_preview", "thumbnail", "full_text_index",
-                            "search_snippet", "notification_summary", "inbox_preview",
-                            "history_preview"
-                        ],
-                        "purposes": ["cotest"],
-                        "visibility": "private_plaintext"
-                    }],
-                    "notary": {
-                        "type": "single_did",
-                        "did": &alice.actor,
-                        "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
-                        "controller_organization": "did:web:collaboration-workflow.cotest.local",
-                        "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
-                    },
-                    "created_at": "2026-05-02T00:00:00.000Z"
-                }
-            }),
-        )
+        .create_realm_with(json!({
+            "realm_id": &realm_id,
+            "title": "Collaboration Workflow Space",
+            "summary": "single server collaboration",
+            "discoverability": "invite_only",
+            "join_rule": "invite",
+            "history_visibility": "shared",
+            "encryption_profile": "none",
+            "plaintext_visible_services": [alice.service_id()]
+        }))
         .await?;
-    assert_eq!(created["status"], "accepted");
+    assert_eq!(created["realm_id"], realm_id);
     Ok(realm_id)
 }
 

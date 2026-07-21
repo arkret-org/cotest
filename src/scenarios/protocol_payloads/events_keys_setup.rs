@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     ArkretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
-    refresh_event_proof_with_signing_seed,
+    realm_bootstrap_event_batch, submit_event_with_signing_seed_and_verification_method,
 };
 use crate::scenarios::federation_collaboration::{
     TEST_PRINCIPAL_SIGNING_KEY_SEED, authorize_device_public_key, signed_keys_upload_body,
@@ -20,46 +20,45 @@ use crate::scenarios::federation_collaboration::{
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
 const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-000000000101";
-const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000100";
-const ADAPTER_MESSAGE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
 
-pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<String> {
     // keys/upload verifies its typed request signature against the accepted
     // device projection. Publish the principal/self-signing hierarchy before
     // authorizing the device; the adapter realm/message then continue at actor
     // sequence 3/4.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
     authorize_device_public_key(server, token, actor_id, KEYS_DEVICE_ID, &device_key).await?;
-    submit_adapter_event(server, token, actor_id).await?;
+    let message_event_id = submit_adapter_event(server, token, actor_id).await?;
     upload_and_inspect_keys(server, token, actor_id, &device_key).await?;
-    Ok(())
+    Ok(message_event_id)
 }
 
-async fn submit_adapter_event(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+async fn submit_adapter_event(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<String> {
     let realm_id = create_adapter_realm(server, token, actor_id).await?;
-    let event = signed_message_event(
-        ADAPTER_MESSAGE_EVENT_ID,
-        4,
-        &realm_id,
+    let submit = submit_event_with_signing_seed_and_verification_method(
+        server,
+        token,
         actor_id,
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-        "ak:thread:adapter",
-        "hello",
-    )?;
-
-    let submit = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(token)
-            .json(&event),
+        &realm_id,
+        "ak.message.create",
+        message_create_text_payload_for_strand(
+            parse_strand_id("ak:strand:0196419b-0000-7000-8000-000000000001")?,
+            "hello",
+        )?,
         StatusCode::OK,
+        TEST_PRINCIPAL_SIGNING_KEY_SEED,
+        &format!("{actor_id}#cotest-principal-signing-key"),
     )
     .await?;
     assert_eq!(submit["status"], "accepted");
-    assert_eq!(submit["accepted"][0], ADAPTER_MESSAGE_EVENT_ID);
-
-    Ok(())
+    submit["event_id"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("accepted adapter message lacks event_id: {submit}"))
 }
 
 async fn create_adapter_realm(
@@ -67,36 +66,28 @@ async fn create_adapter_realm(
     token: &str,
     actor_id: &str,
 ) -> Result<String> {
-    let event = signed_realm_create_event(
-        ADAPTER_REALM_CREATE_EVENT_ID,
-        3,
-        ADAPTER_REALM_ID,
+    let events = realm_bootstrap_event_batch(
         actor_id,
-        "Adapter Event Space",
+        ADAPTER_REALM_ID,
+        adapter_realm_payload(ADAPTER_REALM_ID, actor_id, "Adapter Event Space"),
     )?;
     let submit = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&event),
+            .json(&json!({"events": events})),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(submit["status"], "accepted");
-    assert_eq!(submit["accepted"][0], ADAPTER_REALM_CREATE_EVENT_ID);
+    assert_eq!(submit["accepted"].as_array().map(Vec::len), Some(2));
 
     Ok(ADAPTER_REALM_ID.to_owned())
 }
 
-fn signed_realm_create_event(
-    event_id: &str,
-    actor_seq: u64,
-    realm_id: &str,
-    actor_id: &str,
-    title: &str,
-) -> Result<Value> {
-    let payload = json!({
+fn adapter_realm_payload(realm_id: &str, actor_id: &str, title: &str) -> Value {
+    json!({
         "object": {
             "id": realm_id,
             "schema": "ak.schema.realm.v1",
@@ -122,78 +113,7 @@ fn signed_realm_create_event(
             },
             "created_at": "2026-05-02T00:00:00.000Z"
         }
-    });
-    let mut event = json!({
-        "event_id": event_id,
-        "kind": "ak.realm.create",
-        "realm_id": realm_id,
-        "actor_id": actor_id,
-        "actor_seq": actor_seq,
-        "created_at": "2026-05-02T00:00:00.000Z",
-        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
-        "prev_refs": [],
-        "refs": [],
-        "payload": payload,
-        "unsigned": {
-            "local_operation_idempotency_alias": format!(
-                "ak:operation:{}",
-                event_id.trim_start_matches("ak:event:")
-            )
-        },
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{actor_id}#cotest-principal-signing-key"),
-            "event_digest": "",
-            "created_at": "2026-05-02T00:00:00.000Z",
-            "jws": "a..b",
-        }],
-    });
-    refresh_event_proof_with_signing_seed(&mut event, TEST_PRINCIPAL_SIGNING_KEY_SEED)?;
-    Ok(event)
-}
-
-fn signed_message_event(
-    event_id: &str,
-    actor_seq: u64,
-    realm_id: &str,
-    actor_id: &str,
-    _device_id: &str,
-    _thread_id: &str,
-    body: &str,
-) -> Result<Value> {
-    let payload = message_create_text_payload_for_strand(
-        parse_strand_id("ak:strand:0196419b-0000-7000-8000-000000000001")?,
-        body,
-    )?;
-    let mut event = json!({
-        "event_id": event_id,
-        "kind": "ak.message.create",
-        "realm_id": realm_id,
-        "actor_id": actor_id,
-        "actor_seq": actor_seq,
-        "created_at": "2026-05-02T00:00:00.000Z",
-        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
-        "prev_refs": [],
-        "refs": [],
-        "payload": payload,
-        "unsigned": {
-            "local_operation_idempotency_alias": format!(
-                "ak:operation:{}",
-                event_id.trim_start_matches("ak:event:")
-            )
-        },
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{actor_id}#cotest-principal-signing-key"),
-            "event_digest": "",
-            "created_at": "2026-05-02T00:00:00.000Z",
-            "jws": "a..b",
-        }],
-    });
-    refresh_event_proof_with_signing_seed(&mut event, TEST_PRINCIPAL_SIGNING_KEY_SEED)?;
-    Ok(event)
+    })
 }
 
 async fn upload_and_inspect_keys(

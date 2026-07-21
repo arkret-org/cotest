@@ -593,10 +593,9 @@ async fn submit_event_now(
     payload: Value,
 ) -> Result<Value> {
     let frontier = crate::harness::expect_json(
-        actor.get(&format!(
-            "/_arkret/self/events/frontier?actor_id={}&realm_id={realm_id}",
-            actor.actor
-        )),
+        actor
+            .get("/_arkret/self/events/frontier")
+            .query(&[("actor_id", actor.actor.as_str()), ("realm_id", realm_id)]),
         StatusCode::OK,
     )
     .await?;

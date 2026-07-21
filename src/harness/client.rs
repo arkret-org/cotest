@@ -114,11 +114,20 @@ impl TestActorClient {
     }
 
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
+        let event = self.author_event(realm_id, kind, payload).await?;
+        let mut body = expect_json(
+            self.post("/_arkret/self/events").json(&event),
+            StatusCode::OK,
+        )
+        .await?;
+        ensure_submit_event_id(&mut body, &event);
+        Ok(body)
+    }
+
+    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
         let frontier = expect_json(
-            self.get(&format!(
-                "/_arkret/self/events/frontier?actor_id={}&realm_id={realm_id}",
-                self.actor
-            )),
+            self.get("/_arkret/self/events/frontier")
+                .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
             StatusCode::OK,
         )
         .await?;
@@ -131,21 +140,14 @@ impl TestActorClient {
                 "actor Realm frontier must pair sequence and Event id: {frontier}"
             ));
         }
-        let event = event_envelope_with_chain(
+        Ok(event_envelope_with_chain(
             &self.actor,
             realm_id,
             kind,
             payload,
             accepted_seq + 1,
             prev_event_id,
-        );
-        let mut body = expect_json(
-            self.post("/_arkret/self/events").json(&event),
-            StatusCode::OK,
-        )
-        .await?;
-        ensure_submit_event_id(&mut body, &event);
-        Ok(body)
+        ))
     }
 
     pub async fn sync(&self) -> Result<Value> {
