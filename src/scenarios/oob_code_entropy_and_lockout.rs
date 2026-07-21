@@ -26,7 +26,7 @@
 //!   binding is invalidated and the fourth (correct or wrong) attempt MUST receive the same unified
 //!   non-enumerable response as a never-existed code.
 //!
-//! SCOPE (see `arkret-work/review/code/cotest/02_security.md` #2): the functions here are
+//! SCOPE (see `arkret-work/review/code-open/cotest/02_security.md` #2): the functions here are
 //! **wire pins only** — they assert SDK reason-code constants / entropy and
 //! timing-budget literals agree with the cotest pins and the registry. They do
 //! NOT drive a live OOB endpoint and therefore do NOT verify the *behaviour*

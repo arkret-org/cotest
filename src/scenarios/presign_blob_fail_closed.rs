@@ -18,7 +18,7 @@
 //!
 //! This module covers the legal-hold and redacted paths.
 //!
-//! SCOPE (see `arkret-work/review/code/cotest/02_security.md` #2): the functions here are
+//! SCOPE (see `arkret-work/review/code-open/cotest/02_security.md` #2): the functions here are
 //! **wire pins only** — they assert that the SDK reason-code constants /
 //! header literals agree with the cotest pins and the registry. They do NOT
 //! spawn a presign endpoint and therefore do NOT verify the fail-closed
