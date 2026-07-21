@@ -4,14 +4,22 @@ use anyhow::{Context, Result};
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
+use arkret::identity::{
+    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
+    self_principal_bootstrap_submit_request,
+};
 use arkret_core::canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
 use arkret_core::{
-    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId, Hlc,
-    KeyFormat, KeyOperationSignature, KeysUploadRequestBody, NonEmptyString, PublishedKey, RealmId,
+    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId,
+    EventRef, Hlc, KeyFormat, KeyOperationSignature, KeyPackageClaimRecord, KeysUploadRequestBody,
+    NonEmptyString, PeerKeyPackageClaimPurpose, PeerKeyPackageRequesterAuthorization,
+    PeerKeyPackagesClaimAuthorizationDraft, PeerKeyPackagesClaimOutcome,
+    PeerKeyPackagesClaimRequestBody, PeerKeyPackagesClaimTransportBinding, PublishedKey, RealmId,
     SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
-    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
+    ed25519_pubkey_to_did_key_multibase, peer_keypackage_claim_authorization_signing_bytes,
+    principal_control_realm_id,
 };
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
@@ -28,7 +36,7 @@ use url::Url;
 
 use crate::harness::{
     ArkretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
-    expect_json, expect_text, member_join_payload_value, member_join_payload_with_delivery_binding,
+    expect_json, expect_text, member_join_payload_with_delivery_binding,
     message_create_text_payload, realm_bootstrap_event_batch, register_account, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::{
@@ -39,13 +47,13 @@ pub(crate) const TEST_PRINCIPAL_SIGNING_KEY_SEED: [u8; 32] = [0x51; 32];
 
 const ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 const BOB_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000bb";
-const REALM_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc011ab000";
 const ALICE_MESSAGE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000001";
 const BOB_JOIN_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000002";
 const BOB_MESSAGE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000003";
 const ALICE_DELIVERY_BINDING_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000004";
+const DELIVERY_POLICY_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000006";
 const E2EE_REALM_ID: &str = "ak:realm:01904100-0000-7000-8000-fedc011ab0e2";
-const E2EE_REALM_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e01";
+const E2EE_DELIVERY_POLICY_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e01";
 const E2EE_BOB_JOIN_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e02";
 const E2EE_MLS_GENESIS_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e03";
 const E2EE_MLS_WELCOME_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000e04";
@@ -56,7 +64,7 @@ const E2EE_MESSAGE_CIPHERTEXT: &str = "opaque_cross_server_e2ee_message";
 const E2EE_MESSAGE_PLAINTEXT: &str = "cross-server e2ee plaintext must stay client-side";
 const BOB_DEVICE_KEY_SEED: [u8; 32] = [187u8; 32];
 const ALICE_DEVICE_KEY_SEED: [u8; 32] = [161u8; 32];
-const ALICE_CROSS_SIGNING_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a10";
+const ALICE_PCR_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a10";
 const ALICE_DEVICE_AUTHORIZE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a11";
 
 pub async fn cross_server_collaboration_strand_works() -> Result<()> {
@@ -164,47 +172,60 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         .as_str()
         .context("alice server_a binding response missing event_id")?
         .to_owned();
-    let realm_create = signed_federation_event(
-        REALM_CREATE_EVENT_ID,
-        "ak.realm.create",
+    let mut bootstrap_events = realm_bootstrap_event_batch(
+        &alice_did,
+        &realm_id,
+        federated_realm_payload(&realm_id, &alice_did, &visible_services),
+    )?
+    .into_iter()
+    .map(serde_json::from_value::<Event>)
+    .collect::<Result<Vec<_>, _>>()?;
+    let realm_create = bootstrap_events.remove(0);
+    let founding_grant = bootstrap_events.remove(0);
+    let realm_create_event_id = realm_create.event_id.clone();
+    let mut delivery_policy = signed_federation_event(
+        DELIVERY_POLICY_EVENT_ID,
+        "ak.realm.delivery_binding_policy",
         &realm_id,
         &alice_did,
-        1,
-        federated_realm_payload(&realm_id, &alice_did, &visible_services),
+        3,
+        Some(&founding_grant.event_id),
+        json!({
+            "realm_id": realm_id,
+            "allow_binding_sources": ["explicit"],
+            "allowed_recipient_services": [server_a.service_id(), server_b.service_id()]
+        }),
     )?;
+    attach_delivery_policy_cell_contract(&mut delivery_policy)?;
+    sign_federation_event(&mut delivery_policy)?;
     let alice_delivery_binding = signed_federation_event(
         ALICE_DELIVERY_BINDING_EVENT_ID,
         "ak.member.state",
         &realm_id,
         &alice_did,
-        2,
+        4,
+        Some(&delivery_policy.event_id),
         member_delivery_binding_payload(&realm_id, &alice_did, server_a.service_id()),
-    )?;
-    let alice_message = signed_federation_event(
-        ALICE_MESSAGE_EVENT_ID,
-        "ak.message.create",
-        &realm_id,
-        &alice_did,
-        3,
-        message_create_text_payload(&realm_id, "hello bob from server a")?,
     )?;
     let bob_join = signed_federation_event(
         BOB_JOIN_EVENT_ID,
         "ak.member.state",
         &realm_id,
         &alice_did,
-        4,
-        member_join_payload_value(&realm_id, &bob_did)?,
+        5,
+        Some(&alice_delivery_binding.event_id),
+        member_delivery_binding_payload(&realm_id, &bob_did, server_b.service_id()),
     )?;
     let a_to_b_body = peer_events_submit_body(
         &realm_id,
         vec![
             realm_create,
+            founding_grant,
+            delivery_policy,
             alice_delivery_binding,
-            alice_message,
             bob_join,
         ],
-        Some("a-to-b-01"),
+        Some("a-to-b-bootstrap-01"),
     )?;
     let a_to_b_url = server_b.url("/_arkret/peer/events");
     let pushed_to_b = expect_json(
@@ -221,7 +242,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     .await?;
     assert_json_array_contains(
         &pushed_to_b["accepted"],
-        REALM_CREATE_EVENT_ID,
+        realm_create_event_id.as_str(),
         &pushed_to_b,
     );
     assert_json_array_contains(
@@ -229,12 +250,41 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         ALICE_DELIVERY_BINDING_EVENT_ID,
         &pushed_to_b,
     );
-    assert_json_array_contains(
-        &pushed_to_b["accepted"],
-        ALICE_MESSAGE_EVENT_ID,
-        &pushed_to_b,
-    );
     assert_json_array_contains(&pushed_to_b["accepted"], BOB_JOIN_EVENT_ID, &pushed_to_b);
+
+    let alice_message = signed_federation_event(
+        ALICE_MESSAGE_EVENT_ID,
+        "ak.message.create",
+        &realm_id,
+        &alice_did,
+        6,
+        Some(&EventId::new(BOB_JOIN_EVENT_ID.to_owned())?),
+        message_create_text_payload(&realm_id, "hello bob from server a")?,
+    )?;
+    let a_to_b_delivery_frontier = vec![EventId::new(BOB_JOIN_EVENT_ID.to_owned())?];
+    let message_body = peer_events_submit_body_with_delivery_frontier(
+        &realm_id,
+        vec![alice_message],
+        &a_to_b_delivery_frontier,
+        Some("a-to-b-message-01"),
+    )?;
+    let message_pushed = expect_json(
+        with_federation_trust_headers(
+            server_b.http().post(&a_to_b_url).json(&message_body),
+            "POST",
+            &a_to_b_url,
+            server_a,
+            server_b,
+            &message_body,
+        )?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_json_array_contains(
+        &message_pushed["accepted"],
+        ALICE_MESSAGE_EVENT_ID,
+        &message_pushed,
+    );
 
     let pulled_url = server_b.url(&format!("/_arkret/peer/events?realms={realm_id}"));
     let pulled_on_b = expect_json(
@@ -278,6 +328,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &realm_id,
         &bob_did,
         1,
+        None,
         message_create_text_payload(&realm_id, "hello alice from server b")?,
     )?;
     let b_to_a_delivery_frontier = vec![
@@ -319,114 +370,140 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "alice sync did not include bob federation reply: {alice_sync}"
     );
 
-    // Federate alice's device identity to server_b so the receiver can verify
-    // the cross-server MLS Welcome's `claim_envelope.signature` against alice's
-    // device key (crypto-media/encryption-and-audit.md §6.04 device path:
-    // requester_device_id → the requester's current accepted, unrevoked device
-    // projection). soland projects an accepted `ak.device.authorize` into a
-    // `verification_state="verified"` device row (project_device_authorize), so
-    // the welcome's device-bound claim signature can be checked on server_b.
+    // Bootstrap Alice's PCR only on her home server and carry portable signer
+    // evidence with the federated Realm batch. The destination verifies the
+    // original authorization without importing Alice's PCR or creating a
+    // shadow local identity.
+    let bob_device_key = SigningKey::from_bytes(&BOB_DEVICE_KEY_SEED);
+    authorize_device_public_key(server_b, &bob, &bob_did, BOB_DEVICE_ID, &bob_device_key).await?;
+    upload_test_keypackage(server_b, &bob, &bob_did, BOB_DEVICE_ID, &bob_device_key).await?;
     let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
-    let alice_principal_realm =
-        principal_control_realm_id(&Did::new(alice_did.clone()).context("invalid alice did")?);
-    let alice_cross_signing = signed_federation_event(
-        ALICE_CROSS_SIGNING_EVENT_ID,
-        "ak.cross_signing.publish",
-        &alice_principal_realm,
+    let alice_signer_evidence = bootstrap_test_device_authorization(
+        server_a,
+        &alice,
         &alice_did,
-        4,
-        serde_json::to_value(test_cross_signing_publish(&alice_did)?)?,
-    )?;
-    let mut alice_device_authorize = signed_federation_event(
-        ALICE_DEVICE_AUTHORIZE_EVENT_ID,
-        "ak.device.authorize",
-        &alice_principal_realm,
-        &alice_did,
-        5,
-        bootstrap_device_authorize_payload(&alice_did, ALICE_DEVICE_ID, &alice_device_key)?,
-    )?;
-    alice_device_authorize.prev_refs = vec![
-        EventId::new(ALICE_CROSS_SIGNING_EVENT_ID.to_owned())
-            .context("invalid alice cross-signing event id")?,
-    ];
-    sign_federation_event(&mut alice_device_authorize)?;
-    let alice_device_body = peer_events_submit_body(
-        &alice_principal_realm,
-        vec![alice_cross_signing, alice_device_authorize],
-        Some("a-to-b-identity-bootstrap-01"),
-    )?;
-    let alice_device_url = server_b.url("/_arkret/peer/events");
-    let alice_device_pushed = expect_json(
-        with_federation_trust_headers(
-            server_b
-                .http()
-                .post(&alice_device_url)
-                .json(&alice_device_body),
-            "POST",
-            &alice_device_url,
-            server_a,
-            server_b,
-            &alice_device_body,
-        )?,
-        StatusCode::OK,
+        ALICE_DEVICE_ID,
+        &alice_device_key,
     )
     .await?;
-    assert_json_array_contains(
-        &alice_device_pushed["accepted"],
-        ALICE_CROSS_SIGNING_EVENT_ID,
-        &alice_device_pushed,
-    );
-    assert_json_array_contains(
-        &alice_device_pushed["accepted"],
-        ALICE_DEVICE_AUTHORIZE_EVENT_ID,
-        &alice_device_pushed,
-    );
 
-    let e2ee_realm_create = signed_federation_event(
-        E2EE_REALM_CREATE_EVENT_ID,
-        "ak.realm.create",
+    let mut e2ee_bootstrap = realm_bootstrap_event_batch(
+        &alice_did,
+        E2EE_REALM_ID,
+        federated_e2ee_realm_payload(E2EE_REALM_ID, &alice_did),
+    )?
+    .into_iter()
+    .map(serde_json::from_value::<Event>)
+    .collect::<Result<Vec<_>, _>>()?;
+    let e2ee_realm_create = e2ee_bootstrap.remove(0);
+    let e2ee_founding_grant = e2ee_bootstrap.remove(0);
+    let e2ee_realm_create_event_id = e2ee_realm_create.event_id.clone();
+    let mut e2ee_delivery_policy = signed_federation_event(
+        E2EE_DELIVERY_POLICY_EVENT_ID,
+        "ak.realm.delivery_binding_policy",
         E2EE_REALM_ID,
         &alice_did,
-        6,
-        federated_e2ee_realm_payload(E2EE_REALM_ID, &alice_did),
+        3,
+        Some(&e2ee_founding_grant.event_id),
+        json!({
+            "realm_id": E2EE_REALM_ID,
+            "allow_binding_sources": ["explicit"],
+            "allowed_recipient_services": [server_b.service_id()]
+        }),
     )?;
+    attach_delivery_policy_cell_contract(&mut e2ee_delivery_policy)?;
+    sign_federation_event(&mut e2ee_delivery_policy)?;
     let e2ee_bob_join = signed_federation_event(
         E2EE_BOB_JOIN_EVENT_ID,
         "ak.member.state",
         E2EE_REALM_ID,
         &alice_did,
-        7,
+        4,
+        Some(&e2ee_delivery_policy.event_id),
         member_delivery_binding_payload(E2EE_REALM_ID, &bob_did, server_b.service_id()),
     )?;
+    let e2ee_delivery_frontier = vec![e2ee_bob_join.event_id.clone()];
+    let e2ee_bootstrap_body = peer_events_submit_body(
+        E2EE_REALM_ID,
+        vec![
+            e2ee_realm_create,
+            e2ee_founding_grant,
+            e2ee_delivery_policy,
+            e2ee_bob_join,
+        ],
+        Some("a-to-b-e2ee-bootstrap-01"),
+    )?;
+    let e2ee_url = server_b.url("/_arkret/peer/events");
+    let pushed_e2ee_bootstrap = expect_json(
+        with_federation_trust_headers(
+            server_b.http().post(&e2ee_url).json(&e2ee_bootstrap_body),
+            "POST",
+            &e2ee_url,
+            server_a,
+            server_b,
+            &e2ee_bootstrap_body,
+        )?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_json_array_contains(
+        &pushed_e2ee_bootstrap["accepted"],
+        e2ee_realm_create_event_id.as_str(),
+        &pushed_e2ee_bootstrap,
+    );
+    assert_json_array_contains(
+        &pushed_e2ee_bootstrap["accepted"],
+        E2EE_BOB_JOIN_EVENT_ID,
+        &pushed_e2ee_bootstrap,
+    );
+    let peer_claim = claim_test_keypackage(
+        server_a,
+        server_b,
+        &alice_did,
+        &bob_did,
+        &alice_device_key,
+        &alice_signer_evidence,
+    )
+    .await?;
+    let claimed_keypackage = peer_claim
+        .claims
+        .first()
+        .context("peer KeyPackage claim returned no claim")?;
+
     let e2ee_genesis = signed_federation_event(
         E2EE_MLS_GENESIS_EVENT_ID,
         "ak.mls.genesis",
         E2EE_REALM_ID,
         &alice_did,
-        8,
+        5,
+        Some(&e2ee_delivery_frontier[0]),
         mls_genesis_payload(E2EE_REALM_ID, &alice_did),
     )?;
-    let e2ee_welcome = signed_federation_event(
+    let mut e2ee_welcome = signed_federation_event(
         E2EE_MLS_WELCOME_EVENT_ID,
         "ak.mls.welcome",
         E2EE_REALM_ID,
         &alice_did,
-        9,
+        6,
+        Some(&e2ee_genesis.event_id),
         mls_welcome_payload(
             E2EE_REALM_ID,
             &alice_did,
             &bob_did,
             &alice_device_key,
             ALICE_DEVICE_ID,
-            ALICE_DEVICE_AUTHORIZE_EVENT_ID,
+            claimed_keypackage,
+            &peer_claim.claim_receipt,
         )?,
     )?;
+    sign_federation_event_with_device(&mut e2ee_welcome, ALICE_DEVICE_ID, &alice_device_key)?;
     let e2ee_commit = signed_federation_event(
         E2EE_MLS_COMMIT_EVENT_ID,
         "ak.mls.commit",
         E2EE_REALM_ID,
         &alice_did,
-        10,
+        7,
+        Some(&e2ee_welcome.event_id),
         mls_commit_payload(E2EE_REALM_ID),
     )?;
     let e2ee_message = signed_federation_event(
@@ -434,44 +511,41 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.message.create",
         E2EE_REALM_ID,
         &alice_did,
-        11,
+        8,
+        Some(&e2ee_commit.event_id),
         encrypted_message_payload(E2EE_REALM_ID),
     )?;
-    let e2ee_body = peer_events_submit_body(
-        E2EE_REALM_ID,
-        vec![
-            e2ee_realm_create,
-            e2ee_bob_join,
-            e2ee_genesis,
-            e2ee_welcome,
-            e2ee_commit,
-            e2ee_message,
-        ],
-        Some("a-to-b-e2ee-01"),
-    )?;
-    let pushed_e2ee = expect_json(
-        with_federation_trust_headers(
-            server_b
-                .http()
-                .post(server_b.url("/_arkret/peer/events"))
-                .json(&e2ee_body),
-            "POST",
-            &server_b.url("/_arkret/peer/events"),
-            server_a,
-            server_b,
-            &e2ee_body,
-        )?,
-        StatusCode::OK,
-    )
-    .await?;
-    for accepted_id in [
-        E2EE_REALM_CREATE_EVENT_ID,
-        E2EE_BOB_JOIN_EVENT_ID,
-        E2EE_MLS_GENESIS_EVENT_ID,
-        E2EE_MLS_WELCOME_EVENT_ID,
-        E2EE_MLS_COMMIT_EVENT_ID,
-        E2EE_MESSAGE_EVENT_ID,
-    ] {
+    for (index, (accepted_id, event)) in [
+        (E2EE_MLS_GENESIS_EVENT_ID, e2ee_genesis),
+        (E2EE_MLS_WELCOME_EVENT_ID, e2ee_welcome),
+        (E2EE_MLS_COMMIT_EVENT_ID, e2ee_commit),
+        (E2EE_MESSAGE_EVENT_ID, e2ee_message),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let idempotency_key = format!("a-to-b-e2ee-{index:02}");
+        let mut e2ee_body = peer_events_submit_body_with_delivery_frontier(
+            E2EE_REALM_ID,
+            vec![event],
+            &e2ee_delivery_frontier,
+            Some(&idempotency_key),
+        )?;
+        if accepted_id == E2EE_MLS_WELCOME_EVENT_ID {
+            e2ee_body.signer_key_evidence = vec![alice_signer_evidence.clone()];
+        }
+        let pushed_e2ee = expect_json(
+            with_federation_trust_headers(
+                server_b.http().post(&e2ee_url).json(&e2ee_body),
+                "POST",
+                &e2ee_url,
+                server_a,
+                server_b,
+                &e2ee_body,
+            )?,
+            StatusCode::OK,
+        )
+        .await?;
         assert_json_array_contains(&pushed_e2ee["accepted"], accepted_id, &pushed_e2ee);
     }
 
@@ -514,8 +588,6 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "Bob sync leaked plaintext E2EE body: {bob_e2ee_sync}"
     );
 
-    let bob_device_key = SigningKey::from_bytes(&BOB_DEVICE_KEY_SEED);
-    authorize_device_public_key(server_b, &bob, &bob_did, BOB_DEVICE_ID, &bob_device_key).await?;
     let bob_one_time_keys = json!({
         "signed_curve25519:bob-otk1": {
             "algorithm": "signed_curve25519",
@@ -572,8 +644,18 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
+    let received_device_message = received["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages.iter().find(|message| {
+                message["message_id"] == "ak:device_message:01904100-0000-7000-8000-0000000000b1"
+            })
+        })
+        .with_context(|| {
+            format!("Bob device-message response omitted the sent message: {received}")
+        })?;
     assert_eq!(
-        received["messages"][0]["content"]["ciphertext"],
+        received_device_message["content"]["ciphertext"],
         "opaque-cross-server-welcome"
     );
 
@@ -808,9 +890,11 @@ fn mls_welcome_payload(
     bob_did: &str,
     requester_device_key: &SigningKey,
     requester_device_id: &str,
-    device_authorize_event_id: &str,
+    claim: &KeyPackageClaimRecord,
+    peer_claim_receipt: &arkret_core::PeerKeyPackageClaimReceipt,
 ) -> Result<Value> {
-    let keypackage_ref = "sha256:5555555555555555555555555555555555555555555555555555555555555555";
+    let keypackage_ref = claim.keypackage_ref.as_str();
+    let keypackage_digest = claim.keypackage_digest.as_str();
     // The welcome ciphertext is opaque base64-encoded MLS Welcome bytes: soland
     // base64-decodes `ciphertext` and binds `welcome_digest =
     // sha256(decoded bytes)` (reducer/mls.rs `validate_welcome_trust_binding`).
@@ -819,22 +903,18 @@ fn mls_welcome_payload(
     let welcome_plaintext = b"opaque-cross-server-mls-welcome";
     let welcome_bytes = URL_SAFE_NO_PAD.encode(welcome_plaintext);
     let welcome_digest = sha256_digest(welcome_plaintext);
-    let claim_id = "claim-cross-ps-01";
-    let nonce = "claim_cross_ps_01_nonce_128_bit_material";
+    let claim_id = claim.claim_id.as_str();
+    let nonce = peer_claim_receipt.request.claim_nonce.as_str();
     // §6.04 device path: the welcome `claim_envelope.signature` is a real
     // Ed25519 signature by the requester's device key over the SDK's
     // `MlsWelcomeClaimEnvelopeSigningInput` canonical bytes. soland deserialises
     // the envelope and recomputes the same canonical signing input, so we build
     // it field-for-field (device path → `requester_device_id`, no
     // `ssk_generation`) with the canonical timestamp form the SDK emits.
-    let created_at_canonical = format_timestamp_canonical(
-        chrono::DateTime::parse_from_rfc3339("2026-05-25T00:00:02.000Z")
-            .context("welcome claim envelope timestamp")?
-            .with_timezone(&chrono::Utc),
-    );
+    let created_at_canonical = format_timestamp_canonical(peer_claim_receipt.claimed_at);
     let signing_input = json!({
         "keypackage_ref": keypackage_ref,
-        "keypackage_digest": keypackage_ref,
+        "keypackage_digest": keypackage_digest,
         "intended_realm_id": realm_id,
         "claim_id": claim_id,
         "requester_did": alice_did,
@@ -844,24 +924,30 @@ fn mls_welcome_payload(
         "created_at": created_at_canonical,
     });
     let claim_signature = requester_device_key.sign(&canonical_json_bytes(&signing_input)?);
+    let mut claim_ref = json!({
+        "claim_id": claim_id,
+        "keypackage_ref": keypackage_ref,
+        "keypackage_digest": keypackage_digest,
+        "capabilities_digest": claim.capabilities_digest,
+    });
+    if let Some(generation) = claim.ssk_generation {
+        claim_ref["ssk_generation"] = json!(generation);
+    }
+    if let Some(event_id) = claim.device_authorize_event_id.as_deref() {
+        claim_ref["device_authorize_event_id"] = json!(event_id);
+    }
     Ok(json!({
         "mls_group_id": E2EE_MLS_GROUP_ID,
         "epoch": 1,
         "recipient_principal_id": bob_did,
         "recipient_device_id": BOB_DEVICE_ID,
         "keypackage_ref": keypackage_ref,
-        "keypackage_digest": keypackage_ref,
+        "keypackage_digest": keypackage_digest,
         "claim_id": claim_id,
-        "claim_ref": {
-            "claim_id": claim_id,
-            "keypackage_ref": keypackage_ref,
-            "keypackage_digest": keypackage_ref,
-            "capabilities_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
-            "device_authorize_event_id": device_authorize_event_id
-        },
+        "claim_ref": claim_ref,
         "claim_envelope": {
             "keypackage_ref": keypackage_ref,
-            "keypackage_digest": keypackage_ref,
+            "keypackage_digest": keypackage_digest,
             "intended_realm_id": realm_id,
             "claim_id": claim_id,
             "requester_did": alice_did,
@@ -870,16 +956,17 @@ fn mls_welcome_payload(
             "welcome_digest": welcome_digest,
             "created_at": created_at_canonical,
             "signature": {
-                "kid": format!("{alice_did}#device"),
+                "kid": format!("{alice_did}#{requester_device_id}"),
                 "alg": "EdDSA",
                 "sig": URL_SAFE_NO_PAD.encode(claim_signature.to_bytes())
             }
         },
         "welcome_ref": "ak:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2",
         "ciphertext": welcome_bytes,
-        "expires_at": "2026-05-25T01:00:00.000Z",
+        "expires_at": peer_claim_receipt.expires_at,
         "commit_ref": E2EE_MLS_COMMIT_EVENT_ID,
-        "governance_binding": mls_governance_binding(realm_id, 0, 0)
+        "governance_binding": mls_governance_binding(realm_id, 0, 1),
+        "peer_claim_receipt": peer_claim_receipt
     }))
 }
 
@@ -1285,6 +1372,7 @@ fn signed_federation_event(
     realm_id: &str,
     actor_id: &str,
     actor_seq: u64,
+    prev_event_id: Option<&EventId>,
     payload: Value,
 ) -> Result<Event> {
     let mut event = Event::new(
@@ -1303,6 +1391,9 @@ fn signed_federation_event(
         .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
+    if let Some(prev_event_id) = prev_event_id {
+        event.prev_refs.push(prev_event_id.clone());
+    }
     sign_federation_event(&mut event)?;
     Ok(event)
 }
@@ -1325,6 +1416,318 @@ fn sign_federation_event(event: &mut Event) -> Result<()> {
     .context("sign federation Event with the provisioned principal key")
 }
 
+fn sign_federation_event_with_device(
+    event: &mut Event,
+    device_id: &str,
+    device_signing_key: &SigningKey,
+) -> Result<()> {
+    let verification_method = format!("{}#{device_id}", event.actor_id);
+    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+        device_signing_key.to_bytes(),
+        event.actor_id.clone(),
+        verification_method.clone(),
+    );
+    let created_at = event.created_at;
+    event.proofs.clear();
+    arkret::signatures::sign_event(
+        event,
+        &signer,
+        &verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .context("sign federation Event with the authorized device key")
+}
+
+async fn bootstrap_test_device_authorization(
+    server: &ArkretServer,
+    token: &str,
+    actor: &str,
+    device_id: &str,
+    device_signing_key: &SigningKey,
+) -> Result<arkret_core::FederatedDeviceSigningKeyEvidence> {
+    let (_, remainder) = actor
+        .strip_prefix("did:webvh:")
+        .and_then(|remainder| remainder.split_once(':'))
+        .context("test principal is not a did:webvh DID")?;
+    let (method_authority, local_id) = remainder
+        .split_once(":webvh:")
+        .context("test principal DID has no local id")?;
+    let host = method_authority.replace("%3A", ":").replace("%3a", ":");
+    let prepared = test_principal_inception(&host, local_id)?;
+    let principal = Did::new(actor.to_owned()).context("invalid test principal DID")?;
+    let realm_id = RealmId::new(principal_control_realm_id(&principal))?;
+    let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
+
+    let mut create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
+        principal_id: principal.clone(),
+        realm_id: realm_id.clone(),
+        trust_domain: server.trust_domain().clone(),
+        did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+        event_id: EventId::new(ALICE_PCR_CREATE_EVENT_ID.to_owned())?,
+        created_at,
+        hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
+    })?;
+    let root_seed: [u8; 32] =
+        Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
+    let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
+    let root_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+        root_seed,
+        root_did,
+        prepared.root_verification_method.clone(),
+    );
+    arkret::signatures::sign_event(
+        &mut create,
+        &root_signer,
+        &prepared.root_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )?;
+
+    let enrollment_method = format!("{actor}#cotest-device-enrollment-authority");
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
+    let payload = arkret_core::DeviceAuthorizePayload {
+        principal_id: principal.clone(),
+        device_id: DeviceId::new(device_id.to_owned())?,
+        device_public_key: NonEmptyString::new(device_public_key.clone())
+            .map_err(anyhow::Error::msg)?,
+        hpke_key: NonEmptyString::new("z6LSCotestFederationHpkeKey").map_err(anyhow::Error::msg)?,
+        algorithms: vec![
+            NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
+                .map_err(anyhow::Error::msg)?,
+            NonEmptyString::new("ak.mls.v1").map_err(anyhow::Error::msg)?,
+        ],
+        device_key_algorithm: Some(NonEmptyString::new("EdDSA").map_err(anyhow::Error::msg)?),
+        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(principal.clone()),
+        scopes: None,
+        not_before: created_at,
+        expires_at: None,
+        device_signature: None,
+        proof: None,
+        cross_signing_binding: None,
+        enrollment_authority_binding: Some(arkret_core::DeviceEnrollmentAuthorityBinding {
+            kind: arkret_core::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
+            authority_did: principal.clone(),
+            authorization_ref: NonEmptyString::new(enrollment_method.clone())
+                .map_err(anyhow::Error::msg)?,
+        }),
+        recovery_session_id: None,
+    };
+    let mut authorize = Event::new(
+        arkret_core::events::EventKind::DEVICE_AUTHORIZE,
+        realm_id,
+        principal.clone(),
+        1,
+        Hlc::new("01970e589d21-0001-a13f9c2e")?,
+        serde_json::to_value(payload)?,
+    )?;
+    authorize.event_id = EventId::new(ALICE_DEVICE_AUTHORIZE_EVENT_ID.to_owned())?;
+    authorize.created_at = created_at;
+    authorize.prev_refs = vec![create.event_id.clone()];
+    authorize.executed_by = Some(principal.clone());
+    authorize.authorization_ref = Some(enrollment_method.clone());
+    let enrollment_seed: [u8; 32] =
+        Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
+    let enrollment_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+        enrollment_seed,
+        principal.clone(),
+        enrollment_method.clone(),
+    );
+    arkret::signatures::sign_event(
+        &mut authorize,
+        &enrollment_signer,
+        &enrollment_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )?;
+
+    let request = self_principal_bootstrap_submit_request(create, authorize.clone())?;
+    let accepted = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .json(&request),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_json_array_contains(&accepted["accepted"], ALICE_PCR_CREATE_EVENT_ID, &accepted);
+    assert_json_array_contains(
+        &accepted["accepted"],
+        ALICE_DEVICE_AUTHORIZE_EVENT_ID,
+        &accepted,
+    );
+
+    Ok(arkret_core::FederatedDeviceSigningKeyEvidence {
+        actor_id: principal,
+        device_id: DeviceId::new(device_id.to_owned())?,
+        verification_method: format!("{actor}#{device_id}"),
+        device_signing_key: arkret_core::DidKey::new(format!("did:key:{device_public_key}"))
+            .map_err(anyhow::Error::msg)?,
+        authorization_accepted_at: chrono::Utc::now(),
+        device_authorize_event: Box::new(authorize),
+    })
+}
+
+async fn upload_test_keypackage(
+    server: &ArkretServer,
+    token: &str,
+    principal_id: &str,
+    device_id: &str,
+    device_signing_key: &SigningKey,
+) -> Result<()> {
+    let key_package = b"cotest-cross-ps-bob-keypackage";
+    let keypackage_digest = sha256_digest(key_package);
+    let signature = device_signing_key.sign(key_package);
+    let now = chrono::Utc::now();
+    let outcome = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/keys/keypackages/upload"))
+            .bearer_auth(token)
+            .json(&json!({
+                "principal_id": principal_id,
+                "device_id": device_id,
+                "key_packages": [{
+                    "keypackage_id": "cotest-cross-ps-bob-keypackage-01",
+                    "keypackage_ref": keypackage_digest,
+                    "keypackage_digest": keypackage_digest,
+                    "key_package": URL_SAFE_NO_PAD.encode(key_package),
+                    "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
+                    "capabilities": ["mls"],
+                    "created_at": format_timestamp_canonical(now),
+                    "expires_at": format_timestamp_canonical(now + chrono::Duration::hours(1))
+                }],
+                "device_signature": {
+                    "kid": format!("{principal_id}#{device_id}"),
+                    "alg": "EdDSA",
+                    "sig": URL_SAFE_NO_PAD.encode(signature.to_bytes())
+                }
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    anyhow::ensure!(
+        outcome["accepted"].as_u64() == Some(1),
+        "Bob KeyPackage upload was not accepted: {outcome}"
+    );
+    Ok(())
+}
+
+async fn claim_test_keypackage(
+    source: &ArkretServer,
+    destination: &ArkretServer,
+    requester: &str,
+    target: &str,
+    requester_device_key: &SigningKey,
+    requester_evidence: &arkret_core::FederatedDeviceSigningKeyEvidence,
+) -> Result<PeerKeyPackagesClaimOutcome> {
+    let claim_request_id =
+        Base64UrlString::new("Y2xhaW0tY3Jvc3MtcHMtMDE").map_err(anyhow::Error::msg)?;
+    let signed_at = chrono::Utc::now();
+    let verification_method = format!("{requester}#{}", requester_evidence.device_id);
+    let mut body = PeerKeyPackagesClaimRequestBody {
+        claim_request_id: claim_request_id.clone(),
+        target_principal_id: Did::new(target.to_owned())?,
+        requester: Did::new(requester.to_owned())?,
+        intended_realm_id: RealmId::new(E2EE_REALM_ID.to_owned())?,
+        mls_group_id: NonEmptyString::new(E2EE_MLS_GROUP_ID).map_err(anyhow::Error::msg)?,
+        claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
+        required_capabilities: vec![NonEmptyString::new("mls").map_err(anyhow::Error::msg)?],
+        claim_nonce: Base64UrlString::new("Y2xhaW1fbm9uY2VfY3Jvc3NfcHNfMDE")
+            .map_err(anyhow::Error::msg)?,
+        expires_at: signed_at + chrono::Duration::minutes(5),
+        target_device_ids: vec![DeviceId::new(BOB_DEVICE_ID.to_owned())?],
+        minimal_metadata_allowed: Some(false),
+        timeout_ms: Some(5_000),
+        strand_id: None,
+        pair_key: None,
+        allow_last_resort: Some(false),
+        requester_authorization: PeerKeyPackageRequesterAuthorization {
+            verification_method: NonEmptyString::new(verification_method.clone())
+                .map_err(anyhow::Error::msg)?,
+            requester_device_id: Some(requester_evidence.device_id.clone()),
+            ssk_generation: None,
+            device_authorize_event_id: Some(
+                NonEmptyString::new(
+                    requester_evidence
+                        .device_authorize_event
+                        .event_id
+                        .to_string(),
+                )
+                .map_err(anyhow::Error::msg)?,
+            ),
+            signed_at,
+            signature: KeyOperationSignature {
+                kid: NonEmptyString::new(verification_method.clone())
+                    .map_err(anyhow::Error::msg)?,
+                alg: Some(NonEmptyString::new("EdDSA").map_err(anyhow::Error::msg)?),
+                sig: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+            },
+        },
+        requester_signing_key_evidence: Some(requester_evidence.clone()),
+    };
+    let draft = PeerKeyPackagesClaimAuthorizationDraft {
+        request: body.unsigned_request(),
+        transport_binding: PeerKeyPackagesClaimTransportBinding {
+            source_service_id: Did::new(source.service_id().to_owned())?,
+            destination_service_id: Did::new(destination.service_id().to_owned())?,
+            source_trust_domain: source.trust_domain().clone(),
+            destination_trust_domain: destination.trust_domain().clone(),
+        },
+    };
+    let signing_bytes =
+        peer_keypackage_claim_authorization_signing_bytes(&draft, &body.requester_authorization)?;
+    body.requester_authorization.signature.sig = Base64UrlString::new(
+        URL_SAFE_NO_PAD.encode(requester_device_key.sign(&signing_bytes).to_bytes()),
+    )
+    .map_err(anyhow::Error::msg)?;
+
+    let url = destination.url("/_arkret/peer/keys/keypackages/claim");
+    let outcome = expect_json(
+        with_federation_trust_headers_and_idempotency(
+            destination.http().post(&url).json(&body),
+            "POST",
+            &url,
+            source,
+            destination,
+            &body,
+            claim_request_id.as_str(),
+        )?,
+        StatusCode::OK,
+    )
+    .await?;
+    serde_json::from_value(outcome).context("decode peer KeyPackage claim outcome")
+}
+
+fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
+    let cell = arkret_core::CellRef::new(format!(
+        "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
+        event.realm_id
+    ))?;
+    event.preconditions = vec![arkret_core::Precondition {
+        cell: cell.clone(),
+        predicate: arkret_core::Predicate {
+            op: arkret_core::PredicateOp::HeadEq,
+            value: Some(Value::Null),
+            values: None,
+            predicate_id: None,
+        },
+    }];
+    event.effects = vec![arkret_core::Effect {
+        cell,
+        op: arkret_core::LatticeOp {
+            op_type: arkret_core::LatticeOpType::Set,
+            tag: None,
+            value: Some(serde_json::to_value(&event.payload)?),
+            from: None,
+            to: None,
+            reason: None,
+            issuer_seq: None,
+        },
+    }];
+    Ok(())
+}
+
 fn with_federation_trust_headers(
     builder: reqwest::RequestBuilder,
     method: &str,
@@ -1345,6 +1748,33 @@ fn with_federation_trust_headers(
         destination,
         content_digest,
         request_canonical_digest,
+        None,
+    )?;
+    Ok(builder.body(body_bytes))
+}
+
+fn with_federation_trust_headers_and_idempotency(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    source: &ArkretServer,
+    destination: &ArkretServer,
+    body: &impl Serialize,
+    idempotency_key: &str,
+) -> Result<reqwest::RequestBuilder> {
+    let body_bytes = canonical_json_bytes(body)?;
+    let content_digest =
+        ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = canonical_sha256(body)?;
+    let builder = with_federation_trust_headers_for_digest(
+        builder,
+        method,
+        target_url,
+        source,
+        destination,
+        content_digest,
+        request_canonical_digest,
+        Some(idempotency_key),
     )?;
     Ok(builder.body(body_bytes))
 }
@@ -1412,6 +1842,7 @@ fn with_federation_trust_headers_for_digest(
     destination: &ArkretServer,
     content_digest: String,
     request_canonical_digest: String,
+    idempotency_key: Option<&str>,
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_id = source.service_id();
     let destination_service_id = destination.service_id();
@@ -1432,12 +1863,16 @@ fn with_federation_trust_headers_for_digest(
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;
     let keyid = format!("{source_service_id}#federation-fanout-key");
+    let idempotency_component = idempotency_key.map_or("", |_| " \"idempotency-key\"");
     let signature_params = format!(
         "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
          \"source-service-id\" \"destination-service-id\" \"source-trust-domain\" \
-         \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
+         \"destination-trust-domain\" \"request-canonical-digest\"{idempotency_component});created={created};\
          expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
     );
+    let idempotency_line = idempotency_key
+        .map(|value| format!("\"idempotency-key\": {value}\n"))
+        .unwrap_or_default();
     let signature_base = format!(
         "\"@method\": {}\n\
          \"@target-uri\": {target_uri}\n\
@@ -1448,13 +1883,14 @@ fn with_federation_trust_headers_for_digest(
          \"source-trust-domain\": {source_trust_domain}\n\
          \"destination-trust-domain\": {destination_trust_domain}\n\
          \"request-canonical-digest\": {request_canonical_digest}\n\
+         {idempotency_line}\
          \"@signature-params\": {signature_params}",
         method.to_ascii_uppercase()
     );
     let signing_key = signing_key_from_seed(source.notary_signing_key_seed());
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
-    Ok(builder
+    let mut builder = builder
         .header("Content-Digest", content_digest)
         .header("Source-Service-ID", source_service_id)
         .header("Destination-Service-ID", destination_service_id)
@@ -1462,7 +1898,11 @@ fn with_federation_trust_headers_for_digest(
         .header("Destination-Trust-Domain", destination_trust_domain)
         .header("Request-Canonical-Digest", request_canonical_digest)
         .header("Signature-Input", format!("sig1={signature_params}"))
-        .header("Signature", format!("sig1=:{signature}:")))
+        .header("Signature", format!("sig1=:{signature}:"));
+    if let Some(idempotency_key) = idempotency_key {
+        builder = builder.header("Idempotency-Key", idempotency_key);
+    }
+    Ok(builder)
 }
 
 /// Mint a distinct, fully verifiable `did:webvh` principal for a test service.

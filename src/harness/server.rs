@@ -81,10 +81,6 @@ impl ArkretServer {
         Self::spawn_with_env(name, &env).await
     }
 
-    async fn spawn_with_network(name: &str, docker_network: Option<&str>) -> Result<Self> {
-        Self::spawn_with_network_and_env(name, docker_network, &[]).await
-    }
-
     async fn spawn_with_network_and_env(
         name: &str,
         docker_network: Option<&str>,
@@ -583,6 +579,7 @@ impl TestServerGroup {
         count: usize,
         bin_path: &Path,
     ) -> Result<Vec<ArkretServer>> {
+        let shared_trust_domain = test_trust_domain(name);
         struct Pending {
             name: String,
             port: ReservedPort,
@@ -621,6 +618,7 @@ impl TestServerGroup {
             let extra_env: Vec<(&str, &str)> = vec![
                 ("SOLAND_FEDERATION_PEERS", peer_lists[index].as_str()),
                 ("SOLAND_FEDERATION_OUTBOUND", "0"),
+                ("SOLAND_TRUST_DOMAIN", shared_trust_domain.as_str()),
             ];
             match ArkretServer::spawn_external_binary_with_ports_and_env(
                 &node.name,
@@ -673,10 +671,12 @@ impl TestServerGroup {
             None
         };
         let mut servers = Vec::with_capacity(count);
+        let shared_trust_domain = test_trust_domain(name);
         for index in 0..count {
-            match ArkretServer::spawn_with_network(
+            match ArkretServer::spawn_with_network_and_env(
                 &format!("{name}-{index}"),
                 docker_network.as_deref(),
+                &[("SOLAND_TRUST_DOMAIN", shared_trust_domain.as_str())],
             )
             .await
             {

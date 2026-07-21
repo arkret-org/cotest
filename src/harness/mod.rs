@@ -156,7 +156,12 @@ fn normalize_plaintext_visible_service(entry: &Value) -> Value {
     }
 }
 
-fn realm_create_payload(actor: &str, service_id: &str, realm_id: &str, input: &Value) -> Value {
+pub(crate) fn realm_create_payload(
+    actor: &str,
+    service_id: &str,
+    realm_id: &str,
+    input: &Value,
+) -> Value {
     let title = input
         .get("title")
         .and_then(Value::as_str)

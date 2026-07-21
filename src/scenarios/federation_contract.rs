@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    ArkretServer, dev_login, expect_api_error, expect_json, expect_response,
+    ArkretServer, add_member, dev_login, expect_api_error, expect_json, expect_response,
     member_join_payload_with_delivery_binding, message_create_text_payload, message_redact_payload,
     realm_bootstrap_event_batch, submit_event,
 };
@@ -228,6 +228,7 @@ fn signed_federation_event(
     realm_id: &str,
     actor_id: &str,
     actor_seq: u64,
+    prev_event_id: Option<&EventId>,
     payload: Value,
 ) -> Result<Event> {
     let mut event = Event::new(
@@ -246,21 +247,58 @@ fn signed_federation_event(
         .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
-    let verification_method = format!("{actor_id}#cotest");
+    if let Some(prev_event_id) = prev_event_id {
+        event.prev_refs.push(prev_event_id.clone());
+    }
+    sign_federation_contract_event(&mut event)?;
+    Ok(event)
+}
+
+fn sign_federation_contract_event(event: &mut Event) -> Result<()> {
+    let verification_method = format!("{}#cotest", event.actor_id);
     let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         arkret::signatures::development_signing_key_seed(&verification_method),
         event.actor_id.clone(),
         verification_method.clone(),
     );
     let created_at = event.created_at;
+    event.proofs.clear();
     arkret::signatures::sign_event(
-        &mut event,
+        event,
         &signer,
         &verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
-    .context("sign federation contract Event with the provisioned development key")?;
-    Ok(event)
+    .context("sign federation contract Event with the provisioned development key")
+}
+
+fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
+    let cell = arkret_core::CellRef::new(format!(
+        "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
+        event.realm_id
+    ))?;
+    event.preconditions = vec![arkret_core::Precondition {
+        cell: cell.clone(),
+        predicate: arkret_core::Predicate {
+            op: arkret_core::PredicateOp::HeadEq,
+            value: Some(Value::Null),
+            values: None,
+            predicate_id: None,
+        },
+    }];
+    event.effects = vec![arkret_core::Effect {
+        cell,
+        op: arkret_core::LatticeOp {
+            op_type: arkret_core::LatticeOpType::Set,
+            tag: None,
+            value: Some(serde_json::to_value(&event.payload)?),
+            from: None,
+            to: None,
+            reason: None,
+            issuer_seq: None,
+        },
+    }];
+    Ok(())
 }
 
 fn federation_realm_payload(
@@ -332,7 +370,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "schema_violation",
     )
     .await?;
     // A syntactically valid JSON object that cannot deserialize into the
@@ -412,7 +450,6 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     )
     .await?;
     let realm_id = "ak:realm:0196419b-0000-7000-8000-00000000fed0";
-    let realm_create_event_id = "ak:event:0196419b-0000-7000-8000-00000000f100";
     let policy_event_id = "ak:event:0196419b-0000-7000-8000-00000000f0fe";
     let member_event_id = "ak:event:0196419b-0000-7000-8000-00000000f0ff";
     let replay_event_id = "ak:event:0196419b-0000-7000-8000-00000000f101";
@@ -421,41 +458,48 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let remote_service_id = "did:web:remote.example";
     let remote_source = FederationSource::new(remote_service_id, "ak:trust_domain:remote.example")?;
 
-    let realm_create = signed_federation_event(
-        realm_create_event_id,
-        "ak.realm.create",
-        realm_id,
+    let mut bootstrap_events = realm_bootstrap_event_batch(
         remote_service_id,
-        1,
+        realm_id,
         federation_realm_payload(
             realm_id,
             remote_service_id,
             &remote_source.trust_domain,
             &[remote_service_id, server.service_id()],
         ),
-    )?;
+    )?
+    .into_iter()
+    .map(serde_json::from_value::<Event>)
+    .collect::<Result<Vec<_>, _>>()?;
+    let realm_create = bootstrap_events.remove(0);
+    let founding_grant = bootstrap_events.remove(0);
+    let realm_create_event_id = realm_create.event_id.clone();
     // The originating service is itself the Realm's delivery-bound member (its
     // events are homed on remote.example), so a peer read by that same service
     // is an authorised member read rather than anti-enumeration probing. Declare
     // the delivery-binding policy admitting the binding, then bind the member.
-    let delivery_policy = signed_federation_event(
+    let mut delivery_policy = signed_federation_event(
         policy_event_id,
         "ak.realm.delivery_binding_policy",
         realm_id,
         remote_service_id,
-        2,
+        3,
+        Some(&founding_grant.event_id),
         json!({
             "realm_id": realm_id,
             "allow_binding_sources": ["explicit"],
             "allowed_recipient_services": [remote_service_id]
         }),
     )?;
+    attach_delivery_policy_cell_contract(&mut delivery_policy)?;
+    sign_federation_contract_event(&mut delivery_policy)?;
     let member_binding = signed_federation_event(
         member_event_id,
         "ak.member.state",
         realm_id,
         remote_service_id,
-        3,
+        4,
+        Some(&delivery_policy.event_id),
         member_join_payload_with_delivery_binding(
             realm_id,
             remote_service_id,
@@ -465,7 +509,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
                 "binding_scope": "realm",
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
-                "service_acceptance_ref": realm_create_event_id,
+                "service_acceptance_ref": realm_create_event_id.as_str(),
                 "resolved_at": "2026-05-02T00:00:00.000Z"
             }),
         )?,
@@ -475,19 +519,49 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.message.create",
         realm_id,
         remote_service_id,
-        4,
+        5,
+        Some(&member_binding.event_id),
         message_create_text_payload(realm_id, "from federation")?,
     )?;
 
     let first_push_url = server.url("/_arkret/peer/events");
-    let first_push_body = peer_events_submit_body(
+    let bootstrap_push_body = peer_events_submit_body(
         realm_id,
         vec![
             realm_create.clone(),
+            founding_grant.clone(),
             delivery_policy.clone(),
             member_binding.clone(),
-            event.clone(),
         ],
+        Some("bootstrap-1"),
+    )?;
+    let bootstrap_push = expect_json(
+        with_signed_federation_request(
+            server
+                .http()
+                .post(&first_push_url)
+                .json(&bootstrap_push_body),
+            "POST",
+            &first_push_url,
+            &server,
+            &remote_source,
+            &bootstrap_push_body,
+        )?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_json_array_contains(
+        &bootstrap_push["accepted"],
+        realm_create_event_id.as_str(),
+        &bootstrap_push,
+    );
+    assert!(json_array_absent_or_empty(&bootstrap_push["rejected"]));
+
+    let delivery_frontier = vec![member_binding.event_id.clone()];
+    let first_push_body = peer_events_submit_body_with_delivery_frontier(
+        realm_id,
+        vec![event.clone()],
+        &delivery_frontier,
         Some("replay-1"),
     )?;
     let first_push = expect_json(
@@ -502,7 +576,6 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         StatusCode::OK,
     )
     .await?;
-    assert_json_array_contains(&first_push["accepted"], realm_create_event_id, &first_push);
     assert_json_array_contains(&first_push["accepted"], replay_event_id, &first_push);
     assert!(json_array_absent_or_empty(&first_push["rejected"]));
 
@@ -546,7 +619,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     // message-replay one. The replica delivery gate admits the push
     // (federation_replica_observer), and the message dedupes against its prior
     // persisted copy.
-    let replay_body = peer_events_submit_body(realm_id, vec![event], Some("replay-2"))?;
+    let replay_body = peer_events_submit_body(realm_id, vec![event.clone()], Some("replay-2"))?;
     let replay = expect_json(
         with_signed_federation_request(
             server.http().post(&replay_url).json(&replay_body),
@@ -590,7 +663,8 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.message.create",
         realm_id,
         remote_service_id,
-        5,
+        6,
+        Some(&event.event_id),
         json!({
             "encrypted": true,
             "content": {"ciphertext": "missing-envelope-fields"}
@@ -634,6 +708,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         realm_id,
         remote_service_id,
         6,
+        Some(&event.event_id),
         message_redact_payload(replay_event_id, None)?,
     )?;
     let redaction_push_url = server.url("/_arkret/peer/events");
@@ -774,13 +849,23 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         .context("member.state binding response missing event_id")?
         .to_owned();
 
+    add_member(
+        &server,
+        &alice,
+        "did:web:alice.example",
+        realm_id,
+        remote_source.service_id,
+    )
+    .await?;
+
     let event_id = "ak:event:0196419b-0000-7000-8000-00000000fe22";
     let event = signed_federation_event(
         event_id,
         "ak.message.create",
         realm_id,
-        "did:web:alice.example",
-        100,
+        remote_source.service_id,
+        1,
+        None,
         json!({
             "strand_id": realm_id.replacen("ak:realm:", "ak:strand:", 1),
             "track_name": "discussion",

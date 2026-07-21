@@ -33,8 +33,14 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::harness::{TestServerGroup, expect_json};
-use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
+use crate::harness::{
+    TestServerGroup, event_envelope_with_chain, expect_json,
+    member_join_payload_with_delivery_binding, realm_bootstrap_event_batch, realm_create_payload,
+    refresh_event_proof,
+};
+use crate::scenarios::_helpers::federation_binding::{
+    peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
+};
 use crate::scenarios::federation_collaboration::actor_did_for_service;
 
 /// Spawns two `soland` instances (pre-built binary, located via SOLAND_BIN
@@ -98,38 +104,107 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // `source_can_receive_plaintext`), not anti-enumeration probing. Realm-level
     // `sync_endpoints` is the canonical carrier for federation-peer surfaces
     // (member-delivery-binding.md §7), orthogonal to member delivery_binding.
-    let created = actor_a
-        .create_realm_with(json!({
-            "title": "e2-federation-two-node-realm",
-            "plaintext_visible_services": [
-                server_a.service_id(),
-                server_b.service_id(),
-            ],
-            "sync_endpoints": [
-                {
-                    "did": server_a.service_id(),
-                    "endpoint": server_a.base_url().as_str(),
-                    "role": "federation_peer",
-                    "service_type": "principal_server",
-                    "plaintext_visible": true,
-                    "visibility_scope": "plaintext_events",
-                },
-                {
-                    "did": server_b.service_id(),
-                    "endpoint": server_b.base_url().as_str(),
-                    "role": "federation_peer",
-                    "service_type": "principal_server",
-                    "plaintext_visible": true,
-                    "visibility_scope": "plaintext_events",
-                },
-            ],
-        }))
-        .await
-        .context("create Realm on server_a")?;
-    let realm_id = created["realm_id"]
+    let realm_id = new_prefixed_uuid7("ak:realm:");
+    let realm_input = json!({
+        "title": "e2-federation-two-node-realm",
+        "plaintext_visible_services": [
+            {
+                "service_id": server_a.service_id(),
+                "service_type": "principal_server",
+                "data_classes": ["message_content"],
+                "purposes": ["federated_plaintext_delivery"],
+                "visibility": "private_plaintext",
+            },
+            {
+                "service_id": server_b.service_id(),
+                "service_type": "principal_server",
+                "data_classes": ["message_content"],
+                "purposes": ["federated_plaintext_delivery"],
+                "visibility": "private_plaintext",
+            },
+        ],
+        "sync_endpoints": [
+            {
+                "did": server_a.service_id(),
+                "endpoint": server_a.base_url().as_str(),
+                "role": "federation_peer",
+                "service_type": "principal_server",
+                "plaintext_visible": true,
+                "visibility_scope": "plaintext_events",
+            },
+            {
+                "did": server_b.service_id(),
+                "endpoint": server_b.base_url().as_str(),
+                "role": "federation_peer",
+                "service_type": "principal_server",
+                "plaintext_visible": true,
+                "visibility_scope": "plaintext_events",
+            },
+        ],
+    });
+    let realm_payload = realm_create_payload(
+        &actor_a.actor,
+        server_a.service_id(),
+        &realm_id,
+        &realm_input,
+    );
+    let mut bootstrap_events =
+        realm_bootstrap_event_batch(&actor_a.actor, &realm_id, realm_payload)?;
+    let founding_grant_id = bootstrap_events[1]["event_id"]
         .as_str()
-        .context("create realm response missing realm_id")?
+        .context("founding grant lacks event_id")?
         .to_owned();
+    let mut delivery_policy = event_envelope_with_chain(
+        &actor_a.actor,
+        &realm_id,
+        "ak.realm.delivery_binding_policy",
+        json!({
+            "realm_id": realm_id,
+            "allow_binding_sources": ["explicit"],
+            "allowed_recipient_services": [server_b.service_id()]
+        }),
+        3,
+        Some(&founding_grant_id),
+    );
+    attach_delivery_policy_cell_contract(&mut delivery_policy)?;
+    refresh_event_proof(&mut delivery_policy)?;
+    let delivery_policy_id = delivery_policy["event_id"]
+        .as_str()
+        .context("delivery policy lacks event_id")?
+        .to_owned();
+    let binding = event_envelope_with_chain(
+        &actor_a.actor,
+        &realm_id,
+        "ak.member.state",
+        member_join_payload_with_delivery_binding(
+            &realm_id,
+            &actor_a.actor,
+            json!({
+                "recipient_service_id": server_b.service_id(),
+                "recipient_service_type": "principal_server",
+                "binding_scope": "realm",
+                "binding_source": "explicit",
+                "delivery_modes": ["events", "sync"],
+                "service_acceptance_ref": "ak:event:01904100-0000-7000-8000-fedc0000e201",
+                "resolved_at": "2026-05-02T00:00:00.000Z"
+            }),
+        )?,
+        4,
+        Some(&delivery_policy_id),
+    );
+    let binding_event_id = binding["event_id"]
+        .as_str()
+        .context("delivery binding lacks event_id")?
+        .to_owned();
+    bootstrap_events.extend([delivery_policy, binding]);
+    expect_json(
+        actor_a
+            .post("/_arkret/self/events")
+            .json(&json!({"events": bootstrap_events})),
+        StatusCode::OK,
+    )
+    .await
+    .context("create Realm bootstrap on server_a")?;
     let _msg = actor_a
         .send_message(&realm_id, "thread-e2", "hello from server_a")
         .await
@@ -160,7 +235,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                 "peer events response must be an object with `events` array, got: {events_a}"
             )
         })?;
-    let event_envelopes = events_a_list
+    let mut event_envelopes = events_a_list
         .iter()
         .map(|entry| entry.get("event").unwrap_or(entry).clone())
         .map(|event| {
@@ -168,6 +243,12 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                 .context("parse peer event envelope into SDK Event")
         })
         .collect::<Result<Vec<_>>>()?;
+    event_envelopes.sort_by(|left, right| {
+        left.actor_id
+            .cmp(&right.actor_id)
+            .then_with(|| left.actor_seq.cmp(&right.actor_seq))
+            .then_with(|| left.event_id.cmp(&right.event_id))
+    });
     if event_envelopes.is_empty() {
         return Err(anyhow::anyhow!(
             "server_a peer events query returned no event envelopes: {events_a}"
@@ -175,10 +256,15 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     }
 
     // ── Step 4: push the same Events to server_b ─────────────────────────
+    let message_index = event_envelopes
+        .iter()
+        .position(|event| event.kind.as_str() == arkret_core::events::EventKind::MESSAGE_CREATE)
+        .context("peer query did not return the authored message")?;
+    let later_events = event_envelopes.split_off(message_index);
     let push_body = peer_events_submit_body(
         &realm_id,
         event_envelopes,
-        Some("cotest-two-node-peer-events"),
+        Some("cotest-two-node-peer-bootstrap"),
     )?;
 
     let push_url = format!(
@@ -202,6 +288,31 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
             .as_array()
             .is_some_and(|accepted| !accepted.is_empty()),
         "server_b did not accept any pushed federation Event: {push_result}"
+    );
+
+    let message_body = peer_events_submit_body_with_delivery_frontier(
+        &realm_id,
+        later_events,
+        &[arkret_core::EventId::new(binding_event_id)?],
+        Some("cotest-two-node-peer-events"),
+    )?;
+    let message_result = expect_json(
+        with_peer_post_headers(
+            server_b.http().post(&push_url).json(&message_body),
+            &push_url,
+            server_a,
+            server_b,
+            &message_body,
+        )?,
+        StatusCode::OK,
+    )
+    .await
+    .context("push post-bootstrap peer events to server_b")?;
+    anyhow::ensure!(
+        message_result["accepted"]
+            .as_array()
+            .is_some_and(|accepted| !accepted.is_empty()),
+        "server_b did not accept the pushed federation message: {message_result}"
     );
 
     // ── Step 5: confirm server_b's peer frontier endpoint is reachable ──
@@ -232,6 +343,23 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     }
     assert_eq!(frontier_b["realm_id"], realm_id);
 
+    Ok(())
+}
+
+fn attach_delivery_policy_cell_contract(event: &mut Value) -> Result<()> {
+    let realm_id = event["realm_id"]
+        .as_str()
+        .context("delivery policy Event lacks realm_id")?;
+    let cell = format!("ak:cell:ak.component.realm.delivery_binding_policy.v1:{realm_id}");
+    let payload = event["payload"].clone();
+    event["preconditions"] = json!([{
+        "cell": cell,
+        "predicate": {"op": "head_eq", "value": null}
+    }]);
+    event["effects"] = json!([{
+        "cell": cell,
+        "op": {"kind": "set", "value": payload}
+    }]);
     Ok(())
 }
 
