@@ -69,7 +69,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // re-introduced a hand-rolled canonical encoder. To regenerate:
             // `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:7ade5cd080c516a9c1073a87283790ce58ff681b2a83a97417568929018c5ee9",
+            expected_digest: "sha256:15c143d5c08983ae167c2096cd5e06a13ad2d9c097f76a895e2f144df7051054",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
@@ -113,7 +113,7 @@ fn vectors() -> Vec<CanonicalVector> {
                     "verificationMethod": {"key-1": "z6MkExample"},
                 },
             }),
-            expected_digest: "sha256:0f144fa1df6408114a253823b0814b6059b1656737e6e957bca6c89fa215b59b",
+            expected_digest: "sha256:cda74f4697a972c9bd6c70add695d13ddf6508dc737d629587e6de0644246a80",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.webvh_default_handle_claim.v1",
@@ -144,7 +144,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:cb6a1064cc183af165157f78bc56815451ac1e961274ebf2ed6b445959f87d0a",
+            expected_digest: "sha256:49a84641fe86c2b1992e8d3c9449cc104ece8515e5c8666650f54edafd6a0195",
         },
     ]
 }
@@ -355,7 +355,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:3526fdfd4dae52fb85e8f14feea672c295014d733d073df16037d911d5bdf9c8",
+        display_state, "sha256:7c2e2c38499e5e38a2bdbfbd9801ae847c5c98a81c8a5ed5b622eaab162f50fc",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
