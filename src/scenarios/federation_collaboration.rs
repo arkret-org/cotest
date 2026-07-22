@@ -549,21 +549,27 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         assert_json_array_contains(&pushed_e2ee["accepted"], accepted_id, &pushed_e2ee);
     }
 
-    let pending_welcomes = expect_json(
+    let device_messages = expect_json(
         server_b
             .http()
-            .get(server_b.url("/_soland/self/keys/keypackages/welcomes/pending"))
+            .get(server_b.url("/_arkret/self/device_messages"))
             .bearer_auth(&bob),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(pending_welcomes["welcomes"].as_array().unwrap().len(), 1);
+    let welcome_messages = device_messages["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|message| message["kind"] == "ak.mls.welcome")
+        .collect::<Vec<_>>();
+    assert_eq!(welcome_messages.len(), 1);
     assert_eq!(
-        pending_welcomes["welcomes"][0]["welcome_id"],
+        welcome_messages[0]["unsigned"]["mls_welcome_id"],
         "ak:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2"
     );
     assert_eq!(
-        pending_welcomes["welcomes"][0]["mls_group_ref"],
+        welcome_messages[0]["content"]["mls_group_id"],
         E2EE_MLS_GROUP_ID
     );
 
