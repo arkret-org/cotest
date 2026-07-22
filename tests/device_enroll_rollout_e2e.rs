@@ -405,7 +405,7 @@ fn assert_enrollment_authority_service(
         .iter()
         .find(|service| {
             service.get("type").and_then(Value::as_str)
-                == Some(arkret_core::service::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
+                == Some(arkret_models_discovery::service_requirements::DID_SERVICE_DEVICE_ENROLLMENT_AUTHORITY)
         })
         .context("ArkretDeviceEnrollmentAuthority service")?;
     assert_eq!(
