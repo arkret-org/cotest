@@ -52,7 +52,7 @@ chrono = {workspace = true}
 arkret = {workspace = true}
 arkret-canonical = {workspace = true}
 garth = {workspace = true}
-arkret-core = {workspace = true,features = ["client"]}
+arkret-core = {workspace = true}
 arkret-state = {workspace = true}
 # 05-2 — cotest-wire emits SDK-authoritative cross-signing / device-trust
 # canonical signing-input golden vectors (CrossSigningPublishContent /
