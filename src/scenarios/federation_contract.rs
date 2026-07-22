@@ -502,7 +502,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.realm.delivery_binding_policy",
         realm_id,
         remote_service_id,
-        3,
+        2,
         Some(&founding_grant.event_id),
         json!({
             "realm_id": realm_id,
@@ -517,7 +517,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.member.state",
         realm_id,
         remote_service_id,
-        4,
+        3,
         Some(&delivery_policy.event_id),
         member_join_payload_with_delivery_binding(
             realm_id,
@@ -538,7 +538,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.message.create",
         realm_id,
         remote_service_id,
-        5,
+        4,
         Some(&member_binding.event_id),
         message_create_text_payload(realm_id, "from federation")?,
     )?;
@@ -682,7 +682,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.message.create",
         realm_id,
         remote_service_id,
-        6,
+        5,
         Some(&event.event_id),
         json!({
             "encrypted": true,
@@ -726,7 +726,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.message.redact",
         realm_id,
         remote_service_id,
-        6,
+        5,
         Some(&event.event_id),
         message_redact_payload(replay_event_id, None)?,
     )?;
@@ -883,7 +883,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "ak.message.create",
         realm_id,
         remote_source.service_id,
-        1,
+        0,
         None,
         json!({
             "strand_id": realm_id.replacen("ak:realm:", "ak:strand:", 1),

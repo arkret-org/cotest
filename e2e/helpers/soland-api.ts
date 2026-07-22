@@ -1653,26 +1653,48 @@ async function advanceEnvelopeToActorFrontier(
   if (!actorDid) {
     throw new Error("Event envelope actor_id is required to refresh its frontier");
   }
+  const realmId = stringValue(envelope.realm_id);
+  if (!realmId) {
+    throw new Error("Event envelope realm_id is required to refresh its frontier");
+  }
   const response = await request.get(
-    `${solandBaseUrl(server)}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(actorDid)}`,
+    `${solandBaseUrl(server)}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(actorDid)}&realm_id=${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
   const body = await expectJsonOk<{
-    frontier?: { actor_seq?: unknown; event_id?: unknown };
-  }>(response, `read actor frontier for ${actorDid}`);
-  const actorSeq = body.frontier?.actor_seq;
-  if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq)) {
-    throw new Error(`actor frontier for ${actorDid} has no valid actor_seq`);
+    frontier?: {
+      kind?: unknown;
+      realm_id?: unknown;
+      actor_id?: unknown;
+      next_actor_seq?: unknown;
+      frontier_event_ids?: unknown;
+    };
+  }>(response, `read Realm actor frontier for (${realmId}, ${actorDid})`);
+  if (
+    body.frontier?.kind !== "realm_actor" ||
+    body.frontier.realm_id !== realmId ||
+    body.frontier.actor_id !== actorDid
+  ) {
+    throw new Error("combined Event frontier response does not match its selector");
   }
-  const eventId = stringValue(body.frontier?.event_id);
+  const actorSeq = body.frontier.next_actor_seq;
+  if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq)) {
+    throw new Error(`Realm actor frontier for ${actorDid} has no valid next_actor_seq`);
+  }
+  if (
+    !Array.isArray(body.frontier.frontier_event_ids) ||
+    body.frontier.frontier_event_ids.some((value) => typeof value !== "string")
+  ) {
+    throw new Error(`Realm actor frontier for ${actorDid} has invalid frontier_event_ids`);
+  }
   const proofVerificationMethod = Array.isArray(envelope.proofs)
     ? stringValue(
         (envelope.proofs[0] as Record<string, unknown> | undefined)
           ?.verification_method,
       )
     : undefined;
-  envelope.actor_seq = actorSeq + 1;
-  envelope.prev_refs = eventId ? [eventId] : [];
+  envelope.actor_seq = actorSeq;
+  envelope.prev_refs = [...body.frontier.frontier_event_ids];
   refreshEventEnvelopeProof(envelope, proofVerificationMethod);
 }
 

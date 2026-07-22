@@ -28,7 +28,7 @@ type RegisteredEventSigner = ([u8; 32], String);
 static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, RegisteredEventSigner>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub(crate) fn register_event_signing_identity(
+pub fn register_event_signing_identity(
     actor: &str,
     signing_seed: [u8; 32],
     verification_method: impl Into<String>,
@@ -51,6 +51,25 @@ fn event_signing_identity(actor: &str) -> ([u8; 32], String) {
                 arkret::signatures::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
         })
+}
+
+pub(crate) fn registered_event_signing_seed(
+    signer: &str,
+    verification_method: &str,
+) -> Option<[u8; 32]> {
+    REGISTERED_EVENT_SIGNERS
+        .lock()
+        .expect("registered Event signer lock")
+        .get(signer)
+        .filter(|(_, registered_method)| registered_method == verification_method)
+        .map(|(seed, _)| *seed)
+}
+
+fn verification_method_for_actor(actor: &str) -> String {
+    actor.strip_prefix("did:key:").map_or_else(
+        || format!("{actor}#cotest"),
+        |multibase| format!("{actor}#{multibase}"),
+    )
 }
 
 pub async fn register_account(
@@ -194,7 +213,7 @@ pub async fn create_realm_with_signing_seed(
         &realm_id,
         payload,
         signing_seed,
-        &format!("{actor}#cotest"),
+        &verification_method_for_actor(actor),
     )?;
     expect_json(
         server
@@ -208,7 +227,7 @@ pub async fn create_realm_with_signing_seed(
     Ok(realm_id)
 }
 
-pub(crate) fn realm_bootstrap_event_batch(
+pub fn realm_bootstrap_event_batch(
     actor: &str,
     realm_id: &str,
     realm_payload: Value,
@@ -236,8 +255,8 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         realm_id,
         "ak.realm.create",
         realm_payload,
-        Some(1),
-        None,
+        Some(0),
+        Vec::new(),
         signing_seed,
         verification_method,
     );
@@ -289,8 +308,16 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "grant_id": grant_id,
             "grant": grant
         }),
-        Some(2),
-        realm_event["event_id"].as_str(),
+        Some(1),
+        vec![
+            EventId::new(
+                realm_event["event_id"]
+                    .as_str()
+                    .expect("Realm bootstrap Event id")
+                    .to_owned(),
+            )
+            .expect("Realm bootstrap Event id is canonical"),
+        ],
         signing_seed,
         verification_method,
     );
@@ -430,22 +457,24 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         StatusCode::OK,
     )
     .await?;
-    let accepted_seq = frontier["frontier"]["actor_seq"]
-        .as_u64()
-        .ok_or_else(|| anyhow!("actor Realm frontier missing actor_seq: {frontier}"))?;
-    let prev_event_id = frontier["frontier"]["event_id"].as_str();
-    if (accepted_seq == 0) != prev_event_id.is_none() {
+    let state: arkret_core::EventsFrontierAccountClientState =
+        serde_json::from_value(frontier.clone())?;
+    let arkret_core::EventsFrontierView::RealmActor(frontier) = state.frontier else {
         return Err(anyhow!(
-            "actor Realm frontier must pair sequence and Event id: {frontier}"
+            "combined selector returned the wrong frontier variant"
         ));
+    };
+    frontier.validate()?;
+    if frontier.realm_id.as_str() != realm_id || frontier.actor_id.as_str() != actor {
+        return Err(anyhow!("combined selector returned the wrong actor scope"));
     }
     let event = event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
-        Some(accepted_seq + 1),
-        prev_event_id,
+        Some(frontier.next_actor_seq),
+        frontier.frontier_event_ids,
         signing_seed,
         verification_method,
     );
@@ -489,7 +518,7 @@ pub fn event_envelope_with_signing_seed(
         kind,
         payload,
         signing_seed,
-        &format!("{actor}#cotest"),
+        &verification_method_for_actor(actor),
     )
 }
 
@@ -507,9 +536,31 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
         kind,
         payload,
         None,
-        None,
+        Vec::new(),
         signing_seed,
         verification_method,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn event_envelope_at_frontier_with_signing_seed(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    next_actor_seq: u64,
+    frontier_event_ids: Vec<EventId>,
+    signing_seed: [u8; 32],
+) -> Value {
+    event_envelope_with_chain_and_signing_identity(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        Some(next_actor_seq),
+        frontier_event_ids,
+        signing_seed,
+        &verification_method_for_actor(actor),
     )
 }
 
@@ -520,7 +571,7 @@ fn event_envelope_with_chain_and_signing_identity(
     kind: &str,
     mut payload: Value,
     actor_seq: Option<u64>,
-    prev_event_id: Option<&str>,
+    prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &str,
 ) -> Value {
@@ -545,11 +596,7 @@ fn event_envelope_with_chain_and_signing_identity(
         created_at,
     )
     .expect("SDK Event builder accepts cotest envelope");
-    if let Some(prev_event_id) = prev_event_id {
-        event.prev_refs.push(
-            EventId::new(prev_event_id.to_owned()).expect("accepted actor frontier Event id"),
-        );
-    }
+    event.prev_refs = prev_event_ids;
     event.unsigned.insert(
         "local_operation_idempotency_alias".to_owned(),
         json!(format!("ak:operation:{suffix}")),
@@ -584,7 +631,10 @@ pub(crate) fn event_envelope_with_chain(
         kind,
         payload,
         Some(actor_seq),
-        prev_event_id,
+        prev_event_id
+            .map(|value| EventId::new(value.to_owned()).expect("accepted actor frontier Event id"))
+            .into_iter()
+            .collect(),
         signing_seed,
         &verification_method,
     )

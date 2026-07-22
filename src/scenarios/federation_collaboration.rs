@@ -188,7 +188,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.realm.delivery_binding_policy",
         &realm_id,
         &alice_did,
-        3,
+        2,
         Some(&founding_grant.event_id),
         json!({
             "realm_id": realm_id,
@@ -203,7 +203,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.member.state",
         &realm_id,
         &alice_did,
-        4,
+        3,
         Some(&delivery_policy.event_id),
         member_delivery_binding_payload(&realm_id, &alice_did, server_a.service_id()),
     )?;
@@ -212,7 +212,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.member.state",
         &realm_id,
         &alice_did,
-        5,
+        4,
         Some(&alice_delivery_binding.event_id),
         member_delivery_binding_payload(&realm_id, &bob_did, server_b.service_id()),
     )?;
@@ -257,7 +257,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.message.create",
         &realm_id,
         &alice_did,
-        6,
+        5,
         Some(&EventId::new(BOB_JOIN_EVENT_ID.to_owned())?),
         message_create_text_payload(&realm_id, "hello bob from server a")?,
     )?;
@@ -327,7 +327,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.message.create",
         &realm_id,
         &bob_did,
-        1,
+        0,
         None,
         message_create_text_payload(&realm_id, "hello alice from server b")?,
     )?;
@@ -403,7 +403,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.realm.delivery_binding_policy",
         E2EE_REALM_ID,
         &alice_did,
-        3,
+        2,
         Some(&e2ee_founding_grant.event_id),
         json!({
             "realm_id": E2EE_REALM_ID,
@@ -418,7 +418,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.member.state",
         E2EE_REALM_ID,
         &alice_did,
-        4,
+        3,
         Some(&e2ee_delivery_policy.event_id),
         member_delivery_binding_payload(E2EE_REALM_ID, &bob_did, server_b.service_id()),
     )?;
@@ -475,7 +475,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.mls.genesis",
         E2EE_REALM_ID,
         &alice_did,
-        5,
+        4,
         Some(&e2ee_delivery_frontier[0]),
         mls_genesis_payload(E2EE_REALM_ID, &alice_did),
     )?;
@@ -484,7 +484,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.mls.welcome",
         E2EE_REALM_ID,
         &alice_did,
-        6,
+        5,
         Some(&e2ee_genesis.event_id),
         mls_welcome_payload(
             E2EE_REALM_ID,
@@ -502,7 +502,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.mls.commit",
         E2EE_REALM_ID,
         &alice_did,
-        7,
+        6,
         Some(&e2ee_welcome.event_id),
         mls_commit_payload(E2EE_REALM_ID),
     )?;
@@ -511,7 +511,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.message.create",
         E2EE_REALM_ID,
         &alice_did,
-        8,
+        7,
         Some(&e2ee_commit.event_id),
         encrypted_message_payload(E2EE_REALM_ID),
     )?;

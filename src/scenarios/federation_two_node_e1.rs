@@ -163,7 +163,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
             "allow_binding_sources": ["explicit"],
             "allowed_recipient_services": [server_b.service_id()]
         }),
-        3,
+        2,
         Some(&founding_grant_id),
     );
     attach_delivery_policy_cell_contract(&mut delivery_policy)?;
@@ -189,7 +189,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                 "resolved_at": "2026-05-02T00:00:00.000Z"
             }),
         )?,
-        4,
+        3,
         Some(&delivery_policy_id),
     );
     let binding_event_id = binding["event_id"]

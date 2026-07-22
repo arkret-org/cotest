@@ -22,7 +22,57 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_snapshot_frontier_recovery(&value)?;
     validate_snapshot_inclusion_challenge(&value)?;
     validate_e2ee_pending(&value)?;
+    validate_realm_actor_frontier_vectors(&value)?;
     run_stream_frame_sequence_vector()?;
+    Ok(())
+}
+
+fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
+    let cases = value_array(
+        required_field(value, "schema_validation_cases")?,
+        "sync schema_validation_cases",
+    )?;
+    for case in cases.iter().filter(|case| {
+        case.get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name.starts_with("realm_actor_frontier_"))
+    }) {
+        let expect_valid = case
+            .get("expect_valid")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("frontier schema case lacks expect_valid"))?;
+        let decoded = serde_json::from_value::<arkret_core::RealmActorFrontierView>(
+            required_field(case, "instance")?.clone(),
+        );
+        let valid = decoded
+            .as_ref()
+            .is_ok_and(|frontier| frontier.validate().is_ok());
+        if expect_valid != valid {
+            bail!(
+                "frontier case {} validity mismatch",
+                value_field_str(case, "name")?
+            );
+        }
+    }
+
+    let vector = required_field(value, "actor_frontier_digest")?;
+    let realm_id =
+        arkret_core::RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001".to_owned())?;
+    let actor_id = arkret_core::Did::new("did:web:alice.example".to_owned())?;
+    let event_ids = vec![
+        arkret_core::EventId::new("ak:event:01904100-0000-7000-8000-000000000001".to_owned())?,
+        arkret_core::EventId::new("ak:event:01904100-0000-7000-8000-000000000002".to_owned())?,
+    ];
+    let digest = arkret_core::RealmActorFrontierView::compute_digest(
+        &realm_id,
+        &actor_id,
+        43,
+        &event_ids,
+        arkret_core::canonical::DigestSuite::Sha256,
+    )?;
+    if digest.as_str() != value_field_str(vector, "expected_digest")? {
+        bail!("Realm actor frontier digest golden mismatch");
+    }
     Ok(())
 }
 

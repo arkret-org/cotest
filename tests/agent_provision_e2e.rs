@@ -789,7 +789,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     ))?;
     let actor_frontier =
         managed_agent_actor_frontier(server, token, ALICE_DID, &control_realm_id).await?;
-    let first_actor_seq = actor_frontier.actor_seq + 1;
+    let first_actor_seq = actor_frontier.next_actor_seq;
     let mut cross_signing_event = arkret::build_cross_signing_publish_event_at(
         typed_control_realm_id.clone(),
         principal_id.clone(),
@@ -801,7 +801,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         cross_signing,
         control_created_at,
     )?;
-    cross_signing_event.prev_refs = actor_frontier.event_id.into_iter().collect();
+    cross_signing_event.prev_refs = actor_frontier.frontier_event_ids;
     cross_signing_event.seal_basis = Some(controller_seal_basis.clone());
     arkret::signatures::sign_event(
         &mut cross_signing_event,
@@ -1039,28 +1039,24 @@ async fn submit_delegated_agent_event(
 ) -> Result<arkret::Event> {
     let mut event = event_envelope(agent_id, realm_id, kind, payload);
     let actor_frontier = managed_agent_actor_frontier(server, token, agent_id, realm_id).await?;
-    let actor_seq = actor_frontier.actor_seq + 1;
+    let actor_seq = actor_frontier.next_actor_seq;
     event["actor_seq"] = json!(actor_seq);
     event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
-    event["prev_refs"] = actor_frontier
-        .event_id
-        .as_ref()
-        .map(|event_id| json!([event_id]))
-        .unwrap_or_else(|| json!([]));
+    event["prev_refs"] = serde_json::to_value(&actor_frontier.frontier_event_ids)?;
     event["executed_by"] = json!(ALICE_DID);
     event["authorization_ref"] = json!(authorization_ref);
     if kind == arkret::events::EventKind::REALM_CREATE {
         let typed_realm_id = arkret::RealmId::new(realm_id.to_owned())?;
-        if actor_frontier.actor_seq != 0 {
+        if actor_frontier.next_actor_seq != 0 {
             return Err(anyhow!(
                 "delegated Realm bootstrap requires an empty actor frontier"
             ));
         }
-        event["actor_seq"] = json!(1);
+        event["actor_seq"] = json!(0);
         event["hlc"] = json!("01970e589d21-0001-a13f9c2e");
         event["prev_refs"] = json!([]);
         event["effects"] = serde_json::to_value(vec![
-            arkret::identity::managed_agent_principal_control_create_effect(&typed_realm_id, 1)?,
+            arkret::identity::managed_agent_principal_control_create_effect(&typed_realm_id, 0)?,
         ])?;
     }
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
@@ -1112,8 +1108,10 @@ async fn managed_agent_frontier(
     }
     let state: EventsFrontierAccountClientState = serde_json::from_str(&body)?;
     match state.frontier {
-        EventsFrontierView::RealmSealView(frontier) => Ok(Some(frontier)),
-        EventsFrontierView::Actor(_) => Err(anyhow!("managed Agent frontier returned actor view")),
+        EventsFrontierView::RealmSeal(frontier) => Ok(Some(frontier)),
+        EventsFrontierView::RealmActor(_) | EventsFrontierView::ActorAggregate(_) => {
+            Err(anyhow!("managed Agent frontier returned a non-Seal view"))
+        }
     }
 }
 
@@ -1122,7 +1120,7 @@ async fn managed_agent_actor_frontier(
     token: &str,
     agent_id: &str,
     realm_id: &str,
-) -> Result<arkret_core::ActorFrontierView> {
+) -> Result<arkret_core::RealmActorFrontierView> {
     let response = server
         .http()
         .get(server.url(&format!(
@@ -1140,13 +1138,13 @@ async fn managed_agent_actor_frontier(
     }
     let state: EventsFrontierAccountClientState = serde_json::from_str(&body)?;
     match state.frontier {
-        EventsFrontierView::Actor(frontier) => {
+        EventsFrontierView::RealmActor(frontier) => {
             frontier.validate()?;
             Ok(frontier)
         }
-        EventsFrontierView::RealmSealView(_) => {
-            Err(anyhow!("managed Agent actor frontier returned Realm view"))
-        }
+        EventsFrontierView::RealmSeal(_) | EventsFrontierView::ActorAggregate(_) => Err(anyhow!(
+            "managed Agent actor frontier returned the wrong frontier variant"
+        )),
     }
 }
 
@@ -1169,7 +1167,7 @@ async fn pause_agent_runtime<P: PairingOutcome>(
     let realm_id = pairing.principal_control_realm_id().clone();
     let frontier =
         managed_agent_actor_frontier(server, token, agent_id.as_str(), realm_id.as_str()).await?;
-    let actor_seq = frontier.actor_seq + 1;
+    let actor_seq = frontier.next_actor_seq;
     let changed_at = canonical_now();
     let mut event = arkret::agent::build_agent_pause_event(
         agent_id.clone(),
@@ -1181,7 +1179,7 @@ async fn pause_agent_runtime<P: PairingOutcome>(
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
         changed_at,
     )?;
-    event.prev_refs = frontier.event_id.into_iter().collect();
+    event.prev_refs = frontier.frontier_event_ids;
     event.seal_basis = Some(managed_agent_seal_basis(server, realm_id.as_str())?);
     let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [21_u8; 32],
@@ -1221,7 +1219,7 @@ async fn resume_agent_runtime<P: PairingOutcome>(
     let realm_id = pairing.principal_control_realm_id().clone();
     let frontier =
         managed_agent_actor_frontier(server, token, agent_id.as_str(), realm_id.as_str()).await?;
-    let actor_seq = frontier.actor_seq + 1;
+    let actor_seq = frontier.next_actor_seq;
     let changed_at = canonical_now();
     let mut event = arkret::agent::build_agent_resume_event(
         agent_id.clone(),
@@ -1233,7 +1231,7 @@ async fn resume_agent_runtime<P: PairingOutcome>(
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
         changed_at,
     )?;
-    event.prev_refs = frontier.event_id.into_iter().collect();
+    event.prev_refs = frontier.frontier_event_ids;
     event.seal_basis = Some(managed_agent_seal_basis(server, realm_id.as_str())?);
     let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
         [21_u8; 32],
@@ -1274,13 +1272,10 @@ async fn move_event_after_actor_frontier(
         .as_str()
         .ok_or_else(|| anyhow!("event realm_id missing before actor-frontier move"))?;
     let frontier = managed_agent_actor_frontier(server, token, actor_id, realm_id).await?;
-    let actor_seq = frontier.actor_seq + 1;
+    let actor_seq = frontier.next_actor_seq;
     event["actor_seq"] = json!(actor_seq);
     event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
-    event["prev_refs"] = frontier
-        .event_id
-        .map(|event_id| json!([event_id]))
-        .unwrap_or_else(|| json!([]));
+    event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
     refresh_event_proof_with_signing_seed(event, [21_u8; 32])?;
     Ok(())
 }
@@ -1678,17 +1673,17 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                     .ok_or_else(|| {
                         anyhow!("controller principal-control stream has no accepted Seal")
                     })?;
-                arkret_core::RealmSealFrontierView {
-                    realm_id: arkret::RealmId::new(controller_realm)?,
-                    seal_id: basis
+                arkret_core::RealmSealFrontierView::new(
+                    arkret::RealmId::new(controller_realm)?,
+                    basis
                         .leaves
                         .first()
                         .cloned()
                         .ok_or_else(|| anyhow!("controller Seal basis has no leaf"))?,
-                    control_event_set_root: basis.control_event_set_root,
-                    state_root: basis.state_root,
-                    hlc: None,
-                }
+                    basis.control_event_set_root,
+                    basis.state_root,
+                    None,
+                )
             }
         };
     let mut active_series = json!({
@@ -1839,7 +1834,7 @@ async fn provision_agent(
     let actor_frontier =
         managed_agent_actor_frontier(server, token, ALICE_DID, controller_realm_id.as_str())
             .await?;
-    let actor_seq = actor_frontier.actor_seq + 1;
+    let actor_seq = actor_frontier.next_actor_seq;
     let now = DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0)
         .ok_or_else(|| anyhow!("current timestamp is outside the wire range"))?;
     let timestamp_hex = format!("{:012x}", now.timestamp_millis());
@@ -1869,7 +1864,7 @@ async fn provision_agent(
         },
         &signer,
     )?;
-    events.accountability_grant.prev_refs = actor_frontier.event_id.into_iter().collect();
+    events.accountability_grant.prev_refs = actor_frontier.frontier_event_ids;
     events.selector_claim.prev_refs = vec![events.accountability_grant.event_id.clone()];
     let realm_seal_basis = CONTROLLER_SEAL_BASES
         .lock()
@@ -2213,7 +2208,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         provisioned.principal_control_realm_id().as_str(),
     )
     .await?;
-    let actor_seq = actor_frontier.actor_seq + 1;
+    let actor_seq = actor_frontier.next_actor_seq;
     let mut authorize_event = arkret::agent::build_agent_key_authorize_event(
         &authorize_payload,
         provisioned.principal_control_realm_id().clone(),
@@ -2223,7 +2218,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         actor_seq,
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
     )?;
-    authorize_event.prev_refs = actor_frontier.event_id.into_iter().collect();
+    authorize_event.prev_refs = actor_frontier.frontier_event_ids;
     authorize_event.created_at = canonical_now();
     authorize_event.proofs.clear();
     arkret::signatures::sign_event(

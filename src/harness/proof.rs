@@ -58,7 +58,16 @@ pub fn refresh_event_proof(event: &mut Value) -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?
         .to_owned();
-    let signing_seed = arkret::signatures::development_signing_key_seed(&verification_method);
+    let signer = event
+        .get("executed_by")
+        .and_then(Value::as_str)
+        .or_else(|| event.get("actor_id").and_then(Value::as_str))
+        .ok_or_else(|| anyhow!("Event fixture {label} lacks a signer DID"))?;
+    let signing_seed =
+        super::event_builder::registered_event_signing_seed(signer, &verification_method)
+            .unwrap_or_else(|| {
+                arkret::signatures::development_signing_key_seed(&verification_method)
+            });
     refresh_event_proof_with_signing_seed(event, signing_seed)
 }
 

@@ -903,13 +903,6 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
   page.on("response", (response) => {
     const url = response.url();
     if (
-      response.status() === 404 &&
-      response.request().method() === "GET" &&
-      /\/_arkret\/self\/events\/frontier\?actor_id=/.test(url)
-    ) {
-      return;
-    }
-    if (
       response.status() >= 400 &&
       /\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
         url,

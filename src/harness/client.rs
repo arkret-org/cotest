@@ -10,6 +10,7 @@ use super::event_builder::{
 };
 use super::{
     member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
+    refresh_event_proof,
 };
 
 #[derive(Clone)]
@@ -131,23 +132,28 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
-        let accepted_seq = frontier["frontier"]["actor_seq"]
-            .as_u64()
-            .ok_or_else(|| anyhow!("actor Realm frontier missing actor_seq: {frontier}"))?;
-        let prev_event_id = frontier["frontier"]["event_id"].as_str();
-        if (accepted_seq == 0) != prev_event_id.is_none() {
+        let state: arkret_core::EventsFrontierAccountClientState =
+            serde_json::from_value(frontier)?;
+        let arkret_core::EventsFrontierView::RealmActor(frontier) = state.frontier else {
             return Err(anyhow!(
-                "actor Realm frontier must pair sequence and Event id: {frontier}"
+                "combined selector returned the wrong frontier variant"
             ));
+        };
+        frontier.validate()?;
+        if frontier.realm_id.as_str() != realm_id || frontier.actor_id.as_str() != self.actor {
+            return Err(anyhow!("combined selector returned the wrong actor scope"));
         }
-        Ok(event_envelope_with_chain(
+        let mut event = event_envelope_with_chain(
             &self.actor,
             realm_id,
             kind,
             payload,
-            accepted_seq + 1,
-            prev_event_id,
-        ))
+            frontier.next_actor_seq,
+            None,
+        );
+        event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
+        refresh_event_proof(&mut event)?;
+        Ok(event)
     }
 
     pub async fn sync(&self) -> Result<Value> {

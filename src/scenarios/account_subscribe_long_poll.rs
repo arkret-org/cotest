@@ -599,24 +599,23 @@ async fn submit_event_now(
         StatusCode::OK,
     )
     .await?;
-    let accepted_seq = frontier["frontier"]["actor_seq"]
-        .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("actor Realm frontier missing actor_seq: {frontier}"))?;
-    let prev_event_id = frontier["frontier"]["event_id"].as_str();
-    if (accepted_seq == 0) != prev_event_id.is_none() {
+    let state: arkret_core::EventsFrontierAccountClientState = serde_json::from_value(frontier)?;
+    let arkret_core::EventsFrontierView::RealmActor(frontier) = state.frontier else {
         return Err(anyhow::anyhow!(
-            "actor Realm frontier must pair sequence and Event id: {frontier}"
+            "combined selector returned the wrong frontier variant"
         ));
-    }
+    };
+    frontier.validate()?;
     let created_at = arkret_core::canonical::format_timestamp_canonical(chrono::Utc::now());
     let mut event = crate::harness::event_envelope_with_chain(
         &actor.actor,
         realm_id,
         kind,
         payload,
-        accepted_seq + 1,
-        prev_event_id,
+        frontier.next_actor_seq,
+        None,
     );
+    event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
     event["created_at"] = Value::String(created_at.clone());
     if let Some(proof) = event
         .get_mut("proofs")
