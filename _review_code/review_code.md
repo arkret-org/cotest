@@ -50,7 +50,7 @@ selection failures.
 
 - Severity: P0
 - Status: resolved and verified together by final focused joint run
-  `20260723-030402` (`2 passed (4.0m)`, managed service failures `[]`).
+  `20260723-034404` (`2 passed (4.0m)`, managed service failures `[]`).
 - Evidence: the Realm UI projected two joined members while the administrator
   logged `admission pre-filter blocked`, and the invitee remained at
   `decryption_pending` with no local MLS snapshot. The same session also tried
