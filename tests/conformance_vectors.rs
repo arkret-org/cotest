@@ -544,7 +544,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // we additionally assert that a stateless body is rejected by the
     // SDK's closed stateful cursor shape. Servers without
     // `ak.profile.stateless_cursor.v1` have no compat path.
-    use arkret_core::cursor::{Cursor, CursorPurpose};
+    use arkret_hlc::{Cursor, CursorPurpose};
 
     let stateless = serde_json::json!({
         "v": "1",
