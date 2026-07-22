@@ -18,7 +18,7 @@
 //! produce an accepted statement. A different key (forgery) or any post-signing
 //! field tamper MUST fail verification.
 
-use arkret_core::base64url::base64url_decode;
+use arkret_canonical::base64url::base64url_decode;
 use arkret_core::models::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,

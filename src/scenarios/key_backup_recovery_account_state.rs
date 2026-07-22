@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_core::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, KeyBackup,
     KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
