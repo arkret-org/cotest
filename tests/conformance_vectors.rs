@@ -210,7 +210,7 @@ fn agent_vector_suite_runs_clean() {
 #[test]
 fn sidecar_vector_suite_runs_clean() {
     run_sidecar_vector_suite().expect("sidecar vectors must pass");
-    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 5);
+    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 7);
 }
 
 // ─── P0 / VECT-CUR-1 — cursor vectors ──────────────────────────────────────

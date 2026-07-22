@@ -253,7 +253,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "participants_unordered",
             "realm_id",
             "main_strand_id",
-            "contact_refs",
+            "authorization_basis",
             "member_event_refs",
             "main_strand_create_ref",
             "mls_group_id",
@@ -267,7 +267,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "participants_unordered",
             "realm_id",
             "main_strand_id",
-            "contact_refs",
+            "authorization_basis",
             "member_event_refs",
             "main_strand_create_ref",
             "mls_group_id",
@@ -622,7 +622,7 @@ fn validate_binding_payload(
             "participants_unordered",
             "realm_id",
             "main_strand_id",
-            "contact_refs",
+            "authorization_basis",
             "member_event_refs",
             "main_strand_create_ref",
             "mls_group_id",
@@ -683,7 +683,23 @@ fn validate_binding_payload(
         bail!("direct conversation pair_key does not match the canonical participant pair");
     }
 
-    validate_event_ref_array(payload, "contact_refs", 2)?;
+    let authorization_basis = required_field(payload, "authorization_basis")?;
+    assert_allowed_object_fields(
+        "direct conversation authorization basis",
+        authorization_basis,
+        &["kind", "event_refs"],
+    )?;
+    let authorization_kind = required_str(authorization_basis, "kind")?;
+    let expected_authorization_refs = match authorization_kind {
+        "accepted_contact" => 2,
+        "managed_agent_controller" => 3,
+        other => bail!("unknown direct conversation authorization kind `{other}`"),
+    };
+    validate_event_ref_array(
+        authorization_basis,
+        "event_refs",
+        expected_authorization_refs,
+    )?;
     validate_event_ref_array(payload, "member_event_refs", 2)?;
     if let Some(state) = payload.get("binding_state").and_then(Value::as_str)
         && !matches!(state, "active" | "retired")

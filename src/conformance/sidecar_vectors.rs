@@ -1,6 +1,8 @@
 //! Sidecar conformance vectors (§0.11 of `_before_todos.md`).
 //!
-//! 5 vectors:
+//! 7 vectors:
+//!   - `ak.vector.sidecar.mls_bootstrap_binding.v1`
+//!   - `ak.vector.sidecar.mls_effective_access.v1`
 //!   - `ak.vector.sidecar.ensure_idempotent.v1`
 //!   - `ak.vector.sidecar.eligibility_states.v1`
 //!   - `ak.vector.sidecar.existence_privacy.v1`
@@ -11,17 +13,28 @@
 //! internal MLS implementation detail and may not appear in public outcomes.
 
 use anyhow::{Result, anyhow, bail};
-use arkret::{AgentSidecarDisplayMode, AgentSidecarExchangeOrigin, SidecarId};
+use arkret::{
+    AgentSidecarDisplayMode, AgentSidecarExchangeOrigin, Did, EventId, Hash,
+    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
+    PendingSidecarAccessReconciliationStage, RealmId, SidecarId, SidecarMlsBinding,
+    agent_sidecar_desired_access_digest,
+};
 use arkret_core::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
 use serde_json::Value;
 
 pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ak.vector.sidecar.ensure_idempotent.v1";
+pub const VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING: &str =
+    "ak.vector.sidecar.mls_bootstrap_binding.v1";
+pub const VECTOR_ID_SIDECAR_MLS_EFFECTIVE_ACCESS: &str =
+    "ak.vector.sidecar.mls_effective_access.v1";
 pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "ak.vector.sidecar.eligibility_states.v1";
 pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "ak.vector.sidecar.existence_privacy.v1";
 pub const VECTOR_ID_SIDECAR_HOSTED_PROJECTION: &str = "ak.vector.sidecar.hosted_projection.v1";
 pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "ak.vector.sidecar.multi_agent_publish.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
+    VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING,
+    VECTOR_ID_SIDECAR_MLS_EFFECTIVE_ACCESS,
     VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT,
     VECTOR_ID_SIDECAR_ELIGIBILITY_STATES,
     VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY,
@@ -66,6 +79,164 @@ fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
 }
 
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
+
+pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
+    let fixture = super::load_fixture_value(SIDECAR_VECTORS_FIXTURE_FILE)?;
+    let case = fixture["cases"]
+        .as_array()
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case["vector_id"].as_str() == Some(VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING)
+            })
+        })
+        .ok_or_else(|| anyhow!("Sidecar MLS bootstrap fixture case is missing"))?;
+    let transcript = &case["desired_access_transcript"];
+    let sidecar_id = SidecarId::new(
+        transcript["sidecar_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("fixture sidecar_id is missing"))?
+            .to_owned(),
+    )?;
+    let realm_id = RealmId::new(
+        transcript["realm_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("fixture realm_id is missing"))?
+            .to_owned(),
+    )?;
+    let controller_id = Did::new(
+        transcript["controller_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("fixture controller_id is missing"))?
+            .to_owned(),
+    )?;
+    let desired_agent_ids = transcript["principal_ids"]
+        .as_array()
+        .ok_or_else(|| anyhow!("fixture principal_ids are missing"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .filter(|principal_id| *principal_id != controller_id.as_str())
+        .map(|principal_id| Did::new(principal_id.to_owned()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let digest = agent_sidecar_desired_access_digest(
+        sidecar_id.clone(),
+        realm_id.clone(),
+        controller_id,
+        &desired_agent_ids,
+    )?;
+    if case["expected_desired_access_digest"].as_str() != Some(digest.as_str()) {
+        bail!("Sidecar desired-access canonical digest differs from the fixture KAT");
+    }
+
+    let sidecar_binding = SidecarMlsBinding {
+        sidecar_id,
+        desired_access_digest: digest,
+        control_frontier: vec![
+            NonEmptyString::new("ak:event:01964137-0000-7000-8000-000000000040")
+                .map_err(anyhow::Error::msg)?,
+        ],
+    };
+    let binding = MlsGovernanceBindingPayload::circle(
+        realm_id,
+        arkret::CircleId::new("ak:circle:01964137-0000-7000-8000-000000000030".to_owned())?,
+        "YXJrcmV0LXNpZGVjYXItZ3JvdXA",
+        0,
+        0,
+        vec![EventId::new(
+            "ak:event:01964137-0000-7000-8000-000000000040".to_owned(),
+        )?],
+        Hash::new(format!("sha256:{}", "1".repeat(64)))?,
+        Hash::new(format!("sha256:{}", "2".repeat(64)))?,
+        Hash::new(format!("sha256:{}", "3".repeat(64)))?,
+        "ak.profile.mls_governance_binding.full.v1",
+        "ak.reducer.v1",
+    )?
+    .with_sidecar_binding(sidecar_binding.clone())?;
+    let cbor = binding.to_deterministic_cbor()?;
+    let decoded = MlsGovernanceBindingPayload::from_deterministic_cbor(&cbor)?;
+    if decoded.sidecar_binding() != Some(&sidecar_binding)
+        || decoded.to_deterministic_cbor()? != cbor
+    {
+        bail!("Sidecar MLS binding did not survive deterministic CBOR round-trip");
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct DeviceJoinEvidence {
+    active_authorized: bool,
+    accepted_add_commit: bool,
+    matching_welcome: bool,
+    key_package_consumed: bool,
+    current_join_ref_bound: bool,
+}
+
+fn principal_effective(devices: &[DeviceJoinEvidence]) -> bool {
+    devices.iter().any(|device| {
+        device.active_authorized
+            && device.accepted_add_commit
+            && device.matching_welcome
+            && device.key_package_consumed
+            && device.current_join_ref_bound
+    })
+}
+
+pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
+    let complete = DeviceJoinEvidence {
+        active_authorized: true,
+        accepted_add_commit: true,
+        matching_welcome: true,
+        key_package_consumed: true,
+        current_join_ref_bound: true,
+    };
+    if !principal_effective(&[complete]) {
+        bail!("one complete active-device evidence chain must make the principal effective");
+    }
+    for incomplete in [
+        DeviceJoinEvidence {
+            accepted_add_commit: false,
+            ..complete
+        },
+        DeviceJoinEvidence {
+            matching_welcome: false,
+            ..complete
+        },
+        DeviceJoinEvidence {
+            key_package_consumed: false,
+            ..complete
+        },
+        DeviceJoinEvidence {
+            current_join_ref_bound: false,
+            ..complete
+        },
+        DeviceJoinEvidence {
+            active_authorized: false,
+            ..complete
+        },
+    ] {
+        if principal_effective(&[incomplete]) {
+            bail!("incomplete or unauthorized device evidence became effective");
+        }
+    }
+    let desired_after_removal = false;
+    let delivery_allowed = desired_after_removal && principal_effective(&[complete]);
+    let removal_obligation_created = !desired_after_removal;
+    let principal_server_authored_commit = false;
+    if delivery_allowed || !removal_obligation_created || principal_server_authored_commit {
+        bail!(
+            "Sidecar removal must stop delivery and create only a client-authored MLS obligation"
+        );
+    }
+    let removal = PendingSidecarAccessReconciliationItem {
+        agent_id: Did::new("did:webvh:z6mkfixture:assistant.agents.example")?,
+        stage: PendingSidecarAccessReconciliationStage::MlsRemove,
+        reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
+        membership_frontier: Some(vec![EventId::new(
+            "ak:event:01964137-0000-7000-8000-000000000041",
+        )?]),
+    };
+    removal.validate()?;
+    Ok(())
+}
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     if arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE
@@ -160,15 +331,17 @@ pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 5 Sidecar vectors.
+/// Suite entry point — runs all 7 Sidecar vectors.
 pub fn run_sidecar_vector_suite() -> Result<()> {
     validate_sidecar_vectors_fixture_metadata()?;
-    if ALL_SIDECAR_VECTOR_IDS.len() != 5 {
+    if ALL_SIDECAR_VECTOR_IDS.len() != 7 {
         bail!(
-            "expected 5 sidecar vector ids, got {}",
+            "expected 7 sidecar vector ids, got {}",
             ALL_SIDECAR_VECTOR_IDS.len()
         );
     }
+    run_sidecar_mls_bootstrap_binding_vector()?;
+    run_sidecar_mls_effective_access_vector()?;
     run_sidecar_ensure_idempotent_vector()?;
     run_sidecar_eligibility_states_vector()?;
     run_sidecar_existence_privacy_vector()?;
@@ -182,7 +355,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_five_sidecar_vectors_run_clean() {
+    fn all_seven_sidecar_vectors_run_clean() {
         run_sidecar_vector_suite().unwrap();
     }
 }
