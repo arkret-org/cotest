@@ -123,3 +123,25 @@ selection failures.
   provisioning accountability Event and its current CAS-register lifecycle;
   Coauth consumes that projection and no longer intersects session content
   scope with its implementation-local accountability table.
+
+## 2026-07-23 Native Agent MLS test evidence overclaim
+
+- Severity: P0
+- Status: report and test classification corrected; live runtime coverage remains open.
+- Evidence: `agent_encrypted_realm_member_e2e.rs` used only in-process
+  `ArkretMlsIdentity`, `ArkretMlsGroup`, and `MemoryCryptoStore` calls. It made
+  no request to Coauth or Soland, did not consume a standard device-message
+  queue, and did not persist/replay a durable consume intent, while its test
+  name and task report described it as a live end-to-end Agent lifecycle.
+- Normative source: `identity/key-management.md` section 3.6.1,
+  `crypto-media/encryption-and-audit.md` section 2.6, and
+  `crypto-media/device-lifecycle.md` section 9 require the same stable Agent
+  device binding across session, KeyPackage, Welcome, durable group-state,
+  consume/revoke, and authorization replacement.
+- Resolution: reclassified the executable test as local MLS primitive
+  conformance and removed the misleading E2E claim. A future live test must
+  drive an independently managed Agent runtime through Coauth session issue,
+  Soland KeyPackage upload/claim, durable device-message Welcome receipt,
+  persist-before-consume, restart, next-epoch decrypt, and replacement/revoke.
+  Browser human-member E2E and server unit tests cannot substitute for that
+  path.

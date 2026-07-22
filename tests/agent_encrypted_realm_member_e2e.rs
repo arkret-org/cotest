@@ -1,11 +1,13 @@
-//! G2 encrypted Realm Agent-member E2EE lifecycle conformance.
+//! G2 encrypted Realm Agent-member MLS primitive conformance.
 //!
 //! Existing cotest/browser MLS coverage proves the human-member path: encrypted
 //! Realm creation, member invite, KeyPackage-backed Welcome delivery, and
 //! cross-member decrypt. Agent provisioning coverage proves agent DPoP submit
 //! and stream access after ordinary Realm membership. This file pins the
-//! bridge between those two surfaces, including canonical KeyPackage writes,
-//! durable Welcome handling, and restart recovery.
+//! local crypto/store bridge between those two surfaces, including canonical
+//! KeyPackage writes, Welcome handling, and restart recovery. It intentionally
+//! does not claim live Principal Server, Account Authority, device-message, or
+//! HTTP conformance; those require a separately managed Agent runtime harness.
 
 use anyhow::{Context, Result, bail};
 use arkret::{
@@ -292,10 +294,10 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
     Ok(())
 }
 
-/// Runtime-neutral lifecycle: authorized key, publish, Welcome persistence,
-/// idempotent consume, restart recovery, next epoch, and supersede revoke.
+/// Local runtime-neutral primitives: authorized key, signed publish/consume/
+/// revoke requests, Welcome persistence, restart recovery, and next epoch.
 #[test]
-fn agent_member_encrypted_realm_e2e_requires_agent_welcome_lifecycle() -> Result<()> {
+fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Result<()> {
     let owner_did = did("agent-lifecycle-owner")?;
     let owner_device = device("000000000301")?;
     let agent_did = did("agent-lifecycle-runtime")?;
