@@ -303,29 +303,38 @@ test.describe("discovery", () => {
         bobPage.gotoTimelineRealm(presenceRealmId),
       ]);
 
-      // A structurally valid proof from a different key must still fail closed.
+      // A structurally valid envelope with a cryptographically invalid
+      // detached signature must fail closed. Build the normal proof first,
+      // then alter one significant signature character so the negative case
+      // cannot accidentally reuse the registered browser signer.
       const sentAt = new Date();
       const ephemeralUrl = `${solandBaseUrl()}/_arkret/self/ephemeral`;
+      const forgedEnvelope = withBroadcastEphemeralProof({
+        kind: "ak.presence",
+        realm_id: presenceRealmId,
+        actor_id: bob.did,
+        device_id: bob.deviceId,
+        sent_at: sentAt.toISOString(),
+        expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
+        payload: {
+          realm_id: presenceRealmId,
+          actor_id: bob.did,
+          state: "dnd",
+          ttl_ms: 30_000,
+        },
+      });
+      const forgedProof = forgedEnvelope.proof as Record<string, unknown>;
+      const forgedJws = forgedProof.jws as string;
+      const [protectedHeader, , signature] = forgedJws.split(".");
+      const forgedSignature = `${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
+      forgedProof.jws = `${protectedHeader}..${forgedSignature}`;
       const forged = await request.post(ephemeralUrl, {
         headers: selfPathHeadersForDpopSession(
           bobSession.session,
           "POST",
           ephemeralUrl,
         ),
-        data: withBroadcastEphemeralProof({
-          kind: "ak.presence",
-          realm_id: presenceRealmId,
-          actor_id: bob.did,
-          device_id: bob.deviceId,
-          sent_at: sentAt.toISOString(),
-          expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-          payload: {
-            realm_id: presenceRealmId,
-            actor_id: bob.did,
-            state: "dnd",
-            ttl_ms: 30_000,
-          },
-        }),
+        data: forgedEnvelope,
       });
       const forgedText = await forged.text();
       expect(forged.status(), forgedText).toBe(400);
