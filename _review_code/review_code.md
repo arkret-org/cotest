@@ -41,3 +41,20 @@ selection failures.
 - Required resolution: derive the migration event's actor sequence and previous
   references from the live Realm actor frontier; a new Realm-scoped chain must
   begin at one.
+
+## 2026-07-22 Native Agent session accountability drift
+
+- Severity: P0
+- Evidence: an Agent provisioned through Soland could pair successfully but
+  Coauth rejected every later `agent_key_proof` session with
+  `accountability_grant_missing` unless a second implementation-local
+  `/_coauth/self/agents/{id}/accountability-grant` record was minted.
+- Normative source: `identity/key-management.md` section 3.6.1 requires the
+  controller-authored `ak.identity.accountability_grant` Event accepted during
+  the two-phase provision operation to remain the protocol truth source.
+  `accountability_scope` is governance metadata and MUST NOT become a content
+  capability set.
+- Resolution: Soland's standard Agent projection now validates the exact
+  provisioning accountability Event and its current CAS-register lifecycle;
+  Coauth consumes that projection and no longer intersects session content
+  scope with its implementation-local accountability table.
