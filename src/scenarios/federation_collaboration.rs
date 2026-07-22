@@ -1742,13 +1742,15 @@ fn with_federation_trust_headers(
     let request_canonical_digest = canonical_sha256(body)?;
     let builder = with_federation_trust_headers_for_digest(
         builder,
-        method,
-        target_url,
-        source,
-        destination,
-        content_digest,
-        request_canonical_digest,
-        None,
+        FederationDigestHeaders {
+            method,
+            target_url,
+            source,
+            destination,
+            content_digest,
+            request_canonical_digest,
+            idempotency_key: None,
+        },
     )?;
     Ok(builder.body(body_bytes))
 }
@@ -1768,13 +1770,15 @@ fn with_federation_trust_headers_and_idempotency(
     let request_canonical_digest = canonical_sha256(body)?;
     let builder = with_federation_trust_headers_for_digest(
         builder,
-        method,
-        target_url,
-        source,
-        destination,
-        content_digest,
-        request_canonical_digest,
-        Some(idempotency_key),
+        FederationDigestHeaders {
+            method,
+            target_url,
+            source,
+            destination,
+            content_digest,
+            request_canonical_digest,
+            idempotency_key: Some(idempotency_key),
+        },
     )?;
     Ok(builder.body(body_bytes))
 }
@@ -1834,16 +1838,29 @@ fn with_federation_trust_headers_empty(
         .header("Signature", format!("sig1=:{signature}:")))
 }
 
-fn with_federation_trust_headers_for_digest(
-    builder: reqwest::RequestBuilder,
-    method: &str,
-    target_url: &str,
-    source: &ArkretServer,
-    destination: &ArkretServer,
+struct FederationDigestHeaders<'a> {
+    method: &'a str,
+    target_url: &'a str,
+    source: &'a ArkretServer,
+    destination: &'a ArkretServer,
     content_digest: String,
     request_canonical_digest: String,
-    idempotency_key: Option<&str>,
+    idempotency_key: Option<&'a str>,
+}
+
+fn with_federation_trust_headers_for_digest(
+    builder: reqwest::RequestBuilder,
+    headers: FederationDigestHeaders<'_>,
 ) -> Result<reqwest::RequestBuilder> {
+    let FederationDigestHeaders {
+        method,
+        target_url,
+        source,
+        destination,
+        content_digest,
+        request_canonical_digest,
+        idempotency_key,
+    } = headers;
     let source_service_id = source.service_id();
     let destination_service_id = destination.service_id();
     let source_trust_domain = source.trust_domain().as_str();
@@ -1987,18 +2004,18 @@ fn did_authority_from_service_id(service_id: &str) -> String {
     if let Some(rest) = service_id.strip_prefix("did:webvh:") {
         let mut parts = rest.split(':');
         let scid = parts.next().unwrap_or_default();
-        if let Some(host) = parts.next() {
-            if !scid.is_empty() && !host.is_empty() {
-                return host.to_ascii_lowercase();
-            }
+        if let Some(host) = parts.next()
+            && !scid.is_empty()
+            && !host.is_empty()
+        {
+            return host.to_ascii_lowercase();
         }
     }
-    if let Some(rest) = service_id.strip_prefix("did:web:") {
-        if let Some(host) = rest.split(':').next() {
-            if !host.is_empty() {
-                return host.to_ascii_lowercase();
-            }
-        }
+    if let Some(rest) = service_id.strip_prefix("did:web:")
+        && let Some(host) = rest.split(':').next()
+        && !host.is_empty()
+    {
+        return host.to_ascii_lowercase();
     }
     service_id
         .strip_prefix("did:key:")

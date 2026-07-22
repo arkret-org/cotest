@@ -109,29 +109,30 @@ fn account_stream_and_device_message_replay_vectors_converge() {
     let mut stream_cursor = None;
     let mut device_ack = None;
 
-    let mut ingest = |envelope: &Value, cursor: &'static str| -> Result<bool, &'static str> {
-        match durable_inbox.get(&key) {
-            None => {
-                durable_inbox.insert(key, envelope.clone());
-                side_effects += 1;
-                stream_cursor = Some(cursor);
-                Ok(true)
+    {
+        let mut ingest = |envelope: &Value, cursor: &'static str| -> Result<bool, &'static str> {
+            match durable_inbox.get(&key) {
+                None => {
+                    durable_inbox.insert(key, envelope.clone());
+                    side_effects += 1;
+                    stream_cursor = Some(cursor);
+                    Ok(true)
+                }
+                Some(existing) if existing == envelope => {
+                    stream_cursor = Some(cursor);
+                    Ok(false)
+                }
+                Some(_) => Err("device_message_conflict"),
             }
-            Some(existing) if existing == envelope => {
-                stream_cursor = Some(cursor);
-                Ok(false)
-            }
-            Some(_) => Err("device_message_conflict"),
-        }
-    };
+        };
 
-    assert_eq!(ingest(&first, "ak:cursor:first"), Ok(true));
-    assert_eq!(ingest(&first, "ak:cursor:duplicate"), Ok(false));
-    assert_eq!(
-        ingest(&conflicting, "ak:cursor:conflict"),
-        Err("device_message_conflict")
-    );
-    drop(ingest);
+        assert_eq!(ingest(&first, "ak:cursor:first"), Ok(true));
+        assert_eq!(ingest(&first, "ak:cursor:duplicate"), Ok(false));
+        assert_eq!(
+            ingest(&conflicting, "ak:cursor:conflict"),
+            Err("device_message_conflict")
+        );
+    }
     assert_eq!(
         side_effects, 1,
         "duplicate delivery must not repeat effects"

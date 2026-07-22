@@ -334,7 +334,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/identity/account/social.rs",
+          "path": "../soland/crates/http/src/routing/identity/account/social.rs",
           "markers": [
             "ak.self.contact.command.request",
             "ak.self.contact.command.respond"
@@ -342,7 +342,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/circles.rs",
+          "path": "../soland/crates/http/src/routing/circles.rs",
           "markers": [
             "ak.self.circle.command.create",
             "ak.self.circle.member.command.add"
@@ -350,28 +350,28 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/events/projection_query.rs",
+          "path": "../soland/crates/http/src/routing/events/projection_query.rs",
           "markers": [
             "ak.self.space.query.list"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/spaces/space.rs",
+          "path": "../soland/crates/http/src/routing/spaces/space.rs",
           "markers": [
             "ak.self.realm.resource.get"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/realms.rs",
+          "path": "../soland/crates/http/src/routing/realms.rs",
           "markers": [
             "ak.self.realm_link.query.list"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/identity/consent.rs",
+          "path": "../soland/crates/http/src/routing/identity/consent.rs",
           "markers": [
             "ak.self.consent.command.grant",
             "ak.self.consent.command.revoke"
@@ -379,7 +379,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/interop/moderation.rs",
+          "path": "../soland/crates/http/src/routing/interop/moderation.rs",
           "markers": [
             "ak.self.moderation.command.report"
           ]
@@ -880,7 +880,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/identity/agents.rs",
+          "path": "../soland/crates/http/src/routing/identity/agents.rs",
           "markers": [
             "ak.self.agent.command.provision",
             "ak.gate.account.command.pair_agent_key"
@@ -1005,7 +1005,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/src/routing/invites.rs",
+          "path": "../soland/crates/http/src/routing/invites.rs",
           "markers": [
             "ak.open.invite_locator.query.resolve"
           ]

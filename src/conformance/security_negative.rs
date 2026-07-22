@@ -117,7 +117,7 @@ fn verify_event_proof_signature(
         .and_then(|value| Did::new(value).map_err(Into::into))
         .map_err(|_| "invalid_signature")?;
     let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "invalid_signature")?;
-    verify_eddsa_detached_jws_proof(&proof, &canonical_bytes, &actor_id, public_key)
+    verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)
         .map_err(|_| "invalid_signature")
 }
 
@@ -419,7 +419,7 @@ mod tests {
         let event = sample_event();
         let mut proof = signed_proof(&event, &signing_key);
         let header_b64 = proof.jws.split('.').next().unwrap().to_owned();
-        let forged_sig = base64url_encode(&[0u8; 64]);
+        let forged_sig = base64url_encode([0u8; 64]);
         proof.jws = format!("{header_b64}..{forged_sig}");
         assert_eq!(
             verify_event_proof_signature(&event, &proof, &public_key(&signing_key)),

@@ -1,3 +1,4 @@
+mod agent_mls_keypackage_authorization;
 mod agent_participation;
 mod agent_vectors;
 mod arkret_private_kdf_and_durability;
@@ -75,6 +76,7 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
+pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
 pub use agent_participation::{
     ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,
     run_agent_participation_ceiling_tighten_vector,

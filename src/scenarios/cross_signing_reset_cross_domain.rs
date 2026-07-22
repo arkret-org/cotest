@@ -34,12 +34,10 @@ pub const TRUST_DOMAIN_ID_PREFIX: &str = "ak:trust_domain:";
 /// pin the error code constant matches the cotest expectation and that
 /// the SDK can construct (and distinguish) the two ids.
 pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
-    if arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED
-        != arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED
-    {
+    if arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED != "cross_domain_replay_rejected" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED,
+            "cross_domain_replay_rejected",
             arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED,
         ));
     }
@@ -81,12 +79,10 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
 /// reducer surface for this code is "payload.reset_event_id != Event.id"
 /// which is a structural inequality the SDK constructors enable.
 pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
-    if arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH
-        != arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH
-    {
+    if arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH != "reset_event_id_mismatch" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH,
+            "reset_event_id_mismatch",
             arkret_core::ReasonCode::RESET_EVENT_ID_MISMATCH,
         ));
     }

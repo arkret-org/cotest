@@ -230,9 +230,11 @@ fn write_source(root: &Path, relative: &str, source: &str) -> Result<()> {
     Ok(())
 }
 
+type RegistryOperationFixture<'a> = (&'a str, &'a str, &'a str, Option<&'a str>, Option<&'a str>);
+
 fn write_minimal_artifacts(
     artifacts_root: &Path,
-    registry_operations: &[(&str, &str, &str, Option<&str>, Option<&str>)],
+    registry_operations: &[RegistryOperationFixture<'_>],
     openapi_operations: &[(&str, &str, &str)],
 ) -> Result<()> {
     let registry_rows = registry_operations

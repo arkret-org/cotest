@@ -49,13 +49,15 @@ fn with_signed_federation_request(
     let request_canonical_digest = canonical_sha256(body)?;
     let builder = with_signed_federation_request_digests(
         builder,
-        method,
-        target_url,
-        destination,
-        source,
-        content_digest,
-        request_canonical_digest,
-        None,
+        SignedFederationDigests {
+            method,
+            target_url,
+            destination,
+            source,
+            content_digest,
+            request_canonical_digest,
+            destination_trust_domain_override: None,
+        },
     )?;
     Ok(builder.body(body_bytes))
 }
@@ -71,13 +73,15 @@ fn with_signed_federation_empty_request(
     let request_canonical_digest = sha256_digest([]);
     with_signed_federation_request_digests(
         builder,
-        method,
-        target_url,
-        destination,
-        source,
-        content_digest,
-        request_canonical_digest,
-        None,
+        SignedFederationDigests {
+            method,
+            target_url,
+            destination,
+            source,
+            content_digest,
+            request_canonical_digest,
+            destination_trust_domain_override: None,
+        },
     )
 }
 
@@ -91,26 +95,41 @@ fn with_signed_federation_empty_request_for_destination(
 ) -> Result<reqwest::RequestBuilder> {
     with_signed_federation_request_digests(
         builder,
-        method,
-        target_url,
-        destination,
-        source,
-        ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value,
-        sha256_digest([]),
-        Some(destination_trust_domain),
+        SignedFederationDigests {
+            method,
+            target_url,
+            destination,
+            source,
+            content_digest: ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value,
+            request_canonical_digest: sha256_digest([]),
+            destination_trust_domain_override: Some(destination_trust_domain),
+        },
     )
+}
+
+struct SignedFederationDigests<'a> {
+    method: &'a str,
+    target_url: &'a str,
+    destination: &'a ArkretServer,
+    source: &'a FederationSource<'a>,
+    content_digest: String,
+    request_canonical_digest: String,
+    destination_trust_domain_override: Option<&'a str>,
 }
 
 fn with_signed_federation_request_digests(
     builder: reqwest::RequestBuilder,
-    method: &str,
-    target_url: &str,
-    destination: &ArkretServer,
-    source: &FederationSource<'_>,
-    content_digest: String,
-    request_canonical_digest: String,
-    destination_trust_domain_override: Option<&str>,
+    digests: SignedFederationDigests<'_>,
 ) -> Result<reqwest::RequestBuilder> {
+    let SignedFederationDigests {
+        method,
+        target_url,
+        destination,
+        source,
+        content_digest,
+        request_canonical_digest,
+        destination_trust_domain_override,
+    } = digests;
     let source_service_id = source.service_id;
     let source_trust_domain = source.trust_domain.as_str();
     let destination_service_id = destination.service_id();

@@ -109,90 +109,6 @@ fn event_fixture_label(event: &Value) -> String {
         .to_owned()
 }
 
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    #[test]
-    fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
-        let event = json!({
-            "event_id": "ak:event:019f3b1c-76c8-7000-8000-000000000001",
-            "kind": "ak.message.create",
-            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
-            "actor_id": "did:web:alice.example",
-            "actor_seq": 1,
-            "created_at": "2026-07-07T00:00:00.000Z",
-            "hlc": "019f3b1c76c8-0000-ac7eadec",
-            "prev_refs": [],
-            "refs": [],
-            "requirements": {
-                "features": [],
-                "critical_extensions": []
-            },
-            "payload": {
-                "content": {"kind": "ak.content.text", "body": "hello"},
-                "message_id": "ak:message:019f3b1c-76c8-7000-8000-000000000001",
-                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001"
-            },
-            "proofs": [{
-                "kind": "detached_jws",
-                "alg": "EdDSA",
-                "verification_method": "did:web:alice.example#device",
-                "event_digest": "",
-                "created_at": "2026-07-07T00:00:00.000Z",
-                "jws": "placeholder"
-            }]
-        });
-
-        let digest = super::canonical_event_digest(&event).unwrap();
-        let mut parseable = event.clone();
-        parseable["proofs"][0]["event_digest"] =
-            json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
-        let typed: arkret_core::Event = serde_json::from_value(parseable).unwrap();
-
-        assert_eq!(digest, typed.event_digest().unwrap());
-    }
-
-    #[test]
-    fn raw_ephemeral_envelope_can_be_signed_before_it_has_a_proof() {
-        let mut envelope = json!({
-            "kind": "ak.typing",
-            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
-            "actor_id": "did:web:alice.example",
-            "device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
-            "sent_at": "2026-07-07T00:00:00.000Z",
-            "expires_at": "2026-07-07T00:00:15.000Z",
-            "payload": {
-                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001",
-                "typing": true
-            }
-        });
-
-        super::attach_ephemeral_proof_value(
-            &mut envelope,
-            &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
-        );
-
-        let typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope).unwrap();
-        assert_eq!(typed.proof.kind, arkret_core::proof_kind::DETACHED_JWS);
-        assert!(!typed.proof.jws.is_empty());
-
-        let wire = serde_json::to_value(&typed).unwrap();
-        assert_eq!(
-            wire["device_id"],
-            "ak:device:019f3b1c-76c8-7000-8000-000000000001"
-        );
-        let mut missing_device_id = wire;
-        missing_device_id
-            .as_object_mut()
-            .unwrap()
-            .remove("device_id");
-        assert!(
-            serde_json::from_value::<arkret_core::EphemeralEnvelope>(missing_device_id).is_err()
-        );
-    }
-}
-
 /// Attach the `ephemeral-envelope.schema.json` broadcast `proof` to an
 /// ephemeral envelope: a real ed25519 detached JWS whose
 /// `verification_method` is `{actor_id}#{device_id}` and whose `event_digest`
@@ -293,4 +209,88 @@ pub fn attach_ephemeral_proof_value(envelope: &mut Value, signing_key: &ed25519_
         .expect("value is a well-formed ephemeral envelope");
     attach_ephemeral_proof(&mut typed, signing_key);
     *envelope = serde_json::to_value(&typed).expect("ephemeral envelope serializes");
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
+        let event = json!({
+            "event_id": "ak:event:019f3b1c-76c8-7000-8000-000000000001",
+            "kind": "ak.message.create",
+            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
+            "actor_id": "did:web:alice.example",
+            "actor_seq": 1,
+            "created_at": "2026-07-07T00:00:00.000Z",
+            "hlc": "019f3b1c76c8-0000-ac7eadec",
+            "prev_refs": [],
+            "refs": [],
+            "requirements": {
+                "features": [],
+                "critical_extensions": []
+            },
+            "payload": {
+                "content": {"kind": "ak.content.text", "body": "hello"},
+                "message_id": "ak:message:019f3b1c-76c8-7000-8000-000000000001",
+                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001"
+            },
+            "proofs": [{
+                "kind": "detached_jws",
+                "alg": "EdDSA",
+                "verification_method": "did:web:alice.example#device",
+                "event_digest": "",
+                "created_at": "2026-07-07T00:00:00.000Z",
+                "jws": "placeholder"
+            }]
+        });
+
+        let digest = super::canonical_event_digest(&event).unwrap();
+        let mut parseable = event.clone();
+        parseable["proofs"][0]["event_digest"] =
+            json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
+        let typed: arkret_core::Event = serde_json::from_value(parseable).unwrap();
+
+        assert_eq!(digest, typed.event_digest().unwrap());
+    }
+
+    #[test]
+    fn raw_ephemeral_envelope_can_be_signed_before_it_has_a_proof() {
+        let mut envelope = json!({
+            "kind": "ak.typing",
+            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
+            "actor_id": "did:web:alice.example",
+            "device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
+            "sent_at": "2026-07-07T00:00:00.000Z",
+            "expires_at": "2026-07-07T00:00:15.000Z",
+            "payload": {
+                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001",
+                "typing": true
+            }
+        });
+
+        super::attach_ephemeral_proof_value(
+            &mut envelope,
+            &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+        );
+
+        let typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope).unwrap();
+        assert_eq!(typed.proof.kind, arkret_core::proof_kind::DETACHED_JWS);
+        assert!(!typed.proof.jws.is_empty());
+
+        let wire = serde_json::to_value(&typed).unwrap();
+        assert_eq!(
+            wire["device_id"],
+            "ak:device:019f3b1c-76c8-7000-8000-000000000001"
+        );
+        let mut missing_device_id = wire;
+        missing_device_id
+            .as_object_mut()
+            .unwrap()
+            .remove("device_id");
+        assert!(
+            serde_json::from_value::<arkret_core::EphemeralEnvelope>(missing_device_id).is_err()
+        );
+    }
 }

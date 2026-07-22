@@ -715,19 +715,16 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
             ctx,
             "ak:realm:01999999-0000-7000-8000-000000000451",
             "Mock parity setup",
-            9_000_000_000_000_451,
         )?),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
             "ak:realm:01999999-0000-7000-8000-000000000452",
             "Mock Parity Realm",
-            9_000_000_000_000_452,
         )?),
         Some("realm_create_event_3") => Some(realm_create_event(
             ctx,
             "ak:realm:01999999-0000-7000-8000-000000000453",
             "Mock Parity Space",
-            9_000_000_000_000_453,
         )?),
         Some("typing_ephemeral") => {
             let sent_at = Utc::now();
@@ -789,13 +786,7 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
         .replace("${space_id}", &ctx.space_id)
 }
 
-fn realm_create_event(
-    ctx: &TemplateContext,
-    realm_id: &str,
-    title: &str,
-    actor_seq: u64,
-) -> Result<Value> {
-    let cell = format!("ak:cell:ak.component.realm.create.v1:{realm_id}");
+fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Result<Value> {
     let payload = json!({
         "object": {
             "id": realm_id,
@@ -823,58 +814,14 @@ fn realm_create_event(
             "created_at": "2026-05-22T10:00:00.000Z"
         }
     });
-    let event_id = format!(
-        "ak:event:{}",
-        realm_id
-            .strip_prefix("ak:realm:")
-            .unwrap_or("01999999-0000-7000-8000-000000000451")
-    );
-    let mut event = json!({
-        "event_id": event_id,
-        "kind": "ak.realm.create",
-        "realm_id": realm_id,
-        "actor_id": ctx.alice_did,
-        "actor_seq": actor_seq,
-        "created_at": "2026-05-22T10:00:00.000Z",
-        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
-        "prev_refs": [],
-        "refs": [],
-        "requirements": {
-            "schema": ["ak.schema.realm.v1"]
-        },
-        "payload": payload,
-        "preconditions": [{
-            "cell": cell,
-            "predicate": {
-                "op": "head_eq",
-                "value": null
-            }
-        }],
-        "effects": [{
-            "cell": cell,
-            "op": {
-                "kind": "set",
-                "value": payload["object"]
-            }
-        }],
-        "unsigned": {
-            "local_operation_idempotency_alias": format!("ak:operation:{}", realm_id.strip_prefix("ak:realm:").unwrap_or("01999999-0000-7000-8000-000000000451")),
-            "local_target_ref": realm_id
-        },
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{}#{}", ctx.alice_did, MOCK_PARITY_ALICE_DEVICE_ID),
-            "event_digest": "",
-            "created_at": "2026-05-22T10:00:00.000Z",
-            "jws": "placeholder"
-        }]
-    });
-    cotest::harness::refresh_event_proof_with_signing_seed(
-        &mut event,
+    let events = cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
+        &ctx.alice_did,
+        realm_id,
+        payload,
         MOCK_PARITY_ALICE_SIGNING_SEED,
+        &format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did),
     )?;
-    Ok(event)
+    Ok(json!({"events": events}))
 }
 
 fn call_mock_contract(

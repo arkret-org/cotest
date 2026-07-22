@@ -252,17 +252,16 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                     ),
                     Err(error) => error,
                 };
-                if let Some(expected_reason) = mutation_case.expected.reason_code.as_deref() {
-                    if error.reason_code() != expected_reason
+                if let Some(expected_reason) = mutation_case.expected.reason_code.as_deref()
+                    && (error.reason_code() != expected_reason
                         || expected_reason
-                            != arkret_core::ReasonCode::MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID
-                    {
-                        bail!(
-                            "case {} rejected with {} (expected {expected_reason})",
-                            mutation_case.name,
-                            error.reason_code()
-                        );
-                    }
+                            != arkret_core::ReasonCode::MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID)
+                {
+                    bail!(
+                        "case {} rejected with {} (expected {expected_reason})",
+                        mutation_case.name,
+                        error.reason_code()
+                    );
                 }
             }
             other => bail!("unknown expected result {other}"),
@@ -270,14 +269,14 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
 
         // `principal_directory_queries: 0` is an executable assertion: the spy
         // is the ONLY directory in scope and the validator cannot reach it.
-        if let Some(expected_queries) = mutation_case.expected.principal_directory_queries {
-            if directory.queries as u64 != expected_queries || expected_queries != 0 {
-                bail!(
-                    "case {} performed {} principal directory queries (expected {expected_queries})",
-                    mutation_case.name,
-                    directory.queries
-                );
-            }
+        if let Some(expected_queries) = mutation_case.expected.principal_directory_queries
+            && (directory.queries as u64 != expected_queries || expected_queries != 0)
+        {
+            bail!(
+                "case {} performed {} principal directory queries (expected {expected_queries})",
+                mutation_case.name,
+                directory.queries
+            );
         }
         // Every case — accept and reject alike — runs without a directory.
         if directory.queries != 0 {

@@ -23,7 +23,9 @@ use super::{
     NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
 };
 
-static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, ([u8; 32], String)>>> =
+type RegisteredEventSigner = ([u8; 32], String);
+
+static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, RegisteredEventSigner>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub(crate) fn register_event_signing_identity(
@@ -221,7 +223,7 @@ pub(crate) fn realm_bootstrap_event_batch(
     )
 }
 
-fn realm_bootstrap_event_batch_with_signing_seed(
+pub fn realm_bootstrap_event_batch_with_signing_seed(
     actor: &str,
     realm_id: &str,
     realm_payload: Value,

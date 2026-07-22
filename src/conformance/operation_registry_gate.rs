@@ -309,9 +309,9 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
         product_private_path: cotest_root.join(PRODUCT_PRIVATE_REF),
         source_roots: vec![
             OperationSourceRoot::new("soland", workspace_root.join("soland"))
-                .with_dir("crates/server/src/routing")
-                .with_file("crates/server/src/wire.rs")
-                .with_file("crates/server/src/did_resolver_chain.rs"),
+                .with_dir("crates/http/src/routing")
+                .with_file("crates/http/src/wire.rs")
+                .with_file("crates/http/src/did_resolver_chain.rs"),
             OperationSourceRoot::new("sdk", workspace_root.join("arkret-rust-sdk"))
                 .with_dir("crates/core/src")
                 .with_dir("crates/http-client/src")

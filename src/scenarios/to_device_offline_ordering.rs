@@ -69,12 +69,14 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     send_to_device(
         &server,
         &alice_token,
-        bob_did,
-        bob_device,
-        "ak:device_message:0196419b-0000-7000-8000-00000000c101",
-        "ct10-msg-1",
-        "ciphertext-msg-1",
-        true,
+        DeviceMessageRequest {
+            recipient: bob_did,
+            device_id: bob_device,
+            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c101",
+            idempotency_key: "ct10-msg-1",
+            ciphertext: "ciphertext-msg-1",
+            expect_delivery: true,
+        },
     )
     .await?;
 
@@ -97,23 +99,27 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     send_to_device(
         &server,
         &alice_token,
-        bob_did,
-        bob_device,
-        "ak:device_message:0196419b-0000-7000-8000-00000000c102",
-        "ct10-msg-2",
-        "ciphertext-msg-2",
-        true,
+        DeviceMessageRequest {
+            recipient: bob_did,
+            device_id: bob_device,
+            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
+            idempotency_key: "ct10-msg-2",
+            ciphertext: "ciphertext-msg-2",
+            expect_delivery: true,
+        },
     )
     .await?;
     send_to_device(
         &server,
         &alice_token,
-        bob_did,
-        bob_device,
-        "ak:device_message:0196419b-0000-7000-8000-00000000c103",
-        "ct10-msg-3",
-        "ciphertext-msg-3",
-        true,
+        DeviceMessageRequest {
+            recipient: bob_did,
+            device_id: bob_device,
+            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c103",
+            idempotency_key: "ct10-msg-3",
+            ciphertext: "ciphertext-msg-3",
+            expect_delivery: true,
+        },
     )
     .await?;
 
@@ -157,12 +163,14 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     send_to_device(
         &server,
         &alice_token,
-        bob_did,
-        bob_device,
-        "ak:device_message:0196419b-0000-7000-8000-00000000c102",
-        "ct10-msg-2-replay",
-        "ciphertext-msg-2",
-        true,
+        DeviceMessageRequest {
+            recipient: bob_did,
+            device_id: bob_device,
+            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
+            idempotency_key: "ct10-msg-2-replay",
+            ciphertext: "ciphertext-msg-2",
+            expect_delivery: true,
+        },
     )
     .await?;
     let after_replay = poll_to_device(&server, &bob_token, None).await?;
@@ -198,16 +206,28 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     Ok(())
 }
 
+struct DeviceMessageRequest<'a> {
+    recipient: &'a str,
+    device_id: &'a str,
+    message_id: &'a str,
+    idempotency_key: &'a str,
+    ciphertext: &'a str,
+    expect_delivery: bool,
+}
+
 async fn send_to_device(
     server: &ArkretServer,
     sender_token: &str,
-    recipient: &str,
-    device_id: &str,
-    message_id: &str,
-    idempotency_key: &str,
-    ciphertext: &str,
-    expect_delivery: bool,
+    request: DeviceMessageRequest<'_>,
 ) -> Result<Value> {
+    let DeviceMessageRequest {
+        recipient,
+        device_id,
+        message_id,
+        idempotency_key,
+        ciphertext,
+        expect_delivery,
+    } = request;
     let body = device_message_send_request(
         recipient,
         device_id,

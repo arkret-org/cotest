@@ -36,14 +36,12 @@ pub const ABSOLUTE_HARD_CEILING_MS: u64 = 300_000;
 /// `relaxed_window_max_ms = 400_000` payload is not yet implemented; do not
 /// count this pin as behavioural fail-closed coverage.
 pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
-    if arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING
-        != arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING
-    {
+    if arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING != "relaxed_window_exceeds_ceiling" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING ({}) drifted from the \
              cotest-pinned wire literal ({}). Update one or the other before \
              unfreezing this scenario.",
-            arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING,
+            "relaxed_window_exceeds_ceiling",
             arkret_core::ReasonCode::RELAXED_WINDOW_EXCEEDS_CEILING,
         ));
     }
@@ -65,12 +63,12 @@ pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
 /// canonical registry knows it.
 pub async fn e2ee_relaxed_disallowed_in_compliance_run() -> Result<()> {
     if arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE
-        != arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE
+        != "e2ee_relaxed_disallowed_in_compliance_profile"
     {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE ({}) drifted \
              from cotest pin ({}).",
-            arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
+            "e2ee_relaxed_disallowed_in_compliance_profile",
             arkret_core::ReasonCode::E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
         ));
     }

@@ -10,6 +10,7 @@ selection failures.
 ### SDK reducer-profile digest is stale
 
 - Severity: P0
+- Status: resolved 2026-07-22 by arkret-rust-sdk `84611736`.
 - Evidence: `federation_replay_snapshot_and_redaction_contracts_work` receives
   `reducer_profile_mismatch` from Soland.
 - Normative value: arkret-spec's current
@@ -18,20 +19,23 @@ selection failures.
 - Stale generated value: arkret-rust-sdk
   `crates/policy/src/generated/profiles.rs` pins
   `sha256:fe7b320b94f96214842464efa9bdc9f99c54359a8bd9b98a18f24dde04f7426d`.
-- Required resolution: regenerate and review the SDK profile constants from the
-  current spec artifacts, then rebuild Soland. Do not change Cotest to the stale
-  SDK value.
+- Resolution: regenerated the SDK profile constants and embedded artifacts from
+  the current spec, rebuilt Soland, and passed the Cotest federation suite with
+  the normative `sha256:952a4c29...` digest.
 
 ### Inkson mock parity omits Realm founding authority
 
 - Severity: P1
+- Status: resolved 2026-07-22.
 - Evidence: `inkson_mock_contract_matches_live_soland_baseline` reports drift
   for `events_submit`, `realm_create`, `space_create`, directory search, and
   ephemeral behavior. Live writes fail with `realm_founding_grant_missing`.
 - Normative source: `models/realm-and-space.md` section 2.5 requires
   `ak.realm.create` and its closed-form founding grant in one ordered batch.
-- Required resolution: make the parity setup create the normative Realm
-  bootstrap unit before comparing downstream event and ephemeral behavior.
+- Resolution: removed the parity test's duplicate single-event Realm builder
+  and reused Cotest's normative Realm bootstrap helper, which submits the
+  create event and founding grant as one ordered batch. The live parity test now
+  passes without an allowlist entry.
 
 ### Morph migration fixture violates Realm actor-chain genesis
 

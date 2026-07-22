@@ -124,7 +124,7 @@
 
 ## 实现状态(2026-06,与 `tests/authz/policy-server-check.spec.ts` 对齐)
 
-后端集成已落地:`PUT/GET /_arkret/self/realms/{realm_id}/policy-server` 投影、cap-gated 路径上的 outbound `POST /_arkret/self/policy/check`(`soland/crates/server/src/routing/policy_gate.rs` → `authz::check_with_policy_server`)、per-realm `cache_ttl` 决策缓存、`on_timeout=fail_closed` 兜底、以及对 `PolicyCheckOutcome` 的签名 + frontier 校验(`authz/policy_client.rs`)。
+后端集成已落地:`PUT/GET /_arkret/self/realms/{realm_id}/policy-server` 投影、cap-gated 路径上的 outbound `POST /_arkret/self/policy/check`(`soland/crates/http/src/routing/policy_gate.rs` → `authz::check_with_policy_server`)、per-realm `cache_ttl` 决策缓存、`on_timeout=fail_closed` 兜底、以及对 `authz/policy_client.rs` 中 `PolicyCheckOutcome` 的签名 + frontier 校验。
 
 但 soland 对**真实 allow 路径**有强约束:上游必须返回 spec §3 完整 `PolicyCheckOutcome`(回签 `bound_to`、三个 frontier digest 与 soland 运行时计算值逐字段一致、`signature.kid` 在声明的 `policy_server_did` 下可由 soland 的 DID resolver 验证)。harness 的 `mock-policy-server.mjs` 返回的是简化未签 body,且其 DID 不在 soland 信任集内,因此 soland 对任何 gated 操作一律 fail-closed(deny)。据此当前 e2e 覆盖的是 spec §4 的 **fail-closed 安全属性**(可确定性断言),而非 allow→deny→obligation 生命周期。
 

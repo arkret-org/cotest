@@ -74,7 +74,9 @@ const TEST_DEVICE_ALGORITHMS: [&str; 2] = ["ak.hpke_x25519_aead_chacha20poly1305
 const TEST_DEVICE_HPKE_KEY: &str = "z6LSCotestAgentDeviceHpkeKey";
 const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901";
 static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
-static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, (u64, Vec<String>)>>> =
+type AgentBackupPointer = (u64, Vec<String>);
+
+static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, AgentBackupPointer>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static CONTROLLER_SEAL_BASES: LazyLock<Mutex<HashMap<String, arkret::SealBasis>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));

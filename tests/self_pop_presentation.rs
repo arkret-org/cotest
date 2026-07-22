@@ -33,9 +33,6 @@ fn sign_self_request(
     signing_key: &Ed25519SigningKey,
     key_id: &str,
     method: &str,
-    target_uri: &str,
-    authority: &str,
-    path: &str,
     body: &[u8],
     created: i64,
     expires: i64,
@@ -71,9 +68,9 @@ fn sign_self_request(
     };
     let parts = SignedRequestParts {
         method: method.to_owned(),
-        target_uri: target_uri.to_owned(),
-        authority: authority.to_owned(),
-        path: path.to_owned(),
+        target_uri: URI.to_owned(),
+        authority: AUTHORITY.to_owned(),
+        path: PATH.to_owned(),
         headers: Vec::new(),
         body_digest: digest,
     };
@@ -83,9 +80,9 @@ fn sign_self_request(
     headers.push(("signature".to_owned(), format!("sig1=:{signature}:")));
     SignedRequest {
         method: method.to_owned(),
-        target_uri: target_uri.to_owned(),
-        authority: authority.to_owned(),
-        path: path.to_owned(),
+        target_uri: URI.to_owned(),
+        authority: AUTHORITY.to_owned(),
+        path: PATH.to_owned(),
         headers,
         body: body.to_vec(),
     }
@@ -142,17 +139,7 @@ fn signed_self_write_is_accepted() {
     let key = test_key(7);
     let now = 1_716_000_000;
     let body = br#"{"hello":"world"}"#;
-    let req = sign_self_request(
-        &key,
-        "kid-1",
-        "POST",
-        URI,
-        AUTHORITY,
-        PATH,
-        body,
-        now,
-        now + 120,
-    );
+    let req = sign_self_request(&key, "kid-1", "POST", body, now, now + 120);
     verify_self_pop(&req, &key.verifying_key(), now).expect("valid PoP accepted");
 }
 
@@ -160,17 +147,7 @@ fn signed_self_write_is_accepted() {
 fn signed_self_read_without_body_is_accepted() {
     let key = test_key(8);
     let now = 1_716_000_000;
-    let req = sign_self_request(
-        &key,
-        "kid-1",
-        "GET",
-        URI,
-        AUTHORITY,
-        PATH,
-        b"",
-        now,
-        now + 120,
-    );
+    let req = sign_self_request(&key, "kid-1", "GET", b"", now, now + 120);
     verify_self_pop(&req, &key.verifying_key(), now).expect("body-less signed GET accepted");
 }
 
@@ -182,9 +159,6 @@ fn tampered_body_is_rejected() {
         &key,
         "kid-1",
         "POST",
-        URI,
-        AUTHORITY,
-        PATH,
         br#"{"hello":"world"}"#,
         now,
         now + 120,
@@ -201,9 +175,6 @@ fn expired_window_is_rejected() {
         &key,
         "kid-1",
         "POST",
-        URI,
-        AUTHORITY,
-        PATH,
         br#"{"a":1}"#,
         signed_at,
         signed_at + 120,
@@ -216,17 +187,7 @@ fn expired_window_is_rejected() {
 fn over_long_window_is_rejected() {
     let key = test_key(7);
     let now = 1_716_000_000;
-    let req = sign_self_request(
-        &key,
-        "kid-1",
-        "POST",
-        URI,
-        AUTHORITY,
-        PATH,
-        br#"{"a":1}"#,
-        now,
-        now + 3_600,
-    );
+    let req = sign_self_request(&key, "kid-1", "POST", br#"{"a":1}"#, now, now + 3_600);
     assert!(verify_self_pop(&req, &key.verifying_key(), now).is_err());
 }
 
@@ -235,17 +196,7 @@ fn wrong_key_is_rejected() {
     let signer = test_key(7);
     let attacker_view = test_key(9);
     let now = 1_716_000_000;
-    let req = sign_self_request(
-        &signer,
-        "kid-1",
-        "POST",
-        URI,
-        AUTHORITY,
-        PATH,
-        br#"{"a":1}"#,
-        now,
-        now + 120,
-    );
+    let req = sign_self_request(&signer, "kid-1", "POST", br#"{"a":1}"#, now, now + 120);
     assert!(verify_self_pop(&req, &attacker_view.verifying_key(), now).is_err());
 }
 

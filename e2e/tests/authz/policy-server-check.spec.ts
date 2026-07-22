@@ -11,7 +11,7 @@
 // self-skips rather than failing.
 //
 // Contract reality these tests are written against:
-//   soland's outbound policy client (soland/crates/server/src/authz/policy_client.rs)
+//   soland's outbound policy client (soland/crates/http/src/authz/policy_client.rs)
 //   requires a spec §3-conformant PolicyCheckOutcome — bound_to echo, three
 //   frontier digests matching soland's own runtime-computed values, and an
 //   Ed25519 signature whose kid resolves under the declared policy_server_did

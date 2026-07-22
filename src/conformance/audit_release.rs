@@ -310,7 +310,7 @@ pub fn run_close_release_concurrency_vector() -> Result<()> {
         bail!("same-basis release won over close");
     }
 
-    let mut releases = vec![
+    let mut releases = [
         ReleaseRecord {
             seal_sequence: 8,
             event_digest: "sha256:bbbb",

@@ -44,7 +44,7 @@ impl StreamSurface {
 }
 
 enum EmittedStreamFrame {
-    Account(AccountSubscribeFrame),
+    Account(Box<AccountSubscribeFrame>),
     Events(EventsSubscribeFrame),
 }
 
@@ -106,7 +106,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
     let cursor = frame.get("cursor").and_then(Value::as_str);
     let reconnect_after_ms = frame.get("reconnect_after_ms").and_then(Value::as_u64);
     Ok(match surface {
-        StreamSurface::Account => EmittedStreamFrame::Account(AccountSubscribeFrame {
+        StreamSurface::Account => EmittedStreamFrame::Account(Box::new(AccountSubscribeFrame {
             kind: match kind {
                 "delta" => AccountSubscribeFrameKind::Delta,
                 "frontier" => AccountSubscribeFrameKind::Frontier,
@@ -127,7 +127,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
             partial: frame.get("partial").and_then(Value::as_bool),
             priority: None,
             reconnect_after_ms,
-        }),
+        })),
         StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
             kind: match kind {
                 "delta" => EventsSubscribeFrameKind::Event,
@@ -151,7 +151,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
 
 fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFrame {
     match surface {
-        StreamSurface::Account => EmittedStreamFrame::Account(AccountSubscribeFrame {
+        StreamSurface::Account => EmittedStreamFrame::Account(Box::new(AccountSubscribeFrame {
             kind: AccountSubscribeFrameKind::Dropped,
             cursor: None,
             realms: None,
@@ -163,7 +163,7 @@ fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFra
             partial: None,
             priority: None,
             reconnect_after_ms: None,
-        }),
+        })),
         StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
             kind: EventsSubscribeFrameKind::Dropped,
             realm_id: None,

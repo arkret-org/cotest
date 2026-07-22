@@ -38,10 +38,10 @@ pub const PRESIGN_REFERRER_POLICY: &str = "no-referrer";
 /// Wire-level executable check: the SDK constant for `legal_hold_active`
 /// matches the cotest pin and the canonical registry recognises it.
 pub async fn presign_blob_legal_hold_run() -> Result<()> {
-    if arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE != arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE {
+    if arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE != "legal_hold_active" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE,
+            "legal_hold_active",
             arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE,
         ));
     }
@@ -60,10 +60,10 @@ pub async fn presign_blob_legal_hold_run() -> Result<()> {
 /// Wire-level executable check: the SDK constant for `blob_redacted`
 /// matches the cotest pin and the canonical registry recognises it.
 pub async fn presign_blob_redacted_run() -> Result<()> {
-    if arkret_core::ReasonCode::BLOB_REDACTED != arkret_core::ReasonCode::BLOB_REDACTED {
+    if arkret_core::ReasonCode::BLOB_REDACTED != "blob_redacted" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::BLOB_REDACTED ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::BLOB_REDACTED,
+            "blob_redacted",
             arkret_core::ReasonCode::BLOB_REDACTED,
         ));
     }

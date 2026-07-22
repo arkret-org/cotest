@@ -31,28 +31,22 @@ use arkret_schema::embedded_error_code_identifiers;
 pub const APPEAL_SCHEMA: &str = "ak.schema.moderation_appeal.v1";
 pub const APPEAL_ID_PREFIX: &str = "ak:appeal:";
 
-/// Error codes the reducer SHOULD surface on the negative branches.
-
 /// Wire-level executable check: the SDK's appeal-related error code
 /// constants agree with the cotest pins and the canonical registry
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
 /// `ak:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
-    if arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT
-        != arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT
-    {
+    if arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT != "appeal_overturn_missing_lift" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
+            "appeal_overturn_missing_lift",
             arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
         ));
     }
-    if arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN
-        != arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN
-    {
+    if arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN != "appeal_self_review_forbidden" {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
+            "appeal_self_review_forbidden",
             arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
         ));
     }

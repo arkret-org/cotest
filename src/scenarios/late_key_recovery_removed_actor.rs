@@ -24,10 +24,6 @@
 use anyhow::{Result, anyhow};
 use arkret_schema::embedded_error_code_identifiers;
 
-/// The canonical error code surfaced by the reducer when a late key
-/// share is accepted by a Realm whose membership for the recipient was
-/// already revoked at the originating event's HLC.
-
 /// Wire-level executable check: the SDK constant for
 /// `late_recovery_rejected_membership` matches the cotest pin and the
 /// canonical registry recognises it.
@@ -37,11 +33,11 @@ use arkret_schema::embedded_error_code_identifiers;
 /// without weakening the always-on error-code gate.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
     if arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP
-        != arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP
+        != "late_recovery_rejected_membership"
     {
         return Err(anyhow!(
             "SDK arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
-            arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
+            "late_recovery_rejected_membership",
             arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
         ));
     }

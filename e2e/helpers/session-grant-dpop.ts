@@ -19,7 +19,7 @@
 // callers can `test.skip` cleanly.
 //
 // The DPoP proof shape mirrors exactly what soland's verifier accepts
-// (soland: crates/server/src/routing/identity/auth_grant_dpop.rs):
+// (soland: crates/http/src/routing/identity/auth_grant_dpop.rs):
 //   * compact JWS, header `{typ:"dpop+jwt", alg:"EdDSA", jwk:<public OKP jwk>}`
 //   * claims `{htm, htu, ath, jti, iat}`
 //   * `ath = base64url(sha256(grant_jwt))` (unpadded)
