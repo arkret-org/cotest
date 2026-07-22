@@ -5,7 +5,7 @@
 //! gate. These tests drive the *shared* arkret-rust-sdk surfaces so cotest
 //! never re-implements the organization-side invariants:
 //!
-//!   * `arkret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
+//!   * `arkret_schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
 //!     `ak.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
 //!     organization_ref }` shape).
 //!   * `arkret_policy::verify_realm_organization_statement` enforces the issuer-role / delegation /
@@ -24,9 +24,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_core::schema::{
-    EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
-};
 use arkret_models_collaboration::{
     ObjectRef, RealmOrganizationControlScope, RealmOrganizationPayload,
     RealmOrganizationRelationship,
@@ -34,6 +31,9 @@ use arkret_models_collaboration::{
 use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     RealmOrganizationVerificationResult, verify_realm_organization_statement,
+};
+use arkret_schema::{
+    EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
 use arkret_wire::{Did, RealmId};
 use chrono::{DateTime, Utc};
