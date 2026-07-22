@@ -14,10 +14,12 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{
-    AgentSidecarDisplayMode, AgentSidecarExchangeOrigin, Did, EventId, Hash,
-    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
-    PendingSidecarAccessReconciliationStage, RealmId, SidecarId, SidecarMlsBinding,
-    agent_sidecar_desired_access_digest,
+    AgentSidecarDisplayMode, AgentSidecarExchangeId, AgentSidecarExchangeOrigin,
+    AgentSidecarExchangeProjection, AgentSidecarExchangeProjectionSchema,
+    AgentSidecarExchangeStatus, AgentSidecarProjectionProvenance, AgentSidecarSourceTrackRef, Did,
+    EventId, Hash, Hlc, MlsGovernanceBindingPayload, NonEmptyString,
+    PendingSidecarAccessReconciliationItem, PendingSidecarAccessReconciliationStage, RealmId,
+    SidecarId, SidecarMlsBinding, StrandId, agent_sidecar_desired_access_digest,
 };
 use arkret_core::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
 use serde_json::Value;
@@ -304,6 +306,86 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         || serde_json::to_value(AgentSidecarExchangeOrigin::SidecarNative)? != "sidecar_native"
     {
         bail!("hosted Sidecar closed enums drifted");
+    }
+    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-000000000030")?;
+    let source_strand_id = StrandId::new("ak:strand:01964137-0000-7000-8000-000000000031")?;
+    let private_strand_id = StrandId::new("ak:strand:01964137-0000-7000-8000-000000000032")?;
+    let anchor_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000033")?;
+    let request_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000034")?;
+    let native_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000035")?;
+    let projection = AgentSidecarExchangeProjection {
+        schema: AgentSidecarExchangeProjectionSchema::V1,
+        controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
+        sidecar_id: sidecar,
+        private_strand_id: private_strand_id.clone(),
+        exchange_id: AgentSidecarExchangeId::new("Abcdefghijklmnopqrstuv")?,
+        origin: AgentSidecarExchangeOrigin::SourceTrackRouted,
+        source_track_ref: AgentSidecarSourceTrackRef {
+            realm_id: realm_id.clone(),
+            strand_id: source_strand_id.clone(),
+            track_name: "discussion".to_owned(),
+        },
+        source_frontier_anchor: Some(anchor_id.clone()),
+        source_hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
+        client_order_key: NonEmptyString::new("device-1-1").map_err(anyhow::Error::msg)?,
+        addressed_agent_ids: vec![Did::new("did:webvh:z6mkfixture:assistant.agents.example")?],
+        participating_agent_ids: Vec::new(),
+        private_request_event_id: request_id.clone(),
+        user_facing_response_event_ids: Vec::new(),
+        status: AgentSidecarExchangeStatus::Delivered,
+        failure_code: None,
+        updated_hlc: Hlc::new("01970e589d21-0002-a13f9c2e")?,
+    };
+    let event = |event_id: EventId, hlc: &str, value: &'static str| {
+        garth::projection::SidecarTimelineEvent {
+            event_id,
+            hlc: hlc.to_owned(),
+            track_name: "discussion".to_owned(),
+            value,
+        }
+    };
+    let shared = vec![event(
+        anchor_id.clone(),
+        "01970e589d21-0001-a13f9c2e",
+        "shared anchor",
+    )];
+    let private = vec![
+        event(
+            request_id.clone(),
+            "01970e589d21-0002-a13f9c2e",
+            "routed request",
+        ),
+        event(
+            native_id.clone(),
+            "01970e589d21-0003-a13f9c2e",
+            "sidecar native",
+        ),
+    ];
+    let merged = garth::projection::merge_sidecar_timeline(
+        [&projection],
+        AgentSidecarDisplayMode::ContextMerged,
+        &shared,
+        &private,
+    );
+    if merged.iter().map(|item| &item.event_id).collect::<Vec<_>>()
+        != vec![&anchor_id, &request_id, &native_id]
+        || merged[1].provenance != AgentSidecarProjectionProvenance::PrivateEcho
+        || merged[2].provenance != AgentSidecarProjectionProvenance::Private
+    {
+        bail!("hosted Sidecar merge did not preserve anchored echo/native provenance");
+    }
+    let private_only = garth::projection::merge_sidecar_timeline(
+        [&projection],
+        AgentSidecarDisplayMode::SidecarOnly,
+        &shared,
+        &private,
+    );
+    if private_only.len() != 2
+        || private_only
+            .iter()
+            .any(|item| item.provenance != AgentSidecarProjectionProvenance::Private)
+    {
+        bail!("Sidecar-only projection leaked shared content or echo provenance");
     }
     Ok(())
 }
