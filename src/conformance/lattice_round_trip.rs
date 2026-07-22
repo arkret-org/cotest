@@ -1,6 +1,6 @@
 //! C10.C lattice round-trip vectors.
 //!
-//! Exercises the SDK's [`arkret_core::lattice`] module directly against the
+//! Exercises the SDK's [`arkret_state::lattice`] module directly against the
 //! normative scenarios from `cba-lattice-fixture.json`.
 //! The fixture itself is symbolic (it describes protocol-level semantics,
 //! eliding wire-required `space_id` / `hlc` / `sig`) — this suite reifies
@@ -27,15 +27,15 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::canonical::canonical_json_bytes;
-use arkret_core::lattice::ordered_log::IssuedOp;
-use arkret_core::lattice::{
-    CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
-};
 use arkret_core::{
     CellRef, Did, ErrorCode, LatticeOp, LatticeOpType, MoveId, REALM_LINK_ALLOWED_TRANSITIONS,
     REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES, RealmId, RealmLinkKind,
     RealmLinkPayload, RealmLinkStatus, RealmLinkTransitionCandidate, RealmLinkTransitionOutcome,
     evaluate_realm_link_transition,
+};
+use arkret_state::lattice::ordered_log::IssuedOp;
+use arkret_state::lattice::{
+    CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
 };
 use serde_json::{Value, json};
 

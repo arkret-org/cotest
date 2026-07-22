@@ -10,12 +10,12 @@ use arkret::{
     MediaServiceAnchors, call_media_token_exchange, participant_binding_signing_input,
     verify_call_media_token_outcome,
 };
-use arkret_core::lattice::{CellState, Fsm, Lattice, SealedOp};
 use arkret_core::{
     BottomKind, CallId, CallMediaParticipantBinding, CallMediaServiceSignature,
     CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody, CellRef, DeviceId, Did,
     LatticeOp, LatticeOpType, MoveId, PARTICIPANT_BINDING_SCHEMA, RealmId, base64url_encode,
 };
+use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
