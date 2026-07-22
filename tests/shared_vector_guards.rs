@@ -75,7 +75,7 @@ fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
         if profile_id == cotest::conformance::FEDERATION_MINIMAL_PROFILE_ID {
             assert_eq!(
                 actual,
-                arkret::FEDERATION_MINIMAL_REDUCER_PROFILE_DIGEST,
+                arkret_policy::generated::profiles::FEDERATION_MINIMAL_REDUCER_PROFILE_DIGEST,
                 "Spec, SDK, Soland consumer, and Cotest federation digest must share one generated value"
             );
         }
