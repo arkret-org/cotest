@@ -5,7 +5,9 @@ use arkret::webvh::{
     PrincipalInceptionInput, PrincipalRotationInput, prepare_principal_inception,
     prepare_principal_rotation, validate_principal_did_document_profile,
 };
-use arkret_core::{Did, ed25519_pubkey_to_did_key_multibase, validate_did_webvh_v1_method};
+use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_models_identity::validate_did_webvh_v1_method;
+use arkret_wire::Did;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};

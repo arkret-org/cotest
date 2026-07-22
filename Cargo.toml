@@ -50,6 +50,7 @@ bip39 = {workspace = true}
 chacha20poly1305 = {workspace = true,default-features = false,features = ["alloc"]}
 chrono = {workspace = true}
 arkret = {workspace = true}
+arkret-canonical = {workspace = true}
 garth = {workspace = true}
 arkret-core = {workspace = true,features = ["client"]}
 arkret-state = {workspace = true}
@@ -59,6 +60,7 @@ arkret-state = {workspace = true}
 arkret-crypto = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-models-collaboration = {workspace = true}
+arkret-models-identity = {workspace = true}
 arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
@@ -106,11 +108,13 @@ chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
 arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "mls", "device-runtime"]}
+arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth"}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
 arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
+arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity"}
 arkret-policy = {path = "../arkret-rust-sdk/crates/policy"}
 arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",features = ["signer"]}
