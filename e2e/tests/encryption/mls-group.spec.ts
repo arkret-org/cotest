@@ -541,6 +541,8 @@ async function sendEncryptedTimelineMessage(
     : primarySendButton;
   await expect(secureSendButton).toBeVisible({ timeout: 30_000 });
 
+  const chatStatus = userPage.page.getByTestId("chat-status");
+
   const messageSubmit = userPage.page.waitForResponse(
     (response) => {
       const request = response.request();
@@ -558,15 +560,21 @@ async function sendEncryptedTimelineMessage(
   await userPage.page.getByTestId("chat-input").fill(body);
   await secureSendButton.click();
 
-  const response = await messageSubmit;
+  const response = await Promise.race([
+    messageSubmit,
+    chatStatus
+      .filter({ hasText: /(?:_pending|failed|could not|error)/i })
+      .waitFor({ state: "visible", timeout: 60_000 })
+      .then(async () => {
+        throw new Error(`secure send blocked: ${await chatStatus.innerText()}`);
+      }),
+  ]);
   const postData = response.request().postData() ?? "";
-  expect(postData).toContain("encrypted_content");
-  // The per-message content scheme is the MLS-exporter-derived AEAD scheme
-  // (`mls-exporter-aead-v1`) — the shareable-history content scheme — NOT the
-  // realm-level `mls_rfc9420` encryption_profile. (This assertion previously read
-  // "mls-rfc9420" and only ever passed because the test silently skipped when
-  // coauth was absent; it now runs end-to-end.)
-  expect(postData).toContain("mls-exporter-aead");
+  const submittedEvent = JSON.parse(postData);
+  expect(submittedEvent.payload?.encrypted_content).toMatchObject({
+    scheme: "mls-exporter-aead-v1",
+    key_ref: { algorithm: "MLS-EXPORTER-AEAD" },
+  });
   expect(postData).not.toContain(body);
   await expect(userPage.page.getByTestId("chat-status")).toContainText(
     /Encrypted message sent/i,
@@ -1165,40 +1173,29 @@ test.describe("MLS group encryption", () => {
     }
     const alice = aliceSession!.user;
     const bob = bobSession!.user;
-    const [alicePage, bobPage] = await Promise.all([
-      openUserPage(browser, alice, {
-        grantJwt: aliceSession!.grantJwt,
-        dpopSeedB64url: aliceSession!.dpopSeedB64url,
-        grantId: aliceSession!.grantId,
-        grantAudience: aliceSession!.grantAudience,
-      }),
-      openUserPage(browser, bob, {
-        grantJwt: bobSession!.grantJwt,
-        dpopSeedB64url: bobSession!.dpopSeedB64url,
-        grantId: bobSession!.grantId,
-        grantAudience: bobSession!.grantAudience,
-      }),
-    ]);
+    const alicePage = await openUserPage(browser, alice, {
+      grantJwt: aliceSession.grantJwt,
+      dpopSeedB64url: aliceSession.dpopSeedB64url,
+      eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
+      grantId: aliceSession.grantId,
+      grantAudience: aliceSession.grantAudience,
+    });
+    let bobPage: JointUserPage | undefined;
     const invalidHistoryBackupWarnings: string[] = [];
-    for (const userPage of [alicePage, bobPage]) {
+    const recordInvalidHistoryBackupWarning = (userPage: JointUserPage) => {
       userPage.page.on("console", (message) => {
         const text = message.text();
         if (text.includes("encryption.aead is required")) {
           invalidHistoryBackupWarnings.push(text);
         }
       });
-    }
+    };
+    recordInvalidHistoryBackupWarning(alicePage);
 
     try {
-      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
-      await Promise.all([
-        alicePage.completeRecoveryKeySetupIfPrompted(),
-        bobPage.completeRecoveryKeySetupIfPrompted(),
-      ]);
-      await Promise.all([
-        alicePage.acknowledgeRecommendedEncryptionPromptIfVisible(),
-        bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
-      ]);
+      await alicePage.gotoHome();
+      await alicePage.completeRecoveryKeySetupIfPrompted();
+      await alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
 
       const realmId = await alicePage.createRealm({
         title: `S11 joined decrypt ${stamp}`,
@@ -1208,7 +1205,20 @@ test.describe("MLS group encryption", () => {
         encryptionProfile: "mls_rfc9420",
       });
       const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
-      expect(inviteStatus).toContain("MLS Welcome queued");
+      expect(inviteStatus).toContain("invited");
+      expect(inviteStatus).not.toContain("MLS Welcome queued");
+
+      bobPage = await openUserPage(browser, bob, {
+        grantJwt: bobSession.grantJwt,
+        dpopSeedB64url: bobSession.dpopSeedB64url,
+        eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
+        grantId: bobSession.grantId,
+        grantAudience: bobSession.grantAudience,
+      });
+      recordInvalidHistoryBackupWarning(bobPage);
+      await bobPage.gotoHome();
+      await bobPage.completeRecoveryKeySetupIfPrompted();
+      await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
 
       // Route-context bootstrap is where Bob applies pending MLS Welcome state.
@@ -1280,7 +1290,7 @@ test.describe("MLS group encryption", () => {
       expect(rawEvents.status()).toBe(200);
       const rawWire = JSON.stringify(await rawEvents.json());
       expect(rawWire).toContain("encrypted_content");
-      expect(rawWire).toContain("mls-exporter-aead");
+      expect(rawWire).toContain('"scheme":"mls-exporter-aead-v1"');
       expect(rawWire).not.toContain(plaintext);
       expect(rawWire).not.toContain(bobPlaintext);
 
@@ -1317,7 +1327,10 @@ test.describe("MLS group encryption", () => {
         "joined-member-decrypted-e2ee-message",
       );
     } finally {
-      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        bobPage?.close() ?? Promise.resolve(),
+        alicePage.close(),
+      ]);
     }
   });
 

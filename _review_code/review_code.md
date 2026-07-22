@@ -46,6 +46,67 @@ selection failures.
   references from the live Realm actor frontier; a new Realm-scoped chain must
   begin at one.
 
+## 2026-07-22 Deferred MLS Welcome and second-member decrypt regression
+
+- Severity: P0
+- Status: resolved and verified together by final focused joint run
+  `20260723-023445` (`2 passed (3.7m)`, managed service failures `[]`).
+- Evidence: the Realm UI projected two joined members while the administrator
+  logged `admission pre-filter blocked`, and the invitee remained at
+  `decryption_pending` with no local MLS snapshot. The same session also tried
+  the founding-only `device-enroll` endpoint at an existing PCR frontier and
+  was correctly rejected by Coauth.
+- Root causes:
+  1. Inkson treated a missing or mismatched current device signer as permission
+     to invoke founding-device enrollment after PCR creation.
+  2. MLS admission derived its reconciliation candidates only from the local
+     `raw_operations` cursor window and ignored account sync's current
+     `members[]` roster hint. The inverse is also unsafe: the hint is not
+     accepted membership authority.
+  3. Crown-jewel browser tests prepared both users' KeyPackages before invite,
+     so they never exercised deferred admission.
+  4. Commit and Welcome were separate, non-durable writes, so navigation after
+     Commit acceptance could permanently lose the bound Welcome.
+  5. The client could send on an old MLS epoch while a complete roster hint
+     already showed that its local group was behind.
+  6. Joined-history initial sync hid the current pre-join encryption policy,
+     making the wire content scheme unknowable after invitee reload.
+  7. The joint runner could serve a stale Dioxus debug WASM and the send helper
+     masked concrete product failures behind a response timeout.
+- Resolution rules:
+  1. Founding authorization remains atomic with PCR create; later or mismatched
+     devices use explicit pairing/recovery and never call `device-enroll`.
+  2. `ak.member.state` interpreted at the accepted Seal/Lattice state remains
+     membership authority. `members[]` is only a reconciliation/UI hint:
+     `members_limited=true` permits positive retry scheduling but never
+     negative/removal claims, while even a complete hint cannot authorize a
+     Commit or clear `epoch_update_required` without verified governance proof.
+     A limited hint must not erase a joined actor already present in verified
+     membership state, and verified state wins any hint conflict.
+  3. Device authorization and KeyPackage publication must re-check/retry from
+     durable state transitions without reload, re-invite, or an unrelated
+     timeline message.
+  4. Joint E2E must invite before the second browser publishes a KeyPackage,
+     then prove automatic Welcome, bidirectional post-join decrypt, shared
+     pre-join history recovery, reload durability, and ciphertext-only storage.
+  5. Commit, exact signed Welcome(s), and post-commit snapshot form one durable
+     saga. Once Commit is accepted, Welcome material is never terminally
+     discarded; retries must preserve its event id and `commit_ref`. CAS,
+     signer-generation changes, deterministic rejection, and local snapshot
+     persistence failure must retain the immutable saga for explicit repair.
+  6. Encrypted sends conservatively pause whenever a complete roster hint
+     differs from local MLS membership or the verified content scheme is
+     unavailable. Hint agreement alone never replaces the accepted
+     governance-binding send gate.
+  7. Joined-history filtering may hide pre-join data-plane events, but an active
+     member's initial sync must include the latest Realm create/policy security
+     baseline needed to validate current encrypted writes.
+  8. Joint builds must verify the exact served WASM feature/debug markers.
+     Send helpers may retry only an explicit `encryption_transition_pending`
+     during a bounded convergence window; every other UI failure must fail
+     immediately with its concrete status, and a retry is green only after a
+     real accepted ciphertext POST is observed.
+
 ## 2026-07-22 Native Agent session accountability drift
 
 - Severity: P0

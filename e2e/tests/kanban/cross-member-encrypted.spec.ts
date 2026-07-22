@@ -210,24 +210,48 @@ async function addEncryptedDescription(
     );
   }, description);
 
-  const strandUpdate = page.waitForResponse(
-    (response) =>
-      response.url().includes("/_arkret/self/events") &&
-      response.request().method() === "POST" &&
-      (response.request().postData() ?? "").includes("ak.strand.update"),
-    { timeout: 60_000 },
-  );
-  await page.getByTestId("card-detail-save-button").click();
+  const responseDeadline = Date.now() + 120_000;
+  let response: Awaited<ReturnType<Page["waitForResponse"]>> | undefined;
+  while (Date.now() < responseDeadline) {
+    const strandUpdate = page.waitForResponse(
+      (candidate) =>
+        candidate.url().includes("/_arkret/self/events") &&
+        candidate.request().method() === "POST" &&
+        (candidate.request().postData() ?? "").includes("ak.strand.update"),
+      { timeout: 10_000 },
+    );
+    await page.getByTestId("card-detail-save-button").click();
 
-  const response = await strandUpdate;
-  const body = await response.text();
+    response = await strandUpdate.catch(() => undefined);
+    if (response) break;
+
+    const status = (await page.getByTestId("card-detail-edit-status").textContent())?.trim() ?? "";
+    expect(
+      status,
+      "description save produced neither ak.strand.update nor a visible failure status",
+    ).not.toBe("");
+    expect(
+      status.includes("encryption_transition_pending"),
+      `description save failed before submission: ${status}`,
+    ).toBe(true);
+  }
+  expect(
+    response,
+    "description remained encryption_transition_pending after the MLS admission convergence deadline",
+  ).toBeDefined();
+
+  const acceptedResponse = response!;
+  const body = await acceptedResponse.text();
   expect(
     body.includes("content_encryption_floor_violation"),
-    `description ak.strand.update hit the content-encryption floor — client shipped plaintext to an encrypted realm: ${response.status()} ${body.slice(0, 500)}`,
+    `description ak.strand.update hit the content-encryption floor — client shipped plaintext to an encrypted realm: ${acceptedResponse.status()} ${body.slice(0, 500)}`,
   ).toBe(false);
-  expect(response.status(), `ak.strand.update should be accepted; body=${body.slice(0, 500)}`).toBeLessThan(400);
   expect(
-    (response.request().postData() ?? "").includes(description),
+    acceptedResponse.status(),
+    `ak.strand.update should be accepted; body=${body.slice(0, 500)}`,
+  ).toBeLessThan(400);
+  expect(
+    (acceptedResponse.request().postData() ?? "").includes(description),
     "description leaked as plaintext into the ak.strand.update wire — realm not actually encrypted",
   ).toBe(false);
 
@@ -453,20 +477,14 @@ test.describe("cross-member encrypted kanban", () => {
 
     const alice = aliceSession.user;
     const bob = bobSession.user;
-    const [alicePage, bobPage] = await Promise.all([
-      openUserPage(browser, alice, {
-        grantJwt: aliceSession.grantJwt,
-        dpopSeedB64url: aliceSession.dpopSeedB64url,
-        grantId: aliceSession.grantId,
-        grantAudience: aliceSession.grantAudience,
-      }),
-      openUserPage(browser, bob, {
-        grantJwt: bobSession.grantJwt,
-        dpopSeedB64url: bobSession.dpopSeedB64url,
-        grantId: bobSession.grantId,
-        grantAudience: bobSession.grantAudience,
-      }),
-    ]);
+    const alicePage = await openUserPage(browser, alice, {
+      grantJwt: aliceSession.grantJwt,
+      dpopSeedB64url: aliceSession.dpopSeedB64url,
+      eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
+      grantId: aliceSession.grantId,
+      grantAudience: aliceSession.grantAudience,
+    });
+    let bobPage: JointUserPage | undefined;
 
     const boardTitle = `Enc XM Board ${stamp}`;
     const listTitle = `Todo-${stamp}`;
@@ -475,15 +493,9 @@ test.describe("cross-member encrypted kanban", () => {
     const bobCard = `Bob reply card ${stamp}`;
 
     try {
-      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
-      await Promise.all([
-        alicePage.completeRecoveryKeySetupIfPrompted(),
-        bobPage.completeRecoveryKeySetupIfPrompted(),
-      ]);
-      await Promise.all([
-        alicePage.acknowledgeRecommendedEncryptionPromptIfVisible(),
-        bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
-      ]);
+      await alicePage.gotoHome();
+      await alicePage.completeRecoveryKeySetupIfPrompted();
+      await alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
 
       // 1) Alice creates an EMPTY MLS-encrypted realm.
       const realmId = await alicePage.createRealm({
@@ -494,12 +506,29 @@ test.describe("cross-member encrypted kanban", () => {
         encryptionProfile: "mls_rfc9420",
       });
 
-      // 2) Alice invites bob → MLS Welcome must be queued (KeyPackage claimed).
+      // 2) Invite Bob before his browser has completed the founding-device
+      // bootstrap or published a KeyPackage. The invite must persist even
+      // though immediate MLS admission is deferred.
       const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
       expect(
         inviteStatus,
-        "inviting a member of an MLS realm must queue a Welcome (KeyPackage claimed)",
-      ).toContain("MLS Welcome queued");
+        "the Realm invite must persist while Bob has no claimable KeyPackage",
+      ).toContain("invited");
+      expect(inviteStatus).not.toContain("MLS Welcome queued");
+
+      // Bob now completes the atomic PCR create + founding-device authorization.
+      // This publishes his real event-signer KeyPackage after the invite already
+      // exists, exercising the deferred Welcome reconciliation path.
+      bobPage = await openUserPage(browser, bob, {
+        grantJwt: bobSession.grantJwt,
+        dpopSeedB64url: bobSession.dpopSeedB64url,
+        eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
+        grantId: bobSession.grantId,
+        grantAudience: bobSession.grantAudience,
+      });
+      await bobPage.gotoHome();
+      await bobPage.completeRecoveryKeySetupIfPrompted();
+      await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
 
       // 3) Bob JOINS before any board content exists. This matters twice over:
       //    under history_visibility=joined, soland crops pre-join events from
@@ -600,7 +629,10 @@ test.describe("cross-member encrypted kanban", () => {
       expect(rawEvents.status()).toBe(200);
       expect(JSON.stringify(await rawEvents.json())).not.toContain(aliceDescription);
     } finally {
-      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        bobPage?.close() ?? Promise.resolve(),
+        alicePage.close(),
+      ]);
     }
   });
 
@@ -625,20 +657,14 @@ test.describe("cross-member encrypted kanban", () => {
 
     const alice = aliceSession.user;
     const bob = bobSession.user;
-    const [alicePage, bobPage] = await Promise.all([
-      openUserPage(browser, alice, {
-        grantJwt: aliceSession.grantJwt,
-        dpopSeedB64url: aliceSession.dpopSeedB64url,
-        grantId: aliceSession.grantId,
-        grantAudience: aliceSession.grantAudience,
-      }),
-      openUserPage(browser, bob, {
-        grantJwt: bobSession.grantJwt,
-        dpopSeedB64url: bobSession.dpopSeedB64url,
-        grantId: bobSession.grantId,
-        grantAudience: bobSession.grantAudience,
-      }),
-    ]);
+    const alicePage = await openUserPage(browser, alice, {
+      grantJwt: aliceSession.grantJwt,
+      dpopSeedB64url: aliceSession.dpopSeedB64url,
+      eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
+      grantId: aliceSession.grantId,
+      grantAudience: aliceSession.grantAudience,
+    });
+    let bobPage: JointUserPage | undefined;
 
     const boardTitle = `Shared History Board ${stamp}`;
     const listTitle = `Before-join-${stamp}`;
@@ -646,15 +672,9 @@ test.describe("cross-member encrypted kanban", () => {
     const aliceDescription = `Pre-join private detail ${stamp}`;
 
     try {
-      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
-      await Promise.all([
-        alicePage.completeRecoveryKeySetupIfPrompted(),
-        bobPage.completeRecoveryKeySetupIfPrompted(),
-      ]);
-      await Promise.all([
-        alicePage.acknowledgeRecommendedEncryptionPromptIfVisible(),
-        bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
-      ]);
+      await alicePage.gotoHome();
+      await alicePage.completeRecoveryKeySetupIfPrompted();
+      await alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
 
       // 1) Alice creates a shared-history MLS realm. For this visibility the
       // card events are visible to a later joined member, but the private body
@@ -682,9 +702,22 @@ test.describe("cross-member encrypted kanban", () => {
       await addEncryptedDescription(alicePage.page, aliceCard, aliceDescription);
       await stepShot(alicePage.page, testInfo, "A-alice-prejoin-encrypted-card");
 
-      // 3) Alice invites Bob only after the encrypted content already exists.
+      // 3) Alice invites Bob only after the encrypted content already exists,
+      // while Bob still has no browser-published KeyPackage.
       const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
-      expect(inviteStatus).toContain("MLS Welcome queued");
+      expect(inviteStatus).toContain("invited");
+      expect(inviteStatus).not.toContain("MLS Welcome queued");
+
+      bobPage = await openUserPage(browser, bob, {
+        grantJwt: bobSession.grantJwt,
+        dpopSeedB64url: bobSession.dpopSeedB64url,
+        eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
+        grantId: bobSession.grantId,
+        grantAudience: bobSession.grantAudience,
+      });
+      await bobPage.gotoHome();
+      await bobPage.completeRecoveryKeySetupIfPrompted();
+      await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
 
       // Server-side visibility gate: Bob's event feed must include the pre-join
@@ -735,7 +768,10 @@ test.describe("cross-member encrypted kanban", () => {
       expect(rawEvents.status()).toBe(200);
       expect(JSON.stringify(await rawEvents.json())).not.toContain(aliceDescription);
     } finally {
-      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        bobPage?.close() ?? Promise.resolve(),
+        alicePage.close(),
+      ]);
     }
   });
 });

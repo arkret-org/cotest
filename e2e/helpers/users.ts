@@ -123,6 +123,7 @@ const pendingBootstrapByGrant = new Map<
   {
     recoveryKey: string;
     pendingPrincipalRegistration: Record<string, unknown>;
+    eventSigningSeedB64url: string;
   }
 >();
 
@@ -1172,14 +1173,10 @@ export async function createDpopUserSessionForAccount(
   opts: {
     server?: SolandKey;
     coauthBase?: string;
-    // Skip the harness-side `ak.device.authorize`. Set this for browser MLS
-    // sessions so inkson's own on-connect self-enrollment
-    // (app/connect.rs enroll_current_session_device) becomes the sole device
-    // authority — it enrolls the browser's REAL event-signer key, which is what
-    // signs message proofs, so a receiver's chat proof gate resolves a matching
-    // key. Leaving the harness enroll on would pre-authorize the device with the
-    // DPoP *session* key and suppress self-enrollment (only unauthorized devices
-    // self-enroll), stranding cross-member chat proofs.
+    // Skip the harness-side `ak.device.authorize`. Browser sessions complete
+    // the spec-mandated atomic founding-device bootstrap in Inkson onboarding
+    // with `eventSigningSeedB64url`; later devices use pairing/recovery. The
+    // standalone enrollment endpoint is not a valid fallback for either path.
     skipDeviceEnrollment?: boolean;
   } = {},
 ): Promise<DpopUserSession | undefined> {
@@ -1228,20 +1225,14 @@ export async function createDpopUserSessionForAccount(
     deviceId: user.deviceId,
     signingSeedB64url: eventSigningSeedB64url,
   });
-  // Device authorization up front, for API-only sessions that never open a
-  // browser (no in-browser self-enrollment runs, so authorize here to make the
-  // KeyPackage upload / MLS flows accepted).
+  // Device authorization up front for API-only sessions that never open a
+  // browser. Browser sessions must complete the atomic founding-device
+  // bootstrap in Inkson onboarding with the event signer injected below.
   //
-  // For BROWSER MLS sessions, pass `skipDeviceEnrollment: true`: this harness
-  // enroll authorizes the DPoP *session* key, but the browser's real event-signer
-  // key (what signs message proofs) is different — so a receiver's chat proof gate
-  // (verify_chat_envelope_proof) would resolve a non-matching key and drop
-  // cross-member chat messages. inkson's on-connect self-enrollment now works
-  // under the injected-grant seam (connect.rs falls back to the connect-held
-  // bearer when local_state has no reconstructed grant), so skipping this lets
-  // self-enrollment authorize the correct event-signer key. Because a pre-existing
-  // authorization suppresses self-enrollment (only unauthorized devices
-  // self-enroll), the harness enroll MUST be skipped, not merely overwritten.
+  // For browser sessions, `skipDeviceEnrollment` must remain true: this helper
+  // would authorize the DPoP session key, while the browser signs Events with
+  // the distinct event signer. Pre-authorizing the wrong key would make the
+  // atomic onboarding bootstrap conflict and remote proof verification fail.
   if (!opts.skipDeviceEnrollment) {
     const authorizedKey = await enrollOnboardedDeviceSigningKey(
       request,
@@ -1282,6 +1273,7 @@ export async function createDpopUserSessionForAccount(
     pendingBootstrapByGrant.set(session.grantJwt, {
       recoveryKey: session.recoveryKey,
       pendingPrincipalRegistration: session.pendingPrincipalRegistration,
+      eventSigningSeedB64url: session.eventSigningSeedB64url,
     });
   }
   return session;
@@ -1671,6 +1663,9 @@ export async function openUserPage(
           opts.pendingPrincipalRegistration ??
           registeredBootstrap.pendingPrincipalRegistration,
         recoveryKey: opts.recoveryKey ?? registeredBootstrap.recoveryKey,
+        eventSigningSeedB64url:
+          opts.eventSigningSeedB64url ??
+          registeredBootstrap.eventSigningSeedB64url,
       }
     : opts;
   const userPage = new JointUserPage(
