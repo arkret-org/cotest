@@ -313,6 +313,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     let anchor_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000033")?;
     let request_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000034")?;
     let native_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000035")?;
+    let response_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000036")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
         controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
@@ -329,10 +330,10 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         source_hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         client_order_key: NonEmptyString::new("device-1-1").map_err(anyhow::Error::msg)?,
         addressed_agent_ids: vec![Did::new("did:webvh:z6mkfixture:assistant.agents.example")?],
-        participating_agent_ids: Vec::new(),
+        participating_agent_ids: vec![Did::new("did:webvh:z6mkfixture:assistant.agents.example")?],
         private_request_event_id: request_id.clone(),
-        user_facing_response_event_ids: Vec::new(),
-        status: AgentSidecarExchangeStatus::Delivered,
+        user_facing_response_event_ids: vec![response_id.clone()],
+        status: AgentSidecarExchangeStatus::Complete,
         failure_code: None,
         updated_hlc: Hlc::new("01970e589d21-0002-a13f9c2e")?,
     };
@@ -358,7 +359,12 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         event(
             native_id.clone(),
             "01970e589d21-0003-a13f9c2e",
-            "sidecar native",
+            "agent internal",
+        ),
+        event(
+            response_id.clone(),
+            "01970e589d21-0004-a13f9c2e",
+            "user-facing response",
         ),
     ];
     let merged = garth::projection::merge_sidecar_timeline(
@@ -368,11 +374,12 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         &private,
     );
     if merged.iter().map(|item| &item.event_id).collect::<Vec<_>>()
-        != vec![&anchor_id, &request_id, &native_id]
+        != vec![&anchor_id, &request_id, &response_id, &native_id]
         || merged[1].provenance != AgentSidecarProjectionProvenance::PrivateEcho
-        || merged[2].provenance != AgentSidecarProjectionProvenance::Private
+        || merged[2].provenance != AgentSidecarProjectionProvenance::PrivateEcho
+        || merged[3].provenance != AgentSidecarProjectionProvenance::Private
     {
-        bail!("hosted Sidecar merge did not preserve anchored echo/native provenance");
+        bail!("hosted Sidecar merge did not isolate explicit responses from internal Events");
     }
     let private_only = garth::projection::merge_sidecar_timeline(
         [&projection],
@@ -380,7 +387,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         &shared,
         &private,
     );
-    if private_only.len() != 2
+    if private_only.len() != 3
         || private_only
             .iter()
             .any(|item| item.provenance != AgentSidecarProjectionProvenance::Private)

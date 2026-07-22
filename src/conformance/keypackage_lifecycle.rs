@@ -988,6 +988,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         claim_nonce,
         Some(ssk_generation),
         None,
+        None,
         Some(ssk_generation),
         None,
     )
@@ -1008,6 +1009,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &welcome_digest,
             claim_nonce,
             Some(ssk_generation),
+            None,
             None,
             Some(ssk_generation),
             None,
@@ -1040,6 +1042,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             claim_nonce,
             Some(ssk_generation),
             None,
+            None,
             Some(ssk_generation),
             None,
         )
@@ -1066,6 +1069,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &welcome_digest,
         claim_nonce,
         Some(ssk_generation),
+        None,
         None,
         Some(ssk_generation),
         None,
@@ -1094,6 +1098,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         claim_nonce,
         Some(ssk_generation),
         None,
+        None,
         Some(ssk_generation),
         None,
     )
@@ -1116,6 +1121,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &welcome_digest,
         claim_nonce,
         Some(ssk_generation),
+        None,
         None,
         Some(ssk_generation),
         None,
