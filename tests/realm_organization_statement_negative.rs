@@ -8,8 +8,8 @@
 //!   * `arkret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
 //!     `ak.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
 //!     organization_ref }` shape).
-//!   * `arkret_core::models::verify_realm_organization_statement` enforces the issuer-role /
-//!     delegation / proof / validity-window / scope / revocation invariants, fail-closed.
+//!   * `arkret_policy::verify_realm_organization_statement` enforces the issuer-role / delegation /
+//!     proof / validity-window / scope / revocation invariants, fail-closed.
 //!
 //! COT-ORG-01 asserts the coverage fixture's active + revoked
 //! `RealmOrganizationPayload` shapes validate against the SDK validator and the
@@ -24,15 +24,18 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_core::Did;
-use arkret_core::models::{
-    NoDelegationResolver, ObjectRef, RealmId, RealmOrganizationControlScope,
-    RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationPayload,
-    RealmOrganizationRelationship, verify_realm_organization_statement,
-};
 use arkret_core::schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
+use arkret_models_collaboration::{
+    ObjectRef, RealmOrganizationControlScope, RealmOrganizationPayload,
+    RealmOrganizationRelationship,
+};
+use arkret_policy::{
+    NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
+    RealmOrganizationVerificationResult, verify_realm_organization_statement,
+};
+use arkret_wire::{Did, RealmId};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -153,11 +156,13 @@ fn org_did() -> Did {
 
 struct FixedResolver(Option<RealmOrganizationDelegation>);
 impl RealmOrganizationDelegationResolver for FixedResolver {
+    type Error = std::convert::Infallible;
+
     fn resolve_delegation(
         &self,
         _delegation_ref: &ObjectRef,
         _organization_id: &Did,
-    ) -> arkret_core::Result<Option<RealmOrganizationDelegation>> {
+    ) -> Result<Option<RealmOrganizationDelegation>, Self::Error> {
         Ok(self.0.clone())
     }
 }
@@ -180,7 +185,7 @@ fn run_verifier(
     expected_realm_id: &RealmId,
     now: DateTime<Utc>,
     resolver_name: &str,
-) -> arkret_core::Result<()> {
+) -> RealmOrganizationVerificationResult<()> {
     use RealmOrganizationControlScope::*;
     use RealmOrganizationRelationship::*;
     match resolver_name {
