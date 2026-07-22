@@ -53,6 +53,7 @@ arkret = {workspace = true}
 arkret-canonical = {workspace = true}
 garth = {workspace = true}
 arkret-core = {workspace = true}
+arkret-hlc = {workspace = true}
 arkret-state = {workspace = true}
 # 05-2 — cotest-wire emits SDK-authoritative cross-signing / device-trust
 # canonical signing-input golden vectors (CrossSigningPublishContent /
@@ -112,6 +113,7 @@ arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth"}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}
+arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
 arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
 arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity"}

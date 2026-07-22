@@ -4,7 +4,7 @@
 //! body `{v, purpose, issued_at, expires_at, h}`.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
+use arkret_hlc::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
 
 pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "ak.vector.encoding.cursor_opaque.core.v1";
 
