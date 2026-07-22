@@ -15,7 +15,8 @@
 use anyhow::{Result, anyhow, bail};
 use arkret::{
     AgentSidecarDisplayMode, AgentSidecarExchangeOrigin, Did, EventId, Hash,
-    MlsGovernanceBindingPayload, NonEmptyString, RealmId, SidecarId, SidecarMlsBinding,
+    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
+    PendingSidecarAccessReconciliationStage, RealmId, SidecarId, SidecarMlsBinding,
     agent_sidecar_desired_access_digest,
 };
 use arkret_core::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
@@ -225,6 +226,15 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
             "Sidecar removal must stop delivery and create only a client-authored MLS obligation"
         );
     }
+    let removal = PendingSidecarAccessReconciliationItem {
+        agent_id: Did::new("did:webvh:z6mkfixture:assistant.agents.example")?,
+        stage: PendingSidecarAccessReconciliationStage::MlsRemove,
+        reason: NonEmptyString::new("mls_remove_obligation_pending")?,
+        membership_frontier: Some(vec![EventId::new(
+            "ak:event:01964137-0000-7000-8000-000000000041",
+        )?]),
+    };
+    removal.validate()?;
     Ok(())
 }
 
