@@ -48,8 +48,10 @@ use anyhow::{Context, Result, anyhow, bail};
 use arkret_core::{
     Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
     DeliveryMode, Did, EventId, Handle, HandleHintBindingSource, Hash,
-    MemberDeliveryBindingCandidate, Proof, RecipientServiceType, sanitize_blind_payload,
-    sanitize_blind_payload_strict,
+    MemberDeliveryBindingCandidate, Proof, RecipientServiceType,
+};
+use arkret_policy::blind_payload_sanitizer::{
+    sanitize_blind_payload, sanitize_blind_payload_strict,
 };
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
@@ -469,8 +471,8 @@ fn negative_stable_push_id_leak_rejected() -> Result<()> {
             Err(e)
                 if matches!(
                     e.reason_code,
-                    arkret_core::BlindPayloadReasonCode::ForbiddenField
-                        | arkret_core::BlindPayloadReasonCode::SensitiveLiteral
+                    arkret_policy::blind_payload_sanitizer::BlindPayloadReasonCode::ForbiddenField
+                        | arkret_policy::blind_payload_sanitizer::BlindPayloadReasonCode::SensitiveLiteral
                 ) =>
             {
                 // Expected — the sanitizer correctly refused the leak.
