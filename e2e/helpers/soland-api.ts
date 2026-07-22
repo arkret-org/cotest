@@ -316,7 +316,7 @@ export async function createRealmApi(
     actorDid: ownerDid,
     realmId,
     kind: "ak.realm.create",
-    actorSeq: 1,
+    actorSeq: 0,
     createdAt,
     preconditions: [
       {
@@ -367,7 +367,7 @@ export async function createRealmApi(
     actorDid: ownerDid,
     realmId,
     kind: "ak.capability.grant",
-    actorSeq: 2,
+    actorSeq: 1,
     createdAt,
     prevRefs: [realmCreateEventId],
     payload: {
@@ -393,43 +393,57 @@ export async function createRealmApi(
   );
 
   for (const invitee of data.invitees ?? []) {
+    const memberInviteEvent = signedEventEnvelope({
+      actorDid: ownerDid,
+      realmId,
+      kind: "ak.member.state",
+      payload: {
+        realm_id: realmId,
+        actor_id: invitee,
+        membership: "invite",
+      },
+    });
+    await advanceEnvelopeToActorFrontier(
+      request,
+      token,
+      memberInviteEvent,
+      opts.server,
+    );
     await submitSignedEventApi(
       request,
       token,
-      signedEventEnvelope({
-        actorDid: ownerDid,
-        realmId,
-        kind: "ak.member.state",
-        payload: {
-          realm_id: realmId,
-          actor_id: invitee,
-          membership: "invite",
-        },
-      }),
+      memberInviteEvent,
       { server: opts.server, context: `invite ${invitee}` },
     );
 
     const recipientServiceId = data.invitee_service_ids?.[invitee];
     if (recipientServiceId) {
       const evidence = { kind: "explicit_address" };
+      const directedInviteEvent = signedEventEnvelope({
+        actorDid: ownerDid,
+        realmId,
+        kind: "ak.invite.create",
+        payload: {
+          invite_id: typedId("invite"),
+          invitee,
+          invite_delivery_target: {
+            recipient_service_id: recipientServiceId,
+            recipient_service_type: "principal_server",
+          },
+          introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
+          expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+        },
+      });
+      await advanceEnvelopeToActorFrontier(
+        request,
+        token,
+        directedInviteEvent,
+        opts.server,
+      );
       await submitSignedEventApi(
         request,
         token,
-        signedEventEnvelope({
-          actorDid: ownerDid,
-          realmId,
-          kind: "ak.invite.create",
-          payload: {
-            invite_id: typedId("invite"),
-            invitee,
-            invite_delivery_target: {
-              recipient_service_id: recipientServiceId,
-              recipient_service_type: "principal_server",
-            },
-            introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
-            expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-          },
-        }),
+        directedInviteEvent,
         { server: opts.server, context: `directed invite ${invitee}` },
       );
     }
@@ -1041,6 +1055,14 @@ export async function sendMessageApi(
       },
     },
   });
+  if (opts.actorSeq === undefined) {
+    await advanceEnvelopeToActorFrontier(
+      request,
+      token,
+      envelope,
+      opts.server,
+    );
+  }
   await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
     context: `send message to ${realmId}`,
@@ -1049,6 +1071,8 @@ export async function sendMessageApi(
     event_id: String(envelope.event_id),
     realm_id: realmId,
     actor_id: actorDid,
+    actor_seq: Number(envelope.actor_seq),
+    prev_refs: [...(envelope.prev_refs as string[])],
   };
 }
 
@@ -1557,7 +1581,7 @@ export async function submitSignedEventApi(
         text.includes("actor_seq is older than the accepted actor frontier")) ||
       (response.status() === 400 &&
         wireErrCode(body) === "schema_violation" &&
-        text.includes("actor-chain genesis must use actor_seq=1"));
+        text.includes("actor-chain genesis must use actor_seq=0"));
     if (!actorFrontierRefreshRequired || attempt === 2) {
       expect(
         [200, 201],
@@ -1598,7 +1622,7 @@ export async function submitSignedEventBatchApi(
         text.includes("actor_seq is older than the accepted actor frontier")) ||
       (response.status() === 400 &&
         wireErrCode(body) === "schema_violation" &&
-        text.includes("actor-chain genesis must use actor_seq=1"));
+        text.includes("actor-chain genesis must use actor_seq=0"));
     if (!actorFrontierRefreshRequired || attempt === 2) {
       expect(
         [200, 201],

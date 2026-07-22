@@ -9,7 +9,9 @@ coauth processes, including cross-principal chat projections.
 
 1. Register Alice and Bob through soland.
 2. Open two isolated inkson browser contexts with dev sessions.
-3. Alice creates a public, invite-governed, plaintext realm from the inkson UI.
+3. Alice creates a public, invite-governed, plaintext realm from the inkson UI;
+   the submitted genesis batch starts at `actor_seq=0`, links its founding grant
+   at sequence 1, and performs no combined frontier preflight for that new Realm.
 4. Alice sends a plaintext message through real soland.
 5. Alice sees the message in the inkson timeline UI.
 6. Register a third DPoP principal, add it to Alice's Realm, and project it as
@@ -24,6 +26,8 @@ coauth processes, including cross-principal chat projections.
 - `run-cotest.ps1 -Profile joint` starts soland, coauth, and inkson through `run-joint-e2e.ps1`.
 - Playwright project `joint-inkson` discovers this scenario under `e2e/tests/joint`.
 - The smoke is tagged `@fully-implemented` so the joint-smoke profile includes it.
+- The UI-level request trace pins local Realm genesis authoring independently of
+  the API helper and Soland reducer tests.
 - The agent projection case uses a real third DPoP session and real soland
   events. Full personal-agent provisioning, pairing, participation grants, and
   runtime proof enforcement remain covered by `tests/agent_provision_e2e.rs`;

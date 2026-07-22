@@ -672,6 +672,32 @@ fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result
                     bail!("vector {vector_name} sibling bucket key drifted");
                 }
             }
+            "realm_bootstrap_transaction_chain" => {
+                let events = required_array(case, "/events", vector_name)?;
+                if events.len() != 2 {
+                    bail!("vector {vector_name} Realm bootstrap chain needs two Events");
+                }
+                let create_id = required_pointer_str(&events[0], "/event_id", vector_name)?;
+                if required_pointer_str(&events[0], "/kind", vector_name)? != "ak.realm.create"
+                    || required_u64(&events[0], "/actor_seq", vector_name)? != 0
+                    || events[0].pointer("/prev_refs") != Some(&json!([]))
+                    || required_pointer_str(&events[1], "/kind", vector_name)?
+                        != "ak.capability.grant"
+                    || required_u64(&events[1], "/actor_seq", vector_name)? != 1
+                    || events[1].pointer("/prev_refs") != Some(&json!([create_id]))
+                    || required_pointer_str(&events[0], "/realm_id", vector_name)?
+                        != required_pointer_str(&events[1], "/realm_id", vector_name)?
+                {
+                    bail!("vector {vector_name} Realm bootstrap actor chain drifted");
+                }
+                require_str_eq(case, "/expected/result", "accept", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/authoring_basis",
+                    "genesis_then_same_transaction",
+                    vector_name,
+                )?;
+            }
             "cross_realm_predecessor" => {
                 if required_pointer_str(case, "/event_realm_id", vector_name)?
                     == required_pointer_str(case, "/predecessor_realm_id", vector_name)?
@@ -690,6 +716,7 @@ fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result
         &[
             "same_actor_and_seq_across_realms",
             "same_actor_and_seq_in_one_realm",
+            "realm_bootstrap_transaction_chain",
             "cross_realm_predecessor",
         ],
     )

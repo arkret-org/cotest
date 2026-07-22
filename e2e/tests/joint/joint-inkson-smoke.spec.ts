@@ -17,6 +17,94 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("joint-inkson smoke @fully-implemented", () => {
+  test("creates a Realm without probing its nonexistent actor frontier", async ({
+    browser,
+    request,
+  }) => {
+    test.setTimeout(360_000);
+    const flow = await openDpopUserPage(
+      browser,
+      request,
+      `joint-realm-genesis-${Date.now()}`,
+      { prepareMlsDevice: false },
+    );
+    if (!flow) {
+      assertJointStackNotRequired("joint-inkson Realm genesis browser login");
+      test.skip(true, "coauth DPoP session-grant login is required for joint UI");
+      return;
+    }
+
+    const frontierRequests: Array<{ url: string; ordinal: number }> = [];
+    const eventBatches: Array<{
+      body: Record<string, unknown>;
+      ordinal: number;
+    }> = [];
+    let requestOrdinal = 0;
+    flow.page.page.on("request", (observed) => {
+      const ordinal = requestOrdinal++;
+      const url = new URL(observed.url());
+      if (
+        observed.method() === "GET" &&
+        url.pathname === "/_arkret/self/events/frontier"
+      ) {
+        frontierRequests.push({ url: url.toString(), ordinal });
+      }
+      if (
+        observed.method() === "POST" &&
+        url.pathname === "/_arkret/self/events"
+      ) {
+        try {
+          const body = observed.postDataJSON() as Record<string, unknown>;
+          if (Array.isArray(body.events)) eventBatches.push({ body, ordinal });
+        } catch {
+          // Non-JSON traffic is irrelevant to the Event batch contract.
+        }
+      }
+    });
+
+    try {
+      const realmId = await flow.page.createRealm({
+        title: `joint Realm genesis ${Date.now()}`,
+        summary: "regression for local Realm genesis authoring",
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "shared",
+        encryptionProfile: "none",
+      });
+      const bootstrapBatch = eventBatches.find(({ body }) => {
+        const events = body.events as Array<Record<string, unknown>>;
+        return (
+          events[0]?.kind === "ak.realm.create" &&
+          events[0]?.realm_id === realmId
+        );
+      });
+      const bootstrap = bootstrapBatch?.body.events as
+        | Array<Record<string, unknown>>
+        | undefined;
+      expect(bootstrap, "Inkson Realm bootstrap POST batch").toBeTruthy();
+      expect(bootstrap![0].actor_seq).toBe(0);
+      expect(bootstrap![0].prev_refs).toEqual([]);
+      expect(bootstrap![1].kind).toBe("ak.capability.grant");
+      expect(bootstrap![1].actor_seq).toBe(1);
+      expect(bootstrap![1].prev_refs).toEqual([bootstrap![0].event_id]);
+
+      const preflightForNewRealm = frontierRequests.filter((observed) => {
+        const url = new URL(observed.url);
+        return (
+          observed.ordinal < bootstrapBatch!.ordinal &&
+          url.searchParams.get("realm_id") === realmId &&
+          url.searchParams.has("actor_id")
+        );
+      });
+      expect(
+        preflightForNewRealm,
+        "registered Realm genesis must be authored locally before submit",
+      ).toEqual([]);
+    } finally {
+      await flow.page.page.context().close();
+    }
+  });
+
   // The inkson chat view synthesizes a default discussion channel from the
   // realm id (views/chat/model/strands.rs default_discussion_strand_id /
   // default_discussion_channel) even when soland has not marked any Strand
