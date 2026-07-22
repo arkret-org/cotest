@@ -58,8 +58,11 @@ arkret-state = {workspace = true}
 # DeviceTrustBinding) so the TS e2e byte-mirror helpers regress against the SDK.
 arkret-crypto = {workspace = true}
 arkret-http-client = {workspace = true}
+arkret-models-collaboration = {workspace = true}
+arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
+arkret-wire = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
 hkdf = {workspace = true}
 hmac = {workspace = true}
@@ -107,9 +110,12 @@ arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth"}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
+arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
+arkret-policy = {path = "../arkret-rust-sdk/crates/policy"}
 arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",features = ["signer"]}
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}
+arkret-wire = {path = "../arkret-rust-sdk/crates/wire"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"
 hmac = "0.13.0"
