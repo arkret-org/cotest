@@ -81,8 +81,9 @@ test.describe("invite addressing", () => {
     );
 
     expect(outcome.status).toBe("deferred");
-    expect(outcome.received_at).toMatch(/Z$/);
-    expect(outcome.received_at).not.toContain(".");
+    expect(outcome.received_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
   });
 
   test("invite locator lifecycle uses opaque body-only secrets", async ({
@@ -140,7 +141,9 @@ test.describe("invite addressing", () => {
     expect(locator.schema).toBe("ak.schema.principal_locator.v1");
     expect(locator.subject_id).toBe(user.did);
     expect(locator.recipient_service_id).toBe(solandServiceId());
-    expect(locator.issued_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(locator.issued_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
     expect(locator.expires_at).toBe(issued.expires_at);
     expect(locator.display_hint).toEqual({ display_name_hint: "Cotest locator" });
     expect(locator.locator_ref_digest).toBe(

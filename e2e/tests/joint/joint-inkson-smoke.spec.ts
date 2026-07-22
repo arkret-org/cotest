@@ -405,8 +405,8 @@ async function submitSignedEvent(
     realmId,
     eventId,
     kind,
-    actorSeq: frontier.actorSeq + 1,
-    prevRefs: frontier.eventId ? [frontier.eventId] : [],
+    actorSeq: frontier.nextActorSeq,
+    prevRefs: frontier.frontierEventIds,
     payload,
   });
   const response = await request.post(url, {
@@ -427,7 +427,7 @@ async function readRealmActorFrontier(
   actorDid: string,
   serverUrl: string,
   realmId: string,
-): Promise<{ actorSeq: number; eventId?: string }> {
+): Promise<{ nextActorSeq: number; frontierEventIds: string[] }> {
   const url = new URL("/_arkret/self/events/frontier", serverUrl);
   url.searchParams.set("actor_id", actorDid);
   url.searchParams.set("realm_id", realmId);
@@ -443,29 +443,40 @@ async function readRealmActorFrontier(
   const body = JSON.parse(text) as {
     frontier?: {
       actor_id?: unknown;
-      actor_seq?: unknown;
-      event_id?: unknown;
+      next_actor_seq?: unknown;
+      frontier_event_ids?: unknown;
     };
   };
   const frontier = body.frontier;
   expect(frontier?.actor_id, "actor frontier identity").toBe(actorDid);
-  const actorSeq = frontier?.actor_seq;
+  const nextActorSeq = frontier?.next_actor_seq;
   expect(
-    typeof actorSeq === "number" &&
-      Number.isSafeInteger(actorSeq) &&
-      actorSeq >= 0,
+    typeof nextActorSeq === "number" &&
+      Number.isSafeInteger(nextActorSeq) &&
+      nextActorSeq >= 0,
     `actor frontier sequence is invalid: ${text}`,
   ).toBeTruthy();
-  if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq) || actorSeq < 0) {
+  if (
+    typeof nextActorSeq !== "number" ||
+    !Number.isSafeInteger(nextActorSeq) ||
+    nextActorSeq < 0
+  ) {
     throw new Error(`actor frontier sequence is invalid: ${text}`);
   }
-  const eventId = frontier?.event_id;
-  if (actorSeq > 0) {
-    expect(typeof eventId, "non-empty actor frontier event id").toBe("string");
+  const frontierEventIds = frontier?.frontier_event_ids;
+  expect(Array.isArray(frontierEventIds), "actor frontier event ids").toBe(true);
+  if (!Array.isArray(frontierEventIds)) {
+    throw new Error(`actor frontier event ids are invalid: ${text}`);
   }
+  expect(
+    frontierEventIds.every((eventId) => typeof eventId === "string"),
+  ).toBe(true);
+  expect([...frontierEventIds].sort()).toEqual(frontierEventIds);
+  expect(new Set(frontierEventIds).size).toBe(frontierEventIds.length);
+  expect(frontierEventIds.length === 0).toBe(nextActorSeq === 0);
   return {
-    actorSeq,
-    eventId: typeof eventId === "string" ? eventId : undefined,
+    nextActorSeq,
+    frontierEventIds: frontierEventIds as string[],
   };
 }
 

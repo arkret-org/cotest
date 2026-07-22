@@ -2085,6 +2085,15 @@ try {
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
                 -Command "dx build --profile joint-e2e --platform web --features experimental-agents,wasm-localstorage-secrets-test" `
                 -ProjectRoot $InksonRoot
+            # Dioxus 0.7.9 can assemble the shared debug output from a stale
+            # wasm-dev executable even though Cargo built the requested custom
+            # profile. Re-run wasm-bindgen against Cargo's exact joint-e2e
+            # artifact so the static bundle cannot silently lose the cotest
+            # feature or regain debug-only devtools.
+            $jointE2eWasm = Join-Path $InksonRoot "target\wasm32-unknown-unknown\joint-e2e\inkson.wasm"
+            $inksonWasmOutputDir = Join-Path $inksonStaticRoot "wasm"
+            $finalizeInksonWasm = Join-Path $repoRoot "scripts\finalize-inkson-joint-e2e-wasm.ps1"
+            $buildCommand = "$buildCommand; if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }; & $(Quote-PsLiteral $finalizeInksonWasm) -SourceWasm $(Quote-PsLiteral $jointE2eWasm) -OutputDirectory $(Quote-PsLiteral $inksonWasmOutputDir)"
             $service = Start-ManagedCommand `
                 -Name "prepare-inkson" `
                 -Command $buildCommand `
@@ -2122,6 +2131,15 @@ try {
             $status = "verified-cargo-cache-hit"
         }
         $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = $status; duration_seconds = $duration; detail = $task.Artifact })
+    }
+    if ($willStartDefaultInkson) {
+        $inksonWasm = Join-Path $inksonStaticRoot "wasm\inkson_bg.wasm"
+        if (-not (Test-BinaryContainsAsciiMarker -Path $inksonWasm -Marker "inkson.test.session_injection.v1")) {
+            throw "prepared inkson bundle lacks the wasm-localstorage-secrets-test marker: $inksonWasm"
+        }
+        if (Test-BinaryContainsAsciiMarker -Path $inksonWasm -Marker "/_dioxus") {
+            throw "prepared inkson static bundle unexpectedly embeds Dioxus devtools: $inksonWasm"
+        }
     }
     ConvertTo-Json -InputObject @($preparationTimings.ToArray()) -Depth 4 |
         Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8

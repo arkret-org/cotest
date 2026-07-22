@@ -1175,7 +1175,6 @@ dependencies = [
  "arkret-hlc",
  "arkret-http-client",
  "arkret-models-collaboration",
- "arkret-models-identity",
  "arkret-policy",
  "arkret-schema",
  "arkret-signatures",
