@@ -347,7 +347,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
         || json!({"ok": true, "side_effect_should_not_fire": true}),
     )?;
     if historical_replay.get("reason_code").and_then(Value::as_str)
-        != Some(arkret_core::ErrorCode::HISTORICAL_ONLY)
+        != Some(arkret_wire::ErrorCode::HISTORICAL_ONLY)
     {
         return Err(anyhow!(
             "post-rotation replay MUST carry reason_code=historical_only; got {:?}",
@@ -382,7 +382,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
         Err(err)
             if err
                 .to_string()
-                .contains(arkret_core::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED) => {}
+                .contains(arkret_wire::ReasonCode::CROSS_DOMAIN_REPLAY_REJECTED) => {}
         other => {
             return Err(anyhow!(
                 "wrong destination MUST be rejected with \
@@ -498,7 +498,7 @@ mod tests {
     fn historical_only_reason_pin_matches_sdk_constant() {
         assert_eq!(
             HISTORICAL_ONLY_REASON,
-            arkret_core::ErrorCode::HISTORICAL_ONLY
+            arkret_wire::ErrorCode::HISTORICAL_ONLY
         );
     }
 

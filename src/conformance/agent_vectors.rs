@@ -207,11 +207,9 @@ pub fn run_agent_provision_vector() -> Result<()> {
     // (modeled by absence of the controller-self capability binding)
     // and `accountability_grant_missing` (the controller's grant has
     // not yet been verified).
-    if arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING
-        != "accountability_grant_missing"
-    {
+    if arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING != "accountability_grant_missing" {
         bail!(
-            "arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING spelling drifted: accountability_grant_missing"
+            "arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING spelling drifted: accountability_grant_missing"
         );
     }
     let realm = "ak:realm:019a7360-0000-7000-8000-000000000000";
@@ -253,7 +251,7 @@ pub fn run_agent_provision_vector() -> Result<()> {
         &["ak.event.read"],
         &[("object", Some(realm), Some("ak:object:019a7360"))],
         &["controller_approval_required"],
-        arkret_core::error::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+        arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
     )
     .map_err(|reason| anyhow!("narrower Realm grant was rejected: {reason}"))?;
     admit_scope_within_agent_ceiling(
@@ -263,7 +261,7 @@ pub fn run_agent_provision_vector() -> Result<()> {
         &["ak.event.read"],
         &[("circle", Some(realm), Some("ak:circle:019a7360"))],
         &["controller_approval_required"],
-        arkret_core::error::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+        arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
     )
     .map_err(|reason| anyhow!("Realm ceiling did not cover a Circle grant: {reason}"))?;
     if admit_scope_within_agent_ceiling(
@@ -273,8 +271,8 @@ pub fn run_agent_provision_vector() -> Result<()> {
         &["ak.strand.update"],
         &[("object", Some(realm), Some("ak:object:019a7360"))],
         &["controller_approval_required"],
-        arkret_core::error::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
-    ) != Err(arkret_core::error::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE)
+        arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+    ) != Err(arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE)
     {
         bail!("Realm grant restored an action omitted from requested_scope");
     }
@@ -285,8 +283,8 @@ pub fn run_agent_provision_vector() -> Result<()> {
         &["ak.event.read"],
         &[("object", Some(other_realm), Some("ak:object:019a7361"))],
         &["controller_approval_required"],
-        arkret_core::error::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
-    ) != Err(arkret_core::error::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE)
+        arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE,
+    ) != Err(arkret_wire::ReasonCode::AGENT_GRANT_EXCEEDS_REQUESTED_SCOPE)
     {
         bail!("Realm grant escaped the provisioned content resource ceiling");
     }
@@ -296,9 +294,9 @@ pub fn run_agent_provision_vector() -> Result<()> {
 // ─── VECT-AG-2 — pairing_expiry ────────────────────────────────────────────
 
 pub fn run_agent_pairing_expiry_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::PAIRING_REQUEST_EXPIRED != "pairing_request_expired" {
+    if arkret_wire::ReasonCode::PAIRING_REQUEST_EXPIRED != "pairing_request_expired" {
         bail!(
-            "arkret_core::error::ReasonCode::PAIRING_REQUEST_EXPIRED spelling drifted: pairing_request_expired"
+            "arkret_wire::ReasonCode::PAIRING_REQUEST_EXPIRED spelling drifted: pairing_request_expired"
         );
     }
     if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY
@@ -315,10 +313,10 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
     // validator (fail-closed-before-validator); we pin the canonical
     // error-code spellings here.
     let required = [
-        arkret_core::error::ReasonCode::VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-        arkret_core::error::ReasonCode::PAIRING_REQUEST_EXPIRED,
-        arkret_core::error::ReasonCode::PROOF_INVALID,
-        arkret_core::error::ReasonCode::AGENT_DEACTIVATED,
+        arkret_wire::ReasonCode::VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+        arkret_wire::ReasonCode::PAIRING_REQUEST_EXPIRED,
+        arkret_wire::ReasonCode::PROOF_INVALID,
+        arkret_wire::ReasonCode::AGENT_DEACTIVATED,
     ];
     for code in required {
         if code.is_empty() || !code.chars().all(|c| c == '_' || c.is_ascii_lowercase()) {
@@ -610,7 +608,7 @@ fn renew_pairing_gate(status: &str) -> std::result::Result<&'static str, &'stati
     match status {
         "pending_runtime_key" | "pairing_expired" => Ok("bootstrap_reopen"),
         "active" | "paused" => Ok("runtime_replacement"),
-        "deactivated" => Err(arkret_core::error::ReasonCode::AGENT_DEACTIVATED),
+        "deactivated" => Err(arkret_wire::ReasonCode::AGENT_DEACTIVATED),
         _ => Err("reject"),
     }
 }
@@ -623,9 +621,9 @@ pub fn run_agent_repairing_supersede_vector() -> Result<()> {
             "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING"
         );
     }
-    if arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING != "superseded_by_repairing" {
+    if arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING != "superseded_by_repairing" {
         bail!(
-            "arkret_core::error::ReasonCode::SUPERSEDED_BY_REPAIRING spelling drifted: superseded_by_repairing"
+            "arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING spelling drifted: superseded_by_repairing"
         );
     }
     // Gate: every non-terminal status renews; deactivated is terminal.
@@ -640,7 +638,7 @@ pub fn run_agent_repairing_supersede_vector() -> Result<()> {
             other => bail!("renew gate for `{status}` yielded {other:?}, expected {expected}"),
         }
     }
-    if renew_pairing_gate("deactivated") != Err(arkret_core::error::ReasonCode::AGENT_DEACTIVATED) {
+    if renew_pairing_gate("deactivated") != Err(arkret_wire::ReasonCode::AGENT_DEACTIVATED) {
         bail!("renewing a deactivated agent must fail with agent_deactivated");
     }
     // Runtime replacement is not a state transition: the FSM has no edge for
@@ -671,11 +669,10 @@ pub fn run_agent_repairing_supersede_vector() -> Result<()> {
 // ─── VECT-AG-2c — longevity_no_expiry ──────────────────────────────────────
 
 pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED
-        != "agent_key_authorization_expired"
+    if arkret_wire::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED != "agent_key_authorization_expired"
     {
         bail!(
-            "arkret_core::error::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED spelling drifted: agent_key_authorization_expired"
+            "arkret_wire::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED spelling drifted: agent_key_authorization_expired"
         );
     }
     // `agent_key_authorize_payload.expires_at` is optional on wire: absent
@@ -749,9 +746,9 @@ fn agent_transition(state: AgentState, op: &str) -> std::result::Result<AgentSta
         (Active, "pause") => Ok(Paused),
         (Paused, "resume") => Ok(Active),
         (Active | Paused, "deactivate") => Ok(Deactivated),
-        (Deactivated, _) => Err(arkret_core::error::ReasonCode::AGENT_DEACTIVATED),
+        (Deactivated, _) => Err(arkret_wire::ReasonCode::AGENT_DEACTIVATED),
         (Active, "resume") => Err("reject"),
-        (Paused, "pause") => Err(arkret_core::error::ReasonCode::AGENT_PAUSED),
+        (Paused, "pause") => Err(arkret_wire::ReasonCode::AGENT_PAUSED),
         _ => Err("reject"),
     }
 }
@@ -803,7 +800,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
     let err = agent_transition(AgentState::Deactivated, "resume")
         .err()
         .ok_or_else(|| anyhow!("resume-from-deactivated must be rejected"))?;
-    if err != arkret_core::error::ReasonCode::AGENT_DEACTIVATED {
+    if err != arkret_wire::ReasonCode::AGENT_DEACTIVATED {
         bail!("resume-from-deactivated returned `{err}`, expected agent_deactivated");
     }
 
@@ -811,7 +808,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
     let err = agent_transition(AgentState::Paused, "pause")
         .err()
         .ok_or_else(|| anyhow!("pause-while-paused must be rejected"))?;
-    if err != arkret_core::error::ReasonCode::AGENT_PAUSED {
+    if err != arkret_wire::ReasonCode::AGENT_PAUSED {
         bail!("pause-while-paused returned `{err}`, expected agent_paused");
     }
     Ok(())
@@ -860,7 +857,7 @@ impl MiniActOnBehalfGate {
         };
         let key = format!("{request_id}:{nonce}");
         if !self.consumed_approvals.insert(key) {
-            return Err(arkret_core::error::ReasonCode::APPROVAL_NONCE_REUSED);
+            return Err(arkret_wire::ReasonCode::APPROVAL_NONCE_REUSED);
         }
         Ok(())
     }
@@ -892,22 +889,22 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
     // The four new actor-private agent event kinds are pinned by the
     // SDK constants list in personal_agent_provisioning; here we
     // assert the side-effect that approvals are write-once.
-    if arkret_core::error::ReasonCode::APPROVAL_ALREADY_CONSUMED != "approval_already_consumed" {
+    if arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED != "approval_already_consumed" {
         bail!(
-            "arkret_core::error::ReasonCode::APPROVAL_ALREADY_CONSUMED spelling drifted: approval_already_consumed"
+            "arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED spelling drifted: approval_already_consumed"
         );
     }
     // Sidecar-create denial is part of the act-on-behalf pipeline
     // (controller's grant has not authorised the agent to write to
     // the sidecar circle).
-    if arkret_core::error::ReasonCode::SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
+    if arkret_wire::ReasonCode::SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
         bail!(
-            "arkret_core::error::ReasonCode::SIDECAR_CREATE_DENIED spelling drifted: sidecar_create_denied"
+            "arkret_wire::ReasonCode::SIDECAR_CREATE_DENIED spelling drifted: sidecar_create_denied"
         );
     }
-    if arkret_core::error::ReasonCode::APPROVAL_NONCE_REUSED != "approval_nonce_reused" {
+    if arkret_wire::ReasonCode::APPROVAL_NONCE_REUSED != "approval_nonce_reused" {
         bail!(
-            "arkret_core::error::ReasonCode::APPROVAL_NONCE_REUSED spelling drifted: approval_nonce_reused"
+            "arkret_wire::ReasonCode::APPROVAL_NONCE_REUSED spelling drifted: approval_nonce_reused"
         );
     }
 
@@ -949,7 +946,7 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
     expect_aob_denial(
         &mut gate,
         valid_act_on_behalf_request(),
-        arkret_core::error::ReasonCode::APPROVAL_NONCE_REUSED,
+        arkret_wire::ReasonCode::APPROVAL_NONCE_REUSED,
     )?;
     Ok(())
 }
@@ -987,7 +984,7 @@ impl MiniAgentKeyProofVerifier {
         }
         if proof.signature != self.expected_signature {
             self.consumed_challenges.insert(proof.challenge.to_owned());
-            return Err(arkret_core::error::ReasonCode::PROOF_INVALID);
+            return Err(arkret_wire::ReasonCode::PROOF_INVALID);
         }
         self.consumed_challenges.insert(proof.challenge.to_owned());
         Ok(())
@@ -1019,10 +1016,10 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
     //   agent_paused / agent_deactivated / accountability_grant_missing
     // We pin all five.
     let required = [
-        arkret_core::error::ReasonCode::PROOF_INVALID,
-        arkret_core::error::ReasonCode::VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-        arkret_core::error::ReasonCode::AGENT_PAUSED,
-        arkret_core::error::ReasonCode::AGENT_DEACTIVATED,
+        arkret_wire::ReasonCode::PROOF_INVALID,
+        arkret_wire::ReasonCode::VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+        arkret_wire::ReasonCode::AGENT_PAUSED,
+        arkret_wire::ReasonCode::AGENT_DEACTIVATED,
     ];
     let mut sorted = required.to_vec();
     sorted.sort_unstable();
@@ -1030,11 +1027,9 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
     if sorted.len() != required.len() {
         bail!("session-grant agent-branch reject set has duplicates");
     }
-    if arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING
-        != "accountability_grant_missing"
-    {
+    if arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING != "accountability_grant_missing" {
         bail!(
-            "arkret_core::error::ReasonCode::ACCOUNTABILITY_GRANT_MISSING spelling drifted: accountability_grant_missing"
+            "arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING spelling drifted: accountability_grant_missing"
         );
     }
 
@@ -1071,7 +1066,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
             audience: "soland.local",
             signature: "sig-tampered",
         },
-        arkret_core::error::ReasonCode::PROOF_INVALID,
+        arkret_wire::ReasonCode::PROOF_INVALID,
     )?;
     expect_proof_denial(
         &mut verifier,
@@ -1243,7 +1238,7 @@ impl MiniHumanApprovalGate {
         evidence_ref: Option<&str>,
     ) -> std::result::Result<(), &'static str> {
         if !agent_key_proof_valid {
-            return Err(arkret_core::error::ReasonCode::PROOF_INVALID);
+            return Err(arkret_wire::ReasonCode::PROOF_INVALID);
         }
         if !scope_within_ceiling {
             return Err("agent_scope_exceeds_ceiling");
@@ -1258,7 +1253,7 @@ impl MiniHumanApprovalGate {
             return Err("accepted_approval_evidence_stale");
         }
         if self.evidence_consumed {
-            return Err(arkret_core::error::ReasonCode::APPROVAL_ALREADY_CONSUMED);
+            return Err(arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED);
         }
         self.evidence_consumed = true;
         Ok(())
@@ -1338,7 +1333,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     }
     gate.approve_out_of_band(ACCEPTED_APPROVAL_EVENT_REF);
     if gate.retry(false, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
-        != Err(arkret_core::error::ReasonCode::PROOF_INVALID)
+        != Err(arkret_wire::ReasonCode::PROOF_INVALID)
     {
         bail!("approved retry skipped agent key proof revalidation");
     }
@@ -1350,7 +1345,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     gate.retry(true, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
         .map_err(|reason| anyhow!("accepted approval evidence was rejected: {reason}"))?;
     if gate.retry(true, true, Some(ACCEPTED_APPROVAL_EVENT_REF))
-        != Err(arkret_core::error::ReasonCode::APPROVAL_ALREADY_CONSUMED)
+        != Err(arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED)
     {
         bail!("accepted approval evidence was not single-use");
     }

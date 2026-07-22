@@ -6,9 +6,9 @@
 
 use anyhow::{Result, anyhow};
 pub async fn series_chain_broken_run() -> Result<()> {
-    if arkret_core::error::ReasonCode::SERIES_CHAIN_BROKEN != "series_chain_broken" {
+    if arkret_wire::ReasonCode::SERIES_CHAIN_BROKEN != "series_chain_broken" {
         return Err(anyhow!(
-            "arkret_core::error::ReasonCode::SERIES_CHAIN_BROKEN spelling drifted: series_chain_broken"
+            "arkret_wire::ReasonCode::SERIES_CHAIN_BROKEN spelling drifted: series_chain_broken"
         ));
     }
     // Negative-shape pin: a mismatched supersedes_digest MUST be

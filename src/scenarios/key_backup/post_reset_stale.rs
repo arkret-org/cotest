@@ -20,9 +20,9 @@ fn is_post_reset_stale(envelope_emitted_at: DateTime<Utc>, last_reset_at: DateTi
 }
 
 pub async fn post_reset_stale_run() -> Result<()> {
-    if arkret_core::error::ReasonCode::BACKUP_POST_RESET_STALE != "backup_post_reset_stale" {
+    if arkret_wire::ReasonCode::BACKUP_POST_RESET_STALE != "backup_post_reset_stale" {
         return Err(anyhow!(
-            "arkret_core::error::ReasonCode::BACKUP_POST_RESET_STALE spelling drifted: \
+            "arkret_wire::ReasonCode::BACKUP_POST_RESET_STALE spelling drifted: \
              backup_post_reset_stale"
         ));
     }

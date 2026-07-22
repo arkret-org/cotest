@@ -36,18 +36,18 @@ pub const APPEAL_ID_PREFIX: &str = "ak:appeal:";
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
 /// `ak:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
-    if arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT != "appeal_overturn_missing_lift" {
+    if arkret_wire::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT != "appeal_overturn_missing_lift" {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
             "appeal_overturn_missing_lift",
-            arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
+            arkret_wire::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT,
         ));
     }
-    if arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN != "appeal_self_review_forbidden" {
+    if arkret_wire::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN != "appeal_self_review_forbidden" {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
             "appeal_self_review_forbidden",
-            arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
+            arkret_wire::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN,
         ));
     }
     // Both appeal codes are spec `reason_codes`, not top-level error `codes`,
@@ -55,12 +55,12 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
     // codes-only `KNOWN_ERROR_CODES` table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(arkret_core::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT) {
+    if !registry_identifiers.contains(arkret_wire::ReasonCode::APPEAL_OVERTURN_MISSING_LIFT) {
         return Err(anyhow!(
             "error-code-registry missing reason code appeal_overturn_missing_lift"
         ));
     }
-    if !registry_identifiers.contains(arkret_core::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN) {
+    if !registry_identifiers.contains(arkret_wire::ReasonCode::APPEAL_SELF_REVIEW_FORBIDDEN) {
         return Err(anyhow!(
             "error-code-registry missing reason code appeal_self_review_forbidden"
         ));

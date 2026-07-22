@@ -65,7 +65,7 @@ fn actor() -> Result<Did> {
 /// helper assumes default profile (rebind forbidden).
 ///
 /// Returns `Err` whose message contains the
-/// [`arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN`] reason code so callers can match on
+/// [`arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN`] reason code so callers can match on
 /// the wire reason.
 fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) -> Result<()> {
     match (prev, next) {
@@ -150,7 +150,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
+            if !msg.contains(arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
                 return Err(anyhow!(
                     "expected reason=scope_rebind_forbidden in error; got: {msg}"
                 ));
@@ -172,7 +172,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
+            if !msg.contains(arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
                 return Err(anyhow!(
                     "expected reason=scope_rebind_forbidden; got: {msg}"
                 ));
@@ -189,7 +189,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(arkret_core::error::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
+            if !msg.contains(arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN) {
                 return Err(anyhow!(
                     "expected reason=scope_rebind_forbidden; got: {msg}"
                 ));

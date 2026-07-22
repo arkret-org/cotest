@@ -6,11 +6,9 @@
 use anyhow::{Result, anyhow};
 use arkret_core::BackupSeriesId;
 pub async fn series_predecessor_not_found_run() -> Result<()> {
-    if arkret_core::error::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND
-        != "series_predecessor_not_found"
-    {
+    if arkret_wire::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND != "series_predecessor_not_found" {
         return Err(anyhow!(
-            "arkret_core::error::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND spelling drifted: \
+            "arkret_wire::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND spelling drifted: \
              series_predecessor_not_found"
         ));
     }

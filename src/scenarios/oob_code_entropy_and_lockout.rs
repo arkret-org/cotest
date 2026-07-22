@@ -62,22 +62,22 @@ pub const EXPECTED_UNIFIED_NOT_FOUND: &str = "not_found";
 /// `schema_violation` and `not_found` agree with cotest pins and the
 /// canonical registry recognises both. Also pin the entropy floor.
 pub async fn oob_code_low_entropy_run() -> Result<()> {
-    if arkret_core::ErrorCode::SCHEMA_VIOLATION != EXPECTED_LOW_ENTROPY_REASON {
+    if arkret_wire::ErrorCode::SCHEMA_VIOLATION != EXPECTED_LOW_ENTROPY_REASON {
         return Err(anyhow!(
-            "SDK arkret_core::ErrorCode::SCHEMA_VIOLATION ({}) drifted from cotest pin ({}).",
-            arkret_core::ErrorCode::SCHEMA_VIOLATION,
+            "SDK arkret_wire::ErrorCode::SCHEMA_VIOLATION ({}) drifted from cotest pin ({}).",
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION,
             EXPECTED_LOW_ENTROPY_REASON,
         ));
     }
-    if arkret_core::ErrorCode::NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
+    if arkret_wire::ErrorCode::NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
         return Err(anyhow!(
-            "SDK arkret_core::ErrorCode::NOT_FOUND ({}) drifted from cotest pin ({}).",
-            arkret_core::ErrorCode::NOT_FOUND,
+            "SDK arkret_wire::ErrorCode::NOT_FOUND ({}) drifted from cotest pin ({}).",
+            arkret_wire::ErrorCode::NOT_FOUND,
             EXPECTED_UNIFIED_NOT_FOUND,
         ));
     }
-    if !is_known_error_code(arkret_core::ErrorCode::SCHEMA_VIOLATION)
-        || !is_known_error_code(arkret_core::ErrorCode::NOT_FOUND)
+    if !is_known_error_code(arkret_wire::ErrorCode::SCHEMA_VIOLATION)
+        || !is_known_error_code(arkret_wire::ErrorCode::NOT_FOUND)
     {
         return Err(anyhow!(
             "SDK KNOWN_ERROR_CODES table missing schema_violation or not_found"
@@ -106,10 +106,10 @@ pub async fn oob_code_lookup_three_strike_invalidate_run() -> Result<()> {
             "OOB unified response timing budget must be ≤50ms (spec T15); got {OOB_RESPONSE_TIMING_BUDGET_MS}ms"
         ));
     }
-    if arkret_core::ErrorCode::NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
+    if arkret_wire::ErrorCode::NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
         return Err(anyhow!(
-            "SDK arkret_core::ErrorCode::NOT_FOUND ({}) drifted from cotest pin ({}).",
-            arkret_core::ErrorCode::NOT_FOUND,
+            "SDK arkret_wire::ErrorCode::NOT_FOUND ({}) drifted from cotest pin ({}).",
+            arkret_wire::ErrorCode::NOT_FOUND,
             EXPECTED_UNIFIED_NOT_FOUND,
         ));
     }

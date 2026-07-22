@@ -38,18 +38,18 @@ pub const PRESIGN_REFERRER_POLICY: &str = "no-referrer";
 /// Wire-level executable check: the SDK constant for `legal_hold_active`
 /// matches the cotest pin and the canonical registry recognises it.
 pub async fn presign_blob_legal_hold_run() -> Result<()> {
-    if arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE != "legal_hold_active" {
+    if arkret_wire::ReasonCode::LEGAL_HOLD_ACTIVE != "legal_hold_active" {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::LEGAL_HOLD_ACTIVE ({}) drifted from cotest pin ({}).",
             "legal_hold_active",
-            arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE,
+            arkret_wire::ReasonCode::LEGAL_HOLD_ACTIVE,
         ));
     }
     // `legal_hold_active` is a spec `reason_code` (applies_to=auth_decision),
     // not a top-level error `code`; validate against the registry union.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(arkret_core::ReasonCode::LEGAL_HOLD_ACTIVE) {
+    if !registry_identifiers.contains(arkret_wire::ReasonCode::LEGAL_HOLD_ACTIVE) {
         return Err(anyhow!(
             "error-code-registry missing reason code legal_hold_active"
         ));
@@ -60,18 +60,18 @@ pub async fn presign_blob_legal_hold_run() -> Result<()> {
 /// Wire-level executable check: the SDK constant for `blob_redacted`
 /// matches the cotest pin and the canonical registry recognises it.
 pub async fn presign_blob_redacted_run() -> Result<()> {
-    if arkret_core::ReasonCode::BLOB_REDACTED != "blob_redacted" {
+    if arkret_wire::ReasonCode::BLOB_REDACTED != "blob_redacted" {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::BLOB_REDACTED ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::BLOB_REDACTED ({}) drifted from cotest pin ({}).",
             "blob_redacted",
-            arkret_core::ReasonCode::BLOB_REDACTED,
+            arkret_wire::ReasonCode::BLOB_REDACTED,
         ));
     }
     // `blob_redacted` is a spec `reason_code` (applies_to=state_resolution),
     // not a top-level error `code`; validate against the registry union.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(arkret_core::ReasonCode::BLOB_REDACTED) {
+    if !registry_identifiers.contains(arkret_wire::ReasonCode::BLOB_REDACTED) {
         return Err(anyhow!(
             "error-code-registry missing reason code blob_redacted"
         ));

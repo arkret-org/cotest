@@ -157,7 +157,7 @@ pub fn run_aead_nonce_sender_domain_collision_vector() -> Result<()> {
             None,
         )
         .unwrap_err(),
-        arkret_core::error::ReasonCode::AEAD_NONCE_SENDER_DOMAIN_COLLISION,
+        arkret_wire::ReasonCode::AEAD_NONCE_SENDER_DOMAIN_COLLISION,
     )?;
 
     Ok(())
@@ -192,7 +192,7 @@ pub fn run_aead_nonce_counter_replay_vector() -> Result<()> {
             Some(&mut tracker),
         )
         .unwrap_err(),
-        arkret_core::error::ReasonCode::AEAD_NONCE_COUNTER_REPLAY,
+        arkret_wire::ReasonCode::AEAD_NONCE_COUNTER_REPLAY,
     )?;
 
     let nonce_counter_ten = compose_aead_nonce(&prefix, 10);
@@ -243,7 +243,7 @@ pub fn run_aead_nonce_random_rejected_vector() -> Result<()> {
     }
     expect_reason(
         verify_aead_nonce_derivation(&expected_nonce, &random_nonce).unwrap_err(),
-        arkret_core::error::ReasonCode::AEAD_NONCE_DERIVATION_INVALID,
+        arkret_wire::ReasonCode::AEAD_NONCE_DERIVATION_INVALID,
     )?;
 
     Ok(())

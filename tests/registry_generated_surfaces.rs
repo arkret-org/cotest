@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use arkret_core::events::{EventKind, EventProductClass, EventRegistryCategory};
 use arkret_core::{
-    CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, ExporterLabelId, HPKE_SUITES,
+    CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ExporterLabelId, HPKE_SUITES,
     MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
     SERVICE_OPERATION_DESCRIPTORS, SERVICE_TYPE_DESCRIPTORS, SIGNATURE_ALGORITHMS,
     ServiceOperationId, ServiceType,
@@ -13,6 +13,7 @@ use arkret_schema::{
     REGISTERED_ACCOUNT_DATA_PATTERNS, REGISTERED_CAPABILITY_ACTIONS, REGISTERED_ID_KINDS,
     REGISTERED_SCHEMA_IDS, REGISTERED_SPECIAL_FORM_ID_KINDS, account_data_pattern,
 };
+use arkret_wire::ErrorCode;
 use serde_json::Value;
 
 #[test]

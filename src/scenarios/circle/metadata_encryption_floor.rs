@@ -36,7 +36,7 @@ fn rank(floor: EncryptionFloor) -> u8 {
 /// `metadata_encryption_floor` floor, but MUST NOT loosen it. Returns
 /// `Ok(())` when the Circle's floor is `>=` the Realm's floor in
 /// strictness; otherwise `Err` whose message carries the canonical
-/// [`arkret_core::error::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION`] reason code.
+/// [`arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION`] reason code.
 fn validate_metadata_floor_tightens(
     realm_floor: EncryptionFloor,
     circle_floor: EncryptionFloor,
@@ -128,7 +128,7 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
         }
         Err(e) => {
             let msg = e.to_string();
-            if !msg.contains(arkret_core::error::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION) {
+            if !msg.contains(arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION) {
                 return Err(anyhow!(
                     "expected reason=metadata_encryption_floor_violation; got: {msg}"
                 ));

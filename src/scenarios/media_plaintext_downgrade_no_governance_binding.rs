@@ -38,20 +38,20 @@ use arkret_schema::embedded_error_code_identifiers;
 /// plaintext error codes agree with the cotest pins and the canonical
 /// registry recognises them.
 pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()> {
-    if arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE != "mls_governance_binding_stale" {
+    if arkret_wire::ReasonCode::MLS_GOVERNANCE_BINDING_STALE != "mls_governance_binding_stale" {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::MLS_GOVERNANCE_BINDING_STALE ({}) drifted from cotest pin ({}).",
             "mls_governance_binding_stale",
-            arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
+            arkret_wire::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
         ));
     }
-    if arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
+    if arkret_wire::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
         != "media_plaintext_service_not_authorised"
     {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED ({}) drifted from cotest pin ({}).",
             "media_plaintext_service_not_authorised",
-            arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            arkret_wire::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
         ));
     }
     // Both codes are spec `reason_codes`, not top-level error `codes`, so they
@@ -59,13 +59,13 @@ pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()>
     // `KNOWN_ERROR_CODES` table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE) {
+    if !registry_identifiers.contains(arkret_wire::ReasonCode::MLS_GOVERNANCE_BINDING_STALE) {
         return Err(anyhow!(
             "error-code-registry missing reason code mls_governance_binding_stale"
         ));
     }
     if !registry_identifiers
-        .contains(arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED)
+        .contains(arkret_wire::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED)
     {
         return Err(anyhow!(
             "error-code-registry missing reason code media_plaintext_service_not_authorised"
@@ -141,7 +141,7 @@ pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
             "member recompute mismatch MUST be refused (mls_governance_binding_stale), got Ok",
         ),
         Err(WireError::Protocol(msg)) => {
-            if !msg.contains(arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE) {
+            if !msg.contains(arkret_wire::ReasonCode::MLS_GOVERNANCE_BINDING_STALE) {
                 bail!(
                     "mismatch refusal must carry error code `mls_governance_binding_stale`, \
                      got Protocol({msg})"
@@ -173,8 +173,8 @@ mod tests {
             .await
             .expect("media plaintext error-code pins must be registered");
         assert_ne!(
-            arkret_core::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
-            arkret_core::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            arkret_wire::ReasonCode::MLS_GOVERNANCE_BINDING_STALE,
+            arkret_wire::ReasonCode::MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
             "stale governance and unauthorized service paths must stay distinguishable"
         );
     }

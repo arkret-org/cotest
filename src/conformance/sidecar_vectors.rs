@@ -267,13 +267,11 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     // Sidecar ensure rejects from `paused` / `deactivated` agents with
     // the canonical error codes (also covered by the agent FSM
     // vector, but pinned again at the sidecar-specific code path).
-    if arkret_core::error::ReasonCode::AGENT_PAUSED != "agent_paused" {
-        bail!("arkret_core::error::ReasonCode::AGENT_PAUSED spelling drifted: agent_paused");
+    if arkret_wire::ReasonCode::AGENT_PAUSED != "agent_paused" {
+        bail!("arkret_wire::ReasonCode::AGENT_PAUSED spelling drifted: agent_paused");
     }
-    if arkret_core::error::ReasonCode::AGENT_DEACTIVATED != "agent_deactivated" {
-        bail!(
-            "arkret_core::error::ReasonCode::AGENT_DEACTIVATED spelling drifted: agent_deactivated"
-        );
+    if arkret_wire::ReasonCode::AGENT_DEACTIVATED != "agent_deactivated" {
+        bail!("arkret_wire::ReasonCode::AGENT_DEACTIVATED spelling drifted: agent_deactivated");
     }
     Ok(())
 }
@@ -284,9 +282,9 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     // A caller without the Sidecar ensure capability
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
-    if arkret_core::error::ReasonCode::SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
+    if arkret_wire::ReasonCode::SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
         bail!(
-            "arkret_core::error::ReasonCode::SIDECAR_CREATE_DENIED spelling drifted: sidecar_create_denied"
+            "arkret_wire::ReasonCode::SIDECAR_CREATE_DENIED spelling drifted: sidecar_create_denied"
         );
     }
     Ok(())

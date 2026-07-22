@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_core::{
-    AccountSubscribeFrame, AccountSubscribeFrameKind, ErrorCode, EventsSubscribeFrame,
+    AccountSubscribeFrame, AccountSubscribeFrameKind, EventsSubscribeFrame,
     EventsSubscribeFrameKind, StreamTraceError, StreamTraceFrame, StreamTraceFrameKind,
     StreamTraceValidator,
 };
+use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
 
 use super::{

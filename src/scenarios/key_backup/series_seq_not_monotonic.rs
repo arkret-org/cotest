@@ -10,9 +10,9 @@ fn is_monotonic_advance(tip: u64, candidate: u64) -> bool {
 }
 
 pub async fn series_seq_not_monotonic_run() -> Result<()> {
-    if arkret_core::error::ReasonCode::SERIES_SEQ_NOT_MONOTONIC != "series_seq_not_monotonic" {
+    if arkret_wire::ReasonCode::SERIES_SEQ_NOT_MONOTONIC != "series_seq_not_monotonic" {
         return Err(anyhow!(
-            "arkret_core::error::ReasonCode::SERIES_SEQ_NOT_MONOTONIC spelling drifted: \
+            "arkret_wire::ReasonCode::SERIES_SEQ_NOT_MONOTONIC spelling drifted: \
              series_seq_not_monotonic"
         ));
     }

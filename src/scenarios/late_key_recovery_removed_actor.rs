@@ -32,20 +32,20 @@ use arkret_schema::embedded_error_code_identifiers;
 /// posts a late `ak.key.share` can layer on top of this local contract
 /// without weakening the always-on error-code gate.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
-    if arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP
+    if arkret_wire::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP
         != "late_recovery_rejected_membership"
     {
         return Err(anyhow!(
-            "SDK arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
+            "SDK arkret_wire::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
             "late_recovery_rejected_membership",
-            arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
+            arkret_wire::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
         ));
     }
     // `late_recovery_rejected_membership` is a spec `reason_code` (applies_to=
     // audit_decision); validate against the registry union, not codes-only.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP) {
+    if !registry_identifiers.contains(arkret_wire::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP) {
         return Err(anyhow!(
             "error-code-registry missing reason code late_recovery_rejected_membership"
         ));
@@ -70,7 +70,7 @@ mod tests {
             .await
             .expect("late recovery rejected-membership pin must be registered");
         assert_eq!(
-            arkret_core::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
+            arkret_wire::ReasonCode::LATE_RECOVERY_REJECTED_MEMBERSHIP,
             "late_recovery_rejected_membership"
         );
     }

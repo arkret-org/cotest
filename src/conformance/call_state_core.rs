@@ -196,7 +196,7 @@ fn reducer_participant_binding_admission(
 ) -> std::result::Result<(), &'static str> {
     match verify_call_media_token_outcome(request, outcome, anchors, now) {
         Ok(_) => Ok(()),
-        Err(_) => Err(arkret_core::error::ReasonCode::PARTICIPANT_BINDING_INVALID),
+        Err(_) => Err(arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID),
     }
 }
 
@@ -208,16 +208,15 @@ fn assert_participant_binding_invalid(
     now: DateTime<Utc>,
 ) -> Result<()> {
     match reducer_participant_binding_admission(request, outcome, anchors, now) {
-        Err(code) if code == arkret_core::error::ReasonCode::PARTICIPANT_BINDING_INVALID => Ok(()),
+        Err(code) if code == arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID => Ok(()),
         other => bail!("{label} must map to participant_binding_invalid, got {other:?}"),
     }
 }
 
 pub fn run_participant_binding_invalid_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::PARTICIPANT_BINDING_INVALID != "participant_binding_invalid"
-    {
+    if arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID != "participant_binding_invalid" {
         bail!(
-            "arkret_core::error::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
+            "arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
         );
     }
 
@@ -323,12 +322,12 @@ fn transition_allowed(from: &str, to: &str) -> bool {
 
 fn classify_call_state_transition(from: &str, to: &str) -> std::result::Result<(), &'static str> {
     if TERMINAL_STATES.contains(&from) {
-        return Err(arkret_core::error::ReasonCode::CALL_STATE_TERMINAL);
+        return Err(arkret_wire::ReasonCode::CALL_STATE_TERMINAL);
     }
     if transition_allowed(from, to) {
         Ok(())
     } else {
-        Err(arkret_core::error::ReasonCode::CALL_STATE_TRANSITION_INVALID)
+        Err(arkret_wire::ReasonCode::CALL_STATE_TRANSITION_INVALID)
     }
 }
 
@@ -357,7 +356,7 @@ pub fn run_initial_state_accepts_allowed_vector() -> Result<()> {
 
     for state in ["active", "ended", "missed", "failed", "cancelled"] {
         match initial_state_admission(state) {
-            Err(code) if code == arkret_core::error::ReasonCode::CALL_STATE_TRANSITION_INVALID => {}
+            Err(code) if code == arkret_wire::ReasonCode::CALL_STATE_TRANSITION_INVALID => {}
             other => bail!(
                 "initial state {state} must fail call_state_transition_invalid, got {other:?}"
             ),
@@ -370,7 +369,7 @@ fn initial_state_admission(state: &str) -> std::result::Result<(), &'static str>
     if INITIAL_STATES.contains(&state) {
         Ok(())
     } else {
-        Err(arkret_core::error::ReasonCode::CALL_STATE_TRANSITION_INVALID)
+        Err(arkret_wire::ReasonCode::CALL_STATE_TRANSITION_INVALID)
     }
 }
 
@@ -392,7 +391,7 @@ pub fn run_transition_matrix_vector() -> Result<()> {
         ("active", "ringing"),
     ] {
         match classify_call_state_transition(from, to) {
-            Err(code) if code == arkret_core::error::ReasonCode::CALL_STATE_TRANSITION_INVALID => {}
+            Err(code) if code == arkret_wire::ReasonCode::CALL_STATE_TRANSITION_INVALID => {}
             other => bail!(
                 "illegal non-terminal edge {from}->{to} must be call_state_transition_invalid, got {other:?}"
             ),
@@ -431,7 +430,7 @@ pub fn run_terminal_absorbing_vector() -> Result<()> {
                 continue;
             }
             match classify_call_state_transition(terminal, next) {
-                Err(code) if code == arkret_core::error::ReasonCode::CALL_STATE_TERMINAL => {}
+                Err(code) if code == arkret_wire::ReasonCode::CALL_STATE_TERMINAL => {}
                 other => bail!(
                     "terminal edge {terminal}->{next} must be call_state_terminal, got {other:?}"
                 ),

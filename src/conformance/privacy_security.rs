@@ -255,7 +255,7 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                 if let Some(expected_reason) = mutation_case.expected.reason_code.as_deref()
                     && (error.reason_code() != expected_reason
                         || expected_reason
-                            != arkret_core::ReasonCode::MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID)
+                            != arkret_wire::ReasonCode::MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID)
                 {
                     bail!(
                         "case {} rejected with {} (expected {expected_reason})",

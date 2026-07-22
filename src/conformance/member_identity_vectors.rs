@@ -24,7 +24,7 @@
 //! [`arkret_core::models::member_identity_effective_set_digest`],
 //! [`MemberIdentity::canonical_payload_sha256`]) plus the
 //! `member_identity_*` error-code constants exported from
-//! [`arkret_core::error`]. Live integration is layered on top in
+//! [`arkret_wire::error_codes`]. Live integration is layered on top in
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
@@ -344,7 +344,7 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
     // invalid replacement-event rejection (not the silent-edge case we
     // model here) — assert the constant exists so a rename in the SDK
     // breaks this vector first.
-    if arkret_core::error::ReasonCode::MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH
+    if arkret_wire::ReasonCode::MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH
         != "member_identity_replacement_digest_mismatch"
     {
         bail!(
@@ -410,9 +410,7 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
     if payload.expected_state_digest.as_ref() != Some(&stale_digest) {
         bail!("VECT-MID-4: expected_state_digest field did not round-trip");
     }
-    if arkret_core::error::ReasonCode::MEMBER_IDENTITY_STATE_MISMATCH
-        != "member_identity_state_mismatch"
-    {
+    if arkret_wire::ReasonCode::MEMBER_IDENTITY_STATE_MISMATCH != "member_identity_state_mismatch" {
         bail!(
             "VECT-MID-4: error-code constant drifted; got \
              `member_identity_state_mismatch`"
@@ -465,9 +463,7 @@ pub fn run_member_identity_proof_invalid_vector() -> Result<()> {
         );
     }
     // Wire-level error-code constant the verifier MUST surface.
-    if arkret_core::error::ReasonCode::MEMBER_IDENTITY_PROOF_INVALID
-        != "member_identity_proof_invalid"
-    {
+    if arkret_wire::ReasonCode::MEMBER_IDENTITY_PROOF_INVALID != "member_identity_proof_invalid" {
         bail!(
             "VECT-MID-5: error-code constant drifted; got \
              `member_identity_proof_invalid`"
@@ -515,8 +511,7 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
              only the v1 `member_identity` segment is allowed"
         ),
     }
-    if arkret_core::error::ReasonCode::MEMBER_IDENTITY_UNKNOWN_SEGMENT
-        != "member_identity_unknown_segment"
+    if arkret_wire::ReasonCode::MEMBER_IDENTITY_UNKNOWN_SEGMENT != "member_identity_unknown_segment"
     {
         bail!(
             "VECT-MID-6: error-code constant drifted; got \

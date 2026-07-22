@@ -191,13 +191,13 @@ fn authorize_unlock(
     envelope: &BackupEnvelopeState,
 ) -> std::result::Result<(), &'static str> {
     if !session.fresh_device_proof {
-        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
+        return Err(arkret_wire::ErrorCode::UNAUTHENTICATED);
     }
     if caller != envelope.actor_id {
-        return Err(arkret_core::error::ErrorCode::CAPABILITY_DENIED);
+        return Err(arkret_wire::ErrorCode::CAPABILITY_DENIED);
     }
     let Some(proof) = proof else {
-        return Err(arkret_core::error::ErrorCode::UNAUTHENTICATED);
+        return Err(arkret_wire::ErrorCode::UNAUTHENTICATED);
     };
     if path_backup_id != proof.backup_id.as_str()
         || path_backup_id != envelope.backup_id
@@ -208,10 +208,10 @@ fn authorize_unlock(
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest
         || proof_digest_str(proof)
-            .map_err(|_| arkret_core::error::ReasonCode::RECOVERY_EVIDENCE_UNBOUND)?
+            .map_err(|_| arkret_wire::ReasonCode::RECOVERY_EVIDENCE_UNBOUND)?
             != session.proof_digest
     {
-        return Err(arkret_core::error::ReasonCode::RECOVERY_EVIDENCE_UNBOUND);
+        return Err(arkret_wire::ReasonCode::RECOVERY_EVIDENCE_UNBOUND);
     }
     Ok(())
 }
@@ -257,9 +257,8 @@ pub fn run_key_backup_kdf_floor_rejected_vector() -> Result<()> {
     if !schema_rejects(KEY_BACKUP_ENCRYPTION_SCHEMA, &unknown_kdf)? {
         bail!("unknown KDF name did not fail closed");
     }
-    if expected_str(vector, "negative_reason")? != arkret_core::error::ErrorCode::SCHEMA_VIOLATION
-        || expected_str(vector, "unknown_kdf_reason")?
-            != arkret_core::error::ErrorCode::SCHEMA_VIOLATION
+    if expected_str(vector, "negative_reason")? != arkret_wire::ErrorCode::SCHEMA_VIOLATION
+        || expected_str(vector, "unknown_kdf_reason")? != arkret_wire::ErrorCode::SCHEMA_VIOLATION
     {
         bail!("KDF floor expected schema_violation reason drifted");
     }

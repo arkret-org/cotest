@@ -171,8 +171,8 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
 
     // Off-focus token request from Bob must fail-closed with
     // `focus_mismatch`.
-    if arkret_core::error::ReasonCode::FOCUS_MISMATCH != "focus_mismatch" {
-        bail!("arkret_core::error::ReasonCode::FOCUS_MISMATCH spelling drifted: focus_mismatch");
+    if arkret_wire::ReasonCode::FOCUS_MISMATCH != "focus_mismatch" {
+        bail!("arkret_wire::ReasonCode::FOCUS_MISMATCH spelling drifted: focus_mismatch");
     }
     Ok(())
 }
@@ -191,7 +191,7 @@ struct SessionFocusCell {
 impl SessionFocusCell {
     fn commit(&mut self, focus_id: &str) -> std::result::Result<(), &'static str> {
         if self.committed.is_some() {
-            return Err(arkret_core::error::ReasonCode::SESSION_FOCUS_ALREADY_COMMITTED);
+            return Err(arkret_wire::ReasonCode::SESSION_FOCUS_ALREADY_COMMITTED);
         }
         self.committed = Some(focus_id.to_owned());
         Ok(())
@@ -204,17 +204,15 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
         .map_err(|e| anyhow!("first commit unexpectedly failed: {e}"))?;
     let second = cell.commit("focus.arkret.lhr");
     match second {
-        Err(code) if code == arkret_core::error::ReasonCode::SESSION_FOCUS_ALREADY_COMMITTED => {}
+        Err(code) if code == arkret_wire::ReasonCode::SESSION_FOCUS_ALREADY_COMMITTED => {}
         other => bail!("second write must surface session_focus_already_committed, got {other:?}"),
     }
 
     // Carol's local-fail surfaces `focus_unavailable_for_client` rather
     // than silently downgrading to plaintext or any other focus.
-    if arkret_core::error::ReasonCode::FOCUS_UNAVAILABLE_FOR_CLIENT
-        != "focus_unavailable_for_client"
-    {
+    if arkret_wire::ReasonCode::FOCUS_UNAVAILABLE_FOR_CLIENT != "focus_unavailable_for_client" {
         bail!(
-            "arkret_core::error::ReasonCode::FOCUS_UNAVAILABLE_FOR_CLIENT spelling drifted: focus_unavailable_for_client"
+            "arkret_wire::ReasonCode::FOCUS_UNAVAILABLE_FOR_CLIENT spelling drifted: focus_unavailable_for_client"
         );
     }
     Ok(())
@@ -277,9 +275,9 @@ pub fn run_token_exchange_minimal_vector() -> Result<()> {
 // ─── VECT-MB-4 — token_issuer_unauthorised ─────────────────────────────────
 
 pub fn run_token_issuer_unauthorised_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::TOKEN_ISSUER_UNAUTHORISED != "token_issuer_unauthorised" {
+    if arkret_wire::ReasonCode::TOKEN_ISSUER_UNAUTHORISED != "token_issuer_unauthorised" {
         bail!(
-            "arkret_core::error::ReasonCode::TOKEN_ISSUER_UNAUTHORISED spelling drifted: token_issuer_unauthorised"
+            "arkret_wire::ReasonCode::TOKEN_ISSUER_UNAUTHORISED spelling drifted: token_issuer_unauthorised"
         );
     }
 
@@ -302,10 +300,9 @@ pub fn run_token_issuer_unauthorised_vector() -> Result<()> {
 // ─── VECT-MB-5 — participant_binding_required ──────────────────────────────
 
 pub fn run_participant_binding_required_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::PARTICIPANT_BINDING_INVALID != "participant_binding_invalid"
-    {
+    if arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID != "participant_binding_invalid" {
         bail!(
-            "arkret_core::error::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
+            "arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
         );
     }
     // A response missing the `participant_binding` field, or one whose
@@ -526,10 +523,8 @@ fn hex_lower(bytes: &[u8]) -> String {
 // ─── VECT-MB-6 — unknown_type_fail_closed ──────────────────────────────────
 
 pub fn run_unknown_type_fail_closed_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::UNKNOWN_FOCUS_TYPE != "unknown_focus_type" {
-        bail!(
-            "arkret_core::error::ReasonCode::UNKNOWN_FOCUS_TYPE spelling drifted: unknown_focus_type"
-        );
+    if arkret_wire::ReasonCode::UNKNOWN_FOCUS_TYPE != "unknown_focus_type" {
+        bail!("arkret_wire::ReasonCode::UNKNOWN_FOCUS_TYPE spelling drifted: unknown_focus_type");
     }
     // Known variants must round-trip; anything else MUST fail closed
     // at the SDK helper, never silently downgrade.
@@ -549,11 +544,9 @@ pub fn run_unknown_type_fail_closed_vector() -> Result<()> {
 // ─── VECT-MB-7 — e2ee_key_source ───────────────────────────────────────────
 
 pub fn run_e2ee_key_source_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED
-        != "e2ee_key_source_unauthorised"
-    {
+    if arkret_wire::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED != "e2ee_key_source_unauthorised" {
         bail!(
-            "arkret_core::error::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED spelling drifted: e2ee_key_source_unauthorised"
+            "arkret_wire::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED spelling drifted: e2ee_key_source_unauthorised"
         );
     }
     // Only MLS-Exporter (label `ak-rtc-frame-key/v1`, length=19) is
@@ -716,11 +709,11 @@ fn sframe_context(
 // ─── VECT-MB-8 — participant_identity_unrecognised ─────────────────────────
 
 pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::PARTICIPANT_IDENTITY_UNRECOGNISED
+    if arkret_wire::ReasonCode::PARTICIPANT_IDENTITY_UNRECOGNISED
         != "participant_identity_unrecognised"
     {
         bail!(
-            "arkret_core::error::ReasonCode::PARTICIPANT_IDENTITY_UNRECOGNISED spelling drifted: participant_identity_unrecognised"
+            "arkret_wire::ReasonCode::PARTICIPANT_IDENTITY_UNRECOGNISED spelling drifted: participant_identity_unrecognised"
         );
     }
     // The backend MUST signal only identities that match an entry in
@@ -743,11 +736,11 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
 // ─── VECT-MB-9 — recording_artifact_via_arkret_blob ───────────────────────
 
 pub fn run_recording_artifact_via_arkret_blob_vector() -> Result<()> {
-    if arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED
+    if arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED
         != "recording_artifact_pipeline_bypassed"
     {
         bail!(
-            "arkret_core::error::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: recording_artifact_pipeline_bypassed"
+            "arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: recording_artifact_pipeline_bypassed"
         );
     }
     // Egress MUST land on a Arkret blob endpoint. Direct S3 / GCS
@@ -797,7 +790,7 @@ fn recording_exporter_key_source_ok(
     context: &[u8],
 ) -> std::result::Result<(), &'static str> {
     if label != LABEL_RTC_RECORDING_KEY || context.is_empty() {
-        return Err(arkret_core::error::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED);
+        return Err(arkret_wire::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED);
     }
     Ok(())
 }
@@ -822,7 +815,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         (LABEL_RTC_RECORDING_KEY, &[][..]),
     ] {
         match recording_exporter_key_source_ok(label, candidate_context) {
-            Err(code) if code == arkret_core::error::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED => {}
+            Err(code) if code == arkret_wire::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED => {}
             other => bail!(
                 "recording exporter source ({label}, {} bytes) must be rejected, got {other:?}",
                 candidate_context.len()
