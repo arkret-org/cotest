@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_core::authz::ResourceSelector;
+use arkret_policy::authz::ResourceSelector;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
