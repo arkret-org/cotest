@@ -23,15 +23,35 @@
       "profile_id": "fast-smoke",
       "description": "Small public-surface smoke set for PR feedback.",
       "include_all_tests": false,
-      "cargo_filters": [
-        "server_exposes_core_service_surface",
-        "framework_errors_and_invalid_json_use_arkret_envelopes",
-        "account_auth_and_session_edges_are_enforced",
-        "repo_submit_read_expand_idempotency_and_cas_edges",
-        "event_envelope_fixture_suite_matches_reference_semantics",
-        "encoding_fixture_suite_matches_reference_semantics",
-        "privacy_security_fixture_suite_matches_reference_semantics",
-        "push_rule_core_consistency_vectors_match_all_implementations"
+      "cargo_tests": [
+        {
+          "target": "service_surface",
+          "filter": "server_exposes_core_service_surface"
+        },
+        {
+          "target": "api_contracts_auth",
+          "filter": "framework_errors_and_invalid_json_use_arkret_envelopes"
+        },
+        {
+          "target": "api_contracts_auth",
+          "filter": "account_auth_and_session_edges_are_enforced"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "event_envelope_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "encoding_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "privacy_security_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "push_rule_core_consistency",
+          "filter": "push_rule_core_consistency_vectors_match_all_implementations"
+        }
       ],
       "excluded_quarantine_labels": [
         "flaky"
@@ -46,13 +66,27 @@
       "profile_id": "compose",
       "description": "Process-mode multi-service contract matrix. soland is spawned by cotest; coauth/floria/sodmin/inkson can be attached through scripts/run-compose.ps1.",
       "include_all_tests": false,
-      "cargo_filters": [
-        "principal_bridge_contracts_are_discoverable",
-        "multi_service_bridge_contract_matrix_scaffold",
-        "teabay_directory_service_profile_is_discoverable",
-        "starid_optional_resolver_profile_is_discoverable",
-        "session_grant_presentation_uses_configured_coauth_introspection",
-        "live_describe_profile_claim_gate_from_env"
+      "cargo_tests": [
+        {
+          "target": "bridge_contracts",
+          "filter": "principal_bridge_contracts_are_discoverable"
+        },
+        {
+          "target": "directory_service",
+          "filter": "teabay_directory_service_profile_is_discoverable"
+        },
+        {
+          "target": "bridge_contracts",
+          "filter": "starid_optional_resolver_profile_is_discoverable"
+        },
+        {
+          "target": "bridge_contracts",
+          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
+        },
+        {
+          "target": "profile_claim_gate",
+          "filter": "live_describe_profile_claim_gate_from_env"
+        }
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": [
@@ -65,35 +99,115 @@
       "profile_id": "release-gate",
       "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, session-grant bridge checks, plus Move/Anchor/Lattice wire-model fixtures (move/anchor/lattice + holder consent or-set + composite state subject + mimi components + lattice round-trip + anchor view compaction + anchorer cell + conflict repair + MLS covered_frontier) and the round-21 discovery profile fixture covering tier filtering and post-C16 surface naming.",
       "include_all_tests": false,
-      "cargo_filters": [
-        "artifact_registry_suite_matches_reference_semantics",
-        "event_envelope_fixture_suite_matches_reference_semantics",
-        "capability_fixture_suite_matches_reference_semantics",
-        "state_resolution_fixture_suite_matches_reference_semantics",
-        "cba_lattice_fixture_suite_matches_reference_semantics",
-        "lattice_round_trip_suite_matches_reference_semantics",
-        "anchor_view_compaction_fixture_suite_matches_reference_semantics",
-        "anchorer_cell_fixture_suite_matches_reference_semantics",
-        "conflict_repair_fixture_suite_matches_reference_semantics",
-        "mls_move_covered_frontier_fixture_suite_matches_reference_semantics",
-        "discovery_profile_fixture_suite_matches_reference_semantics",
-        "sync_fixture_suite_matches_reference_semantics",
-        "privacy_security_fixture_suite_matches_reference_semantics",
-        "push_rule_core_consistency_vectors_match_all_implementations",
-        "inkson_client_profile_manifest_suite_matches_reference_semantics",
-        "coauth_account_lifecycle_fixture_suite_matches_reference_semantics",
-        "live_describe_profile_gate_suite_matches_reference_semantics",
-        "consent_fixture_suite_matches_reference_semantics",
-        "composite_state_subject_fixture_suite_matches_reference_semantics",
-        "mimi_components_fixture_suite_matches_reference_semantics",
-        "events_keys_device_blob_push_and_moderation_surfaces_work",
-        "push_and_moderation_edges_are_enforced",
-        "account_auth_and_session_edges_are_enforced",
-        "federation_replay_snapshot_and_redaction_contracts_work",
-        "teabay_directory_service_profile_is_discoverable",
-        "starid_optional_resolver_profile_is_discoverable",
-        "session_grant_presentation_uses_configured_coauth_introspection",
-        "inkson_mock_contract_matches_live_soland_baseline"
+      "cargo_tests": [
+        {
+          "target": "conformance_fixtures",
+          "filter": "event_envelope_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "capability_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "state_resolution_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "cba_lattice_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "lattice_round_trip_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "anchor_view_compaction_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "anchorer_cell_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "conflict_repair_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "mls_move_covered_frontier_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "discovery_profile_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "sync_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "privacy_security_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "push_rule_core_consistency",
+          "filter": "push_rule_core_consistency_vectors_match_all_implementations"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "inkson_client_profile_manifest_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "coauth_account_lifecycle_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "live_describe_profile_gate_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "consent_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "composite_state_subject_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "conformance_fixtures",
+          "filter": "mimi_components_fixture_suite_matches_reference_semantics"
+        },
+        {
+          "target": "protocol_payloads",
+          "filter": "events_keys_device_blob_push_and_moderation_surfaces_work"
+        },
+        {
+          "target": "delivery_media",
+          "filter": "push_and_moderation_edges_are_enforced"
+        },
+        {
+          "target": "api_contracts_auth",
+          "filter": "account_auth_and_session_edges_are_enforced"
+        },
+        {
+          "target": "federation_contract",
+          "filter": "federation_replay_snapshot_and_redaction_contracts_work"
+        },
+        {
+          "target": "directory_service",
+          "filter": "teabay_directory_service_profile_is_discoverable"
+        },
+        {
+          "target": "bridge_contracts",
+          "filter": "starid_optional_resolver_profile_is_discoverable"
+        },
+        {
+          "target": "bridge_contracts",
+          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
+        },
+        {
+          "target": "inkson_mock_parity",
+          "filter": "inkson_mock_contract_matches_live_soland_baseline"
+        }
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": [
@@ -109,8 +223,11 @@
       "profile_id": "mock-parity",
       "description": "T-P1-10 gate: compare inkson's mocked Arkret contract against a live soland baseline; any non-allowlisted drift fails.",
       "include_all_tests": false,
-      "cargo_filters": [
-        "inkson_mock_contract_matches_live_soland_baseline"
+      "cargo_tests": [
+        {
+          "target": "inkson_mock_parity",
+          "filter": "inkson_mock_contract_matches_live_soland_baseline"
+        }
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": []
@@ -133,16 +250,6 @@
         "ak.profile.federation_minimal.v1",
         "ak.profile.e2ee_client.v1"
       ]
-    },
-    {
-      "profile_id": "soak",
-      "description": "Opt-in soak / volume regression runs (CT-18 100 actors x 10k messages, plus future long-running scenarios). NOT for default CI — requires dedicated runner capacity (self-hosted or nightly cron). Each scenario is itself marked #[ignore] and must be run with --ignored.",
-      "include_all_tests": false,
-      "cargo_filters": [
-        "soak_100_actors_10k_messages"
-      ],
-      "excluded_quarantine_labels": [],
-      "required_coverage_profiles": []
     }
   ],
   "quarantined_tests": []

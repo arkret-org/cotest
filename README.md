@@ -71,6 +71,8 @@ Recommended entrypoints:
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime process
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-cotest.ps1 -Profile fast-smoke -PlanOnly
+.\scripts\test-cotest-planner.ps1
 .\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
 .\scripts\run-hygiene.ps1
 .\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
@@ -415,6 +417,13 @@ scrolling terminal output.
 `config/ci-profiles.json`; `-Profile dual-soland` starts alpha/beta soland
 and alpha/beta inkson locally, then runs the federation Playwright matrix;
 `-Profile full-nightly` runs the complete suite.
+Selective profiles declare both the Cargo integration-test `target` and the
+test-name `filter`, so the runner builds and starts only the selected target.
+Target/filter entries also use libtest `--exact`, preventing one configured
+name from selecting longer tests that merely contain it as a substring.
+Use `-PlanOnly` to inspect the exact Cargo arguments without compiling or
+starting services, and `-ValidateProfile` to compile each selected target once
+and require every configured filter to match exactly one listed test.
 `scripts/run-hygiene.ps1` is run separately from scenario profiles so
 dependency policy, typo checks, and advisory scans can fail fast without
 starting services.

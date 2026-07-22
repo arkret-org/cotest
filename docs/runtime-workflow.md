@@ -187,8 +187,26 @@ If the image already exists:
 ### Run a filtered subset
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime docker -CargoTestFilter federation
+.\scripts\run-cotest.ps1 -Runtime docker `
+  -CargoTestTarget federation_contract `
+  -CargoTestFilter federation_replay_snapshot_and_redaction_contracts_work
 ```
+
+Always pass `-CargoTestTarget` with `-CargoTestFilter` for target-aware
+scheduling. Filter-only calls remain available temporarily as an explicitly
+reported `legacy-broad-scan` and scan every integration target.
+
+Inspect or validate a profile without starting the SUT:
+
+```powershell
+.\scripts\run-cotest.ps1 -Profile fast-smoke -PlanOnly
+.\scripts\run-cotest.ps1 -Profile release-gate -ValidateProfile
+.\scripts\test-cotest-planner.ps1
+```
+
+`-PlanOnly` uses `cargo metadata --no-deps` but does not compile tests.
+`-ValidateProfile` runs `cargo test --test <target> -- --list` once per selected
+target and fails zero-match or ambiguous filter entries.
 
 ### Run joint Playwright against the Docker image
 

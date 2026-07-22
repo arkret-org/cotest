@@ -116,6 +116,16 @@ as `ak.profile.core_event_store.v1`, `ak.profile.chat_mvp.v1`, and
 `secret-scan.*` artifacts and can fail on coverage regressions with
 `-FailOnCoverageRegression`.
 
+Selective profiles use structured `cargo_tests` entries with both `target` and
+`filter`. The runner emits `cargo test --test <target> ...` for those entries;
+it never expands a selective profile to `cargo test <filter> --tests`.
+An opt-in ignored case sets `include_ignored: true` on its own entry; quarantine
+entries use the exact `test_target` plus `test_filter` pair.
+`all` and `full-nightly` intentionally remain one `--tests` invocation. Run
+`scripts/test-cotest-planner.ps1` for the no-build planner regression gate,
+`run-cotest.ps1 -Profile <profile> -PlanOnly` to inspect commands, or add
+`-ValidateProfile` to require each filter to match exactly one listed test.
+
 `dual-soland` is a local matrix profile, not a remote workflow. It delegates to
 `run-joint-e2e.ps1 -DualSoland -RunProfile joint-full -Grep "cross-server.federation"`,
 starts alpha/beta soland on separate ports, starts alpha/beta inkson when the

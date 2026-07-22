@@ -2,6 +2,7 @@
 param(
     [string]$SutManifest,
     [string]$OutputRoot,
+    [string]$CargoTestTarget,
     [string]$CargoTestFilter,
     [string]$CoauthBaseUrl,
     [string]$FloriaBaseUrl,
@@ -203,6 +204,9 @@ try {
     }
     if ($OutputRoot) {
         $runCotestArgs.OutputRoot = $OutputRoot
+    }
+    if ($CargoTestTarget) {
+        $runCotestArgs.CargoTestTarget = $CargoTestTarget
     }
     if ($CargoTestFilter) {
         $runCotestArgs.CargoTestFilter = $CargoTestFilter

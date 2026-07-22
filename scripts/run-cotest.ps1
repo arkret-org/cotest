@@ -5,9 +5,13 @@ param(
     [string]$SutManifest,
     [string]$SutImage = "cotest-soland:latest",
     [string]$OutputRoot,
+    [string]$CargoTestTarget,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "soak", "joint", "dual-soland", "mock-parity")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "joint", "dual-soland", "mock-parity")]
     [string]$Profile = "all",
+    [string]$ProfileConfigPath,
+    [switch]$PlanOnly,
+    [switch]$ValidateProfile,
     [string[]]$RequiredCoverageProfiles = @(),
     [string]$CoverageBaselinePath,
     [ValidateSet("promised", "verified")]
@@ -192,13 +196,16 @@ function Invoke-JointSmokeGate {
 }
 
 function Get-CiProfileConfig {
-    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [AllowNull()][string]$ConfigPath
+    )
 
-    $configPath = Join-Path $RepoRoot "config\ci-profiles.json"
-    if (-not (Test-Path $configPath)) {
-        throw "CI profile config not found: $configPath"
+    $resolvedConfigPath = if ($ConfigPath) { $ConfigPath } else { Join-Path $RepoRoot "config\ci-profiles.json" }
+    if (-not (Test-Path -LiteralPath $resolvedConfigPath)) {
+        throw "CI profile config not found: $resolvedConfigPath"
     }
-    return Get-Content $configPath -Raw | ConvertFrom-Json
+    return Get-Content -LiteralPath $resolvedConfigPath -Raw | ConvertFrom-Json
 }
 
 function Get-CiProfile {
@@ -240,39 +247,161 @@ function Get-ActiveQuarantineEntries {
     return $entries
 }
 
+function Get-ProfileCargoTests {
+    param([Parameter(Mandatory = $true)]$Profile)
+
+    if ($Profile.PSObject.Properties.Name -notcontains "cargo_tests") {
+        return @()
+    }
+    return @($Profile.cargo_tests)
+}
+
+function Get-CargoMetadataTestTargets {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    Push-Location $RepoRoot
+    try {
+        $metadataOutput = & cargo metadata --no-deps --format-version 1
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo metadata failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    return @(
+        $metadata.packages |
+            ForEach-Object { $_.targets } |
+            Where-Object { $_.kind -contains "test" } |
+            ForEach-Object { $_.name } |
+            Sort-Object -Unique
+    )
+}
+
+function Assert-CargoTestConfiguration {
+    param(
+        [Parameter(Mandatory = $true)]$Config,
+        [Parameter(Mandatory = $true)][string[]]$KnownTargets
+    )
+
+    $knownTargetSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($target in $KnownTargets) {
+        $null = $knownTargetSet.Add($target)
+    }
+
+    $profileIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($profile in @($Config.profiles)) {
+        if (-not $profile.profile_id -or -not $profileIds.Add([string]$profile.profile_id)) {
+            throw "CI profile ids must be non-empty and unique"
+        }
+        if ($profile.PSObject.Properties.Name -contains "cargo_filters") {
+            throw "CI profile '$($profile.profile_id)' uses removed cargo_filters; migrate it to cargo_tests"
+        }
+
+        $tests = @(Get-ProfileCargoTests -Profile $profile)
+        if ([bool]$profile.include_all_tests) {
+            if ($tests.Count -gt 0) {
+                throw "CI profile '$($profile.profile_id)' cannot combine include_all_tests with cargo_tests"
+            }
+            continue
+        }
+        if ($tests.Count -eq 0) {
+            throw "CI profile '$($profile.profile_id)' must declare at least one cargo_tests entry"
+        }
+
+        $selectionKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        foreach ($test in $tests) {
+            $target = [string]$test.target
+            $filter = [string]$test.filter
+            if ([string]::IsNullOrWhiteSpace($target) -or [string]::IsNullOrWhiteSpace($filter)) {
+                throw "CI profile '$($profile.profile_id)' cargo_tests entries require non-empty target and filter"
+            }
+            if (-not $knownTargetSet.Contains($target)) {
+                throw "CI profile '$($profile.profile_id)' references unknown cargo test target '$target'"
+            }
+            $key = "$target`0$filter"
+            if (-not $selectionKeys.Add($key)) {
+                throw "CI profile '$($profile.profile_id)' contains duplicate cargo test selection '$target::$filter'"
+            }
+        }
+    }
+
+    $quarantineKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($entry in @($Config.quarantined_tests)) {
+        $target = [string]$entry.test_target
+        $filter = [string]$entry.test_filter
+        if ([string]::IsNullOrWhiteSpace($target) -or [string]::IsNullOrWhiteSpace($filter)) {
+            throw "Quarantined tests require non-empty test_target and test_filter"
+        }
+        if (-not $knownTargetSet.Contains($target)) {
+            throw "Quarantined test references unknown cargo test target '$target'"
+        }
+        $key = "$target`0$filter"
+        if (-not $quarantineKeys.Add($key)) {
+            throw "Duplicate quarantined test selection '$target::$filter'"
+        }
+    }
+}
+
 function Get-CargoTestInvocations {
     param(
         [Parameter(Mandatory = $true)]$Profile,
         [Parameter(Mandatory = $true)]$QuarantineEntries,
+        [AllowNull()][string]$CargoTestTarget,
         [AllowNull()][string]$CargoTestFilter
     )
 
-    if ($CargoTestFilter) {
+    if ($CargoTestTarget -or $CargoTestFilter) {
+        $selectionMode = if ($CargoTestTarget -and $CargoTestFilter) {
+            "target-filter"
+        } elseif ($CargoTestTarget) {
+            "target-all"
+        } else {
+            "legacy-broad-scan"
+        }
         return @([pscustomobject]@{
-                label = "filter:$CargoTestFilter"
-                filter = $CargoTestFilter
-                skips = @()
+                label          = if ($CargoTestTarget) { "target:$CargoTestTarget" } else { "filter:$CargoTestFilter" }
+                target         = if ($CargoTestTarget) { $CargoTestTarget } else { $null }
+                filter         = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
+                skips          = @()
+                include_ignored = $false
+                selection_mode = $selectionMode
             })
     }
 
-    $quarantinedFilters = @($QuarantineEntries | ForEach-Object { $_.test_filter } | Where-Object { $_ })
+    $quarantinedFilters = @($QuarantineEntries | ForEach-Object { $_.test_filter })
     if ($Profile.include_all_tests) {
         return @([pscustomobject]@{
-                label = $Profile.profile_id
-                filter = $null
-                skips = $quarantinedFilters
+                label           = $Profile.profile_id
+                target          = $null
+                filter          = $null
+                skips           = $quarantinedFilters
+                include_ignored = $false
+                selection_mode  = "all-tests"
             })
+    }
+
+    $quarantinedKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($entry in $QuarantineEntries) {
+        $null = $quarantinedKeys.Add("$($entry.test_target)`0$($entry.test_filter)")
     }
 
     $invocations = New-Object System.Collections.Generic.List[object]
-    foreach ($filter in @($Profile.cargo_filters)) {
-        if ($quarantinedFilters -contains $filter) {
+    foreach ($test in @(Get-ProfileCargoTests -Profile $Profile)) {
+        $target = [string]$test.target
+        $filter = [string]$test.filter
+        if ($quarantinedKeys.Contains("$target`0$filter")) {
             continue
         }
         $invocations.Add([pscustomobject]@{
-                label = $filter
-                filter = $filter
-                skips = @()
+                label           = "$target::$filter"
+                target          = $target
+                filter          = $filter
+                skips           = @()
+                include_ignored = if ($test.PSObject.Properties.Name -contains "include_ignored") { [bool]$test.include_ignored } else { $false }
+                selection_mode  = "target-filter"
             })
     }
     if ($invocations.Count -eq 0) {
@@ -283,21 +412,31 @@ function Get-CargoTestInvocations {
 
 function New-CargoTestArgs {
     param(
+        [Parameter(Mandatory = $true)][string]$SelectionMode,
+        [AllowNull()][string]$Target,
         [AllowNull()][string]$Filter,
         [string[]]$Skips = @(),
         [switch]$IncludeIgnored
     )
 
     $args = @("test")
+    switch ($SelectionMode) {
+        "all-tests" { $args += "--tests" }
+        "legacy-broad-scan" { $args += "--tests" }
+        "target-all" { $args += @("--test", $Target) }
+        "target-filter" { $args += @("--test", $Target) }
+        default { throw "Unknown cargo test selection mode '$SelectionMode'" }
+    }
+    $args += "--no-fail-fast"
     if ($Filter) {
         $args += $Filter
     }
-    $args += @("--tests", "--no-fail-fast", "--", "--nocapture")
+    $args += @("--", "--nocapture")
     if ($IncludeIgnored) {
-        # The soak (CT-18) profile - and any future opt-in long-running
-        # profiles - must promote `#[ignore]`'d tests, otherwise the run
-        # would silently skip every scenario in the profile.
         $args += "--ignored"
+    }
+    if ($SelectionMode -eq "target-filter") {
+        $args += "--exact"
     }
     foreach ($skip in $Skips) {
         if ($skip) {
@@ -305,6 +444,77 @@ function New-CargoTestArgs {
         }
     }
     return $args
+}
+
+function Add-CargoTestArgsToInvocations {
+    param([Parameter(Mandatory = $true)]$Invocations)
+
+    foreach ($invocation in @($Invocations)) {
+        $cargoArgs = @(
+            New-CargoTestArgs `
+                -SelectionMode $invocation.selection_mode `
+                -Target $invocation.target `
+                -Filter $invocation.filter `
+                -Skips @($invocation.skips) `
+                -IncludeIgnored:([bool]$invocation.include_ignored)
+        )
+        $invocation | Add-Member -NotePropertyName cargo_args -NotePropertyValue $cargoArgs
+    }
+    return @($Invocations)
+}
+
+function Test-CargoProfileSelection {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)]$Invocations
+    )
+
+    $targetFilters = @($Invocations | Where-Object { $_.selection_mode -eq "target-filter" })
+    if ($targetFilters.Count -eq 0) {
+        return [pscustomobject]@{
+            status            = "passed"
+            validated_targets = @()
+            validated_tests   = 0
+        }
+    }
+
+    $validatedTests = 0
+    $validatedTargets = New-Object System.Collections.Generic.List[string]
+    foreach ($targetGroup in @($targetFilters | Group-Object target)) {
+        $target = [string]$targetGroup.Name
+        Push-Location $RepoRoot
+        try {
+            $listOutput = @(& cargo test --test $target -- --list 2>&1)
+            $listExitCode = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+        }
+        if ($listExitCode -ne 0) {
+            throw "Failed to list cargo test target '$target' (exit code $listExitCode):`n$($listOutput -join [Environment]::NewLine)"
+        }
+
+        $listedTests = @(
+            $listOutput |
+                ForEach-Object { [string]$_ } |
+                Where-Object { $_ -match '^(?<name>.+): test$' } |
+                ForEach-Object { $Matches.name }
+        )
+        foreach ($invocation in @($targetGroup.Group)) {
+            $matches = @($listedTests | Where-Object { $_ -eq $invocation.filter -or $_.EndsWith("::$($invocation.filter)", [System.StringComparison]::Ordinal) })
+            if ($matches.Count -ne 1) {
+                throw "Cargo test selection '$target::$($invocation.filter)' matched $($matches.Count) listed tests; expected exactly one"
+            }
+            $validatedTests++
+        }
+        $validatedTargets.Add($target)
+    }
+
+    return [pscustomobject]@{
+        status            = "passed"
+        validated_targets = @($validatedTargets)
+        validated_tests   = $validatedTests
+    }
 }
 
 function ConvertTo-NativeCommandLineArgument {
@@ -1221,25 +1431,28 @@ function New-CiProfileMarkdown {
     $lines.Add("# CI profile")
     $lines.Add("")
     $lines.Add("- profile: $($ProfileReport.profile_id)")
+    $lines.Add("- cargo_test_target: $($ProfileReport.cargo_test_target)")
     $lines.Add("- cargo_test_filter: $($ProfileReport.cargo_test_filter)")
     $lines.Add("- invocations: $($ProfileReport.invocations.Count)")
     $lines.Add("")
-    $lines.Add("| Label | Filter | Skips |")
-    $lines.Add("| --- | --- | --- |")
+    $lines.Add("| Label | Mode | Target | Filter | Cargo args | Skips |")
+    $lines.Add("| --- | --- | --- | --- | --- | --- |")
     foreach ($invocation in $ProfileReport.invocations) {
         $skips = if ($invocation.skips.Count -gt 0) { $invocation.skips -join ", " } else { "-" }
+        $target = if ($invocation.target) { $invocation.target } else { "-" }
         $filter = if ($invocation.filter) { $invocation.filter } else { "-" }
-        $lines.Add("| $($invocation.label) | $filter | $skips |")
+        $cargoArgs = @($invocation.cargo_args) -join " "
+        $lines.Add("| $($invocation.label) | $($invocation.selection_mode) | $target | $filter | ``$cargoArgs`` | $skips |")
     }
     if ($ProfileReport.quarantined_tests.Count -gt 0) {
         $lines.Add("")
         $lines.Add("## Quarantined")
         $lines.Add("")
-        $lines.Add("| Test filter | Labels | Reason |")
-        $lines.Add("| --- | --- | --- |")
+        $lines.Add("| Test target | Test filter | Labels | Reason |")
+        $lines.Add("| --- | --- | --- | --- |")
         foreach ($entry in $ProfileReport.quarantined_tests) {
             $labels = @($entry.labels) -join ", "
-            $lines.Add("| $($entry.test_filter) | $labels | $($entry.reason) |")
+            $lines.Add("| $($entry.test_target) | $($entry.test_filter) | $labels | $($entry.reason) |")
         }
     }
     return ($lines -join [Environment]::NewLine)
@@ -1681,6 +1894,57 @@ if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
 
+$delegatedProfile = $Profile -in @("joint", "dual-soland")
+if ($delegatedProfile -and ($PlanOnly -or $ValidateProfile)) {
+    throw "Profile '$Profile' delegates to the Playwright runner and does not have a Cargo test plan"
+}
+
+if (-not $delegatedProfile) {
+    $ciConfig = Get-CiProfileConfig -RepoRoot $repoRoot -ConfigPath $ProfileConfigPath
+    $knownCargoTestTargets = @(Get-CargoMetadataTestTargets -RepoRoot $repoRoot)
+    Assert-CargoTestConfiguration -Config $ciConfig -KnownTargets $knownCargoTestTargets
+    $ciProfile = Get-CiProfile -Config $ciConfig -ProfileId $Profile
+
+    if ($CargoTestTarget -and $knownCargoTestTargets -notcontains $CargoTestTarget) {
+        throw "Unknown cargo test target '$CargoTestTarget'"
+    }
+
+    $quarantineEntries = @(Get-ActiveQuarantineEntries -Config $ciConfig -ExcludedLabels @($ciProfile.excluded_quarantine_labels))
+    $invocations = @(
+        Get-CargoTestInvocations `
+            -Profile $ciProfile `
+            -QuarantineEntries $quarantineEntries `
+            -CargoTestTarget $CargoTestTarget `
+            -CargoTestFilter $CargoTestFilter
+    )
+    $invocations = @(Add-CargoTestArgsToInvocations -Invocations $invocations)
+
+    if (@($invocations | Where-Object { $_.selection_mode -eq "legacy-broad-scan" }).Count -gt 0) {
+        Write-Warning "-CargoTestFilter without -CargoTestTarget scans every integration test target; add -CargoTestTarget to use target-aware scheduling"
+    }
+
+    if ($PlanOnly -or $ValidateProfile) {
+        $selectionValidation = if ($ValidateProfile) {
+            Test-CargoProfileSelection -RepoRoot $repoRoot -Invocations $invocations
+        } else {
+            [pscustomobject]@{
+                status            = "not-requested"
+                validated_targets = @()
+                validated_tests   = 0
+            }
+        }
+        [pscustomobject]@{
+            profile_id          = $Profile
+            cargo_test_target   = if ($CargoTestTarget) { $CargoTestTarget } else { $null }
+            cargo_test_filter   = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
+            known_target_count  = $knownCargoTestTargets.Count
+            validation          = $selectionValidation
+            invocations         = $invocations
+        } | ConvertTo-Json -Depth 10
+        exit 0
+    }
+}
+
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runDir = Join-Path $OutputRoot "runs\$timestamp"
 $latestDir = Join-Path $OutputRoot "latest"
@@ -1851,13 +2115,10 @@ foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", 
 }
 
 $startedAt = Get-Date
-$ciConfig = Get-CiProfileConfig -RepoRoot $repoRoot
-$ciProfile = Get-CiProfile -Config $ciConfig -ProfileId $Profile
-$quarantineEntries = @(Get-ActiveQuarantineEntries -Config $ciConfig -ExcludedLabels @($ciProfile.excluded_quarantine_labels))
-$invocations = @(Get-CargoTestInvocations -Profile $ciProfile -QuarantineEntries $quarantineEntries -CargoTestFilter $CargoTestFilter)
 $effectiveRequiredCoverageProfiles = @(Get-EffectiveRequiredCoverageProfiles -Profile $ciProfile -Overrides $RequiredCoverageProfiles)
 $profileReport = [pscustomobject]@{
     profile_id                 = $Profile
+    cargo_test_target          = if ($CargoTestTarget) { $CargoTestTarget } else { $null }
     cargo_test_filter          = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
     required_coverage_profiles = $effectiveRequiredCoverageProfiles
     invocations                = $invocations
@@ -1879,14 +2140,8 @@ try {
     }
 
     $exitCode = 0
-    # Profiles whose scenarios are all `#[ignore]` by design (opt-in
-    # long-running runs). Promoting `--ignored` here keeps the per-test
-    # `#[ignore = "..."]` reason text intact while still letting the
-    # profile actually execute the scenarios.
-    $promoteIgnored = ($Profile -eq "soak")
     foreach ($invocation in $invocations) {
-        $cargoArgs = New-CargoTestArgs -Filter $invocation.filter -Skips @($invocation.skips) -IncludeIgnored:$promoteIgnored
-        $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs $cargoArgs -RawLog $rawLog -Label $invocation.label
+        $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs @($invocation.cargo_args) -RawLog $rawLog -Label $invocation.label
         if ($invocationExitCode -ne 0 -and $exitCode -eq 0) {
             $exitCode = $invocationExitCode
         }
