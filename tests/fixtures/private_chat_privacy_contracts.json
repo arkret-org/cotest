@@ -203,10 +203,13 @@
           ],
           "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
           "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
-          "contact_refs": [
-            "ak:event:0196b39d-0000-7000-8000-000000000502",
-            "ak:event:0196b39d-0000-7000-8000-000000000503"
-          ],
+          "authorization_basis": {
+            "kind": "accepted_contact",
+            "event_refs": [
+              "ak:event:0196b39d-0000-7000-8000-000000000502",
+              "ak:event:0196b39d-0000-7000-8000-000000000503"
+            ]
+          },
           "member_event_refs": [
             "ak:event:0196b39d-0000-7000-8000-000000000504",
             "ak:event:0196b39d-0000-7000-8000-000000000505"
@@ -239,10 +242,13 @@
       ],
       "realm_id": "ak:realm:0196b39d-0000-7000-8000-000000000301",
       "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
-      "contact_refs": [
-        "ak:event:0196b39d-0000-7000-8000-000000000502",
-        "ak:event:0196b39d-0000-7000-8000-000000000503"
-      ],
+      "authorization_basis": {
+        "kind": "accepted_contact",
+        "event_refs": [
+          "ak:event:0196b39d-0000-7000-8000-000000000502",
+          "ak:event:0196b39d-0000-7000-8000-000000000503"
+        ]
+      },
       "member_event_refs": [
         "ak:event:0196b39d-0000-7000-8000-000000000504",
         "ak:event:0196b39d-0000-7000-8000-000000000505"
