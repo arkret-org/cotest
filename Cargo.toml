@@ -129,7 +129,7 @@ arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity"}
 arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration"}
 arkret-policy = {path = "../arkret-rust-sdk/crates/policy"}
 arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
-arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",features = ["signer"]}
+arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["collaboration", "keypackages", "signer", "webvh"]}
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}
 arkret-wire = {path = "../arkret-rust-sdk/crates/wire"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
