@@ -1511,7 +1511,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let actor_frontier =
         managed_agent_actor_frontier(server, token, ALICE_DID, &control_realm_id).await?;
     let first_actor_seq = actor_frontier.next_actor_seq;
-    let mut cross_signing_event = arkret::build_cross_signing_publish_event_at(
+    let mut cross_signing_event = arkret_event_draft::build_cross_signing_publish_event_at(
         typed_control_realm_id.clone(),
         principal_id.clone(),
         first_actor_seq,
@@ -1587,7 +1587,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         ),
     )?));
     let device_actor_seq = first_actor_seq + 1;
-    let mut device_authorize_event = arkret::build_device_authorize_event_at(
+    let mut device_authorize_event = arkret_event_draft::build_device_authorize_event_at(
         typed_control_realm_id,
         principal_id.clone(),
         device_actor_seq,

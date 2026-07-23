@@ -60,6 +60,7 @@ arkret-state = {workspace = true}
 # canonical signing-input golden vectors (CrossSigningPublishContent /
 # DeviceTrustBinding) so the TS e2e byte-mirror helpers regress against the SDK.
 arkret-crypto = {workspace = true}
+arkret-event-draft = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-crypto = {workspace = true}
@@ -116,6 +117,7 @@ arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "ml
 arkret-bootstrap = {path = "../arkret-rust-sdk/crates/bootstrap"}
 arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
+arkret-event-draft = {path = "../arkret-rust-sdk/crates/event-draft"}
 garth = {path = "../garth",features = ["mls"]}
 arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
