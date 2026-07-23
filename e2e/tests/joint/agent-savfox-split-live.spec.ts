@@ -70,7 +70,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const inksonCode = (
           await inkson.getByTestId("agent-runtime-approval-code").innerText()
         ).trim();
-        expect(inksonCode).toMatch(/^\d{6}$/);
+        expect(inksonCode).toMatch(/^\d{8}$/);
         await expect(
           savfox.getByText(`Pairing code: ${inksonCode}`),
         ).toBeVisible();
@@ -82,7 +82,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         await inkson.getByTestId("agent-runtime-approval-approve").click();
         await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
-        await expect(savfox.getByText(/Runtime key approved/)).toBeVisible({
+        await expect(savfox.getByText(/Approved by Inkson/)).toBeVisible({
           timeout: 180_000,
         });
 
@@ -94,12 +94,23 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .locator(".channels-card")
           .filter({ hasText: "Arkret" });
         await expect(arkretCard).toHaveCount(1);
-        await expect(arkretCard).toContainText("Pairing Active", {
+        await expect(arkretCard).toContainText(/Pairing\s*Active/, {
           timeout: 120_000,
         });
-        await expect(arkretCard).toContainText("Connected", {
-          timeout: 120_000,
-        });
+        await expect
+          .poll(
+            async () => {
+              await savfox.reload();
+              await expect(arkretCard).toHaveCount(1);
+              return (await arkretCard.textContent()) ?? "";
+            },
+            {
+              timeout: 120_000,
+              intervals: [1_000, 2_000, 5_000],
+              message: "Savfox should surface the live Arkret session",
+            },
+          )
+          .toContain("Connected");
 
         await inkson.reload();
         await expect(inkson.getByTestId("personal-agent-admin")).toBeVisible({
