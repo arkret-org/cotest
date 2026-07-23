@@ -4,7 +4,7 @@
 //! `zh/conformance/encoding.md` section 10.1.
 
 use anyhow::{Result, anyhow, bail};
-use arkret::{
+use arkret_crypto::{
     AEAD_NONCE_AES_GCM_LEN, AEAD_NONCE_EXPORTER_LABEL, AEAD_NONCE_XCHACHA20_POLY1305_LEN,
     AEAD_PROFILE_AES_256_GCM, AEAD_PROFILE_XCHACHA20_POLY1305, AeadNonceContext,
     AeadNonceReplayTracker, Error, compose_aead_nonce, derive_aead_sender_nonce_prefix,
