@@ -142,7 +142,7 @@ fn expected_u64(value: &Value, field: &str) -> Result<u64> {
 }
 
 fn parse_time(value: &str) -> Result<DateTime<Utc>> {
-    Ok(arkret_core::canonical::parse_timestamp_canonical(value)?)
+    Ok(arkret_canonical::parse_timestamp_canonical(value)?)
 }
 
 fn did(value: &str) -> Result<Did> {
@@ -190,7 +190,7 @@ fn claim_record_value(
         "capabilities": ["ak.mls.profile.full"],
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "ssk_generation": 7,
-        "expires_at": arkret_core::canonical::format_timestamp_canonical(expires_at),
+        "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
         "device_signature": {
             "kid": format!("{}#{}", principal_id.as_str(), device_id.as_str()),
             "alg": "EdDSA",

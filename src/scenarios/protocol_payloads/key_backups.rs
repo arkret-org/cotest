@@ -16,8 +16,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow};
+use arkret_canonical::canonical_json_bytes;
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_core::canonical::canonical_json_bytes;
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, Hash, KeyBackup,
     KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
@@ -348,7 +348,7 @@ fn remove_auth_signature(value: &mut Value) -> Result<()> {
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
-    arkret_core::canonical::parse_timestamp_canonical(value)
+    arkret_canonical::parse_timestamp_canonical(value)
         .with_context(|| format!("invalid timestamp {value}"))
 }
 

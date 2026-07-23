@@ -138,7 +138,7 @@ pub fn attach_ephemeral_proof(
     let canonical = envelope
         .canonical_bytes_without_proof()
         .expect("ephemeral envelope is canonicalizable");
-    let event_digest = arkret_core::Hash::new(arkret_core::canonical::sha256_digest(&canonical))
+    let event_digest = arkret_core::Hash::new(arkret_canonical::sha256_digest(&canonical))
         .expect("sha256 digest is a valid Hash");
 
     let mut proof = arkret_core::Proof {

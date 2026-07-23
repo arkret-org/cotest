@@ -69,7 +69,7 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
         &actor_id,
         43,
         &event_ids,
-        arkret_core::canonical::DigestSuite::Sha256,
+        arkret_canonical::DigestSuite::Sha256,
     )?;
     if digest.as_str() != value_field_str(vector, "expected_digest")? {
         bail!("Realm actor frontier digest golden mismatch");

@@ -24,6 +24,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
+use arkret_canonical as canonical;
 use arkret_core::{
     BackupClass, BackupId, BackupSeriesId, Base64UrlString, CrossSigningPublish,
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, DidUrl,
@@ -35,8 +36,8 @@ use arkret_core::{
     RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse,
     RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData,
     RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial, SubordinateSignedKey,
-    SubordinateSignedKeyBinding, TypedTrustDomainId, canonical,
-    ed25519_pubkey_to_did_key_multibase, principal_control_realm_id,
+    SubordinateSignedKeyBinding, TypedTrustDomainId, ed25519_pubkey_to_did_key_multibase,
+    principal_control_realm_id,
 };
 use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};

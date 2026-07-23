@@ -606,7 +606,7 @@ async fn submit_event_now(
         ));
     };
     frontier.validate()?;
-    let created_at = arkret_core::canonical::format_timestamp_canonical(chrono::Utc::now());
+    let created_at = arkret_canonical::format_timestamp_canonical(chrono::Utc::now());
     let mut event = crate::harness::event_envelope_with_chain(
         &actor.actor,
         realm_id,

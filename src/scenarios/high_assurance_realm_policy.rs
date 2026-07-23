@@ -62,7 +62,7 @@ fn build_realm(
         durability_policy: None,
         federation_policy,
         sync_endpoints: Vec::new(),
-        digest_algorithm: arkret_core::canonical::DigestSuite::Sha256,
+        digest_algorithm: arkret_canonical::DigestSuite::Sha256,
         retention_policy_id: None,
         avatar_blob_ref: None,
         created_at: chrono::Utc::now(),

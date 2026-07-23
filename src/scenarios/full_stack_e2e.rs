@@ -254,7 +254,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
         "actor_seq": 1,
         "realm_id": TARGET_REALM_ID,
         "strand_id": STABLE_STRAND_ID,
-        "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
+        "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
         "hlc": "1747613100000-0-cotest-inkson",
         "prev_refs": [],
         "refs": [],
@@ -265,7 +265,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
             "verification_method": format!("{BOB_DID}#inkson"),
             "event_digest":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
+            "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
             "jws": "y0u.gen.mock"
         }]
     });
@@ -593,7 +593,7 @@ async fn live_stack_probe() -> Result<()> {
             "actor_id": ALICE_DID,
             "actor_seq": 1,
             "realm_id": TARGET_REALM_ID,
-            "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
+            "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
             "hlc": "1747613100000-0-cotest",
             "prev_refs": [],
             "refs": [],
@@ -604,7 +604,7 @@ async fn live_stack_probe() -> Result<()> {
                 "verification_method": format!("{ALICE_DID}#inkson"),
                 "event_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": arkret_core::canonical::format_timestamp_canonical(Utc::now()),
+                "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
                 "jws": "a..b",
             }]
         });

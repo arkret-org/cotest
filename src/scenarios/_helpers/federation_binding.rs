@@ -20,7 +20,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, Result};
-use arkret_core::canonical::canonical_sha256;
+use arkret_canonical::canonical_sha256;
 use arkret_core::{
     Event, EventId, EventsSubmitFederationRequestBody, FederationServiceBindingRef, Hash, RealmId,
 };

@@ -26,7 +26,7 @@
 //! spec's normative join semantics.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::canonical::canonical_json_bytes;
+use arkret_canonical::canonical_json_bytes;
 use arkret_core::{
     CellRef, Did, LatticeOp, LatticeOpType, MoveId, REALM_LINK_ALLOWED_TRANSITIONS,
     REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES, RealmId, RealmLinkKind,

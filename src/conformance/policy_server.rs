@@ -32,7 +32,7 @@ pub fn run_policy_server_fixture_suite() -> Result<()> {
 }
 
 fn jcs_sha256_hex(value: &Value) -> Result<String> {
-    let bytes = arkret_core::canonical::canonical_json_bytes(value)
+    let bytes = arkret_canonical::canonical_json_bytes(value)
         .map_err(|error| anyhow!("RFC 8785 JCS canonicalization failed: {error}"))?;
     let digest = Sha256::digest(&bytes);
     let mut out = String::with_capacity(digest.len() * 2);

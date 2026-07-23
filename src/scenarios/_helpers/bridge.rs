@@ -148,7 +148,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "device_id": device_id,
             "audience": audience,
             "scopes": ["urn:arkret:principal-server:session.bind"],
-            "expires_at": arkret_core::canonical::format_timestamp_canonical(
+            "expires_at": arkret_canonical::format_timestamp_canonical(
                 chrono::Utc::now() + chrono::Duration::minutes(10)
             ),
             "revoked_at": null,

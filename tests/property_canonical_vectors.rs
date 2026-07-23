@@ -16,7 +16,7 @@
 //!
 //! Cases per property are capped at 64.
 
-use arkret_core::canonical::{canonical_json_bytes, canonical_json_string, canonical_sha256};
+use arkret_canonical::{canonical_json_bytes, canonical_json_string, canonical_sha256};
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 

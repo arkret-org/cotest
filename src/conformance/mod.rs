@@ -653,7 +653,7 @@ pub(crate) fn canonical_json(value: &Value) -> Result<String> {
     // sorts keys / encodes numbers identically. `canonical_json_bytes` is the
     // single normative source of canonical bytes (spec encoding.md §9.5); the
     // bytes are valid UTF-8 so the historical `String` return type is preserved.
-    let bytes = arkret_core::canonical::canonical_json_bytes(value)
+    let bytes = arkret_canonical::canonical_json_bytes(value)
         .map_err(|err| anyhow!("canonical JSON encoding failed: {err}"))?;
     String::from_utf8(bytes).map_err(|err| anyhow!("canonical JSON produced invalid UTF-8: {err}"))
 }

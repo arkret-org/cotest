@@ -17,7 +17,7 @@
 //! we catch contract drift in CI without spinning up soland.
 
 use anyhow::{Result, anyhow};
-use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_core::{Did, Event, Hlc, RealmId};
 use arkret_wire::events::EventProductClass;
 use serde_json::{Value, json};

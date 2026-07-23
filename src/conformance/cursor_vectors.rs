@@ -20,8 +20,8 @@ pub fn run_cursor_opaque_core_vector() -> Result<()> {
     let cursor = Cursor {
         v: "1".to_owned(),
         purpose: CursorPurpose::Stream,
-        issued_at: arkret_core::canonical::parse_timestamp_canonical("2026-05-27T00:00:00.000Z")?,
-        expires_at: arkret_core::canonical::parse_timestamp_canonical("2026-06-03T00:00:00.000Z")?,
+        issued_at: arkret_canonical::parse_timestamp_canonical("2026-05-27T00:00:00.000Z")?,
+        expires_at: arkret_canonical::parse_timestamp_canonical("2026-06-03T00:00:00.000Z")?,
         h: handle.clone(),
     };
     if cursor.h.is_empty() {

@@ -273,7 +273,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
-    arkret_core::canonical::parse_timestamp_canonical(value)
+    arkret_canonical::parse_timestamp_canonical(value)
         .with_context(|| format!("invalid timestamp {value}"))
 }
 

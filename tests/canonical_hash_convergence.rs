@@ -2,7 +2,7 @@
 //!
 //! Every Arkret service (coauth / soland / starid / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
-//! the SDK's `arkret_core::canonical` module and the
+//! the SDK's `arkret_canonical` module and the
 //! `arkret_signatures::EventProofBuilder` facade. This test pins a
 //! handful of fixture payloads representing the three shapes that
 //! matter on the wire — coauth `handle_claim`, soland event-envelope
@@ -16,7 +16,7 @@
 //! failures in federation / replication tests).
 
 use arkret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
-use arkret_core::canonical::{
+use arkret_canonical::{
     blake3_digest, canonical_hash, canonical_json_bytes, canonical_sha256, verify_digest,
 };
 use serde_json::{Value, json};
@@ -63,7 +63,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // R3.1 digest — recomputed after the `handle_uri` → `handle`
             // wire rename. Source of truth: SDK's
-            // `arkret_core::canonical::canonical_sha256` over the canonical
+            // `arkret_canonical::canonical_sha256` over the canonical
             // JSON bytes of the payload above. If this digest drifts, the
             // first place to look is whether any downstream service has
             // re-introduced a hand-rolled canonical encoder. To regenerate:
@@ -161,7 +161,7 @@ fn canonical_fixture_suite() -> CanonicalFixtureSuite {
     builder.finish()
 }
 
-/// Round-trip every vector through `arkret_core::canonical::canonical_sha256`
+/// Round-trip every vector through `arkret_canonical::canonical_sha256`
 /// to make sure the SDK hash itself is stable and matches what we encode
 /// in `expected_digest`. The other downstream services all reach the same
 /// digest by going through this same SDK helper, so this is also our
@@ -242,7 +242,7 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 }
 
 /// Every service ultimately goes through one of two SDK entry points:
-/// the low-level `arkret_core::canonical::canonical_sha256` (used by
+/// the low-level `arkret_canonical::canonical_sha256` (used by
 /// `coauth::handlers::arkret::canonical_json_sha256`, soland's
 /// `validate_event_proofs`, and starid's `proof::canonical_bytes`), or
 /// the high-level `arkret_signatures::EventProofBuilder` (used by

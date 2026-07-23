@@ -1,9 +1,9 @@
 //! Auth, DID-proof, and sender-constrained session proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
+use arkret_canonical as canonical;
 use arkret_core::{
     DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
-    canonical,
 };
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
@@ -199,7 +199,7 @@ fn session_grant_request_value(
             "challenge": required_str(vector, "challenge")?,
             "request_canonical_digest": request_canonical_digest.as_str(),
             "audience": audience,
-            "expires_at": arkret_core::canonical::format_timestamp_canonical(expires_at),
+            "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
             "signature": "detached-proof-placeholder"
         }
     }))

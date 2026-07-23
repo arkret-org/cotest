@@ -8,7 +8,7 @@ use arkret::identity::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
     self_principal_bootstrap_submit_request,
 };
-use arkret_core::canonical::{
+use arkret_canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
 use arkret_core::{

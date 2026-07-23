@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow};
-use arkret_core::canonical::canonical_sha256;
+use arkret_canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 

@@ -26,7 +26,7 @@ use anyhow::{Context, Result};
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use arkret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;

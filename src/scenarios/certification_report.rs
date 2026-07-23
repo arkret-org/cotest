@@ -270,7 +270,7 @@ fn report_with_services(services: Vec<ServiceCertificationEntry>) -> StackCertif
     let profile_gate = build_profile_gate_report().ok();
     StackCertificationReport {
         schema: "ak.cotest.live_stack_certification_report.v1".to_owned(),
-        generated_at: arkret_core::canonical::format_timestamp_canonical(chrono::Utc::now()),
+        generated_at: arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
         services,
         profile_gate,
     }

@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{Did, Proof, canonical};
+use arkret_canonical as canonical;
+use arkret_core::{Did, Proof};
 use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
 use serde_json::{Value, json};
 use url::Url;

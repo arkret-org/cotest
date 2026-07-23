@@ -3,7 +3,7 @@ use arkret::TypedTrustDomainId;
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use arkret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
+use arkret_canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
 use arkret_core::{Did, Event, EventId, Hlc, RealmId};
 use reqwest::StatusCode;
 use serde::Serialize;

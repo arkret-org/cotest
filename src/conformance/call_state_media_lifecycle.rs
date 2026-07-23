@@ -197,7 +197,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
 // ─── §12.16.1 — recording_result_artifact_shape ────────────────────────────
 
 fn ts(value: &str) -> DateTime<Utc> {
-    arkret_core::canonical::parse_timestamp_canonical(value).unwrap()
+    arkret_canonical::parse_timestamp_canonical(value).unwrap()
 }
 
 fn realm_id() -> RealmId {

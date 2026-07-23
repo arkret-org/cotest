@@ -126,7 +126,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
         "actor_id": "did:web:moderator.example",
         "target_realm_id": "ak:realm:0196419b-0000-7000-8000-000000000501",
         "reason": "subject_request",
-        "created_at": arkret_core::canonical::format_timestamp_canonical(now),
+        "created_at": arkret_canonical::format_timestamp_canonical(now),
     });
     let parsed_reason: TakedownReason = serde_json::from_value(row["reason"].clone())
         .map_err(|e| anyhow!("parse takedown reason: {e}"))?;

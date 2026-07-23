@@ -240,7 +240,7 @@ fn key_backup_signed_fields() -> Vec<String> {
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
-    arkret_core::canonical::parse_timestamp_canonical(value)
+    arkret_canonical::parse_timestamp_canonical(value)
         .with_context(|| format!("invalid timestamp {value}"))
 }
 

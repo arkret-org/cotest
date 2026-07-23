@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{SecretShareRequestContent, SecretShareSendContent};
-use arkret_core::canonical::{canonical_json_bytes, from_canonical_json_slice};
+use arkret_canonical::{canonical_json_bytes, from_canonical_json_slice};
 use arkret_core::{
     DeviceId, DeviceMessageEnvelope, DeviceMessageId, DeviceMessageTarget,
     DeviceMessagesSendRequestBody, Did, ProtocolKind,
@@ -258,7 +258,7 @@ fn open_secret_send(
     let aad = send_aad(
         envelope.sender_device_id.as_str(),
         envelope.recipient_device_id.as_str(),
-        &arkret_core::canonical::format_timestamp_canonical(envelope.expires_at),
+        &arkret_canonical::format_timestamp_canonical(envelope.expires_at),
     )?;
     let enc = URL_SAFE_NO_PAD.decode(content.enc.as_bytes())?;
     let ciphertext = URL_SAFE_NO_PAD.decode(content.ciphertext.as_bytes())?;
@@ -308,7 +308,7 @@ fn send_aad(
     recipient_device_id: &str,
     expires_at: &str,
 ) -> Result<Vec<u8>> {
-    arkret_core::canonical::validate_timestamp_canonical(expires_at)?;
+    arkret_canonical::validate_timestamp_canonical(expires_at)?;
     Ok(canonical_json_bytes(&json!({
         "kind": SEND_KIND,
         "sender_principal_id": ACCOUNT_DID,
@@ -347,7 +347,7 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
 }
 
 fn parse_utc(value: &str) -> Result<DateTime<Utc>> {
-    Ok(arkret_core::canonical::parse_timestamp_canonical(value)?)
+    Ok(arkret_canonical::parse_timestamp_canonical(value)?)
 }
 
 fn device_id(value: &str) -> Result<DeviceId> {

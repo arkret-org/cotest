@@ -153,14 +153,14 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 
     // 1. Envelope without proof.
     let created_at = Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 0).unwrap();
-    let sent_at_str = arkret_core::canonical::format_timestamp_canonical(created_at);
+    let sent_at_str = arkret_canonical::format_timestamp_canonical(created_at);
     let mut envelope = json!({
         "kind": "ak.call.signal",
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
         "actor_id": actor_id,
         "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
         "sent_at": &sent_at_str,
-        "expires_at": arkret_core::canonical::format_timestamp_canonical(
+        "expires_at": arkret_canonical::format_timestamp_canonical(
             Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 30).unwrap()
         ),
         "payload": {
@@ -172,9 +172,9 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     });
 
     // 2. event_digest = sha256: || hex(sha256(JCS(envelope_without_proof))).
-    let canonical_bytes = arkret_core::canonical::canonical_json_bytes(&envelope)
+    let canonical_bytes = arkret_canonical::canonical_json_bytes(&envelope)
         .map_err(|err| anyhow!("envelope JCS failed: {err}"))?;
-    let event_digest = arkret_core::canonical::sha256_digest(&canonical_bytes);
+    let event_digest = arkret_canonical::sha256_digest(&canonical_bytes);
 
     // 3. JWS transcript = protected `.` base64url(SDK canonical proof binding). The SDK is the only
     //    implementation of the binding object and its timestamp projection; cotest deliberately
@@ -185,7 +185,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     // the proof object + binding, not the header.
     let header = json!({ "alg": "EdDSA" });
     let header_b64 = b64url(
-        &arkret_core::canonical::canonical_json_bytes(&header)
+        &arkret_canonical::canonical_json_bytes(&header)
             .map_err(|err| anyhow!("header JCS failed: {err}"))?,
     );
     let did = arkret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
@@ -221,7 +221,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     // envelope, not merely a shape.
     let mut tampered_env = envelope.clone();
     tampered_env["payload"]["seq"] = json!(99);
-    let tampered_bytes = arkret_core::canonical::canonical_json_bytes(&{
+    let tampered_bytes = arkret_canonical::canonical_json_bytes(&{
         let mut v = tampered_env.clone();
         v.as_object_mut().unwrap().remove("proof");
         v

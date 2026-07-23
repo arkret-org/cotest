@@ -372,7 +372,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "public_key_digest": public_digest,
         "verification_method": "did:webvh:z6mkagent:agent.example#runtime-1",
     });
-    let canonical = String::from_utf8(arkret_core::canonical::canonical_json_bytes(&canonical)?)?;
+    let canonical = String::from_utf8(arkret_canonical::canonical_json_bytes(&canonical)?)?;
     if case.get("canonical_binding_json").and_then(Value::as_str) != Some(canonical.as_str()) {
         bail!("runtime-key-binding canonical JSON drifted");
     }
@@ -438,9 +438,9 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "runtime_public_key_digest": public_digest,
         "verification_method": verification_method,
     });
-    let canonical_pairing_binding = String::from_utf8(
-        arkret_core::canonical::canonical_json_bytes(&canonical_pairing_binding)?,
-    )?;
+    let canonical_pairing_binding = String::from_utf8(arkret_canonical::canonical_json_bytes(
+        &canonical_pairing_binding,
+    )?)?;
     if case
         .get("canonical_pairing_request_binding_json")
         .and_then(Value::as_str)

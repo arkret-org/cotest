@@ -157,7 +157,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         siblings.frontier_event_ids.clone(),
         SIGNING_SEED,
     );
-    let exact_body = arkret_core::canonical::canonical_json_bytes(&merge)?;
+    let exact_body = arkret_canonical::canonical_json_bytes(&merge)?;
     let lost = submit_bytes(&server, &token, exact_body.clone()).await?;
     assert_eq!(lost.status(), StatusCode::OK);
     drop(lost);

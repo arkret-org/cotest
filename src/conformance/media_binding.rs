@@ -374,7 +374,7 @@ fn participant_binding_signing_input(
         "participant_identity": participant_identity,
         "realm_id": realm_id,
     });
-    let jcs = arkret_core::canonical::canonical_json_bytes(&seven_tuple)
+    let jcs = arkret_canonical::canonical_json_bytes(&seven_tuple)
         .map_err(|err| anyhow!("participant_binding JCS encoding failed: {err}"))?;
     let mut input = Vec::with_capacity(PARTICIPANT_BINDING_SCHEMA.len() + 1 + jcs.len());
     input.extend_from_slice(PARTICIPANT_BINDING_SCHEMA.as_bytes());
@@ -482,7 +482,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
     cross_input.extend_from_slice(ICE_CONFIG_LABEL.as_bytes());
     cross_input.push(0x00);
     cross_input.extend_from_slice(
-        &arkret_core::canonical::canonical_json_bytes(&json!({
+        &arkret_canonical::canonical_json_bytes(&json!({
             "actor_id": actor_id, "call_id": call_id, "device_id": device_id,
             "expires_at": expires_at, "focus_id": focus_id,
             "participant_identity": participant_identity, "realm_id": realm_id,
@@ -695,7 +695,7 @@ fn sframe_context(
     participant_identity: &str,
     device_id: &str,
 ) -> Result<Vec<u8>> {
-    arkret_core::canonical::canonical_json_bytes(&json!({
+    arkret_canonical::canonical_json_bytes(&json!({
         "realm_id": realm_id,
         "call_id": call_id,
         "focus_id": focus_id,
@@ -774,7 +774,7 @@ fn recording_context(
     media_service_id: &str,
     recording_start_event_id: &str,
 ) -> Result<Vec<u8>> {
-    arkret_core::canonical::canonical_json_bytes(&json!({
+    arkret_canonical::canonical_json_bytes(&json!({
         "realm_id": realm_id,
         "call_id": call_id,
         "focus_id": focus_id,

@@ -528,7 +528,10 @@ fn evaluate_calendar_occurrence(occurrence: &Value, timezone: &str) -> Result<Va
         );
     }
     let occurrence_key =
-        arkret_core::canonical_calendar_rsvp_occurrence_key(&fields, Some(local_start))?;
+        arkret_models_collaboration::objects::productivity::canonical_calendar_rsvp_occurrence_key(
+            &fields,
+            Some(local_start),
+        )?;
     Ok(json!({"occurrence_key": occurrence_key}))
 }
 
