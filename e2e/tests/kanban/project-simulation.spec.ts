@@ -13,6 +13,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
@@ -401,17 +402,23 @@ test.describe("project simulation", () => {
         { context: "create todo card strand" },
       );
 
+      const badDoneEvent = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.strand.update",
+        payload: {
+          target_ref: taskStrandId,
+          patch: { metadata: { fields: { status: "done" } } },
+        },
+      });
+      await alignSignedEventToActorFrontierApi(
+        request,
+        aliceToken,
+        badDoneEvent,
+      );
       const badDone = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: realmId,
-          kind: "ak.strand.update",
-          payload: {
-            target_ref: taskStrandId,
-            patch: { metadata: { fields: { status: "done" } } },
-          },
-        }),
+        data: badDoneEvent,
       });
       expect(badDone.status()).toBe(412);
       expect(wireErrCode(await badDone.json())).toBe("strand_status_transition_invalid");
@@ -474,17 +481,23 @@ test.describe("project simulation", () => {
         { context: "create investigating incident strand" },
       );
 
+      const badResolvedEvent = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.strand.update",
+        payload: {
+          target_ref: incidentStrandId,
+          patch: { metadata: { fields: { status: "resolved" } } },
+        },
+      });
+      await alignSignedEventToActorFrontierApi(
+        request,
+        aliceToken,
+        badResolvedEvent,
+      );
       const badResolved = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: realmId,
-          kind: "ak.strand.update",
-          payload: {
-            target_ref: incidentStrandId,
-            patch: { metadata: { fields: { status: "resolved" } } },
-          },
-        }),
+        data: badResolvedEvent,
       });
       expect(badResolved.status()).toBe(412);
       expect(wireErrCode(await badResolved.json())).toBe("strand_status_transition_invalid");
@@ -629,10 +642,16 @@ test.describe("project simulation", () => {
       realmId,
       kind: "ak.relation.create",
       payload: {
-        relation_id: typedId("relation"),
-        relation_kind: "assigned_to",
-        from_ref: cardId,
-        to_ref: alice.did,
+        relation: {
+          id: typedId("relation"),
+          schema: "ak.schema.relation.v1",
+          realm_id: realmId,
+          relation_kind: "assigned_to",
+          from_ref: cardId,
+          to_ref: alice.did,
+          created_by: alice.did,
+          created_at: canonicalTimestamp(),
+        },
       },
     });
     const assignToBob = signedEventEnvelope({
@@ -640,10 +659,16 @@ test.describe("project simulation", () => {
       realmId,
       kind: "ak.relation.create",
       payload: {
-        relation_id: typedId("relation"),
-        relation_kind: "assigned_to",
-        from_ref: cardId,
-        to_ref: bob.did,
+        relation: {
+          id: typedId("relation"),
+          schema: "ak.schema.relation.v1",
+          realm_id: realmId,
+          relation_kind: "assigned_to",
+          from_ref: cardId,
+          to_ref: bob.did,
+          created_by: alice.did,
+          created_at: canonicalTimestamp(),
+        },
       },
     });
 
@@ -700,10 +725,16 @@ test.describe("project simulation", () => {
         realmId,
         kind: "ak.relation.create",
         payload: {
-          relation_id: relationId,
-          relation_kind: "assigned_to",
-          from_ref: cardId,
-          to_ref: bob.did,
+          relation: {
+            id: relationId,
+            schema: "ak.schema.relation.v1",
+            realm_id: realmId,
+            relation_kind: "assigned_to",
+            from_ref: cardId,
+            to_ref: bob.did,
+            created_by: alice.did,
+            created_at: canonicalTimestamp(),
+          },
         },
       }),
       { context: "assign Card to bob" },
@@ -790,27 +821,35 @@ test.describe("project simulation", () => {
     const listRow = await readSpaceRow(request, aliceToken, realmId, listId);
     expect(listRow?.state).toBe("archived");
 
-    // Cascade: the Card is archived (read-only). It no longer appears in the
-    // active strand view but is visible with include_terminal.
-    const activeCard = await readStrandRow(request, aliceToken, realmId, cardId);
-    expect(activeCard, "archived Card hidden from active view").toBeFalsy();
-    const archivedCard = await readStrandRow(request, aliceToken, realmId, cardId, {
-      includeTerminal: true,
-    });
+    // Cascade: the Card is archived (read-only). Archived is reversible rather
+    // than terminal, so the default projection continues to surface it for the
+    // archive list view; include_terminal only controls redacted rows.
+    const archivedCard = await readStrandRow(
+      request,
+      aliceToken,
+      realmId,
+      cardId,
+    );
     expect(archivedCard?.state).toBe("archived");
 
     // Read-only: a write to the archived Card is rejected (strand_not_active).
+    const writeEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.strand.update",
+      payload: {
+        target_ref: cardId,
+        patch: { metadata: { title: `renamed ${stamp}` } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      writeEnvelope,
+    );
     const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
-      data: signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.strand.update",
-        payload: {
-          target_ref: cardId,
-          patch: { metadata: { title: `renamed ${stamp}` } },
-        },
-      }),
+      data: writeEnvelope,
     });
     expect(write.status()).toBe(412);
     expect(wireErrCode(await write.json())).toBe("strand_not_active");

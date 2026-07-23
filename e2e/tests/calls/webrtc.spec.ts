@@ -274,7 +274,7 @@ test.describe("calls — canonical wire", () => {
     const aliceParsed = parseTurnUsername(aliceUsername);
     const bobParsed = parseTurnUsername(bobUsername);
     expect(aliceParsed.expiryUnix).toBe(
-      Math.floor(new Date(aliceTurn.expires_at as string).getTime() / 1000),
+      Math.floor(new Date(aliceIce.expires_at as string).getTime() / 1000),
     );
     // credential = base64(HMAC-SHA256(turn_shared_secret, username)).
     expect(aliceTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);

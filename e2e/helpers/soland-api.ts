@@ -761,6 +761,8 @@ export async function submitKnockApi(
       actorDid,
       realmId,
       kind: "ak.member.state",
+      actorSeq: 0,
+      prevRefs: [],
       createdAt: opts.createdAt,
       payload: {
         realm_id: realmId,
@@ -1734,6 +1736,20 @@ async function advanceEnvelopeToActorFrontier(
   envelope.actor_seq = actorSeq;
   envelope.prev_refs = [...body.frontier.frontier_event_ids];
   refreshEventEnvelopeProof(envelope, proofVerificationMethod);
+}
+
+export async function alignSignedEventToActorFrontierApi(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  opts: { server?: SolandKey } = {},
+): Promise<void> {
+  await advanceEnvelopeToActorFrontier(
+    request,
+    token,
+    envelope,
+    opts.server,
+  );
 }
 
 // COT-06-004: discover a Realm's default discussion Strand via the projection face

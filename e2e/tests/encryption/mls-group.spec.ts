@@ -16,6 +16,7 @@ import {
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   b64url,
   canonicalJson,
@@ -23,6 +24,7 @@ import {
   addRealmMemberApi,
   createRealmApi,
   principalControlRealmForDid,
+  registerEventSigner,
   singleDidNotary,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -30,6 +32,15 @@ import {
   wireErrCode,
   wireErrReason,
 } from "../../helpers/soland-api";
+import { ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
+import {
+  buildDeviceCrossSigningBinding,
+  buildDevicePossessionSignature,
+  generateCrossSigningKey,
+  TEST_DEVICE_ALGORITHMS,
+  type CrossSigningIdentity,
+  type CrossSigningKey,
+} from "../../helpers/cross-signing-harness";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -219,8 +230,9 @@ function crossSigningBindingInput(args: {
 async function publishCrossSigning(
   request: import("@playwright/test").APIRequestContext,
   token: string,
+  user: JointUser,
   fixture: WebvhPrincipalFixture,
-): Promise<string> {
+): Promise<{ trustDomain: string; deviceKey: CrossSigningKey }> {
   const trustDomain = await solandTrustDomain(request);
   const realmId = principalControlRealmForDid(fixture.did);
   const pskKid = fixture.principalSigningKeyId;
@@ -243,6 +255,14 @@ async function publishCrossSigning(
     key_format: "multibase",
   };
   const generation = 1;
+  registerEventSigner({
+    actorDid: fixture.did,
+    deviceId: user.deviceId,
+    verificationMethod: fixture.principalSigningKeyId,
+    signingSeedB64url: ed25519PrivateKeySeedB64url(
+      fixture.psk.privateKey,
+    ),
+  });
   await submitSignedEventApi(
     request,
     token,
@@ -299,7 +319,76 @@ async function publishCrossSigning(
     }),
     { context: `publish cross-signing ${fixture.did}` },
   );
-  return trustDomain;
+  const identity: CrossSigningIdentity = {
+    principalId: fixture.did,
+    trustDomain,
+    generation,
+    psk: fixtureCrossSigningKey(fixture.psk, fixture.principalSigningKeyId),
+    ssk: fixtureCrossSigningKey(fixture.ssk, fixture.sskKid),
+    usk: fixtureCrossSigningKey(
+      fixture.usk,
+      `${fixture.did}#ak_user_signing_v1`,
+    ),
+  };
+  const deviceKey = generateCrossSigningKey();
+  const hpkeKeyMultibase = "z6LSCotestE2eDeviceHpkeKey";
+  const notBefore = canonicalTimestamp();
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: fixture.did,
+      realmId,
+      kind: "ak.device.authorize",
+      payload: {
+        principal_id: fixture.did,
+        device_id: user.deviceId,
+        device_public_key: deviceKey.multibase,
+        hpke_key: hpkeKeyMultibase,
+        algorithms: TEST_DEVICE_ALGORITHMS,
+        device_key_algorithm: "EdDSA",
+        device_signature: {
+          kid: `${fixture.did}#${user.deviceId}`,
+          alg: "EdDSA",
+          sig: buildDevicePossessionSignature({
+            identity,
+            deviceId: user.deviceId,
+            devicePublicKeyMultibase: deviceKey.multibase,
+            hpkeKeyMultibase,
+            algorithms: TEST_DEVICE_ALGORITHMS,
+            deviceKeyAlgorithm: "EdDSA",
+            authorizedBy: user.deviceId,
+            notBefore,
+            privateKey: deviceKey.privateKey,
+          }),
+        },
+        authorized_by: user.deviceId,
+        not_before: notBefore,
+        cross_signing_binding: buildDeviceCrossSigningBinding({
+          identity,
+          deviceId: user.deviceId,
+          devicePublicKeyMultibase: deviceKey.multibase,
+          hpkeKeyMultibase,
+          algorithms: TEST_DEVICE_ALGORITHMS,
+        }),
+      },
+    }),
+    { context: `authorize device ${user.deviceId}` },
+  );
+  return { trustDomain, deviceKey };
+}
+
+function fixtureCrossSigningKey(
+  key: Ed25519FixtureKey,
+  verificationMethod: string,
+): CrossSigningKey {
+  return {
+    privateKey: key.privateKey,
+    rawPublicKey: key.publicKey,
+    multibase: key.publicKeyMultibase,
+    didKey: `did:key:${key.publicKeyMultibase}`,
+    verificationMethod,
+  };
 }
 
 // Build an encrypted Realm via a direct ak.realm.create envelope. This local
@@ -311,40 +400,12 @@ async function createEncryptedRealm(
   ownerDid: string,
   title: string,
 ): Promise<string> {
-  const realmId = typedId("realm");
-  const createdAt = canonicalTimestamp();
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: ownerDid,
-      realmId,
-      kind: "ak.realm.create",
-      createdAt,
-      payload: {
-        object: {
-          id: realmId,
-          schema: "ak.schema.realm.v1",
-          title,
-          created_by: ownerDid,
-          trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ak.schema.realm.v1"],
-          default_discoverability: "listed",
-          default_join_rule: "invite",
-          history_visibility: "joined",
-          encryption_profile: "mls_rfc9420",
-          security_class: "standard",
-          federation_policy: "restricted",
-          notary_profile: "single_did",
-          digest_algorithm: "sha256",
-          notary: singleDidNotary(ownerDid),
-          created_at: createdAt,
-        },
-      },
-    }),
-    { context: `create encrypted realm ${title}` },
-  );
-  return realmId;
+  return createRealmApi(request, token, {
+    title,
+    ownerDid,
+    history_visibility: "joined",
+    encryption_profile: "mls_rfc9420",
+  });
 }
 
 type MlsGroupContext = {
@@ -362,6 +423,17 @@ async function fetchMlsGovernanceBinding(
   previousEpoch: number,
   nextEpoch: number,
 ): Promise<Record<string, unknown>> {
+  const frontierResponse = await request.get(
+    `${solandBaseUrl()}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(group.effectiveScope.realm_id)}`,
+    { headers: authHeaders(token) },
+  );
+  const frontierBody = await frontierResponse.json();
+  expect(
+    frontierResponse.ok(),
+    `Realm Seal frontier failed with ${frontierResponse.status()}: ${JSON.stringify(frontierBody)}`,
+  ).toBeTruthy();
+  const trustedAnchorSealId = String(frontierBody.frontier?.seal_id ?? "");
+  expect(trustedAnchorSealId).toMatch(/^ak:seal:/);
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events/mls-governance-proof`,
     {
@@ -374,6 +446,8 @@ async function fetchMlsGovernanceBinding(
         next_epoch: nextEpoch,
         binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
         reducer_profile: MLS_REDUCER_PROFILE_V1,
+        trusted_anchor_seal_id: trustedAnchorSealId,
+        chunk_index: 0,
       },
     },
   );
@@ -448,9 +522,7 @@ async function submitMlsGenesis(
   return group;
 }
 
-// Submit a ak.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`. Optional
-// `policyRoot` override forges one field of an otherwise materialized binding
-// (E11.2);
+// Submit a ak.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`.
 // `concurrentCommit` flags a racing fork at the same base epoch (E11.1). Returns
 // the raw submit response so callers can assert accepted ids or wire codes.
 async function submitMlsCommit(
@@ -463,7 +535,7 @@ async function submitMlsCommit(
     baseEpoch: number;
     label: string;
     eventId?: string;
-    policyRoot?: string;
+    governanceBinding?: Record<string, unknown>;
     concurrentCommit?: boolean;
     raw?: boolean;
   },
@@ -475,16 +547,15 @@ async function submitMlsCommit(
   if (!baseEpochRef) {
     throw new Error(`missing MLS epoch ${baseEpoch} event ref`);
   }
-  const governanceBinding = await fetchMlsGovernanceBinding(
-    request,
-    token,
-    group,
-    baseEpoch,
-    nextEpoch,
-  );
-  if (args.policyRoot) {
-    governanceBinding.policy_root = args.policyRoot;
-  }
+  const governanceBinding = args.governanceBinding
+    ? structuredClone(args.governanceBinding)
+    : await fetchMlsGovernanceBinding(
+        request,
+        token,
+        group,
+        baseEpoch,
+        nextEpoch,
+      );
   const payload: Record<string, unknown> = {
     mls_group_id: group.groupId,
     base_epoch: baseEpoch,
@@ -505,6 +576,7 @@ async function submitMlsCommit(
     payload,
   });
   if (args.raw) {
+    await alignSignedEventToActorFrontierApi(request, token, envelope);
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(token),
       data: envelope,
@@ -803,9 +875,9 @@ test.describe("MLS group encryption", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    await Promise.all([
-      publishCrossSigning(request, aliceToken, aliceFixture),
-      publishCrossSigning(request, bobToken, bobFixture),
+    const [, bobCrossSigning] = await Promise.all([
+      publishCrossSigning(request, aliceToken, alice, aliceFixture),
+      publishCrossSigning(request, bobToken, bob, bobFixture),
     ]);
 
     const keypackageId = typedId("mls_keypackage");
@@ -817,10 +889,37 @@ test.describe("MLS group encryption", () => {
     const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
     const createdAt = canonicalTimestamp();
     const expiresAt = canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000));
+    const keypackageExpiresAt = canonicalTimestamp(
+      new Date(Date.now() + 2 * 60 * 60 * 1000),
+    );
+    const keyPackages = [
+      {
+        keypackage_id: keypackageId,
+        keypackage_ref: keypackageRef,
+        key_package: keyPackage,
+        keypackage_digest: keypackageDigest,
+        cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
+        capabilities: keypackageCapabilities,
+        created_at: createdAt,
+        expires_at: keypackageExpiresAt,
+      },
+    ];
+    const unsignedUpload = {
+      principal_id: bob.did,
+      device_id: bob.deviceId,
+      key_packages: keyPackages,
+    };
     const deviceSignature = {
       kid: `${bob.did}#${bob.deviceId}`,
       alg: "EdDSA",
-      sig: b64url(`device-signature-${stamp}`),
+      sig: nodeSign(
+        null,
+        Buffer.concat([
+          Buffer.from("ak.self.keys.keypackages.upload.create\n", "utf8"),
+          canonicalBytes(unsignedUpload),
+        ]),
+        bobCrossSigning.deviceKey.privateKey,
+      ).toString("base64url"),
     };
 
     const publish = await request.post(
@@ -828,23 +927,8 @@ test.describe("MLS group encryption", () => {
       {
         headers: authHeaders(bobToken),
         data: {
-          principal_id: bob.did,
-          device_id: bob.deviceId,
+          ...unsignedUpload,
           device_signature: deviceSignature,
-          key_packages: [
-            {
-              keypackage_id: keypackageId,
-              keypackage_ref: keypackageRef,
-              key_package: keyPackage,
-              keypackage_digest: keypackageDigest,
-              cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-              capabilities: keypackageCapabilities,
-              device_signature: deviceSignature,
-              created_at: createdAt,
-              expires_at: expiresAt,
-              last_resort: false,
-            },
-          ],
         },
       },
     );
@@ -978,7 +1062,6 @@ test.describe("MLS group encryption", () => {
       1,
     );
 
-    const welcomeId = typedId("mls_welcome");
     const welcomeEventId = typedId("event");
     const welcomeCiphertext = b64url(`opaque-mls-welcome-${stamp}`);
     const welcomeDigest = sha256Digest(
@@ -996,6 +1079,32 @@ test.describe("MLS group encryption", () => {
       welcome_digest: welcomeDigest,
       created_at: claimEnvelopeCreatedAt,
     };
+    const commitPayload = (label: string) => ({
+      mls_group_id: groupId,
+      base_epoch: 0,
+      base_epoch_ref: genesisEventId,
+      proposal_refs: [],
+      next_epoch: 1,
+      commit_digest: sha256Digest(Buffer.from(label, "utf8")),
+      governance_binding: commitBinding,
+    });
+    const commitEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.mls.commit",
+      eventId: commitEventId,
+      payload: commitPayload(`opaque-commit-${stamp}`),
+    });
+    const commitBody = await submitSignedEventApi(
+      request,
+      aliceToken,
+      commitEnvelope,
+      {
+        context: "submit MLS commit",
+      },
+    );
+    expect(commitBody.accepted ?? []).toContain(commitEventId);
+
     const welcomeBody = await submitSignedEventApi(
       request,
       aliceToken,
@@ -1005,7 +1114,6 @@ test.describe("MLS group encryption", () => {
         kind: "ak.mls.welcome",
         eventId: welcomeEventId,
         payload: {
-          welcome_id: welcomeId,
           mls_group_id: groupId,
           epoch: 1,
           recipient_principal_id: bob.did,
@@ -1043,32 +1151,6 @@ test.describe("MLS group encryption", () => {
     );
     expect(welcomeBody.accepted ?? []).toContain(welcomeEventId);
 
-    const commitPayload = (label: string) => ({
-      mls_group_id: groupId,
-      base_epoch: 0,
-      base_epoch_ref: genesisEventId,
-      proposal_refs: [],
-      next_epoch: 1,
-      commit_digest: sha256Digest(Buffer.from(label, "utf8")),
-      governance_binding: commitBinding,
-    });
-    const commitEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
-      realmId,
-      kind: "ak.mls.commit",
-      eventId: commitEventId,
-      payload: commitPayload(`opaque-commit-${stamp}`),
-    });
-    const commitBody = await submitSignedEventApi(
-      request,
-      aliceToken,
-      commitEnvelope,
-      {
-        context: "submit MLS commit",
-      },
-    );
-    expect(commitBody.accepted ?? []).toContain(commitEventId);
-
     const pendingAfterWelcome = await request.get(
       `${solandBaseUrl()}/_arkret/self/device_messages`,
       {
@@ -1086,7 +1168,6 @@ test.describe("MLS group encryption", () => {
       recipient_principal_id: bob.did,
       recipient_device_id: bob.deviceId,
       content: {
-        welcome_id: welcomeId,
         mls_group_id: groupId,
         keypackage_ref: keypackageRef,
         commit_ref: commitEventId,
@@ -1121,16 +1202,22 @@ test.describe("MLS group encryption", () => {
       ),
     ).toEqual([]);
 
+    const staleCommitEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.mls.commit",
+      payload: commitPayload(`opaque-stale-commit-${stamp}`),
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      staleCommitEnvelope,
+    );
     const staleCommit = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.mls.commit",
-          payload: commitPayload(`opaque-stale-commit-${stamp}`),
-        }),
+        data: staleCommitEnvelope,
       },
     );
     expect([409, 412, 422]).toContain(staleCommit.status());
@@ -1682,15 +1769,27 @@ test.describe("MLS group encryption", () => {
       encryption_profile: "mls_rfc9420",
     });
     const group = await submitMlsGenesis(request, aliceToken, alice, realmId);
+    const originalCommitBinding = await fetchMlsGovernanceBinding(
+      request,
+      aliceToken,
+      group,
+      0,
+      1,
+    );
 
-    // A commit carrying a different policy_root than the genesis-locked root is
-    // rejected with governance_binding_mismatch.
+    const forgedCommitBinding = structuredClone(originalCommitBinding);
+    forgedCommitBinding.policy_root = sha256Digest(
+      Buffer.from(`forged-policy-root-${stamp}`, "utf8"),
+    );
+
+    // A syntactically valid binding with a policy_root that does not match the
+    // accepted Realm control state is rejected with governance_binding_mismatch.
     const forged = await submitMlsCommit(request, aliceToken, alice, {
       realmId,
       group,
       baseEpoch: 0,
       label: `forged-binding-${stamp}`,
-      policyRoot: `sha256:${"9".repeat(64)}`,
+      governanceBinding: forgedCommitBinding,
       raw: true,
     });
     expect([400, 409, 412, 422]).toContain(forged.__status as number);
@@ -1705,6 +1804,7 @@ test.describe("MLS group encryption", () => {
       eventId: cleanEventId,
       baseEpoch: 0,
       label: `clean-binding-${stamp}`,
+      governanceBinding: originalCommitBinding,
     });
     expect(clean.accepted ?? []).toContain(cleanEventId);
   });
@@ -1730,17 +1830,23 @@ test.describe("MLS group encryption", () => {
       `MLS create-lock realm ${stamp}`,
     );
 
+    const updateEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.realm.update",
+      payload: {
+        target_ref: realmId,
+        patch: { encryption_profile: { $op: "set", value: "none" } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      updateEnvelope,
+    );
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
-      data: signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.realm.update",
-        payload: {
-          target_ref: realmId,
-          patch: { encryption_profile: { $op: "set", value: "none" } },
-        },
-      }),
+      data: updateEnvelope,
     });
 
     const body = await resp.json();
@@ -1801,17 +1907,23 @@ test.describe("MLS group encryption", () => {
       { context: `create circle ${circleId}` },
     );
 
+    const updateEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.circle.update",
+      payload: {
+        target_ref: circleId,
+        patch: { encryption_profile: { $op: "set", value: "none" } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      updateEnvelope,
+    );
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(aliceToken),
-      data: signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.circle.update",
-        payload: {
-          target_ref: circleId,
-          patch: { encryption_profile: { $op: "set", value: "none" } },
-        },
-      }),
+      data: updateEnvelope,
     });
 
     const body = await resp.json();

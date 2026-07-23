@@ -31,10 +31,12 @@ import {
 } from "../../helpers/api";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   signedEventEnvelope,
+  submitSignedEventApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
@@ -530,6 +532,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         },
       });
       const eventId = String(envelope.event_id);
+      await alignSignedEventToActorFrontierApi(request, token, envelope);
 
       const first = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
@@ -612,11 +615,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
             content: { kind: "ak.content.text", body: `page seed ${i} ${stamp}` },
           },
         });
-        const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-          headers: authHeaders(token),
-          data: envelope,
+        await submitSignedEventApi(request, token, envelope, {
+          context: `seed pagination event ${i}`,
         });
-        expect([200, 201], `seed ${i} returned ${resp.status()}`).toContain(resp.status());
         seededEventIds.push(String(envelope.event_id));
       }
       const seededSet = new Set(seededEventIds);
@@ -767,6 +768,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R1 — first request under the key executes and is cached.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
+      await alignSignedEventToActorFrontierApi(request, token, b1);
       const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
         data: b1,

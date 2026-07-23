@@ -10,6 +10,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
@@ -196,19 +197,21 @@ test.describe("workflow: incident response", () => {
       { context: "create investigating incident strand" },
     );
 
+    const badResolvedEvent = signedEventEnvelope({
+      actorDid: oncall.did,
+      realmId,
+      kind: "ak.strand.update",
+      payload: {
+        target_ref: incidentStrandId,
+        patch: { metadata: { fields: { status: "resolved" } } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(request, token, badResolvedEvent);
     const badResolved = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(token),
-        data: signedEventEnvelope({
-          actorDid: oncall.did,
-          realmId,
-          kind: "ak.strand.update",
-          payload: {
-            target_ref: incidentStrandId,
-            patch: { metadata: { fields: { status: "resolved" } } },
-          },
-        }),
+        data: badResolvedEvent,
       },
     );
     expect(badResolved.status()).toBe(412);

@@ -269,6 +269,7 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome: delivery, inviteId } =
       await deliverInviteWithConsentGrant(request, {
         inviterDid: alice.did,
+        inviterToken: aliceToken,
         realmId,
         inviteeDid: bob.did,
         consentGrantRef: grantRef!,
@@ -334,6 +335,7 @@ test.describe("contact graph (same principal server)", () => {
 
     const { outcome } = await deliverInviteExplicitAddress(request, {
       inviterDid: mallory.did,
+      inviterToken: malloryToken,
       realmId,
       inviteeDid: victim.did,
       originServer: "default",
@@ -397,6 +399,7 @@ test.describe("contact graph (same principal server)", () => {
     });
     const { outcome: delivery } = await deliverInviteWithConsentGrant(request, {
       inviterDid: bob.did,
+      inviterToken: bobToken,
       realmId,
       inviteeDid: alice.did,
       consentGrantRef: grantRef!,
@@ -480,6 +483,7 @@ test.describe("contact graph (same principal server)", () => {
 
     const { outcome: delivery } = await deliverInviteWithConsentGrant(request, {
       inviterDid: bob.did,
+      inviterToken: bobToken,
       realmId,
       inviteeDid: alice.did,
       consentGrantRef: grantRef!,

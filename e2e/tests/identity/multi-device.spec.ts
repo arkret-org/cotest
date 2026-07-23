@@ -18,9 +18,11 @@ import {
 } from "../../helpers/cross-signing-harness";
 import {
   accountSubscribeFramesApi,
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   b64url,
   canonicalBytes,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   currentActorDidApi,
@@ -455,9 +457,10 @@ test.describe("multi-device pairing + revocation", () => {
     const realmId = principalControlRealmForDid(alice.did);
 
     // Device 1 (a peer device) revokes Device 2 on the principal control stream.
-    const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(device1Token),
-      data: signedEventEnvelope({
+    await submitSignedEventApi(
+      request,
+      device1Token,
+      signedEventEnvelope({
         actorDid: alice.did,
         realmId,
         kind: "ak.device.revoke",
@@ -469,11 +472,8 @@ test.describe("multi-device pairing + revocation", () => {
           reason: "lost_device",
         },
       }),
-    });
-    expect(
-      [200, 201],
-      `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
-    ).toContain(revoke.status());
+      { context: `revoke device ${device2Id}` },
+    );
 
     // Device 2's subsequent signed write is rejected — the revoked device can
     // no longer authenticate. soland returns 401 unauthenticated at the auth
@@ -582,7 +582,7 @@ test.describe("multi-device pairing + revocation", () => {
     });
 
     const identity = await publishCrossSigningForUser(request, alice, device1Token);
-    await authorizeDeviceWithCrossSigning(
+    const device2Key = await authorizeDeviceWithCrossSigning(
       request,
       alice,
       device1Token,
@@ -606,7 +606,14 @@ test.describe("multi-device pairing + revocation", () => {
         lastResort: true,
       }),
     ];
-    await uploadDeviceKeyPackages(request, alice, device2Token, device2Id, keyPackages);
+    await uploadDeviceKeyPackages(
+      request,
+      alice,
+      device2Token,
+      device2Id,
+      device2Key.privateKey,
+      keyPackages,
+    );
 
     await revokeDeviceApi(request, alice, device1Token, device2Id);
 
@@ -651,22 +658,28 @@ test.describe("multi-device pairing + revocation", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
+    const selfRevokeEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: principalControlRealmForDid(alice.did),
+      kind: "ak.device.revoke",
+      payload: {
+        principal_id: alice.did,
+        device_id: alice.deviceId,
+        revoked_by: alice.deviceId,
+        revoked_at: new Date().toISOString(),
+        reason: "self_revoke_probe",
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      selfRevokeEnvelope,
+    );
     const selfRevoke = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: principalControlRealmForDid(alice.did),
-          kind: "ak.device.revoke",
-          payload: {
-            principal_id: alice.did,
-            device_id: alice.deviceId,
-            revoked_by: alice.deviceId,
-            revoked_at: new Date().toISOString(),
-            reason: "self_revoke_probe",
-          },
-        }),
+        data: selfRevokeEnvelope,
       },
     );
     expect(selfRevoke.status()).toBe(400);
@@ -795,9 +808,10 @@ test.describe("multi-device pairing + revocation", () => {
     ]);
 
     // Device 1 revokes Device 2 — this drops the queued to-device message.
-    const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(device1Token),
-      data: signedEventEnvelope({
+    await submitSignedEventApi(
+      request,
+      device1Token,
+      signedEventEnvelope({
         actorDid: alice.did,
         realmId: principalControlRealmForDid(alice.did),
         kind: "ak.device.revoke",
@@ -809,11 +823,8 @@ test.describe("multi-device pairing + revocation", () => {
           reason: "lost_device",
         },
       }),
-    });
-    expect(
-      [200, 201],
-      `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
-    ).toContain(revoke.status());
+      { context: `revoke device ${device2Id}` },
+    );
 
     // After revocation Device 2's session is fail-closed at the auth gate, so
     // the previously-queued message can never be drained by the revoked device.
@@ -1572,19 +1583,17 @@ async function publishCrossSigningForUser(
 ): Promise<CrossSigningIdentity> {
   const realmId = principalControlRealmForDid(user.did);
   const identity = generateCrossSigningIdentity({ principalId: user.did });
-  const publish = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-    headers: authHeaders(token),
-    data: signedEventEnvelope({
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
       actorDid: user.did,
       realmId,
       kind: "ak.cross_signing.publish",
       payload: buildCrossSigningPublishPayload(identity),
     }),
-  });
-  expect(
-    [200, 201],
-    `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
-  ).toContain(publish.status());
+    { context: `publish cross-signing ${user.did}` },
+  );
   return identity;
 }
 
@@ -1605,11 +1614,10 @@ async function authorizeDeviceWithCrossSigning(
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
   const authorizeNotBefore = canonicalTimestamp();
-  const authorize = await request.post(
-    `${solandBaseUrl()}/_arkret/self/events`,
-    {
-      headers: authHeaders(token),
-      data: signedEventEnvelope({
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
         actorDid: user.did,
         realmId,
         kind: "ak.device.authorize",
@@ -1634,12 +1642,9 @@ async function authorizeDeviceWithCrossSigning(
           cross_signing_binding: binding,
         },
       }),
-    },
+    { context: `authorize device ${deviceId}` },
   );
-  expect(
-    [200, 201],
-    `ak.device.authorize returned ${authorize.status()}: ${await authorize.text()}`,
-  ).toContain(authorize.status());
+  return deviceKey;
 }
 
 async function revokeDeviceApi(
@@ -1649,9 +1654,10 @@ async function revokeDeviceApi(
   deviceId: string,
 ): Promise<string> {
   const eventId = typedId("event");
-  const revoke = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-    headers: authHeaders(token),
-    data: signedEventEnvelope({
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
       actorDid: user.did,
       realmId: principalControlRealmForDid(user.did),
       kind: "ak.device.revoke",
@@ -1664,11 +1670,8 @@ async function revokeDeviceApi(
         reason: "lost_device",
       },
     }),
-  });
-  expect(
-    [200, 201],
-    `ak.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
-  ).toContain(revoke.status());
+    { context: `revoke device ${deviceId}` },
+  );
   return eventId;
 }
 
@@ -1872,25 +1875,33 @@ async function uploadDeviceKeyPackages(
   user: JointUser,
   token: string,
   deviceId: string,
+  devicePrivateKey: ReturnType<typeof deviceVerifyKeyMultibase>["privateKey"],
   keyPackages: KeyPackageUploadEntry[],
 ) {
+  const unsignedUpload = {
+    principal_id: user.did,
+    device_id: deviceId,
+    key_packages: keyPackages,
+  };
   const deviceSignature = {
     kid: `${user.did}#${deviceId}`,
     alg: "EdDSA",
-    sig: b64url(`device-signature-${deviceId}-${Date.now()}`),
+    sig: nodeSign(
+      null,
+      Buffer.concat([
+        Buffer.from("ak.self.keys.keypackages.upload.create\n", "utf8"),
+        Buffer.from(canonicalJson(unsignedUpload), "utf8"),
+      ]),
+      devicePrivateKey,
+    ).toString("base64url"),
   };
   const publish = await request.post(
     `${solandBaseUrl()}/_arkret/self/keys/keypackages/upload`,
     {
       headers: authHeaders(token),
       data: {
-        principal_id: user.did,
-        device_id: deviceId,
+        ...unsignedUpload,
         device_signature: deviceSignature,
-        key_packages: keyPackages.map((entry) => ({
-          ...entry,
-          device_signature: deviceSignature,
-        })),
       },
     },
   );

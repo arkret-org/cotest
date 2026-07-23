@@ -463,6 +463,7 @@ test.describe("contact graph federation (α/β)", () => {
       request,
       {
         inviterDid: alice.did,
+        inviterToken: aliceTokenAlpha,
         realmId,
         inviteeDid: bob.did,
         consentGrantRef: grantRef!,

@@ -74,7 +74,7 @@ test.describe("private read marker", () => {
     expect(markBody.position).toEqual(position);
     expect(typeof markBody.updated_at).toBe("string");
     expect(markBody.updated_at).toMatch(
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/,
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
 
     const after = await request.get(

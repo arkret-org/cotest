@@ -23,6 +23,7 @@ import { type APIRequestContext, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
@@ -478,24 +479,27 @@ test.describe("core object invariants", () => {
       // A fully-duplicate edge (same relation_id) is idempotent — re-submitting
       // the same signed envelope is accepted by the events submit surface.
       const dupRelationId = typedId("relation");
-      await createDefaultView(v2, dupRelationId);
+      const duplicateEnvelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.relation.create",
+        payload: {
+          relation: relationObject({
+            id: dupRelationId,
+            realmId,
+            relationKind: "has_default_view",
+            fromRef: sourceRef,
+            toRef: v2,
+            actorDid: alice.did,
+          }),
+        },
+      });
+      await submitSignedEventApi(request, aliceToken, duplicateEnvelope, {
+        context: `create duplicate relation ${dupRelationId}`,
+      });
       const dupAgain = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.relation.create",
-          payload: {
-            relation: relationObject({
-              id: dupRelationId,
-              realmId,
-              relationKind: "has_default_view",
-              fromRef: sourceRef,
-              toRef: v2,
-              actorDid: alice.did,
-            }),
-          },
-        }),
+        data: duplicateEnvelope,
       });
       expect([200, 201, 409]).toContain(dupAgain.status());
 
@@ -519,23 +523,29 @@ test.describe("core object invariants", () => {
         realmB,
         `card in B ${stamp}`,
       );
+      const crossRealmEnvelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.relation.create",
+        payload: {
+          relation: relationObject({
+            id: typedId("relation"),
+            realmId,
+            relationKind: "contains",
+            fromRef: strandInA,
+            toRef: strandInB,
+            actorDid: alice.did,
+          }),
+        },
+      });
+      await alignSignedEventToActorFrontierApi(
+        request,
+        aliceToken,
+        crossRealmEnvelope,
+      );
       const crossRealm = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.relation.create",
-          payload: {
-            relation: relationObject({
-              id: typedId("relation"),
-              realmId,
-              relationKind: "contains",
-              fromRef: strandInA,
-              toRef: strandInB,
-              actorDid: alice.did,
-            }),
-          },
-        }),
+        data: crossRealmEnvelope,
       });
       expect(crossRealm.status()).toBe(412);
       expect(wireErrCode(await crossRealm.json())).toBe("cross_realm_structural_relation");

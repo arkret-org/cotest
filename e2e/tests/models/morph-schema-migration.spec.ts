@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
   createRealmApi,
@@ -655,6 +656,7 @@ async function submitSchemaMigrateRaw(
       ...(args.transformationRules ? { transformation_rules: args.transformationRules } : {}),
     },
   });
+  await alignSignedEventToActorFrontierApi(request, token, envelope);
   const response = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: envelope,

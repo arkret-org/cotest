@@ -13,6 +13,7 @@ import {
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   canonicalTimestamp,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -625,9 +626,11 @@ async function postModerationEvent(
   kind: string,
   payload: Record<string, unknown>,
 ) {
+  const envelope = signedModerationEvent(actorDid, realmId, kind, payload);
+  await alignSignedEventToActorFrontierApi(request, token, envelope);
   return await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
-    data: signedModerationEvent(actorDid, realmId, kind, payload),
+    data: envelope,
   });
 }
 
@@ -641,4 +644,3 @@ async function getAppealHistory(request: APIRequestContext, token: string, appea
   const body = JSON.parse(text) as { history: Array<Record<string, unknown>> };
   return body.history;
 }
-

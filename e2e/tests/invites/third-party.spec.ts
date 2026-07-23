@@ -7,6 +7,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 import { mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
@@ -71,7 +72,11 @@ async function submitSelfEvent(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
+  opts: { alignFrontier?: boolean } = {},
 ): Promise<SelfEventsOutcome> {
+  if (opts.alignFrontier !== false) {
+    await alignSignedEventToActorFrontierApi(request, token, envelope);
+  }
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,
     { headers: authHeaders(token), data: envelope },
@@ -183,9 +188,12 @@ async function submitClaim(
       actorDid: claimant.did,
       realmId: cell.realmId,
       kind: "ak.invite.claim",
+      actorSeq: 0,
+      prevRefs: [],
       schemaId: "ak.schema.event.v1",
       payload: claimPayload,
     }),
+    { alignFrontier: false },
   );
 }
 

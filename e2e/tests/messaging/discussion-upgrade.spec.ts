@@ -16,6 +16,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
+  alignSignedEventToActorFrontierApi,
   canonicalTimestamp,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -406,26 +407,32 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const fixture = await createDiscussionFixture(request, "orphan-scope");
     const orphanCircleId = typedId("circle");
     const createdAt = canonicalTimestamp();
+    const envelope = signedEventEnvelope({
+      actorDid: fixture.alice.did,
+      realmId: fixture.realmId,
+      kind: "ak.strand.create",
+      createdAt,
+      payload: {
+        object: strandObject(
+          fixture.realmId,
+          typedId("strand"),
+          fixture.alice,
+          "orphan scoped Strand",
+          createdAt,
+          { scopeCircleId: orphanCircleId },
+        ),
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      fixture.aliceToken,
+      envelope,
+    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(fixture.aliceToken),
-        data: signedEventEnvelope({
-          actorDid: fixture.alice.did,
-          realmId: fixture.realmId,
-          kind: "ak.strand.create",
-          createdAt,
-          payload: {
-            object: strandObject(
-              fixture.realmId,
-              typedId("strand"),
-              fixture.alice,
-              "orphan scoped Strand",
-              createdAt,
-              { scopeCircleId: orphanCircleId },
-            ),
-          },
-        }),
+        data: envelope,
       },
     );
     const body = await response.text();
@@ -450,19 +457,25 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       members: [fixture.alice],
     });
 
+    const envelope = signedEventEnvelope({
+      actorDid: fixture.alice.did,
+      realmId: fixture.realmId,
+      kind: "ak.strand.update",
+      payload: {
+        target_ref: strandId,
+        patch: { scope_circle_id: { $op: "set", value: circleId } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      fixture.aliceToken,
+      envelope,
+    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(fixture.aliceToken),
-        data: signedEventEnvelope({
-          actorDid: fixture.alice.did,
-          realmId: fixture.realmId,
-          kind: "ak.strand.update",
-          payload: {
-            target_ref: strandId,
-            patch: { scope_circle_id: { $op: "set", value: circleId } },
-          },
-        }),
+        data: envelope,
       },
     );
     const body = await response.text();

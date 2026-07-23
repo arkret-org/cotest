@@ -11,6 +11,7 @@ import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   createRealmApi,
   queryRealmEventsApi,
@@ -113,19 +114,25 @@ test.describe("moderation and ban", () => {
     expect(ownerReports.ok()).toBeTruthy();
     expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
 
+    const unauthorizedBanEvent = signedEventEnvelope({
+      actorDid: bob.did,
+      realmId,
+      kind: "ak.member.state",
+      payload: {
+        realm_id: realmId,
+        actor_id: mallory.did,
+        membership: "ban",
+        reason: "non_moderator_attempt",
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      bobToken,
+      unauthorizedBanEvent,
+    );
     const unauthorizedBan = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(bobToken),
-      data: signedEventEnvelope({
-        actorDid: bob.did,
-        realmId: realmId,
-        kind: "ak.member.state",
-        payload: {
-          realm_id: realmId,
-          actor_id: mallory.did,
-          membership: "ban",
-          reason: "non_moderator_attempt",
-        },
-      }),
+      data: unauthorizedBanEvent,
     });
     expect(unauthorizedBan.status()).toBe(403);
     expect(JSON.stringify(await unauthorizedBan.json())).toContain("missing_capability");

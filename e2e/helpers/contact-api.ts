@@ -13,7 +13,6 @@
 
 import {
   createHash,
-  generateKeyPairSync,
   sign as nodeSign,
   type KeyObject,
 } from "node:crypto";
@@ -24,9 +23,9 @@ import {
 } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   b64url,
-  canonicalBytes,
   canonicalJson,
   canonicalTimestamp,
   currentActorDidApi,
@@ -40,20 +39,25 @@ import {
   type InviteDeliveryRequestBody,
 } from "./soland-api";
 import type { JointUser } from "./users";
+import { ed25519PrivateKeySeedB64url } from "./encoding";
 import {
-  ed25519PrivateKeySeedB64url,
-  encodeEd25519PubkeyMultibase,
-} from "./encoding";
+  buildCrossSigningPublishPayload,
+  buildDeviceCrossSigningBinding,
+  buildDevicePossessionSignature,
+  generateCrossSigningKey,
+  TEST_DEVICE_ALGORITHMS,
+  type CrossSigningIdentity,
+  type CrossSigningKey,
+} from "./cross-signing-harness";
 import {
   buildPrincipalGenesisEntry,
   generateWebvhKey,
   submitPrincipalGenesisEntry,
 } from "./webvh-api";
 
-const CROSS_SIGNING_BINDING_LABEL = "ak.cross-signing-bind-v1\n";
-
 export type Ed25519FixtureKey = {
   privateKey: KeyObject;
+  rawPublicKey: Buffer;
   publicKeyMultibase: string;
 };
 
@@ -377,6 +381,7 @@ export async function prepareDirectConversationIdentityArkret(
     user: { ...user, did: built.did },
     principalSigningKey: {
       privateKey: principalSigningKey.privateKey,
+      rawPublicKey: principalSigningKey.publicKey,
       publicKeyMultibase: principalSigningKey.multibase,
     },
   };
@@ -389,30 +394,20 @@ export async function seedDirectConversationIdentityArkret(
   opts: { principalSigningKey: Ed25519FixtureKey; server?: SolandKey },
 ): Promise<void> {
   const psk = opts.principalSigningKey;
-  const ssk = ed25519FixtureKey();
-  const usk = ed25519FixtureKey();
+  const ssk = generateCrossSigningKey();
+  const usk = generateCrossSigningKey();
   const pskKid = `${user.did}#principal-signing-key`;
   const sskKid = `${user.did}#ak_self_signing_v1`;
   const uskKid = `${user.did}#ak_user_signing_v1`;
   const trustDomain = await solandTrustDomain(request, opts);
   const generation = 1;
-  const principalSigningKey = {
-    kid: pskKid,
-    alg: "EdDSA",
-    public_key: psk.publicKeyMultibase,
-    key_format: "multibase",
-  };
-  const selfSigningKey = {
-    kid: sskKid,
-    alg: "EdDSA",
-    public_key: ssk.publicKeyMultibase,
-    key_format: "multibase",
-  };
-  const userSigningKey = {
-    kid: uskKid,
-    alg: "EdDSA",
-    public_key: usk.publicKeyMultibase,
-    key_format: "multibase",
+  const identity: CrossSigningIdentity = {
+    principalId: user.did,
+    trustDomain,
+    generation,
+    psk: fixtureCrossSigningKey(psk, pskKid),
+    ssk: { ...ssk, verificationMethod: sskKid },
+    usk: { ...usk, verificationMethod: uskKid },
   };
 
   await submitSignedEventApi(
@@ -422,104 +417,77 @@ export async function seedDirectConversationIdentityArkret(
       actorDid: user.did,
       realmId: principalControlRealmForDid(user.did),
       kind: "ak.cross_signing.publish",
-      payload: {
-        principal_id: user.did,
-        trust_domain: trustDomain,
-        principal_signing_key: principalSigningKey,
-        self_signing_key: {
-          ...selfSigningKey,
-          binding: {
-            verification_method: pskKid,
-            alg: "EdDSA",
-            signature: ed25519SignatureB64url(
-              psk.privateKey,
-              crossSigningBindingInput({
-                principalId: user.did,
-                trustDomain,
-                subordinateKeyKind: "self_signing",
-                subordinateKid: selfSigningKey.kid,
-                subordinateAlg: selfSigningKey.alg,
-                subordinatePublicKey: selfSigningKey.public_key,
-                generation,
-              }),
-            ),
-          },
-        },
-        user_signing_key: {
-          ...userSigningKey,
-          binding: {
-            verification_method: pskKid,
-            alg: "EdDSA",
-            signature: ed25519SignatureB64url(
-              psk.privateKey,
-              crossSigningBindingInput({
-                principalId: user.did,
-                trustDomain,
-                subordinateKeyKind: "user_signing",
-                subordinateKid: userSigningKey.kid,
-                subordinateAlg: userSigningKey.alg,
-                subordinatePublicKey: userSigningKey.public_key,
-                generation,
-              }),
-            ),
-          },
-        },
-        expected_previous_generation: 0,
-        generation,
-        issued_at: canonicalTimestamp(),
-      },
+      payload: buildCrossSigningPublishPayload(identity),
     }),
     { server: opts.server, context: `publish cross-signing ${user.did}` },
   );
 
-  await uploadDirectConversationKeyPackage(request, token, user, opts);
-}
-
-function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
-  const der = publicKey.export({ format: "der", type: "spki" }) as Buffer;
-  if (der.length < 32) {
-    throw new Error("Ed25519 SPKI public key is too short");
-  }
-  return der.subarray(der.length - 32);
-}
-
-function ed25519PublicKeyMultibase(publicKey: KeyObject): string {
-  return encodeEd25519PubkeyMultibase(rawEd25519PublicKey(publicKey));
-}
-
-function ed25519FixtureKey(): Ed25519FixtureKey {
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  return {
-    privateKey,
-    publicKeyMultibase: ed25519PublicKeyMultibase(publicKey),
-  };
-}
-
-function ed25519SignatureB64url(privateKey: KeyObject, payload: Buffer): string {
-  return nodeSign(null, payload, privateKey).toString("base64url");
-}
-
-function crossSigningBindingInput(args: {
-  principalId: string;
-  trustDomain: string;
-  subordinateKeyKind: "self_signing" | "user_signing";
-  subordinateKid: string;
-  subordinateAlg: string;
-  subordinatePublicKey: string;
-  generation: number;
-}): Buffer {
-  return Buffer.concat([
-    Buffer.from(CROSS_SIGNING_BINDING_LABEL, "utf8"),
-    canonicalBytes({
-      principal_id: args.principalId,
-      trust_domain: args.trustDomain,
-      subordinate_key_kind: args.subordinateKeyKind,
-      subordinate_kid: args.subordinateKid,
-      subordinate_alg: args.subordinateAlg,
-      subordinate_public_key: args.subordinatePublicKey,
-      generation: args.generation,
+  const deviceKey = generateCrossSigningKey();
+  const hpkeKeyMultibase = "z6LSCotestE2eDeviceHpkeKey";
+  const notBefore = canonicalTimestamp();
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: user.did,
+      realmId: principalControlRealmForDid(user.did),
+      kind: "ak.device.authorize",
+      payload: {
+        principal_id: user.did,
+        device_id: user.deviceId,
+        device_public_key: deviceKey.multibase,
+        hpke_key: hpkeKeyMultibase,
+        algorithms: TEST_DEVICE_ALGORITHMS,
+        device_key_algorithm: "EdDSA",
+        device_signature: {
+          kid: `${user.did}#${user.deviceId}`,
+          alg: "EdDSA",
+          sig: buildDevicePossessionSignature({
+            identity,
+            deviceId: user.deviceId,
+            devicePublicKeyMultibase: deviceKey.multibase,
+            hpkeKeyMultibase,
+            algorithms: TEST_DEVICE_ALGORITHMS,
+            deviceKeyAlgorithm: "EdDSA",
+            authorizedBy: user.deviceId,
+            notBefore,
+            privateKey: deviceKey.privateKey,
+          }),
+        },
+        authorized_by: user.deviceId,
+        not_before: notBefore,
+        cross_signing_binding: buildDeviceCrossSigningBinding({
+          identity,
+          deviceId: user.deviceId,
+          devicePublicKeyMultibase: deviceKey.multibase,
+          hpkeKeyMultibase,
+          algorithms: TEST_DEVICE_ALGORITHMS,
+        }),
+      },
     }),
-  ]);
+    { server: opts.server, context: `authorize device ${user.deviceId}` },
+  );
+
+  await uploadDirectConversationKeyPackage(
+    request,
+    token,
+    user,
+    deviceKey.privateKey,
+    opts,
+  );
+}
+
+function fixtureCrossSigningKey(
+  key: Ed25519FixtureKey,
+  verificationMethod: string,
+): CrossSigningKey {
+  return {
+    privateKey: key.privateKey,
+    rawPublicKey: key.rawPublicKey,
+    multibase: key.publicKeyMultibase,
+    didKey: `did:key:${key.publicKeyMultibase}`,
+    verificationMethod,
+  };
 }
 
 async function solandTrustDomain(
@@ -538,6 +506,7 @@ async function uploadDirectConversationKeyPackage(
   request: APIRequestContext,
   token: string,
   user: JointUser,
+  devicePrivateKey: KeyObject,
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
   const stamp = `${Date.now()}-${Math.random()}`;
@@ -546,33 +515,42 @@ async function uploadDirectConversationKeyPackage(
   const keypackageDigest = `sha256:${createHash("sha256")
     .update(Buffer.from(keyPackage, "base64url"))
     .digest("hex")}`;
+  const keyPackages = [
+    {
+      keypackage_id: keypackageId,
+      keypackage_ref: keypackageDigest,
+      key_package: keyPackage,
+      keypackage_digest: keypackageDigest,
+      cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
+      capabilities: ["ak.mls.rfc9420", "ak.mls.profile.full"],
+      created_at: canonicalTimestamp(),
+      expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
+    },
+  ];
+  const unsigned = {
+    principal_id: user.did,
+    device_id: user.deviceId,
+    key_packages: keyPackages,
+  };
   const deviceSignature = {
     kid: `${user.did}#${user.deviceId}`,
     alg: "EdDSA",
-    sig: b64url(`direct-conversation-device-signature-${stamp}`),
+    sig: nodeSign(
+      null,
+      Buffer.concat([
+        Buffer.from("ak.self.keys.keypackages.upload.create\n", "utf8"),
+        Buffer.from(canonicalJson(unsigned), "utf8"),
+      ]),
+      devicePrivateKey,
+    ).toString("base64url"),
   };
   const response = await request.post(
     `${solandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`,
     {
       headers: authHeaders(token),
       data: {
-        principal_id: user.did,
-        device_id: user.deviceId,
+        ...unsigned,
         device_signature: deviceSignature,
-        key_packages: [
-          {
-            keypackage_id: keypackageId,
-            keypackage_ref: keypackageDigest,
-            key_package: keyPackage,
-            keypackage_digest: keypackageDigest,
-            cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-            capabilities: ["ak.mls.rfc9420", "ak.mls.profile.full"],
-            device_signature: deviceSignature,
-            created_at: canonicalTimestamp(),
-            expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
-            last_resort: false,
-          },
-        ],
       },
     },
   );
@@ -690,6 +668,7 @@ export async function deliverInviteWithConsentGrant(
   request: APIRequestContext,
   args: {
     inviterDid: string;
+    inviterToken: string;
     realmId: string;
     inviteeDid: string;
     consentGrantRef: string;
@@ -710,6 +689,12 @@ export async function deliverInviteWithConsentGrant(
     recipientServiceId,
     evidence,
   });
+  await alignSignedEventToActorFrontierApi(
+    request,
+    args.inviterToken,
+    event,
+    { server: args.originServer },
+  );
   const body: InviteDeliveryRequestBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
@@ -736,6 +721,7 @@ export async function deliverInviteExplicitAddress(
   request: APIRequestContext,
   args: {
     inviterDid: string;
+    inviterToken: string;
     realmId: string;
     inviteeDid: string;
     originServer: SolandKey;
@@ -752,6 +738,12 @@ export async function deliverInviteExplicitAddress(
     recipientServiceId,
     evidence,
   });
+  await alignSignedEventToActorFrontierApi(
+    request,
+    args.inviterToken,
+    event,
+    { server: args.originServer },
+  );
   const body: InviteDeliveryRequestBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,

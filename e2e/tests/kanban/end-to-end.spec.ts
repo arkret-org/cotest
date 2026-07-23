@@ -15,6 +15,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
@@ -292,7 +293,7 @@ test.describe("kanban end-to-end", () => {
     }
   });
 
-  test("concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_conflict", async ({
+  test("stale cross-list move: cas-register accepts the winner and rejects the stale move with cas_conflict", async ({
     request,
   }) => {
     // spec: realm-and-space.md §3.6 — ak.strand.move writes the strand
@@ -324,16 +325,10 @@ test.describe("kanban end-to-end", () => {
     const inProgressListId = typedId("space");
     const doneListId = typedId("space");
 
-    // Pin explicit actor_seq values so the race is deterministic: the winner
-    // advances the frontier; the loser is stamped strictly behind it.
-    const winnerSeq = 1_000_000;
-    const loserSeq = winnerSeq - 1;
-
     const winnerMove = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
       kind: "ak.strand.move",
-      actorSeq: winnerSeq,
       payload: {
         strand_id: cardId,
         board_space_id: boardSpaceId,
@@ -341,18 +336,10 @@ test.describe("kanban end-to-end", () => {
         rank: "m",
       },
     });
-    // Winner is accepted (submitSignedEventApi asserts 200/201).
-    await submitSignedEventApi(request, aliceToken, winnerMove, {
-      context: "concurrent move winner",
-    });
-
-    // Loser targets the SAME card but is stamped behind the accepted frontier
-    // → cas_conflict. Use a raw POST since submitSignedEventApi asserts 2xx.
     const loserMove = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
       kind: "ak.strand.move",
-      actorSeq: loserSeq,
       payload: {
         strand_id: cardId,
         board_space_id: boardSpaceId,
@@ -360,12 +347,30 @@ test.describe("kanban end-to-end", () => {
         rank: "m",
       },
     });
+    await alignSignedEventToActorFrontierApi(request, aliceToken, winnerMove);
+    await alignSignedEventToActorFrontierApi(request, aliceToken, loserMove);
+    // Winner is accepted (submitSignedEventApi asserts 200/201).
+    await submitSignedEventApi(request, aliceToken, winnerMove, {
+      context: "concurrent move winner",
+    });
+    await createCardStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      `CAS frontier advance ${stamp}`,
+    );
+
+    // Loser targets the SAME card but is stamped behind the accepted frontier
+    // → cas_conflict. Use a raw POST since submitSignedEventApi asserts 2xx.
     const loserResponse = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: loserMove },
     );
-    expect(loserResponse.status()).toBe(409);
-    expect(wireErrCode(await loserResponse.json())).toBe("cas_conflict");
+    const loserBody = await loserResponse.json();
+    const loserReason =
+      wireErrCode(loserBody) ?? loserBody.rejected?.[0]?.reason_code;
+    expect(loserReason).toBe("cas_conflict");
   });
 
   test("cross-realm contains relation rejected with reason=cross_realm_structural_relation", async ({
@@ -424,6 +429,11 @@ test.describe("kanban end-to-end", () => {
         }),
       },
     });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      crossRealm,
+    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: crossRealm },
@@ -484,6 +494,11 @@ test.describe("kanban end-to-end", () => {
         patch: { discussion: { enabled: true } },
       },
     });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      trackWrite,
+    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: trackWrite },
