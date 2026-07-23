@@ -25,24 +25,33 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use arkret_canonical as canonical;
-use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, Base64UrlString, CrossSigningPublish,
-    DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceId, DeviceOrPrincipalRef, Did, DidUrl,
-    EventsFrontierAccountClientState, EventsFrontierView, KeyBackup, KeyBackupAead,
-    KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
-    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupFrontierRef,
-    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeyFormat, ManagedFrontierRef,
-    ManagedPrincipalBinding, NonEmptyString, PolicyId, PublishedKey, RecoveryHpkeSuite,
-    RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse,
-    RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData,
-    RecoveryPolicyRef, RecoveryProofKind, SignatureMaterial, SubordinateSignedKey,
-    SubordinateSignedKeyBinding, TypedTrustDomainId, ed25519_pubkey_to_did_key_multibase,
-    principal_control_realm_id,
-};
+use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{
     Auth, Client as SdkClient, ClientBuilder, DpopAuth, Error as ArkretError,
 };
+use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId, TypedTrustDomainId};
+use arkret_models_collaboration::event_sync::{
+    EventsFrontierAccountClientState, EventsFrontierView,
+};
+use arkret_models_collaboration::events_payloads::device_identity::{
+    DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceOrPrincipalRef,
+};
+use arkret_models_collaboration::events_payloads::preview_realm_reaction::SignatureMaterial;
+use arkret_models_crypto::{
+    BackupClass, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
+    KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, ManagedFrontierRef, ManagedPrincipalBinding, RecoveryHpkeSuite,
+    RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse,
+    RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData,
+    RecoveryPolicyRef, RecoveryProofKind,
+};
+use arkret_models_identity::artifacts_device_identity::{
+    CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
+};
+use arkret_models_identity::did_document::principal_control_realm_id;
+use arkret_wire::{Base64UrlString, DidUrl, NonEmptyString};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
@@ -167,16 +176,30 @@ fn dpop_sdk_client(base_url: &str, session_grant: String, key: SigningKey) -> Re
         .build()?)
 }
 
-async fn issue_live_agent_session(
-    coauth_base_url: &str,
-    service_id: &str,
-    agent_id: &arkret::Did,
-    device_id: &arkret::DeviceId,
-    authorization_ref: &str,
-    verification_method: &str,
-    runtime_key: &SigningKey,
+struct LiveAgentSessionRequest<'a> {
+    coauth_base_url: &'a str,
+    service_id: &'a str,
+    agent_id: &'a arkret::Did,
+    device_id: &'a arkret::DeviceId,
+    authorization_ref: &'a str,
+    verification_method: &'a str,
+    runtime_key: &'a SigningKey,
     dpop_key: SigningKey,
+}
+
+async fn issue_live_agent_session(
+    request: LiveAgentSessionRequest<'_>,
 ) -> Result<arkret::SessionGrantOutcome> {
+    let LiveAgentSessionRequest {
+        coauth_base_url,
+        service_id,
+        agent_id,
+        device_id,
+        authorization_ref,
+        verification_method,
+        runtime_key,
+        dpop_key,
+    } = request;
     let path = "/_arkret/gate/account/session-grants";
     let endpoint = format!("{coauth_base_url}{path}");
     let dpop = arkret::signatures::build_dpop_proof(
@@ -354,16 +377,16 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
     let agent_device_1 = arkret::DeviceId::new(AGENT_DEVICE_1.to_owned())?;
     let runtime_key_1 = runtime_signing_key();
     let verification_method_1 = pair_body.verification_method.to_string();
-    let session_1 = issue_live_agent_session(
-        coauth.base_url(),
-        server.service_id(),
-        &provisioned.agent_id,
-        &agent_device_1,
-        paired.authorized_event_ref.as_str(),
-        &verification_method_1,
-        &runtime_key_1,
-        SigningKey::from_bytes(&[31_u8; 32]),
-    )
+    let session_1 = issue_live_agent_session(LiveAgentSessionRequest {
+        coauth_base_url: coauth.base_url(),
+        service_id: server.service_id(),
+        agent_id: &provisioned.agent_id,
+        device_id: &agent_device_1,
+        authorization_ref: paired.authorized_event_ref.as_str(),
+        verification_method: &verification_method_1,
+        runtime_key: &runtime_key_1,
+        dpop_key: SigningKey::from_bytes(&[31_u8; 32]),
+    })
     .await?;
     assert_eq!(session_1.device_id.as_ref(), Some(&agent_device_1));
     let agent_client_1 = dpop_sdk_client(
@@ -786,16 +809,16 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
         .finish_authorization_replacement(binding_2.clone(), runtime_key_2.to_bytes(), 1, now)
         .await?;
     assert!(runtime.group_state(&group_id).is_none());
-    let session_2 = issue_live_agent_session(
-        coauth.base_url(),
-        server.service_id(),
-        &provisioned.agent_id,
-        &agent_device_2,
-        replacement_pair.authorized_event_ref.as_str(),
-        replacement_body.verification_method.as_str(),
-        &runtime_key_2,
-        SigningKey::from_bytes(&[32_u8; 32]),
-    )
+    let session_2 = issue_live_agent_session(LiveAgentSessionRequest {
+        coauth_base_url: coauth.base_url(),
+        service_id: server.service_id(),
+        agent_id: &provisioned.agent_id,
+        device_id: &agent_device_2,
+        authorization_ref: replacement_pair.authorized_event_ref.as_str(),
+        verification_method: replacement_body.verification_method.as_str(),
+        runtime_key: &runtime_key_2,
+        dpop_key: SigningKey::from_bytes(&[32_u8; 32]),
+    })
     .await?;
     let agent_client_2 = dpop_sdk_client(
         server.base_url().as_str(),
@@ -1671,7 +1694,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             signature: "pending".to_owned(),
             signed_fields: signed_fields.clone(),
         },
-        extra: arkret_core::XExtensionMap::default(),
+        extra: arkret_wire::XExtensionMap::default(),
     };
     let policy_value = serde_json::to_value(&policy)?;
     let signed_payload = RECOVERY_POLICY_SIGNED_FIELDS
@@ -1779,7 +1802,7 @@ async fn managed_agent_frontier(
     server: &ArkretServer,
     token: &str,
     realm_id: &str,
-) -> Result<Option<arkret_core::RealmSealFrontierView>> {
+) -> Result<Option<arkret_models_collaboration::event_sync::RealmSealFrontierView>> {
     let response = server
         .http()
         .get(server.url(&format!(
@@ -1818,7 +1841,7 @@ async fn managed_agent_actor_frontier(
     token: &str,
     agent_id: &str,
     realm_id: &str,
-) -> Result<arkret_core::RealmActorFrontierView> {
+) -> Result<arkret_models_collaboration::event_sync::RealmActorFrontierView> {
     let response = server
         .http()
         .get(server.url(&format!(
@@ -1982,7 +2005,10 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
     server: &ArkretServer,
     token: &str,
     provisioned: &P,
-) -> Result<(arkret_core::RealmSealFrontierView, String)> {
+) -> Result<(
+    arkret_models_collaboration::event_sync::RealmSealFrontierView,
+    String,
+)> {
     let agent_id = provisioned.agent_id().as_str();
     let realm_id = provisioned.principal_control_realm_id().as_str();
     let group_id = format!("ak:mls_group:{}", realm_id.trim_start_matches("ak:realm:"));
@@ -2371,7 +2397,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                     .ok_or_else(|| {
                         anyhow!("controller principal-control stream has no accepted Seal")
                     })?;
-                arkret_core::RealmSealFrontierView::new(
+                arkret_models_collaboration::event_sync::RealmSealFrontierView::new(
                     arkret::RealmId::new(controller_realm)?,
                     basis
                         .leaves

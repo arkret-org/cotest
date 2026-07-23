@@ -447,7 +447,7 @@ fn applet_transaction_replay_identity(
         operation_id: transaction
             .get("operation_id")
             .and_then(Value::as_str)
-            .unwrap_or(arkret_core::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION)
+            .unwrap_or(arkret_wire::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION)
             .to_owned(),
         direction: transaction
             .get("direction")

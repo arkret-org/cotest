@@ -37,12 +37,12 @@
 //! round-trip on the canonical `ak.circle.member.state` payload to keep
 //! the SDK wire shape stable.
 //!
-//! When `arkret-core` later grows a typed `CircleMemberState` enum, this
+//! When Models Collaboration grows a typed `CircleMemberState` enum, this
 //! scenario should be migrated to import it directly and drop the local
 //! string-based state table.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CircleId, Did, RealmId};
+use arkret_identifiers::{CircleId, Did, RealmId};
 use serde_json::json;
 
 /// Canonical Circle member state names per AKP-0007 §3.6. Mirrors the

@@ -4,7 +4,7 @@
 //! the server MUST be rejected with 409 + `series_predecessor_not_found`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::BackupSeriesId;
+use arkret_identifiers::BackupSeriesId;
 pub async fn series_predecessor_not_found_run() -> Result<()> {
     if arkret_wire::ReasonCode::SERIES_PREDECESSOR_NOT_FOUND != "series_predecessor_not_found" {
         return Err(anyhow!(

@@ -8,23 +8,27 @@ use arkret::identity::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
     self_principal_bootstrap_submit_request,
 };
+use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
-use arkret_core::{
-    AlgorithmKeyRecords, Base64UrlString, CrossSigningPublish, DeviceId, Did, Event, EventId,
-    EventRef, Hlc, KeyFormat, KeyOperationSignature, KeyPackageClaimRecord, KeysUploadRequestBody,
-    NonEmptyString, PeerKeyPackageClaimPurpose, PeerKeyPackageRequesterAuthorization,
+use arkret_identifiers::{DeviceId, Did, EventId, Hlc, RealmId, TypedTrustDomainId};
+use arkret_models_crypto::{
+    AlgorithmKeyRecords, KeyOperationSignature, KeyPackageClaimRecord, KeysUploadRequestBody,
+    PeerKeyPackageClaimPurpose, PeerKeyPackageRequesterAuthorization,
     PeerKeyPackagesClaimAuthorizationDraft, PeerKeyPackagesClaimOutcome,
-    PeerKeyPackagesClaimRequestBody, PeerKeyPackagesClaimTransportBinding, PublishedKey, RealmId,
-    SubordinateSignedKey, SubordinateSignedKeyBinding, TypedTrustDomainId,
-    ed25519_pubkey_to_did_key_multibase, peer_keypackage_claim_authorization_signing_bytes,
-    principal_control_realm_id,
+    PeerKeyPackagesClaimRequestBody, PeerKeyPackagesClaimTransportBinding,
+    peer_keypackage_claim_authorization_signing_bytes,
 };
+use arkret_models_identity::artifacts_device_identity::{
+    CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
+};
+use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
     prepare_principal_inception,
 };
+use arkret_wire::{Base64UrlString, Event, EventRef, NonEmptyString};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer, SigningKey};
@@ -332,7 +336,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         message_create_text_payload(&realm_id, "hello alice from server b")?,
     )?;
     let b_to_a_delivery_frontier = vec![
-        arkret_core::EventId::new(alice_local_binding_frontier)
+        arkret_identifiers::EventId::new(alice_local_binding_frontier)
             .context("invalid alice server_a binding frontier id")?,
     ];
     let b_to_a_body = peer_events_submit_body_with_delivery_frontier(
@@ -897,7 +901,7 @@ fn mls_welcome_payload(
     requester_device_key: &SigningKey,
     requester_device_id: &str,
     claim: &KeyPackageClaimRecord,
-    peer_claim_receipt: &arkret_core::PeerKeyPackageClaimReceipt,
+    peer_claim_receipt: &arkret_models_crypto::PeerKeyPackageClaimReceipt,
 ) -> Result<Value> {
     let keypackage_ref = claim.keypackage_ref.as_str();
     let keypackage_digest = claim.keypackage_digest.as_str();
@@ -1030,10 +1034,11 @@ pub(crate) fn bootstrap_device_authorize_payload(
         ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
     let principal = Did::new(principal_id.to_owned())
         .with_context(|| format!("invalid principal DID `{principal_id}`"))?;
-    let device = arkret_core::DeviceId::new(device_id.to_owned()).context("invalid device id")?;
+    let device =
+        arkret_identifiers::DeviceId::new(device_id.to_owned()).context("invalid device id")?;
     let algorithms = vec![
-        arkret_core::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
-        arkret_core::NonEmptyString::new("ak.mls.v1").unwrap(),
+        arkret_wire::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
+        arkret_wire::NonEmptyString::new("ak.mls.v1").unwrap(),
     ];
     let trust_algorithms = algorithms
         .iter()
@@ -1049,16 +1054,16 @@ pub(crate) fn bootstrap_device_authorize_payload(
             &trust_algorithms,
             ssk_generation.get(),
         )?);
-    let mut payload = arkret_core::DeviceAuthorizePayload {
+    let mut payload = arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload {
         principal_id: principal.clone(),
         device_id: device,
-        device_public_key: arkret_core::NonEmptyString::new(device_public_key)
+        device_public_key: arkret_wire::NonEmptyString::new(device_public_key)
             .map_err(anyhow::Error::msg)?,
-        hpke_key: arkret_core::NonEmptyString::new("z6LSCotestDeviceHpkeKey")
+        hpke_key: arkret_wire::NonEmptyString::new("z6LSCotestDeviceHpkeKey")
             .expect("static HPKE key is non-empty"),
         algorithms,
-        device_key_algorithm: Some(arkret_core::NonEmptyString::new("EdDSA").unwrap()),
-        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(principal),
+        device_key_algorithm: Some(arkret_wire::NonEmptyString::new("EdDSA").unwrap()),
+        authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(principal),
         scopes: None,
         not_before: "2026-05-02T00:00:00.000Z"
             .parse()
@@ -1066,14 +1071,14 @@ pub(crate) fn bootstrap_device_authorize_payload(
         expires_at: None,
         device_signature: None,
         proof: None,
-        cross_signing_binding: Some(arkret_core::DeviceCrossSigningBinding {
-            verification_method: arkret_core::DidUrl::new(format!(
+        cross_signing_binding: Some(arkret_models_collaboration::events_payloads::device_identity::DeviceCrossSigningBinding {
+            verification_method: arkret_wire::DidUrl::new(format!(
                 "{principal_id}#ak_self_signing_v1"
             ))
             .map_err(anyhow::Error::msg)?,
-            alg: arkret_core::NonEmptyString::new("EdDSA").unwrap(),
+            alg: arkret_wire::NonEmptyString::new("EdDSA").unwrap(),
             ssk_generation,
-            signature: arkret_core::Base64UrlString::new(
+            signature: arkret_wire::Base64UrlString::new(
                 URL_SAFE_NO_PAD.encode(ssk_signature.to_bytes()),
             )
             .unwrap(),
@@ -1095,7 +1100,7 @@ pub(crate) fn bootstrap_device_authorize_payload(
         "sig".to_owned(),
         json!(URL_SAFE_NO_PAD.encode(signature.to_bytes())),
     );
-    payload.device_signature = Some(arkret_core::SignatureMaterial::Variant1(signature_material));
+    payload.device_signature = Some(arkret_models_collaboration::events_payloads::preview_realm_reaction::SignatureMaterial::Variant1(signature_material));
     serde_json::to_value(&payload).context("serialize device.authorize payload")
 }
 
@@ -1450,7 +1455,7 @@ async fn bootstrap_test_device_authorization(
     actor: &str,
     device_id: &str,
     device_signing_key: &SigningKey,
-) -> Result<arkret_core::FederatedDeviceSigningKeyEvidence> {
+) -> Result<arkret_wire::FederatedDeviceSigningKeyEvidence> {
     let (_, remainder) = actor
         .strip_prefix("did:webvh:")
         .and_then(|remainder| remainder.split_once(':'))
@@ -1492,7 +1497,7 @@ async fn bootstrap_test_device_authorization(
     let enrollment_method = format!("{actor}#cotest-device-enrollment-authority");
     let device_public_key =
         ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
-    let payload = arkret_core::DeviceAuthorizePayload {
+    let payload = arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload {
         principal_id: principal.clone(),
         device_id: DeviceId::new(device_id.to_owned())?,
         device_public_key: NonEmptyString::new(device_public_key.clone())
@@ -1504,15 +1509,15 @@ async fn bootstrap_test_device_authorization(
             NonEmptyString::new("ak.mls.v1").map_err(anyhow::Error::msg)?,
         ],
         device_key_algorithm: Some(NonEmptyString::new("EdDSA").map_err(anyhow::Error::msg)?),
-        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(principal.clone()),
+        authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(principal.clone()),
         scopes: None,
         not_before: created_at,
         expires_at: None,
         device_signature: None,
         proof: None,
         cross_signing_binding: None,
-        enrollment_authority_binding: Some(arkret_core::DeviceEnrollmentAuthorityBinding {
-            kind: arkret_core::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
+        enrollment_authority_binding: Some(arkret_models_identity::artifacts_device_identity::DeviceEnrollmentAuthorityBinding {
+            kind: arkret_models_identity::artifacts_device_identity::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
             authority_did: principal.clone(),
             authorization_ref: NonEmptyString::new(enrollment_method.clone())
                 .map_err(anyhow::Error::msg)?,
@@ -1563,11 +1568,11 @@ async fn bootstrap_test_device_authorization(
         &accepted,
     );
 
-    Ok(arkret_core::FederatedDeviceSigningKeyEvidence {
+    Ok(arkret_wire::FederatedDeviceSigningKeyEvidence {
         actor_id: principal,
         device_id: DeviceId::new(device_id.to_owned())?,
         verification_method: format!("{actor}#{device_id}"),
-        device_signing_key: arkret_core::DidKey::new(format!("did:key:{device_public_key}"))
+        device_signing_key: arkret_wire::DidKey::new(format!("did:key:{device_public_key}"))
             .map_err(anyhow::Error::msg)?,
         authorization_accepted_at: chrono::Utc::now(),
         device_authorize_event: Box::new(authorize),
@@ -1625,7 +1630,7 @@ async fn claim_test_keypackage(
     requester: &str,
     target: &str,
     requester_device_key: &SigningKey,
-    requester_evidence: &arkret_core::FederatedDeviceSigningKeyEvidence,
+    requester_evidence: &arkret_wire::FederatedDeviceSigningKeyEvidence,
 ) -> Result<PeerKeyPackagesClaimOutcome> {
     let claim_request_id =
         Base64UrlString::new("Y2xhaW0tY3Jvc3MtcHMtMDE").map_err(anyhow::Error::msg)?;
@@ -1706,23 +1711,23 @@ async fn claim_test_keypackage(
 }
 
 fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
-    let cell = arkret_core::CellRef::new(format!(
+    let cell = arkret_identifiers::CellRef::new(format!(
         "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
         event.realm_id
     ))?;
-    event.preconditions = vec![arkret_core::Precondition {
+    event.preconditions = vec![arkret_wire::Precondition {
         cell: cell.clone(),
-        predicate: arkret_core::Predicate {
-            op: arkret_core::PredicateOp::HeadEq,
+        predicate: arkret_wire::Predicate {
+            op: arkret_wire::PredicateOp::HeadEq,
             value: Some(Value::Null),
             values: None,
             predicate_id: None,
         },
     }];
-    event.effects = vec![arkret_core::Effect {
+    event.effects = vec![arkret_wire::Effect {
         cell,
-        op: arkret_core::LatticeOp {
-            op_type: arkret_core::LatticeOpType::Set,
+        op: arkret_wire::LatticeOp {
+            op_type: arkret_wire::LatticeOpType::Set,
             tag: None,
             value: Some(serde_json::to_value(&event.payload)?),
             from: None,

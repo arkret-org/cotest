@@ -1,7 +1,7 @@
 //! Terminal `DELETE /_arkret/self/keys/backups/{id}`.
 
 use anyhow::Result;
-use arkret_core::{
+use arkret_models_crypto::{
     KeyBackupDeleteDevelopmentProof, KeyBackupDeleteProof, KeysBackupsDeleteRequestBody,
 };
 use reqwest::StatusCode;

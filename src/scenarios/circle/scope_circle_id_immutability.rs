@@ -20,7 +20,8 @@
 //! locally that any future SDK helper / reducer SHOULD match bit-for-bit.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CircleId, Did, RealmId, Strand, StrandId};
+use arkret_identifiers::{CircleId, Did, RealmId, StrandId};
+use arkret_models_collaboration::objects::strand::Strand;
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {

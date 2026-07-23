@@ -24,13 +24,13 @@
 //! error enum grows them.
 
 use anyhow::{Result, bail};
-use arkret_core::{
-    BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
+use arkret_identifiers::{BlobRef, CallId, Did, EventId, GrantId, Hash, PolicyId, RealmId};
+use arkret_models_collaboration::events_payloads::call::{
+    CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
     CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingId,
     CallRecordingRetention, CallStatePayload, CallStatePayloadRecordingResult,
-    CallStatePayloadTranscriptResult, Did, EventId, GrantId, Hash, PolicyId, RealmId,
-    RecordingStartPayload,
+    CallStatePayloadTranscriptResult, RecordingStartPayload,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};

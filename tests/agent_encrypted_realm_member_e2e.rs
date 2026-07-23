@@ -20,7 +20,7 @@ use arkret::{
     sign_keypackages_revoke_request, sign_keypackages_upload_request,
     verify_keypackage_signing_input,
 };
-use arkret_core::MlsKeyPackageState;
+use arkret_models_crypto::MlsKeyPackageState;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::SigningKey;

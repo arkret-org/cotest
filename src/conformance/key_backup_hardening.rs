@@ -1,7 +1,7 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
+use arkret_models_crypto::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;

@@ -175,7 +175,7 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
         bail!("minimal-metadata author credential assertion catalogue drifted");
     }
 
-    let actor_id = arkret_core::Did::new(case.base.actor_id.clone())
+    let actor_id = arkret_identifiers::Did::new(case.base.actor_id.clone())
         .context("vector base actor_id must be a valid DID")?;
 
     for mutation_case in &case.cases {

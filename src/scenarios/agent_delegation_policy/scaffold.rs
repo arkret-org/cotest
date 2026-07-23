@@ -13,8 +13,9 @@
 //!      (the dedicated `ak:accountability_grant:` typed-id family is retired).
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CapabilityActionId, EventId};
+use arkret_identifiers::EventId;
 use arkret_schema::REGISTERED_CAPABILITY_ACTIONS;
+use arkret_wire::CapabilityActionId;
 
 /// The 3 aggregate Sidecar actions. Each carries a
 /// `migration_group` in the spec's registry artifact.

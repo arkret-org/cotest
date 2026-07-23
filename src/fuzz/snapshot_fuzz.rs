@@ -14,11 +14,11 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use arkret_core::SNAPSHOT_SCHEMA;
 use arkret_schema as schema;
+use arkret_wire::SNAPSHOT_SCHEMA;
 use serde_json::{Value, json};
 
-fn registry() -> arkret_core::ProtocolSchemaRegistry {
+fn registry() -> arkret_schema::ProtocolSchemaRegistry {
     schema::schema_registry_from_default_spec_artifacts()
         .ok()
         .flatten()

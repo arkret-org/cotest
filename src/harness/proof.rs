@@ -10,7 +10,7 @@ use serde_json::Value;
 pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
     let typed_value = event_value_with_parseable_proof_digests(event);
     let label = event_fixture_label(event);
-    let typed: arkret_core::Event = serde_json::from_value(typed_value)
+    let typed: arkret_wire::Event = serde_json::from_value(typed_value)
         .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
     typed
         .event_digest()
@@ -83,7 +83,7 @@ pub fn refresh_event_proof_with_signing_seed(
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?
         .to_owned();
-    let mut typed: arkret_core::Event =
+    let mut typed: arkret_wire::Event =
         serde_json::from_value(event_value_with_parseable_proof_digests(event))
             .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
     let signer_did = typed
@@ -125,11 +125,11 @@ fn event_fixture_label(event: &Value) -> String {
 /// relay verifies against the active device directory key before admission).
 ///
 /// Fully typed on the SDK surface: the binding transcript comes from
-/// [`arkret_core::Proof::canonical_ephemeral_binding_bytes`] and the JWS wire
+/// [`arkret_wire::Proof::canonical_ephemeral_binding_bytes`] and the JWS wire
 /// form from [`arkret_signatures::proof::Ed25519DetachedJwsSigner`], so this helper can never
 /// drift from the verifier's bytes.
 pub fn attach_ephemeral_proof(
-    envelope: &mut arkret_core::EphemeralEnvelope,
+    envelope: &mut arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope,
     signing_key: &ed25519_dalek::SigningKey,
 ) {
     let device_id = envelope.device_id.as_str().to_owned();
@@ -138,11 +138,11 @@ pub fn attach_ephemeral_proof(
     let canonical = envelope
         .canonical_bytes_without_proof()
         .expect("ephemeral envelope is canonicalizable");
-    let event_digest = arkret_core::Hash::new(arkret_canonical::sha256_digest(&canonical))
+    let event_digest = arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&canonical))
         .expect("sha256 digest is a valid Hash");
 
-    let mut proof = arkret_core::Proof {
-        kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+    let mut proof = arkret_wire::Proof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: format!("{}#{device_id}", envelope.actor_id),
         event_digest,
@@ -166,12 +166,12 @@ pub fn ephemeral_proof_placeholder(
     actor_id: &str,
     device_id: &str,
     created_at: chrono::DateTime<chrono::Utc>,
-) -> arkret_core::Proof {
-    arkret_core::Proof {
-        kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+) -> arkret_wire::Proof {
+    arkret_wire::Proof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: format!("{actor_id}#{device_id}"),
-        event_digest: arkret_core::Hash::new(format!("sha256:{}", "0".repeat(64)))
+        event_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
             .expect("zero SHA-256 digest is typed"),
         created_at,
         domain: None,
@@ -183,9 +183,9 @@ pub fn ephemeral_proof_placeholder(
 }
 
 /// [`attach_ephemeral_proof`] for callers holding a raw JSON envelope: the
-/// value is round-tripped through the typed [`arkret_core::EphemeralEnvelope`]
-/// (so a malformed envelope fails loudly here, not at the server) and
-/// re-serialized with the attached proof.
+/// value is round-tripped through the typed
+/// [`arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope`] (so a malformed
+/// envelope fails loudly here, not at the server) and re-serialized with the attached proof.
 pub fn attach_ephemeral_proof_value(envelope: &mut Value, signing_key: &ed25519_dalek::SigningKey) {
     let actor_id = envelope
         .get("actor_id")
@@ -214,8 +214,9 @@ pub fn attach_ephemeral_proof_value(envelope: &mut Value, signing_key: &ed25519_
             ))
             .expect("ephemeral proof placeholder serializes"),
         );
-    let mut typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope.clone())
-        .expect("value is a well-formed ephemeral envelope");
+    let mut typed: arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope =
+        serde_json::from_value(envelope.clone())
+            .expect("value is a well-formed ephemeral envelope");
     attach_ephemeral_proof(&mut typed, signing_key);
     *envelope = serde_json::to_value(&typed).expect("ephemeral envelope serializes");
 }
@@ -259,7 +260,7 @@ mod tests {
         let mut parseable = event.clone();
         parseable["proofs"][0]["event_digest"] =
             json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
-        let typed: arkret_core::Event = serde_json::from_value(parseable).unwrap();
+        let typed: arkret_wire::Event = serde_json::from_value(parseable).unwrap();
 
         assert_eq!(digest, typed.event_digest().unwrap());
     }
@@ -284,8 +285,9 @@ mod tests {
             &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         );
 
-        let typed: arkret_core::EphemeralEnvelope = serde_json::from_value(envelope).unwrap();
-        assert_eq!(typed.proof.kind, arkret_core::proof_kind::DETACHED_JWS);
+        let typed: arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope =
+            serde_json::from_value(envelope).unwrap();
+        assert_eq!(typed.proof.kind, arkret_wire::proof_kind::DETACHED_JWS);
         assert!(!typed.proof.jws.is_empty());
 
         let wire = serde_json::to_value(&typed).unwrap();
@@ -299,7 +301,10 @@ mod tests {
             .unwrap()
             .remove("device_id");
         assert!(
-            serde_json::from_value::<arkret_core::EphemeralEnvelope>(missing_device_id).is_err()
+            serde_json::from_value::<
+                arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope,
+            >(missing_device_id)
+            .is_err()
         );
     }
 }

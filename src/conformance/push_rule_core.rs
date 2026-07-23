@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, anyhow, bail};
 use arkret::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
-use arkret_core::{
-    HARDENED_MENTION_ROUTING_PROFILES, MentionRoutingHint, PROFILE_E2EE_CLIENT,
-    effective_mention_routing_hint,
+use arkret_models_integration::{
+    HARDENED_MENTION_ROUTING_PROFILES, MentionRoutingHint, effective_mention_routing_hint,
 };
+use arkret_wire::PROFILE_E2EE_CLIENT;
 use serde::Deserialize;
 use serde_json::Value;
 

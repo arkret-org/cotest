@@ -7,11 +7,11 @@ use arkret::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
     prepare_principal_inception,
 };
-use arkret_core::{
-    Did, Event, EventId, EventRef, EventsSubmitRequestBody, Hlc, RealmId, TypedTrustDomainId,
-    ed25519_pubkey_to_did_key_multibase,
-};
+use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_identifiers::{Did, EventId, Hlc, RealmId, TypedTrustDomainId};
+use arkret_models_collaboration::http_bodies::EventsSubmitRequestBody;
 use arkret_signatures::{Ed25519MoveSigner, SignEventOptions, sign_event};
+use arkret_wire::{Event, EventRef};
 use cotest::harness::{ArkretServer, dev_login, expect_api_error, expect_json};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
@@ -279,7 +279,8 @@ fn principal_bootstrap_request(
     device_public_key: &str,
 ) -> Result<EventsSubmitRequestBody> {
     let principal = Did::new(prepared.did.clone())?;
-    let realm_id = RealmId::new(arkret_core::principal_control_realm_id(&principal))?;
+    let realm_id =
+        RealmId::new(arkret_models_identity::did_document::principal_control_realm_id(&principal))?;
     let created_at = "2026-06-17T00:00:00.000Z".parse()?;
     let mut create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
         principal_id: principal.clone(),
@@ -328,11 +329,11 @@ fn service_attested_device_authorize_event(
     prev_refs: Vec<EventId>,
 ) -> Result<Event> {
     let principal = Did::new(principal_id.to_owned())?;
-    let realm_id = arkret_core::principal_control_realm_id(&principal);
+    let realm_id = arkret_models_identity::did_document::principal_control_realm_id(&principal);
     let authority_did = Did::new(authority.did.clone())?;
-    let payload = arkret_core::DeviceAuthorizePayload {
+    let payload = arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload {
         principal_id: principal.clone(),
-        device_id: arkret_core::DeviceId::new(device_id.to_owned())?,
+        device_id: arkret_identifiers::DeviceId::new(device_id.to_owned())?,
         device_public_key: non_empty(device_public_key)?,
         hpke_key: non_empty("z6LSCotestEnrollHpkeKey")?,
         algorithms: vec![
@@ -340,15 +341,15 @@ fn service_attested_device_authorize_event(
             non_empty("ak.mls.v1")?,
         ],
         device_key_algorithm: Some(non_empty("EdDSA")?),
-        authorized_by: arkret_core::DeviceOrPrincipalRef::Did(authority_did.clone()),
+        authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(authority_did.clone()),
         scopes: None,
         not_before: "2026-06-17T00:00:00.000Z".parse()?,
         expires_at: None,
         device_signature: None,
         proof: None,
         cross_signing_binding: None,
-        enrollment_authority_binding: Some(arkret_core::DeviceEnrollmentAuthorityBinding {
-            kind: arkret_core::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
+        enrollment_authority_binding: Some(arkret_models_identity::artifacts_device_identity::DeviceEnrollmentAuthorityBinding {
+            kind: arkret_models_identity::artifacts_device_identity::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
             authority_did: authority_did.clone(),
             authorization_ref: non_empty(authorization_ref)?,
         }),
@@ -419,6 +420,6 @@ fn assert_enrollment_authority_service(
     Ok(())
 }
 
-fn non_empty(value: impl Into<String>) -> Result<arkret_core::NonEmptyString> {
-    arkret_core::NonEmptyString::new(value).map_err(anyhow::Error::msg)
+fn non_empty(value: impl Into<String>) -> Result<arkret_wire::NonEmptyString> {
+    arkret_wire::NonEmptyString::new(value).map_err(anyhow::Error::msg)
 }

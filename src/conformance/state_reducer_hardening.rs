@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::CellRef;
+use arkret_identifiers::CellRef;
 use arkret_state::lattice::CellState;
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
 use serde::{Deserialize, Serialize};

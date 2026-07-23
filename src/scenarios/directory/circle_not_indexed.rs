@@ -18,7 +18,8 @@
 //! Returns `Ok(())` when the filter behaviour matches the contract.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CircleId, EffectiveScope, RealmId};
+use arkret_identifiers::{CircleId, RealmId};
+use arkret_wire::EffectiveScope;
 
 /// Drop reason emitted by the teabay ingest filter when an event is
 /// suppressed.

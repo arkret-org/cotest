@@ -157,7 +157,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                 let mut cell_families: std::collections::BTreeSet<&str> = Default::default();
                 for effect in effects {
                     let cell = required_str(effect, "cell")?;
-                    arkret_core::CellRef::new(cell.to_owned()).map_err(|_| {
+                    arkret_identifiers::CellRef::new(cell.to_owned()).map_err(|_| {
                         anyhow!(
                             "vector {name} cell {cell} is not a canonical ak:cell:ak.component.*.v<n>:<subject> reference"
                         )

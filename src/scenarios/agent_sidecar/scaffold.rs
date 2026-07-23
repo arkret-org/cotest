@@ -5,7 +5,7 @@ use arkret::{
     AgentSidecarContextRef, AgentSidecarDisplayMode, AgentSidecarEnsureRequestBody,
     AgentSidecarExchangeOrigin, Did, RealmId, SidecarId, StrandId,
 };
-use arkret_core::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
+use arkret_wire::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
 
 pub async fn agent_sidecar_run() -> Result<()> {
     if PROFILE_AGENT_SIDECAR != "ak.profile.agent_sidecar.v1" {

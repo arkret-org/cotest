@@ -3,11 +3,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
-use arkret_core::{
-    Audience, ConsentId, CrossSigningPublish, DeviceId, Did, Event, Hash, MimiConsentDecision,
-    MimiUpdateConsentRequestBody, PayloadProof, Proof, principal_control_realm_id, proof_kind,
-};
 use arkret_crypto::DeviceTrustBinding;
+use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
+use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
+use arkret_models_identity::artifacts_device_identity::CrossSigningPublish;
+use arkret_models_identity::did_document::principal_control_realm_id;
+use arkret_wire::{Audience, Event, PayloadProof, Proof, proof_kind};
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -194,7 +195,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
     let challenge_request = garth::identity_binding_challenge_request(
-        arkret::RequestId::new(arkret_core::new_prefixed_uuid7("ak:request:"))
+        arkret::RequestId::new(arkret_identifiers::new_prefixed_uuid7("ak:request:"))
             .context("build identity-binding challenge request id")?,
         &lease,
         draft.submit_body,
@@ -219,7 +220,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "backup_hpke_public_key_multibase": key_material.backup_hpke_public_key_multikey,
         "recovery_key_fingerprint": recovery_key_fingerprint,
         "did_operation": did_operation,
-        "bootstrap_create_event_id": arkret_core::new_prefixed_uuid7("ak:event:"),
+        "bootstrap_create_event_id": arkret_identifiers::new_prefixed_uuid7("ak:event:"),
         "bootstrap_created_at": arkret_canonical::format_timestamp_canonical(created_at),
         "bootstrap_hlc": hlc.generate().to_string(),
         "binding_receipt": null,

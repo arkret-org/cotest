@@ -1,12 +1,13 @@
 //! P2F.3 — Circle-scoped Strand envelopes stamp `EffectiveScope::Circle`.
 //!
-//! Pins the serde shape of [`arkret_core::EffectiveScope`] for both
+//! Pins the serde shape of [`arkret_wire::EffectiveScope`] for both
 //! variants (`Realm` and `Circle`) and asserts that the Circle variant
 //! retains both `realm_id` and `circle_id` across a JSON round-trip — the
 //! envelope-vs-payload visibility binding required by AKP-0007.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CircleId, EffectiveScope, RealmId};
+use arkret_identifiers::{CircleId, RealmId};
+use arkret_wire::EffectiveScope;
 use serde_json::json;
 
 fn realm_id() -> Result<RealmId> {

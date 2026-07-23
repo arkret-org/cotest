@@ -5,11 +5,11 @@
 //! device-trust canonical signing-input construction in TypeScript
 //! (`e2e/helpers/cross-signing-harness.ts`) because it cannot call the Rust SDK
 //! directly. The authoritative construction is
-//! `arkret_core::CrossSigningPublish::{self,user}_signing_binding_input`
-//! (`ak.cross-signing-bind-v1`) and `arkret_crypto::DeviceTrustBinding::canonical_input`
-//! (`ak.device-trust-bind-v1`); soland verifies the resulting signatures with
-//! those exact bytes, so any drift between the TS mirror and the SDK is a silent
-//! signature false-negative/false-positive vector.
+//! `arkret_models_identity::artifacts_device_identity::CrossSigningPublish::{self,
+//! user}_signing_binding_input` (`ak.cross-signing-bind-v1`) and
+//! `arkret_crypto::DeviceTrustBinding::canonical_input` (`ak.device-trust-bind-v1`); soland
+//! verifies the resulting signatures with those exact bytes, so any drift between the TS mirror and
+//! the SDK is a silent signature false-negative/false-positive vector.
 //!
 //! This gate (Rust side) and
 //! `e2e/tests/conformance/cross-signing-binding-golden.spec.ts` (TS side) read
@@ -23,8 +23,9 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use arkret_core::{CrossSigningPublish, DeviceId, Did};
 use arkret_crypto::DeviceTrustBinding;
+use arkret_identifiers::{DeviceId, Did};
+use arkret_models_identity::artifacts_device_identity::CrossSigningPublish;
 use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::Value;

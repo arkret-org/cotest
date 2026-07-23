@@ -27,7 +27,7 @@ use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_core::identifiers::new_prefixed_uuid7;
+use arkret_identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -239,7 +239,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         .iter()
         .map(|entry| entry.get("event").unwrap_or(entry).clone())
         .map(|event| {
-            serde_json::from_value::<arkret_core::Event>(event)
+            serde_json::from_value::<arkret_wire::Event>(event)
                 .context("parse peer event envelope into SDK Event")
         })
         .collect::<Result<Vec<_>>>()?;
@@ -293,7 +293,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     let message_body = peer_events_submit_body_with_delivery_frontier(
         &realm_id,
         later_events,
-        &[arkret_core::EventId::new(binding_event_id)?],
+        &[arkret_identifiers::EventId::new(binding_event_id)?],
         Some("cotest-two-node-peer-events"),
     )?;
     let message_result = expect_json(

@@ -605,7 +605,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // effective-set filter that soland's MID reducer MUST mirror. An
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
-    use arkret_core::{Did, EventId, Hash, RealmId};
+    use arkret_identifiers::{Did, EventId, Hash, RealmId};
     use arkret_models_identity::{
         DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
@@ -732,10 +732,14 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // live `#[ignore]` companion below.
     use std::collections::BTreeSet;
 
-    use arkret_core::{
-        Audience, CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, EventId, Handle,
-        HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate, Proof, RecipientServiceType,
+    use arkret_identifiers::{Did, EventId, Hash};
+    use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
+        CandidateIntent, MemberDeliveryBindingCandidate,
     };
+    use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceType};
+    use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
+    use arkret_models_identity::handle_claim::DeliveryBindingHint;
+    use arkret_wire::{Audience, Proof};
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {

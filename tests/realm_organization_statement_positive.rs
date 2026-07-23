@@ -19,13 +19,14 @@
 //! field tamper MUST fail verification.
 
 use arkret_canonical::base64url::base64url_decode;
-use arkret_core::{Did, DidUrl, NonEmptyString, RealmId};
+use arkret_identifiers::{Did, RealmId};
 use arkret_models_collaboration::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
     SignatureMaterial, realm_organization_statement_signing_bytes,
 };
 use arkret_signatures::realm_organization_statement_sign;
+use arkret_wire::{DidUrl, NonEmptyString};
 use chrono::{DateTime, TimeZone, Utc};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 

@@ -11,7 +11,8 @@
 //! `actor_kind_self_stamped`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{Did, EnvelopeActorKind, EventId};
+use arkret_identifiers::{Did, EventId};
+use arkret_wire::EnvelopeActorKind;
 
 pub async fn act_on_behalf_attribution_run() -> Result<()> {
     // (a) the EnvelopeActorKind enum has exactly the spec-required

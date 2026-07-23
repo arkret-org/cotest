@@ -45,14 +45,17 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_core::{
-    Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
-    DeliveryMode, Did, EventId, Handle, HandleHintBindingSource, Hash,
-    MemberDeliveryBindingCandidate, Proof, RecipientServiceType,
+use arkret_identifiers::{Did, EventId, Hash};
+use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
+    CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
+use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceType};
+use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
+use arkret_models_identity::handle_claim::DeliveryBindingHint;
 use arkret_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
+use arkret_wire::{Audience, Proof};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 

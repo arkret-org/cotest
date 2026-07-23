@@ -14,7 +14,7 @@
 //! - `ak.vector.media_binding.recording_exporter_label.v1`
 //!
 //! These are SDK-pure wire-shape pins. They lock the spelling of the
-//! 10 new error codes (cotest mirrors `arkret_core`'s registry), the
+//! 10 new error codes (cotest mirrors Wire's registry), the
 //! participant_binding scheme id, the 600s TTL ceiling, the
 //! oldest-membership focus-selection contract, and the
 //! `ak.profile.media_service_binding.v1` registry id so a downstream
@@ -23,7 +23,7 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{MEDIA_TOKEN_TTL_MAX_SECS, PARTICIPANT_BINDING_SCHEMA};
+use arkret_wire::{MEDIA_TOKEN_TTL_MAX_SECS, PARTICIPANT_BINDING_SCHEMA};
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use hkdf::Hkdf;
 use serde_json::{Value, json};
@@ -105,7 +105,7 @@ fn validate_media_binding_fixture_metadata() -> Result<()> {
 /// Known media-backend type tags from `ak.realm.media_service.foci[].type`.
 /// Mirrors `arkret_sdk::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
-/// minimal `arkret-core` dep slice.
+/// minimal direct-owner dependency slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
     "livekit",
     "mediasoup",
@@ -235,11 +235,11 @@ fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
 }
 
 pub fn run_token_exchange_minimal_vector() -> Result<()> {
-    if arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN
+    if arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN
         != "ak.self.call.media.exchange.issue_token"
     {
         bail!(
-            "arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_core::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN"
+            "arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN"
         );
     }
     if PARTICIPANT_BINDING_SCHEMA != "ak.media.participant_binding.v1" {

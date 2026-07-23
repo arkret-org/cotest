@@ -18,9 +18,9 @@
 //! Seal whose canonical bytes leak `id` or `notary_signature` is rejected.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    Did, Hash, Hlc, MoveId, MoveSignature, NotarySig, RealmId, Seal, SealId, SealKind,
-    compute_seal_id, seal_canonical_bytes,
+use arkret_identifiers::{Did, Hash, Hlc, MoveId, RealmId, SealId};
+use arkret_wire::{
+    MoveSignature, NotarySig, Seal, SealKind, compute_seal_id, seal_canonical_bytes,
 };
 use chrono::TimeZone;
 

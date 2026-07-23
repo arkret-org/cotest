@@ -19,7 +19,7 @@ use std::ffi::OsStr;
 use std::fs;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::Did;
+use arkret_identifiers::Did;
 use arkret_models_identity::{HandleClaimKind, validate_handle_claim_subject};
 use jsonschema::{Registry, Resource};
 use serde_json::{Value, json};

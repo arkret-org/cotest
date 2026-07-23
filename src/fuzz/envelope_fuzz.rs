@@ -15,8 +15,8 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use arkret_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, SNAPSHOT_SCHEMA};
 use arkret_schema::{self as schema, ProtocolSchemaRegistry};
+use arkret_wire::{ANCHOR_SCHEMA, EVENT_SCHEMA, SNAPSHOT_SCHEMA};
 use serde_json::{Value, json};
 
 /// Reusable schema registry. The artifact-backed registry is preferred (it
@@ -122,14 +122,14 @@ impl FuzzEventInput {
 ///      objects, etc.).
 pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_core::Event>(data);
+        let _ = serde_json::from_slice::<arkret_wire::Event>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzEventInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), EVENT_SCHEMA, |v| {
-        let _ = serde_json::from_value::<arkret_core::Event>(v.clone());
+        let _ = serde_json::from_value::<arkret_wire::Event>(v.clone());
     })
 }
 
@@ -201,7 +201,7 @@ impl FuzzMoveInput {
 /// on `serde_json::from_value::<Move>` to exercise the typed validator.
 pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_core::Move>(data);
+        let _ = serde_json::from_slice::<arkret_wire::Move>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzMoveInput::arbitrary(&mut unstructured) else {
@@ -209,7 +209,7 @@ pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
     };
     let value = input.to_json();
     catch(|| {
-        let _ = serde_json::from_value::<arkret_core::Move>(value.clone());
+        let _ = serde_json::from_value::<arkret_wire::Move>(value.clone());
     })
 }
 
@@ -253,14 +253,14 @@ impl FuzzSealInput {
 /// its value is the current `ak.schema.seal.v1`) to exercise both layers.
 pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_core::Seal>(data);
+        let _ = serde_json::from_slice::<arkret_wire::Seal>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzSealInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), ANCHOR_SCHEMA, |v| {
-        let _ = serde_json::from_value::<arkret_core::Seal>(v.clone());
+        let _ = serde_json::from_value::<arkret_wire::Seal>(v.clone());
     })
 }
 

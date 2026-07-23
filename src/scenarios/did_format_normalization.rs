@@ -10,7 +10,7 @@
 //! agrees with the SDK validator on every input.
 
 use anyhow::{Result, anyhow};
-use arkret_core::Did;
+use arkret_identifiers::Did;
 
 const LEGAL: &[&str] = &[
     "did:web:alice.example",

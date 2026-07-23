@@ -3,8 +3,8 @@
 //!
 //! Spec: a Realm declared with `security_class=high_assurance` MUST
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`. The
-//! SDK exposes this as a struct invariant on `arkret_core::Realm`'s
-//! [`validate_kind_invariants`](arkret_core::Realm::validate_kind_invariants)
+//! SDK exposes this as a struct invariant on `arkret_models_collaboration::objects::realm::Realm`'s
+//! [`validate_kind_invariants`](arkret_models_collaboration::objects::realm::Realm::validate_kind_invariants)
 //! and soland enforces it at the reducer with the canonical reason
 //! code `high_assurance_federation_policy_invalid`.
 //!
@@ -12,9 +12,12 @@
 //! integration test lives at `soland/tests/high_assurance_policy.rs`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    Did, Discoverability, EncryptionFloor, EncryptionProfile, FederationPolicy, HistoryVisibility,
-    JoinRule, NotaryProfile, NotaryValue, Realm, RealmId, SecurityClass, TypedTrustDomainId,
+use arkret_identifiers::{Did, RealmId, TypedTrustDomainId};
+use arkret_models_collaboration::governance::circle::EncryptionFloor;
+use arkret_models_collaboration::objects::realm::{NotaryProfile, Realm};
+use arkret_wire::{
+    Discoverability, EncryptionProfile, FederationPolicy, HistoryVisibility, JoinRule, NotaryValue,
+    SecurityClass,
 };
 
 const REALM_ID: &str = "ak:realm:01904100-0000-7000-8000-000000000aa1";

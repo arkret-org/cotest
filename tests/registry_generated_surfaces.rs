@@ -2,18 +2,17 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use arkret_core::{
-    CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ExporterLabelId, HPKE_SUITES,
-    MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
-    SERVICE_OPERATION_DESCRIPTORS, SERVICE_TYPE_DESCRIPTORS, SIGNATURE_ALGORITHMS,
-    ServiceOperationId, ServiceType,
-};
 use arkret_schema::{
     REGISTERED_ACCOUNT_DATA_PATTERNS, REGISTERED_CAPABILITY_ACTIONS, REGISTERED_ID_KINDS,
     REGISTERED_SCHEMA_IDS, REGISTERED_SPECIAL_FORM_ID_KINDS, account_data_pattern,
 };
-use arkret_wire::ErrorCode;
 use arkret_wire::events::{EventKind, EventProductClass, EventRegistryCategory};
+use arkret_wire::{
+    CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, ExporterLabelId, HPKE_SUITES,
+    MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
+    SERVICE_OPERATION_DESCRIPTORS, SERVICE_TYPE_DESCRIPTORS, SIGNATURE_ALGORITHMS,
+    ServiceOperationId, ServiceType,
+};
 use serde_json::Value;
 
 #[test]
@@ -188,7 +187,7 @@ fn generated_metadata_keeps_product_and_security_domains_separate() {
 
 #[test]
 fn unknown_remote_error_code_remains_round_trippable_wire_data() {
-    let detail = arkret_core::ErrorDetail {
+    let detail = arkret_wire::ErrorDetail {
         code: "vendor.example.future_error".to_owned(),
         message: "future peer error".to_owned(),
         retry_after_ms: None,
@@ -196,7 +195,7 @@ fn unknown_remote_error_code_remains_round_trippable_wire_data() {
     };
     assert_eq!(detail.error_code(), None);
     let encoded = serde_json::to_value(&detail).expect("serialize open remote error");
-    let decoded: arkret_core::ErrorDetail =
+    let decoded: arkret_wire::ErrorDetail =
         serde_json::from_value(encoded).expect("deserialize open remote error");
     assert_eq!(decoded.code, "vendor.example.future_error");
 }

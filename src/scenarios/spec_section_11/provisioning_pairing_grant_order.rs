@@ -8,9 +8,9 @@
 use anyhow::{Result, anyhow};
 /// Canonical landing order. Index = step number.
 const SPEC_ORDER: &[&str] = &[
-    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
-    arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
+    arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+    arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
 ];
 
 pub async fn provisioning_pairing_grant_order_run() -> Result<()> {

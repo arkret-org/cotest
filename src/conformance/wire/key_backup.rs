@@ -119,7 +119,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                 }
                 // 05-1 — converge onto the SDK's authoritative validator: the
                 // `passphrase_kdf` envelope this vector implies must deserialize
-                // into `arkret_core::KeyBackupEncryption` (running its
+                // into `arkret_models_crypto::KeyBackupEncryption` (running its
                 // recipient-method `validate()` shim) and pass.
                 let salt_b64 = required_str(v, "salt_b64")?;
                 assert_passphrase_kdf_envelope_valid_via_sdk(name, kdf, salt_b64)?;
@@ -270,7 +270,7 @@ pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
 
 /// 05-1 — build the `passphrase_kdf` `encryption` envelope implied by a fixture
 /// vector and deserialize it into the SDK's authoritative
-/// [`arkret_core::KeyBackupEncryption`], which runs its recipient-method
+/// [`arkret_models_crypto::KeyBackupEncryption`], which runs its recipient-method
 /// `validate()` shim (`key-backup.schema.json` `encryption.allOf[].if/then`:
 /// passphrase_kdf REQUIRES `kdf` + `aead.nonce` + `aead.nonce_salt` and FORBIDS
 /// `hpke_suite`). Replaces a bespoke `serde_json::Value` re-derivation of those
@@ -309,8 +309,8 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
             "nonce_salt": salt_b64,
         },
     });
-    let encryption: arkret_core::KeyBackupEncryption = serde_json::from_value(encryption_json)
-        .map_err(|e| {
+    let encryption: arkret_models_crypto::KeyBackupEncryption =
+        serde_json::from_value(encryption_json).map_err(|e| {
             anyhow!(
                 "vector {name} passphrase_kdf envelope must deserialize into SDK \
                  KeyBackupEncryption (runs authoritative validate()): {e}"
@@ -323,7 +323,8 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
             "vector {name} SDK KeyBackupEncryption::validate() rejected a well-formed envelope: {e}"
         )
     })?;
-    if encryption.recipient_method != arkret_core::KeyBackupRecipientMethod::PassphraseKdf {
+    if encryption.recipient_method != arkret_models_crypto::KeyBackupRecipientMethod::PassphraseKdf
+    {
         bail!("vector {name} SDK parsed recipient_method != passphrase_kdf");
     }
     Ok(())
@@ -331,7 +332,7 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
 
 /// 05-1 — prove the SDK validator fails closed: two malformed `passphrase_kdf`
 /// envelopes (missing `aead.nonce_salt`; carrying a `recovery_public_key`-only
-/// `hpke_suite`) MUST be rejected by `arkret_core::KeyBackupEncryption`'s
+/// `hpke_suite`) MUST be rejected by `arkret_models_crypto::KeyBackupEncryption`'s
 /// deserialize/validate shim. Guards against the SDK validator silently going
 /// permissive underneath cotest's positive assertions.
 fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
@@ -341,7 +342,9 @@ fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
                 "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
         "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA"},
     });
-    if serde_json::from_value::<arkret_core::KeyBackupEncryption>(missing_nonce_salt).is_ok() {
+    if serde_json::from_value::<arkret_models_crypto::KeyBackupEncryption>(missing_nonce_salt)
+        .is_ok()
+    {
         bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope missing aead.nonce_salt");
     }
     let stray_hpke_suite = json!({
@@ -351,7 +354,8 @@ fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
         "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA", "nonce_salt": "AAAAAAAAAAAAAAAA"},
         "hpke_suite": "ak.hpke_x25519_aead_chacha20poly1305.v1",
     });
-    if serde_json::from_value::<arkret_core::KeyBackupEncryption>(stray_hpke_suite).is_ok() {
+    if serde_json::from_value::<arkret_models_crypto::KeyBackupEncryption>(stray_hpke_suite).is_ok()
+    {
         bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope carrying hpke_suite");
     }
     Ok(())

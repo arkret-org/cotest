@@ -20,10 +20,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    AgentHumanApprovalErrorDetails, AgentKeyScope, CapabilityActionId, Did, ErrorEnvelope,
-    NotificationDelta, NotificationDeltaAction, agent_requested_scope_digest,
+use arkret_identifiers::Did;
+use arkret_models_collaboration::agent_operations::agent_requested_scope_digest;
+use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
+use arkret_models_collaboration::sync_frames::account_sync::{
+    NotificationDelta, NotificationDeltaAction,
 };
+use arkret_wire::{AgentHumanApprovalErrorDetails, CapabilityActionId, ErrorEnvelope};
 use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
@@ -193,11 +196,11 @@ pub fn run_agent_provision_vector() -> Result<()> {
     if commitment.get("expected_digest").and_then(Value::as_str) != Some(digest.as_str()) {
         bail!("Agent requested_scope DID commitment digest drifted");
     }
-    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION
+    if arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION
         != "ak.self.agent.command.provision"
     {
         bail!(
-            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
+            "arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
         );
     }
     if CapabilityActionId::SELF_AGENT_COMMAND_PROVISION != "ak.self.agent.command.provision" {
@@ -299,11 +302,11 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
             "arkret_wire::ReasonCode::PAIRING_REQUEST_EXPIRED spelling drifted: pairing_request_expired"
         );
     }
-    if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY
+    if arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY
         != "ak.gate.account.command.pair_agent_key"
     {
         bail!(
-            "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY"
+            "arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY"
         );
     }
     // The error-response matrix for the key-pair endpoint MUST
@@ -346,9 +349,10 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let attestation = case
         .get("source_runtime_attestation")
         .filter(|value| !value.is_null());
-    let public_digest = arkret_core::agent_runtime_public_key_digest(public_key)?;
-    let attestation_digest = arkret_core::agent_runtime_attestation_digest(attestation)?;
-    let binding = arkret_core::agent_runtime_key_binding_digest(
+    let public_digest = arkret_signatures::agent::agent_runtime_public_key_digest(public_key)?;
+    let attestation_digest =
+        arkret_signatures::agent::agent_runtime_attestation_digest(attestation)?;
+    let binding = arkret_signatures::agent::agent_runtime_key_binding_digest(
         &agent_id,
         "pairing_request:01964137-0000-7000-8000-000000000000",
         "did:webvh:z6mkagent:agent.example#runtime-1",
@@ -432,7 +436,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "controller_id": controller_id,
         "expires_at": canonical_pairing_expires_at,
         "kind": "ak.agent.key_pairing_request_binding.v1",
-        "operation_id": arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+        "operation_id": arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
         "pairing_code": pairing_code,
         "pairing_request_id": pairing_request_id,
         "runtime_public_key_digest": public_digest,
@@ -452,7 +456,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         let expires_at = expires_at
             .as_str()
             .ok_or_else(|| anyhow!("pairing expiry input must be a string"))?;
-        let digest = arkret_core::agent_key_pairing_request_binding_digest(
+        let digest = arkret_signatures::agent::agent_key_pairing_request_binding_digest(
             &controller_id,
             &pairing_agent_id,
             verification_method,
@@ -474,7 +478,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "approval-1",
         "ak:notification:01964137-0000-7000-8000-000000000001",
     );
-    let restart_binding = arkret_core::agent_runtime_key_binding_digest(
+    let restart_binding = arkret_signatures::agent::agent_runtime_key_binding_digest(
         &agent_id,
         "pairing_request:01964137-0000-7000-8000-000000000000",
         "did:webvh:z6mkagent:agent.example#runtime-1",
@@ -495,7 +499,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "kid": "runtime-1",
         "kty": "OKP"
     });
-    let different = arkret_core::agent_runtime_key_binding_digest(
+    let different = arkret_signatures::agent::agent_runtime_key_binding_digest(
         &agent_id,
         "pairing_request:01964137-0000-7000-8000-000000000000",
         "did:webvh:z6mkagent:agent.example#runtime-1",
@@ -614,11 +618,11 @@ fn renew_pairing_gate(status: &str) -> std::result::Result<&'static str, &'stati
 }
 
 pub fn run_agent_repairing_supersede_vector() -> Result<()> {
-    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING
+    if arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING
         != "ak.self.agent.command.renew_pairing"
     {
         bail!(
-            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING"
+            "arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING spelling drifted: arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING"
         );
     }
     if arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING != "superseded_by_repairing" {
@@ -693,8 +697,9 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
             "evidence_ref": "ak:event:01990000-0000-7000-8000-000000000001"
         }
     });
-    let decoded: arkret_core::AgentKeyAuthorizePayload = serde_json::from_value(payload)
-        .map_err(|error| anyhow!("non-expiring authorize payload must decode: {error}"))?;
+    let decoded: arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload =
+        serde_json::from_value(payload)
+            .map_err(|error| anyhow!("non-expiring authorize payload must decode: {error}"))?;
     if decoded.expires_at.is_some() {
         bail!("absent expires_at must decode as None");
     }
@@ -721,7 +726,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
             "jws": "eyJhbGciOiJFZERTQSJ9..sig"
         }
     });
-    let decoded: arkret_core::AccountabilityGrantPayload = serde_json::from_value(grant)
+    let decoded: arkret_models_collaboration::governance::accountability::AccountabilityGrantPayload = serde_json::from_value(grant)
         .map_err(|error| anyhow!("non-expiring accountability grant must decode: {error}"))?;
     if decoded.expires_at.is_some() {
         bail!("absent accountability expires_at must decode as None");
@@ -756,15 +761,15 @@ fn agent_transition(state: AgentState, op: &str) -> std::result::Result<AgentSta
 pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
     // Verify FSM op-id spelling first.
     for op in [
-        arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
-        arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
-        arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
-        arkret_core::ServiceOperationId::SELF_AGENT_QUERY_LIST,
-        arkret_core::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
-        arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
-        arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
-        arkret_core::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
-        arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
+        arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
+        arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
+        arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
+        arkret_wire::ServiceOperationId::SELF_AGENT_QUERY_LIST,
+        arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
+        arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
+        arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
+        arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
+        arkret_wire::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
     ] {
         if !op.starts_with("ak.agent.")
             && !op.starts_with("ak.gate.account.")
@@ -773,11 +778,11 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
             bail!("agent op id `{op}` lost canonical namespace");
         }
     }
-    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE
+    if arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE
         != "ak.self.agent.command.deactivate"
     {
         bail!(
-            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE"
+            "arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE spelling drifted: arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE"
         );
     }
 
@@ -1004,11 +1009,11 @@ fn expect_proof_denial(
 }
 
 pub fn run_agent_session_grant_replay_vector() -> Result<()> {
-    if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT
+    if arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT
         != "ak.gate.account.command.issue_session_grant"
     {
         bail!(
-            "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT"
+            "arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT spelling drifted: arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT"
         );
     }
     // Agent branch reject codes per §0.8:
@@ -1289,7 +1294,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
         "human-approval request",
     )?;
     if request.get("operation_id").and_then(Value::as_str)
-        != Some(arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT)
+        != Some(arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT)
         || request.get("proof_kind").and_then(Value::as_str) != Some("agent_key_proof")
         || request.get("risk_class").and_then(Value::as_str) != Some("high")
         || request

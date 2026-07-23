@@ -28,7 +28,7 @@
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{Did, EventId, Hash, RealmId};
+use arkret_identifiers::{Did, EventId, Hash, RealmId};
 use arkret_models_identity::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,

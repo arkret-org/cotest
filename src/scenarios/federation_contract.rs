@@ -4,7 +4,8 @@ use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use arkret_canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
-use arkret_core::{Did, Event, EventId, Hlc, RealmId};
+use arkret_identifiers::{Did, EventId, Hlc, RealmId};
+use arkret_wire::Event;
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -292,23 +293,23 @@ fn sign_federation_contract_event(event: &mut Event) -> Result<()> {
 }
 
 fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
-    let cell = arkret_core::CellRef::new(format!(
+    let cell = arkret_identifiers::CellRef::new(format!(
         "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
         event.realm_id
     ))?;
-    event.preconditions = vec![arkret_core::Precondition {
+    event.preconditions = vec![arkret_wire::Precondition {
         cell: cell.clone(),
-        predicate: arkret_core::Predicate {
-            op: arkret_core::PredicateOp::HeadEq,
+        predicate: arkret_wire::Predicate {
+            op: arkret_wire::PredicateOp::HeadEq,
             value: Some(Value::Null),
             values: None,
             predicate_id: None,
         },
     }];
-    event.effects = vec![arkret_core::Effect {
+    event.effects = vec![arkret_wire::Effect {
         cell,
-        op: arkret_core::LatticeOp {
-            op_type: arkret_core::LatticeOpType::Set,
+        op: arkret_wire::LatticeOp {
+            op_type: arkret_wire::LatticeOpType::Set,
             tag: None,
             value: Some(serde_json::to_value(&event.payload)?),
             from: None,

@@ -10,7 +10,8 @@
 //! to wire reason code `circle_member_must_be_realm_member`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{Circle, CircleScopeError, Did};
+use arkret_identifiers::Did;
+use arkret_models_collaboration::governance::circle::{Circle, CircleScopeError};
 
 fn did(local: &str) -> Result<Did> {
     format!("did:web:{local}.example")

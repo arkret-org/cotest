@@ -26,7 +26,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     assert_eq!(description.protocol_version, "1.0");
     assert_eq!(
         description.service_type,
-        arkret_core::ServiceType::PrincipalServer
+        arkret_wire::ServiceType::PrincipalServer
     );
 
     let server_describe = expect_json(

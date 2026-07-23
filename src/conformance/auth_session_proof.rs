@@ -2,9 +2,11 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_core::{
-    DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
+use arkret_identifiers::{DeviceId, Did, Hash};
+use arkret_models_collaboration::session_grant_bodies::{
+    SessionGrantOutcome, SessionGrantRequestBody,
 };
+use arkret_models_identity::session_credential::SessionGrantProofKind;
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
     SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,

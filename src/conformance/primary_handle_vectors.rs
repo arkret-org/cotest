@@ -16,7 +16,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
-use arkret_core::{Did, Hash};
+use arkret_identifiers::{Did, Hash};
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
 use arkret_wire::PayloadProof;
 use chrono::{DateTime, TimeZone, Utc};

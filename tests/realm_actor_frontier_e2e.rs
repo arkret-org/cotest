@@ -1,7 +1,10 @@
 use std::sync::LazyLock;
 
 use anyhow::{Result, anyhow};
-use arkret_core::{EventId, EventsFrontierAccountClientState, EventsFrontierView};
+use arkret_identifiers::EventId;
+use arkret_models_collaboration::event_sync::{
+    EventsFrontierAccountClientState, EventsFrontierView,
+};
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope_at_frontier_with_signing_seed,
     expect_json, register_account,
@@ -16,7 +19,9 @@ static ACTOR: LazyLock<String> = LazyLock::new(|| {
     let key = ed25519_dalek::SigningKey::from_bytes(&SIGNING_SEED);
     format!(
         "did:key:{}",
-        arkret_core::ed25519_pubkey_to_did_key_multibase(key.verifying_key().as_bytes())
+        arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase(
+            key.verifying_key().as_bytes()
+        )
     )
 });
 
@@ -24,7 +29,7 @@ async fn frontier(
     server: &ArkretServer,
     token: &str,
     realm_id: &str,
-) -> Result<arkret_core::RealmActorFrontierView> {
+) -> Result<arkret_models_collaboration::event_sync::RealmActorFrontierView> {
     let value = expect_json(
         server
             .http()

@@ -11,13 +11,19 @@ use arkret::identity_root::{
     bip39_identity_recovery_secret, derive_identity_recovery_key_material,
     derive_identity_recovery_key_material_from_bip39,
 };
-use arkret_core::{
-    Audience, Base64UrlString, DeviceAuthorizePayload, DeviceEnrollmentAuthorityBinding,
-    DeviceEnrollmentAuthorityBindingKind, DeviceGenerationState, DeviceGenerationStatus, DeviceId,
-    DeviceOrPrincipalRef, DeviceReanchorPayload, DeviceStatus, Did, DidUrl, Event, EventId,
-    EventRef, Hash, Hlc, MoveId, NonEmptyString, Proof, QueryDeviceCrossSigningBinding,
-    QueryDeviceRecord, RealmId, TypedTrustDomainId, validate_device_reanchor_recovery_first_seal,
+use arkret_identifiers::{DeviceId, Did, EventId, Hash, Hlc, MoveId, RealmId, TypedTrustDomainId};
+use arkret_models_collaboration::events_payloads::device_identity::{
+    DeviceAuthorizePayload, DeviceOrPrincipalRef, DeviceReanchorPayload,
+    validate_device_reanchor_recovery_first_seal,
 };
+use arkret_models_crypto::{
+    DeviceGenerationState, DeviceGenerationStatus, DeviceStatus, QueryDeviceCrossSigningBinding,
+    QueryDeviceRecord,
+};
+use arkret_models_identity::artifacts_device_identity::{
+    DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind,
+};
+use arkret_wire::{Audience, Base64UrlString, DidUrl, Event, EventRef, NonEmptyString, Proof};
 use serde_json::{Value, json};
 
 use super::load_fixture_value;
@@ -250,7 +256,8 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
 fn validate_bootstrap_helpers() -> Result<()> {
     let principal = Did::new("did:webvh:z6mkfixture:alice.example")?;
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
-    let realm_id = RealmId::new(arkret_core::principal_control_realm_id(&principal))?;
+    let realm_id =
+        RealmId::new(arkret_models_identity::did_document::principal_control_realm_id(&principal))?;
     let create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
         principal_id: principal.clone(),
         realm_id: realm_id.clone(),
@@ -452,7 +459,7 @@ fn enrollment_binding() -> Result<DeviceEnrollmentAuthorityBinding> {
 fn with_proof(mut event: Event, verification_method: &str) -> Result<Event> {
     let digest = Hash::new(event.event_digest()?)?;
     event.proofs = vec![Proof {
-        kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: verification_method.to_owned(),
         event_digest: digest,

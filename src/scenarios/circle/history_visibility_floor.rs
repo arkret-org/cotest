@@ -19,7 +19,7 @@
 //! `(realm, circle)` pair.
 
 use anyhow::{Result, anyhow};
-use arkret_core::HistoryVisibility;
+use arkret_wire::HistoryVisibility;
 
 /// Strictness rank for the 4 ordered `history_visibility` levels. Returns
 /// `None` for `Restricted` since it is a profile-evaluated overlay, not

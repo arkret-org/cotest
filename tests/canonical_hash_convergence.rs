@@ -196,14 +196,14 @@ fn sdk_blake3_digest_backend_matches_known_vector() {
         digest,
         "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
     );
-    assert!(arkret_core::Hash::new(digest.clone()).is_ok());
+    assert!(arkret_identifiers::Hash::new(digest.clone()).is_ok());
     verify_digest(b"", &digest).expect("empty BLAKE3 digest verifies");
     assert!(verify_digest(b"not-empty", &digest).is_err());
 
     let payload = json!({ "b": 2, "a": 1 });
     let canonical = canonical_hash(&payload, "blake3").expect("canonical BLAKE3");
     assert!(canonical.starts_with("blake3:"));
-    assert!(arkret_core::Hash::new(canonical).is_ok());
+    assert!(arkret_identifiers::Hash::new(canonical).is_ok());
 }
 
 /// Diagnostic: prints the SDK-computed canonical digest for every vector.
@@ -285,12 +285,12 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 //     dump_r3_2_identity_digests -- --ignored --nocapture
 
 fn pinned_r3_2_inputs() -> (
-    arkret_core::RealmId,
-    arkret_core::Did,
+    arkret_identifiers::RealmId,
+    arkret_identifiers::Did,
     Vec<arkret_models_identity::EffectiveIdentityEntry>,
     Vec<arkret_models_identity::RosterHandleClaimDigestEntry>,
 ) {
-    use arkret_core::{Did, EventId, Hash, RealmId};
+    use arkret_identifiers::{Did, EventId, Hash, RealmId};
     use arkret_models_identity::{
         EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
         RosterHandleClaimDigestEntry,

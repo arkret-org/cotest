@@ -264,28 +264,30 @@ fn typing_envelope(
     strand_id: &str,
     signing_key: &SigningKey,
     typing: bool,
-) -> arkret_core::EphemeralEnvelope {
+) -> arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope {
     let sent_at = Utc::now()
         .with_nanosecond(0)
         .expect("zeroing nanos is valid");
     let expires_at = sent_at + ChronoDuration::seconds(30);
-    let mut envelope = arkret_core::EphemeralEnvelope::new(
-        "ak.typing",
-        arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
-        arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-        arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed"),
-        sent_at,
-        expires_at,
-        std::collections::BTreeMap::from([
-            ("strand_id".to_owned(), json!(strand_id)),
-            // ephemeral-envelope.schema.json ak.typing branch: optional, const
-            // "discussion" in v1; omitted resolves to "discussion".
-            ("track_name".to_owned(), json!("discussion")),
-            ("typing".to_owned(), json!(typing)),
-        ]),
-        ephemeral_proof_placeholder(actor_id, device_id, sent_at),
-    )
-    .expect("typing envelope is well-formed");
+    let mut envelope =
+        arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope::new(
+            "ak.typing",
+            arkret_identifiers::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
+            arkret_identifiers::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
+            arkret_identifiers::DeviceId::new(device_id.to_owned())
+                .expect("test device id is typed"),
+            sent_at,
+            expires_at,
+            std::collections::BTreeMap::from([
+                ("strand_id".to_owned(), json!(strand_id)),
+                // ephemeral-envelope.schema.json ak.typing branch: optional, const
+                // "discussion" in v1; omitted resolves to "discussion".
+                ("track_name".to_owned(), json!("discussion")),
+                ("typing".to_owned(), json!(typing)),
+            ]),
+            ephemeral_proof_placeholder(actor_id, device_id, sent_at),
+        )
+        .expect("typing envelope is well-formed");
     attach_ephemeral_proof(&mut envelope, signing_key);
     envelope
 }

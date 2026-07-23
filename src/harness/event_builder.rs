@@ -6,12 +6,18 @@ use anyhow::{Result, anyhow};
 use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
-use arkret_core::{
-    ContentBlock, DeliveryStatus, Did, EventId, Hash, InviteCreatePayload, InviteDeliveryTarget,
-    InviteId, MemberDeliveryBinding, MembershipInviteRef, MembershipPayload,
-    MembershipPayloadState, MessageCreatePayload, MessageId, MessageRedactPayload,
-    MessageRevisePayload, RealmId, StrandId,
+use arkret_identifiers::{Did, EventId, Hash, InviteId, MessageId, RealmId, StrandId};
+use arkret_models_collaboration::events_payloads::list_message_mimi_mls::{
+    MessageRedactPayload, MessageRevisePayload,
 };
+use arkret_models_collaboration::events_payloads::morph_message::{
+    ContentBlock, MessageCreatePayload,
+};
+use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget;
+use arkret_models_collaboration::governance::membership_invite::{
+    InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
+};
+use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -457,9 +463,11 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         StatusCode::OK,
     )
     .await?;
-    let state: arkret_core::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
         serde_json::from_value(frontier.clone())?;
-    let arkret_core::EventsFrontierView::RealmActor(frontier) = state.frontier else {
+    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
+        state.frontier
+    else {
         return Err(anyhow!(
             "combined selector returned the wrong frontier variant"
         ));
@@ -584,13 +592,13 @@ fn event_envelope_with_chain_and_signing_identity(
         .expect("static cotest Event timestamp")
         .with_timezone(&Utc);
     let actor_id = Did::new(actor.to_owned()).expect("cotest actor DID");
-    let mut event = arkret_core::Event::new_with_id_at(
+    let mut event = arkret_wire::Event::new_with_id_at(
         EventId::new(format!("ak:event:{suffix}")).expect("cotest Event id"),
         kind,
         RealmId::new(realm_id.to_owned()).expect("cotest Realm id"),
         actor_id.clone(),
         actor_seq,
-        arkret_core::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
+        arkret_identifiers::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
             .expect("cotest HLC"),
         payload,
         created_at,

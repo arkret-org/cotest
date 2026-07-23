@@ -23,7 +23,7 @@
 //! SHOULD mirror.
 
 use anyhow::{Result, anyhow};
-use arkret_core::EncryptionFloor;
+use arkret_models_collaboration::governance::circle::EncryptionFloor;
 /// Strictness rank for the two floor values: stricter → larger rank.
 fn rank(floor: EncryptionFloor) -> u8 {
     match floor {

@@ -4,7 +4,7 @@
 //! Realm event kinds cover the security boundary, and Space event kinds cover
 //! containers inside a Realm.
 //!
-//! This module builds SDK-typed [`arkret_core::Event`] envelopes for
+//! This module builds SDK-typed [`arkret_wire::Event`] envelopes for
 //! each renamed kind, canonical-encodes them via the SDK encoder, and
 //! asserts:
 //!
@@ -18,7 +18,8 @@
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_core::{Did, Event, Hlc, RealmId};
+use arkret_identifiers::{Did, Hlc, RealmId};
+use arkret_wire::Event;
 use arkret_wire::events::EventProductClass;
 use serde_json::{Value, json};
 

@@ -18,14 +18,14 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::canonical_json_bytes;
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, Hash, KeyBackup,
-    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
-    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
-    KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
+use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, Hash, RecoverySessionId};
+use arkret_models_crypto::{
+    BackupClass, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
+    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
     KeyBackupUnlockProof, KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, ProofKind,
-    RecoverySessionId,
 };
+use arkret_wire::{Base64UrlString, DidUrl};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};

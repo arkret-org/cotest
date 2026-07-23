@@ -66,7 +66,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .to_string()
             .contains("capability_registry_basis_unavailable")
     );
-    let wrong_registry_digest = arkret_core::Hash::new(format!("sha256:{}", "f".repeat(64)))?;
+    let wrong_registry_digest =
+        arkret_identifiers::Hash::new(format!("sha256:{}", "f".repeat(64)))?;
     let wrong_basis =
         arkret::validate_capability_action_registry_binding(&actions, Some(&wrong_registry_digest))
             .expect_err("aggregate-admin grant with unknown registry basis must fail closed");
@@ -76,42 +77,46 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .contains("capability_registry_basis_unavailable")
     );
     arkret::validate_capability_action_registry_binding(&actions, Some(&current_registry_digest))?;
-    let grant_id = arkret_core::GrantId::new(manage_grant_id.to_owned())?;
+    let grant_id = arkret_identifiers::GrantId::new(manage_grant_id.to_owned())?;
     let issued_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
     let verification_method = format!("{}#cotest", alice.actor);
-    let mut typed_grant = arkret_core::CapabilityGrant {
-        id: grant_id.clone(),
-        schema: "ak.schema.capability.v1".to_owned(),
-        realm_id: Some(arkret_core::RealmId::new(realm_id.clone())?),
-        issuer: arkret_core::Did::new(alice.actor.clone())?,
-        subject: arkret_core::CapabilitySubject::Did(arkret_core::Did::new(bob.actor.clone())?),
-        actions,
-        resources: vec![serde_json::from_value(json!({
-            "kind": "realm",
-            "realm_id": realm_id
-        }))?],
-        capability_action_registry_digest: Some(current_registry_digest),
-        constraints: Vec::new(),
-        parent_grant_id: None,
-        issued_at,
-        not_before: None,
-        expires_at: None,
-        updated_by: None,
-        updated_at: None,
-        revoked_by: None,
-        revoked_at: None,
-        proofs: Vec::new(),
-    };
-    let mut grant_proof = arkret_core::PayloadProof {
-        kind: arkret_core::proof_kind::DETACHED_JWS.to_owned(),
+    let mut typed_grant =
+        arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
+            id: grant_id.clone(),
+            schema: "ak.schema.capability.v1".to_owned(),
+            realm_id: Some(arkret_identifiers::RealmId::new(realm_id.clone())?),
+            issuer: arkret_identifiers::Did::new(alice.actor.clone())?,
+            subject:
+                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
+                    arkret_identifiers::Did::new(bob.actor.clone())?,
+                ),
+            actions,
+            resources: vec![serde_json::from_value(json!({
+                "kind": "realm",
+                "realm_id": realm_id
+            }))?],
+            capability_action_registry_digest: Some(current_registry_digest),
+            constraints: Vec::new(),
+            parent_grant_id: None,
+            issued_at,
+            not_before: None,
+            expires_at: None,
+            updated_by: None,
+            updated_at: None,
+            revoked_by: None,
+            revoked_at: None,
+            proofs: Vec::new(),
+        };
+    let mut grant_proof = arkret_wire::PayloadProof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: verification_method.clone(),
         payload_digest: typed_grant.payload_digest()?,
         created_at: issued_at,
         domain: None,
         audience: None,
-        proof_purpose: Some(arkret_core::PayloadProofPurpose::IssuerAttestation),
+        proof_purpose: Some(arkret_wire::PayloadProofPurpose::IssuerAttestation),
         jws: String::new(),
     };
     let grant_binding = typed_grant.canonical_proof_binding_bytes(&grant_proof)?;
@@ -122,7 +127,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         &grant_binding,
     )?;
     typed_grant.proofs.push(grant_proof);
-    let grant_payload = arkret_core::CapabilityGrantPayload {
+    let grant_payload = arkret_models_collaboration::events_payloads::capability_circle_consent_contact::CapabilityGrantPayload {
         grant: Some(typed_grant),
         grant_id,
         subject: None,
@@ -745,20 +750,21 @@ pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<
         &sibling_key,
     )
     .await?;
-    let principal = arkret_core::Did::new(actor.clone())?;
-    let principal_realm = arkret_core::principal_control_realm_id(&principal);
+    let principal = arkret_identifiers::Did::new(actor.clone())?;
+    let principal_realm =
+        arkret_models_identity::did_document::principal_control_realm_id(&principal);
     let revoked = sibling
         .submit_event(
             principal_realm.as_str(),
             "ak.device.revoke",
-            serde_json::to_value(arkret_core::DeviceRevokePayload {
+            serde_json::to_value(arkret_models_collaboration::events_payloads::device_identity::DeviceRevokePayload {
                 principal_id: principal,
-                device_id: arkret_core::DeviceId::new(PRIMARY_DEVICE.to_owned())?,
-                revoked_by: arkret_core::DeviceOrPrincipalRef::DeviceId(
-                    arkret_core::DeviceId::new(SIBLING_DEVICE.to_owned())?,
+                device_id: arkret_identifiers::DeviceId::new(PRIMARY_DEVICE.to_owned())?,
+                revoked_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::DeviceId(
+                    arkret_identifiers::DeviceId::new(SIBLING_DEVICE.to_owned())?,
                 ),
                 revoked_at: Utc::now(),
-                reason: arkret_core::DeviceRevocationReason::new("security_test")
+                reason: arkret_models_collaboration::events_payloads::device_identity::DeviceRevocationReason::new("security_test")
                     .map_err(anyhow::Error::msg)?,
                 proof: None,
             })?,
@@ -801,7 +807,7 @@ fn presence_envelope(
     realm_id: &str,
     signing_key: &SigningKey,
     payload_fields: Value,
-) -> arkret_core::EphemeralEnvelope {
+) -> arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope {
     let sent_at = Utc::now()
         .with_nanosecond(0)
         .expect("zeroing nanos is valid");
@@ -816,17 +822,19 @@ fn presence_envelope(
             base.insert(key.clone(), value.clone());
         }
     }
-    let mut envelope = arkret_core::EphemeralEnvelope::new(
-        "ak.presence",
-        arkret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
-        arkret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-        arkret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed"),
-        sent_at,
-        expires_at,
-        serde_json::from_value(payload).expect("presence payload is an object"),
-        ephemeral_proof_placeholder(actor_id, device_id, sent_at),
-    )
-    .expect("presence envelope is well-formed");
+    let mut envelope =
+        arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope::new(
+            "ak.presence",
+            arkret_identifiers::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
+            arkret_identifiers::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
+            arkret_identifiers::DeviceId::new(device_id.to_owned())
+                .expect("test device id is typed"),
+            sent_at,
+            expires_at,
+            serde_json::from_value(payload).expect("presence payload is an object"),
+            ephemeral_proof_placeholder(actor_id, device_id, sent_at),
+        )
+        .expect("presence envelope is well-formed");
     attach_ephemeral_proof(&mut envelope, signing_key);
     envelope
 }

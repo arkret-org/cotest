@@ -6,11 +6,12 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    CircleScopeError, EncryptionFloor, EncryptionProfile, validate_circle_encryption_floor,
+use arkret_models_collaboration::governance::circle::{
+    CircleScopeError, EncryptionFloor, validate_circle_encryption_floor,
     validate_content_encryption_floor, validate_content_encryption_floor_ratchet,
     validate_metadata_encryption_floor_ratchet,
 };
+use arkret_wire::EncryptionProfile;
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_CONTENT_FLOOR_DOWNGRADE_REJECTED: &str =

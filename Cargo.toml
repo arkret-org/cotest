@@ -32,7 +32,7 @@ test-with-containers = ["dep:testcontainers"]
 # `EventProofBuilder` facade alongside the low-level canonical helpers
 # to pin that every Arkret service hashes payloads identically.
 # lattice round-trip vectors: cotest exercises the SDK's
-# `arkret_core::lattice` module directly to confirm CasRegister / OrSet /
+# `arkret_state::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
 # normative join semantics.
 # coauth_bootstrap / floria_bootstrap render generated YAML to disk
@@ -52,8 +52,8 @@ chrono = {workspace = true}
 arkret = {workspace = true}
 arkret-canonical = {workspace = true}
 garth = {workspace = true}
-arkret-core = {workspace = true}
 arkret-hlc = {workspace = true}
+arkret-identifiers = {workspace = true}
 arkret-state = {workspace = true}
 # 05-2 — cotest-wire emits SDK-authoritative cross-signing / device-trust
 # canonical signing-input golden vectors (CrossSigningPublishContent /
@@ -64,6 +64,7 @@ arkret-models-collaboration = {workspace = true}
 arkret-models-crypto = {workspace = true}
 arkret-models-discovery = {workspace = true}
 arkret-models-identity = {workspace = true}
+arkret-models-integration = {workspace = true}
 arkret-policy = {workspace = true}
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
@@ -114,13 +115,14 @@ arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "ml
 arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth",features = ["mls"]}
-arkret-core = {path = "../arkret-rust-sdk/crates/core"}
 arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
+arkret-identifiers = {path = "../arkret-rust-sdk/crates/identifiers"}
 arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
 arkret-models-crypto = {path = "../arkret-rust-sdk/crates/models-crypto"}
 arkret-models-discovery = {path = "../arkret-rust-sdk/crates/models-discovery"}
 arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity"}
+arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration"}
 arkret-policy = {path = "../arkret-rust-sdk/crates/policy"}
 arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",features = ["signer"]}

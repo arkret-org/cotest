@@ -132,9 +132,11 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
-        let state: arkret_core::EventsFrontierAccountClientState =
+        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
             serde_json::from_value(frontier)?;
-        let arkret_core::EventsFrontierView::RealmActor(frontier) = state.frontier else {
+        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
+            state.frontier
+        else {
             return Err(anyhow!(
                 "combined selector returned the wrong frontier variant"
             ));

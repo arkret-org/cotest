@@ -16,11 +16,12 @@
 //! - `ak.vector.call_signal.proof_detached_jws.v1`
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    CALL_SIGNAL_TYPES, CallSignalSeqKey, CallSignalState, EphemeralEnvelope, Proof,
-    validate_call_signal_envelope, validate_signal_seq,
+use arkret_models_collaboration::events_payloads::ephemeral::{
+    CallSignalSeqKey, CallSignalState, EphemeralEnvelope, validate_call_signal_envelope,
+    validate_signal_seq,
 };
 use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use arkret_wire::{CALL_SIGNAL_TYPES, Proof};
 use chrono::{TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
@@ -109,14 +110,18 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     // Stateful reducer over the [1, 2, 1] stream the e2e relay delivers
     // verbatim: the trailing 1 is the only rejection.
     let key = CallSignalSeqKey::new(
-        arkret_core::RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())
-            .map_err(|e| anyhow!("realm id: {e}"))?,
-        arkret_core::CallId::new("ak:call:0196441c-0000-7000-8000-000000000000".to_owned())
+        arkret_identifiers::RealmId::new(
+            "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned(),
+        )
+        .map_err(|e| anyhow!("realm id: {e}"))?,
+        arkret_identifiers::CallId::new("ak:call:0196441c-0000-7000-8000-000000000000".to_owned())
             .map_err(|e| anyhow!("call id: {e}"))?,
-        arkret_core::Did::new("did:web:alice.example.com".to_owned())
+        arkret_identifiers::Did::new("did:web:alice.example.com".to_owned())
             .map_err(|e| anyhow!("did: {e}"))?,
-        arkret_core::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000".to_owned())
-            .map_err(|e| anyhow!("device id: {e}"))?,
+        arkret_identifiers::DeviceId::new(
+            "ak:device:01964137-0000-7000-8000-000000000000".to_owned(),
+        )
+        .map_err(|e| anyhow!("device id: {e}"))?,
     );
     let mut state = CallSignalState::new();
     state
@@ -188,12 +193,12 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         &arkret_canonical::canonical_json_bytes(&header)
             .map_err(|err| anyhow!("header JCS failed: {err}"))?,
     );
-    let did = arkret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
+    let did = arkret_identifiers::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
     let mut proof = Proof {
         kind: "detached_jws".to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: verification_method.clone(),
-        event_digest: arkret_core::Hash::new(event_digest.clone())
+        event_digest: arkret_identifiers::Hash::new(event_digest.clone())
             .map_err(|err| anyhow!("event digest: {err}"))?,
         created_at,
         domain: None,

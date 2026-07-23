@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::Result;
-use arkret_core::MembershipPayloadState;
+use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 

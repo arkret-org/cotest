@@ -22,7 +22,7 @@
 //!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{EventId, TypedTrustDomainId};
+use arkret_identifiers::{EventId, TypedTrustDomainId};
 use arkret_schema::embedded_error_code_identifiers;
 
 pub const TRUST_DOMAIN_ID_PREFIX: &str = "ak:trust_domain:";

@@ -21,7 +21,7 @@
 //! strings may appear only inside signed `HandleClaim` objects.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{Did, EventId, Hash, RealmId};
+use arkret_identifiers::{Did, EventId, Hash, RealmId};
 use arkret_models_collaboration::sync_frames::account_sync::{MemberRosterEntry, MembershipState};
 use arkret_models_identity::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,

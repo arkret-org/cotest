@@ -1,12 +1,13 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_core::{
-    BackupClass, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidUrl, KeyBackup,
-    KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupContentItem,
-    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
-    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, PolicyId, RecoveryPolicy,
-    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind, TypedTrustDomainId,
+use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId, TypedTrustDomainId};
+use arkret_models_crypto::{
+    BackupClass, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
+    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicy,
+    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
 };
+use arkret_wire::{Base64UrlString, DidUrl};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;

@@ -21,7 +21,7 @@ use arkret::{
     PendingSidecarAccessReconciliationItem, PendingSidecarAccessReconciliationStage, RealmId,
     SidecarId, SidecarMlsBinding, StrandId, agent_sidecar_desired_access_digest,
 };
-use arkret_core::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
+use arkret_wire::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
 use serde_json::Value;
 
 pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ak.vector.sidecar.ensure_idempotent.v1";
@@ -241,7 +241,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
 }
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
-    if arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE
+    if arkret_wire::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE
         != "ak.self.agent.sidecar.command.ensure"
     {
         bail!("Sidecar ensure operation spelling drifted");

@@ -641,7 +641,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     let value = value.as_str().ok_or_else(|| {
                         anyhow!("privacy fixture {} has non-string handle", case.name)
                     })?;
-                    arkret_core::Handle::parse(value).map_err(|error| {
+                    arkret_models_identity::handle::Handle::parse(value).map_err(|error| {
                         anyhow!("privacy fixture {} rejected {value}: {error}", case.name)
                     })?;
                 }
@@ -651,7 +651,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .and_then(Value::as_array)
                     .ok_or_else(|| anyhow!("privacy fixture {} missing agent slugs", case.name))?;
                 for value in slugs {
-                    arkret_core::validate_canonical_agent_slug(value.as_str().ok_or_else(
+                    arkret_wire::validate_canonical_agent_slug(value.as_str().ok_or_else(
                         || anyhow!("privacy fixture {} has non-string agent slug", case.name),
                     )?)?;
                 }
@@ -661,12 +661,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .and_then(Value::as_array)
                     .ok_or_else(|| anyhow!("privacy fixture {} missing display text", case.name))?;
                 for value in display_texts {
-                    arkret_core::validate_single_line_display_text(
+                    arkret_wire::validate_single_line_display_text(
                         value.as_str().ok_or_else(|| {
                             anyhow!("privacy fixture {} has non-string display text", case.name)
                         })?,
                         256,
-                        arkret_core::DISPLAY_TEXT_MAX_UTF8_OCTETS,
+                        arkret_wire::DISPLAY_TEXT_MAX_UTF8_OCTETS,
                     )?;
                 }
 
@@ -674,7 +674,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .get("accepted_acct_alias")
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("privacy fixture {} missing acct alias", case.name))?;
-                arkret_core::Handle::from_acct(acct_alias)?;
+                arkret_models_identity::handle::Handle::from_acct(acct_alias)?;
 
                 let mappings = input
                     .get("input_to_canonical")
@@ -693,7 +693,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         .ok_or_else(|| {
                             anyhow!("privacy fixture {} mapping missing canonical", case.name)
                         })?;
-                    let prepared = arkret_core::Handle::prepare(source)?;
+                    let prepared = arkret_models_identity::handle::Handle::prepare(source)?;
                     if prepared.canonical() != expected {
                         bail!(
                             "privacy fixture {} prepared {source} as {}, expected {expected}",
@@ -713,7 +713,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     let value = value.as_str().ok_or_else(|| {
                         anyhow!("privacy fixture {} has non-string rejection", case.name)
                     })?;
-                    if arkret_core::Handle::parse(value).is_ok() {
+                    if arkret_models_identity::handle::Handle::parse(value).is_ok() {
                         bail!(
                             "privacy fixture {} unexpectedly accepted {value}",
                             case.name
@@ -733,7 +733,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     let value = value.as_str().ok_or_else(|| {
                         anyhow!("privacy fixture {} has non-string rejection", case.name)
                     })?;
-                    if arkret_core::validate_single_line_display_text(value, 256, 1024).is_ok() {
+                    if arkret_wire::validate_single_line_display_text(value, 256, 1024).is_ok() {
                         bail!(
                             "privacy fixture {} unexpectedly accepted display text",
                             case.name
@@ -806,12 +806,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .input
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
-                let parse_handle = |field: &str| -> Result<arkret_core::Handle> {
+                let parse_handle = |field: &str| -> Result<arkret_models_identity::handle::Handle> {
                     let value = input
                         .get(field)
                         .and_then(Value::as_str)
                         .ok_or_else(|| anyhow!("privacy fixture {} missing {field}", case.name))?;
-                    Ok(arkret_core::Handle::parse(value)?)
+                    Ok(arkret_models_identity::handle::Handle::parse(value)?)
                 };
                 let registered = parse_handle("registered")?;
                 let candidate = parse_handle("confusable_candidate")?;
@@ -820,7 +820,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .get("same_string_realm_alias_namespace")
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("privacy fixture {} missing realm alias", case.name))?;
-                arkret_core::RealmAlias::parse(alias_value)?;
+                arkret_models_collaboration::objects::realm_alias::RealmAlias::parse(alias_value)?;
 
                 let registered_skeleton = registered.registration_skeleton()?;
                 if registered_skeleton != candidate.registration_skeleton()?

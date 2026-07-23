@@ -21,9 +21,11 @@ use std::collections::HashSet;
 
 use anyhow::{Context, Result};
 use arkret_canonical::canonical_sha256;
-use arkret_core::{
-    Event, EventId, EventsSubmitFederationRequestBody, FederationServiceBindingRef, Hash, RealmId,
+use arkret_identifiers::{EventId, Hash, RealmId};
+use arkret_models_collaboration::event_sync::{
+    EventsSubmitFederationRequestBody, FederationServiceBindingRef,
 };
+use arkret_wire::Event;
 use serde_json::json;
 
 use crate::conformance::{

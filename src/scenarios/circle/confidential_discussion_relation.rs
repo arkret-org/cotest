@@ -8,7 +8,7 @@
 //!   - it round-trips through `serde_json`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::RelationKind;
+use arkret_wire::RelationKind;
 
 pub async fn confidential_discussion_relation_run() -> Result<()> {
     let rel = RelationKind::ConfidentialDiscussionOf;

@@ -15,10 +15,12 @@
 //! drift into a second implementation of the policy.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    ChildScopePolicy, CircleId, EncryptionProfile, enforce_child_scope_policy,
-    enforce_child_scope_policy_with_circle_profile,
+use arkret_identifiers::CircleId;
+use arkret_models_collaboration::governance::circle::{
+    enforce_child_scope_policy, enforce_child_scope_policy_with_circle_profile,
 };
+use arkret_models_collaboration::objects::space::ChildScopePolicy;
+use arkret_wire::EncryptionProfile;
 
 fn circle_a() -> Result<CircleId> {
     CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000701".to_owned())

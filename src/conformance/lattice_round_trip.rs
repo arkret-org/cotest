@@ -27,17 +27,17 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical::canonical_json_bytes;
-use arkret_core::{
-    CellRef, Did, LatticeOp, LatticeOpType, MoveId, REALM_LINK_ALLOWED_TRANSITIONS,
-    REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES, RealmId, RealmLinkKind,
-    RealmLinkPayload, RealmLinkStatus, RealmLinkTransitionCandidate, RealmLinkTransitionOutcome,
-    evaluate_realm_link_transition,
+use arkret_identifiers::{CellRef, Did, MoveId, RealmId};
+use arkret_models_collaboration::governance::realm_governance::{
+    REALM_LINK_ALLOWED_TRANSITIONS, REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES,
+    RealmLinkKind, RealmLinkPayload, RealmLinkStatus, RealmLinkTransitionCandidate,
+    RealmLinkTransitionOutcome, evaluate_realm_link_transition,
 };
 use arkret_state::lattice::ordered_log::IssuedOp;
 use arkret_state::lattice::{
     CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
 };
-use arkret_wire::ErrorCode;
+use arkret_wire::{ErrorCode, LatticeOp, LatticeOpType};
 use serde_json::{Value, json};
 
 const REALM_LINK_FSM_VECTOR_ID: &str = "ak.vector.realm_link.fsm_transition_matrix.v1";
@@ -591,7 +591,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
             )
         }
     };
-    if !matches!(bottom.kind, arkret_core::BottomKind::Conflict) {
+    if !matches!(bottom.kind, arkret_wire::BottomKind::Conflict) {
         bail!(
             "CasRegister Bottom kind expected Conflict, got {:?}",
             bottom.kind
@@ -723,7 +723,7 @@ fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
     ];
     let resolved = lattice.join(&cref, &ops);
     match resolved {
-        CellState::Bottom(bottom) if matches!(bottom.kind, arkret_core::BottomKind::Conflict) => {
+        CellState::Bottom(bottom) if matches!(bottom.kind, arkret_wire::BottomKind::Conflict) => {
             Ok(())
         }
         other => {
@@ -1126,7 +1126,7 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
             bail!("Notary concurrent reconfig MUST Bottom (notary split is a Realm-wide pause)")
         }
     };
-    if !matches!(bottom.kind, arkret_core::BottomKind::Conflict) {
+    if !matches!(bottom.kind, arkret_wire::BottomKind::Conflict) {
         bail!(
             "Notary split Bottom kind expected Conflict, got {:?}",
             bottom.kind

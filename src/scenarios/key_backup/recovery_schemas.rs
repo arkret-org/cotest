@@ -6,7 +6,8 @@
 //! shape.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{RECOVERY_POLICY_SCHEMA, RECOVERY_RECEIPT_SCHEMA, RecoverySessionId};
+use arkret_identifiers::RecoverySessionId;
+use arkret_wire::{RECOVERY_POLICY_SCHEMA, RECOVERY_RECEIPT_SCHEMA};
 
 pub async fn recovery_schemas_run() -> Result<()> {
     if RECOVERY_POLICY_SCHEMA != "ak.schema.recovery_policy.v1" {

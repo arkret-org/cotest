@@ -5,24 +5,25 @@
 //! fails this test before reaching the live soland surface.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CapabilityActionId, Did, EventId};
+use arkret_identifiers::{Did, EventId};
+use arkret_wire::CapabilityActionId;
 
 /// The 11 personal-agent endpoint operation IDs registered in
 /// `operation-registry.json` and mounted under soland `agents.rs`. Key
 /// rotation is expressed through runtime replacement re-pairing
 /// (`renew_pairing`), not a dedicated rotate operation.
 const PERSONAL_AGENT_OPERATIONS: &[&str] = &[
-    arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
-    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
-    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
-    arkret_core::ServiceOperationId::SELF_AGENT_QUERY_LIST,
-    arkret_core::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
-    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
-    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
-    arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
-    arkret_core::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
-    arkret_core::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
-    arkret_core::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+    arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
+    arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
+    arkret_wire::ServiceOperationId::SELF_AGENT_QUERY_LIST,
+    arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
+    arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
+    arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
+    arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
+    arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
+    arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE,
+    arkret_wire::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
 ];
 
 pub async fn personal_agent_provisioning_run() -> Result<()> {
@@ -42,18 +43,18 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
             "duplicate personal-agent operation ids: {PERSONAL_AGENT_OPERATIONS:?}"
         ));
     }
-    if arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION
+    if arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION
         != "ak.self.agent.command.provision"
     {
         return Err(anyhow!(
-            "arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_core::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
+            "arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION spelling drifted: arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION"
         ));
     }
-    if arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY
+    if arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY
         != "ak.gate.account.command.pair_agent_key"
     {
         return Err(anyhow!(
-            "arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_core::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY"
+            "arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY spelling drifted: arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY"
         ));
     }
 

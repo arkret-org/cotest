@@ -3,8 +3,8 @@
 //!
 //! Drives the unit-style scenario in
 //! [`cotest::scenarios::high_assurance_realm_policy`]. The scenario
-//! exercises the SDK invariant validator on `arkret_core::Space`; the
-//! reducer-side integration test lives at
+//! exercises the SDK invariant validator on `arkret_models_collaboration::objects::space::Space`;
+//! the reducer-side integration test lives at
 //! `soland/tests/high_assurance_policy.rs`. Together they pin the
 //! contract that any Realm with `security_class=high_assurance` MUST
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`.

@@ -6,7 +6,7 @@ use arkret::webvh::{
     prepare_principal_rotation, validate_principal_did_document_profile,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_core::validate_did_webvh_v1_method;
+use arkret_models_identity::did_document::validate_did_webvh_v1_method;
 use arkret_wire::Did;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;

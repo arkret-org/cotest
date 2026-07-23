@@ -4,14 +4,17 @@
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    AGENT_SELECTOR_CLAIM_SCHEMA, AgentParticipation, AgentParticipationEntry,
-    AgentParticipationError, AgentParticipationOutcome, AgentParticipationScope,
-    AgentSelectorClaim, Audience, Did, DirectoryAgentSelectorResolutionOutcome, Handle,
-    HandleBindingState, HandleVisibility, Hash, Mention, MentionNode, PayloadProof,
-    PayloadProofPurpose, RealmId, effective_participation, fold_ceiling_chain,
-    validate_agent_participation_tightens, validate_selection_within_ceiling,
+use arkret_identifiers::{Did, Hash, RealmId};
+use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode};
+use arkret_models_collaboration::governance::agent_participation::{
+    AgentParticipation, AgentParticipationEntry, AgentParticipationError,
+    AgentParticipationOutcome, AgentParticipationScope, effective_participation,
+    fold_ceiling_chain, validate_agent_participation_tightens, validate_selection_within_ceiling,
 };
+use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
+use arkret_models_identity::claim_presentation::AgentSelectorClaim;
+use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
+use arkret_wire::{AGENT_SELECTOR_CLAIM_SCHEMA, Audience, PayloadProof, PayloadProofPurpose};
 use chrono::{TimeZone, Utc};
 use serde_json::Value;
 

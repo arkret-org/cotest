@@ -12,7 +12,8 @@
 //! accepting the envelope. The check is local to the envelope bytes.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CircleId, EffectiveScope, RealmId};
+use arkret_identifiers::{CircleId, RealmId};
+use arkret_wire::EffectiveScope;
 use serde_json::{Value, json};
 
 fn realm_id() -> Result<RealmId> {

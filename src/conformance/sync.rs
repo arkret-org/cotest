@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    AccountSubscribeFrame, AccountSubscribeFrameKind, EventsSubscribeFrame,
-    EventsSubscribeFrameKind, StreamTraceError, StreamTraceFrame, StreamTraceFrameKind,
-    StreamTraceValidator,
+use arkret_models_collaboration::http_bodies::{EventsSubscribeFrame, EventsSubscribeFrameKind};
+use arkret_models_collaboration::sync_frames::account_subscribe::{
+    AccountSubscribeFrame, AccountSubscribeFrameKind,
+};
+use arkret_models_collaboration::sync_frames::stream_trace::{
+    StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
 };
 use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
@@ -42,9 +44,9 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
             .get("expect_valid")
             .and_then(Value::as_bool)
             .ok_or_else(|| anyhow!("frontier schema case lacks expect_valid"))?;
-        let decoded = serde_json::from_value::<arkret_core::RealmActorFrontierView>(
-            required_field(case, "instance")?.clone(),
-        );
+        let decoded = serde_json::from_value::<
+            arkret_models_collaboration::event_sync::RealmActorFrontierView,
+        >(required_field(case, "instance")?.clone());
         let valid = decoded
             .as_ref()
             .is_ok_and(|frontier| frontier.validate().is_ok());
@@ -57,14 +59,19 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
     }
 
     let vector = required_field(value, "actor_frontier_digest")?;
-    let realm_id =
-        arkret_core::RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001".to_owned())?;
-    let actor_id = arkret_core::Did::new("did:web:alice.example".to_owned())?;
+    let realm_id = arkret_identifiers::RealmId::new(
+        "ak:realm:01904100-0000-7000-8000-000000000001".to_owned(),
+    )?;
+    let actor_id = arkret_identifiers::Did::new("did:web:alice.example".to_owned())?;
     let event_ids = vec![
-        arkret_core::EventId::new("ak:event:01904100-0000-7000-8000-000000000001".to_owned())?,
-        arkret_core::EventId::new("ak:event:01904100-0000-7000-8000-000000000002".to_owned())?,
+        arkret_identifiers::EventId::new(
+            "ak:event:01904100-0000-7000-8000-000000000001".to_owned(),
+        )?,
+        arkret_identifiers::EventId::new(
+            "ak:event:01904100-0000-7000-8000-000000000002".to_owned(),
+        )?,
     ];
-    let digest = arkret_core::RealmActorFrontierView::compute_digest(
+    let digest = arkret_models_collaboration::event_sync::RealmActorFrontierView::compute_digest(
         &realm_id,
         &actor_id,
         43,
@@ -88,8 +95,8 @@ enum StreamSurface {
 impl StreamSurface {
     const fn operation_id(self) -> &'static str {
         match self {
-            Self::Account => arkret_core::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
-            Self::Events => arkret_core::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
+            Self::Account => arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
+            Self::Events => arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
         }
     }
 }
@@ -192,7 +199,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
             },
             realm_id: None,
             cursor: cursor
-                .map(|cursor| arkret_core::identifiers::Cursor::new(cursor.to_owned()))
+                .map(|cursor| arkret_identifiers::Cursor::new(cursor.to_owned()))
                 .transpose()?,
             payload: None,
             reconnect_after_ms,
@@ -391,8 +398,8 @@ pub fn run_stream_frame_sequence_vector() -> Result<()> {
         "stream frame sequence operations",
     )?;
     let expected_operations = [
-        arkret_core::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
-        arkret_core::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
+        arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
+        arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
     ];
     if operations.len() != expected_operations.len()
         || !expected_operations.iter().all(|operation| {

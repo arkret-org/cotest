@@ -2,7 +2,7 @@
 //! artifact at runtime.
 //!
 //! This is the cotest-side companion of the SDK's
-//! [`arkret_core::ProfileValidator`]: the SDK owns a frozen table baked at
+//! [`arkret_policy::profile_claim::ProfileValidator`]: the SDK owns a frozen table baked at
 //! build time, cotest reads the live artifact off disk so a stale SDK build
 //! cannot mask a spec change. The two are wired together in
 //! [`assert_sdk_matches_artifact`] which is called by the smoke suite.
@@ -302,7 +302,7 @@ pub fn assert_sdk_matches_artifact() -> Result<()> {
     let table = ProfileRoleTable::load()?;
     let mut diffs = Vec::new();
     for (profile_id, expected) in &table.roles {
-        match arkret_core::profile_role(profile_id) {
+        match arkret_policy::generated::profiles::profile_role(profile_id) {
             Some(sdk_role) => {
                 if sdk_role.as_str() != expected.as_str() {
                     diffs.push(format!(

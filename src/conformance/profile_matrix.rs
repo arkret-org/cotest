@@ -533,7 +533,7 @@ fn collect_cell_refs(
             bail!("requirement {field} contains an empty value");
         }
         if require_cell_prefix
-            && arkret_core::CellRef::new(value.to_owned()).is_err()
+            && arkret_identifiers::CellRef::new(value.to_owned()).is_err()
             && !is_template_cell_ref(value)
         {
             bail!(

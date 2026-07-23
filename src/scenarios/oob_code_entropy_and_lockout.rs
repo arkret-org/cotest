@@ -35,7 +35,7 @@
 //! / lockout coverage; a live behavioural test is a tracked follow-up.
 
 use anyhow::{Result, anyhow};
-use arkret_core::is_known_error_code;
+use arkret_wire::is_known_error_code;
 
 /// Minimum acceptable length for an offline-verifiable OOB code.
 /// 22 chars base32 ≈ 110 bits entropy with disambiguated alphabet.

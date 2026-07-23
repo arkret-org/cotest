@@ -1,4 +1,4 @@
-//! P2F.3 — every AKP-0007 reason code is reachable from `arkret-core`.
+//! P2F.3 — every AKP-0007 reason code is reachable from the Wire registry.
 //!
 //! Eight of the nine AKP-0007 error codes are `failed_precondition` /
 //! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)
@@ -15,7 +15,7 @@
 //! anti-enumeration scenarios will fire in P2F.4.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{error_code_http_status, is_known_error_code};
+use arkret_wire::{error_code_http_status, is_known_error_code};
 
 const KNOWN_REASON_CODES_CKP_0007: [&str; 10] = [
     arkret_wire::ReasonCode::CIRCLE_REALM_MISMATCH,

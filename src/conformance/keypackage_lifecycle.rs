@@ -4,10 +4,12 @@
 //! Welcome digest binding against the spec artifact fixture.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::{
-    DeviceId, Did, Hash, KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome,
-    KeyPackagesUploadOutcome, MlsKeypackagePayload, MlsWelcomePayload, RealmId,
-    validate_mls_welcome_claim_envelope,
+use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
+use arkret_models_collaboration::events_payloads::list_message_mimi_mls::{
+    MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
+};
+use arkret_models_crypto::{
+    KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome, KeyPackagesUploadOutcome,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -88,10 +90,10 @@ fn validate_keypackage_lifecycle_fixture_metadata(fixture: &Value) -> Result<()>
     }
 
     for op in [
-        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
-        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM,
-        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
-        arkret_core::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
+        arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE,
+        arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM,
+        arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME,
+        arkret_wire::ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_REVOKE,
     ] {
         if !op.starts_with("ak.self.keys.keypackages.") {
             bail!("keypackage operation id namespace drifted: {op}");

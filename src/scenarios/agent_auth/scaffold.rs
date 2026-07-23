@@ -7,7 +7,8 @@
 //!   agent_principal DID, NOT the controller DID.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{CapabilityActionId, Did};
+use arkret_identifiers::Did;
+use arkret_wire::CapabilityActionId;
 
 /// Validate a `runtime_attestation` envelope per §1.2 — unknown kinds
 /// fail-closed; v1 baseline is `self_asserted`.

@@ -7,9 +7,10 @@
 //! type's wire shape against `spec/v1/artifacts/schemas/circle.schema.json`.
 
 use anyhow::{Result, anyhow};
-use arkret_core::{
-    Circle, CircleColorToken, CircleDirectoryVisibility, CircleDisplay, CircleGlyph, CircleId,
-    CircleJoinRule, CircleState, CircleSymbol, Did, RealmId,
+use arkret_identifiers::{CircleId, Did, RealmId};
+use arkret_models_collaboration::governance::circle::{
+    Circle, CircleColorToken, CircleDirectoryVisibility, CircleDisplay, CircleGlyph,
+    CircleJoinRule, CircleState, CircleSymbol,
 };
 
 fn display() -> CircleDisplay {

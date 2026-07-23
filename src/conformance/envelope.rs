@@ -910,25 +910,25 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
             missing_payload_fields(content, &["board_id", "strand_id", "list_id", "rank"])
         }
         "ak.container.move_item" => {
-            serde_json::from_value::<arkret_core::ContainerMoveItemPayload>(content.clone())
+            serde_json::from_value::<arkret_models_collaboration::events_payloads::capability_circle_consent_contact::ContainerMoveItemPayload>(content.clone())
                 .map_err(|error| error.to_string())
                 .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
                 .err()
         }
         "ak.container.rebalance" => {
-            serde_json::from_value::<arkret_core::ContainerRebalancePayload>(content.clone())
+            serde_json::from_value::<arkret_models_collaboration::events_payloads::capability_circle_consent_contact::ContainerRebalancePayload>(content.clone())
                 .map_err(|error| error.to_string())
                 .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
                 .err()
         }
         "ak.realm.notary" => {
-            serde_json::from_value::<arkret_core::RealmNotaryPayload>(content.clone())
+            serde_json::from_value::<arkret_models_collaboration::events_payloads::preview_realm_reaction::RealmNotaryPayload>(content.clone())
                 .map_err(|error| error.to_string())
                 .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
                 .err()
         }
         "ak.realm.digest_suite_transition" => serde_json::from_value::<
-            arkret_core::RealmDigestSuiteTransitionPayload,
+            arkret_models_collaboration::events_payloads::preview_realm_reaction::RealmDigestSuiteTransitionPayload,
         >(content.clone())
         .map_err(|error| error.to_string())
         .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
