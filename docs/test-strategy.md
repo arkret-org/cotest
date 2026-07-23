@@ -297,16 +297,17 @@ failures can be debugged without reconstructing paths from HAR files.
 
 ### Mock services
 
-`run-joint-e2e.ps1` can spin up nine in-process mock services under
+`run-joint-e2e.ps1` can spin up ten in-process mock services under
 `e2e/mocks/` to cover spec sections that depend on external infrastructure.
 Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
-`-StartMockWitness`, `-StartMockAuditAgent`, `-StartMockPolicyServer`,
+`-StartMockWitness`, `-StartMockPolicyServer`,
 `-StartMockPushGateway`, `-StartMockAppletRegistry`, `-StartMockTspEndpoint`,
-`-StartMockMimiFacade`) or all at once with
+`-StartMockMimiFacade`, `-StartMockClaimIssuer`,
+`-StartMockChallengeProvider`) or all at once with
 `-StartMocks`. Specs read the live base URLs via the helpers in
 `e2e/helpers/env.ts` (`mockIdpBaseUrl()`, `mockEmailBaseUrl()`,
-`mockWitnessBaseUrl()`, `mockAuditAgentBaseUrl()`, and the matching helpers
-for policy, push, applet, TSP, and MIMI).
+`mockWitnessBaseUrl()`, and the matching helpers
+for policy, push, applet, TSP, MIMI, claim issuance, and challenge providers).
 
 When `-StartCoauth -StartMockEmail` are both enabled, the generated Coauth
 config uses the `email.http_webhook` provider with the mock email
@@ -328,12 +329,13 @@ single-witness env vars and the quorum lists
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
 | `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/mock/email/verification/send` (with `ttl_seconds` + `body_html`), `/mock/email/verification/inbox?to=`, `/mock/email/verification/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
 | `mock-witness.mjs` | S9 did:webvh rotation | `/mock/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/mock/witness/policy`, `/mock/witness/health` test hook, `/inspect` |
-| `mock-audit-agent.mjs` | S25 audited E2EE / `ak.audit.accessed` | `/_arkret/self/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ak.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
 | `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_arkret/self/policy/check`, `/_arkret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
 | `mock-push-gateway.mjs` | notification push / blind wake | `/_arkret/edge/push/register-device`, `/_arkret/edge/push/notify`, `/mock/push/inbox`, `/scenarios`, `/jwks` |
 | `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_arkret/edge/applet/register`, `/_arkret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
 | `mock-tsp-endpoint.mjs` | TSP relationship bootstrap / message ACK | `/tsp/relationship-bootstrap`, `/tsp/message`, `/tsp/inbox`, `/tsp/outbox`, `/identity`, `/inspect` |
 | `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/mock/mimi/join-requests`, `/mock/mimi/approve`, `/mock/mimi/outbound`, `/mock/mimi/inbound`, `/identity`, `/inspect` |
+| `mock-claim-issuer.mjs` | restricted-join claim issuance | `/issue-claim`, `/identity`, `/inspect` |
+| `mock-challenge-provider.mjs` | restricted-join challenge completion | `/challenge`, `/identity`, `/inspect` |
 
 `e2e/tests/harness/mocks-selftest.spec.ts` is the contract pin for these
 mocks. It is tagged `@fully-implemented` so the `joint-smoke` profile runs

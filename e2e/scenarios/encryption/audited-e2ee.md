@@ -1,82 +1,51 @@
-# Audited E2EE(franking + moderator decryption attestation)
+# S25 — Moderation Franking 与 Audited E2EE 边界
 
 ## 目标
 
-E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking 收据(`ak.moderation.franking_proof`),证明"该 ciphertext 在某时间点存在 + 来自某 sender";audit agent 可以在用户明确 audit_disclosure_policy 下,通过 attested ceremony 解密 + 写入 `ak.audit.accessed`。
+验证普通治理举报与 Audit Applet release 是两条彼此独立的协议流程：
 
-## Spec 锚点
+- E2EE 消息可生成本地 `ak.moderation.franking_proof`，且 proof 不包含明文；
+- `POST /_arkret/self/moderation/report` 只把举报送入目标 Realm / Circle 的 moderation workflow；
+- 普通举报不得自动派生 `ak.audit.session.request`、`ak.audit.session.authorize`、`ak.audit.release` 或 `ak.audit.accessed`；
+- 只有 active `ak.audit.applet_binding` 加上完整 sealed release session 才能向 Audit Applet 释放有界历史材料。本场景不伪造该跨服务 transport。
 
-- `crypto-media/audited-e2ee.md` §2 — 设计目标(可审 + 不破坏 forward secrecy)
-- `crypto-media/audited-e2ee.md` §3 — Audit agent 进入条件
-- `crypto-media/audited-e2ee.md` §4 — Franking schema + `ak.audit.accessed`
-- `crypto-media/encryption-and-audit.md` §3 — Audited mode 集成
-- `governance/content-moderation.md` §3.4 — E2EE 举报 franking
+## 规范映射
 
-## 拓扑
-
-- 1 × soland + 1 × coauth + 1 × audit agent service(独立 DID)
+- `crypto-media/audited-e2ee.md` §2、§8 — Audit Applet 控制面与治理举报边界
+- `governance/content-moderation.md` §3.1–§3.4 — 举报、scoped moderation routing、E2EE evidence / franking
+- `crypto-media/encryption-and-audit.md` §2.3.3 — `payload_digest`
 
 ## Actors
 
-| 名字 | 角色 |
+| Actor | 角色 |
 |---|---|
-| alice | Realm owner,启用 audit mode |
-| bob | 成员,发被举报的消息 |
-| reporter | 成员,举报 |
-| audit-agent | 第三方 audit service,`did:web:audit.example.com` |
+| alice | Realm owner / scoped administrator |
+| bob | E2EE 消息发送者 |
+| reporter | 可见目标消息的普通 Realm 成员 |
 
-## Steps
+## 主流程
 
-### Phase A — 启用 audited E2EE
+1. alice 创建 `encryption_profile=mls_rfc9420` 的 Realm；不配置旧式 `audit_disclosure_policy`。
+2. bob 提交只含 ciphertext、AAD 与 digest 的 `ak.message.create`。
+3. alice 从部署本地审计查询面读取 `ak.moderation.franking_proof`：
+   - proof 绑定消息 event、ciphertext digest、接收服务与 canonical event digest；
+   - proof 不含 plaintext；
+   - proof 不携带 `audit_disclosure_policy` 或 Audit Applet endpoint。
+4. 使用本地 verifier 验证 proof；篡改 `ciphertext_digest` 后必须返回 `franking_tampered`。
+5. reporter 对该消息调用 `POST /_arkret/self/moderation/report`。
+6. 响应为 `{report_id,status:"submitted"}`；普通 reporter 不获得具体 `routed_to` DID。
+7. reporter 从自身可见的部署本地审计查询面看到 `moderation.report` 留痕，确认举报已被本地受理。
+8. 查询该 Realm 的内部审计记录，确认本次举报没有产生：
+   - `org.arkret.soland.audit.report`
+   - `ak.audit.accessed`
+   - `ak.audit.session.request`
+   - `ak.audit.session.authorize`
+   - `ak.audit.release`
 
-1. alice createRealm,`encryption_profile=mls_rfc9420` + `audit_disclosure_policy = { agent_id: "did:web:audit.example.com", trigger: "report_filed" }`
-2. alice 邀请 bob、reporter,both 接受
+## 明确不覆盖
 
-### Phase B — bob 发消息,franking 自动生成
+本场景不模拟 Audit Applet identity、invite、inbox 或自动 plaintext access。若未来需要跨服务 Audit Applet transport，必须先在规范中完整登记身份认证、session/notice/authorize/release schema、重放与重试、recipient key/attestation、撤销与顺序语义，然后再增加真实互操作测试。
 
-3. bob 发加密消息 `M1` 到 Realm `R_audit`
-4. soland Sync Service:
-   - 接受 ciphertext + plaintext metadata
-   - 同时生成 `ak.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_id, timestamp }`,服务端 service DID 签
-5. 断言:`GET /_soland/admin/audit/events?realm_id=<R_audit>&kind=ak.moderation.franking_proof` 返回该 franking 记录
-6. 断言:franking record **不含** 明文消息内容,只含 ciphertext_digest
+## 预算
 
-### Phase C — reporter 举报
-
-7. reporter 举报 `M1`,`POST /_arkret/self/moderation/report { realm_id, target_ref: M1.event_id, report_reason_code: "harassment" }`
-   - reporter 响应只断言 `{report_id,status:"submitted"}`;不得向普通 reporter 暴露 `routed_to` 的具体 audit-agent / moderator DID。
-8. Report 触发 `audit_disclosure_policy.trigger = report_filed`
-9. soland 通知 audit-agent service:`POST <agent_url>/_arkret/self/audit-agent/invite` 与 `POST <agent_url>/_arkret/self/audit-agent/events`
-
-### Phase D — audit-agent 进入 + 解密
-
-10. audit-agent 收到 request → 调 `GET /_arkret/self/events/<M1.event_id>/audit-access?realm_id=<R_audit>`
-11. soland 校验 audit-agent 是 audit_disclosure_policy.agent_id → 允许
-12. audit-agent 调 MLS KeyPackage / out-of-band 拿到 epoch key(spec 留 mechanism;可能需要群组重新加 audit-agent 进 MLS)
-13. audit-agent 解密 `M1` 得到 plaintext
-14. **关键**:audit-agent 必须写 `ak.audit.accessed { auditor_did, target_ref, accessed_at, reason: "moderation_report" }`
-15. 断言:audit log 含该 accessed record
-16. 断言:alice 进 `/realms/${realmId}/admin/audit` 看到这条 access entry
-
-### Phase E — Audit-agent 私自访问被拒
-
-17. audit-agent 不在 audit_disclosure_policy 时(假设 alice 改了 policy),audit-agent 调同样的 endpoint → 拒,403
-18. 断言:soland 拒绝 + 写入 `ak.audit.rejected_access` 记录
-
-## Edge cases
-
-- **E25.1 franking 完整性**:测试 harness 改 franking record 的 ciphertext_digest → 后续校验失败,reducer 拒
-- **E25.2 audit-agent 单独看到 frank 但解不开**:audit-agent 拿到 frank record,但因为不在 MLS group 中所以解不了密(spec 行为)
-- **E25.3 alice 撤销 audit policy 中途**:撤销后,audit-agent 后续请求被拒;已 access 的记录保留(不可篡改)
-- **E25.4 报告人 = 加害人**:bob 举报自己的消息 → 触发 audit?spec 可能禁止 self-report 进 audit pipeline
-
-## Implementation notes
-
-- **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `ak.message.create` 后自动追加 `ak.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/_soland/self/audit/franking/verify` 做 tamper 校验。
-- **2026-05-25 P2-045 local close**:soland `POST /_arkret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ak.audit.accessed` 记录写入 audit log。
-- **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`ak.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
-- **仍待后续**:policy revoke 后的 `ak.audit.rejected_access` 细化测试保留为 E25.3 fixme;inkson realm-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
-
-## 总耗时预估
-
-约 90s(audit-agent 解密 + 写回 audit log)。
+约 45 秒。

@@ -13,10 +13,11 @@ e2e/
   tests/          # 同结构,playwright 实现
     authz/        calls/        conformance/  discovery/
     ...           (19 个 domain,一一对应)
-  mocks/          # 9 个 mock service,Node.js 单文件
+  mocks/          # 10 个 mock service,Node.js 单文件
     mock-idp.mjs        mock-email.mjs      mock-witness.mjs
-    mock-audit-agent.mjs mock-policy-server.mjs mock-push-gateway.mjs
+    mock-policy-server.mjs mock-push-gateway.mjs
     mock-applet-registry.mjs mock-tsp-endpoint.mjs mock-mimi-facade.mjs
+    mock-claim-issuer.mjs mock-challenge-provider.mjs
     _shared/keypairs.mjs _shared/inspect.mjs
 ```
 
@@ -24,45 +25,45 @@ e2e/
 
 ## 总览
 
-- **66 条 scenarios**(19 个领域),其中
-  - **64** 条业务 scenario 与 spec 一一对应(`scenarios/<domain>/<name>.md` ↔ `tests/<domain>/<name>.spec.ts`)
+- **72 条 scenarios**(19 个领域),其中
+  - **70** 条业务 scenario 与 spec 一一对应(`scenarios/<domain>/<name>.md` ↔ `tests/<domain>/<name>.spec.ts`)
   - **2** 条 harness/probe 专属:[`harness/mocks-selftest`](harness/mocks-selftest.md)、[`spaces/admin-section-route`](spaces/admin-section-route.md)
   - `workflows/incident-response`、dual-soland federation、history visibility、MIMI facade harness 等新增 coverage 均已登记到 catalog
-- **66 个 playwright spec 文件**
-- **226 live test / 169 fixme / 21 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
-- **9 个 mock service**:OIDC IdP / Email 3PID / WebVH witness / Audit agent / Policy server / Push gateway / Applet registry / TSP endpoint / MIMI facade
+- **88 个 playwright spec 文件**
+- **398 live test / 42 fixme / 148 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
+- **10 个 mock service**:OIDC IdP / Email 3PID / WebVH witness / Policy server / Push gateway / Applet registry / TSP endpoint / MIMI facade / Claim issuer / Challenge provider
 
 ## 19 个 domain
 
 | Domain | scenario doc 数 | spec 文件数 | verified | promised | fixme | skip |
 |---|---:|---:|---:|---:|---:|---:|
-| authz | 2 | 2 | 8 | 12 | 4 | 0 |
-| calls | 4 | 4 | 5 | 13 | 8 | 0 |
-| conformance | 4 | 4 | 21 | 33 | 12 | 3 |
-| discovery | 2 | 2 | 10 | 11 | 1 | 0 |
-| documents | 1 | 1 | 2 | 2 | 0 | 0 |
-| encryption | 5 | 5 | 20 | 33 | 13 | 1 |
-| extensions | 3 | 3 | 1 | 14 | 13 | 0 |
-| federation | 2 | 2 | 14 | 16 | 2 | 1 |
-| governance | 4 | 4 | 18 | 28 | 10 | 1 |
-| harness | 1 | 1 | 10 | 10 | 0 | 10 |
-| identity | 9 | 9 | 31 | 69 | 38 | 2 |
-| invites | 1 | 1 | 1 | 7 | 6 | 0 |
-| joint | 1 | 1 | 1 | 1 | 0 | 0 |
-| kanban | 2 | 2 | 5 | 13 | 8 | 0 |
-| messaging | 4 | 4 | 35 | 41 | 6 | 0 |
-| models | 4 | 4 | 6 | 21 | 15 | 0 |
-| spaces | 6 | 6 | 13 | 25 | 12 | 0 |
-| sync | 5 | 5 | 16 | 28 | 12 | 3 |
-| workflows | 6 | 6 | 9 | 18 | 9 | 0 |
-| **合计** | **66** | **66** | **226** | **395** | **169** | **21** |
+| authz | 2 | 2 | 9 | 10 | 1 | 3 |
+| calls | 7 | 7 | 18 | 18 | 0 | 0 |
+| conformance | 4 | 6 | 36 | 36 | 0 | 3 |
+| discovery | 3 | 3 | 7 | 10 | 3 | 11 |
+| encryption | 6 | 6 | 27 | 32 | 5 | 15 |
+| events | 1 | 1 | 1 | 1 | 0 | 0 |
+| extensions | 2 | 3 | 12 | 15 | 3 | 2 |
+| federation | 2 | 3 | 18 | 18 | 0 | 5 |
+| governance | 5 | 5 | 23 | 30 | 7 | 3 |
+| harness | 1 | 1 | 9 | 9 | 0 | 9 |
+| identity | 9 | 15 | 80 | 97 | 17 | 50 |
+| invites | 1 | 2 | 8 | 8 | 0 | 1 |
+| joint | 1 | 5 | 5 | 5 | 0 | 3 |
+| kanban | 3 | 3 | 19 | 19 | 0 | 7 |
+| messaging | 4 | 4 | 39 | 39 | 0 | 6 |
+| models | 4 | 4 | 18 | 21 | 3 | 1 |
+| spaces | 6 | 6 | 26 | 26 | 0 | 6 |
+| sync | 5 | 6 | 26 | 29 | 3 | 7 |
+| workflows | 6 | 6 | 17 | 17 | 0 | 16 |
+| **合计** | **72** | **88** | **398** | **440** | **42** | **148** |
 
 ## 设计原则
 
 1. **Spec-contract first** — 每条 fixme 都标了 scenario 引用 + 当前 owner gap。删除 `.fixme` 前必须走 [`docs/fixme-promotion-checklist.md`](../../docs/fixme-promotion-checklist.md)。
 2. **UI 层 + 业务流程** — 每个 scenario 模拟真实多用户业务,不是单页 smoke。例外是 `harness/mocks-selftest`(纯 harness 自检)与 `spaces/admin-section-route`(inkson routing probe),两条都显式标注为 harness/probe-only。
 3. **Spec-mirrored 目录** — 按 arkret-spec 的域划分(`identity/`、`encryption/`、`sync/` 等),scenario 路径直接对应 spec 路径,导航零成本。
-4. **Mock services 解锁外部依赖** — 9 个 mock 把所有外部依赖(OIDC、email、witness、audit agent、policy server、push gateway、applet registry、TSP endpoint、MIMI facade)mock 化,默认不启动,通过 `-StartMocks` 一次拉起。
+4. **Mock services 解锁外部依赖** — 10 个 mock 把已登记协议的外部依赖(OIDC、email、witness、policy server、push gateway、applet registry、TSP endpoint、MIMI facade、claim issuer、challenge provider)mock 化,默认不启动,通过 `-StartMocks` 一次拉起。Audit Applet 不在已登记跨服务 transport 前提下伪造 identity / invite / inbox 路由。
 
 ## Mock services
 
@@ -71,14 +72,15 @@ e2e/
 | OIDC IdP | [mocks/mock-idp.mjs](../mocks/mock-idp.mjs) | `-StartMockIdp` | `mockIdpBaseUrl()` |
 | Email + 3PID | [mocks/mock-email.mjs](../mocks/mock-email.mjs) | `-StartMockEmail` | `mockEmailBaseUrl()` |
 | WebVH witness | [mocks/mock-witness.mjs](../mocks/mock-witness.mjs) | `-StartMockWitness` | `mockWitnessBaseUrl()` + `mockWitnessDid()` |
-| Audit agent | [mocks/mock-audit-agent.mjs](../mocks/mock-audit-agent.mjs) | `-StartMockAuditAgent` | `mockAuditAgentBaseUrl()` + `mockAuditAgentDid()` |
 | Policy server | [mocks/mock-policy-server.mjs](../mocks/mock-policy-server.mjs) | `-StartMockPolicyServer` | `mockPolicyServerBaseUrl()` + `mockPolicyServerDid()` |
 | Push gateway | [mocks/mock-push-gateway.mjs](../mocks/mock-push-gateway.mjs) | `-StartMockPushGateway` | `mockPushGatewayBaseUrl()` |
 | Applet registry | [mocks/mock-applet-registry.mjs](../mocks/mock-applet-registry.mjs) | `-StartMockAppletRegistry` | `mockAppletRegistryBaseUrl()` + `mockAppletRegistryDid()` |
 | TSP endpoint | [mocks/mock-tsp-endpoint.mjs](../mocks/mock-tsp-endpoint.mjs) | `-StartMockTspEndpoint` | `mockTspEndpointBaseUrl()` + `mockTspEndpointVid()` |
 | MIMI facade | [mocks/mock-mimi-facade.mjs](../mocks/mock-mimi-facade.mjs) | `-StartMockMimiFacade` | `mockMimiFacadeBaseUrl()` + `mockMimiFacadeDid()` / `createMimiFacadeClient()` |
+| Claim issuer | [mocks/mock-claim-issuer.mjs](../mocks/mock-claim-issuer.mjs) | `-StartMockClaimIssuer` | `mockClaimIssuerBaseUrl()` + `mockClaimIssuerDid()` |
+| Challenge provider | [mocks/mock-challenge-provider.mjs](../mocks/mock-challenge-provider.mjs) | `-StartMockChallengeProvider` | `mockChallengeProviderBaseUrl()` + `mockChallengeProviderDid()` |
 
-`-StartMocks` 一次启动全部 9 个。每个 mock 都是 Node.js 单文件,需要签名的 mock 使用 RS256 / Ed25519 真签名 JWT,全部共享 `mocks/_shared/inspect.mjs` 的 debug surface。harness 自检 spec [`harness/mocks-selftest`](harness/mocks-selftest.md) 锁住每个 mock 的契约,任一 mock 实现漂移都会被立刻发现。
+`-StartMocks` 一次启动全部 10 个。每个 mock 都是 Node.js 单文件,需要签名的 mock 使用 RS256 / Ed25519 真签名 JWT,全部共享 `mocks/_shared/inspect.mjs` 的 debug surface。harness 自检 spec [`harness/mocks-selftest`](harness/mocks-selftest.md) 锁住其中 8 类共享基础契约；claim issuer / challenge provider 的业务约束由 `spaces/knock-auto-resolve` 覆盖。
 
 ## 编排约定
 

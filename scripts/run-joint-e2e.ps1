@@ -97,7 +97,6 @@ param(
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
-    [switch]$StartMockAuditAgent,
     [switch]$StartMockPolicyServer,
     [string]$MockPolicyServerDid,
     [switch]$StartMockPushGateway,
@@ -115,7 +114,6 @@ param(
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:webvh:z6mkfixture:witness.joint-e2e.local",
     [string[]]$MockWitnessExtraDids = @(),
-    [string]$MockAuditAgentDid,
     [ValidateSet("joint-smoke", "joint-full")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
@@ -126,7 +124,6 @@ if ($StartMocks) {
     $StartMockIdp = $true
     $StartMockEmail = $true
     $StartMockWitness = $true
-    $StartMockAuditAgent = $true
     $StartMockPolicyServer = $true
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
@@ -1895,12 +1892,6 @@ if ($StartMockWitness) {
         $mockWitnessQuorumDids += $extraDid
     }
 }
-$mockAuditAgentPort = $null
-$mockAuditAgentBaseUrl = $null
-if ($StartMockAuditAgent) {
-    $mockAuditAgentPort = Get-FreeTcpPort
-    $mockAuditAgentBaseUrl = "http://127.0.0.1:$mockAuditAgentPort"
-}
 $mockPolicyServerPort = $null
 $mockPolicyServerBaseUrl = $null
 if ($StartMockPolicyServer) {
@@ -2206,15 +2197,6 @@ try {
             Wait-HttpReady -Url "$($witness.base_url)/mock/witness/policy" -TimeoutSeconds 30
             $witnessIndex++
         }
-    }
-    if ($StartMockAuditAgent) {
-        $auditEnv = "`$env:MOCK_AUDIT_AGENT_PORT='$mockAuditAgentPort'"
-        if ($MockAuditAgentDid) {
-            $auditEnv = "$auditEnv; `$env:MOCK_AUDIT_AGENT_DID=" + (Quote-PsLiteral $MockAuditAgentDid)
-        }
-        $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/_arkret/self/audit-agent/identity" -TimeoutSeconds 30
     }
     if ($StartMockPolicyServer) {
         $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
@@ -2817,17 +2799,6 @@ try {
         Remove-Item Env:COTEST_MOCK_WITNESS_QUORUM_BASE_URLS -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_WITNESS_QUORUM_DIDS -ErrorAction SilentlyContinue
     }
-    if ($mockAuditAgentBaseUrl) {
-        $env:COTEST_MOCK_AUDIT_AGENT_BASE_URL = $mockAuditAgentBaseUrl
-        if ($MockAuditAgentDid) {
-            $env:COTEST_MOCK_AUDIT_AGENT_DID = $MockAuditAgentDid
-        } else {
-            Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
-        }
-    } else {
-        Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
-    }
     if ($mockPolicyServerBaseUrl) {
         $env:COTEST_MOCK_POLICY_SERVER_BASE_URL = $mockPolicyServerBaseUrl
         if ($MockPolicyServerDid) {
@@ -3402,8 +3373,6 @@ $summary = [pscustomobject]@{
     mock_witness_did = if ($mockWitnessBaseUrl) { $MockWitnessDid } else { $null }
     mock_witness_quorum_base_urls = if ($mockWitnessBaseUrl) { $mockWitnessQuorumBaseUrls } else { @() }
     mock_witness_quorum_dids = if ($mockWitnessBaseUrl) { $mockWitnessQuorumDids } else { @() }
-    mock_audit_agent_base_url = $mockAuditAgentBaseUrl
-    mock_audit_agent_principal_id = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     inkson_base_url = $InksonBaseUrl
@@ -3467,8 +3436,6 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_witness_did: $($summary.mock_witness_did)
 - mock_witness_quorum_base_urls: $($mockWitnessQuorumBaseUrls -join ",")
 - mock_witness_quorum_dids: $($mockWitnessQuorumDids -join ",")
-- mock_audit_agent_base_url: $($summary.mock_audit_agent_base_url)
-- mock_audit_agent_principal_id: $($summary.mock_audit_agent_principal_id)
 - mock_mimi_facade_base_url: $($summary.mock_mimi_facade_base_url)
 - mock_mimi_facade_did: $($summary.mock_mimi_facade_did)
 - inkson_base_url: $($summary.inkson_base_url)
@@ -3531,10 +3498,6 @@ if ($mockWitnessBaseUrl) {
     if ($mockWitnessQuorumBaseUrls.Count -gt 1) {
         Write-Host "  mock-witness-quorum: $($mockWitnessQuorumBaseUrls -join ', ')"
     }
-}
-if ($mockAuditAgentBaseUrl) {
-    $auditAgentLabel = if ($MockAuditAgentDid) { " ($MockAuditAgentDid)" } else { "" }
-    Write-Host "  mock-audit-agent: $mockAuditAgentBaseUrl$auditAgentLabel"
 }
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"

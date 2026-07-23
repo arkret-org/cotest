@@ -5,14 +5,10 @@
 //   - crypto-media/encryption-and-audit.md §2.3.1 (key_ref MLS)
 //   - crypto-media/audited-e2ee.md §3-§4 (franking, ak.audit.accessed)
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { expect, test } from "@playwright/test";
-import {
-  mockAuditAgentBaseUrl,
-  solandBaseUrl,
-  solandServiceId,
-} from "../../helpers/env";
+import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
   authHeaders,
@@ -185,153 +181,8 @@ test.describe("encrypted attachments", () => {
     expect(wireErrCode(await missing.json())).toBe("not_found");
   });
 
-  test.fixme("E12.4 audited E2EE: ak.moderation.franking_proof receipt visible to audit agent without revealing plaintext", async ({
-    request,
-  }) => {
-    // spec: audited-e2ee.md §4 / §8 — a report carries the optional
-    // ak.moderation.franking_proof to the bound audit agent; the agent sees
-    // the receipt (ciphertext_digest / routing metadata) but never the
-    // attachment plaintext or its plaintext digest.
-    const agentBaseUrl = mockAuditAgentBaseUrl();
-    test.skip(!agentBaseUrl, "mock-audit-agent not started for audited E2EE");
-    await request.delete(`${agentBaseUrl}/inspect`);
-    const identity = await (
-      await request.get(`${agentBaseUrl}/_arkret/self/audit-agent/identity`)
-    ).json();
-    const agentDid = String(identity.did);
-
-    const alice = uniqueUser("s12-frank-alice");
-    const bob = uniqueUser("s12-frank-bob");
-    const reporter = uniqueUser("s12-frank-reporter");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, reporter),
-    ]);
-    const [aliceToken, bobToken, reporterToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, reporter),
-    ]);
-
-    const realmId = await createRealmApi(request, aliceToken, {
-      title: `S12 audited attachment franking ${Date.now()}`,
-      discoverability: "listed",
-      history_visibility: "joined",
-      encryption_profile: "mls_rfc9420",
-      plaintext_visible_services: [],
-      ownerDid: alice.did,
-      audit_disclosure_policy: {
-        enabled: true,
-        agent_id: agentDid,
-        agent_url: agentBaseUrl,
-        trigger: "report_filed",
-        assurance: "mock_attested",
-      },
-    });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-    await addRealmMemberApi(request, aliceToken, realmId, reporter.did);
-
-    // Bob sends an encrypted attachment message. The plaintext (filename /
-    // body) is never sent to soland — only ciphertext + digests.
-    const secretPlaintext = `secret-attachment-plaintext-${Date.now()}`;
-    const secretFilename = `secret-${Date.now()}.bin`;
-    const ciphertext = Buffer.from(
-      `opaque-attachment-ciphertext-${Date.now()}`,
-      "utf8",
-    ).toString("base64url");
-    const encryptedContent = encryptedAttachmentEnvelope(ciphertext, realmId);
-    const ciphertextDigest = String(encryptedContent.payload_digest);
-    const aadDigest = String(encryptedContent.aad_digest);
-    const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
-    const message = signedEventEnvelope({
-      actorDid: bob.did,
-      realmId,
-      kind: "ak.message.create",
-      payload: {
-        strand_id: strandId,
-        track_name: "discussion",
-        encrypted_content: encryptedContent,
-      },
-    });
-    await submitSignedEventApi(request, bobToken, message, {
-      context: "submit audited encrypted attachment message",
-    });
-    const eventId = String(message.event_id);
-
-    // The reporter files a report carrying a franking_proof receipt that
-    // commits to the ciphertext / routing metadata — not the plaintext.
-    const frankingProof = {
-      kind: "ak.moderation.franking_proof",
-      franking_proof_id: `ak:franking_proof:${randomUUID()}`,
-      realm_id: realmId,
-      event_id: eventId,
-      routing_metadata_digest: sha256HexDigest(`routing-${eventId}`),
-      ciphertext_digest: ciphertextDigest,
-      aad_digest: aadDigest,
-      sender_claim: {
-        actor_id: bob.did,
-        device_id: bob.deviceId,
-        mls_group_id_digest: sha256HexDigest(`mls-group-${realmId}`),
-      },
-      received_by: solandServiceId(),
-      received_at: new Date().toISOString(),
-      replay_nonce: Buffer.from(randomUUID()).toString("base64url"),
-      signature: "mock-attested-franking-signature",
-    };
-
-    const report = await request.post(
-      `${solandBaseUrl()}/_arkret/self/moderation/report`,
-      {
-        headers: authHeaders(reporterToken),
-        data: {
-          realm_id: realmId,
-          target_ref: eventId,
-          report_reason_code: "harassment",
-          reporter: reporter.did,
-          description: "encrypted attachment report with franking proof",
-          evidence_refs: [],
-          franking_proof: frankingProof,
-        },
-      },
-    );
-    const reportText = await report.text();
-    expect(report.ok(), reportText).toBeTruthy();
-    const reportId = String(JSON.parse(reportText).report_id);
-
-    // The bound audit agent receives the report (and its franking_proof)
-    // in its inbox.
-    const inbox = await (
-      await request.get(`${agentBaseUrl}/_arkret/self/audit-agent/inbox`)
-    ).json();
-    const inboxText = JSON.stringify(inbox);
-    expect(inboxText).toContain(reportId);
-    // The franking receipt's commitments are visible to the audit agent.
-    expect(inboxText).toContain(ciphertextDigest);
-    expect(inboxText).toContain(frankingProof.franking_proof_id);
-    // ...but no plaintext, filename, or plaintext digest is revealed.
-    expect(inboxText).not.toContain(secretPlaintext);
-    expect(inboxText).not.toContain(secretFilename);
-    expect(inboxText).not.toContain("plaintext_digest");
-    expect(inboxText).not.toContain(ciphertext);
-
-    // The franking receipt is independently verifiable via the audit surface
-    // without disclosing plaintext.
-    const audit = await request.get(
-      `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=org.arkret.soland.audit.report`,
-      { headers: authHeaders(aliceToken) },
-    );
-    const auditText = await audit.text();
-    expect(audit.ok(), auditText).toBeTruthy();
-    const auditEvents = JSON.stringify(JSON.parse(auditText).events ?? []);
-    expect(auditEvents).toContain(reportId);
-    expect(auditEvents).not.toContain(secretPlaintext);
-  });
 });
 
-function sha256HexDigest(value: string): string {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
 
 function encryptedAttachmentEnvelope(
   ciphertext: string,

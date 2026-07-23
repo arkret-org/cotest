@@ -81,13 +81,6 @@
     },
     {
       "source": "cotest",
-      "method": "*",
-      "path": "/_arkret/self/audit-agent/{**rest}",
-      "classification": "product-private",
-      "reason": "Mock audit-agent harness surface (identity, inbox, accessed, invite) served by the cotest mock-audit-agent process via mockAuditAgentBaseUrl()/setup.agentBaseUrl, not soland; no corresponding protocol operation exists."
-    },
-    {
-      "source": "cotest",
       "method": "GET",
       "path": "/_arkret/self/keys/backups/{wildcard}",
       "classification": "product-private",

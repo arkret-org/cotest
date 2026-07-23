@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 `encryption_profile=mls_rfc9420` 的 Realm 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `ak.moderation.franking_proof` 收据(可证存在但不可解密)。
+在 `encryption_profile=mls_rfc9420` 的 Realm 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。
 
 不验证:MLS 群组生命周期本身(encryption/mls-group 前置)、密钥备份(encryption/key-backup)、calls 中的媒体(calls/webrtc)。
 
@@ -14,13 +14,10 @@
 - `crypto-media/media-and-blob.md` §5.2-§5.3 — Caching + thumbnail
 - `crypto-media/media-and-blob.md` §6 — Asset Privacy Policy(`download_mode=provider_proxy` 默认)
 - `crypto-media/encryption-and-audit.md` §2.3.1 — `key_ref` for MLS profile
-- `crypto-media/audited-e2ee.md` §3 — Audit agent 进入(需要 explicit policy)
-- `crypto-media/audited-e2ee.md` §4 — `ak.moderation.franking_proof` / `ak.audit.accessed`
 
 ## 拓扑
 
 - 1 × soland(含 Blob Service)+ 1 × coauth
-- (sub-test E12.4)外置 audit agent
 
 ## Actors
 
@@ -29,7 +26,6 @@
 | alice | Realm owner,上传附件 |
 | bob | 成员,下载 + 解密 |
 | mallory | 非成员,验证 ACL |
-| audit-agent (sub-test) | `did:web:audit.example`,持 `ak.audit.read` capability |
 
 ## Pre-conditions
 
@@ -87,13 +83,6 @@
 22. 断言:写盘 metadata 含 `blob_ref`、`size`(ciphertext size,不是 plaintext)、`media_type = "application/octet-stream"`
 23. 断言:写盘 metadata **不含** plaintext filename、不含 `image/png` 或类似 plaintext media type
 
-### Phase F — (sub-test E12.4)Audited E2EE 模式
-
-24. 重新建一个 audit-enabled Realm `R_audit`(`audit_disclosure_policy` 含 audit-agent 的 DID)
-25. alice 在 `R_audit` 发加密附件 — 同 Phase A
-26. audit-agent 拉 `GET /_soland/admin/audit/events?realm_id=<R_audit>` → 应当看到 `ak.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
-27. audit-agent **不能** 直接拿到 plaintext attachment;若要审,需要触发 `ak.audit.accessed`(spec §4),记录到 audit trail
-
 ## Observable assertions(合并)
 
 - Phase A 步骤 4-5:blob_ref 生成、消息携带 encrypted attachment metadata
@@ -102,21 +91,19 @@
 - Phase C 步骤 16:digest 失败客户端拒绝
 - Phase D 步骤 19-20:non-member 拿到 opaque 错误
 - Phase E 步骤 22-23:Blob Service 只见 ciphertext
-- Phase F 步骤 26-27:audit franking 存在但不泄漏明文
 
 ## Edge cases / sub-tests
 
 - **E12.1 message redact 后 attachment 仍可访问?**:alice redact 消息,但 `blob_ref` 在 storage 仍存在 → blob GC policy 决定何时清理。spec 暗示 redact 不立刻删 blob(`media-and-blob.md` §3),但 `ak.blob.gc` event 触发后清理
 - **E12.2 thumbnail derivation**:E2EE 模式下,服务端**不能**生成 thumbnail(因为没明文)→ client-side 生成 + 重新加密上传(§5.3)
 - **E12.3 download_mode=provider_proxy**:大文件经过 Sync proxy 中转(防止 client 跨域)→ proxy 只见 ciphertext,不解密(spec §6)
-- **E12.4 audited e2ee**:见 Phase F
 - **E12.5 大文件 + chunked upload**:>10MB 文件分块上传,每块独立 encrypted + digested
 
 ## Implementation notes
 
 - **2026-05-25 P2-044 local close**:soland `POST /_arkret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
 - **2026-05-25 P2-044 local close**:inkson 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`ArkretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
-- **仍待 audited-e2ee**:`ak.moderation.franking_proof`、audit-agent invite、`ak.audit.accessed` 与 tamper verification 归入 `encryption/audited-e2ee` / GAP-P2-045。
+- **Moderation franking 边界**:`ak.moderation.franking_proof` 与普通举报不触发 Audit Applet release 的验证归入 `encryption/audited-e2ee`；本场景不复制该流程。
 - **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。
 
 ## 总耗时预估

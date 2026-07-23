@@ -12,7 +12,6 @@ import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
   mockAppletRegistryBaseUrl,
-  mockAuditAgentBaseUrl,
   mockEmailBaseUrl,
   mockIdpBaseUrl,
   mockPolicyServerBaseUrl,
@@ -200,40 +199,6 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       expect(body.witness_did).toBe(dids[index]);
       expect(body.health).toBe("healthy");
     }
-  });
-
-  test("mock-audit-agent: identity, invite ack, accessed log, jwks", async ({ request }) => {
-    const baseUrl = mockAuditAgentBaseUrl();
-    test.skip(!baseUrl, "mock-audit-agent not started for this run");
-
-    const identity = await (await request.get(`${baseUrl}/_arkret/self/audit-agent/identity`)).json();
-    expect(typeof identity.did).toBe("string");
-    expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
-
-    const realmId = `ak:realm:selftest:${Date.now()}`;
-    const invite = await request.post(`${baseUrl}/_arkret/self/audit-agent/invite`, {
-      data: { realm_id: realmId, invite: { event_id: "evt-selftest" } },
-    });
-    expect(invite.status()).toBe(200);
-    const inviteBody = await invite.json();
-    expect(inviteBody.agent_id).toBe(identity.did);
-    expect(inviteBody.emitted.type).toBe("ak.audit.accessed");
-    expect(inviteBody.emitted.realm_id).toBe(realmId);
-    expect(typeof inviteBody.emitted.binding_proof).toBe("string");
-
-    const accessed = await (
-      await request.get(`${baseUrl}/_arkret/self/audit-agent/accessed`)
-    ).json();
-    expect(
-      (accessed.events as Array<{ realm_id: string }>).some((e) => e.realm_id === realmId),
-    ).toBe(true);
-
-    const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
-    expect(jwks.keys?.[0]?.kid).toBe("mock-audit-agent-key-1");
-
-    const inspect = await (await request.get(`${baseUrl}/inspect`)).json();
-    expect(inspect.kinds.invites.length).toBeGreaterThanOrEqual(1);
-    expect(inspect.kinds.accessed.length).toBeGreaterThanOrEqual(1);
   });
 
   test("mock-policy-server: rule injection, deny + obligation, signed transcript", async ({
