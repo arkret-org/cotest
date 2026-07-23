@@ -148,4 +148,129 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       await jointPage.close();
     }
   });
+
+  test("a bound client that receives a forged principal_unknown fails closed without minting a second identity", async ({
+    browser,
+    request,
+  }) => {
+    test.skip(!coauth, "coauth not started for this run");
+    if (!optIn) {
+      assertJointStackNotRequired("forged principal_unknown fail-closed flow");
+      test.skip(true, "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony");
+    }
+
+    // A fully bound account: client-signed entry 0 with a verified binding.
+    const account = await registerCoauthPasswordAccount(request, coauth!);
+    const returningUser = uniqueUser("forged-unknown");
+    returningUser.did = account.did;
+    const jointPage = await openUserPage(browser, returningUser);
+    const page = jointPage.page;
+    try {
+      // Establish the bound client state with one real login, then log out so
+      // the durable per-account entry and returning-account selection exist.
+      await test.step("bound client signs in once and logs out", async () => {
+        await jointPage.gotoLogin();
+        await serverLoginViaCoauth(page, account);
+        await hardLogoutViaAccountMenu(jointPage);
+      });
+
+      // Force the full credential ceremony on the next attempt and forge the
+      // Account Authority's session-grant answer into `principal_unknown`,
+      // pretending the verified binding vanished.
+      await page.context().clearCookies();
+      let forgedResponses = 0;
+      await page.route("**/_arkret/gate/account/session-grants", async (route) => {
+        forgedResponses += 1;
+        // Exact wire ErrorEnvelope shape per api-conventions.md §5: required
+        // top-level ok/error/request_id, required error.code/error.message,
+        // request_id in the canonical ak:request:<uuid7> form.
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ok: false,
+            error: { code: "principal_unknown", message: "principal_unknown" },
+            request_id: "ak:request:01964137-0000-7000-8000-000000000000",
+          }),
+        });
+      });
+      const identityCreationCalls: string[] = [];
+      page.on("request", (interceptedRequest) => {
+        const url = interceptedRequest.url();
+        if (
+          url.includes("/_arkret/gate/account/identity-binding-challenges") ||
+          url.includes("/_arkret/gate/account/register") ||
+          url.includes("submit-did-operation")
+        ) {
+          identityCreationCalls.push(url);
+        }
+      });
+
+      await test.step("forged principal_unknown surfaces recovery guidance", async () => {
+        await page.getByTestId("login-server-url").fill(solandBaseUrl());
+        await page.getByTestId("start-server-login-button").click();
+        await submitCoauthPasswordCredentials(page, account);
+        const approve = page.getByTestId("coauth-oauth-approve");
+        if (
+          await approve
+            .waitFor({ state: "visible", timeout: 20_000 })
+            .then(() => true)
+            .catch(() => false)
+        ) {
+          await approve.click();
+        }
+        const authStatus = page.getByTestId("auth-status");
+        await expect(authStatus).toContainText("No new identity was created", {
+          timeout: 120_000,
+        });
+        await expect(authStatus).toContainText("recovery or diagnostics");
+      });
+
+      await test.step("no second identity is minted or drafted", async () => {
+        expect(forgedResponses).toBeGreaterThan(0);
+        expect(
+          identityCreationCalls,
+          "a forged principal_unknown must never trigger identity creation calls",
+        ).toEqual([]);
+        await expect(page.getByTestId("onboarding-panel")).toHaveCount(0);
+        await expect(page.getByTestId("account-handoff-onboarding")).toHaveCount(0);
+        await expect(page.getByTestId("login-panel")).toBeVisible();
+        const state = await page.evaluate((expectedDid) => {
+          const pendingKeys: string[] = [];
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index) ?? "";
+            if (!key.startsWith("inkson.local_state.v1")) {
+              continue;
+            }
+            const raw = localStorage.getItem(key) ?? "";
+            if (
+              raw.includes('"pending_account_handoff":{') ||
+              raw.includes('"pending_principal_registration":{')
+            ) {
+              pendingKeys.push(key);
+            }
+          }
+          // The per-account blob lives in the encrypted IndexedDB store on
+          // wasm; the localStorage root index keeps the durable known-DID
+          // marker for the bound account.
+          const rootIndex = JSON.parse(
+            localStorage.getItem("inkson.local_state.v1") ?? "{}",
+          ) as { known_dids?: string[] };
+          const boundAccountKnown = (rootIndex.known_dids ?? []).includes(expectedDid);
+          return { pendingKeys, boundAccountKnown };
+        }, account.did);
+        expect(
+          state.pendingKeys,
+          "a forged principal_unknown must not draft identity creation checkpoints",
+        ).toEqual([]);
+        expect(
+          state.boundAccountKnown,
+          "the bound account's known-DID marker must survive the forged error",
+        ).toBe(true);
+      });
+    } finally {
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      await jointPage.close();
+    }
+  });
 });

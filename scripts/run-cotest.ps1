@@ -1347,59 +1347,10 @@ function New-JointSmokeGateMarkdown {
     return ($lines -join [Environment]::NewLine)
 }
 
-function ConvertTo-SecretPreview {
-    param([Parameter(Mandatory = $true)][string]$Line)
-
-    $preview = $Line
-    $preview = $preview -replace '(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
-    $preview = $preview -replace '(?i)("(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)"\s*:\s*")(?!\[redacted\])([^"]+)(")', '$1[redacted]$5'
-    $preview = $preview -replace '(?i)((?:^|[?&\s])(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=)(?!\[redacted\]|%5[Bb]redacted%5[Dd])([^&\s]+)', '$1[redacted]'
-    $preview = $preview -replace '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----[^\-]*-----END (RSA |EC |OPENSSH )?PRIVATE KEY-----', '[redacted-private-key]'
-    if ($preview.Length -gt 220) {
-        return $preview.Substring(0, 220) + "...[truncated]"
-    }
-    return $preview
-}
-
-function Find-SecretLeaks {
-    param([Parameter(Mandatory = $true)][string[]]$ScanRoots)
-
-    $patterns = @(
-        [pscustomobject]@{ name = "authorization_header"; pattern = '(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!\[redacted\])\S+' },
-        [pscustomobject]@{ name = "json_secret_field"; pattern = '(?i)"(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)"\s*:\s*"(?!\[redacted\])[^"]+"' },
-        [pscustomobject]@{ name = "query_secret_field"; pattern = '(?i)(?:^|[?&\s])(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=(?!\[redacted\]|%5[Bb]redacted%5[Dd])[^&\s]+' },
-        [pscustomobject]@{ name = "did_in_token_field"; pattern = '(?i)"(token|push_key|credential)"\s*:\s*"(did:[^"]+)"' },
-        [pscustomobject]@{ name = "private_key_block"; pattern = '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' }
-    )
-    $leaks = New-Object System.Collections.Generic.List[object]
-    foreach ($root in $ScanRoots) {
-        if (-not $root -or -not (Test-Path $root)) {
-            continue
-        }
-        $files = if ((Get-Item $root).PSIsContainer) {
-            Get-ChildItem -Path $root -Recurse -File
-        } else {
-            @(Get-Item $root)
-        }
-        foreach ($file in $files) {
-            $lineNo = 0
-            foreach ($line in Get-Content -Path $file.FullName -ErrorAction SilentlyContinue) {
-                $lineNo += 1
-                foreach ($pattern in $patterns) {
-                    if ($line -match $pattern.pattern) {
-                        $leaks.Add([pscustomobject]@{
-                                path    = $file.FullName
-                                line    = $lineNo
-                                pattern = $pattern.name
-                                preview = ConvertTo-SecretPreview -Line $line
-                            })
-                    }
-                }
-            }
-        }
-    }
-    return $leaks
-}
+# ConvertTo-SecretPreview / Find-SecretLeaks live in a dot-sourced library so
+# the synthetic-secret regression test (scripts/tests/secret-scan.tests.ps1)
+# exercises the exact production patterns and redactions.
+. (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 
 function New-SecretScanMarkdown {
     param([Parameter(Mandatory = $true)]$SecretScan)
@@ -1408,6 +1359,7 @@ function New-SecretScanMarkdown {
     $lines.Add("# secret scan")
     $lines.Add("")
     $lines.Add("- status: $($SecretScan.status)")
+    $lines.Add("- self_test: $($SecretScan.self_test)")
     $lines.Add("- scanned_files: $($SecretScan.scanned_files)")
     $lines.Add("- leaks: $($SecretScan.leaks.Count)")
     $lines.Add("")
@@ -2259,15 +2211,22 @@ foreach ($root in $scanRoots) {
         $scanFiles += 1
     }
 }
+# Run the synthetic-secret regression first: it proves the detector patterns
+# and their redactions have not drifted apart before any real log is scanned.
+$secretScanSelfTest = Join-Path $PSScriptRoot "tests\secret-scan.tests.ps1"
+$psHostExe = (Get-Process -Id $PID).Path
+& $psHostExe -NoProfile -ExecutionPolicy Bypass -File $secretScanSelfTest | Out-Null
+$secretScanSelfTestStatus = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
 $secretLeaks = @(Find-SecretLeaks -ScanRoots $scanRoots)
 $secretScan = [pscustomobject]@{
     generated_at  = $finishedAt.ToString("o")
-    status        = if ($secretLeaks.Count -eq 0) { "passed" } else { "failed" }
+    status        = if ($secretScanSelfTestStatus -eq "passed" -and $secretLeaks.Count -eq 0) { "passed" } else { "failed" }
+    self_test     = $secretScanSelfTestStatus
     scanned_roots = $scanRoots
     scanned_files = $scanFiles
     leaks         = $secretLeaks
 }
-if (-not $AllowSecretLeaks -and $secretScan.status -eq "failed") {
+if ($secretScanSelfTestStatus -ne "passed" -or (-not $AllowSecretLeaks -and $secretLeaks.Count -gt 0)) {
     $exitCode = 1
 }
 $releaseGate = New-ReleaseGate `

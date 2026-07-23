@@ -436,13 +436,18 @@ mock and exports `COTEST_MOCK_MIMI_FACADE_BASE_URL` /
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous `artifacts/latest/coverage-matrix.json`.
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run
-unless `-AllowSecretLeaks` is supplied.
+unless `-AllowSecretLeaks` is supplied. That switch permits reported log hits
+only; it never bypasses a failed scanner self-test.
 
 ### Secret scan patterns (P5.1)
 
-`scripts/run-cotest.ps1` (`Find-SecretLeaks`) flags three categories of
-unredacted secret-shaped fields when scanning `raw.log`, `transcript.ndjson`,
-and `services/*.log`. Each is matched case-insensitively.
+`scripts/lib/secret-scan.ps1` (dot-sourced by `scripts/run-cotest.ps1`)
+defines `Find-SecretLeaks`, which flags unredacted secret-shaped content when
+scanning `raw.log`, `transcript.ndjson`, and `services/*.log`. Field patterns
+are matched case-insensitively. Before every scan, `run-cotest.ps1` executes
+the synthetic-secret regression `scripts/tests/secret-scan.tests.ps1`; a
+self-test failure fails the secret gate even when the logs themselves are
+clean.
 
 **Positive examples (these MUST be flagged):**
 
@@ -450,9 +455,18 @@ and `services/*.log`. Each is matched case-insensitively.
 Authorization: Bearer eyJhbGciOiJI...                       # authorization_header
 "access_token":"4f0e1a8b-09e4-4f10-..."                     # json_secret_field
 "push_key":"BEL5N6h..."                                     # json_secret_field
+"mnemonic":"abandon ability able ..."                       # json_secret_field
 "private_key":"-----BEGIN EC PRIVATE KEY-----..."            # json_secret_field + raw PEM
 ?access_token=4f0e1a8b-09e4-4f10-...                        # query_secret_field
 ?signed_link=https%3A%2F%2F...%26sig%3Dabc                  # query_secret_field
+?root_seed=deadbeef...                                      # query_secret_field
+"abandon ability able about ... actual"                     # bip39_mnemonic_sequence
+                                                            # (12+ consecutive words
+                                                            # from the BIP-39 English
+                                                            # wordlist inside quotes;
+                                                            # surrounding text and
+                                                            # punctuation are allowed)
+"credential":"did:webvh:..."                                # did_in_token_field
 ```
 
 **Negative examples (these MUST NOT trip the scanner):**
@@ -471,6 +485,9 @@ Authorization: Bearer [redacted]                            # post-redaction pla
                                                             # the closed allowlist
 "public_key":"MFkwEwYHKoZIzj0..."                           # `public_key` is not in the
                                                             # secret-field allowlist
+"the server logs show that retry loops kept firing ..."     # 12+ short lowercase words
+                                                            # that are NOT 12 consecutive
+                                                            # BIP-39 wordlist entries
 ```
 
 **Redaction defaults:**
@@ -480,20 +497,27 @@ Authorization: Bearer [redacted]                            # post-redaction pla
 | `Authorization: Bearer <token>`                      | `Authorization: Bearer [redacted]` |
 | JSON `"<allowed>":"<value>"`                         | `"<allowed>":"[redacted]"` |
 | Query `<allowed>=<value>`                            | `<allowed>=[redacted]`  |
-| PEM `-----BEGIN [RSA\|EC\|OPENSSH ]PRIVATE KEY-----` | `[redacted-private-key]` |
+| Quoted string containing 12+ short-word run         | `"[redacted-mnemonic]"` |
+| PEM `-----BEGIN [RSA\|EC\|OPENSSH\|ENCRYPTED ]PRIVATE KEY-----` | `[redacted-private-key]` |
 
 The closed allowlist of secret-shaped field names is: `authorization`,
 `access_token`, `token`, `push_key`, `invite_token`, `signed_link`, `jws`,
-`sig`, `password`, `secret`, `private_key`, `seed`. Adding a new
-secret-shaped field anywhere in the harness or in a service log MUST be
-accompanied by:
+`sig`, `password`, `secret`, `secret_b64u`, `private_key`, `seed`,
+`mnemonic`, `recovery_key`, `recovery_phrase`, `recovery_secret`,
+`root_seed`, `root_private_key`, `hkdf_prk`, `prk`, `credential`. The
+BIP-39 detector validates candidates against the standard 2048-word English
+wordlist (`scripts/lib/bip39-english.txt`); a quoted run only counts when it
+contains 12 consecutive wordlist entries. Adding a new secret-shaped field
+anywhere in the harness or in a service log MUST be accompanied by:
 
-1. Adding the field name to all three patterns in `Find-SecretLeaks` and to
-   the redaction pass in `ConvertTo-SecretPreview`.
-2. Adding a positive and negative example to the table above.
+1. Adding the field name to the shared field-name variables in
+   `scripts/lib/secret-scan.ps1` (detection and redaction consume the same
+   variables, so one edit keeps them consistent).
+2. Adding a planted vector to `scripts/tests/secret-scan.tests.ps1` plus a
+   positive and negative example to the table above.
 3. Re-running `.\scripts\run-cotest.ps1` and confirming `secret-scan.md`
-   reports `status: passed` with the redacted preview rendered as
-   `[redacted]`.
+   reports `status: passed`, `self_test: passed`, with the redacted preview
+   rendered as `[redacted]`.
 
 **Failure example:**
 
@@ -503,6 +527,7 @@ similar to:
 ```
 # secret scan
 - status: failed
+- self_test: passed
 - scanned_files: 142
 - leaks: 1
 

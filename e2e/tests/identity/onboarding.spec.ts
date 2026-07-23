@@ -168,6 +168,47 @@ test.describe("account onboarding", () => {
       autoCompleteRecoveryKeySetup: false,
     });
     const page = jointPage.page;
+    // Phase E secret audit: record every outbound request for the whole
+    // registration ceremony so the confirmed Recovery Key can be proven to
+    // never leave the page. Audit the URL (query params) and headers together
+    // with the body — a secret is a leak on any of those surfaces — and keep
+    // percent-/form-decoded variants so standard URL or form encoding cannot
+    // hide a match.
+    // Decoders are applied per surface (url / headers / body) so a malformed
+    // escape in one part never drops another part out of the decoded audit.
+    const softDecode = (text: string): string => {
+      try {
+        return decodeURIComponent(text);
+      } catch {
+        return text;
+      }
+    };
+    const softFormDecode = (text: string): string => {
+      // application/x-www-form-urlencoded additionally encodes space as '+'
+      try {
+        return decodeURIComponent(text.replace(/\+/g, "%20"));
+      } catch {
+        return text.replace(/\+/g, " ");
+      }
+    };
+    const outboundRequests: Array<{ target: string; auditTexts: string[] }> = [];
+    page.on("request", (outbound) => {
+      const url = new URL(outbound.url());
+      const parts = [
+        outbound.url(),
+        JSON.stringify(outbound.headers()),
+        outbound.postData() ?? "",
+      ];
+      outboundRequests.push({
+        // Query-less locator, safe to echo in assertion messages.
+        target: `${outbound.method()} ${url.origin}${url.pathname}`,
+        auditTexts: [
+          parts.join("\n"),
+          parts.map(softDecode).join("\n"),
+          parts.map(softFormDecode).join("\n"),
+        ],
+      });
+    });
     try {
       await page.goto("/register", { waitUntil: "domcontentloaded" });
       await expect(page.getByTestId("registration-panel")).toBeVisible();
@@ -332,6 +373,71 @@ test.describe("account onboarding", () => {
           recipient_method: "recovery_public_key",
         },
       });
+
+      // The Recovery Key (full 24 words or any 3-consecutive-word run) must
+      // never appear in a network request — URL, headers, or body — and no
+      // request may carry an identity-root secret in a named plaintext field.
+      // This is the client half of the "no mnemonic / seed / root key /
+      // HKDF PRK on the wire" invariant; server logs are covered by the
+      // harness secret scan. Assertion messages intentionally reference word
+      // runs by index only: the failure log must not reproduce the secret.
+      expect(outboundRequests.length).toBeGreaterThan(0);
+      const lowerKey = recoveryKey.toLowerCase();
+      const lowerWords = recoveryWords.map((word) => word.toLowerCase());
+      const wordRuns = lowerWords
+        .slice(0, -2)
+        .map((_, index) =>
+          `${lowerWords[index]} ${lowerWords[index + 1]} ${lowerWords[index + 2]}`,
+        );
+      // Common wire encodings of the full key, checked against the RAW text
+      // (decoding cannot reverse base64; percent/plus forms are also matched
+      // directly in case a variant failed to decode).
+      const encodedKeyForms = [
+        encodeURIComponent(lowerKey).toLowerCase(),
+        lowerKey.replace(/ /g, "+"),
+        Buffer.from(lowerKey, "utf8").toString("base64").toLowerCase(),
+        Buffer.from(lowerKey, "utf8").toString("base64url").toLowerCase(),
+      ];
+      // Field names from key-management.md §3.3/§7.1/§7.7.1: mnemonic, seed,
+      // PRK, derived private keys, and the §7.7.1-named secret_b64u.
+      const identityRootSecretField =
+        /(?:"(?:mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|secret_b64u)"\s*:|(?:^|[?&\s])(?:mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|secret_b64u)\s*=)/i;
+      for (const plantedFieldShape of [
+        '{"root_seed":"synthetic"}',
+        "?hkdf_prk=synthetic",
+        "mnemonic=synthetic&next=1",
+      ]) {
+        expect(
+          identityRootSecretField.test(plantedFieldShape),
+          `secret-field detector missed planted shape: ${plantedFieldShape}`,
+        ).toBe(true);
+      }
+      for (const outbound of outboundRequests) {
+        for (const [variantIndex, auditText] of outbound.auditTexts.entries()) {
+          const lowerText = auditText.toLowerCase();
+          expect(
+            lowerText.includes(lowerKey),
+            `full recovery key leaked to ${outbound.target} (variant ${variantIndex})`,
+          ).toBe(false);
+          for (const [runIndex, run] of wordRuns.entries()) {
+            expect(
+              lowerText.includes(run),
+              `recovery key words ${runIndex}..${runIndex + 2} leaked to ${outbound.target} (variant ${variantIndex})`,
+            ).toBe(false);
+          }
+          expect(
+            identityRootSecretField.test(auditText),
+            `identity-root secret field leaked to ${outbound.target} (variant ${variantIndex})`,
+          ).toBe(false);
+        }
+        const rawLower = outbound.auditTexts[0].toLowerCase();
+        for (const [formIndex, encodedForm] of encodedKeyForms.entries()) {
+          expect(
+            rawLower.includes(encodedForm),
+            `encoded recovery key (form ${formIndex}) leaked to ${outbound.target}`,
+          ).toBe(false);
+        }
+      }
     } finally {
       await jointPage.close();
     }
