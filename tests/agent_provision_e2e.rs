@@ -1890,7 +1890,7 @@ async fn pause_agent_runtime<P: PairingOutcome>(
         managed_agent_actor_frontier(server, token, agent_id.as_str(), realm_id.as_str()).await?;
     let actor_seq = frontier.next_actor_seq;
     let changed_at = canonical_now();
-    let mut event = arkret::agent::build_agent_pause_event(
+    let mut event = arkret_event_draft::build_agent_pause_event(
         agent_id.clone(),
         Did::new(ALICE_DID.to_owned())?,
         realm_id.clone(),
@@ -1942,7 +1942,7 @@ async fn resume_agent_runtime<P: PairingOutcome>(
         managed_agent_actor_frontier(server, token, agent_id.as_str(), realm_id.as_str()).await?;
     let actor_seq = frontier.next_actor_seq;
     let changed_at = canonical_now();
-    let mut event = arkret::agent::build_agent_resume_event(
+    let mut event = arkret_event_draft::build_agent_resume_event(
         agent_id.clone(),
         Did::new(ALICE_DID.to_owned())?,
         realm_id.clone(),
@@ -2499,7 +2499,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
 
 /// Complete the controller-owned two-phase provisioning protocol. All
 /// canonical payloads, nested proof transcripts, effects and Event envelopes
-/// come from `arkret::agent`; this fixture only supplies live frontier stamps
+/// come from `arkret-bootstrap`; this fixture only supplies live frontier stamps
 /// and transports the typed requests.
 async fn provision_agent(
     server: &ArkretServer,
@@ -2547,8 +2547,11 @@ async fn provision_agent(
         }
     };
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())?;
-    let expected_scope_digest =
-        arkret::agent_requested_scope_digest(&agent_id, &controller_id, &requested_scope)?;
+    let expected_scope_digest = arkret_signatures::agent::agent_requested_scope_digest(
+        &agent_id,
+        &controller_id,
+        &requested_scope,
+    )?;
     if requested_scope_digest != expected_scope_digest {
         return Err(anyhow!(
             "agent provision prepare returned a mismatched requested_scope_digest"
@@ -2568,12 +2571,12 @@ async fn provision_agent(
         controller_id.clone(),
         verification_method.clone(),
     );
-    let mut events = arkret::agent::build_agent_provision_event_drafts(
+    let mut events = arkret_bootstrap::build_agent_provision_event_drafts(
         &controller_id,
         &controller_realm_id,
         &agent_id,
         slug,
-        arkret::agent::AgentProvisionEventDraftOptions {
+        arkret_bootstrap::AgentProvisionEventDraftOptions {
             created_at: now,
             accountability_actor_seq: actor_seq,
             accountability_hlc: arkret::Hlc::new(format!(
@@ -2783,7 +2786,7 @@ fn runtime_key_request_builder<'a, P: PairingOutcome>(
     server: &ArkretServer,
     provisioned: &P,
     signing_key: &'a SigningKey,
-) -> Result<arkret::agent::RuntimeKeyRequestBuilder<'a>> {
+) -> Result<arkret_signatures::agent::RuntimeKeyRequestBuilder<'a>> {
     let pairing_code = provisioned
         .pairing_code()
         .map(str::to_owned)
@@ -2791,7 +2794,7 @@ fn runtime_key_request_builder<'a, P: PairingOutcome>(
     let service_id = arkret::Did::new(server.service_id().to_owned())?;
     let proof_expires_at =
         chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
-    Ok(arkret::agent::RuntimeKeyRequestBuilder::new(
+    Ok(arkret_signatures::agent::RuntimeKeyRequestBuilder::new(
         signing_key,
         arkret::AgentPairingBootstrap {
             arkret_base_url: server.base_url().to_string(),
@@ -2892,16 +2895,17 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         .agent_runtime_approval_request(&approval_request)
         .await?;
     let runtime_public_key_digest = builder.public_key_digest()?;
-    let pairing_binding_digest = arkret::agent_key_pairing_request_binding_digest(
-        &controller_id,
-        &agent_id,
-        &verification_method,
-        &runtime_public_key_digest,
-        pairing_request_id,
-        pairing_code,
-        &pairing_expires_at,
-        server.service_id(),
-    )?;
+    let pairing_binding_digest =
+        arkret_signatures::agent::agent_key_pairing_request_binding_digest(
+            &controller_id,
+            &agent_id,
+            &verification_method,
+            &runtime_public_key_digest,
+            pairing_request_id,
+            pairing_code,
+            &pairing_expires_at,
+            server.service_id(),
+        )?;
     let authorize_payload = arkret::AgentKeyAuthorizePayload {
         agent_id: agent_id.clone(),
         key_id: verification_method.clone(),
@@ -2952,7 +2956,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     )
     .await?;
     let actor_seq = actor_frontier.next_actor_seq;
-    let mut authorize_event = arkret::agent::build_agent_key_authorize_event(
+    let mut authorize_event = arkret_event_draft::build_agent_key_authorize_event(
         &authorize_payload,
         provisioned.principal_control_realm_id().clone(),
         agent_id.clone(),
@@ -2972,8 +2976,11 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     )?;
     let disclosure_issued_at = canonical_now();
     let requested_scope = test_agent_requested_scope();
-    let requested_scope_digest =
-        arkret::agent_requested_scope_digest(&agent_id, &controller_id, &requested_scope)?;
+    let requested_scope_digest = arkret_signatures::agent::agent_requested_scope_digest(
+        &agent_id,
+        &controller_id,
+        &requested_scope,
+    )?;
     let pairing_request_uuid = pairing_request_id
         .strip_prefix("agent_pairing_request:")
         .ok_or_else(|| anyhow!("pairing_request_id has an invalid prefix"))?;
@@ -3001,6 +3008,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
             created_at: disclosure_issued_at,
             domain: None,
             audience: None,
+            proof_purpose: None,
             jws: "eyJhbGciOiJFZERTQSJ9..AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ".to_owned(),
         }],
     };

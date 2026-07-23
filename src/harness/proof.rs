@@ -149,6 +149,7 @@ pub fn attach_ephemeral_proof(
         created_at: envelope.sent_at,
         domain: None,
         audience: None,
+        proof_purpose: None,
         jws: String::new(),
     };
     let binding_bytes = proof
@@ -176,6 +177,7 @@ pub fn ephemeral_proof_placeholder(
         created_at,
         domain: None,
         audience: None,
+        proof_purpose: None,
         // `EphemeralEnvelope::new` validates the required proof shape before
         // the caller can replace it with the real signature.
         jws: "eyJhbGciOiJFZERTQSJ9..c2ln".to_owned(),

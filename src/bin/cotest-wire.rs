@@ -418,6 +418,7 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         created_at,
         domain: None,
         audience: None,
+        proof_purpose: None,
         jws: String::new(),
     };
     let binding_bytes = proof

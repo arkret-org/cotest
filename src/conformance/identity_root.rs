@@ -466,6 +466,7 @@ fn with_proof(mut event: Event, verification_method: &str) -> Result<Event> {
         created_at: event.created_at,
         domain: None,
         audience: Some(Audience::Single(event.realm_id.to_string())),
+        proof_purpose: None,
         jws: "c2ln".to_owned(),
     }];
     Ok(event)

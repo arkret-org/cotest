@@ -203,6 +203,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         created_at,
         domain: None,
         audience: None,
+        proof_purpose: None,
         jws: String::new(),
     };
     let binding_b64 = b64url(

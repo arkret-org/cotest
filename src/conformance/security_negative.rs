@@ -393,6 +393,7 @@ mod tests {
             created_at: Utc.with_ymd_and_hms(2026, 5, 2, 0, 0, 0).unwrap(),
             domain: None,
             audience: None,
+            proof_purpose: None,
             jws: String::new(),
         };
         let binding_bytes = proof.canonical_binding_bytes(&actor_id).unwrap();
