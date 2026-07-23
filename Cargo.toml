@@ -68,6 +68,7 @@ arkret-models-discovery = {workspace = true}
 arkret-models-identity = {workspace = true}
 arkret-models-integration = {workspace = true}
 arkret-policy = {workspace = true}
+arkret-push-policy.workspace = true
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
 arkret-wire = {workspace = true}
@@ -128,6 +129,7 @@ arkret-models-discovery = {path = "../arkret-rust-sdk/crates/models-discovery"}
 arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity"}
 arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration"}
 arkret-policy = {path = "../arkret-rust-sdk/crates/policy"}
+arkret-push-policy = {path = "../arkret-rust-sdk/crates/push-policy"}
 arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["collaboration", "keypackages", "signer", "webvh"]}
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}

@@ -1,12 +1,12 @@
 //! T1.1 — shared push blind-payload sanitizer conformance vectors.
 //!
 //! These vectors live in `cotest/tests/fixtures/blind_payload_vectors.json`
-//! and exercise the SDK sanitizer (`arkret_policy::blind_payload_sanitizer`)
+//! and exercise the SDK sanitizer (`arkret_push_policy::blind_payload_sanitizer`)
 //! that chime and floria both delegate to. They guarantee that any future
 //! drift between the three implementations is caught here.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_policy::blind_payload_sanitizer::{
+use arkret_push_policy::blind_payload_sanitizer::{
     BlindPayloadError, BlindPayloadReasonCode, SanitizerMode, sanitize_blind_payload_with,
 };
 use serde::Deserialize;

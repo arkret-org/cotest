@@ -52,7 +52,7 @@ use arkret_models_collaboration::governance::member_delivery_binding_candidate::
 use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceType};
 use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
 use arkret_models_identity::handle_claim::DeliveryBindingHint;
-use arkret_policy::blind_payload_sanitizer::{
+use arkret_push_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
 use arkret_wire::{Audience, Proof};
@@ -474,8 +474,8 @@ fn negative_stable_push_id_leak_rejected() -> Result<()> {
             Err(e)
                 if matches!(
                     e.reason_code,
-                    arkret_policy::blind_payload_sanitizer::BlindPayloadReasonCode::ForbiddenField
-                        | arkret_policy::blind_payload_sanitizer::BlindPayloadReasonCode::SensitiveLiteral
+                    arkret_push_policy::blind_payload_sanitizer::BlindPayloadReasonCode::ForbiddenField
+                        | arkret_push_policy::blind_payload_sanitizer::BlindPayloadReasonCode::SensitiveLiteral
                 ) =>
             {
                 // Expected — the sanitizer correctly refused the leak.
