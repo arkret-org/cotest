@@ -3,13 +3,13 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret::identity::{
-    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
-    self_principal_bootstrap_submit_request,
-};
 use arkret::identity_root::{
     bip39_identity_recovery_secret, derive_identity_recovery_key_material,
     derive_identity_recovery_key_material_from_bip39,
+};
+use arkret_bootstrap::{
+    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
+    self_principal_bootstrap_submit_request,
 };
 use arkret_identifiers::{DeviceId, Did, EventId, Hash, Hlc, MoveId, RealmId, TypedTrustDomainId};
 use arkret_models_collaboration::events_payloads::device_identity::{

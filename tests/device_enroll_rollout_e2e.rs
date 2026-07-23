@@ -1,11 +1,11 @@
 use anyhow::{Context, Result, anyhow};
-use arkret::identity::{
-    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
-    self_principal_bootstrap_submit_request,
-};
 use arkret::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
     prepare_principal_inception,
+};
+use arkret_bootstrap::{
+    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
+    self_principal_bootstrap_submit_request,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{Did, EventId, Hlc, RealmId, TypedTrustDomainId};

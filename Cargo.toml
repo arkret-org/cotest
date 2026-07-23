@@ -50,6 +50,7 @@ bip39 = {workspace = true}
 chacha20poly1305 = {workspace = true,default-features = false,features = ["alloc"]}
 chrono = {workspace = true}
 arkret = {workspace = true}
+arkret-bootstrap = {workspace = true}
 arkret-canonical = {workspace = true}
 garth = {workspace = true}
 arkret-hlc = {workspace = true}
@@ -112,6 +113,7 @@ chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
 arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "mls", "device-runtime"]}
+arkret-bootstrap = {path = "../arkret-rust-sdk/crates/bootstrap"}
 arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 garth = {path = "../garth",features = ["mls"]}

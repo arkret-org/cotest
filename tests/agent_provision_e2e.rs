@@ -1343,14 +1343,14 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         event_verification_method.clone(),
     );
 
-    let mut bootstrap_create = arkret::identity::build_self_principal_pcr_create(
-        arkret::identity::SelfPrincipalPcrCreateInput {
+    let mut bootstrap_create = arkret_bootstrap::build_self_principal_pcr_create(
+        arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal_id.clone(),
             realm_id: typed_control_realm_id.clone(),
             trust_domain: trust_domain.clone(),
             did_inception_ref: arkret::EventRef::new(
                 prepared_inception.version_id.clone(),
-                arkret::identity::DID_INCEPTION_REF_ROLE,
+                arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
             event_id: arkret::EventId::new(
                 "ak:event:01904100-0000-7000-8000-00000000a910".to_owned(),
@@ -1437,7 +1437,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         principal_id.clone(),
         format!("{ALICE_DID}#{ALICE_DEVICE}"),
     );
-    let controller_seal = arkret::identity::build_self_principal_bootstrap_seal(
+    let controller_seal = arkret_bootstrap::build_self_principal_bootstrap_seal(
         &bootstrap_create,
         &bootstrap_authorize,
         arkret::Hlc::new(format!("{control_timestamp_hex}-0002-a13f9c2e"))?,
@@ -1777,7 +1777,7 @@ async fn submit_delegated_agent_event(
         event["hlc"] = json!("01970e589d21-0001-a13f9c2e");
         event["prev_refs"] = json!([]);
         event["effects"] = serde_json::to_value(vec![
-            arkret::identity::managed_agent_principal_control_create_effect(&typed_realm_id, 0)?,
+            arkret_bootstrap::managed_agent_principal_control_create_effect(&typed_realm_id, 0)?,
         ])?;
     }
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
@@ -2161,7 +2161,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
         );
         let mut hlc =
             arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
-        let seal = arkret::identity::build_managed_agent_pcr_event_seal(
+        let seal = arkret_bootstrap::build_managed_agent_pcr_event_seal(
             &events,
             predecessor.as_ref(),
             hlc.generate(),

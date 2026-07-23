@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use arkret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use arkret::identity::{
+use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
     self_principal_bootstrap_submit_request,
 };
