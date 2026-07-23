@@ -1,12 +1,13 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use arkret_core::models::{
-    DraftKind, MessageId, RealmId, draft_account_data_key, saved_account_data_key,
-    scheduled_send_account_data_key, search_index_manifest_account_data_key,
-    snooze_account_data_key, validate_private_account_data_key,
+use arkret_models_collaboration::objects::productivity::{
+    DraftKind, draft_account_data_key, saved_account_data_key, scheduled_send_account_data_key,
+    search_index_manifest_account_data_key, snooze_account_data_key,
+    validate_private_account_data_key,
 };
 use arkret_schema::event_payload_validator_catalog_from_spec_artifacts;
+use arkret_wire::{MessageId, RealmId};
 use serde_json::{Value, json};
 
 fn artifacts_root() -> PathBuf {

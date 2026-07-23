@@ -1061,14 +1061,15 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     let prov =
         provision_agent(&server, &token, "Status Poll Assistant", "statuspoll", None).await?;
     let agent_did = prov.agent_id.to_string();
-    let status_body = arkret::models::AgentRuntimeApprovalStatusRequestBody {
-        pairing_request_id: prov.pairing_request_id.clone(),
-        pairing_code: prov
-            .pairing_code
-            .clone()
-            .ok_or_else(|| anyhow!("pairing_code missing"))?,
-        agent_id: prov.agent_id.clone(),
-    };
+    let status_body =
+        arkret_models_collaboration::agent_operations::AgentRuntimeApprovalStatusRequestBody {
+            pairing_request_id: prov.pairing_request_id.clone(),
+            pairing_code: prov
+                .pairing_code
+                .clone()
+                .ok_or_else(|| anyhow!("pairing_code missing"))?,
+            agent_id: prov.agent_id.clone(),
+        };
 
     // 1. Open pairing, nothing submitted yet: pending without an approval_request_id or any
     //    authorized binding.
@@ -1078,7 +1079,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     assert_eq!(status.retry_after, Some(Duration::from_secs(1)));
     assert_eq!(
         status.status,
-        arkret::models::AgentStatus::PendingRuntimeKey
+        arkret_models_collaboration::agent_operations::AgentStatus::PendingRuntimeKey
     );
     assert!(status.approval_request_id.is_none());
     assert!(status.authorized_event_ref.is_none());
@@ -1095,7 +1096,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         .await?;
     assert_eq!(
         status.status,
-        arkret::models::AgentStatus::PendingRuntimeKey
+        arkret_models_collaboration::agent_operations::AgentStatus::PendingRuntimeKey
     );
     assert_eq!(
         status.approval_request_id.as_deref(),
@@ -1104,10 +1105,11 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
 
     // 3. Anti-enumeration: a wrong pairing_code is indistinguishable from an unknown
     //    pairing_request_id.
-    let wrong_code = arkret::models::AgentRuntimeApprovalStatusRequestBody {
-        pairing_code: "00000000".to_owned(),
-        ..status_body.clone()
-    };
+    let wrong_code =
+        arkret_models_collaboration::agent_operations::AgentRuntimeApprovalStatusRequestBody {
+            pairing_code: "00000000".to_owned(),
+            ..status_body.clone()
+        };
     expect_sdk_api_error(
         controller.agent_runtime_approval_status(&wrong_code).await,
         StatusCode::NOT_FOUND,
@@ -1120,7 +1122,10 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     let status = controller
         .agent_runtime_approval_status(&status_body)
         .await?;
-    assert_eq!(status.status, arkret::models::AgentStatus::Active);
+    assert_eq!(
+        status.status,
+        arkret_models_collaboration::agent_operations::AgentStatus::Active
+    );
     assert!(status.approval_request_id.is_none());
     assert_eq!(
         status.authorized_event_ref.as_ref().map(|id| id.as_str()),

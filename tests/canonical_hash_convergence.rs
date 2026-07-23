@@ -287,14 +287,14 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 fn pinned_r3_2_inputs() -> (
     arkret_core::RealmId,
     arkret_core::Did,
-    Vec<arkret_core::models::EffectiveIdentityEntry>,
-    Vec<arkret_core::models::RosterHandleClaimDigestEntry>,
+    Vec<arkret_models_identity::EffectiveIdentityEntry>,
+    Vec<arkret_models_identity::RosterHandleClaimDigestEntry>,
 ) {
-    use arkret_core::models::{
+    use arkret_core::{Did, EventId, Hash, RealmId};
+    use arkret_models_identity::{
         EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
         RosterHandleClaimDigestEntry,
     };
-    use arkret_core::{Did, EventId, Hash, RealmId};
 
     let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap();
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
@@ -333,7 +333,7 @@ fn pinned_r3_2_inputs() -> (
 
 #[test]
 fn r3_2_identity_digests_match_pinned_baseline() {
-    use arkret_core::models::{
+    use arkret_models_identity::{
         MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
@@ -372,7 +372,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
 #[test]
 #[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
 fn dump_r3_2_identity_digests() {
-    use arkret_core::models::{
+    use arkret_models_identity::{
         MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();

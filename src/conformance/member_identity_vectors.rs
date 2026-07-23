@@ -20,21 +20,21 @@
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
 //! SDK-pure — they exercise the canonical-bytes helpers
 //! ([`IdentityPayloadCarrier::carrier_sha256`],
-//! [`arkret_core::models::effective_identity_events`],
-//! [`arkret_core::models::member_identity_effective_set_digest`],
+//! [`arkret_models_identity::effective_identity_events`],
+//! [`arkret_models_identity::member_identity_effective_set_digest`],
 //! [`MemberIdentity::canonical_payload_sha256`]) plus the
 //! `member_identity_*` error-code constants exported from
 //! [`arkret_wire::error_codes`]. Live integration is layered on top in
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::models::{
+use arkret_core::{Did, EventId, Hash, RealmId};
+use arkret_models_identity::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
     MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,
     member_identity_effective_set_digest,
 };
-use arkret_core::{Did, EventId, Hash, RealmId};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
 

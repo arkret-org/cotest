@@ -19,7 +19,7 @@
 use std::collections::BTreeSet;
 
 use arkret_core::Did;
-use arkret_core::models::{
+use arkret_models_identity::{
     DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
     HandleHintBindingSource, RecipientServiceType,
 };

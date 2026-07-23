@@ -1,7 +1,7 @@
-use arkret_core::models::{
-    ContentBlock, DisappearingMessageExpiry, DisappearingMessageExpiryTrigger,
-    MessageCreatePayload, StrandId,
+use arkret_models_collaboration::events_payloads::morph_message::{
+    ContentBlock, DisappearingMessageExpiry, DisappearingMessageExpiryTrigger, MessageCreatePayload,
 };
+use arkret_wire::StrandId;
 use serde_json::{Value, json};
 
 #[derive(Debug, PartialEq, Eq)]

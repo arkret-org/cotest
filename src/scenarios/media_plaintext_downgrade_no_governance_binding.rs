@@ -27,11 +27,11 @@
 //! soland-side `realm_policy_components_check` reducer (no drift).
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::models::{
+use arkret_core::{Did, WireError};
+use arkret_models_crypto::{
     MediaDecryptPolicyValue, MediaPlaintextService, derive_media_decrypt_metadata_digest,
     verify_media_decrypt_metadata,
 };
-use arkret_core::{Did, WireError};
 use arkret_schema::embedded_error_code_identifiers;
 
 /// Wire-level executable check: the SDK constants for both media

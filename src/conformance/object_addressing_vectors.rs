@@ -5,8 +5,7 @@
 //! common directory response fields) + the AKP-0011 object-addressing grammar.
 //!
 //! The vectors below are deterministic, pure unit checks against the SDK's
-//! object-addressing surface (`arkret_core::models::*`, re-exported from
-//! `crate::model::object_address`). No live server is required for
+//! object-addressing surface (`arkret_wire`). No live server is required for
 //! OA-COT-1..4; the live share→resolve→open leg is the `#[ignore]` companion
 //! `test_oa_cot_5_share_resolve_open_live` in
 //! `tests/r3_conformance_vectors.rs`.
@@ -27,10 +26,10 @@
 //!     `source_refs`, `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_core::models::{
-    AddressAction, DirectoryTargetResolutionOutcome, LinkType, RealmRef, TargetDescriptor,
-    TargetKind, build_address, build_https_landing, parse_address, target_digest,
-    verify_token_target,
+use arkret_models_discovery::{DirectoryTargetResolutionOutcome, TargetKind};
+use arkret_wire::{
+    AddressAction, LinkType, RealmRef, TargetDescriptor, build_address, build_https_landing,
+    parse_address, target_digest, verify_token_target,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::json;

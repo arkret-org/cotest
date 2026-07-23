@@ -17,7 +17,8 @@
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
 use arkret_core::Did;
-use arkret_core::models::{Handle, HandleBindingState, HandleClaim, Mention};
+use arkret_models_collaboration::events_payloads::mention::Mention;
+use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::json;
 

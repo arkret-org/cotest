@@ -16,8 +16,9 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
-use arkret_core::models::{Handle, HandleBindingState, HandleClaim, PayloadProof};
 use arkret_core::{Did, Hash};
+use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_wire::PayloadProof;
 use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =

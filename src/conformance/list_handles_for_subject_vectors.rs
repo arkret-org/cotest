@@ -14,10 +14,10 @@
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{PrimaryHandleSelectInput, select_primary_handle};
 use arkret_core::Did;
-use arkret_core::models::{
-    DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList, Handle,
-    HandleBindingState, HandleClaim,
+use arkret_models_discovery::{
+    DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList,
 };
+use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
 use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_LH_HAPPY_SINGLE: &str =

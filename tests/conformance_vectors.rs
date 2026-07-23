@@ -344,7 +344,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 
 // ─── R3.3 / OA-COT-1..4 — AKP-0011 object addressing + resolve_target ─────
 //
-// SDK-pure vectors over `arkret_core::models::*` object-addressing surface:
+// SDK-pure vectors over the `arkret_wire` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
 //     keyword/order/missing-via, realm-id vs alias.
 //   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks strand/message
@@ -605,12 +605,12 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // effective-set filter that soland's MID reducer MUST mirror. An
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
-    use arkret_core::models::{
+    use arkret_core::{Did, EventId, Hash, RealmId};
+    use arkret_models_identity::{
         DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
         MemberIdentityUpdatePayload, effective_identity_events,
     };
-    use arkret_core::{Did, EventId, Hash, RealmId};
 
     let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-000000007007")
         .map_err(|e| anyhow!("realm: {e}"))?;
