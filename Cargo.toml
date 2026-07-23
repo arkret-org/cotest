@@ -59,7 +59,7 @@ arkret-state = {workspace = true}
 # 05-2 — cotest-wire emits SDK-authoritative cross-signing / device-trust
 # canonical signing-input golden vectors (CrossSigningPublishContent /
 # DeviceTrustBinding) so the TS e2e byte-mirror helpers regress against the SDK.
-arkret-crypto = {workspace = true,features = ["secret-share"]}
+arkret-crypto = {workspace = true,features = ["blob-aead", "secret-share"]}
 arkret-event-draft = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-models-collaboration = {workspace = true}
@@ -113,7 +113,7 @@ blake3 = {version = "1.5.5",default-features = false}
 chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
 chrono-tz = {version = "0.10.4",default-features = false}
-arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "mls", "device-runtime"]}
+arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["mls"]}
 arkret-bootstrap = {path = "../arkret-rust-sdk/crates/bootstrap"}
 arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}

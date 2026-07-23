@@ -23,11 +23,11 @@
 //! is locatable (and silently skips otherwise).
 
 use anyhow::{Context, Result};
-use arkret::http_signature::{
-    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
-};
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_identifiers::new_prefixed_uuid7;
+use arkret_signatures::http_signature::{
+    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
+};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};

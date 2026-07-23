@@ -4,8 +4,9 @@
 //! canonical blob encrypted_attachment schema together.
 
 use anyhow::{Result, anyhow, bail};
-use arkret::{
-    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, KeyRefObject, SCHEME_STREAM, StreamDecryptor,
+use arkret::KeyRefObject;
+use arkret_crypto::blob_aead::{
+    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, SCHEME_STREAM, StreamDecryptor,
     StreamEncryptParams, decrypt_stream, encrypt_stream,
 };
 use serde_json::{Value, json};

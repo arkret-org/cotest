@@ -1,10 +1,10 @@
 use anyhow::{Context, Result, anyhow};
 use arkret::TypedTrustDomainId;
-use arkret::http_signature::{
-    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
-};
 use arkret_canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
 use arkret_identifiers::{Did, EventId, Hlc, RealmId};
+use arkret_signatures::http_signature::{
+    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
+};
 use arkret_wire::Event;
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -217,7 +217,9 @@ fn with_signed_federation_request_digests(
     Ok(builder)
 }
 
-fn development_service_signing_key(service_id: &str) -> arkret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(
+    service_id: &str,
+) -> arkret_signatures::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:notary-ephemeral:");
     hasher.update(service_id.as_bytes());

@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use arkret::http_signature::{
-    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
-};
 use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
     self_principal_bootstrap_submit_request,
@@ -24,6 +21,9 @@ use arkret_models_identity::artifacts_device_identity::{
     CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
+use arkret_signatures::http_signature::{
+    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
+};
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
     prepare_principal_inception,
