@@ -197,9 +197,8 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
     }
 
     let mut digest_mismatch_stream = stream.clone();
-    digest_mismatch_stream.ciphertext_digest = Hash::new(
-        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    )?;
+    digest_mismatch_stream.ciphertext_digest =
+        Hash::new("sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
     let digest_mismatch = EncryptedAttachment::Stream(digest_mismatch_stream);
     expect_reason(
         decrypt_stream(&ciphertext, &digest_mismatch, &key).unwrap_err(),
