@@ -469,8 +469,9 @@ fn normalize_transient_fields(value: Value) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_secret_field, sanitize_json_value};
     use serde_json::json;
+
+    use super::{is_secret_field, sanitize_json_value};
 
     #[test]
     fn transcript_sanitizer_redacts_credential_material() {
