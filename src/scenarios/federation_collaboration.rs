@@ -1588,32 +1588,34 @@ async fn upload_test_keypackage(
 ) -> Result<()> {
     let key_package = b"cotest-cross-ps-bob-keypackage";
     let keypackage_digest = sha256_digest(key_package);
-    let signature = device_signing_key.sign(key_package);
     let now = chrono::Utc::now();
+    let unsigned: arkret_models_crypto::KeyPackagesUploadUnsignedRequest =
+        serde_json::from_value(json!({
+            "principal_id": principal_id,
+            "device_id": device_id,
+            "key_packages": [{
+                "keypackage_id": "cotest-cross-ps-bob-keypackage-01",
+                "keypackage_ref": keypackage_digest,
+                "keypackage_digest": keypackage_digest,
+                "key_package": URL_SAFE_NO_PAD.encode(key_package),
+                "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
+                "capabilities": ["mls"],
+                "created_at": format_timestamp_canonical(now),
+                "expires_at": format_timestamp_canonical(now + chrono::Duration::hours(1))
+            }]
+        }))?;
+    let signature = arkret_signatures::keypackages::sign_keypackages_upload_request(
+        &unsigned,
+        &format!("{principal_id}#{device_id}"),
+        &device_signing_key.to_bytes(),
+    )?;
+    let body = unsigned.into_signed(signature);
     let outcome = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/keys/keypackages/upload"))
             .bearer_auth(token)
-            .json(&json!({
-                "principal_id": principal_id,
-                "device_id": device_id,
-                "key_packages": [{
-                    "keypackage_id": "cotest-cross-ps-bob-keypackage-01",
-                    "keypackage_ref": keypackage_digest,
-                    "keypackage_digest": keypackage_digest,
-                    "key_package": URL_SAFE_NO_PAD.encode(key_package),
-                    "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-                    "capabilities": ["mls"],
-                    "created_at": format_timestamp_canonical(now),
-                    "expires_at": format_timestamp_canonical(now + chrono::Duration::hours(1))
-                }],
-                "device_signature": {
-                    "kid": format!("{principal_id}#{device_id}"),
-                    "alg": "EdDSA",
-                    "sig": URL_SAFE_NO_PAD.encode(signature.to_bytes())
-                }
-            })),
+            .json(&body),
         StatusCode::OK,
     )
     .await?;

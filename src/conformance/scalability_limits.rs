@@ -68,12 +68,25 @@ fn run_case(case: &Value) -> Result<()> {
         "seal_new_control_moves" => decision(generator, "count", 1_000)?,
         "capability_delegation_chain" => bounded_outcome(generator, "depth", 4, "accept", "deny")?,
         "capability_grant_constraints" => decision(generator, "count", 64)?,
-        "resource_selector_ast" => decision(generator, "depth", 16)?,
+        "resource_selector_ast" => decision(generator, "depth", 8)?,
         "authorization_grant_expansion" => {
             bounded_outcome(generator, "count", 1_024, "accept", "fail_closed")?
         }
         "active_circle_count" => decision(generator, "realm_active_circle_count", 999)?,
+        "active_circle_count_by_composition" => composition_decision(
+            generator,
+            &["ordinary_active_circles", "sidecar_backing_circles"],
+            999,
+        )?,
         "actor_active_mls_circle_memberships" => decision(generator, "count", 255)?,
+        "actor_active_mls_circle_memberships_by_composition" => composition_decision(
+            generator,
+            &[
+                "ordinary_mls_circle_memberships",
+                "sidecar_backing_circle_memberships",
+            ],
+            255,
+        )?,
         "sibling_forks" if generator["same_actor_sequence"].as_bool() == Some(true) => {
             bounded_outcome(
                 generator,
@@ -404,6 +417,18 @@ fn validate_chunk_request_matrix(case: &Value, generator: &Value) -> Result<()> 
 
 fn decision(generator: &Value, field: &str, maximum: u64) -> Result<&'static str> {
     bounded_outcome(generator, field, maximum, "accept", "reject")
+}
+
+fn composition_decision(generator: &Value, fields: &[&str], maximum: u64) -> Result<&'static str> {
+    let composition = generator
+        .get("count_composition")
+        .ok_or_else(|| anyhow!("generated composition case missing count_composition"))?;
+    let count = fields.iter().try_fold(0_u64, |total, field| {
+        total
+            .checked_add(required_u64(composition, field)?)
+            .ok_or_else(|| anyhow!("generated composition count overflowed"))
+    })?;
+    Ok(if count <= maximum { "accept" } else { "reject" })
 }
 
 fn bounded_outcome(

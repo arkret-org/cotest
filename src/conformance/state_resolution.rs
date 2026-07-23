@@ -1380,6 +1380,130 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     vector_name,
                 )?;
             }
+            "late_revocation_leaf_retroactive_removal" => {
+                let source_event_id = required_pointer_str(vector, "/data_event/id", vector_name)?;
+                require_str_eq(case, "/dependent_data_event/plane", "data", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/dependent_data_event/critical_causal_ref",
+                    source_event_id,
+                    vector_name,
+                )?;
+                let sequence = required_array(case, "/sequence", vector_name)?;
+                if sequence.len() != 2 {
+                    bail!(
+                        "vector {vector_name} late-revocation sequence must contain exactly two steps"
+                    );
+                }
+                let accepted = &sequence[0];
+                require_str_eq(accepted, "/step", "accept_before_revocation", vector_name)?;
+                require_str_eq(
+                    accepted,
+                    "/expected/data_event_result",
+                    "accept",
+                    vector_name,
+                )?;
+                require_bool_eq(
+                    accepted,
+                    "/expected/data_cell_x_contains_event_effect",
+                    true,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    accepted,
+                    "/expected/dependent_event_result",
+                    "accept",
+                    vector_name,
+                )?;
+                require_bool_eq(
+                    accepted,
+                    "/expected/data_cell_y_contains_dependent_effect",
+                    true,
+                    vector_name,
+                )?;
+
+                let revoked = &sequence[1];
+                require_str_eq(
+                    revoked,
+                    "/step",
+                    "revocation_leaf_arrives_late",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    revoked,
+                    "/expected/data_event_result",
+                    "reject_or_hide",
+                    vector_name,
+                )?;
+                require_str_eq(revoked, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_bool_eq(
+                    revoked,
+                    "/expected/data_cell_x_effect_retroactively_removed",
+                    true,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    revoked,
+                    "/expected/dependent_event_result",
+                    "pending",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    revoked,
+                    "/expected/dependent_event_reason",
+                    "dependency_missing",
+                    vector_name,
+                )?;
+                for path in [
+                    "/expected/dependent_event_effect_retroactively_removed",
+                    "/expected/recursive_dependency_closure_revalidated",
+                    "/expected/projection_recomputed",
+                    "/expected/converges_with_from_start_joiner",
+                    "/expected/order_independent",
+                ] {
+                    require_bool_eq(revoked, path, true, vector_name)?;
+                }
+
+                require_str_eq(
+                    case,
+                    "/expected/final_data_event_result",
+                    "reject_or_hide",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/final_reason",
+                    "stale_seal_ref",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/dependent_event_final_result",
+                    "pending",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/dependent_event_final_reason",
+                    "dependency_missing",
+                    vector_name,
+                )?;
+                for path in [
+                    "/expected/data_cell_x_effect_retroactively_removed",
+                    "/expected/data_cell_y_dependent_effect_retroactively_removed",
+                    "/expected/accepted_set_is_authorized_dependency_closed",
+                    "/expected/order_independent",
+                ] {
+                    require_bool_eq(case, path, true, vector_name)?;
+                }
+                if case.pointer("/expected/final_state_equals_from_start_joiner_of_leaf_set")
+                    != vector.pointer("/joined_leaf_set")
+                {
+                    bail!(
+                        "vector {vector_name} late-revocation final leaf set must equal the joined open-set view"
+                    );
+                }
+            }
             other => {
                 bail!("vector {vector_name} unknown concurrent revocation case {other}");
             }
@@ -1392,6 +1516,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
             "concurrent_revoke_branch",
             "authorization_cell_bottom",
             "light_client_without_joined_view",
+            "late_revocation_leaf_retroactive_removal",
         ],
     )
 }

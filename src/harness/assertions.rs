@@ -412,12 +412,24 @@ fn is_secret_field(name: &str) -> bool {
             | "auth"
             | "password"
             | "secret"
+            | "secret_b64u"
             | "session_credential"
+            | "credential"
             | "push_key"
             | "invite_token"
             | "signed_link"
             | "jws"
             | "sig"
+            | "private_key"
+            | "seed"
+            | "mnemonic"
+            | "recovery_key"
+            | "recovery_phrase"
+            | "recovery_secret"
+            | "root_seed"
+            | "root_private_key"
+            | "hkdf_prk"
+            | "prk"
     )
 }
 
@@ -452,5 +464,36 @@ fn normalize_transient_fields(value: Value) -> Value {
             Value::Array(values.into_iter().map(normalize_transient_fields).collect())
         }
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_secret_field, sanitize_json_value};
+    use serde_json::json;
+
+    #[test]
+    fn transcript_sanitizer_redacts_credential_material() {
+        for field in [
+            "credential",
+            "secret_b64u",
+            "private_key",
+            "recovery_key",
+            "root_seed",
+            "hkdf_prk",
+        ] {
+            assert!(is_secret_field(field), "{field} must be treated as secret");
+        }
+
+        let sanitized = sanitize_json_value(json!({
+            "ice": {
+                "credential": "turn-password",
+                "username": "public-routing-user"
+            },
+            "recovery_key": "word list"
+        }));
+        assert_eq!(sanitized["ice"]["credential"], "[redacted]");
+        assert_eq!(sanitized["ice"]["username"], "public-routing-user");
+        assert_eq!(sanitized["recovery_key"], "[redacted]");
     }
 }

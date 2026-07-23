@@ -599,7 +599,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           signingKey: signed.service_signing_private_key,
         }),
       },
-      data: body,
+      data: canonicalJson(body),
     });
     const responseText = await resp.text();
     expect(resp.status(), responseText).toBe(200);
@@ -675,7 +675,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           expires: 1_000_000_200,
         }),
       },
-      data: body,
+      data: canonicalJson(body),
     });
     expect(expired.status()).toBe(401);
     expect(signatureReason(await expired.json())).toBe("signature_window_invalid");

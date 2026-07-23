@@ -211,6 +211,7 @@ test.describe("key backup + restore", () => {
       const recoveryKey = await createMlsRecoveryBackupFromPrompt(
         deviceA.page,
         keyBackupPuts,
+        deviceASession.recoveryKey,
       );
       await deviceA.gotoSetup();
       await deviceA.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
@@ -484,6 +485,7 @@ test.describe("key backup + restore", () => {
       const recoveryKey = await createMlsRecoveryBackupFromPrompt(
         deviceA.page,
         keyBackupPuts,
+        deviceASession.recoveryKey,
       );
       await deviceA.gotoSetup();
       await deviceA.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
@@ -927,6 +929,7 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
 async function createMlsRecoveryBackupFromPrompt(
   page: Page,
   keyBackupPuts: KeyBackupPut[],
+  bootstrapRecoveryKey?: string,
 ): Promise<string> {
   const setupRecoveryKey = await completeRecoveryKeySetupPrompt(page, 30_000);
   if (setupRecoveryKey) {
@@ -939,7 +942,13 @@ async function createMlsRecoveryBackupFromPrompt(
     .then(() => true)
     .catch(() => false);
   if (!legacyPromptVisible) {
-    return createMlsRecoveryBackupFromRecoverySettings(page);
+    if (bootstrapRecoveryKey) {
+      expect(bootstrapRecoveryKey.split(/\s+/)).toHaveLength(24);
+      return bootstrapRecoveryKey;
+    }
+    throw new Error(
+      "Recovery Key bootstrap completed without exposing a setup prompt or bootstrap key",
+    );
   }
 
   await expect(legacyPrompt).toBeVisible({
@@ -971,47 +980,6 @@ async function createMlsRecoveryBackupFromPrompt(
 
   await page.getByTestId("mls-backup-saved").click();
   await expect(page.getByTestId("mls-backup-modal")).toHaveCount(0);
-  return recoveryKey;
-}
-
-async function createMlsRecoveryBackupFromRecoverySettings(
-  page: Page,
-): Promise<string> {
-  await page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("recovery-key-section")).toBeVisible({
-    timeout: 120_000,
-  });
-  const setupRecoveryKey = await completeRecoveryKeySetupPrompt(page, 5_000);
-  if (setupRecoveryKey) {
-    return setupRecoveryKey;
-  }
-  await page.getByTestId("recovery-key-regenerate").click();
-  const generatedFromPrompt = await completeRecoveryKeySetupPrompt(page, 5_000);
-  if (generatedFromPrompt) {
-    return generatedFromPrompt;
-  }
-
-  const generatedKeyField = page.getByTestId("recovery-key-current");
-  let recoveryKey = "";
-  await expect
-    .poll(
-      async () => {
-        recoveryKey = normalizeRecoveryKeyText(
-          (await generatedKeyField.textContent()) ?? "",
-        );
-        return recoveryKey.split(/\s+/).filter(Boolean).length;
-      },
-      { timeout: 120_000 },
-    )
-    .toBe(24);
-  await expect(page.getByTestId("recovery-key-live-warning")).toBeVisible();
-  await page.getByTestId("recovery-key-confirm-input").fill(recoveryKey);
-  await page.getByTestId("recovery-key-clear-live").click();
-
-  await expect(page.getByTestId("recovery-key-status")).toContainText(
-    /(?:DID recovery backup is on the server|encrypted history (?:is|are) backed up|Recovery Key confirmed)/i,
-    { timeout: 30_000 },
-  );
   return recoveryKey;
 }
 
@@ -1092,10 +1060,6 @@ function mlsPrivatePlaintextBackupPutCount(
         keyBackupWireData(hit),
       ),
   ).length;
-}
-
-function normalizeRecoveryKeyText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
