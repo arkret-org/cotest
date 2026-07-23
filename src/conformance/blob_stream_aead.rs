@@ -4,11 +4,12 @@
 //! canonical blob encrypted_attachment schema together.
 
 use anyhow::{Result, anyhow, bail};
-use arkret::KeyRefObject;
+use arkret::{Hash, KeyRefObject};
 use arkret_crypto::blob_aead::{
-    ALG_STREAM_XCHACHA, EncryptedAttachmentEnvelope, SCHEME_STREAM, StreamDecryptor,
-    StreamEncryptParams, decrypt_stream, encrypt_stream,
+    ALG_STREAM_XCHACHA, SCHEME_STREAM, StreamDecryptor, StreamEncryptParams, decrypt_stream,
+    encrypt_stream,
 };
+use arkret_models_crypto::{EncryptedAttachment, StreamEncryptedAttachment};
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -109,13 +110,19 @@ fn expect_reason(error: arkret_crypto::Error, expected: &str) -> Result<()> {
     Ok(())
 }
 
-fn split_segments(ciphertext: &[u8], env: &EncryptedAttachmentEnvelope) -> Result<Vec<Vec<u8>>> {
-    let segment_size =
-        env.segment_size
-            .ok_or_else(|| anyhow!("stream envelope missing segment_size"))? as usize;
-    let segment_count = env
-        .segment_count
-        .ok_or_else(|| anyhow!("stream envelope missing segment_count"))?;
+fn stream_fields(env: &EncryptedAttachment) -> Result<&StreamEncryptedAttachment> {
+    match env {
+        EncryptedAttachment::Stream(stream) => Ok(stream),
+        EncryptedAttachment::WholeFile(_) => {
+            bail!("encrypt_stream produced a whole-file envelope")
+        }
+    }
+}
+
+fn split_segments(ciphertext: &[u8], env: &EncryptedAttachment) -> Result<Vec<Vec<u8>>> {
+    let stream = stream_fields(env)?;
+    let segment_size = stream.segment_size as usize;
+    let segment_count = stream.segment_count;
     let mut out = Vec::with_capacity(segment_count as usize);
     let mut offset = 0usize;
     for index in 0..segment_count {
@@ -123,7 +130,7 @@ fn split_segments(ciphertext: &[u8], env: &EncryptedAttachmentEnvelope) -> Resul
         let plaintext_len = if index < last_index {
             segment_size
         } else {
-            (env.size_bytes - (segment_size as u64) * (last_index as u64)) as usize
+            (stream.size_bytes - (segment_size as u64) * last_index) as usize
         };
         let ciphertext_len = plaintext_len + SEGMENT_TAG_LEN;
         let end = offset + ciphertext_len;
@@ -142,7 +149,7 @@ fn split_segments(ciphertext: &[u8], env: &EncryptedAttachmentEnvelope) -> Resul
     Ok(out)
 }
 
-fn schema_ready_envelope_value(env: &EncryptedAttachmentEnvelope) -> Result<Value> {
+fn schema_ready_envelope_value(env: &EncryptedAttachment) -> Result<Value> {
     let mut value = serde_json::to_value(env)?;
     value["blob_ref"] =
         json!("ak:blob:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
@@ -154,20 +161,22 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
     let plaintext: Vec<u8> = (0..2050u32).map(|index| (index % 251) as u8).collect();
     let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
 
-    if env.scheme != SCHEME_STREAM {
-        bail!("stream roundtrip produced scheme {}", env.scheme);
+    let stream = stream_fields(&env)?;
+    let raw = serde_json::to_value(&env)?;
+    if raw["scheme"].as_str() != Some(SCHEME_STREAM) {
+        bail!("stream roundtrip produced scheme {}", raw["scheme"]);
     }
-    if env.alg != ALG_STREAM_XCHACHA {
-        bail!("stream roundtrip produced alg {}", env.alg);
+    if raw["alg"].as_str() != Some(ALG_STREAM_XCHACHA) {
+        bail!("stream roundtrip produced alg {}", raw["alg"]);
     }
-    if env.segment_size != Some(CONFORMANCE_SEGMENT_SIZE) || env.segment_count != Some(3) {
+    if stream.segment_size != u64::from(CONFORMANCE_SEGMENT_SIZE) || stream.segment_count != 3 {
         bail!(
-            "expected segment_size={CONFORMANCE_SEGMENT_SIZE} segment_count=3, got {:?}/{:?}",
-            env.segment_size,
-            env.segment_count
+            "expected segment_size={CONFORMANCE_SEGMENT_SIZE} segment_count=3, got {}/{}",
+            stream.segment_size,
+            stream.segment_count
         );
     }
-    if env.nonce.is_some() || env.nonce_prefix.is_none() {
+    if raw.get("nonce").is_some() || raw.get("nonce_prefix").is_none() {
         bail!("stream envelope must carry nonce_prefix and no whole-file nonce");
     }
 
@@ -187,9 +196,11 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
         bail!("incremental stream decrypt did not recover the original plaintext");
     }
 
-    let mut digest_mismatch = env.clone();
-    digest_mismatch.ciphertext_digest =
-        "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned();
+    let mut digest_mismatch_stream = stream.clone();
+    digest_mismatch_stream.ciphertext_digest = Hash::new(
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
+    let digest_mismatch = EncryptedAttachment::Stream(digest_mismatch_stream);
     expect_reason(
         decrypt_stream(&ciphertext, &digest_mismatch, &key).unwrap_err(),
         "digest_mismatch",
@@ -210,8 +221,9 @@ pub fn run_stream_aead_truncation_rejected_vector() -> Result<()> {
     }
     expect_reason(decryptor.finish().unwrap_err(), "segment_stream_truncated")?;
 
-    let mut count_mismatch = env.clone();
-    count_mismatch.segment_count = Some(env.segment_count.unwrap_or_default() + 1);
+    let mut count_mismatch_stream = stream_fields(&env)?.clone();
+    count_mismatch_stream.segment_count += 1;
+    let count_mismatch = EncryptedAttachment::Stream(count_mismatch_stream);
     let count_mismatch_err = match StreamDecryptor::new(&count_mismatch, &key) {
         Ok(_) => bail!("segment_count mismatch unexpectedly constructed a decryptor"),
         Err(error) => error,
@@ -248,12 +260,14 @@ pub fn run_stream_aead_scheme_closure_vector() -> Result<()> {
     let plaintext = vec![13u8; 2050];
     let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
 
-    let mut unknown_scheme = env.clone();
-    unknown_scheme.scheme = "ak.blob.stream_aead.v2".to_owned();
-    expect_reason(
-        decrypt_stream(&ciphertext, &unknown_scheme, &key).unwrap_err(),
-        "unsupported_attachment_scheme",
-    )?;
+    // The typed envelope enum is closed: an unknown scheme id cannot even
+    // deserialize, so no decryptor can be constructed for it.
+    let mut unknown_scheme = serde_json::to_value(&env)?;
+    unknown_scheme["scheme"] = json!("ak.blob.stream_aead.v2");
+    if serde_json::from_value::<EncryptedAttachment>(unknown_scheme).is_ok() {
+        bail!("unknown attachment scheme survived the closed envelope enum");
+    }
+    let _ = &ciphertext;
 
     let schema_env = SchemaEnv::load()?;
     let validator = schema_env.compile(BLOB_ENCRYPTED_ATTACHMENT_SCHEMA)?;

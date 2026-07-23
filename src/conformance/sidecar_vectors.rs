@@ -1,6 +1,6 @@
 //! Sidecar conformance vectors (§0.11 of `_before_todos.md`).
 //!
-//! 7 vectors:
+//! 10 vectors:
 //!   - `ak.vector.sidecar.mls_bootstrap_binding.v1`
 //!   - `ak.vector.sidecar.mls_effective_access.v1`
 //!   - `ak.vector.sidecar.ensure_idempotent.v1`
@@ -8,20 +8,35 @@
 //!   - `ak.vector.sidecar.existence_privacy.v1`
 //!   - `ak.vector.sidecar.hosted_projection.v1`
 //!   - `ak.vector.sidecar.multi_agent_publish.v1`
+//!   - `ak.vector.sidecar.exchange_binding_closed_loop.v1`
+//!   - `ak.vector.sidecar.exchange_projection_recovery.v1`
+//!   - `ak.vector.sidecar.exchange_binding_containment.v1`
 //!
 //! These vectors pin the first-class Sidecar wire model. Backing scope is an
 //! internal MLS implementation detail and may not appear in public outcomes.
 
+use std::collections::BTreeSet;
+
 use anyhow::{Result, anyhow, bail};
 use arkret::{
-    AgentSidecarDisplayMode, AgentSidecarExchangeId, AgentSidecarExchangeOrigin,
+    AgentSidecarDisplayMode, AgentSidecarEventExchangeBinding, AgentSidecarExchangeBindingRole,
+    AgentSidecarExchangeCompletionPolicy, AgentSidecarExchangeControl,
+    AgentSidecarExchangeControlAction, AgentSidecarExchangeControlSchema,
+    AgentSidecarExchangeFoldedFrontier, AgentSidecarExchangeId, AgentSidecarExchangeOrigin,
     AgentSidecarExchangeProjection, AgentSidecarExchangeProjectionSchema,
-    AgentSidecarExchangeStatus, AgentSidecarProjectionProvenance, AgentSidecarSourceTrackRef, Did,
-    EventId, Hash, Hlc, MlsGovernanceBindingPayload, NonEmptyString,
+    AgentSidecarExchangeRequestContext, AgentSidecarExchangeStatus,
+    AgentSidecarProjectionProvenance, AgentSidecarSourceTrackRef, Did, EventId, Hash, Hlc,
+    MessageMetadata, MlsGovernanceBindingPayload, NonEmptyString,
     PendingSidecarAccessReconciliationItem, PendingSidecarAccessReconciliationStage, RealmId,
     SidecarId, SidecarMlsBinding, StrandId, agent_sidecar_desired_access_digest,
+    agent_sidecar_exchange_event_set_digest,
 };
 use arkret_wire::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
+use garth::projection::{
+    SidecarExchangeAgentFact, SidecarExchangeCacheDecision, SidecarExchangeControlFact,
+    SidecarExchangeFoldScope, SidecarExchangeRequestFact, evaluate_sidecar_exchange_cache,
+    fold_sidecar_exchange,
+};
 use serde_json::Value;
 
 pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ak.vector.sidecar.ensure_idempotent.v1";
@@ -33,6 +48,12 @@ pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "ak.vector.sidecar.eligib
 pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "ak.vector.sidecar.existence_privacy.v1";
 pub const VECTOR_ID_SIDECAR_HOSTED_PROJECTION: &str = "ak.vector.sidecar.hosted_projection.v1";
 pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "ak.vector.sidecar.multi_agent_publish.v1";
+pub const VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CLOSED_LOOP: &str =
+    "ak.vector.sidecar.exchange_binding_closed_loop.v1";
+pub const VECTOR_ID_SIDECAR_EXCHANGE_PROJECTION_RECOVERY: &str =
+    "ak.vector.sidecar.exchange_projection_recovery.v1";
+pub const VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CONTAINMENT: &str =
+    "ak.vector.sidecar.exchange_binding_containment.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING,
@@ -42,6 +63,9 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY,
     VECTOR_ID_SIDECAR_HOSTED_PROJECTION,
     VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH,
+    VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CLOSED_LOOP,
+    VECTOR_ID_SIDECAR_EXCHANGE_PROJECTION_RECOVERY,
+    VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CONTAINMENT,
 ];
 
 const SIDECAR_VECTORS_FIXTURE_FILE: &str = "agent-sidecar-fixture.json";
@@ -312,6 +336,8 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     let request_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000034")?;
     let native_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000035")?;
     let response_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000036")?;
+    let addressed_agent = Did::new("did:webvh:z6mkfixture:assistant.agents.example")?;
+    let terminal_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000037")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
         controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
@@ -327,14 +353,26 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         source_frontier_anchor: Some(anchor_id.clone()),
         source_hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         client_order_key: NonEmptyString::new("device-1-1").map_err(anyhow::Error::msg)?,
-        addressed_agent_ids: vec![Did::new("did:webvh:z6mkfixture:assistant.agents.example")?],
-        participating_agent_ids: vec![Did::new("did:webvh:z6mkfixture:assistant.agents.example")?],
+        addressed_agent_ids: vec![addressed_agent.clone()],
+        completion_policy: AgentSidecarExchangeCompletionPolicy::Coordinator,
+        coordinator_agent_id: addressed_agent.clone(),
+        coordinator_assignment_event_id: request_id.clone(),
+        participating_agent_ids: vec![addressed_agent],
         private_request_event_id: request_id.clone(),
         user_facing_response_event_ids: vec![response_id.clone()],
         status: AgentSidecarExchangeStatus::Complete,
         failure_code: None,
-        updated_hlc: Hlc::new("01970e589d21-0002-a13f9c2e")?,
+        terminal_event_id: Some(terminal_id.clone()),
+        folded_frontier: AgentSidecarExchangeFoldedFrontier {
+            event_ids: vec![terminal_id],
+            event_set_digest: agent_sidecar_exchange_event_set_digest(&[
+                request_id.clone(),
+                response_id.clone(),
+            ])?,
+            max_hlc: Hlc::new("01970e589d21-0004-a13f9c2e")?,
+        },
     };
+    projection.validate()?;
     let event = |event_id: EventId, hlc: &str, value: &'static str| {
         garth::projection::SidecarTimelineEvent {
             event_id,
@@ -418,12 +456,694 @@ pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 7 Sidecar vectors.
+// ─── shared exchange fixtures for the §7.2 vectors ─────────────────────────
+
+fn exchange_event_id(suffix: u32) -> Result<EventId> {
+    Ok(EventId::new(format!(
+        "ak:event:01964137-0000-7000-8000-{suffix:012x}"
+    ))?)
+}
+
+fn exchange_hlc(counter: u32) -> Result<Hlc> {
+    Ok(Hlc::new(format!("01970e589d21-{counter:04x}-a13f9c2e"))?)
+}
+
+fn exchange_controller() -> Result<Did> {
+    Ok(Did::new("did:webvh:z6mkfixture:example.com:users:alice")?)
+}
+
+fn exchange_agent_s() -> Result<Did> {
+    Ok(Did::new("did:webvh:z6mkfixture:assistant.agents.example")?)
+}
+
+fn exchange_agent_t() -> Result<Did> {
+    Ok(Did::new("did:webvh:z6mkfixture:reviewer.agents.example")?)
+}
+
+fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
+    Ok(SidecarExchangeFoldScope {
+        controller_id: exchange_controller()?,
+        sidecar_id: SidecarId::new("ak:sidecar:01964137-0000-7000-8000-000000000021")?,
+        private_strand_id: StrandId::new("ak:strand:01964137-0000-7000-8000-000000000032")?,
+    })
+}
+
+fn exchange_id_x1() -> Result<AgentSidecarExchangeId> {
+    AgentSidecarExchangeId::new("Xabcdefghijklmnopqrstu").map_err(Into::into)
+}
+
+fn exchange_request_context() -> Result<AgentSidecarExchangeRequestContext> {
+    Ok(AgentSidecarExchangeRequestContext {
+        source_track_ref: AgentSidecarSourceTrackRef {
+            realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000030")?,
+            strand_id: StrandId::new("ak:strand:01964137-0000-7000-8000-000000000031")?,
+            track_name: "discussion".to_owned(),
+        },
+        source_hlc: exchange_hlc(1)?,
+        client_order_key: NonEmptyString::new("device-1-1").map_err(anyhow::Error::msg)?,
+        addressed_agent_ids: vec![exchange_agent_s()?, exchange_agent_t()?],
+        completion_policy: AgentSidecarExchangeCompletionPolicy::Coordinator,
+        coordinator_agent_id: Some(exchange_agent_s()?),
+        source_frontier_anchor: None,
+    })
+}
+
+fn exchange_request_fact(
+    suffix: u32,
+    actor_seq: u64,
+    digest: &str,
+) -> Result<SidecarExchangeRequestFact> {
+    Ok(SidecarExchangeRequestFact {
+        event_id: exchange_event_id(suffix)?,
+        hlc: exchange_hlc(1)?,
+        actor_id: exchange_controller()?,
+        actor_seq,
+        event_digest: digest.to_owned(),
+        exchange_id: exchange_id_x1()?,
+        context: exchange_request_context()?,
+    })
+}
+
+fn exchange_agent_fact(
+    suffix: u32,
+    counter: u32,
+    actor: Did,
+    role: AgentSidecarExchangeBindingRole,
+) -> Result<SidecarExchangeAgentFact> {
+    let request_event_id = exchange_event_id(0x34)?;
+    let binding = match role {
+        AgentSidecarExchangeBindingRole::UserFacingResponse => {
+            AgentSidecarEventExchangeBinding::user_facing_response(
+                exchange_id_x1()?,
+                request_event_id.clone(),
+            )?
+        }
+        AgentSidecarExchangeBindingRole::Internal => {
+            AgentSidecarEventExchangeBinding::internal(exchange_id_x1()?, request_event_id.clone())?
+        }
+        AgentSidecarExchangeBindingRole::Request => bail!("request facts use the request builder"),
+    };
+    Ok(SidecarExchangeAgentFact {
+        event_id: exchange_event_id(suffix)?,
+        hlc: exchange_hlc(counter)?,
+        actor_id: actor,
+        binding,
+        refs_after: vec![request_event_id],
+    })
+}
+
+fn exchange_close_control(
+    suffix: u32,
+    actor_seq: u64,
+    digest: &str,
+    action: AgentSidecarExchangeControlAction,
+    basis: Vec<EventId>,
+    responses: Option<Vec<EventId>>,
+    failure_code: Option<&str>,
+) -> Result<SidecarExchangeControlFact> {
+    Ok(SidecarExchangeControlFact {
+        event_id: exchange_event_id(suffix)?,
+        hlc: exchange_hlc(0x40 + suffix)?,
+        actor_id: exchange_controller()?,
+        actor_seq,
+        event_digest: digest.to_owned(),
+        control: AgentSidecarExchangeControl {
+            schema: AgentSidecarExchangeControlSchema::V1,
+            exchange_id: exchange_id_x1()?,
+            request_event_id: exchange_event_id(0x34)?,
+            basis_event_ids: basis,
+            action,
+            response_event_ids: responses,
+            failure_code: failure_code
+                .map(|code| NonEmptyString::new(code).map_err(anyhow::Error::msg))
+                .transpose()?,
+            expected_coordinator_agent_id: None,
+            coordinator_agent_id: None,
+        },
+    })
+}
+
+// ─── VECT-SC-8 — exchange_binding_closed_loop ──────────────────────────────
+
+pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
+    let scope = exchange_scope()?;
+    let exchange = exchange_id_x1()?;
+    // Step 1: the request binding is the only exchange identity source.
+    let request_binding =
+        AgentSidecarEventExchangeBinding::request(exchange.clone(), exchange_request_context()?)?;
+    if request_binding.request_context.as_ref().map(|context| {
+        context.completion_policy == AgentSidecarExchangeCompletionPolicy::Coordinator
+    }) != Some(true)
+    {
+        bail!("request binding lost its coordinator completion policy");
+    }
+    let request = exchange_request_fact(0x34, 3, "aa")?;
+
+    // Step 2: a duplicate request reusing X1 at a higher sequence never
+    // becomes canonical, and an agent-authored request binding is invalid.
+    let duplicate_request = exchange_request_fact(0x40, 9, "zz")?;
+    let mut agent_authored_request = exchange_request_fact(0x41, 1, "zz")?;
+    agent_authored_request.actor_id = exchange_agent_s()?;
+    let delivered = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        &[
+            duplicate_request,
+            agent_authored_request.clone(),
+            request.clone(),
+        ],
+        &[],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("canonical request must fold"))?;
+    if delivered.private_request_event_id != exchange_event_id(0x34)?
+        || delivered.status != AgentSidecarExchangeStatus::Delivered
+    {
+        bail!("canonical request selection or delivered fold drifted");
+    }
+    if fold_sidecar_exchange(&scope, &exchange, &[agent_authored_request], &[], &[])?.is_some() {
+        bail!("an agent-authored request binding must never be consumed");
+    }
+
+    // Internal events keep delivered and stay non-echo.
+    let internal = exchange_agent_fact(
+        0x35,
+        2,
+        exchange_agent_s()?,
+        AgentSidecarExchangeBindingRole::Internal,
+    )?;
+    let with_internal = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        std::slice::from_ref(&internal),
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("internal fold missing"))?;
+    if with_internal.status != AgentSidecarExchangeStatus::Delivered
+        || !with_internal.user_facing_response_event_ids.is_empty()
+        || with_internal.participating_agent_ids != vec![exchange_agent_s()?]
+    {
+        bail!("internal events must track participation without echo or status change");
+    }
+
+    // Step 3: every mutation fails closed to non-echo.
+    let valid_response = exchange_agent_fact(
+        0x36,
+        4,
+        exchange_agent_s()?,
+        AgentSidecarExchangeBindingRole::UserFacingResponse,
+    )?;
+    let mut wrong_exchange = valid_response.clone();
+    wrong_exchange.event_id = exchange_event_id(0x50)?;
+    wrong_exchange.binding.exchange_id = AgentSidecarExchangeId::new("Yabcdefghijklmnopqrstu")?;
+    let mut wrong_request_ref = valid_response.clone();
+    wrong_request_ref.event_id = exchange_event_id(0x51)?;
+    wrong_request_ref.binding.request_event_id = Some(exchange_event_id(0x99)?);
+    let mut missing_causal_ref = valid_response.clone();
+    missing_causal_ref.event_id = exchange_event_id(0x52)?;
+    missing_causal_ref.refs_after = Vec::new();
+    let mut unaddressed_actor = valid_response.clone();
+    unaddressed_actor.event_id = exchange_event_id(0x53)?;
+    unaddressed_actor.actor_id = Did::new("did:webvh:z6mkfixture:stranger.agents.example")?;
+    let mut controller_response = valid_response.clone();
+    controller_response.event_id = exchange_event_id(0x54)?;
+    controller_response.actor_id = exchange_controller()?;
+    let duplicate_delivery = valid_response.clone();
+    let folded = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[
+            valid_response.clone(),
+            duplicate_delivery,
+            wrong_exchange,
+            wrong_request_ref,
+            missing_causal_ref,
+            unaddressed_actor,
+            controller_response,
+        ],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("closed-loop fold missing"))?;
+    // Step 4: duplicate delivery appends exactly once.
+    if folded.user_facing_response_event_ids != vec![exchange_event_id(0x36)?]
+        || folded.status != AgentSidecarExchangeStatus::Responding
+    {
+        bail!("mutated responses leaked into the echo set or duplicates were not idempotent");
+    }
+
+    // Unknown roles and ak:message: shaped request references fail closed at
+    // the closed schema (fail-closed metadata accessor -> non-echo).
+    for invalid in [
+        serde_json::json!({
+            "schema": "ak.schema.agent_sidecar_event_exchange_binding.v1",
+            "exchange_id": exchange.as_str(),
+            "role": "coordinator_summary",
+        }),
+        serde_json::json!({
+            "schema": "ak.schema.agent_sidecar_event_exchange_binding.v1",
+            "exchange_id": exchange.as_str(),
+            "role": "user_facing_response",
+            "request_event_id": "ak:message:01964137-0000-7000-8000-000000000034",
+        }),
+    ] {
+        let metadata: MessageMetadata =
+            serde_json::from_value(serde_json::json!({ "sidecar_exchange_binding": invalid }))?;
+        if metadata.sidecar_exchange_binding().is_some() {
+            bail!("invalid binding material must fail closed to non-echo");
+        }
+    }
+
+    // Step 5: a non-coordinator completion request never closes the exchange;
+    // only the controller-authored durable close control advances terminal
+    // state, and completes_exchange itself changes nothing.
+    let non_coordinator_completion = AgentSidecarEventExchangeBinding::user_facing_response(
+        exchange.clone(),
+        exchange_event_id(0x34)?,
+    )?
+    .with_completion(exchange_event_id(0x34)?)?;
+    let mut t_response = exchange_agent_fact(
+        0x37,
+        5,
+        exchange_agent_t()?,
+        AgentSidecarExchangeBindingRole::UserFacingResponse,
+    )?;
+    t_response.binding = non_coordinator_completion;
+    let coordinator = with_internal.coordinator_agent_id.clone();
+    if t_response.actor_id == coordinator {
+        bail!("fixture expects T to be a non-coordinator");
+    }
+    let responding = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[valid_response.clone(), t_response.clone()],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("responding fold missing"))?;
+    if responding.status != AgentSidecarExchangeStatus::Responding
+        || responding.terminal_event_id.is_some()
+    {
+        bail!("completes_exchange must not advance terminal state by itself");
+    }
+    // T is addressed, so its body may echo even though its completion
+    // request is ignored.
+    if !responding
+        .user_facing_response_event_ids
+        .contains(&exchange_event_id(0x37)?)
+    {
+        bail!("an addressed non-coordinator user-facing response must still echo");
+    }
+    let close = exchange_close_control(
+        0x38,
+        7,
+        "cc",
+        AgentSidecarExchangeControlAction::Close,
+        vec![exchange_event_id(0x36)?, exchange_event_id(0x37)?],
+        Some(vec![exchange_event_id(0x36)?, exchange_event_id(0x37)?]),
+        None,
+    )?;
+    let complete = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        &[request],
+        &[valid_response, t_response],
+        std::slice::from_ref(&close),
+    )?
+    .ok_or_else(|| anyhow!("terminal fold missing"))?;
+    if complete.status != AgentSidecarExchangeStatus::Complete
+        || complete.terminal_event_id != Some(exchange_event_id(0x38)?)
+        || complete.user_facing_response_event_ids
+            != vec![exchange_event_id(0x36)?, exchange_event_id(0x37)?]
+    {
+        bail!("only the accepted durable close control may advance terminal state");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-9 — exchange_projection_recovery ──────────────────────────────
+
+pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
+    let scope = exchange_scope()?;
+    let exchange = exchange_id_x1()?;
+    let request = exchange_request_fact(0x34, 1, "aa")?;
+    let response_r1 = exchange_agent_fact(
+        0x35,
+        3,
+        exchange_agent_s()?,
+        AgentSidecarExchangeBindingRole::UserFacingResponse,
+    )?;
+    let response_r2 = exchange_agent_fact(
+        0x36,
+        2,
+        exchange_agent_s()?,
+        AgentSidecarExchangeBindingRole::UserFacingResponse,
+    )?;
+
+    // Independent devices replay the same accepted history in different
+    // arrival orders and MUST produce bit-identical projections with the
+    // canonical (event HLC, event id) response order.
+    let device_one = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[response_r1.clone(), response_r2.clone()],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("device one fold missing"))?;
+    let device_two = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[response_r2.clone(), response_r1.clone()],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("device two fold missing"))?;
+    if device_one != device_two {
+        bail!("independent device replay must be bit-identical");
+    }
+    if device_one.user_facing_response_event_ids
+        != vec![exchange_event_id(0x36)?, exchange_event_id(0x35)?]
+    {
+        bail!("responses must order by (event HLC, event id) bytes, not arrival");
+    }
+
+    // Cache-loss rebuild starts from the request binding alone and never
+    // redelivers: the request fact is sufficient and deterministic.
+    let rebuilt = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("rebuild fold missing"))?;
+    if rebuilt.status != AgentSidecarExchangeStatus::Delivered
+        || rebuilt.source_track_ref != exchange_request_context()?.source_track_ref
+    {
+        bail!("write-once projection fields must rebuild verbatim from the request binding");
+    }
+
+    // Partial views: D1 only saw R1, D2 only saw R2. Their frontiers are
+    // incomparable; neither may win by HLC/LWW — both must backfill and fold
+    // the joined history to the same digest.
+    let d1_partial = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        std::slice::from_ref(&response_r1),
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("partial fold missing"))?;
+    let d2_local: BTreeSet<EventId> = [exchange_event_id(0x34)?, exchange_event_id(0x36)?]
+        .into_iter()
+        .collect();
+    if evaluate_sidecar_exchange_cache(&d1_partial.folded_frontier, &d2_local)?
+        != SidecarExchangeCacheDecision::BackfillRequired
+    {
+        bail!("incomparable frontiers must demand backfill, never LWW");
+    }
+    let joined: BTreeSet<EventId> = [
+        exchange_event_id(0x34)?,
+        exchange_event_id(0x35)?,
+        exchange_event_id(0x36)?,
+    ]
+    .into_iter()
+    .collect();
+    if evaluate_sidecar_exchange_cache(&d1_partial.folded_frontier, &joined)?
+        != SidecarExchangeCacheDecision::Refold
+        || evaluate_sidecar_exchange_cache(&device_one.folded_frontier, &joined)?
+            != SidecarExchangeCacheDecision::Fresh
+    {
+        bail!("cache decisions must derive from causal coverage of the local verified set");
+    }
+    if device_one.folded_frontier.event_set_digest
+        != agent_sidecar_exchange_event_set_digest(&joined.iter().cloned().collect::<Vec<_>>())?
+    {
+        bail!("folded frontier digest must commit to the complete contributing set");
+    }
+
+    // Terminal action x response-set mapping.
+    let cases: [(AgentSidecarExchangeControlAction, bool, Option<&str>, _); 5] = [
+        (
+            AgentSidecarExchangeControlAction::Close,
+            true,
+            None,
+            AgentSidecarExchangeStatus::Complete,
+        ),
+        (
+            AgentSidecarExchangeControlAction::Cancel,
+            true,
+            None,
+            AgentSidecarExchangeStatus::Complete,
+        ),
+        (
+            AgentSidecarExchangeControlAction::Close,
+            false,
+            None,
+            AgentSidecarExchangeStatus::Failed,
+        ),
+        (
+            AgentSidecarExchangeControlAction::Cancel,
+            false,
+            None,
+            AgentSidecarExchangeStatus::Failed,
+        ),
+        (
+            AgentSidecarExchangeControlAction::Fail,
+            false,
+            Some("agent_deactivated"),
+            AgentSidecarExchangeStatus::Failed,
+        ),
+    ];
+    for (action, with_response, failure_code, expected_status) in cases {
+        let responses = if with_response {
+            vec![exchange_event_id(0x35)?]
+        } else {
+            Vec::new()
+        };
+        let control = exchange_close_control(
+            0x38,
+            5,
+            "cc",
+            action,
+            vec![exchange_event_id(0x35)?],
+            Some(responses),
+            failure_code,
+        )?;
+        let folded = fold_sidecar_exchange(
+            &scope,
+            &exchange,
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&response_r1),
+            std::slice::from_ref(&control),
+        )?
+        .ok_or_else(|| anyhow!("terminal-mapping fold missing"))?;
+        if folded.status != expected_status {
+            bail!("terminal action x response-set mapping drifted for {action:?}");
+        }
+        let expected_failure = match (action, with_response) {
+            (_, true) => None,
+            (AgentSidecarExchangeControlAction::Close, false) => Some("controller_closed_empty"),
+            (AgentSidecarExchangeControlAction::Cancel, false) => Some("controller_cancelled"),
+            (AgentSidecarExchangeControlAction::Fail, false) => Some("agent_deactivated"),
+            (AgentSidecarExchangeControlAction::ReassignCoordinator, false) => unreachable!(),
+        };
+        if folded.failure_code.as_ref().map(|code| code.as_str()) != expected_failure {
+            bail!("derived failure code drifted for {action:?}");
+        }
+        if expected_status == AgentSidecarExchangeStatus::Failed
+            && !folded.user_facing_response_event_ids.is_empty()
+        {
+            bail!("failed exchanges never carry responses");
+        }
+    }
+
+    // Same-sequence terminal siblings resolve by bytewise-max event digest;
+    // the winner absorbs everything after it, and Events outside the winning
+    // basis closure stay private audit history.
+    let winner = exchange_close_control(
+        0x38,
+        5,
+        "ff",
+        AgentSidecarExchangeControlAction::Close,
+        vec![exchange_event_id(0x35)?],
+        Some(vec![exchange_event_id(0x35)?]),
+        None,
+    )?;
+    let sibling_loser = exchange_close_control(
+        0x39,
+        5,
+        "aa",
+        AgentSidecarExchangeControlAction::Cancel,
+        vec![exchange_event_id(0x35)?],
+        Some(Vec::new()),
+        None,
+    )?;
+    let uncovered_late = response_r2.clone();
+    let folded = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[response_r1.clone(), uncovered_late],
+        &[sibling_loser, winner],
+    )?
+    .ok_or_else(|| anyhow!("sibling fold missing"))?;
+    if folded.status != AgentSidecarExchangeStatus::Complete
+        || folded.terminal_event_id != Some(exchange_event_id(0x38)?)
+    {
+        bail!("same-sequence siblings must resolve by bytewise-max event digest");
+    }
+    if folded
+        .folded_frontier
+        .event_ids
+        .contains(&exchange_event_id(0x36)?)
+    {
+        bail!("Events outside the winning terminal basis must stay private audit history");
+    }
+
+    // Reassignment is valid only before terminal and only with a matching
+    // expected coordinator; it retargets the assignment Event id.
+    let mut reassign = exchange_close_control(
+        0x3a,
+        5,
+        "cc",
+        AgentSidecarExchangeControlAction::ReassignCoordinator,
+        vec![exchange_event_id(0x34)?],
+        None,
+        None,
+    )?;
+    reassign.control.expected_coordinator_agent_id = Some(exchange_agent_s()?);
+    reassign.control.coordinator_agent_id = Some(exchange_agent_t()?);
+    let mut stale_reassign = exchange_close_control(
+        0x3b,
+        6,
+        "dd",
+        AgentSidecarExchangeControlAction::ReassignCoordinator,
+        vec![exchange_event_id(0x34)?],
+        None,
+        None,
+    )?;
+    stale_reassign.control.expected_coordinator_agent_id = Some(exchange_agent_s()?);
+    stale_reassign.control.coordinator_agent_id = Some(exchange_agent_t()?);
+    let reassigned = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        &[],
+        &[reassign, stale_reassign],
+    )?
+    .ok_or_else(|| anyhow!("reassign fold missing"))?;
+    if reassigned.coordinator_agent_id != exchange_agent_t()?
+        || reassigned.coordinator_assignment_event_id != exchange_event_id(0x3a)?
+    {
+        bail!("matching reassignment must retarget coordinator and assignment Event id");
+    }
+
+    // Projection state invariants are closed.
+    let mut invalid = device_one.clone();
+    invalid.status = AgentSidecarExchangeStatus::Failed;
+    invalid.failure_code = Some(NonEmptyString::new("agent_deactivated").map_err(anyhow::Error::msg)?);
+    invalid.terminal_event_id = Some(exchange_event_id(0x38)?);
+    if invalid.validate().is_ok() {
+        bail!("failed with responses must violate the projection schema");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-10 — exchange_binding_containment ─────────────────────────────
+
+pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
+    // The forbidden-wire-fields registry hard-rejects plaintext/shared-scope
+    // occurrences of the binding key, both schema ids, and exchange_id.
+    let registry = super::load_artifact_json("registry/forbidden-wire-fields.json")?;
+    let entry = registry["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|entry| entry["id"].as_str() == Some("sidecar_exchange_binding"))
+        .ok_or_else(|| anyhow!("forbidden-wire-fields registry lost sidecar_exchange_binding"))?;
+    if entry["rejection_level"].as_str() != Some("hard_reject") {
+        bail!("sidecar_exchange_binding containment must be a hard reject");
+    }
+    let allowed = entry["allowed_contexts"]
+        .as_array()
+        .map(|contexts| {
+            contexts
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if allowed != vec!["changelog", "negative_test"] {
+        bail!("sidecar_exchange_binding allowed contexts widened: {allowed:?}");
+    }
+
+    // The account-data registry carries no exchange projection key surface.
+    let account_registry = super::load_artifact_json("registry/account-data-type-registry.json")?;
+    if serde_json::to_string(&account_registry)?.contains("sidecar_projection") {
+        bail!("the exchange projection must not register any account-data key");
+    }
+
+    // The local projection cache DTO rejects account-data key smuggling.
+    let mut projection = serde_json::json!({
+        "schema": "ak.schema.agent_sidecar_exchange_projection.v1"
+    });
+    projection["account_data_type"] = serde_json::json!("ak.agent.sidecar_projection.v1:x");
+    if serde_json::from_value::<AgentSidecarExchangeProjection>(projection).is_ok() {
+        bail!("the exchange projection DTO must reject account-data key fields");
+    }
+
+    // Binding material only round-trips through the closed schema mount;
+    // spelling of both schema ids is pinned.
+    let binding = AgentSidecarEventExchangeBinding::user_facing_response(
+        exchange_id_x1()?,
+        exchange_event_id(0x34)?,
+    )?;
+    let mut metadata = MessageMetadata::default();
+    metadata.set_sidecar_exchange_binding(&binding)?;
+    let raw = serde_json::to_value(&metadata)?;
+    if raw["sidecar_exchange_binding"]["schema"].as_str()
+        != Some("ak.schema.agent_sidecar_event_exchange_binding.v1")
+    {
+        bail!("binding schema id spelling drifted");
+    }
+    if serde_json::to_value(AgentSidecarExchangeControlSchema::V1)?
+        != "ak.schema.agent_sidecar_exchange_control.v1"
+    {
+        bail!("control schema id spelling drifted");
+    }
+
+    // An ordinary shared publish event shape carries no exchange material.
+    let publish_event = serde_json::json!({
+        "kind": "ak.message.create",
+        "payload": {
+            "strand_id": "ak:strand:01964137-0000-7000-8000-000000000031",
+            "content": { "kind": "ak.content.text", "text": "published summary" },
+        },
+    });
+    let serialized = serde_json::to_string(&publish_event)?;
+    for needle in [
+        "sidecar_exchange_binding",
+        "ak.schema.agent_sidecar_event_exchange_binding.v1",
+        "ak.schema.agent_sidecar_exchange_control.v1",
+        "exchange_id",
+        "ak:sidecar:",
+    ] {
+        if serialized.contains(needle) {
+            bail!("publish output leaked exchange material: {needle}");
+        }
+    }
+    Ok(())
+}
+
+/// Suite entry point — runs all 10 Sidecar vectors.
 pub fn run_sidecar_vector_suite() -> Result<()> {
     validate_sidecar_vectors_fixture_metadata()?;
-    if ALL_SIDECAR_VECTOR_IDS.len() != 7 {
+    if ALL_SIDECAR_VECTOR_IDS.len() != 10 {
         bail!(
-            "expected 7 sidecar vector ids, got {}",
+            "expected 10 sidecar vector ids, got {}",
             ALL_SIDECAR_VECTOR_IDS.len()
         );
     }
@@ -434,6 +1154,9 @@ pub fn run_sidecar_vector_suite() -> Result<()> {
     run_sidecar_existence_privacy_vector()?;
     run_sidecar_hosted_projection_vector()?;
     run_sidecar_multi_agent_publish_vector()?;
+    run_sidecar_exchange_binding_closed_loop_vector()?;
+    run_sidecar_exchange_projection_recovery_vector()?;
+    run_sidecar_exchange_binding_containment_vector()?;
     Ok(())
 }
 
@@ -442,7 +1165,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_seven_sidecar_vectors_run_clean() {
+    fn all_ten_sidecar_vectors_run_clean() {
         run_sidecar_vector_suite().unwrap();
     }
 }
