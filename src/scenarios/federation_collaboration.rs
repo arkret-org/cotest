@@ -1520,7 +1520,7 @@ async fn bootstrap_test_device_authorization(
         recovery_session_id: None,
     };
     let mut authorize = Event::new(
-        arkret_core::events::EventKind::DEVICE_AUTHORIZE,
+        arkret_wire::events::EventKind::DEVICE_AUTHORIZE,
         realm_id,
         principal.clone(),
         1,

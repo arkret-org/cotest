@@ -258,7 +258,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // ── Step 4: push the same Events to server_b ─────────────────────────
     let message_index = event_envelopes
         .iter()
-        .position(|event| event.kind.as_str() == arkret_core::events::EventKind::MESSAGE_CREATE)
+        .position(|event| event.kind.as_str() == arkret_wire::events::EventKind::MESSAGE_CREATE)
         .context("peer query did not return the authored message")?;
     let later_events = event_envelopes.split_off(message_index);
     let push_body = peer_events_submit_body(

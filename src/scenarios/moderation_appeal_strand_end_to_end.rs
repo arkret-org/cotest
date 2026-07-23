@@ -78,7 +78,7 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use arkret_core::events::EventKind;
+    use arkret_wire::events::EventKind;
 
     use super::*;
 

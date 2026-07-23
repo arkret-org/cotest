@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use arkret_core::events::{EventKind, EventProductClass, EventRegistryCategory};
 use arkret_core::{
     CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ExporterLabelId, HPKE_SUITES,
     MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
@@ -14,6 +13,7 @@ use arkret_schema::{
     REGISTERED_SCHEMA_IDS, REGISTERED_SPECIAL_FORM_ID_KINDS, account_data_pattern,
 };
 use arkret_wire::ErrorCode;
+use arkret_wire::events::{EventKind, EventProductClass, EventRegistryCategory};
 use serde_json::Value;
 
 #[test]
