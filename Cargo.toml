@@ -59,7 +59,7 @@ arkret-state = {workspace = true}
 # 05-2 — cotest-wire emits SDK-authoritative cross-signing / device-trust
 # canonical signing-input golden vectors (CrossSigningPublishContent /
 # DeviceTrustBinding) so the TS e2e byte-mirror helpers regress against the SDK.
-arkret-crypto = {workspace = true}
+arkret-crypto = {workspace = true,features = ["secret-share"]}
 arkret-event-draft = {workspace = true}
 arkret-http-client = {workspace = true}
 arkret-models-collaboration = {workspace = true}

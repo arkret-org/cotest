@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret::{SecretShareRequestContent, SecretShareSendContent};
 use arkret_canonical::{canonical_json_bytes, from_canonical_json_slice};
+use arkret_crypto::secret_share::{SecretShareRequestContent, SecretShareSendContent};
 use arkret_identifiers::{DeviceId, DeviceMessageId, Did};
 use arkret_models_collaboration::sync_frames::account_sync::{
     DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody,

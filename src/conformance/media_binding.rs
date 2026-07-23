@@ -103,7 +103,7 @@ fn validate_media_binding_fixture_metadata() -> Result<()> {
 }
 
 /// Known media-backend type tags from `ak.realm.media_service.foci[].type`.
-/// Mirrors `arkret_sdk::media::MediaBackendType` enum (R3 SDK feature
+/// Mirrors `arkret_signatures::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
 /// minimal direct-owner dependency slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
@@ -222,7 +222,7 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
 
 /// Validate that `remaining_secs` (token expires_at - now) is within
 /// the spec's 600s ceiling and strictly positive. Mirrors
-/// `arkret_sdk::media::validate_token_ttl` so cotest can pin the
+/// `arkret_signatures::media::validate_token_ttl` so cotest can pin the
 /// constraint at the wire layer without pulling the full-surface SDK.
 fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
     if remaining_secs <= 0 {
