@@ -474,6 +474,65 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
         Err(ArkretError::Api { .. }) => {}
         Err(error) => return Err(error.into()),
     }
+    let mismatched_identity = arkret::mls::ArkretMlsIdentity::from_ed25519_signing_seed(
+        provisioned.agent_id.clone(),
+        agent_device_1.clone(),
+        [99_u8; 32],
+    )?;
+    let mismatched_record = mismatched_identity.key_package_record()?;
+    let mut leaf_mismatch_upload = mismatched_identity.signed_key_packages_upload_request(
+        std::slice::from_ref(&mismatched_record),
+        binding_1.verification_method.as_str(),
+    )?;
+    for entry in &mut leaf_mismatch_upload.key_packages {
+        entry.device_signature = Some(arkret::sign_keypackage_upload_entry(
+            &leaf_mismatch_upload.principal_id,
+            &leaf_mismatch_upload.device_id,
+            entry,
+            binding_1.verification_method.as_str(),
+            &runtime_key_1.to_bytes(),
+        )?);
+    }
+    leaf_mismatch_upload.device_signature = arkret::sign_keypackages_upload_request(
+        &leaf_mismatch_upload.unsigned(),
+        binding_1.verification_method.as_str(),
+        &runtime_key_1.to_bytes(),
+    )?;
+    match agent_client_1
+        .keypackages_upload(&leaf_mismatch_upload)
+        .await
+    {
+        Ok(outcome) => assert_eq!(
+            outcome.accepted, 0,
+            "a KeyPackage whose Leaf signature key differs from the authorized runtime key must be rejected"
+        ),
+        Err(ArkretError::Api { .. }) => {}
+        Err(error) => return Err(error.into()),
+    }
+    let mut expired_upload = upload.clone();
+    for entry in &mut expired_upload.key_packages {
+        entry.expires_at = now - chrono::Duration::seconds(1);
+        entry.device_signature = Some(arkret::sign_keypackage_upload_entry(
+            &expired_upload.principal_id,
+            &expired_upload.device_id,
+            entry,
+            binding_1.verification_method.as_str(),
+            &runtime_key_1.to_bytes(),
+        )?);
+    }
+    expired_upload.device_signature = arkret::sign_keypackages_upload_request(
+        &expired_upload.unsigned(),
+        binding_1.verification_method.as_str(),
+        &runtime_key_1.to_bytes(),
+    )?;
+    match agent_client_1.keypackages_upload(&expired_upload).await {
+        Ok(outcome) => assert_eq!(
+            outcome.accepted, 0,
+            "an expired and otherwise correctly signed Agent KeyPackage must be rejected"
+        ),
+        Err(ArkretError::Api { .. }) => {}
+        Err(error) => return Err(error.into()),
+    }
     let upload_outcome = agent_client_1.keypackages_upload(&upload).await?;
     assert_eq!(upload_outcome.accepted as usize, upload.key_packages.len());
     runtime
@@ -509,7 +568,7 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
             target_principal_id: provisioned.agent_id.clone(),
             intended_realm_id: realm_id_typed.clone(),
             requester: arkret::Did::new(ALICE_DID.to_owned())?,
-            required_capabilities: upload_capabilities,
+            required_capabilities: upload_capabilities.clone(),
             claim_nonce: format!("native-agent-mls-claim-{}", now.timestamp_millis()),
             expires_at: now + chrono::Duration::minutes(10),
             target_device_ids: vec![agent_device_1.clone()],
@@ -771,6 +830,30 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
         .await
         .context("revoke old Agent KeyPackage pool")?;
     runtime.mark_revoke_accepted(&revoke_outcome).await?;
+    let revoked_claim = bearer_sdk_client(&server, &controller_token)?
+        .keypackages_claim(&arkret::KeyPackagesClaimRequestBody {
+            target_principal_id: provisioned.agent_id.clone(),
+            intended_realm_id: realm_id_typed,
+            requester: arkret::Did::new(ALICE_DID.to_owned())?,
+            required_capabilities: upload_capabilities,
+            claim_nonce: format!("native-agent-mls-revoked-claim-{}", now.timestamp_millis()),
+            expires_at: now + chrono::Duration::minutes(10),
+            target_device_ids: vec![agent_device_1.clone()],
+            minimal_metadata_allowed: Some(false),
+            timeout_ms: Some(10_000),
+            strand_id: None,
+            mls_group_id: Some(group_id.clone()),
+            proofs: Vec::new(),
+        })
+        .await;
+    match revoked_claim {
+        Ok(outcome) => assert!(
+            outcome.claims.is_empty(),
+            "a revoked Agent KeyPackage must not remain independently claimable"
+        ),
+        Err(ArkretError::Api { .. }) => {}
+        Err(error) => return Err(error.into()),
+    }
     pause_agent_runtime(&server, &controller_token, &provisioned).await?;
     let replacement = bearer_sdk_client(&server, &controller_token)?
         .agent_renew_pairing(
