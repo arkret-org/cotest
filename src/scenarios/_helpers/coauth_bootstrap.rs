@@ -35,7 +35,7 @@
 //! docker CLI isn't available. The CI matrix wires this on for the
 //! Ubuntu job only — see `.github/workflows/integration.yml`.
 
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -124,6 +124,129 @@ impl SpawnedCoauth {
     pub fn health_url(&self) -> String {
         format!("{}/health", self.internal_base_url)
     }
+}
+
+/// Coauth resources reserved before Soland starts. This breaks the bootstrap
+/// cycle cleanly: Soland can be configured with [`Self::base_url`] first, then
+/// Coauth is rendered with that live Soland as its Principal Server.
+pub struct PreparedCoauth {
+    coauth_bin: PathBuf,
+    pg: EphemeralPg,
+    bind_port: ReservedPort,
+    bind_addr: String,
+}
+
+impl PreparedCoauth {
+    pub fn base_url(&self) -> String {
+        format!("http://{}", self.bind_addr)
+    }
+
+    pub async fn spawn_for_principal_server(
+        self,
+        principal_server_endpoint: &str,
+        session_grant_introspection_bearer: &str,
+        embedded_webvh_registration_bearer: &str,
+    ) -> Result<SpawnedCoauth> {
+        let Self {
+            coauth_bin,
+            pg,
+            mut bind_port,
+            bind_addr,
+        } = self;
+        let mut bundle = bootstrap_coauth_config(&coauth_bin, &pg.connect_url, &bind_addr)?;
+        patch_principal_server_config(
+            &mut bundle,
+            principal_server_endpoint,
+            session_grant_introspection_bearer,
+            embedded_webvh_registration_bearer,
+        )?;
+        run_coauth_migrations(&coauth_bin, bundle.file.path())?;
+
+        let mut command = Command::new(&coauth_bin);
+        command
+            .arg("server")
+            .arg("--config")
+            .arg(bundle.file.path())
+            .arg("--no-sync")
+            .env("COAUTH_ENABLE_TEST_ENDPOINTS", "1")
+            .env("COAUTH_ALLOW_INSECURE_LOOPBACK_HTTP", "1");
+        if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
+            command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        } else {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        bind_port.release();
+        bundle.internal_port_reservation.release();
+        let child = command.spawn().context("spawn prepared coauth server")?;
+        let base_url = format!("http://{bind_addr}");
+        let server =
+            SpawnedExternalProcess::from_child(base_url, coauth_bin, child, vec![bind_port]);
+        let internal_base_url = format!("http://{}", bundle.internal_addr);
+        if !wait_for_health(&internal_base_url, Duration::from_secs(60)).await {
+            anyhow::bail!("prepared coauth did not become healthy at {internal_base_url}");
+        }
+        Ok(SpawnedCoauth {
+            server,
+            internal_base_url,
+            config: bundle.file,
+            _internal_port_reservation: bundle.internal_port_reservation,
+            pg,
+        })
+    }
+}
+
+/// Reserve Coauth's public address and database without starting the process.
+/// Live cross-service tests use the address to configure Soland, then call
+/// [`PreparedCoauth::spawn_for_principal_server`] with that Soland endpoint.
+pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
+    let coauth_bin = locate_external_binary(&coauth_binary_probe_spec())
+        .context("coauth binary is required for the live Agent MLS test")?;
+    let pg = spawn_ephemeral_postgres()?
+        .context("Docker-backed Postgres is required for the live Agent MLS test")?;
+    let bind_port = reserve_port().context("reserve prepared coauth public port")?;
+    let bind_addr = format!("127.0.0.1:{}", bind_port.port());
+    Ok(PreparedCoauth {
+        coauth_bin,
+        pg,
+        bind_port,
+        bind_addr,
+    })
+}
+
+fn patch_principal_server_config(
+    bundle: &mut CoauthConfigBundle,
+    endpoint: &str,
+    session_grant_introspection_bearer: &str,
+    embedded_webvh_registration_bearer: &str,
+) -> Result<()> {
+    let file = bundle.file.as_file_mut();
+    file.seek(SeekFrom::Start(0))?;
+    let mut config: serde_yaml_ng::Value = serde_yaml_ng::from_reader(&mut *file)
+        .context("decode generated coauth config for Principal Server wiring")?;
+    let root = config
+        .as_mapping_mut()
+        .context("generated coauth config root must be a mapping")?;
+    let arkret_key = serde_yaml_ng::Value::String("arkret".to_owned());
+    let arkret = root
+        .entry(arkret_key)
+        .or_insert_with(|| serde_yaml_ng::Value::Mapping(Default::default()))
+        .as_mapping_mut()
+        .context("generated coauth arkret config must be a mapping")?;
+    arkret.insert(
+        serde_yaml_ng::Value::String("principal_servers".to_owned()),
+        serde_yaml_ng::to_value(vec![serde_json::json!({
+            "name": "cotest-soland",
+            "endpoint": endpoint,
+            "session_grant_introspection_bearer": session_grant_introspection_bearer,
+            "embedded_webvh_registration_bearer": embedded_webvh_registration_bearer,
+        })])?,
+    );
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
+    serde_yaml_ng::to_writer(&mut *file, &config)
+        .context("write Principal Server-wired coauth config")?;
+    file.flush()?;
+    Ok(())
 }
 
 /// Try to bring up an ephemeral Postgres in docker and return a handle.

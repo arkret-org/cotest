@@ -111,7 +111,7 @@ chrono-tz = {version = "0.10.4",default-features = false}
 arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["full-surface", "mls", "device-runtime"]}
 arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
-garth = {path = "../garth"}
+garth = {path = "../garth",features = ["mls"]}
 arkret-core = {path = "../arkret-rust-sdk/crates/core"}
 arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}

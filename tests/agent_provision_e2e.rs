@@ -18,7 +18,7 @@
 //! Legacy mutation endpoints that cannot carry controller-signed Events are
 //! covered as fail-closed compatibility surfaces.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -40,7 +40,9 @@ use arkret_core::{
     principal_control_realm_id,
 };
 use arkret_crypto::DeviceTrustBinding;
-use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};
+use arkret_http_client::{
+    Auth, Client as SdkClient, ClientBuilder, DpopAuth, Error as ArkretError,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
@@ -48,7 +50,12 @@ use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope, eventually, expect_json,
     refresh_event_proof_with_signing_seed, register_account, submit_event_with_signing_seed,
 };
-use ed25519_dalek::{Signer as _, SigningKey};
+use cotest::scenarios::_helpers::coauth_bootstrap::prepare_coauth_with_db_required;
+use ed25519_dalek::{Signer as _, SigningKey, Verifier as _};
+use garth::{
+    AgentMlsAuthorizationBinding, AgentMlsRuntime, AgentMlsWelcomeInput, AgentMlsWelcomeOutcome,
+    AgentMlsWelcomeVerifier, MemorySecureKeyStore,
+};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use serial_test::serial;
@@ -101,11 +108,7 @@ fn controller_verification_method() -> String {
 }
 
 fn test_agent_requested_scope() -> arkret::AgentKeyScope {
-    let service_actions = [
-        "ak.self.events.stream.subscribe",
-        "ak.self.events.query.scan",
-        "ak.self.events.command.submit",
-    ];
+    let service_actions = agent_runtime_service_actions();
     arkret::AgentKeyScope {
         actions: service_actions
             .into_iter()
@@ -125,6 +128,695 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
             .collect(),
         constraints: Vec::new(),
     }
+}
+
+fn agent_runtime_service_actions() -> [&'static str; 8] {
+    [
+        "ak.self.events.stream.subscribe",
+        "ak.self.events.query.scan",
+        "ak.self.events.command.submit",
+        "ak.self.keys.keypackages.upload.create",
+        "ak.self.keys.keypackages.command.consume",
+        "ak.self.keys.keypackages.command.revoke",
+        "ak.self.device_messages.query.list",
+        "ak.self.device_messages.command.ack",
+    ]
+}
+
+fn agent_mls_session_actions() -> [&'static str; 5] {
+    [
+        "ak.self.keys.keypackages.upload.create",
+        "ak.self.keys.keypackages.command.consume",
+        "ak.self.keys.keypackages.command.revoke",
+        "ak.self.device_messages.query.list",
+        "ak.self.device_messages.command.ack",
+    ]
+}
+
+fn dpop_sdk_client(base_url: &str, session_grant: String, key: SigningKey) -> Result<SdkClient> {
+    Ok(ClientBuilder::new(base_url.parse()?)
+        .allow_insecure_localhost()
+        .auth(Auth::Dpop(DpopAuth::with_access_token(
+            session_grant,
+            move |request| {
+                arkret::signatures::build_dpop_proof(&request, &key)
+                    .map(|proof| proof.proof_jwt)
+                    .map_err(|error| ArkretError::Protocol(error.to_string()))
+            },
+        )))
+        .build()?)
+}
+
+async fn issue_live_agent_session(
+    coauth_base_url: &str,
+    service_id: &str,
+    agent_id: &arkret::Did,
+    device_id: &arkret::DeviceId,
+    authorization_ref: &str,
+    verification_method: &str,
+    runtime_key: &SigningKey,
+    dpop_key: SigningKey,
+) -> Result<arkret::SessionGrantOutcome> {
+    let path = "/_arkret/gate/account/session-grants";
+    let endpoint = format!("{coauth_base_url}{path}");
+    let dpop = arkret::signatures::build_dpop_proof(
+        &arkret::signatures::DpopProofRequest::new("POST", endpoint),
+        &dpop_key,
+    )?;
+    let dpop_binding = arkret::SessionGrantDpopBindingProof {
+        proof_jwt: dpop.proof_jwt.clone(),
+    };
+    let requested_scope = agent_mls_session_actions()
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let scope_request = arkret::SessionGrantAgentScopeRequest {
+        realm_ids: Vec::new(),
+        strand_ids: Vec::new(),
+        track_names: Vec::new(),
+    };
+    let freshness = Utc::now().timestamp_nanos_opt().unwrap_or_default();
+    let challenge = format!("agent-session-challenge-{freshness}");
+    let nonce = format!("agent-session-nonce-{freshness}");
+    let audience = arkret::Did::new(service_id.to_owned())?;
+    let expires_at = canonical_now() + chrono::Duration::minutes(10);
+    let signing_input = arkret::session_grant::agent_key_proof_signing_input_for_session_grant(
+        agent_id,
+        device_id,
+        &requested_scope,
+        authorization_ref,
+        &scope_request,
+        &dpop_binding,
+        verification_method,
+        &challenge,
+        &nonce,
+        audience.clone(),
+        expires_at,
+    )?;
+    let signature = URL_SAFE_NO_PAD.encode(
+        runtime_key
+            .sign(&signing_input.canonical_bytes()?)
+            .to_bytes(),
+    );
+    let request = arkret::session_grant::agent_key_proof_session_grant_request(
+        agent_id.clone(),
+        device_id.clone(),
+        requested_scope,
+        authorization_ref,
+        scope_request,
+        dpop_binding,
+        verification_method,
+        challenge,
+        nonce,
+        audience,
+        expires_at,
+        signature,
+    )?;
+    let fixed_proof = dpop.proof_jwt;
+    let client = ClientBuilder::new(coauth_base_url.parse()?)
+        .allow_insecure_localhost()
+        .auth(Auth::Dpop(DpopAuth::proof_only(move |_| {
+            Ok(fixed_proof.clone())
+        })))
+        .build()?;
+    client
+        .auth_issue_session_grant(&request)
+        .await
+        .context("issue live Coauth Agent session grant")
+}
+
+struct LiveWelcomeVerifier {
+    controller_key: SigningKey,
+}
+
+impl AgentMlsWelcomeVerifier for LiveWelcomeVerifier {
+    fn verify_claim_envelope(&self, payload: &arkret::MlsWelcomePayload) -> garth::Result<()> {
+        let bytes =
+            arkret::canonical::canonical_json_bytes(&payload.claim_envelope.signing_input())
+                .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        let signature_bytes = URL_SAFE_NO_PAD
+            .decode(payload.claim_envelope.signature.sig.as_str())
+            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        let signature = ed25519_dalek::Signature::from_slice(&signature_bytes)
+            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        self.controller_key
+            .verifying_key()
+            .verify(&bytes, &signature)
+            .map_err(|error| garth::Error::Protocol(format!("claim envelope signature: {error}")))
+    }
+
+    fn verify_governance_binding(
+        &self,
+        payload: &arkret::MlsWelcomePayload,
+        group: &arkret::mls::ArkretMlsGroup,
+    ) -> garth::Result<()> {
+        let actual = group
+            .current_governance_binding()
+            .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        if actual.as_ref() != Some(&payload.governance_binding) {
+            return Err(garth::Error::Protocol(
+                "joined MLS governance binding differs from the authoritative Welcome".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result<()> {
+    const INTROSPECTION_BEARER: &str = "cotest-agent-mls-introspection";
+    const REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
+    const AGENT_DEVICE_1: &str = "ak:device:01904100-0000-7000-8000-00000000aa01";
+    const AGENT_DEVICE_2: &str = "ak:device:01904100-0000-7000-8000-00000000aa02";
+
+    let prepared_coauth = prepare_coauth_with_db_required()?;
+    let coauth_base_url = prepared_coauth.base_url();
+    let introspection_url =
+        format!("{coauth_base_url}/_arkret/gate/account/session-grants/introspect");
+    let server = ArkretServer::spawn_with_env(
+        "native-agent-mls-live-e2e",
+        &[
+            (
+                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                introspection_url.as_str(),
+            ),
+            (
+                "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER",
+                INTROSPECTION_BEARER,
+            ),
+            (
+                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                REGISTRATION_BEARER,
+            ),
+        ],
+    )
+    .await?;
+    let coauth = prepared_coauth
+        .spawn_for_principal_server(
+            server.base_url().as_str(),
+            INTROSPECTION_BEARER,
+            REGISTRATION_BEARER,
+        )
+        .await?;
+
+    let controller_token =
+        register_account(&server, ALICE_DID, "@cotest-native-agent-mls", ALICE_DEVICE).await?;
+    prepare_agent_controller_recovery(&server, &controller_token).await?;
+    let provisioned = provision_agent(
+        &server,
+        &controller_token,
+        "Native MLS Assistant",
+        "native-mls",
+        None,
+    )
+    .await?;
+    prepare_agent_pcr_recovery(&server, &controller_token, &provisioned).await?;
+    let controller_device_verification_method = format!("{ALICE_DID}#{ALICE_DEVICE}");
+    let pair_body = build_agent_key_pair_request_with_controller_vm(
+        &server,
+        &controller_token,
+        &provisioned,
+        "runtime-key-1",
+        &controller_device_verification_method,
+        [24_u8; 32],
+    )
+    .await?;
+    let coauth_client = ClientBuilder::new(coauth.base_url().parse()?)
+        .allow_insecure_localhost()
+        .build()?;
+    let paired = coauth_client
+        .agent_key_pair(&pair_body)
+        .await
+        .context("pair Agent runtime through live Coauth -> Soland fanout")?;
+    assert!(paired.ok);
+
+    let agent_device_1 = arkret::DeviceId::new(AGENT_DEVICE_1.to_owned())?;
+    let runtime_key_1 = runtime_signing_key();
+    let verification_method_1 = pair_body.verification_method.to_string();
+    let session_1 = issue_live_agent_session(
+        coauth.base_url(),
+        server.service_id(),
+        &provisioned.agent_id,
+        &agent_device_1,
+        paired.authorized_event_ref.as_str(),
+        &verification_method_1,
+        &runtime_key_1,
+        SigningKey::from_bytes(&[31_u8; 32]),
+    )
+    .await?;
+    assert_eq!(session_1.device_id.as_ref(), Some(&agent_device_1));
+    let agent_client_1 = dpop_sdk_client(
+        server.base_url().as_str(),
+        session_1.session_grant.clone(),
+        SigningKey::from_bytes(&[31_u8; 32]),
+    )?;
+
+    let now = canonical_now();
+    let binding_1 = AgentMlsAuthorizationBinding {
+        principal_id: provisioned.agent_id.clone(),
+        device_id: agent_device_1.clone(),
+        authorization_event_id: paired.authorized_event_ref.clone(),
+        verification_method: verification_method_1,
+        signing_public_key: runtime_key_1.verifying_key().to_bytes().to_vec(),
+        expires_at: Some(now + chrono::Duration::minutes(30)),
+    };
+    let secure_store = MemorySecureKeyStore::new();
+    let mut runtime = AgentMlsRuntime::initialize(
+        secure_store.clone(),
+        "cotest-native-agent-mls",
+        binding_1.clone(),
+        runtime_key_1.to_bytes(),
+        2,
+        now,
+    )
+    .await?;
+    let upload = runtime
+        .pending_upload_request(&binding_1, now)?
+        .context("runtime must expose its durable KeyPackage upload")?;
+    let realm_id = create_realm_with_signing_seed(
+        &server,
+        &controller_token,
+        ALICE_DID,
+        "Native Agent MLS live realm",
+        [21_u8; 32],
+    )
+    .await?;
+    let raw_group_id = b"cotest-native-agent-mls-live";
+    let group_id = URL_SAFE_NO_PAD.encode(raw_group_id);
+    let realm_id_typed = arkret::RealmId::new(realm_id.clone())?;
+    let upload_capabilities = runtime
+        .key_package_record(&upload.key_packages[0].keypackage_ref)
+        .context("pending KeyPackage record disappeared")?
+        .capabilities
+        .clone();
+    let empty_claim = bearer_sdk_client(&server, &controller_token)?
+        .keypackages_claim(&arkret::KeyPackagesClaimRequestBody {
+            target_principal_id: provisioned.agent_id.clone(),
+            intended_realm_id: realm_id_typed.clone(),
+            requester: arkret::Did::new(ALICE_DID.to_owned())?,
+            required_capabilities: upload_capabilities.clone(),
+            claim_nonce: format!("native-agent-mls-empty-claim-{}", now.timestamp_millis()),
+            expires_at: now + chrono::Duration::minutes(10),
+            target_device_ids: vec![agent_device_1.clone()],
+            minimal_metadata_allowed: Some(false),
+            timeout_ms: Some(10_000),
+            strand_id: None,
+            mls_group_id: Some(group_id.clone()),
+            proofs: Vec::new(),
+        })
+        .await?;
+    assert!(
+        empty_claim.claims.is_empty(),
+        "an Agent with no published KeyPackage must not be claimable"
+    );
+
+    let mut bad_upload = upload.clone();
+    bad_upload.device_signature.sig = base64_url("AQ")?;
+    match agent_client_1.keypackages_upload(&bad_upload).await {
+        Ok(outcome) => assert_eq!(outcome.accepted, 0, "bad signature must accept no package"),
+        Err(ArkretError::Api { .. }) => {}
+        Err(error) => return Err(error.into()),
+    }
+    let mut wrong_device_upload = upload.clone();
+    wrong_device_upload.device_id = arkret::DeviceId::new(AGENT_DEVICE_2.to_owned())?;
+    match agent_client_1
+        .keypackages_upload(&wrong_device_upload)
+        .await
+    {
+        Ok(outcome) => assert_eq!(
+            outcome.accepted, 0,
+            "a session-bound request for another Agent device must accept no package"
+        ),
+        Err(ArkretError::Api { .. }) => {}
+        Err(error) => return Err(error.into()),
+    }
+    let upload_outcome = agent_client_1.keypackages_upload(&upload).await?;
+    assert_eq!(upload_outcome.accepted as usize, upload.key_packages.len());
+    runtime
+        .mark_upload_accepted(&binding_1, &upload_outcome.key_package_refs, now)
+        .await?;
+
+    let governance_hash =
+        |digit: char| arkret::Hash::new(format!("sha256:{}", digit.to_string().repeat(64)));
+    let governance_event =
+        arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000aa03".to_owned())?;
+    let genesis_binding = arkret::MlsGovernanceBindingPayload::realm(
+        realm_id_typed.clone(),
+        group_id.clone(),
+        0,
+        0,
+        vec![governance_event.clone()],
+        governance_hash('1')?,
+        governance_hash('2')?,
+        governance_hash('3')?,
+        arkret::MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+        "ak.reducer.v1",
+    )?;
+    let controller_identity = arkret::mls::ArkretMlsIdentity::from_ed25519_signing_seed(
+        arkret::Did::new(ALICE_DID.to_owned())?,
+        arkret::DeviceId::new(ALICE_DEVICE.to_owned())?,
+        [21_u8; 32],
+    )?;
+    let mut controller_group =
+        controller_identity.create_group_with_governance_binding(raw_group_id, &genesis_binding)?;
+
+    let claim_outcome = bearer_sdk_client(&server, &controller_token)?
+        .keypackages_claim(&arkret::KeyPackagesClaimRequestBody {
+            target_principal_id: provisioned.agent_id.clone(),
+            intended_realm_id: realm_id_typed.clone(),
+            requester: arkret::Did::new(ALICE_DID.to_owned())?,
+            required_capabilities: upload_capabilities,
+            claim_nonce: format!("native-agent-mls-claim-{}", now.timestamp_millis()),
+            expires_at: now + chrono::Duration::minutes(10),
+            target_device_ids: vec![agent_device_1.clone()],
+            minimal_metadata_allowed: Some(false),
+            timeout_ms: Some(10_000),
+            strand_id: None,
+            mls_group_id: Some(group_id.clone()),
+            proofs: Vec::new(),
+        })
+        .await?;
+    assert!(
+        claim_outcome.failures.is_empty(),
+        "claim failed: {:?}",
+        claim_outcome.failures
+    );
+    let claim = claim_outcome
+        .claims
+        .into_iter()
+        .next()
+        .context("live claim returned no KeyPackage")?;
+    let local_record = runtime
+        .key_package_record(&claim.keypackage_ref)
+        .context("claimed KeyPackage record disappeared from the runtime")?
+        .clone();
+    assert_eq!(
+        claim.agent_key_authorize_event_id.as_deref(),
+        Some(paired.authorized_event_ref.as_str())
+    );
+
+    let add_binding = arkret::MlsGovernanceBindingPayload::realm(
+        realm_id_typed.clone(),
+        group_id.clone(),
+        0,
+        1,
+        vec![governance_event],
+        governance_hash('1')?,
+        governance_hash('2')?,
+        governance_hash('3')?,
+        arkret::MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+        "ak.reducer.v1",
+    )?;
+    let add = controller_group.add_member_with_governance_binding(&local_record, &add_binding)?;
+    let claim_id = non_empty(claim.claim_id.clone())?;
+    let welcome_digest = add.welcome.welcome_hash.clone();
+    let mut claim_envelope = arkret::MlsWelcomeClaimEnvelope {
+        keypackage_ref: claim.keypackage_ref.clone(),
+        keypackage_digest: claim.keypackage_digest.clone(),
+        intended_realm_id: realm_id_typed.clone(),
+        claim_id: claim_id.clone(),
+        requester_did: arkret::Did::new(ALICE_DID.to_owned())?,
+        trust_binding: arkret::MlsRequesterTrustBinding::RequesterDeviceId(arkret::DeviceId::new(
+            ALICE_DEVICE.to_owned(),
+        )?),
+        nonce: non_empty("native-agent-mls-welcome-nonce")?,
+        welcome_digest,
+        created_at: now,
+        signature: arkret::KeyOperationSignature {
+            kid: non_empty(controller_device_verification_method.clone())?,
+            alg: Some(non_empty("EdDSA")?),
+            sig: base64_url("AQ")?,
+        },
+    };
+    let envelope_signature = SigningKey::from_bytes(&[24_u8; 32])
+        .sign(&arkret::canonical::canonical_json_bytes(
+            &claim_envelope.signing_input(),
+        )?)
+        .to_bytes();
+    claim_envelope.signature.sig = base64_url(URL_SAFE_NO_PAD.encode(envelope_signature))?;
+    let payload = arkret::MlsWelcomePayload {
+        mls_group_id: arkret::MlsGroupId::new(group_id.clone()).map_err(anyhow::Error::msg)?,
+        epoch: add.welcome.epoch,
+        recipient_principal_id: provisioned.agent_id.clone(),
+        recipient_device_id: agent_device_1.clone(),
+        sender_device_id: Some(arkret::DeviceId::new(ALICE_DEVICE.to_owned())?),
+        keypackage_ref: claim.keypackage_ref.clone(),
+        keypackage_digest: claim.keypackage_digest.clone(),
+        claim_id: claim_id.clone(),
+        claim_ref: arkret::MlsWelcomePayloadClaimRef {
+            claim_id: claim_id.clone(),
+            keypackage_ref: claim.keypackage_ref.clone(),
+            keypackage_digest: claim.keypackage_digest.clone(),
+            capabilities_digest: claim.capabilities_digest.clone(),
+            trust_binding: arkret::MlsClaimTrustBinding::AgentKeyAuthorizeEventId(non_empty(
+                paired.authorized_event_ref.as_str(),
+            )?),
+        },
+        claim_envelope,
+        peer_claim_receipt: None,
+        carrier: arkret::MlsWelcomeCarrier::new(
+            None,
+            None,
+            Some(non_empty(add.welcome.welcome.clone())?),
+        )
+        .map_err(anyhow::Error::msg)?,
+        commit_ref: None,
+        governance_binding: add_binding,
+        expires_at: now + chrono::Duration::minutes(10),
+    };
+    let message_id = arkret::DeviceMessageId::new(
+        "ak:device_message:01904100-0000-7000-8000-00000000aa04".to_owned(),
+    )?;
+    let content = serde_json::to_value(&payload)?
+        .as_object()
+        .context("Welcome payload must serialize as an object")?
+        .clone()
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    let send = arkret::DeviceMessagesSendRequestBody {
+        messages: BTreeMap::from([(
+            provisioned.agent_id.clone(),
+            BTreeMap::from([(
+                agent_device_1.clone(),
+                arkret::DeviceMessageTarget {
+                    message_id: message_id.clone(),
+                    kind: arkret::ProtocolKind::new("ak.mls.welcome")
+                        .map_err(anyhow::Error::msg)?,
+                    content,
+                    expires_at: now + chrono::Duration::minutes(10),
+                },
+            )]),
+        )]),
+    };
+    let sent = bearer_sdk_client(&server, &controller_token)?
+        .send_device_messages("native-agent-mls-welcome-1", &send)
+        .await?;
+    assert!(sent.ok);
+    let received = agent_client_1
+        .receive_device_messages(None, Some(10))
+        .await?;
+    let envelope = received
+        .messages
+        .iter()
+        .find(|message| message.message_id == message_id)
+        .context("Agent did not receive the standard device-message Welcome")?;
+    let received_payload: arkret::MlsWelcomePayload = serde_json::from_value(
+        serde_json::Value::Object(envelope.content.clone().into_iter().collect()),
+    )?;
+    let mut drifted_payload = received_payload.clone();
+    drifted_payload.recipient_device_id = arkret::DeviceId::new(AGENT_DEVICE_2.to_owned())?;
+    let drifted = runtime
+        .process_welcome(
+            &binding_1,
+            AgentMlsWelcomeInput {
+                message_id: message_id.clone(),
+                key_package_id: local_record.keypackage_id.clone(),
+                payload: drifted_payload,
+                claimed_capabilities: claim.capabilities.clone(),
+            },
+            &LiveWelcomeVerifier {
+                controller_key: SigningKey::from_bytes(&[24_u8; 32]),
+            },
+            now,
+        )
+        .await;
+    assert!(
+        drifted.is_err(),
+        "a standard Welcome whose recipient binding drifted must fail closed"
+    );
+    assert!(runtime.group_state(&group_id).is_none());
+    assert!(runtime.pending_consume_intents().is_empty());
+    let welcome_outcome = runtime
+        .process_welcome(
+            &binding_1,
+            AgentMlsWelcomeInput {
+                message_id: message_id.clone(),
+                key_package_id: local_record.keypackage_id.clone(),
+                payload: received_payload,
+                claimed_capabilities: claim.capabilities,
+            },
+            &LiveWelcomeVerifier {
+                controller_key: SigningKey::from_bytes(&[24_u8; 32]),
+            },
+            now,
+        )
+        .await?;
+    let consume_request = match welcome_outcome {
+        AgentMlsWelcomeOutcome::ConsumeRequired(request) => request,
+        other => return Err(anyhow!("unexpected Welcome outcome: {other:?}")),
+    };
+    let consume_outcome = agent_client_1
+        .keypackages_consume(&consume_request)
+        .await
+        .with_context(|| {
+            format!(
+                "consume live Agent KeyPackage targets {:?}; local id {} ref {}",
+                consume_request.key_package_refs,
+                local_record.keypackage_id,
+                local_record.keypackage_ref
+            )
+        })?;
+    assert!(consume_outcome.failures.is_empty());
+    runtime
+        .mark_consume_accepted(
+            &binding_1,
+            claim_id.as_str(),
+            &consume_outcome.consumed,
+            now,
+        )
+        .await?;
+    let ack_token = received
+        .ack_token
+        .as_deref()
+        .context("device-message receive returned no ack token")?;
+    let ack = agent_client_1
+        .ack_device_messages(&arkret::DeviceMessagesAckRequestBody {
+            ack_token: ack_token.to_owned(),
+        })
+        .await?;
+    assert!(ack.ok);
+    runtime
+        .mark_message_acked(&binding_1, &message_id, now)
+        .await?;
+
+    drop(runtime);
+    let mut runtime = AgentMlsRuntime::restore(
+        secure_store.clone(),
+        "cotest-native-agent-mls",
+        &binding_1,
+        now,
+    )?;
+    assert!(runtime.group_state(&group_id).is_some());
+    assert!(runtime.pending_consume_intents().is_empty());
+    assert!(runtime.pending_message_acks().is_empty());
+    let from_agent = runtime
+        .encrypt_payload(
+            &binding_1,
+            &group_id,
+            "ak.message.create",
+            b"agent-after-restart",
+            now,
+        )
+        .await?;
+    assert_eq!(
+        controller_group.decrypt_payload(&from_agent)?,
+        b"agent-after-restart"
+    );
+    let next_epoch = controller_group.self_update_commit()?;
+    assert_eq!(runtime.apply_commit(&binding_1, &next_epoch, now).await?, 2);
+    let from_controller = controller_group.encrypt_payload("ak.message.create", b"epoch-two")?;
+    assert_eq!(
+        runtime
+            .decrypt_payload(&binding_1, &group_id, &from_controller, now)
+            .await?,
+        b"epoch-two"
+    );
+
+    let revoke_request = runtime
+        .prepare_authorization_replacement(&binding_1, now)
+        .await?
+        .context("the second uploaded KeyPackage must be revoked before replacement")?;
+    assert!(
+        runtime
+            .encrypt_payload(&binding_1, &group_id, "ak.message.create", b"blocked", now)
+            .await
+            .is_err()
+    );
+    let revoke_outcome = agent_client_1
+        .keypackages_revoke(&revoke_request)
+        .await
+        .context("revoke old Agent KeyPackage pool")?;
+    runtime.mark_revoke_accepted(&revoke_outcome).await?;
+    pause_agent_runtime(&server, &controller_token, &provisioned).await?;
+    let replacement = bearer_sdk_client(&server, &controller_token)?
+        .agent_renew_pairing(
+            provisioned.agent_id.as_str(),
+            &arkret::AgentRenewPairingRequestBody::default(),
+        )
+        .await?;
+    prepare_agent_pcr_recovery(&server, &controller_token, &replacement).await?;
+    let replacement_body = build_agent_key_pair_request_with_controller_vm(
+        &server,
+        &controller_token,
+        &replacement,
+        "runtime-key-2",
+        &controller_device_verification_method,
+        [24_u8; 32],
+    )
+    .await?;
+    let replacement_pair = coauth_client.agent_key_pair(&replacement_body).await?;
+    assert_ne!(
+        replacement_pair.authorized_event_ref,
+        paired.authorized_event_ref
+    );
+    resume_agent_runtime(&server, &controller_token, &replacement).await?;
+
+    let runtime_key_2 = SigningKey::from_bytes(&[14_u8; 32]);
+    let agent_device_2 = arkret::DeviceId::new(AGENT_DEVICE_2.to_owned())?;
+    let binding_2 = AgentMlsAuthorizationBinding {
+        principal_id: provisioned.agent_id.clone(),
+        device_id: agent_device_2.clone(),
+        authorization_event_id: replacement_pair.authorized_event_ref.clone(),
+        verification_method: replacement_body.verification_method.to_string(),
+        signing_public_key: runtime_key_2.verifying_key().to_bytes().to_vec(),
+        expires_at: Some(now + chrono::Duration::minutes(30)),
+    };
+    runtime
+        .finish_authorization_replacement(binding_2.clone(), runtime_key_2.to_bytes(), 1, now)
+        .await?;
+    assert!(runtime.group_state(&group_id).is_none());
+    let session_2 = issue_live_agent_session(
+        coauth.base_url(),
+        server.service_id(),
+        &provisioned.agent_id,
+        &agent_device_2,
+        replacement_pair.authorized_event_ref.as_str(),
+        replacement_body.verification_method.as_str(),
+        &runtime_key_2,
+        SigningKey::from_bytes(&[32_u8; 32]),
+    )
+    .await?;
+    let agent_client_2 = dpop_sdk_client(
+        server.base_url().as_str(),
+        session_2.session_grant,
+        SigningKey::from_bytes(&[32_u8; 32]),
+    )?;
+    assert!(
+        agent_client_1
+            .receive_device_messages(None, Some(1))
+            .await
+            .is_err()
+    );
+    let replacement_upload = runtime
+        .pending_upload_request(&binding_2, now)?
+        .context("replacement endpoint must have a fresh KeyPackage")?;
+    let replacement_upload_outcome = agent_client_2
+        .keypackages_upload(&replacement_upload)
+        .await?;
+    assert_eq!(replacement_upload_outcome.accepted, 1);
+
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2131,6 +2823,25 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
     provisioned: &P,
     fragment: &str,
 ) -> Result<arkret::AgentKeyPairRequestBody> {
+    build_agent_key_pair_request_with_controller_vm(
+        server,
+        token,
+        provisioned,
+        fragment,
+        &controller_verification_method(),
+        [21_u8; 32],
+    )
+    .await
+}
+
+async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
+    server: &ArkretServer,
+    token: &str,
+    provisioned: &P,
+    fragment: &str,
+    controller_vm: &str,
+    controller_signing_seed: [u8; 32],
+) -> Result<arkret::AgentKeyPairRequestBody> {
     let agent_did = provisioned.agent_id().to_string();
     let pairing_request_id = provisioned.pairing_request_id();
     let pairing_code = provisioned
@@ -2198,9 +2909,9 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         runtime_attestation: None,
     };
     let controller_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
-        [21_u8; 32],
+        controller_signing_seed,
         controller_id.clone(),
-        controller_verification_method(),
+        controller_vm,
     );
     let actor_frontier = managed_agent_actor_frontier(
         server,
@@ -2225,7 +2936,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
     arkret::signatures::sign_event(
         &mut authorize_event,
         &controller_signer,
-        &controller_verification_method(),
+        controller_vm,
         arkret::signatures::SignEventOptions::new().with_created_at(canonical_now()),
     )?;
     let disclosure_issued_at = canonical_now();
@@ -2254,7 +2965,7 @@ async fn build_agent_key_pair_request_as<P: PairingOutcome>(
         proofs: vec![arkret::Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
-            verification_method: controller_verification_method(),
+            verification_method: controller_vm.to_owned(),
             event_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: disclosure_issued_at,
             domain: None,

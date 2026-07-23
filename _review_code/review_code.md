@@ -127,7 +127,7 @@ selection failures.
 ## 2026-07-23 Native Agent MLS test evidence overclaim
 
 - Severity: P0
-- Status: report and test classification corrected; live runtime coverage remains open.
+- Status: resolved; report/test classification corrected and an independent live runtime leg added.
 - Evidence: `agent_encrypted_realm_member_e2e.rs` used only in-process
   `ArkretMlsIdentity`, `ArkretMlsGroup`, and `MemoryCryptoStore` calls. It made
   no request to Coauth or Soland, did not consume a standard device-message
@@ -138,10 +138,76 @@ selection failures.
   `crypto-media/device-lifecycle.md` section 9 require the same stable Agent
   device binding across session, KeyPackage, Welcome, durable group-state,
   consume/revoke, and authorization replacement.
-- Resolution: reclassified the executable test as local MLS primitive
-  conformance and removed the misleading E2E claim. A future live test must
-  drive an independently managed Agent runtime through Coauth session issue,
-  Soland KeyPackage upload/claim, durable device-message Welcome receipt,
-  persist-before-consume, restart, next-epoch decrypt, and replacement/revoke.
-  Browser human-member E2E and server unit tests cannot substitute for that
-  path.
+- Resolution: reclassified the old executable test as local MLS primitive
+  conformance and removed the misleading E2E claim. The non-ignored
+  `native_agent_mls_coauth_soland_restart_replacement_live_e2e` now drives an
+  independently managed Garth runtime through a real Coauth/Postgres/Soland
+  stack: Agent session issue, KeyPackage upload/claim, standard device-message
+  Welcome, persist-before-consume, restart, bidirectional encryption, next
+  epoch, and replacement/revoke. Browser human-member E2E and server unit tests
+  remain layered evidence rather than substitutes for this path.
+
+## 2026-07-23 Native Agent MLS cross-service live contract gaps
+
+- Severity: P0
+- Status: resolved and covered by the live Agent runtime leg.
+- Evidence: the first real Coauth/Soland run exposed four contracts that local
+  unit tests could not compose: Agent grants omitted the KeyPackage revoke
+  action; introspection tried to parse JWT-internal Agent constraints as the
+  strict wire `SessionGrantScopeDetails` and omitted Agent freshness; Soland
+  required Realm/Strand selectors even for account-scoped KeyPackage and
+  device-message actions; and standard device-message delivery recognized only
+  ordinary `DeviceIdentity` rows, not an independently paired Agent endpoint.
+- Regression class: cross-service authorization tests must use the actual
+  introspection wire shape and a freshly built server pair. Runtime endpoint
+  eligibility must be derived from the current accepted Agent authorization,
+  not merely from the presence of an old KeyPackage or an implementation-local
+  device record. Replacement tests must include revoke in the exact issued
+  Agent scope.
+- Resolution: Coauth now includes revoke, projects only the four wire scope
+  fields while rejecting non-object input, and reports Agent Fresh/Stale state.
+  Soland requires resource selectors only for resource operations and accepts
+  an Agent device-message endpoint only when a live KeyPackage references the
+  current accepted `agent_key_authorize_event_id`. The live test additionally
+  rejects no-KeyPackage claims, bad upload signatures, wrong session devices,
+  Welcome recipient drift, and the superseded session after replacement.
+
+## 2026-07-23 Agent MLS durable replay and pool accounting boundary
+
+- Severity: P0
+- Status: resolved in Garth and covered by runtime tests plus the live leg.
+- Evidence: the initial lifecycle state machine could return an already-pending
+  consume solely by `claim_id`, without proving that the replay carried the
+  same message, KeyPackage, and Welcome digest. Its low-watermark count also
+  treated consumed packages as usable and could re-emit an expired local
+  package in a later upload attempt.
+- Regression class: durable protocol retries must compare the immutable
+  persisted intent, not only an idempotency identifier. Pool availability must
+  count only unexpired `published` records; claimed, consumed, expired, and
+  revoked records are never upload or refill candidates. Public typed APIs must
+  enforce cross-field invariants even when callers construct DTOs directly and
+  bypass Serde deserialization.
+- Resolution: Garth validates the complete claim/top-level/governance binding,
+  rejects conflicting pending replays, binds snapshot KeyPackages/groups to the
+  current principal and device, excludes non-published or expired records from
+  upload/refill, drains pending consume/ack work before replacement, and forbids
+  replacement from changing principals. Unit tests exercise direct typed
+  binding drift, exact replay, restart, consume, and post-consume refill.
+
+## 2026-07-23 Canonical owner migration omitted the serde helper module
+
+- Severity: P0
+- Status: resolved during the final cross-repository rebase gate.
+- Evidence: Soland's upstream `refactor(canonical): use canonical owner`
+  replaced `arkret_core::canonical::*_canonical_timestamp` with root-level
+  `arkret_canonical::*_canonical_timestamp`, but the owner crate exposes these
+  functions only through `arkret_canonical::serde_helpers`. A clean Coauth
+  rebuild therefore failed while compiling `soland-contracts`, before the live
+  Agent MLS test could start.
+- Regression class: facade retirement must compile every downstream workspace
+  against the commit that removes the facade. Mechanical owner migrations must
+  target the owner's actual public module, not infer a root re-export from the
+  old facade path.
+- Resolution: all Soland timestamp Serde attributes now reference
+  `arkret_canonical::serde_helpers`; the clean Coauth/Soland builds and live
+  cross-service test are rerun after rebase before push.
