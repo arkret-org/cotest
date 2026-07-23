@@ -567,6 +567,7 @@ fn exchange_close_control(
         actor_id: exchange_controller()?,
         actor_seq,
         event_digest: digest.to_owned(),
+        refs_after: basis.clone(),
         control: AgentSidecarExchangeControl {
             schema: AgentSidecarExchangeControlSchema::V1,
             exchange_id: exchange_id_x1()?,
@@ -923,12 +924,21 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
         } else {
             Vec::new()
         };
+        // §7.2.3 exactness: response_event_ids must be exactly the
+        // basis-covered validated set, so the empty-response terminals use a
+        // basis that covers only the request (a basis covering the validated
+        // response with an empty listing would be an invalid control).
+        let basis = if with_response {
+            vec![exchange_event_id(0x35)?]
+        } else {
+            vec![exchange_event_id(0x34)?]
+        };
         let control = exchange_close_control(
             0x38,
             5,
             "cc",
             action,
-            vec![exchange_event_id(0x35)?],
+            basis,
             Some(responses),
             failure_code,
         )?;
@@ -958,6 +968,30 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
         {
             bail!("failed exchanges never carry responses");
         }
+    }
+
+    // An empty terminal whose basis covers a validated response is an
+    // inexact response set and therefore an invalid control: the exchange
+    // stays responding rather than forking to failed (§7.2.3).
+    let inexact_empty_close = exchange_close_control(
+        0x3c,
+        5,
+        "cc",
+        AgentSidecarExchangeControlAction::Close,
+        vec![exchange_event_id(0x35)?],
+        Some(Vec::new()),
+        None,
+    )?;
+    let still_responding = fold_sidecar_exchange(
+        &scope,
+        &exchange,
+        std::slice::from_ref(&request),
+        std::slice::from_ref(&response_r1),
+        std::slice::from_ref(&inexact_empty_close),
+    )?
+    .ok_or_else(|| anyhow!("inexact-terminal fold missing"))?;
+    if still_responding.status != AgentSidecarExchangeStatus::Responding {
+        bail!("an inexact terminal response set must invalidate the control");
     }
 
     // Same-sequence terminal siblings resolve by bytewise-max event digest;
@@ -1086,12 +1120,24 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
         bail!("the exchange projection must not register any account-data key");
     }
 
-    // The local projection cache DTO rejects account-data key smuggling.
-    let mut projection = serde_json::json!({
-        "schema": "ak.schema.agent_sidecar_exchange_projection.v1"
-    });
-    projection["account_data_type"] = serde_json::json!("ak.agent.sidecar_projection.v1:x");
-    if serde_json::from_value::<AgentSidecarExchangeProjection>(projection).is_ok() {
+    // The local projection cache DTO rejects account-data key smuggling: a
+    // fully valid projection round-trips, and the same JSON plus a smuggled
+    // account-data key fails closed (deny_unknown_fields).
+    let valid_projection = fold_sidecar_exchange(
+        &exchange_scope()?,
+        &exchange_id_x1()?,
+        &[exchange_request_fact(0x34, 1, "aa")?],
+        &[],
+        &[],
+    )?
+    .ok_or_else(|| anyhow!("containment projection fold missing"))?;
+    let mut round_trip = serde_json::to_value(&valid_projection)?;
+    if serde_json::from_value::<AgentSidecarExchangeProjection>(round_trip.clone()).is_err() {
+        bail!("a valid exchange projection must round-trip");
+    }
+    round_trip["account_data_type"] =
+        serde_json::json!("ak.agent.sidecar_projection.v1:x");
+    if serde_json::from_value::<AgentSidecarExchangeProjection>(round_trip).is_ok() {
         bail!("the exchange projection DTO must reject account-data key fields");
     }
 
@@ -1115,26 +1161,13 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
         bail!("control schema id spelling drifted");
     }
 
-    // An ordinary shared publish event shape carries no exchange material.
-    let publish_event = serde_json::json!({
-        "kind": "ak.message.create",
-        "payload": {
-            "strand_id": "ak:strand:01964137-0000-7000-8000-000000000031",
-            "content": { "kind": "ak.content.text", "text": "published summary" },
-        },
-    });
-    let serialized = serde_json::to_string(&publish_event)?;
-    for needle in [
-        "sidecar_exchange_binding",
-        "ak.schema.agent_sidecar_event_exchange_binding.v1",
-        "ak.schema.agent_sidecar_exchange_control.v1",
-        "exchange_id",
-        "ak:sidecar:",
-    ] {
-        if serialized.contains(needle) {
-            bail!("publish output leaked exchange material: {needle}");
-        }
-    }
+    // Fixture assertions 3/4 (explicit publish output, shared history, push
+    // previews, notifications, and public telemetry carrying zero exchange
+    // material) require the live client publish path plus a real service
+    // stack; they are intentionally NOT modeled here so that this static
+    // runner cannot stand in for live evidence. The corresponding acceptance
+    // items stay unchecked in the coordination task until the joint E2E
+    // covers them.
     Ok(())
 }
 
