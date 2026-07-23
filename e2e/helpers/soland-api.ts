@@ -1575,13 +1575,11 @@ export async function submitSignedEventApi(
       return JSON.parse(text) as Record<string, unknown>;
     }
     const body = JSON.parse(text) as unknown;
-    const actorFrontierRefreshRequired =
-      (response.status() === 409 &&
-        wireErrCode(body) === "cas_conflict" &&
-        text.includes("actor_seq is older than the accepted actor frontier")) ||
-      (response.status() === 400 &&
-        wireErrCode(body) === "schema_violation" &&
-        text.includes("actor-chain genesis must use actor_seq=0"));
+    const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
+      response.status(),
+      body,
+      text,
+    );
     if (!actorFrontierRefreshRequired || attempt === 2) {
       expect(
         [200, 201],
@@ -1616,13 +1614,11 @@ export async function submitSignedEventBatchApi(
       return JSON.parse(text) as Record<string, unknown>;
     }
     const body = JSON.parse(text) as unknown;
-    const actorFrontierRefreshRequired =
-      (response.status() === 409 &&
-        wireErrCode(body) === "cas_conflict" &&
-        text.includes("actor_seq is older than the accepted actor frontier")) ||
-      (response.status() === 400 &&
-        wireErrCode(body) === "schema_violation" &&
-        text.includes("actor-chain genesis must use actor_seq=0"));
+    const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
+      response.status(),
+      body,
+      text,
+    );
     if (!actorFrontierRefreshRequired || attempt === 2) {
       expect(
         [200, 201],
@@ -1638,6 +1634,24 @@ export async function submitSignedEventBatchApi(
     refreshBatchActorChain(events);
   }
   throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
+function requiresActorFrontierRefresh(
+  status: number,
+  body: unknown,
+  text: string,
+): boolean {
+  return (
+    (status === 409 &&
+      wireErrCode(body) === "cas_conflict" &&
+      text.includes("actor_seq is older than the accepted actor frontier")) ||
+    (status === 400 &&
+      wireErrCode(body) === "schema_violation" &&
+      (text.includes("actor-chain genesis must use actor_seq=0") ||
+        text.includes(
+          "prev_refs must include the preceding actor sequence in the same Realm",
+        )))
+  );
 }
 
 function refreshBatchActorChain(

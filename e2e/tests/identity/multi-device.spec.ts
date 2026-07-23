@@ -26,6 +26,7 @@ import {
   currentActorDidApi,
   principalControlRealmForDid,
   queryRealmEventsApi,
+  refreshEventEnvelopeProof,
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -1093,43 +1094,62 @@ test.describe("multi-device pairing + revocation", () => {
     }
   });
 
-  test("rejecting the pairing request (global prompt device-pair-approval-reject) dismisses it locally and does NOT authorize the new device", async ({
+  test("a pairing request replay after failed ACK is durably deduplicated and its reject side effect runs once", async ({
     browser,
     request,
   }) => {
-    // spec: device-lifecycle.md §7 (no trust without explicit approval).
-    // device-pair-approval-reject calls dismiss_pairing_to_device_message and
-    // never POSTs device-pair, so the new device is never added to the list.
-    const device1Session = await createDpopUserSession(
+    test.setTimeout(420_000);
+    // spec: device-lifecycle.md §7 / §10.1. The receiving client must persist
+    // the generic envelope key before invoking its handler. Force the remote
+    // ACK to fail, reject the first prompt, reload the browser host, and wait
+    // for the same queued envelope to be delivered again. The durable receipt
+    // must suppress the duplicate prompt and the rejected device must remain
+    // absent.
+    const device1Flow = await openDpopUserPage(
+      browser,
       request,
       `s10-pair-reject-${Date.now()}`,
-      { skipDeviceEnrollment: false },
     );
     test.skip(
-      !device1Session,
+      !device1Flow,
       "coauth DPoP session-grant login is required for UI device-pair rejection",
     );
-    if (!device1Session) {
+    if (!device1Flow) {
       return;
     }
+    const device1Session = device1Flow.session;
     const alice = device1Session.user;
     const device1Headers = dpopHeadersSource(device1Session);
-    await promoteDeviceToVerified(
-      request,
-      alice,
-      device1Headers,
-      alice.deviceId,
-    );
-
-    const device1 = await openUserPage(browser, alice, {
-      grantJwt: device1Session.grantJwt,
-      dpopSeedB64url: device1Session.dpopSeedB64url,
-      grantId: device1Session.grantId,
-      grantAudience: device1Session.grantAudience,
-    });
+    const device1 = device1Flow.page;
+    // Inkson's atomic founding-device bootstrap has already authored the
+    // device authorization under this principal's selected cross-signing
+    // model. Re-publishing a second model here would correctly fail closed.
+    await expect
+      .poll(
+        () => pollDeviceStatus(request, device1Headers, alice.deviceId),
+        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toBe("active");
     try {
+      let ackAttempts = 0;
+      let ackAttemptsAfterReload = 0;
+      let reloading = false;
+      await device1.page.route(
+        "**/_arkret/self/device_messages/ack",
+        async (route) => {
+          if (route.request().method() !== "POST") {
+            await route.continue();
+            return;
+          }
+          ackAttempts += 1;
+          if (reloading) {
+            ackAttemptsAfterReload += 1;
+          }
+          await route.abort("failed");
+        },
+      );
       await device1.gotoHome();
-      const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
+      const { messageId, pairingCode, requestingDeviceId } = await deliverPairingRequest(
         request,
         alice,
         device1Headers,
@@ -1142,15 +1162,42 @@ test.describe("multi-device pairing + revocation", () => {
         pairingCode,
         { timeout: 30_000 },
       );
+      await expect.poll(() => ackAttempts, { timeout: 30_000 }).toBeGreaterThan(0);
 
       await device1.page.getByTestId("device-pair-approval-reject").click();
 
-      // The prompt dismisses locally and does not re-pop for the same request.
+      // Reject is the business handler side effect: it durably removes the
+      // pending request from the inbox without authorizing the requesting
+      // device.
       await expect(modal).toBeHidden({ timeout: 30_000 });
 
+      // The blocked ACK leaves the exact envelope queued on the server, so the
+      // next browser-host sync is a genuine transport redelivery rather than a
+      // second test send that the server could deduplicate first.
+      const listUrl = `${solandBaseUrl()}/_arkret/self/device_messages`;
+      const stillQueued = await request.get(listUrl, {
+        headers: selfPathHeaders(device1Headers, "GET", listUrl),
+      });
+      expect(stillQueued.status(), await stillQueued.text()).toBe(200);
+      const queuedBody = (await stillQueued.json()) as {
+        messages?: Array<{ message_id?: string }>;
+      };
+      expect(queuedBody.messages?.map((message) => message.message_id)).toContain(
+        messageId,
+      );
+
+      reloading = true;
+      await device1.page.reload({ waitUntil: "domcontentloaded" });
+      await expect
+        .poll(() => ackAttemptsAfterReload, {
+          timeout: 90_000,
+          intervals: [500, 1_000, 2_000, 5_000],
+        })
+        .toBeGreaterThan(0);
+      await expect(modal).toBeHidden({ timeout: 10_000 });
+
       // The rejected device is never authorized: it does not appear in alice's
-      // device-set projection. Poll a few times to let any (incorrect) write
-      // settle, then assert absence.
+      // device-set projection before or after the duplicate delivery.
       const seenStatus = await pollDeviceStatus(
         request,
         device1Headers,
@@ -1299,14 +1346,20 @@ async function promoteDeviceToVerified(
   const realmId = principalControlRealmForDid(user.did);
   const identity = generateCrossSigningIdentity({ principalId: user.did });
   const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+  const publishEnvelope = signedEventEnvelope({
+    actorDid: user.did,
+    realmId,
+    kind: "ak.cross_signing.publish",
+    payload: buildCrossSigningPublishPayload(identity),
+  });
+  await alignEventToActorFrontier(
+    request,
+    headersSource,
+    publishEnvelope,
+  );
   const publish = await request.post(eventsUrl, {
     headers: selfPathHeaders(headersSource, "POST", eventsUrl),
-    data: signedEventEnvelope({
-      actorDid: user.did,
-      realmId,
-      kind: "ak.cross_signing.publish",
-      payload: buildCrossSigningPublishPayload(identity),
-    }),
+    data: publishEnvelope,
   });
   expect(
     [200, 201],
@@ -1322,34 +1375,40 @@ async function promoteDeviceToVerified(
     algorithms: TEST_DEVICE_ALGORITHMS,
   });
   const authorizeNotBefore = new Date().toISOString();
-  const authorize = await request.post(eventsUrl, {
-      headers: selfPathHeaders(headersSource, "POST", eventsUrl),
-      data: signedEventEnvelope({
-        actorDid: user.did,
-        realmId,
-        kind: "ak.device.authorize",
-        payload: {
-          principal_id: user.did,
-          device_id: deviceId,
-          device_public_key: deviceKey.multibase,
-          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
-          algorithms: TEST_DEVICE_ALGORITHMS,
-          device_key_algorithm: "EdDSA",
-          device_signature: deviceAuthorizeSignature({
-            identity,
-            principalId: user.did,
-            deviceId,
-            devicePublicKeyMultibase: deviceKey.multibase,
-            authorizedBy: deviceId,
-            notBefore: authorizeNotBefore,
-            privateKey: deviceKey.privateKey,
-          }),
-          authorized_by: deviceId,
-          not_before: authorizeNotBefore,
-          cross_signing_binding: binding,
-        },
+  const authorizeEnvelope = signedEventEnvelope({
+    actorDid: user.did,
+    realmId,
+    kind: "ak.device.authorize",
+    payload: {
+      principal_id: user.did,
+      device_id: deviceId,
+      device_public_key: deviceKey.multibase,
+      hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+      algorithms: TEST_DEVICE_ALGORITHMS,
+      device_key_algorithm: "EdDSA",
+      device_signature: deviceAuthorizeSignature({
+        identity,
+        principalId: user.did,
+        deviceId,
+        devicePublicKeyMultibase: deviceKey.multibase,
+        authorizedBy: deviceId,
+        notBefore: authorizeNotBefore,
+        privateKey: deviceKey.privateKey,
       }),
-    });
+      authorized_by: deviceId,
+      not_before: authorizeNotBefore,
+      cross_signing_binding: binding,
+    },
+  });
+  await alignEventToActorFrontier(
+    request,
+    headersSource,
+    authorizeEnvelope,
+  );
+  const authorize = await request.post(eventsUrl, {
+    headers: selfPathHeaders(headersSource, "POST", eventsUrl),
+    data: authorizeEnvelope,
+  });
   expect(
     [200, 201],
     `ak.device.authorize (self-verify) returned ${authorize.status()}: ${await authorize.text()}`,
@@ -1364,6 +1423,44 @@ async function promoteDeviceToVerified(
     .toBe("active");
 }
 
+async function alignEventToActorFrontier(
+  request: APIRequestContext,
+  headersSource: SelfPathHeadersSource,
+  envelope: Record<string, unknown>,
+) {
+  const actorId = String(envelope.actor_id ?? "");
+  const realmId = String(envelope.realm_id ?? "");
+  const frontierUrl =
+    `${solandBaseUrl()}/_arkret/self/events/frontier` +
+    `?actor_id=${encodeURIComponent(actorId)}` +
+    `&realm_id=${encodeURIComponent(realmId)}`;
+  const response = await request.get(frontierUrl, {
+    headers: selfPathHeaders(headersSource, "GET", frontierUrl),
+  });
+  expect(response.status(), await response.text()).toBe(200);
+  const body = (await response.json()) as {
+    frontier?: {
+      actor_id?: string;
+      realm_id?: string;
+      next_actor_seq?: number;
+      frontier_event_ids?: string[];
+    };
+  };
+  expect(body.frontier).toMatchObject({
+    actor_id: actorId,
+    realm_id: realmId,
+  });
+  expect(Number.isSafeInteger(body.frontier?.next_actor_seq)).toBe(true);
+  expect(Array.isArray(body.frontier?.frontier_event_ids)).toBe(true);
+  envelope.actor_seq = body.frontier?.next_actor_seq;
+  envelope.prev_refs = body.frontier?.frontier_event_ids ?? [];
+  const verificationMethod = Array.isArray(envelope.proofs)
+    ? (envelope.proofs[0] as { verification_method?: string } | undefined)
+        ?.verification_method
+    : undefined;
+  refreshEventEnvelopeProof(envelope, verificationMethod);
+}
+
 /// Deliver a same-principal `ak.key.verification.request` pairing request to
 /// every authorized sibling over the to-device queue (the API shape inkson's
 /// `pair-device-start-button` produces; driven directly here because that
@@ -1376,8 +1473,14 @@ async function deliverPairingRequest(
   user: JointUser,
   senderHeadersSource: SelfPathHeadersSource,
   opts: { displayName?: string } = {},
-): Promise<{ requestingDeviceId: string; pairingCode: string; newDevicePublicKey: string }> {
+): Promise<{
+  messageId: string;
+  requestingDeviceId: string;
+  pairingCode: string;
+  newDevicePublicKey: string;
+}> {
   const requestingDeviceId = typedId("device");
+  const messageId = typedId("device_message");
   const pairingCode = `${Date.now() % 1_000_000}`.padStart(6, "0");
   const transactionId = `ak.key.verification.request:${requestingDeviceId}`;
   const newDeviceKey = deviceVerifyKeyMultibase();
@@ -1403,7 +1506,7 @@ async function deliverPairingRequest(
         messages: {
           [user.did]: {
             [user.deviceId]: {
-              message_id: typedId("device_message"),
+              message_id: messageId,
               kind: "ak.key.verification.request",
               expires_at: expiresAt,
               content: {
@@ -1430,7 +1533,12 @@ async function deliverPairingRequest(
     sendResp.ok(),
     `pairing to-device send returned ${sendResp.status()}: ${await sendResp.text()}`,
   ).toBeTruthy();
-  return { requestingDeviceId, pairingCode, newDevicePublicKey: newDeviceKey.multibase };
+  return {
+    messageId,
+    requestingDeviceId,
+    pairingCode,
+    newDevicePublicKey: newDeviceKey.multibase,
+  };
 }
 
 /// Read a single device's `status` out of alice's device-set projection

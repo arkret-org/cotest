@@ -22,6 +22,8 @@
 // gating.
 
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   createRealmViaApi,
@@ -114,6 +116,69 @@ function submittedEventOutcome(
     return "accepted";
   }
   return undefined;
+}
+
+async function startSharedDescribeBinding(
+  descriptions: Readonly<Record<string, Record<string, unknown>>>,
+): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const server = createServer((req, res) => {
+    const requestUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (req.method !== "GET" || requestUrl.pathname !== "/_arkret/describe") {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "unrecognized_endpoint",
+            message: "only the shared describe binding is exposed by this fixture",
+          },
+          request_id: `ak:request:${randomUUID()}`,
+        }),
+      );
+      return;
+    }
+
+    const serviceType = requestUrl.searchParams.get("service_type");
+    const description = serviceType ? descriptions[serviceType] : undefined;
+    if (!description) {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "invalid_param",
+            message: serviceType
+              ? `service_type ${JSON.stringify(serviceType)} is not available on this binding`
+              : "service_type is required when multiple roles share this binding",
+          },
+          request_id: `ak:request:${randomUUID()}`,
+        }),
+      );
+      return;
+    }
+
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-type": "application/json",
+    });
+    res.end(JSON.stringify(description));
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  };
 }
 
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
@@ -275,6 +340,78 @@ test.describe("describes coauth surface @fully-implemented", () => {
     );
     expect(rejected.status()).toBe(400);
     expect(wireErrCode(await rejected.json())).toBe("invalid_param");
+  });
+});
+
+test.describe("shared public describe binding @fully-implemented", () => {
+  test("requires a registered role and returns the selected role's closed describe", async ({
+    request,
+  }) => {
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
+    if (!coauth) {
+      return;
+    }
+
+    const [principalResponse, authResponse] = await Promise.all([
+      request.get(
+        `${solandBaseUrl()}/_arkret/describe?service_type=principal_server`,
+      ),
+      request.get(`${coauth}/_arkret/describe?service_type=auth_server`),
+    ]);
+    expect(principalResponse.status()).toBe(200);
+    expect(authResponse.status()).toBe(200);
+    const principal = (await principalResponse.json()) as Record<string, unknown>;
+    const auth = (await authResponse.json()) as Record<string, unknown>;
+
+    const shared = await startSharedDescribeBinding({
+      principal_server: principal,
+      auth_server: auth,
+    });
+    try {
+      const missing = await request.get(`${shared.baseUrl}/_arkret/describe`);
+      expect(missing.status()).toBe(400);
+      expect(wireErrCode(await missing.json())).toBe("invalid_param");
+
+      const invalid = await request.get(
+        `${shared.baseUrl}/_arkret/describe?service_type=directory_service`,
+      );
+      expect(invalid.status()).toBe(400);
+      expect(wireErrCode(await invalid.json())).toBe("invalid_param");
+
+      const selectedPrincipal = await request.get(
+        `${shared.baseUrl}/_arkret/describe?service_type=principal_server`,
+      );
+      const selectedAuth = await request.get(
+        `${shared.baseUrl}/_arkret/describe?service_type=auth_server`,
+      );
+      expect(selectedPrincipal.status()).toBe(200);
+      expect(selectedAuth.status()).toBe(200);
+      const selectedPrincipalBody =
+        (await selectedPrincipal.json()) as Record<string, unknown>;
+      const selectedAuthBody =
+        (await selectedAuth.json()) as Record<string, unknown>;
+
+      // The shared discovery binding selects complete role descriptions; it
+      // does not aggregate operation/profile/plaintext boundaries or rewrite
+      // either role's DID and advertised service bindings.
+      expect(selectedPrincipalBody).toEqual(principal);
+      expect(selectedAuthBody).toEqual(auth);
+      expect(selectedPrincipalBody.service_type).toBe("principal_server");
+      expect(selectedAuthBody.service_type).toBe("auth_server");
+      expect(selectedPrincipalBody.service_id).not.toBe(selectedAuthBody.service_id);
+      expect(selectedPrincipalBody.supported_operations).not.toEqual(
+        selectedAuthBody.supported_operations,
+      );
+      expect(selectedPrincipalBody.claimed_profiles).not.toEqual(
+        selectedAuthBody.claimed_profiles,
+      );
+      expect(selectedPrincipalBody.plaintext_visibility).not.toEqual(
+        selectedAuthBody.plaintext_visibility,
+      );
+    } finally {
+      await shared.close();
+    }
   });
 });
 
