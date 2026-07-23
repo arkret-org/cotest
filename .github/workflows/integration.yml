@@ -145,13 +145,16 @@ jobs:
         working-directory: cotest/e2e
         env:
           COTEST_SOLAND_BASE_URL: http://127.0.0.1:8008
+          COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
+          COTEST_WIRE_BIN: ${{ github.workspace }}/cotest/target/debug/cotest-wire
           COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/integration-playwright/joint-e2e
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/soland-objects"
           SOLAND_DEVELOPMENT_MODE=1 \
+          SOLAND_CANDIDATE_JOIN_POLICY=1 \
           SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
-          SOLAND_SERVICE_ID="did:webvh:z6mkfixture:soland.integration-ci.local" \
+          SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
           SOLAND_METRICS_BIND="127.0.0.1:9008" \
           SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
           SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
@@ -170,7 +173,10 @@ jobs:
             sleep 1
           done
           curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
+          export COTEST_SOLAND_SERVICE_ID
+          COTEST_SOLAND_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
           npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /_arkret/describe"
+          npx playwright test --config playwright.config.ts --project=chromium tests/spaces/knock-application.spec.ts
       - name: run federation security hardening Playwright
         working-directory: cotest/e2e
         env:

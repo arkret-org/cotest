@@ -22,6 +22,7 @@
       "applet_install",
       "authz_policy",
       "blob_storage",
+      "candidate_join_policy",
       "circle_management",
       "consent_management",
       "contact_lifecycle",

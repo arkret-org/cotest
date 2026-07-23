@@ -18,6 +18,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   grantRealmReviewCapabilityApi,
+  listJoinApplicationAuditApi,
   listMemberApplicationsApi,
   revokeCapabilityApi,
   submitApplicationApi,
@@ -82,6 +83,15 @@ async function makeUser(request: APIRequestContext, prefix: string) {
   return { user, token };
 }
 
+function applicationAnswers(
+  entry: Record<string, unknown> | undefined,
+): unknown {
+  const privateBody = entry?.private_body;
+  return privateBody && typeof privateBody === "object"
+    ? (privateBody as Record<string, unknown>).answers
+    : undefined;
+}
+
 test.describe("knock + application + cooldown", () => {
   test("alice opens a knock Realm and lists bob in member.state=knock after he knocks", async ({
     request,
@@ -112,7 +122,7 @@ test.describe("knock + application + cooldown", () => {
     expect(listed.viewer_is_reviewer).toBe(true);
   });
 
-  test.fixme("E6.A bob submits structured member.application after knocking; alice (with ak.realm.join.review) sees the answers and accepts", async ({
+  test("E6.A bob submits structured member.application after knocking; alice (with ak.realm.join.review) sees the answers and accepts", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -156,7 +166,7 @@ test.describe("knock + application + cooldown", () => {
       (entry) => entry.applicant_did === bob.user.did,
     );
     expect(bobEntry, "bob application listed for reviewer").toBeTruthy();
-    expect(bobEntry?.answers, "reviewer sees answers").toBeTruthy();
+    expect(applicationAnswers(bobEntry), "reviewer sees answers").toBeTruthy();
 
     // alice accepts.
     await submitApplicationReviewApi(
@@ -178,7 +188,7 @@ test.describe("knock + application + cooldown", () => {
     expect(accepted?.status).toBe("accepted");
   });
 
-  test.fixme('E6.B alice\'s ak.invite.create.refs[role="join_authorised_by"] is required to point at a fresh review accept; reducer rejects re-used or stale refs', async ({
+  test('E6.B alice\'s ak.invite.create.refs[role="join_authorised_by"] is required to point at a fresh review accept; reducer rejects re-used or stale refs', async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -252,7 +262,7 @@ test.describe("knock + application + cooldown", () => {
     expect(await rejectCode(replayResp)).toContain("join_authorisation_invalid");
   });
 
-  test.fixme("E6.C mallory is rejected by alice and CANNOT re-knock until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator", async ({
+  test("E6.C mallory is rejected by alice and CANNOT re-apply until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -289,7 +299,6 @@ test.describe("knock + application + cooldown", () => {
     );
 
     // Immediate re-application within cooldown_after_reject MUST be rejected.
-    await submitKnockApi(request, mallory.token, mallory.user.did, realmId);
     const reapplyResp = await submitApplicationApi(
       request,
       mallory.token,
@@ -303,7 +312,7 @@ test.describe("knock + application + cooldown", () => {
     );
   });
 
-  test.fixme("E6.D max_open_applications_per_actor=1 — bob's second open application is rejected before review", async ({
+  test("E6.D max_open_applications_per_actor=1 — bob's second open application is rejected before review", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -334,7 +343,7 @@ test.describe("knock + application + cooldown", () => {
     );
   });
 
-  test.fixme("E6.E application_ttl expiry — application accepted past TTL is rejected even if reviewer signs accept", async ({
+  test("E6.E application_ttl expiry — application accepted past TTL is rejected even if reviewer signs accept", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -377,7 +386,7 @@ test.describe("knock + application + cooldown", () => {
     expect(String(reviewResp)).toMatch(/ttl_expired|application_ttl|expired/i);
   });
 
-  test.fixme("E6.F reviewer loses ak.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted", async ({
+  test("E6.F reviewer loses ak.realm.join.review after accept; the accepted receipt remains valid at its own authorization basis", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -423,8 +432,8 @@ test.describe("knock + application + cooldown", () => {
       },
     );
 
-    // Revoke the reviewer's capability, then the reviewer tries to write the
-    // invite — reducer re-checks reviewer capability (§7.5 #3) and rejects.
+    // Revocation after a valid accept is non-retroactive. The Realm owner may
+    // still create the invite citing that already-counted receipt.
     await revokeCapabilityApi(request, alice.token, {
       ownerDid: alice.user.did,
       realmId,
@@ -432,17 +441,20 @@ test.describe("knock + application + cooldown", () => {
     });
     const inviteResp = await submitInviteCreateApi(
       request,
-      reviewer.token,
-      reviewer.user.did,
+      alice.token,
+      alice.user.did,
       realmId,
       bob.user.did,
       reviewDigest,
     );
-    expect([400, 412, 422]).toContain(inviteResp.status());
-    expect(await rejectCode(inviteResp)).toContain("join_authorisation_invalid");
+    const inviteBody = await inviteResp.text();
+    expect(
+      [200, 201],
+      `non-retroactive accepted review returned ${inviteResp.status()}: ${inviteBody}`,
+    ).toContain(inviteResp.status());
   });
 
-  test.fixme("E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes ak.audit.accessed", async ({
+  test("E6.G applicant_visibility=reviewer_only — non-reviewer members receive redacted metadata while reviewer reads are audited", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -456,10 +468,11 @@ test.describe("knock + application + cooldown", () => {
       invitees: [eve.user.did],
       ownerDid: alice.user.did,
     });
+    await addRealmMemberApi(request, alice.token, realmId, eve.user.did);
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
     await submitKnockApi(request, bob.token, bob.user.did, realmId);
-    await submitApplicationApi(request, bob.token, bob.user.did, realmId, {
+    const applicationRef = await submitApplicationApi(request, bob.token, bob.user.did, realmId, {
       answers: [{ question_id: "q1", value: "secret reviewer-only application" }],
     });
 
@@ -470,7 +483,7 @@ test.describe("knock + application + cooldown", () => {
       (entry) => entry.applicant_did === bob.user.did,
     );
     expect(eveEntry, "eve sees the application metadata").toBeTruthy();
-    expect(eveEntry?.answers, "eve MUST NOT see answers").toBeFalsy();
+    expect(applicationAnswers(eveEntry), "eve MUST NOT see answers").toBeFalsy();
     expect(eveEntry?.application_pending).toBe(true);
 
     // alice (reviewer) sees the answers.
@@ -482,6 +495,19 @@ test.describe("knock + application + cooldown", () => {
     const aliceEntry = aliceView.applications.find(
       (entry) => entry.applicant_did === bob.user.did,
     );
-    expect(aliceEntry?.answers, "reviewer sees answers").toBeTruthy();
+    expect(applicationAnswers(aliceEntry), "reviewer sees answers").toBeTruthy();
+    const audit = await listJoinApplicationAuditApi(
+      request,
+      alice.token,
+      realmId,
+      applicationRef,
+    );
+    expect(
+      audit.some(
+        (entry) =>
+          entry.action === "read" && entry.actor_id === alice.user.did,
+      ),
+      "reviewer private-body read is durably audited",
+    ).toBe(true);
   });
 });

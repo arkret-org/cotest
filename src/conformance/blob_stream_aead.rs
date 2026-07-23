@@ -258,7 +258,7 @@ pub fn run_stream_aead_reorder_rejected_vector() -> Result<()> {
 pub fn run_stream_aead_scheme_closure_vector() -> Result<()> {
     let key = key();
     let plaintext = vec![13u8; 2050];
-    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
+    let (_ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
 
     // The typed envelope enum is closed: an unknown scheme id cannot even
     // deserialize, so no decryptor can be constructed for it.
@@ -267,7 +267,6 @@ pub fn run_stream_aead_scheme_closure_vector() -> Result<()> {
     if serde_json::from_value::<EncryptedAttachment>(unknown_scheme).is_ok() {
         bail!("unknown attachment scheme survived the closed envelope enum");
     }
-    let _ = &ciphertext;
 
     let schema_env = SchemaEnv::load()?;
     let validator = schema_env.compile(BLOB_ENCRYPTED_ATTACHMENT_SCHEMA)?;

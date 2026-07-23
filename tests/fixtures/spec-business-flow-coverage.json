@@ -1028,6 +1028,70 @@
           ]
         }
       ]
+    },
+    {
+      "id": "candidate_join_application_review",
+      "title": "Profile-private Realm join application, review, cancellation, and audit",
+      "status": "implemented",
+      "surfaces": [
+        "candidate_join_policy"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ak.self.realm.join_application.command.submit",
+          "surfaces": [
+            "candidate_join_policy"
+          ]
+        },
+        {
+          "operation_id": "ak.self.realm.join_application.command.review",
+          "surfaces": [
+            "candidate_join_policy"
+          ]
+        },
+        {
+          "operation_id": "ak.self.realm.join_application.command.cancel",
+          "surfaces": [
+            "candidate_join_policy"
+          ]
+        },
+        {
+          "operation_id": "ak.self.realm.join_application.query.list",
+          "surfaces": [
+            "candidate_join_policy"
+          ]
+        },
+        {
+          "operation_id": "ak.self.realm.join_application.resource.get",
+          "surfaces": [
+            "candidate_join_policy"
+          ]
+        },
+        {
+          "operation_id": "ak.self.realm.join_application.audit.query.list",
+          "surfaces": [
+            "candidate_join_policy"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/join_applications.rs",
+          "markers": [
+            "ak.self.realm.join_application.command.submit",
+            "ak.self.realm.join_application.audit.query.list"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "e2e/tests/spaces/knock-application.spec.ts",
+          "markers": [
+            "submitApplicationApi",
+            "listJoinApplicationAuditApi"
+          ]
+        }
+      ]
     }
   ]
 }

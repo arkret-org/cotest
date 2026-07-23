@@ -68,7 +68,7 @@ fn generated_registry_sets_are_complete_and_unique() {
         "actions",
         "action",
     );
-    assert_generated_set(
+    assert_generated_active_set(
         "schema ids",
         REGISTERED_SCHEMA_IDS.iter().map(|row| row.schema_id),
         "schema-registry.json",
@@ -228,6 +228,27 @@ fn assert_generated_set<'a>(
     rows_field: &str,
     value_field: &str,
 ) {
+    assert_generated_set_with_status(label, actual, artifact_file, rows_field, value_field, false);
+}
+
+fn assert_generated_active_set<'a>(
+    label: &str,
+    actual: impl IntoIterator<Item = &'a str>,
+    artifact_file: &str,
+    rows_field: &str,
+    value_field: &str,
+) {
+    assert_generated_set_with_status(label, actual, artifact_file, rows_field, value_field, true);
+}
+
+fn assert_generated_set_with_status<'a>(
+    label: &str,
+    actual: impl IntoIterator<Item = &'a str>,
+    artifact_file: &str,
+    rows_field: &str,
+    value_field: &str,
+    active_only: bool,
+) {
     let actual_values = actual.into_iter().map(str::to_owned).collect::<Vec<_>>();
     let actual_set = actual_values.iter().cloned().collect::<BTreeSet<_>>();
     assert_eq!(
@@ -245,6 +266,14 @@ fn assert_generated_set<'a>(
         .as_array()
         .unwrap_or_else(|| panic!("{artifact_file} lacks {rows_field} array"))
         .iter()
+        .filter(|row| {
+            !active_only
+                || row
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("active")
+                    == "active"
+        })
         .map(|row| {
             row[value_field]
                 .as_str()
