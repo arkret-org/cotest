@@ -15,10 +15,10 @@
 //! first place it surfaces (instead of inscrutable cross-service signature
 //! failures in federation / replication tests).
 
-use arkret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
 use arkret_canonical::{
     blake3_digest, canonical_hash, canonical_json_bytes, canonical_sha256, verify_digest,
 };
+use cotest::conformance::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
 use serde_json::{Value, json};
 
 /// A canonical-hash test vector: the input payload shape, the wire

@@ -10,6 +10,7 @@ mod call_signal;
 mod call_state_core;
 mod call_state_media_lifecycle;
 mod canonical_cross_lang;
+mod canonical_fixture;
 mod capability;
 mod coauth_lifecycle;
 mod cross_signing_binding_golden;
@@ -131,6 +132,10 @@ pub use call_state_media_lifecycle::{
     run_transcribe_lifecycle_vector,
 };
 pub use canonical_cross_lang::run_canonical_cross_lang_suite;
+pub use canonical_fixture::{
+    CANONICAL_FIXTURE_DEFAULT_KIND, CanonicalFixtureBuilder, CanonicalFixtureSuite,
+    CanonicalFixtureVector,
+};
 pub use capability::{
     run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
     run_capability_fixture_suite,
