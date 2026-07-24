@@ -123,7 +123,7 @@ test.describe("multi-device pairing + revocation", () => {
       {
         headers: authHeaders(token),
         data: {
-          pairing_code: b64url(`pair:${newDeviceId}`),
+          pairing_code: "7H2K9M4Q",
           new_device_pubkey: {
             kty: "OKP",
             kid: newDeviceId,
@@ -1311,6 +1311,183 @@ test.describe("multi-device pairing + revocation", () => {
       await device1.close();
     }
   });
+
+  test("server-mediated short-link: new device stages, an authorized device resolves + approves, status flips to authorized, and the device surfaces (device-lifecycle.md §2.1.1)", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §2.1.1. The not-yet-authorized device stages its
+    // key at the UNAUTHENTICATED open endpoint; an authorized verified sibling
+    // resolves the short token and drives the existing authenticated device-pair
+    // gate (authorization model unchanged); the new device's status poll then
+    // observes `authorized`. Also asserts the §2.1.1 anti-enumeration MUSTs:
+    // token-in-URL is refused, and a wrong code is a uniform not-found.
+    const alice = uniqueUser(`s10-shortlink-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    // The approving device MUST be verified for the pair gate to accept it.
+    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+
+    // 1) New device stages its key (unauthenticated — no auth header).
+    const device2Id = typedId("device");
+    const device2Key = deviceVerifyKeyMultibase();
+    const stage = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/requests`,
+      {
+        data: {
+          new_device_pubkey: {
+            kty: "OKP",
+            kid: device2Id,
+            alg: "EdDSA",
+            key: device2Key.multibase,
+          },
+          challenge_signature: b64url(`challenge:${device2Id}`),
+          display_name: "Alice short-link browser",
+          device_metadata: { platform: "browser" },
+        },
+      },
+    );
+    expect(stage.status(), await stage.text()).toBe(200);
+    const staged = (await stage.json()) as {
+      device_pairing_request_id: string;
+      pairing_code: string;
+      expires_at: string;
+    };
+    expect(staged.device_pairing_request_id).toMatch(/^device_pairing_request:/);
+    expect(staged.pairing_code).toBeTruthy();
+
+    const token = Buffer.from(
+      JSON.stringify({
+        c: staged.pairing_code,
+        r: staged.device_pairing_request_id,
+      }),
+    ).toString("base64url");
+    const statusBody = {
+      device_pairing_request_id: staged.device_pairing_request_id,
+      pairing_code: staged.pairing_code,
+    };
+
+    // 2) §2.1.1: the token MUST NOT be accepted in the URL query.
+    const tokenInUrl = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/resolve?token=${token}`,
+      { data: { pairing_token: token } },
+    );
+    expect(tokenInUrl.status()).toBe(400);
+
+    // 3) §2.1.1: a wrong pairing_code masks as a uniform not-found (no oracle).
+    const wrongCode = `${staged.pairing_code[0] === "A" ? "B" : "A"}${staged.pairing_code.slice(1)}`;
+    const wrongToken = Buffer.from(
+      JSON.stringify({ c: wrongCode, r: staged.device_pairing_request_id }),
+    ).toString("base64url");
+    const wrongResolve = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/resolve`,
+      { data: { pairing_token: wrongToken } },
+    );
+    expect(wrongResolve.status()).toBe(404);
+
+    // 4) Authorized device resolves the real token → bootstrap (canonical `key`).
+    const resolve = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/resolve`,
+      { data: { pairing_token: token } },
+    );
+    expect(resolve.status(), await resolve.text()).toBe(200);
+    const bootstrap = (await resolve.json()) as {
+      device_pairing_request_id: string;
+      pairing_code: string;
+      new_device_pubkey: { kid: string; key: string; public_key?: string };
+      challenge_signature: string;
+    };
+    expect(bootstrap.new_device_pubkey.kid).toBe(device2Id);
+    expect(bootstrap.new_device_pubkey.key).toBe(device2Key.multibase);
+    expect(bootstrap.new_device_pubkey.public_key).toBeUndefined();
+    expect(bootstrap.pairing_code).toBe(staged.pairing_code);
+
+    // 5) Status before approval is pending.
+    const pending = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/requests/status`,
+      { data: statusBody },
+    );
+    expect(pending.status()).toBe(200);
+    expect((await pending.json()).state).toBe("pending_authorization");
+
+    // Status credentials are body-only as well.
+    const statusInUrl = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/requests/status?pairing_code=${staged.pairing_code}`,
+      { data: statusBody },
+    );
+    expect(statusInUrl.status()).toBe(400);
+
+    // 6) A staged request id is a strict binding, not an advisory callback id:
+    // a mismatched code must perform no device authorization and must leave the
+    // staged row pending so a later correct approval remains possible.
+    const mismatchedPair = await request.post(
+      `${solandBaseUrl()}/_arkret/gate/account/device-pair`,
+      {
+        headers: authHeaders(device1Token),
+        data: {
+          pairing_code: wrongCode,
+          new_device_pubkey: bootstrap.new_device_pubkey,
+          challenge_signature: bootstrap.challenge_signature,
+          device_pairing_request_id: bootstrap.device_pairing_request_id,
+        },
+      },
+    );
+    expect(mismatchedPair.status()).toBe(404);
+    const stillPending = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/requests/status`,
+      { data: statusBody },
+    );
+    expect(stillPending.status()).toBe(200);
+    expect((await stillPending.json()).state).toBe("pending_authorization");
+
+    // 7) Authorized device approves through the existing gate, echoing the
+    //    staged request id so the row flips to authorized.
+    const pair = await request.post(
+      `${solandBaseUrl()}/_arkret/gate/account/device-pair`,
+      {
+        headers: authHeaders(device1Token),
+        data: {
+          pairing_code: bootstrap.pairing_code,
+          new_device_pubkey: bootstrap.new_device_pubkey,
+          challenge_signature: bootstrap.challenge_signature,
+          display_name: "Alice short-link browser",
+          device_metadata: { platform: "browser" },
+          device_pairing_request_id: bootstrap.device_pairing_request_id,
+        },
+      },
+    );
+    expect(pair.status(), await pair.text()).toBe(200);
+    expect((await pair.json()).device_id).toBe(device2Id);
+
+    // 8) The new device's status poll now observes `authorized` + the device id.
+    await expect
+      .poll(
+        async () => {
+          const poll = await request.post(
+            `${solandBaseUrl()}/_arkret/open/device-pairing/requests/status`,
+            { data: statusBody },
+          );
+          if (!poll.ok()) {
+            return `http_${poll.status()}`;
+          }
+          return (await poll.json()).state as string;
+        },
+        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toBe("authorized");
+    const authorized = await request.post(
+      `${solandBaseUrl()}/_arkret/open/device-pairing/requests/status`,
+      { data: statusBody },
+    );
+    expect((await authorized.json()).device_id).toBe(device2Id);
+
+    // 9) The paired device surfaces in alice's device-set projection.
+    await expect
+      .poll(() => pollDeviceStatus(request, device1Token, device2Id), {
+        timeout: 30_000,
+        intervals: [500, 1_000, 2_000],
+      })
+      .toBe("active");
+  });
 });
 
 function deviceMessageIdempotencyBody(
@@ -1492,7 +1669,7 @@ async function deliverPairingRequest(
 }> {
   const requestingDeviceId = typedId("device");
   const messageId = typedId("device_message");
-  const pairingCode = `${Date.now() % 1_000_000}`.padStart(6, "0");
+  const pairingCode = "7H2K9M4Q";
   const transactionId = `ak.key.verification.request:${requestingDeviceId}`;
   const newDeviceKey = deviceVerifyKeyMultibase();
   const newDevicePubkey = {
