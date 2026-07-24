@@ -5,7 +5,8 @@
 //! surface. The test obtains server-allocated coordinates, asks the SDK to
 //! build and sign the closed Event pair, then commits that pair through the
 //! ordinary admission pipeline:
-//!   1. `ak.self.agent.command.provision` prepare + commit -> `pending_runtime_key` + pairing.
+//!   1. `ak.self.agent.command.provision` prepare + commit -> active lifecycle intent with a
+//!      `pending_runtime_key` runtime_state + pairing (key-management.md §3.6.1).
 //!   2. `ak.gate.account.command.pair_agent_key` -> durable `ak.agent.key.authorize`, status ->
 //!      `active` without changing Realm grants.
 //!   3. grant attach / detach -> durable `ak.capability.grant` / `ak.capability.revoke`.
@@ -936,7 +937,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         .await
         .context("prepare agent controller recovery")?;
 
-    // 1-2. provision -> pending_runtime_key + pairing material -> active.
+    // 1-2. provision -> active intent with pending_runtime_key + pairing material -> ready.
     let agent_did = provision_and_pair_agent(&server, &token, "Summary Assistant", "summary")
         .await
         .context("provision and pair agent")?;
@@ -1089,9 +1090,12 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let prov = provision_agent(&server, &token, "Renewal Assistant", "renewal", Some(1)).await?;
     let agent_did = prov.agent_id.to_string();
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    // Lazy expiry flips the projected status on first observation.
+    // Two orthogonal axes (key-management.md §3.6.1): pairing expiry is not a
+    // lifecycle transition — the intent stays active while the derived
+    // runtime_state falls to pairing_expired on first observation.
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
+        agent_runtime_state(&server, &token, &agent_did).await?,
         "pairing_expired"
     );
 
@@ -1104,8 +1108,9 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     assert_eq!(renewed.agent_id.to_string(), agent_did, "same principal");
     assert_ne!(renewed.pairing_request_id, prov.pairing_request_id);
     assert_ne!(renewed.pairing_code, prov.pairing_code);
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_status(&server, &token, &agent_did).await?,
+        agent_runtime_state(&server, &token, &agent_did).await?,
         "pending_runtime_key"
     );
 
@@ -1114,26 +1119,63 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let paired = pair_agent_runtime_key(&server, &token, &renewed).await?;
     assert!(!paired.authorized_event_ref.as_str().is_empty());
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert_eq!(
+        agent_runtime_state(&server, &token, &agent_did).await?,
+        "ready"
+    );
 
-    // Runtime replacement requires an explicit pause. Pairing supersedes the
-    // old runtime key while the principal stays paused until an explicit resume.
-    pause_agent_runtime(&server, &token, &renewed).await?;
+    // Active-intent runtime replacement: no forced pause and no resume. The
+    // agent stays active throughout, runtime_state projects replacing while the
+    // handle is open, and completing the pairing atomically supersedes the old
+    // key without changing the lifecycle intent (key-management.md §3.6.1).
     let replacement = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
         .await?;
     assert_eq!(replacement.agent_id.to_string(), agent_did);
     assert_ne!(replacement.pairing_request_id, renewed.pairing_request_id);
-    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert_eq!(
+        agent_runtime_state(&server, &token, &agent_did).await?,
+        "replacing"
+    );
     let stale = pair_agent_runtime_key(&server, &token, &renewed).await;
     assert!(stale.is_err(), "superseded pairing handle must remain dead");
     let replaced =
         pair_agent_runtime_key_as(&server, &token, &replacement, "runtime-key-2").await?;
     assert_ne!(replaced.authorized_event_ref, paired.authorized_event_ref);
+    // No resume required: the active agent immediately serves with the new key.
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert_eq!(
+        agent_runtime_state(&server, &token, &agent_did).await?,
+        "ready"
+    );
+
+    // Compromise path: the controller explicitly pauses, then replaces. The
+    // intent stays paused across the replacement and requires an explicit
+    // resume; pause/resume never interlock with the open handle.
+    pause_agent_runtime(&server, &token, &replacement).await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
-    resume_agent_runtime(&server, &token, &replacement).await?;
+    let paused_replacement = controller
+        .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
+        .await?;
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
+    assert_eq!(
+        agent_runtime_state(&server, &token, &agent_did).await?,
+        "replacing"
+    );
+    let paused_replaced =
+        pair_agent_runtime_key_as(&server, &token, &paused_replacement, "runtime-key-3").await?;
+    assert_ne!(paused_replaced.authorized_event_ref, replaced.authorized_event_ref);
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
+    assert_eq!(
+        agent_runtime_state(&server, &token, &agent_did).await?,
+        "ready"
+    );
+    resume_agent_runtime(&server, &token, &paused_replacement).await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
-    pause_agent_runtime(&server, &token, &replacement).await?;
+    // Replacement handle expiry is non-destructive: the intent, the existing key
+    // and grants all survive and runtime_state returns to ready.
     let short_lived = controller
         .agent_renew_pairing(
             &agent_did,
@@ -1143,9 +1185,13 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         )
         .await?;
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
+    assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
+    assert_eq!(
+        agent_runtime_state(&server, &token, &agent_did).await?,
+        "ready"
+    );
     assert!(
-        pair_agent_runtime_key_as(&server, &token, &short_lived, "runtime-key-3")
+        pair_agent_runtime_key_as(&server, &token, &short_lived, "runtime-key-4")
             .await
             .is_err(),
         "expired replacement handle must remain dead"
@@ -1183,9 +1229,15 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         .agent_runtime_approval_status(&status_body)
         .await?;
     assert_eq!(status.retry_after, Some(Duration::from_secs(1)));
+    // Two orthogonal axes (key-management.md §3.6.1): the bootstrapping agent's
+    // lifecycle intent is active; the derived runtime_state is pending_runtime_key.
     assert_eq!(
         status.status,
-        arkret_models_collaboration::agent_operations::AgentStatus::PendingRuntimeKey
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
+    );
+    assert_eq!(
+        status.runtime_state,
+        arkret_models_collaboration::agent_operations::AgentRuntimeState::PendingRuntimeKey
     );
     assert!(status.approval_request_id.is_none());
     assert!(status.authorized_event_ref.is_none());
@@ -1202,7 +1254,11 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         .await?;
     assert_eq!(
         status.status,
-        arkret_models_collaboration::agent_operations::AgentStatus::PendingRuntimeKey
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
+    );
+    assert_eq!(
+        status.runtime_state,
+        arkret_models_collaboration::agent_operations::AgentRuntimeState::PendingRuntimeKey
     );
     assert_eq!(
         status.approval_request_id.as_deref(),
@@ -1230,7 +1286,11 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         .await?;
     assert_eq!(
         status.status,
-        arkret_models_collaboration::agent_operations::AgentStatus::Active
+        arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
+    );
+    assert_eq!(
+        status.runtime_state,
+        arkret_models_collaboration::agent_operations::AgentRuntimeState::Ready
     );
     assert!(status.approval_request_id.is_none());
     assert_eq!(
@@ -1281,8 +1341,16 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
         StatusCode::PRECONDITION_FAILED,
         "agent_pcr_recovery_not_ready",
     )?;
+    // A rejected recovery gate must not consume the pairing: the lifecycle
+    // intent stays active and the derived runtime_state stays pending_runtime_key
+    // (key-management.md §3.6.1).
     assert_eq!(
         agent_status(&server, &token, provisioned.agent_id.as_str()).await?,
+        "active",
+        "a rejected recovery gate must not change the lifecycle intent"
+    );
+    assert_eq!(
+        agent_runtime_state(&server, &token, provisioned.agent_id.as_str()).await?,
         "pending_runtime_key",
         "a rejected recovery gate must not activate or consume the pairing"
     );
@@ -2788,6 +2856,12 @@ async fn provision_and_pair_agent(
         agent_status(server, token, &agent_did)
             .await
             .context("read pending agent status")?,
+        "active"
+    );
+    assert_eq!(
+        agent_runtime_state(server, token, &agent_did)
+            .await
+            .context("read pending agent runtime_state")?,
         "pending_runtime_key"
     );
 
@@ -3116,6 +3190,28 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
         })
         .unwrap_or_default();
     Ok(status)
+}
+
+/// The derived runtime readiness axis (key-management.md §3.6.1), orthogonal to
+/// the lifecycle intent returned by [`agent_status`].
+async fn agent_runtime_state(
+    server: &ArkretServer,
+    token: &str,
+    agent_did: &str,
+) -> Result<String> {
+    let list = bearer_sdk_client(server, token)?.agent_list().await?;
+    let runtime_state = list
+        .agents
+        .iter()
+        .find(|agent| agent.agent_id.as_str() == agent_did)
+        .map(|agent| {
+            serde_json::to_value(agent.runtime_state)
+                .ok()
+                .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    Ok(runtime_state)
 }
 
 fn bearer_sdk_client(server: &ArkretServer, token: &str) -> Result<SdkClient> {
