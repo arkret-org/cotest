@@ -126,17 +126,32 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         await page.getByTestId("pair-device-start-button").click();
         const secret = page.getByTestId("pair-device-secret");
         await expect(secret).toBeVisible({ timeout: 30_000 });
-        const payload = JSON.parse(await secret.inputValue()) as {
-          new_device_pubkey?: { public_key?: string; kid?: string };
+        const pairingLink = new URL(await secret.inputValue());
+        expect(pairingLink.search).toBe("");
+        const pairingToken = new URLSearchParams(
+          pairingLink.hash.slice(1),
+        ).get("token");
+        expect(pairingToken, "pairing token must be carried in the URL fragment").toBeTruthy();
+        const resolve = await request.post(
+          new URL(
+            "/_arkret/open/device-pairing/resolve",
+            pairingLink.origin,
+          ).toString(),
+          { data: { pairing_token: pairingToken } },
+        );
+        expect(resolve.status(), await resolve.text()).toBe(200);
+        const bootstrap = (await resolve.json()) as {
+          new_device_pubkey?: { key?: string; kid?: string; public_key?: string };
         };
         expect(
-          payload.new_device_pubkey?.public_key,
+          bootstrap.new_device_pubkey?.key,
           "pairing request must publish the device identity signing public key",
         ).toBe(firstSignerPublicKey);
         expect(
-          payload.new_device_pubkey?.public_key,
+          bootstrap.new_device_pubkey?.key,
           "pairing request must not publish the grant-binding cnf.jkt",
         ).not.toBe(activeGrant.jkt);
+        expect(bootstrap.new_device_pubkey?.public_key).toBeUndefined();
       });
 
       await test.step("soft refresh preserves the grant-binding key and device signer", async () => {

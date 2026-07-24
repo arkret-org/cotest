@@ -510,20 +510,26 @@ test.describe("consent grant", () => {
     browser,
     request,
   }) => {
-    const alice = uniqueUser("p1-023-settings-consent-alice");
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      "p1-023-settings-consent-alice",
+      { prepareMlsDevice: false },
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("consent settings DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
     const bob = uniqueUser("p1-023-settings-consent-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
+    await ensureRegistered(request, bob);
     const [aliceToken, bobToken] = await Promise.all([
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
     await requestContactApi(request, bobToken, alice.did, "message");
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    const alicePage = aliceFlow.page;
 
     try {
       await gotoConsentSettings(alicePage);

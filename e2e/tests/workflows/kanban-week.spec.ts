@@ -9,7 +9,12 @@
 // mistake. Single-user to stay on the proven kanban CRUD surface; cross-
 // user kanban sync lives in workflows/sprint-planning fixme'd cases.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Locator,
+} from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -19,6 +24,24 @@ import {
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
+
+async function addCardThroughColumn(column: Locator, title: string): Promise<void> {
+  const titleInput = column.getByTestId("new-card-title-input").last();
+  if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
+    const addButton = column.getByTestId("add-card-button").last();
+    await expect(addButton).toBeVisible({ timeout: 30_000 });
+    await addButton.click({ timeout: 5_000 }).catch(async (error) => {
+      if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
+        throw error;
+      }
+    });
+  }
+  await expect(titleInput).toBeVisible({ timeout: 30_000 });
+  await titleInput.fill(title);
+  const saveButton = column.getByTestId("save-card-button").last();
+  await expect(saveButton).toBeEnabled({ timeout: 30_000 });
+  await saveButton.click({ timeout: 10_000 });
+}
 
 test.describe("workflow: kanban week-in-review", () => {
   test("pat plans 4 tasks, archives 2 as done, restores 1 that was archived by mistake", async ({
@@ -83,9 +106,7 @@ test.describe("workflow: kanban week-in-review", () => {
         .filter({ hasText: todayList })
         .first();
       for (const task of [triageTask, prTask, specTask, planTask]) {
-        await today.getByTestId("add-card-button").click();
-        await today.getByTestId("new-card-title-input").fill(task);
-        await today.getByTestId("save-card-button").click();
+        await addCardThroughColumn(today, task);
         await expect(today.getByTestId("kanban-card").filter({ hasText: task })).toBeVisible({
           timeout: 30_000,
         });

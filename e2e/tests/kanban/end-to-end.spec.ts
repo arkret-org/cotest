@@ -700,10 +700,13 @@ test.describe("kanban end-to-end", () => {
   }, testInfo) => {
     test.setTimeout(180_000);
     const stamp = Date.now();
-    const alice = uniqueUser("kanban-enc-desc-alice");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(browser, request, "kanban-enc-desc-alice");
+    if (!aliceFlow) {
+      assertJointStackNotRequired("encrypted kanban description DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     const cardTitle = `Encrypted Card ${stamp}`;
     const description = `Encrypted description body ${stamp}`;
@@ -846,10 +849,13 @@ test.describe("kanban end-to-end", () => {
   }, testInfo) => {
     test.setTimeout(180_000);
     const stamp = Date.now();
-    const alice = uniqueUser("kanban-enc-synth-alice");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(browser, request, "kanban-enc-synth-alice");
+    if (!aliceFlow) {
+      assertJointStackNotRequired("encrypted kanban synthesis DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     const cardTitle = `Synthesis Card ${stamp}`;
     const synthesis = `Encrypted synthesis note ${stamp}`;
@@ -922,10 +928,13 @@ test.describe("kanban end-to-end", () => {
   }, testInfo) => {
     test.setTimeout(180_000);
     const stamp = Date.now();
-    const alice = uniqueUser("kanban-enc-disc-alice");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const aliceFlow = await openDpopUserPage(browser, request, "kanban-enc-disc-alice");
+    if (!aliceFlow) {
+      assertJointStackNotRequired("encrypted kanban discussion DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     const cardTitle = `Discussion Card ${stamp}`;
     const comment = `Encrypted discussion comment ${stamp}`;

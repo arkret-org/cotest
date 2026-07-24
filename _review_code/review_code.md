@@ -327,3 +327,149 @@ selection failures.
   `SessionCoordinator` generation before dispatch and after completion. A
   terminal invalidation makes the stale bootstrap task return immediately
   before it can reuse the revoked grant.
+
+## 2026-07-24 Realm creation relied on an opportunistic authenticated transport cache
+
+- Severity: P1
+- Status: resolved in Inkson; targeted joint E2E regression passed.
+- Evidence: the 20260724-224454 joint-full run rendered
+  `authenticated session transport is not initialized; use an async
+  provider-aware API path` in the Realm bootstrap wizard. The click handler
+  already ran in an async task but called the synchronous cached-transport
+  constructor, so a valid session could fail Realm creation when the cache had
+  not yet been initialized.
+- Normative source: `identity/account-lifecycle.md` section 4.1 requires
+  authenticated client work to follow the active session lifecycle. A valid
+  session operation must obtain its current authenticated transport through
+  the session provider rather than depend on an optional stale cache.
+- Resolution: the Realm bootstrap task now awaits the provider-aware
+  authenticated transport constructor, which initializes or refreshes the
+  shared SDK client before submitting the canonical Realm bootstrap.
+- Verification: joint-full targeted run `20260724-235218` passed
+  `alice adds a strand description` (1/1).
+
+## 2026-07-24 Kanban overdue UI regression bypassed the authenticated client path
+
+- Severity: P1
+- Status: resolved in cotest; targeted joint E2E regression passed.
+- Evidence: the `due_date past today renders as overdue badge` browser test
+  was another `issueDevSession` + `sessionCredential` caller and failed Realm
+  creation in `20260724-224454` with the same missing authenticated transport.
+  It also created the board and cards through bare-bearer API helpers, so it did
+  not exercise the user flow whose rendering it claimed to cover.
+- Normative source: `crypto-media/device-lifecycle.md` section 3.3 requires
+  `ak.session.grant` plus DPoP on protected client requests.
+- Resolution: the regression now logs in through the Coauth DPoP fixture and
+  creates the Realm, board, column, cards, and due date entirely through Inkson
+  before asserting the overdue presentation.
+- Verification: joint-full targeted run `20260725-000119` passed
+  `due_date past today renders as overdue badge` (1/1).
+
+## 2026-07-25 Cross-device notification test raced read-cursor submission
+
+- Severity: P1
+- Status: resolved in cotest; targeted joint E2E regression pending.
+- Evidence: both `20260724-224454` and the 2-worker failed-subset rerun reached
+  the device-2 optimistic `mark-unread-button`, then reloaded device 1 before
+  the spawned read-cursor submission completed. Device 1 correctly still
+  rendered `Mark read` because no synced actor-private cursor covered the
+  notification yet.
+- Normative source: `discovery/read-receipts.md` sections 6.5-6.6 define
+  cross-device state as convergence from the actor-private
+  `ak.read_cursor.advance`, not from another device's local optimistic state.
+- Resolution: the test now waits for Inkson's `notifications-status` to report
+  that the read cursor was synced before reloading and asserting device-1
+  convergence.
+
+## 2026-07-25 Consent settings browser regression used a bare development bearer
+
+- Severity: P1
+- Status: resolved in cotest; targeted joint E2E regression pending.
+- Evidence: the 2-worker failed-subset trace showed Inkson stopped with
+  `no session grant is available for the active principal server`; the test
+  opened the settings UI with `issueDevSession` + `sessionCredential`.
+- Normative source: `crypto-media/device-lifecycle.md` section 3.3 requires a
+  DPoP-bound `ak.session.grant` for protected client requests.
+- Resolution: the consent settings browser now uses the Coauth DPoP login
+  fixture. Development sessions remain scoped to API fixture setup and
+  projection assertions only.
+
+## 2026-07-25 Device-key lifecycle regression parsed an obsolete inline pairing payload
+
+- Severity: P1
+- Status: resolved in cotest; targeted joint E2E regression pending.
+- Evidence: the failed-subset run raised `Unexpected token 'h'` while parsing
+  the `pair-device-secret` value as JSON; Inkson now renders the
+  server-mediated `http://.../device-pairing/resolve#token=...` short link.
+- Normative source: `crypto-media/device-lifecycle.md` section 2.1.1 requires
+  the compact token in the URL fragment and resolves it through the body-only
+  open endpoint. The resolved canonical `PublicKey` uses `key`, not the
+  obsolete `public_key` field.
+- Resolution: the test now verifies that the link has no query, extracts the
+  fragment token, resolves it through the open endpoint, and compares
+  `new_device_pubkey.key` with the durable device event signer while asserting
+  that `public_key` is absent.
+
+## 2026-07-25 Contacts sidebar ignored Agent runtime-key readiness
+
+- Severity: P1
+- Status: resolved in Inkson; targeted joint E2E regression pending.
+- Evidence: the failed-subset run rendered a freshly provisioned Agent whose
+  controller lifecycle was `active` but whose orthogonal runtime state was
+  `pending_runtime_key`. `active_agents_only` filtered only the lifecycle axis.
+- Normative source: `identity/contact-and-direct-conversation.md` sections 3
+  and 6 require a lifecycle-active accountable Agent with effective runtime-key
+  facts for a usable direct conversation.
+- Resolution: the Contacts chat sidebar now requires lifecycle `Active` and
+  runtime state `Ready` or `Replacing`; replacement retains its previous active
+  authorization, while bootstrap-pending and expired Agents remain settings-only.
+
+## 2026-07-25 Joint E2E default worker count exceeded shared auth-stack capacity
+
+- Severity: P1
+- Status: resolved in cotest; failed-subset verification in progress.
+- Evidence: the original joint-full run used four file workers and failed 24
+  tests. Three representative failures passed alone. A four-worker rerun of
+  the failure titles rapidly reproduced broad login/invite cascades, whereas
+  the same precise subset with two workers passed the early capability,
+  policy-server, and media-token cases and reduced the remaining failures to
+  six independently diagnosable regressions.
+- Normative source: this is harness capacity rather than protocol semantics;
+  the test runner must preserve the spec-defined fail-closed behavior without
+  creating artificial authentication starvation.
+- Resolution: Playwright now defaults to two file workers. Individual tests
+  may still create multiple sessions concurrently, and explicitly provisioned
+  environments can override the count through `COTEST_PW_WORKERS`.
+
+## 2026-07-25 Kanban week workflow waited on a replaced Add Card button
+
+- Severity: P2
+- Status: resolved in cotest; targeted joint E2E regression pending.
+- Evidence: the 2-worker trace showed the second Add Card click had already
+  opened the editor, but Playwright kept waiting because Dioxus replaced the
+  clicked button during re-render, eventually exhausting the test timeout.
+- Normative source: no protocol behavior changed; the test must observe the
+  resulting editor state rather than require a stale DOM node's click promise
+  to settle.
+- Resolution: the workflow now uses the established Kanban helper pattern:
+  a short bounded click whose replacement is accepted only when the title
+  editor is visibly open, followed by explicit input and save readiness checks.
+
+## 2026-07-24 Encrypted Kanban browser regressions used a bare development bearer
+
+- Severity: P1
+- Status: resolved in cotest; targeted joint E2E regression passed.
+- Evidence: the targeted Realm-description trace reported that
+  `inkson.test.session_injection.v1` was absent and only the legacy
+  `session_credential` fixture was present. The three creator-device encrypted
+  Kanban regressions called `issueDevSession` and opened Inkson with a bare
+  development bearer, so the provider correctly had no DPoP-bound session
+  grant to restore.
+- Normative source: `crypto-media/device-lifecycle.md` section 3.3 requires
+  `ak.session.grant` plus DPoP for `/_arkret/self/*`; a bearer is only the grant
+  carrier and cannot authenticate a protected endpoint by itself.
+- Resolution: all three encrypted creator-device Kanban regressions now use
+  the existing Coauth-minted DPoP session fixture, including the bound grant
+  key and separate event-signing key.
+- Verification: joint-full targeted run `20260724-235218` passed
+  `alice adds a strand description` (1/1).
