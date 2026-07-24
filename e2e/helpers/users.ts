@@ -624,49 +624,6 @@ export class JointUserPage {
     await expect(unlockPrompt).not.toBeVisible({ timeout: 120_000 });
   }
 
-  async configureRecoveryKey(): Promise<string> {
-    const promptedKey = await this.completeRecoveryKeySetupIfPrompted(2_000);
-    if (promptedKey) return promptedKey;
-
-    await this.page.goto("/settings/recovery", {
-      waitUntil: "domcontentloaded",
-    });
-    await expect(this.page.getByTestId("recovery-key-section")).toBeVisible({
-      timeout: 120_000,
-    });
-    const settingsPromptKey =
-      await this.completeRecoveryKeySetupIfPrompted(5_000);
-    if (settingsPromptKey) return settingsPromptKey;
-
-    await this.page.getByTestId("recovery-key-regenerate").click();
-    const generatedPromptKey =
-      await this.completeRecoveryKeySetupIfPrompted(5_000);
-    if (generatedPromptKey) return generatedPromptKey;
-
-    const currentKey = this.page.getByTestId("recovery-key-current");
-    let recoveryKey = "";
-    await expect
-      .poll(
-        async () => {
-          recoveryKey = ((await currentKey.textContent()) ?? "")
-            .replace(/\s+/g, " ")
-            .trim();
-          return recoveryKey.split(/\s+/).filter(Boolean).length;
-        },
-        { timeout: 120_000 },
-      )
-      .toBe(24);
-    await this.page
-      .getByTestId("recovery-key-confirm-input")
-      .fill(recoveryKey);
-    await this.page.getByTestId("recovery-key-clear-live").click();
-    await expect(this.page.getByTestId("recovery-key-status")).toContainText(
-      /(?:backup is on the server|encrypted history (?:is|are) backed up|Recovery Key confirmed)/i,
-      { timeout: 30_000 },
-    );
-    return recoveryKey;
-  }
-
   async acknowledgeRecommendedEncryptionPromptIfVisible(
     timeoutMs = 5_000,
   ): Promise<boolean> {

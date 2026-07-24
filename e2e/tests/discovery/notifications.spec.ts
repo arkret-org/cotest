@@ -242,12 +242,9 @@ test.describe("notifications", () => {
     const apiActorSeq = 8_000_000_000_000_000 + (stamp % 100_000);
     let suppressedMsg = "";
     let resumedMsg = "";
-    let bobDeviceB: typeof bobDeviceA | undefined;
 
     try {
       await bobDeviceA.gotoHome();
-      const recoveryKey = await bobDeviceA.configureRecoveryKey();
-      expect(recoveryKey.split(/\s+/)).toHaveLength(24);
 
       const realmId = await alicePage.createRealm({
         title: `S23 DND ${stamp}`,
@@ -304,83 +301,61 @@ test.describe("notifications", () => {
       expect(storedWire).not.toContain('"mode":"now"');
       expect(storedWire).not.toContain('"dnd"');
 
-      const bobDeviceBSession = await openDpopUserPageForAccount(
-        browser,
-        request,
-        `s23-dnd-bob-${stamp}-device-b`,
-        bobAccount,
-        {
-          prepareMlsDevice: false,
-          autoCompleteRecoveryKeySetup: false,
-        },
-      );
-      expect(bobDeviceBSession, "same-account device B login").toBeTruthy();
-      if (!bobDeviceBSession) throw new Error("device B login is unavailable");
-      expect(bobDeviceBSession.user.did).toBe(bob.did);
-      expect(bobDeviceBSession.user.deviceId).not.toBe(
-        bobDeviceASession.user.deviceId,
-      );
-      bobDeviceB = bobDeviceBSession.page;
-      await bobDeviceB.gotoHome();
-      await expect(bobDeviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
-        timeout: 90_000,
-      });
-      await bobDeviceB.unlockMlsAccountSecret(recoveryKey);
-      await bobDeviceB.page.goto("/notifications/settings", {
-        waitUntil: "domcontentloaded",
-      });
-      await expect(
-        bobDeviceB.page.getByTestId("dnd-enabled-toggle"),
-      ).toBeChecked({ timeout: 30_000 });
-
       suppressedMsg = suppressedSuffix;
       await sendMessageApi(request, aliceToken, realmId, suppressedMsg, {
         mentions: [bob.did],
         actorSeq: apiActorSeq,
       });
-      await bobDeviceB.page.goto("/notifications", {
+      await bobDeviceA.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobDeviceB.page
+        bobDeviceA.page
           .getByTestId("notification-item")
           .filter({ hasText: suppressedMsg }),
       ).toHaveCount(0);
 
-      await bobDeviceB.page.goto("/notifications/settings", {
+      await bobDeviceA.page.goto("/notifications/settings", {
         waitUntil: "domcontentloaded",
       });
-      await bobDeviceB.uncheckWithPassivePromptRetry(
-        bobDeviceB.page.getByTestId("dnd-enabled-toggle"),
+      await bobDeviceA.uncheckWithPassivePromptRetry(
+        bobDeviceA.page.getByTestId("dnd-enabled-toggle"),
       );
-      await bobDeviceB.clickWithPassivePromptRetry(
-        bobDeviceB.page.getByTestId("save-notification-settings-button"),
+      await bobDeviceA.clickWithPassivePromptRetry(
+        bobDeviceA.page.getByTestId("save-notification-settings-button"),
       );
       await expect(
-        bobDeviceB.page.getByTestId("notification-settings-status"),
+        bobDeviceA.page.getByTestId("notification-settings-status"),
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
       resumedMsg = resumedSuffix;
       await sendMessageApi(request, aliceToken, realmId, resumedMsg, {
         mentions: [bob.did],
         actorSeq: apiActorSeq + 1,
       });
-      await bobDeviceB.page.goto("/notifications", {
+      await bobDeviceA.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
       await expect(
-        bobDeviceB.page
+        bobDeviceA.page
           .getByTestId("notification-item")
           .filter({ hasText: resumedMsg }),
       ).toBeVisible({ timeout: 30_000 });
-      await stepShot(bobDeviceB.page, testInfo, "dnd-resumed-device-b");
+      await stepShot(bobDeviceA.page, testInfo, "dnd-resumed");
     } finally {
-      await Promise.allSettled([
-        bobDeviceB?.close(),
-        bobDeviceA.close(),
-        alicePage.close(),
-      ]);
+      await Promise.allSettled([bobDeviceA.close(), alicePage.close()]);
     }
   });
+
+  test.fixme(
+    "an authorized fresh device restores encrypted DND settings after Recovery Key unlock",
+    async () => {
+      // Spec: key-management.md §5.1 and §7.3. A login factor only yields a
+      // restricted fresh-device session; backup unlock is forbidden until the
+      // new device completes pairing or the B-model recovery re-anchor flow.
+      // Keep this separate from DND enforcement until that live authorization
+      // harness can bind the exact accepted actor frontier and device key.
+    },
+  );
 
   test("mark-all-read clears unread badges and marks notification rows as read", async ({
     browser,

@@ -1499,6 +1499,38 @@ function Stop-ManagedCommand {
     }
 }
 
+function Get-ManagedServiceRuntimePanic {
+    param([Parameter(Mandatory = $true)]$Service)
+
+    $panicPattern = "(?i)(thread\s+['""][^'""]+['""]\s+panicked\s+at|panicked with message|fatal runtime error)"
+    foreach ($property in @("Stderr", "Stdout")) {
+        if (-not ($Service.PSObject.Properties.Name -contains $property)) {
+            continue
+        }
+        $path = [string]$Service.$property
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) {
+            continue
+        }
+        $match = Select-String `
+            -LiteralPath $path `
+            -Pattern $panicPattern `
+            -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($match) {
+            $line = $match.Line.Trim()
+            if ($line.Length -gt 280) {
+                $line = $line.Substring(0, 280) + "..."
+            }
+            return [pscustomobject]@{
+                path = $path
+                line_number = $match.LineNumber
+                line = $line
+            }
+        }
+    }
+    return $null
+}
+
 function Get-ManagedServiceFailures {
     param([Parameter(Mandatory = $true)]$Services)
 
@@ -1531,18 +1563,37 @@ function Get-ManagedServiceFailures {
                         stdout = $service.Stdout
                         stderr = $service.Stderr
                     }) | Out-Null
+                continue
             }
-            continue
+            $logs = @(Invoke-NativeCapture -FilePath "docker" -Arguments @(
+                    "logs", $service.ContainerName
+                ))
+            if ($LASTEXITCODE -eq 0) {
+                $logs | Set-Content -Path $service.Stdout -Encoding UTF8
+            }
+        } else {
+            $service.Process.Refresh()
+            if ($service.Process.HasExited) {
+                $service.Process.WaitForExit()
+                $failures.Add([pscustomobject]@{
+                        name = $service.Name
+                        kind = $service.Kind
+                        exit_code = $service.Process.ExitCode
+                        detail = "process exited before test completion"
+                        stdout = $service.Stdout
+                        stderr = $service.Stderr
+                    }) | Out-Null
+                continue
+            }
         }
 
-        $service.Process.Refresh()
-        if ($service.Process.HasExited) {
-            $service.Process.WaitForExit()
+        $panic = Get-ManagedServiceRuntimePanic -Service $service
+        if ($panic) {
             $failures.Add([pscustomobject]@{
                     name = $service.Name
                     kind = $service.Kind
-                    exit_code = $service.Process.ExitCode
-                    detail = "process exited before test completion"
+                    exit_code = $null
+                    detail = "runtime panic in $($panic.path):L$($panic.line_number): $($panic.line)"
                     stdout = $service.Stdout
                     stderr = $service.Stderr
                 }) | Out-Null
@@ -1659,6 +1710,13 @@ function Invoke-RunnerSelfTest {
         }
         if (@(Get-ManagedServiceFailures -Services @($runningService)).Count -ne 0) {
             throw "running managed service was incorrectly classified as failed"
+        }
+        "thread 'tokio-rt-worker' panicked at fixture.rs:1:1:" |
+            Set-Content -LiteralPath $runningService.Stderr -Encoding UTF8
+        $panicFailures = @(Get-ManagedServiceFailures -Services @($runningService))
+        if ($panicFailures.Count -ne 1 -or
+            $panicFailures[0].detail -notmatch "runtime panic") {
+            throw "managed service runtime panic self-test was not classified as failed"
         }
 
         Write-Host "Joint E2E runner self-test passed."
@@ -2926,7 +2984,7 @@ finally {
     if ($managedServiceFailures.Count -gt 0) {
         $exitCode = 1
         foreach ($failure in $managedServiceFailures) {
-            Write-Warning "Managed service '$($failure.name)' exited before test completion; see $managedServiceFailuresMd"
+            Write-Warning "Managed service '$($failure.name)' failed during the test run; see $managedServiceFailuresMd"
         }
     }
     if (-not $KeepServices) {

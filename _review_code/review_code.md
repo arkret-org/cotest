@@ -211,3 +211,119 @@ selection failures.
 - Resolution: all Soland timestamp Serde attributes now reference
   `arkret_canonical::serde_helpers`; the clean Coauth/Soland builds and live
   cross-service test are rerun after rebase before push.
+
+## 2026-07-24 Coauth request tracing held an entered span across await
+
+- Severity: P0
+- Status: resolved in Coauth; targeted joint E2E regressions passed.
+- Evidence: the 20260724-191052 joint-full run repeatedly panicked inside
+  `tracing-subscriber` with closed-span and missing-span assertions. The
+  request tracing middleware kept a `span.enter()` guard alive while awaiting
+  the complete Salvo handler chain, allowing the future to move between Tokio
+  worker threads while a thread-local span guard remained entered. Affected
+  requests surfaced as socket resets, session-grant introspection 503s, and
+  account-registration 503s.
+- Regression class: async middleware must bind spans with
+  `tracing::Instrument` so every future poll enters and exits on the current
+  worker. An `Entered` guard must never cross an await point.
+- Resolution: the Coauth HTTP tracing middleware now instruments the downstream
+  future and records the response fields through the retained span handle.
+
+## 2026-07-24 DND E2E attempted forbidden direct Recovery Key replacement
+
+- Severity: P1
+- Status: resolved in Cotest.
+- Evidence: the DND cross-device scenario completed canonical account
+  bootstrap with a fixture Recovery Key, then navigated to Recovery settings
+  and clicked the disabled direct-regeneration control. The joint-full run
+  spent its full six-minute timeout waiting for a control intentionally marked
+  `Staged handoff required`.
+- Normative source: `identity/key-management.md` section 3.3 requires recovery
+  secret replacement to use the resumable two-entry handoff and global root
+  index. A client must not replace accepted recovery material directly.
+- Resolution: the scenario no longer replaces accepted recovery material, and
+  the obsolete helper that attempted direct regeneration was removed.
+  Follow-up evidence showed that the second login still held only a restricted
+  fresh-device session, so the DND enforcement scenario no longer attempts a
+  backup unlock before device authorization; that cross-device leg is tracked
+  separately as fixme pending the canonical B-model pairing/re-anchor harness.
+
+## 2026-07-24 Joint runner ignored managed-service worker panics
+
+- Severity: P0
+- Status: resolved in Cotest.
+- Evidence: the 20260724-191052 Coauth stderr contained repeated Tokio worker
+  panics, but the run reported `managed_service_failure_count: 0` because the
+  runner only classified a whole process/container exit as a managed-service
+  failure.
+- Regression class: a long-lived service can survive a request-task panic while
+  dropping that request and corrupting E2E evidence. A managed-service runtime
+  panic must fail the run even when the parent process remains alive.
+- Resolution: the runner now scans live process and container logs for Rust
+  panic/fatal-runtime markers, records the first signal with file and line
+  evidence, forces a nonzero run result, and covers the behavior in its
+  self-test.
+
+## 2026-07-24 Encrypted DND writes omitted the account-secret backup trigger
+
+- Severity: P1
+- Status: resolved in Inkson; targeted DND regression passed.
+- Evidence: device A successfully stored an encrypted `ak.dnd_schedule`, but
+  device B logged `ignoring undecryptable ak.dnd_schedule: account secret is
+  unavailable` and silently rendered default notification settings. The DND
+  write created the account secret but, unlike encrypted Realm, chat, Kanban,
+  and file-transfer writes, never invoked the shared first-write backup path.
+- Normative source: `identity/key-management.md` section 7.10 says clients
+  should automatically and continuously maintain a `secret_storage` backup
+  when the account secret or encrypted private account data is created or
+  rotated. `artifacts/registry/account-data-type-registry.json` classifies
+  `ak.dnd_schedule` as encrypted principal-private account data.
+- Resolution: after Soland accepts the encrypted DND value, Inkson now waits
+  for the shared recovery-public-key account-secret backup path before
+  reporting the settings save complete. The live DND test verifies encrypted
+  storage plus suppression/resumption on the authorized device. Fresh-device
+  restore remains separate until the device first completes the authorization
+  required by `key-management.md` sections 5.1 and 7.3.
+
+## 2026-07-24 DND E2E tried to unlock backup before device authorization
+
+- Severity: P1
+- Status: resolved in Cotest; canonical B-model multi-device harness remains
+  explicitly fixme.
+- Evidence: the same-account second login received a restricted fresh-device
+  session grant but never completed pairing or recovery re-anchor. Inkson
+  correctly suppressed downstream MLS unlock while
+  `needs_device_authorization` remained true, so the test waited 90 seconds for
+  an unlock prompt that must not be available in that state.
+- Normative source: `identity/key-management.md` section 5.1 forbids a fresh
+  device from reading E2EE history or unlocking key backup before SAS/QR
+  verification; section 7.3 authorizes the new device before it restores E2EE
+  state. A login factor alone is not device authorization.
+- Resolution: DND enforcement and encrypted-at-rest assertions now run on the
+  already-authorized device. The distinct fresh-device restore assertion is a
+  separate fixme with the exact blocker: the harness must bind the accepted
+  actor frontier and the new device's real signing key through pairing or the
+  B-model recovery re-anchor flow.
+
+## 2026-07-24 Inkson bootstrap continued with a stale session after terminal auth loss
+
+- Severity: P0
+- Status: resolved in Inkson; targeted live regression passed.
+- Evidence: after hard logout, Inkson rendered the login panel but then issued
+  two more authenticated requests with the revoked grant:
+  `/_arkret/self/account/viewer` and
+  `/_arkret/self/account/subscribe?catchup=true`. The failing Playwright
+  assertion consistently observed the authenticated request count grow from
+  10 to 12. The trace showed both requests began after terminal 401 responses,
+  so this was not an in-flight-request allowance or a brittle exact-count
+  assertion.
+- Normative source: `identity/account-lifecycle.md` section 4.1 requires the
+  client to stop sync and clear local session credentials during hard logout.
+- Regression class: the bootstrap task retained an authenticated transport
+  across awaits but was not fenced by the app-wide session generation. A
+  concurrent terminal denial could invalidate the session while that task
+  continued into its next authenticated bootstrap request.
+- Resolution: every authenticated bootstrap request and retry now checks the
+  `SessionCoordinator` generation before dispatch and after completion. A
+  terminal invalidation makes the stale bootstrap task return immediately
+  before it can reuse the revoked grant.
