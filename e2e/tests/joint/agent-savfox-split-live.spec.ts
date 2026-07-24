@@ -9,11 +9,20 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
     async ({ browser, jointRealm }) => {
       jointTest.setTimeout(600_000);
 
-      const savfoxBaseUrl = requiredEnv("COTEST_SAVFOX_BASE_URL").replace(
-        /\/$/,
-        "",
+      // The joint harness does not provision the out-of-tree savfox gateway,
+      // so this live pairing scenario only runs when both endpoints are
+      // supplied externally. Follow the repo convention (README test tiers:
+      // "a missing prerequisite must be an explicit test.skip with a
+      // machine-readable reason") and skip instead of hard-throwing, which
+      // otherwise reds the smoke/full gate on every run.
+      const savfoxBaseUrlRaw = process.env.COTEST_SAVFOX_BASE_URL?.trim();
+      const savfoxTokenRaw = process.env.COTEST_SAVFOX_TOKEN?.trim();
+      jointTest.skip(
+        !savfoxBaseUrlRaw || !savfoxTokenRaw,
+        "PRECONDITION_SAVFOX_UNAVAILABLE: COTEST_SAVFOX_BASE_URL / COTEST_SAVFOX_TOKEN unset (harness does not provision the savfox gateway)",
       );
-      const savfoxToken = requiredEnv("COTEST_SAVFOX_TOKEN");
+      const savfoxBaseUrl = savfoxBaseUrlRaw!.replace(/\/$/, "");
+      const savfoxToken = savfoxTokenRaw!;
       const inkson = jointRealm.alicePage.page;
 
       await jointRealm.alicePage.gotoSettings();
@@ -128,11 +137,3 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
     },
   );
 });
-
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`Missing required environment variable ${name}`);
-  }
-  return value;
-}
