@@ -254,8 +254,8 @@ test.describe("key backup + restore", () => {
       const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
+      await pairDpopDevice(deviceA, deviceB, request, deviceBSession);
       await deviceB.gotoHome();
-      await expectDpopDeviceActive(request, deviceBSession);
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
       });
@@ -550,8 +550,8 @@ test.describe("key backup + restore", () => {
       const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
+      await pairDpopDevice(deviceA, deviceB, request, deviceBSession);
       await deviceB.gotoHome();
-      await expectDpopDeviceActive(request, deviceBSession);
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
       });
@@ -691,6 +691,38 @@ async function expectDpopDeviceActive(
       { timeout: 90_000 },
     )
     .toBe("active");
+}
+
+async function pairDpopDevice(
+  authorizingDevice: JointUserPage,
+  requestingDevice: JointUserPage,
+  request: APIRequestContext,
+  requestingSession: DpopUserSession,
+) {
+  // A password/OIDC handoff identifies the fresh browser but does not
+  // authorize it to write events or unwrap account E2EE history. Complete
+  // the spec-required same-account pairing before exercising recovery.
+  await authorizingDevice.gotoHome();
+  await requestingDevice.page.goto("/settings/devices/pair", {
+    waitUntil: "domcontentloaded",
+  });
+  await requestingDevice.page.getByTestId("pair-device-start-button").click();
+  const pairingCode = requestingDevice.page.getByTestId("pair-device-code");
+  await expect(pairingCode).toBeVisible({ timeout: 30_000 });
+  const code = (await pairingCode.textContent())?.trim() ?? "";
+  expect(code).not.toBe("");
+
+  const approvalModal = authorizingDevice.page.getByTestId(
+    "device-pair-approval-modal",
+  );
+  await expect(approvalModal).toBeVisible({ timeout: 90_000 });
+  await expect(
+    authorizingDevice.page.getByTestId("device-pair-approval-code"),
+  ).toHaveText(code);
+  await authorizingDevice.page
+    .getByTestId("device-pair-approval-approve")
+    .click();
+  await expectDpopDeviceActive(request, requestingSession);
 }
 
 type HolderProofRequest = {
