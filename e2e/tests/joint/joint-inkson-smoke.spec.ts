@@ -13,6 +13,7 @@ import {
   openDpopUserPageFromSession,
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
+import { coauthBaseUrl } from "../../helpers/env";
 
 test.describe.configure({ mode: "serial" });
 
@@ -115,16 +116,53 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   test("creates a public realm and renders a soland message in inkson", async ({
     jointRealm,
   }) => {
+    // Regression: the Coauth service-account hint belongs to the Account
+    // Authority namespace. Public principal identity must instead use the
+    // Soland-signed handle consistently across every shell/chat surface.
     const stamp = Date.now();
     const aliceMessage = `joint smoke from Alice ${stamp}`;
+    const principalHandle = canonicalHandle(
+      jointRealm.alice.handle,
+      jointRealm.alicePage.serverUrl,
+    );
+    const accountAuthority = coauthBaseUrl();
+    const accountAuthorityHandle = accountAuthority
+      ? canonicalHandle(jointRealm.alice.handle, accountAuthority)
+      : undefined;
 
     await jointRealm.alicePage.sendTimelineMessage(
       jointRealm.realmId,
       aliceMessage,
     );
-    await expect(jointRealm.alicePage.timelineEvent(aliceMessage)).toBeVisible({
+    const message = jointRealm.alicePage.timelineEvent(aliceMessage);
+    await expect(message).toBeVisible({
       timeout: 30_000,
     });
+    await expect(message.locator(".msg-head .name")).toHaveText(principalHandle);
+
+    const selfParticipant = jointRealm.alicePage.page
+      .getByTestId("discussion-user-row")
+      .filter({
+        has: jointRealm.alicePage.page.getByTestId("participant-self-badge"),
+      });
+    await expect(selfParticipant).toContainText(principalHandle);
+
+    await jointRealm.alicePage.page.getByTestId("account-menu-button").click();
+    await expect(
+      jointRealm.alicePage.page.getByTestId("account-menu-handles"),
+    ).toHaveText(`@${principalHandle}`);
+    if (
+      accountAuthorityHandle &&
+      accountAuthorityHandle !== principalHandle
+    ) {
+      for (const identitySurface of [
+        message,
+        selfParticipant,
+        jointRealm.alicePage.page.getByTestId("account-menu-handles"),
+      ]) {
+        await expect(identitySurface).not.toContainText(accountAuthorityHandle);
+      }
+    }
   });
 
   test("does not promote mention audit metadata to Agent identity", async ({
