@@ -750,33 +750,4 @@ test.describe("conformance encoding vectors", () => {
     expect(projected.redacted_because).toEqual(receipt.reason);
   });
 
-  // -------------------------------------------------------------------------
-  // Smoke probe (kept from the original suite) — confirms the conformance
-  // namespace is reachable in profiles where the suite runs without a
-  // backing soland (probe accepts 404/501 so the suite stays green).
-  // -------------------------------------------------------------------------
-  test("conformance endpoint surface probe (smoke)", async ({
-    request,
-  }, testInfo) => {
-    const probe = await request.post(
-      `${conformanceBaseUrl()}/encode`,
-      {
-        data: {
-          vector_id: "ak.vector.encoding.canonical_json.basic.v1",
-          input: { b: 2, a: 1 },
-        },
-      },
-    );
-    // Today: 200 is the target; 404 (route absent), 405 (route present but
-    // verb not wired) and 501 (route stubbed) are tolerated so the suite
-    // can run in environments where soland hasn't enabled the conformance
-    // namespace yet (e.g. release-build without
-    // SOLAND_ENABLE_CONFORMANCE_ENDPOINTS=1).
-    expect([200, 404, 405, 501]).toContain(probe.status());
-    await testInfo.attach("conformance-endpoint-probe-status", {
-      body: String(probe.status()),
-      contentType: "text/plain",
-    });
-  });
-
 });
