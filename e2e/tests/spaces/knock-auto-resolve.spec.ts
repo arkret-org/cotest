@@ -305,7 +305,7 @@ test.describe("knock auto-resolve path", () => {
     ).toContain(joinResp.status());
 
     // bob leaves, then immediately re-applies with a still-valid g-vc proof.
-    await submitLeaveApi(request, bobToken, bob.did, realmId);
+    const leave = await submitLeaveApi(request, bobToken, bob.did, realmId);
 
     const reapplyClaim = await issueClaim(request, bob.did, ["acme:employee"]);
     const resp = await submitJoinWithProofsApi(
@@ -314,6 +314,12 @@ test.describe("knock auto-resolve path", () => {
       bob.did,
       realmId,
       [{ gate_id: "g-vc", claim_presentation: reapplyClaim }],
+      {
+        invisibleActorFrontier: {
+          nextActorSeq: leave.actor_seq + 1,
+          frontierEventIds: [leave.event_id],
+        },
+      },
     );
     const body = await rejectCode(resp);
     expectGateReject(resp, body);

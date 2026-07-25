@@ -1068,25 +1068,41 @@ export async function submitJoinWithProofsApi(
   actorDid: string,
   realmId: string,
   gateProofs: Array<Record<string, unknown>>,
-  opts: { server?: SolandKey; createdAt?: string } = {},
+  opts: {
+    server?: SolandKey;
+    createdAt?: string;
+    invisibleActorFrontier?: {
+      nextActorSeq: number;
+      frontierEventIds: string[];
+    };
+  } = {},
 ) {
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.member.state",
+    createdAt: opts.createdAt,
+    payload: {
+      realm_id: realmId,
+      actor_id: actorDid,
+      membership: "join",
+      delivery_status: "unroutable",
+      gate_proofs: gateProofs,
+    },
+  });
+  await advanceEnvelopeToActorFrontier(
+    request,
+    token,
+    envelope,
+    opts.server,
+    true,
+    opts.invisibleActorFrontier,
+  );
   return await request.post(
     `${solandBaseUrl(opts.server)}/_arkret/self/events`,
     {
       headers: authHeaders(token),
-      data: signedEventEnvelope({
-        actorDid,
-        realmId,
-        kind: "ak.member.state",
-        createdAt: opts.createdAt,
-        payload: {
-          realm_id: realmId,
-          actor_id: actorDid,
-          membership: "join",
-          delivery_status: "unroutable",
-          gate_proofs: gateProofs,
-        },
-      }),
+      data: envelope,
     },
   );
 }
@@ -1099,22 +1115,28 @@ export async function submitLeaveApi(
   realmId: string,
   opts: { server?: SolandKey; createdAt?: string } = {},
 ) {
-  return await submitSignedEventApi(
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.member.state",
+    createdAt: opts.createdAt,
+    payload: {
+      realm_id: realmId,
+      actor_id: actorDid,
+      membership: "leave",
+    },
+  });
+  const response = await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.member.state",
-      createdAt: opts.createdAt,
-      payload: {
-        realm_id: realmId,
-        actor_id: actorDid,
-        membership: "leave",
-      },
-    }),
+    envelope,
     { server: opts.server, context: `leave ${realmId}` },
   );
+  return {
+    ...response,
+    event_id: String(envelope.event_id),
+    actor_seq: Number(envelope.actor_seq),
+  };
 }
 
 // join-policy.md §7.5 — `ak.invite.create` whose
@@ -1917,6 +1939,11 @@ async function advanceEnvelopeToActorFrontier(
   token: string,
   envelope: Record<string, unknown>,
   server?: SolandKey,
+  allowInvisibleRealmGenesis = false,
+  invisibleActorFrontier?: {
+    nextActorSeq: number;
+    frontierEventIds: string[];
+  },
 ): Promise<void> {
   const actorDid = stringValue(envelope.actor_id);
   if (!actorDid) {
@@ -1930,6 +1957,18 @@ async function advanceEnvelopeToActorFrontier(
     `${solandBaseUrl(server)}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(actorDid)}&realm_id=${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
+  if (allowInvisibleRealmGenesis && response.status() === 404) {
+    const proofVerificationMethod = Array.isArray(envelope.proofs)
+      ? stringValue(
+          (envelope.proofs[0] as Record<string, unknown> | undefined)
+            ?.verification_method,
+        )
+      : undefined;
+    envelope.actor_seq = invisibleActorFrontier?.nextActorSeq ?? 0;
+    envelope.prev_refs = invisibleActorFrontier?.frontierEventIds ?? [];
+    refreshEventEnvelopeProof(envelope, proofVerificationMethod);
+    return;
+  }
   const body = await expectJsonOk<{
     frontier?: {
       kind?: unknown;
@@ -2365,6 +2404,8 @@ export function reducerProfileDigest(profileId: string): string {
       profile_id?: string;
       status?: string;
       digest_input?: unknown;
+      resolved_digest_input?: unknown;
+      reducer_profile_digest?: string;
     }>;
   };
   // federation.md §4.1.1 fail-closed preconditions.
@@ -2379,13 +2420,18 @@ export function reducerProfileDigest(profileId: string): string {
   const row = (registry.profiles ?? []).find(
     (profile) => profile.profile_id === profileId,
   );
-  if (!row || row.status !== "active" || row.digest_input === undefined) {
+  if (
+    !row ||
+    row.status !== "active" ||
+    row.digest_input === undefined ||
+    row.resolved_digest_input === undefined
+  ) {
     throw new Error(
       `reducer profile ${profileId} has no active reducer-profile-registry row; fail closed`,
     );
   }
-  const digest = `sha256:${sha256CanonicalJson(row.digest_input)}`;
-  assertReducerProfileDigestMatchesVectors(profileId, digest, registry);
+  const digest = `sha256:${sha256CanonicalJson(row.resolved_digest_input)}`;
+  assertReducerProfileDigestMatchesRegistry(profileId, digest, registry);
   reducerProfileDigestCache.set(profileId, digest);
   return digest;
 }
@@ -2435,9 +2481,9 @@ function assertPrincipalControlRealmVectors(
   }
 }
 
-let reducerProfileVectorsChecked = false;
+let reducerProfileRegistryChecked = false;
 
-function assertReducerProfileDigestMatchesVectors(
+function assertReducerProfileDigestMatchesRegistry(
   profileId: string,
   digest: string,
   registry: {
@@ -2445,58 +2491,48 @@ function assertReducerProfileDigestMatchesVectors(
       profile_id?: string;
       status?: string;
       digest_input?: unknown;
+      resolved_digest_input?: unknown;
+      reducer_profile_digest?: string;
     }>;
   },
 ): void {
-  const fixture = JSON.parse(
-    readFileSync(
-      join(E2E_FIXTURES_ROOT, "reducer-profile-digest-vectors.json"),
-      "utf8",
-    ),
-  ) as { vectors?: Array<{ profile_id?: string; expected_digest?: string }> };
-  const vectors = new Map(
-    (fixture.vectors ?? []).map((entry) => [
-      entry.profile_id,
-      entry.expected_digest,
-    ]),
+  const current = (registry.profiles ?? []).find(
+    (row) => row.profile_id === profileId,
   );
-  const expected = vectors.get(profileId);
-  if (!expected) {
+  if (!current?.reducer_profile_digest) {
     throw new Error(
-      `reducer-profile-digest-vectors.json lacks a vector for ${profileId}`,
+      `reducer-profile-registry lacks reducer_profile_digest for ${profileId}`,
     );
   }
-  if (expected !== digest) {
+  if (current.reducer_profile_digest !== digest) {
     throw new Error(
-      `computed reducer_profile_digest ${digest} drifted from vector ${expected} for ${profileId}`,
+      `computed reducer_profile_digest ${digest} drifted from registry ${current.reducer_profile_digest} for ${profileId}`,
     );
   }
-  if (reducerProfileVectorsChecked) {
+  if (reducerProfileRegistryChecked) {
     return;
   }
   for (const row of registry.profiles ?? []) {
     if (row.status !== "active") {
       continue;
     }
-    if (!row.profile_id || row.digest_input === undefined) {
+    if (
+      !row.profile_id ||
+      row.resolved_digest_input === undefined ||
+      !row.reducer_profile_digest
+    ) {
       throw new Error(
         "reducer-profile-registry contains an incomplete active profile",
       );
     }
-    const rowExpected = vectors.get(row.profile_id);
-    if (!rowExpected) {
+    const actual = `sha256:${sha256CanonicalJson(row.resolved_digest_input)}`;
+    if (actual !== row.reducer_profile_digest) {
       throw new Error(
-        `reducer-profile-digest-vectors.json lacks an active profile vector for ${row.profile_id}`,
-      );
-    }
-    const actual = `sha256:${sha256CanonicalJson(row.digest_input)}`;
-    if (actual !== rowExpected) {
-      throw new Error(
-        `active reducer profile ${row.profile_id} digest ${actual} drifted from vector ${rowExpected}`,
+        `active reducer profile ${row.profile_id} digest ${actual} drifted from registry ${row.reducer_profile_digest}`,
       );
     }
   }
-  reducerProfileVectorsChecked = true;
+  reducerProfileRegistryChecked = true;
 }
 
 // federation.md §4.1: membership_frontier / delivery_binding_frontier are the

@@ -35,6 +35,7 @@ import {
   solandBaseUrl,
 } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   createRealmApi,
   currentActorDidApi,
@@ -100,6 +101,7 @@ async function submitGatedMessage(
       content: { kind: "ak.content.text", body },
     },
   });
+  await alignSignedEventToActorFrontierApi(request, token, envelope);
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,
     { headers: authHeaders(token), data: envelope },

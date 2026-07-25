@@ -33,6 +33,7 @@ import {
 import {
   ensureRegistered,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -245,24 +246,29 @@ test.describe("contact graph federation (α/β)", () => {
   }) => {
     test.setTimeout(480_000);
     const stamp = Date.now();
-    const alice = uniqueUser(`cgf-live-alice-${stamp}`);
-    const bob = uniqueUser(`cgf-live-bob-${stamp}`);
-    await Promise.all([
-      ensureRegistered(request, alice, { server: "alpha" }),
-      ensureRegistered(request, bob, { server: "beta" }),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `cgf-live-alice-${stamp}`, {
+        server: "alpha",
+      }),
+      openDpopUserPage(browser, request, `cgf-live-bob-${stamp}`, {
+        server: "beta",
+      }),
     ]);
+    test.skip(
+      !aliceFlow || !bobFlow,
+      "coauth DPoP session-grant login is unavailable",
+    );
+    if (!aliceFlow || !bobFlow) {
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
     const [aliceToken, bobToken] = await Promise.all([
       issueDevSession(request, alice, { server: "alpha" }),
       issueDevSession(request, bob, { server: "beta" }),
     ]);
-    const alicePage = await openUserPage(browser, alice, {
-      server: "alpha",
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      server: "beta",
-      sessionCredential: bobToken,
-    });
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
     try {
       await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
       const bobLocator = await resolvePrincipalLocator(

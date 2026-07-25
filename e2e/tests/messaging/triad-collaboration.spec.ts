@@ -343,8 +343,15 @@ test.describe("single-server triad collaboration", () => {
       await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message removed/i);
       await stepShot(bobPage.page, testInfo, "E-bob-redacted");
 
-      await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("chat-redacted-tombstone")).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(
+          async () => {
+            await alicePage.gotoTimelineRealm(realmId);
+            return alicePage.page.getByTestId("chat-redacted-tombstone").count();
+          },
+          { timeout: 60_000, intervals: [500, 1_000, 2_000, 5_000] },
+        )
+        .toBeGreaterThan(0);
       // The redacted body should not be visible in plain form anymore.
       await expect(alicePage.page.getByTestId("message-list")).not.toContainText(m2Edited);
       await stepShot(alicePage.page, testInfo, "E-alice-sees-tombstone");

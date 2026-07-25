@@ -948,25 +948,28 @@ export class JointUserPage {
   }
 
   async clickTimelineReply(body: string) {
-    await this.clickTimelineAction(body, "chat-reply-button");
+    await this.clickTimelineAction(body, "message-context-reply-button");
   }
 
   async clickTimelineEdit(body: string) {
-    await this.clickTimelineAction(body, "chat-edit-button");
+    await this.clickTimelineAction(body, "message-context-edit-button");
   }
 
   async clickTimelineRedact(body: string) {
-    await this.clickTimelineAction(body, "chat-redact-button");
+    await this.clickTimelineAction(body, "message-context-redact-button");
   }
 
   private async clickTimelineAction(body: string, testId: string) {
     const event = this.timelineEvent(body);
     await this.dismissPassiveBlockingPrompts();
     await expect(event).toBeVisible({ timeout: 30_000 });
-    const action = event.getByTestId(testId);
     await this.withPassivePromptRetry(async () => {
       await event.scrollIntoViewIfNeeded({ timeout: 5_000 });
       await event.hover({ timeout: 5_000 });
+      const menuButton = event.getByTestId("chat-message-menu-button");
+      await expect(menuButton).toBeVisible({ timeout: 5_000 });
+      await menuButton.click({ timeout: 5_000 });
+      const action = event.getByTestId(testId);
       await expect(action).toBeVisible({ timeout: 5_000 });
       await action.click({ timeout: 5_000 });
     });
@@ -1400,6 +1403,7 @@ export async function openUser(
     });
   }
   const context = await browser.newContext({
+    baseURL: inksonBaseUrl(opts.server),
     // Opt-in for running against a live Caddy stack whose TLS is `tls internal`
     // (self-signed). Default off so CI/headless harness runs are unaffected.
     ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",

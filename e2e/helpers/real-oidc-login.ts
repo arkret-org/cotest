@@ -62,7 +62,7 @@ export async function serverLoginViaCoauth(
 
   await expect(shell).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("login-panel")).toHaveCount(0);
-  expect(new URL(page.url()).pathname).not.toBe("/login");
+  await expect(page).not.toHaveURL(/\/login(?:[?#]|$)/, { timeout: 30_000 });
 }
 
 export async function hardLogoutViaAccountMenu(

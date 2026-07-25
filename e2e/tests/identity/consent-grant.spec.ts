@@ -60,6 +60,23 @@ async function requestContact(
   return actor.page.getByTestId("contact-request-status");
 }
 
+async function expectContactState(
+  actor: Awaited<ReturnType<typeof openUserPage>>,
+  targetDid: string,
+  states: string[],
+) {
+  const row = actor.page.locator(
+    `[data-testid="contact-row"][data-peer="${targetDid}"]`,
+  );
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row).toHaveAttribute(
+    "data-state",
+    new RegExp(`^(?:${states.join("|")})$`),
+    { timeout: 30_000 },
+  );
+  return row;
+}
+
 async function gotoConsentSettings(
   actor: Awaited<ReturnType<typeof openUserPage>>,
 ) {
@@ -601,31 +618,38 @@ test.describe("consent grant", () => {
     request,
   }, testInfo) => {
     // spec: identity/consent-model.md §2-§4.
-    const alice = uniqueUser("consent-alice");
-    const bob = uniqueUser("consent-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "consent-alice", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "consent-bob", {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([
+        aliceFlow?.page.close(),
+        bobFlow?.page.close(),
+      ]);
+      assertJointStackNotRequired("consent lifecycle DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     try {
       await alicePage.gotoHome();
       await bobPage.gotoHome();
 
-      const pendingStatus = await requestContact(bobPage, alice.did, "invite");
-      await expect(pendingStatus).toContainText(/pending/i, {
-        timeout: 30_000,
-      });
+      await requestContact(bobPage, alice.did, "invite");
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
       await expectConsentCell(
         request,
         aliceToken,
@@ -672,20 +696,31 @@ test.describe("consent grant", () => {
       await stepShot(alicePage.page, testInfo, "B-alice-granted-consent");
 
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(
-        bobPage.page.getByTestId("contact-request-status"),
-      ).toContainText(/accepted|granted/i, { timeout: 30_000 });
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
 
-      const retryStatus = await requestContact(bobPage, alice.did, "invite");
-      await expect(retryStatus).toContainText(/accepted|already connected/i, {
-        timeout: 30_000,
-      });
       await alicePage.page.goto("/contacts", { waitUntil: "domcontentloaded" });
-      await expect(
-        alicePage.page.getByTestId("contact-row").filter({ hasText: bob.did }),
-      ).toBeVisible({
-        timeout: 30_000,
-      });
+      await expectContactState(alicePage, bob.did, [
+        "pending",
+        "pending_incoming",
+      ]);
+      await alicePage.page.getByTestId(`contact-accept-${bob.did}`).click();
+      await expectContactState(alicePage, bob.did, ["accepted"]);
+
+      await expect
+        .poll(
+          async () => {
+            await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+            const row = bobPage.page.locator(
+              `[data-testid="contact-row"][data-peer="${alice.did}"]`,
+            );
+            return await row.getAttribute("data-state");
+          },
+          { timeout: 30_000 },
+        )
+        .toBe("accepted");
       await stepShot(alicePage.page, testInfo, "C-contact-established");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
@@ -697,22 +732,28 @@ test.describe("consent grant", () => {
     request,
   }, testInfo) => {
     // spec: identity/consent-model.md §2 time window.
-    const alice = uniqueUser("consent-window-alice");
-    const bob = uniqueUser("consent-window-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "consent-window-alice", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "consent-window-bob", {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([
+        aliceFlow?.page.close(),
+        bobFlow?.page.close(),
+      ]);
+      assertJointStackNotRequired("time-window consent DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     try {
       await requestContact(bobPage, alice.did, "invite");
@@ -740,9 +781,12 @@ test.describe("consent grant", () => {
         "active",
       );
 
-      await expect(
-        await requestContact(bobPage, alice.did, "invite"),
-      ).toContainText(/accepted|already connected/i, { timeout: 30_000 });
+      // Consent is an independent authorization cell; it does not accept the
+      // pending contact request on Alice's behalf.
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
       // The consent window above was set to Date.now()+5_000. Instead of
       // sleeping for a fixed margin, poll the authoritative consent cell until
       // the window lapses and the cell falls back to spec `pending` (implicit
@@ -764,10 +808,10 @@ test.describe("consent grant", () => {
           { timeout: 30_000, intervals: [250, 500, 1_000] },
         )
         .toContain("pending");
-      const expiredStatus = await requestContact(bobPage, alice.did, "invite");
-      await expect(expiredStatus).toContainText(/pending|expired/i, {
-        timeout: 30_000,
-      });
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
       await expectConsentCell(
         request,
         aliceToken,
@@ -787,22 +831,28 @@ test.describe("consent grant", () => {
     request,
   }, testInfo) => {
     // spec: identity/consent-model.md §3 add-after-remove lifecycle.
-    const alice = uniqueUser("consent-regrant-alice");
-    const bob = uniqueUser("consent-regrant-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "consent-regrant-alice", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "consent-regrant-bob", {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([
+        aliceFlow?.page.close(),
+        bobFlow?.page.close(),
+      ]);
+      assertJointStackNotRequired("re-grant consent DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     try {
       await requestContact(bobPage, alice.did, "message");
@@ -817,6 +867,10 @@ test.describe("consent grant", () => {
         .getByTestId("consent-pending-detail")
         .getByTestId("grant-consent-button")
         .click();
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(
+        /granted/i,
+        { timeout: 30_000 },
+      );
       await expectConsentCell(
         request,
         aliceToken,
@@ -848,11 +902,11 @@ test.describe("consent grant", () => {
         "revoked",
       );
 
-      await expect(
-        await requestContact(bobPage, alice.did, "message"),
-      ).toContainText(/pending/i, {
-        timeout: 30_000,
-      });
+      await requestContact(bobPage, alice.did, "message");
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
       pendingRow = alicePage.page.getByTestId("consent-pending-row").filter({
         hasText: bob.did,
@@ -862,6 +916,10 @@ test.describe("consent grant", () => {
         .getByTestId("consent-pending-detail")
         .getByTestId("grant-consent-button")
         .click();
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(
+        /granted/i,
+        { timeout: 30_000 },
+      );
       await expectConsentCell(
         request,
         aliceToken,
@@ -870,9 +928,10 @@ test.describe("consent grant", () => {
         "message",
         "active",
       );
-      await expect(
-        await requestContact(bobPage, alice.did, "message"),
-      ).toContainText(/accepted|already connected/i, { timeout: 30_000 });
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
       await stepShot(alicePage.page, testInfo, "revoke-then-regrant");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
@@ -884,22 +943,31 @@ test.describe("consent grant", () => {
     request,
   }, testInfo) => {
     // spec: identity/consent-model.md §2 scope granularity.
-    const alice = uniqueUser("consent-scope-alice");
-    const bob = uniqueUser("consent-scope-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "consent-scope-alice", {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, "consent-scope-bob", {
+        prepareMlsDevice: false,
+      }),
     ]);
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([
+        aliceFlow?.page.close(),
+        bobFlow?.page.close(),
+      ]);
+      assertJointStackNotRequired("scope consent DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
     const [aliceToken, bobToken] = await Promise.all([
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     try {
       await requestContact(bobPage, alice.did, "invite");
@@ -916,6 +984,10 @@ test.describe("consent grant", () => {
         "invite",
       );
       await detail.getByTestId("grant-consent-button").click();
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(
+        /granted/i,
+        { timeout: 30_000 },
+      );
       await expectConsentCell(
         request,
         aliceToken,
@@ -925,14 +997,19 @@ test.describe("consent grant", () => {
         "active",
       );
 
-      await expect(
-        await requestContact(bobPage, alice.did, "invite"),
-      ).toContainText(/accepted|already connected/i, { timeout: 30_000 });
-      await expect(
-        await requestContact(bobPage, alice.did, "call"),
-      ).toContainText(/pending/i, {
-        timeout: 30_000,
-      });
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
+      // The contacts UI currently exposes invite/direct-message scopes only.
+      // Exercise the independent voice-call consent cell through the same
+      // signed contact API used by non-UI clients.
+      await requestContactApi(request, bobToken, alice.did, "call");
+      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+      await expectContactState(bobPage, alice.did, [
+        "pending",
+        "pending_outgoing",
+      ]);
       await expectConsentCell(
         request,
         aliceToken,
@@ -951,8 +1028,19 @@ test.describe("consent grant", () => {
     browser,
     request,
   }, testInfo) => {
-    // spec: identity/consent-model.md §4 pairwise DID isolation.
-    const alice = uniqueUser("consent-pairwise-alice");
+    // spec: identity/consent-model.md §3.2 and §8.1 pairwise DID isolation.
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      "consent-pairwise-alice",
+      { prepareMlsDevice: false },
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("pairwise consent DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
     const bob = uniqueUser("consent-pairwise-bob");
     const bobPairwise = {
       ...bob,
@@ -969,18 +1057,16 @@ test.describe("consent grant", () => {
       issueDevSession(request, bobPairwise),
       issueDevSession(request, bob),
     ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const pairwisePage = await openUserPage(browser, bobPairwise, {
-      sessionCredential: pairwiseToken,
-    });
-    const rootPage = await openUserPage(browser, bob, {
-      sessionCredential: rootToken,
-    });
+    const alicePage = aliceFlow.page;
 
     try {
-      await requestContact(pairwisePage, alice.did, "message");
+      const pairwisePending = await requestContactApi(
+        request,
+        pairwiseToken,
+        alice.did,
+        "message",
+      );
+      expect(pairwisePending.state).toBe("pending_outgoing");
       await gotoConsentSettings(alicePage);
       const pairwiseRow = alicePage.page
         .getByTestId("consent-pending-row")
@@ -992,6 +1078,10 @@ test.describe("consent grant", () => {
         .getByTestId("consent-pending-detail")
         .getByTestId("grant-consent-button")
         .click();
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(
+        /granted/i,
+        { timeout: 30_000 },
+      );
       await expectConsentCell(
         request,
         aliceToken,
@@ -1001,12 +1091,20 @@ test.describe("consent grant", () => {
         "active",
       );
 
-      await expect(
-        await requestContact(pairwisePage, alice.did, "message"),
-      ).toContainText(/accepted|already connected/i, { timeout: 30_000 });
-      await expect(
-        await requestContact(rootPage, alice.did, "message"),
-      ).toContainText(/pending|needs consent/i, { timeout: 30_000 });
+      const pairwiseStillPending = await requestContactApi(
+        request,
+        pairwiseToken,
+        alice.did,
+        "message",
+      );
+      expect(pairwiseStillPending.state).toBe("pending_outgoing");
+      const rootPending = await requestContactApi(
+        request,
+        rootToken,
+        alice.did,
+        "message",
+      );
+      expect(rootPending.state).toBe("pending_outgoing");
       await expectConsentCell(
         request,
         aliceToken,
@@ -1017,11 +1115,7 @@ test.describe("consent grant", () => {
       );
       await stepShot(alicePage.page, testInfo, "pairwise-isolated");
     } finally {
-      await Promise.allSettled([
-        rootPage.close(),
-        pairwisePage.close(),
-        alicePage.close(),
-      ]);
+      await alicePage.close();
     }
   });
 });

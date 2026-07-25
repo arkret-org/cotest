@@ -486,7 +486,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       kind: "ak.message.create",
       realm_id: realmId,
       actor_id: actorDid,
-      actor_seq: 1,
+      actor_seq: 0,
       created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
       prev_refs: [],
@@ -717,6 +717,7 @@ function signedAppletTransactionHeaders(args: {
     args.signingKey ?? developmentAppletPrivateKey(keyid),
   );
   return {
+    "content-type": "application/json",
     "content-digest": contentDigest,
     "source-service-id": args.sourceServiceId,
     "destination-service-id": args.destinationServiceId,

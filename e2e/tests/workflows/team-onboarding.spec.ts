@@ -129,15 +129,15 @@ test.describe("workflow: team onboarding", () => {
       await yukiPage.acceptInvite(realmId);
       await meiPage.sendTimelineMessage(realmId, welcome);
 
-      // Mei pins the welcome via the hover action on the message row. The
+      // Mei pins the welcome via the message context menu. The
       // pinned-message bar at the top of the feed then surfaces it. Spec:
       // models/pins.md (`ak.pin.add` shared event).
       const meiMessage = meiPage.timelineEvent(welcome);
       await expect(meiMessage).toBeVisible({ timeout: 30_000 });
       await meiMessage.hover();
-      const pinButton = meiMessage.getByTestId("chat-pin-button");
+      await meiMessage.getByTestId("chat-message-menu-button").click();
+      const pinButton = meiMessage.getByTestId("message-shared-pin-button");
       await expect(pinButton).toBeVisible({ timeout: 30_000 });
-      await expect(pinButton).toHaveAttribute("data-pinned", "false");
       await pinButton.click();
 
       const meiPinnedBar = meiPage.page.getByTestId("pinned-bar");

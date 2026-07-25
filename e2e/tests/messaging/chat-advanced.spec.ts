@@ -538,7 +538,10 @@ test.describe("chat advanced", () => {
         .first();
       await expect(bobOnM1).toBeVisible({ timeout: 30_000 });
       await bobOnM1.hover();
-      const bobReact = bobOnM1.getByTestId("chat-react-button");
+      await bobOnM1.getByTestId("chat-message-menu-button").click();
+      const bobReact = bobOnM1.getByTestId(
+        "message-context-react-button",
+      );
       await expect(bobReact).toBeVisible({ timeout: 5_000 });
       await bobReact.click();
       const bobPicker = bobPage.page.getByTestId("chat-reaction-picker");
@@ -555,7 +558,10 @@ test.describe("chat advanced", () => {
         .first();
       await expect(carolOnM1).toBeVisible({ timeout: 30_000 });
       await carolOnM1.hover();
-      const carolReact = carolOnM1.getByTestId("chat-react-button");
+      await carolOnM1.getByTestId("chat-message-menu-button").click();
+      const carolReact = carolOnM1.getByTestId(
+        "message-context-react-button",
+      );
       await expect(carolReact).toBeVisible({ timeout: 5_000 });
       await carolReact.click();
       await carolPage.page
