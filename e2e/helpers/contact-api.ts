@@ -25,7 +25,7 @@ import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
-  b64url,
+  base64url,
   canonicalJson,
   canonicalTimestamp,
   currentActorDidApi,
@@ -511,7 +511,7 @@ async function uploadDirectConversationKeyPackage(
 ): Promise<void> {
   const stamp = `${Date.now()}-${Math.random()}`;
   const keypackageId = typedId("mls_keypackage");
-  const keyPackage = b64url(`direct-conversation-keypackage-${stamp}`);
+  const keyPackage = base64url(`direct-conversation-keypackage-${stamp}`);
   const keypackageDigest = `sha256:${createHash("sha256")
     .update(Buffer.from(keyPackage, "base64url"))
     .digest("hex")}`;

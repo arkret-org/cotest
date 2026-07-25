@@ -18,7 +18,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
-  b64url,
+  base64url,
   canonicalJson,
   canonicalTimestamp,
   addRealmMemberApi,
@@ -479,7 +479,7 @@ async function submitMlsGenesis(
   owner: JointUser,
   realmId: string,
 ): Promise<MlsGroupContext> {
-  const groupId = b64url(typedId("mls_group"));
+  const groupId = base64url(typedId("mls_group"));
   const genesisEventId = typedId("event");
   const effectiveScope = { kind: "realm" as const, realm_id: realmId };
   const group: MlsGroupContext = {
@@ -881,11 +881,11 @@ test.describe("MLS group encryption", () => {
     ]);
 
     const keypackageId = typedId("mls_keypackage");
-    const keyPackage = b64url(`opaque-keypackage-${stamp}`);
+    const keyPackage = base64url(`opaque-keypackage-${stamp}`);
     const keypackageDigest = sha256Digest(Buffer.from(keyPackage, "base64url"));
     const keypackageRef = keypackageDigest;
     const keypackageCapabilities = ["ak.mls.profile.full"];
-    const groupId = b64url(typedId("mls_group"));
+    const groupId = base64url(typedId("mls_group"));
     const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
     const createdAt = canonicalTimestamp();
     const expiresAt = canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000));
@@ -1063,7 +1063,7 @@ test.describe("MLS group encryption", () => {
     );
 
     const welcomeEventId = typedId("event");
-    const welcomeCiphertext = b64url(`opaque-mls-welcome-${stamp}`);
+    const welcomeCiphertext = base64url(`opaque-mls-welcome-${stamp}`);
     const welcomeDigest = sha256Digest(
       Buffer.from(welcomeCiphertext, "base64url"),
     );

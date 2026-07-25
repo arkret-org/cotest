@@ -34,9 +34,6 @@ export type SignedEventEnvelopeArgs = {
   /// (the union of from/to schema_refs) here, not just the payload schema id.
   requirementsSchema?: string[];
   proofVerificationMethod?: string;
-  /// @deprecated The Event wire field was renamed to seal_ref/seal_basis. This
-  /// parameter is retained so old test call sites compile, but is not emitted.
-  anchorRef?: string;
   refs?: Array<Record<string, unknown>>;
   preconditions?: Array<Record<string, unknown>>;
   effects?: Array<Record<string, unknown>>;
@@ -128,11 +125,6 @@ export function principalControlRealmForDid(did: string): string {
 
 // Re-exported authoritative base64url encoder (single source: encoding.ts).
 export { base64url };
-
-/// @deprecated string-only alias for `base64url`; retained for existing callers.
-export function b64url(value: string): string {
-  return base64url(value);
-}
 
 export function wireErrCode(body: unknown): string | undefined {
   if (!body || typeof body !== "object") {

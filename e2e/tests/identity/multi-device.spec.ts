@@ -20,7 +20,7 @@ import {
   accountSubscribeFramesApi,
   alignSignedEventToActorFrontierApi,
   authHeaders,
-  b64url,
+  base64url,
   canonicalBytes,
   canonicalJson,
   canonicalTimestamp,
@@ -128,9 +128,9 @@ test.describe("multi-device pairing + revocation", () => {
             kty: "OKP",
             kid: newDeviceId,
             alg: "EdDSA",
-            key: b64url(`pubkey:${newDeviceId}`),
+            key: base64url(`pubkey:${newDeviceId}`),
           },
-          challenge_signature: b64url(`challenge:${newDeviceId}`),
+          challenge_signature: base64url(`challenge:${newDeviceId}`),
           display_name: "Alice laptop",
           device_metadata: {
             platform: "browser",
@@ -1340,7 +1340,7 @@ test.describe("multi-device pairing + revocation", () => {
             alg: "EdDSA",
             key: device2Key.multibase,
           },
-          challenge_signature: b64url(`challenge:${device2Id}`),
+          challenge_signature: base64url(`challenge:${device2Id}`),
           display_name: "Alice short-link browser",
           device_metadata: { platform: "browser" },
         },
@@ -1703,7 +1703,7 @@ async function deliverPairingRequest(
                 purpose: "same_principal_device_authorization",
                 pairing_code: pairingCode,
                 new_device_pubkey: newDevicePubkey,
-                challenge_signature: b64url(`challenge:${requestingDeviceId}`),
+                challenge_signature: base64url(`challenge:${requestingDeviceId}`),
                 device_metadata: {
                   platform: "browser",
                   display_name: opts.displayName ?? "New device",
@@ -1946,7 +1946,7 @@ function buildMlsWelcomeEnvelope(args: {
   const capabilitiesDigest = String(args.keypackageClaim.capabilities_digest);
   const sskGeneration = Number(args.keypackageClaim.ssk_generation);
   expect(Number.isFinite(sskGeneration)).toBeTruthy();
-  const ciphertext = b64url(`opaque-mls-welcome-${args.label}`);
+  const ciphertext = base64url(`opaque-mls-welcome-${args.label}`);
   const welcomeDigest = sha256Digest(Buffer.from(ciphertext, "base64url"));
   const claimEnvelopeUnsigned = {
     keypackage_ref: keypackageRef,
@@ -2032,7 +2032,7 @@ function buildKeyPackageUploadEntry(args: {
   expiresAt: string;
   lastResort: boolean;
 }): KeyPackageUploadEntry {
-  const keyPackage = b64url(`opaque-keypackage-${args.label}`);
+  const keyPackage = base64url(`opaque-keypackage-${args.label}`);
   const keypackageDigest = sha256Digest(Buffer.from(keyPackage, "base64url"));
   return {
     keypackage_id: typedId("mls_keypackage"),

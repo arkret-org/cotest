@@ -426,11 +426,10 @@ async function createBottomConflictFixture(
       historyVisibility: "shared",
     },
   );
-  const basis = `ak:anchor:sha256:${"0".repeat(64)}`;
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
-  await submitRealmTitleUpdate(request, aliceToken, alice.did, realmId, aliceTitle, basis);
-  await submitRealmTitleUpdate(request, bobToken, bob.did, realmId, bobTitle, basis);
+  await submitRealmTitleUpdate(request, aliceToken, alice.did, realmId, aliceTitle);
+  await submitRealmTitleUpdate(request, bobToken, bob.did, realmId, bobTitle);
   const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
   return { alice, bob, aliceToken, bobToken, bobPage, realmId, aliceTitle };
 }
@@ -441,7 +440,6 @@ async function submitRealmTitleUpdate(
   actorDid: string,
   realmId: string,
   title: string,
-  anchorRef: string,
 ) {
   await submitSignedEventApi(
     request,
@@ -450,7 +448,6 @@ async function submitRealmTitleUpdate(
       actorDid,
       realmId: realmId,
       kind: "ak.realm.update",
-      anchorRef,
       payload: {
         target_ref: realmId,
         patch: {

@@ -27,7 +27,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
-  b64url,
+  base64url,
   canonicalJson,
   canonicalTimestamp,
   signedEventEnvelope,
@@ -214,7 +214,7 @@ function rrkRealmKeyShareEnvelope(args: {
       sender_device_signature: {
         kid: `${args.senderDid}#${args.senderDeviceId}`,
         alg: "EdDSA",
-        sig: b64url(`rrk-share-sig-${randomUUID()}`),
+        sig: base64url(`rrk-share-sig-${randomUUID()}`),
       },
       ciphertext: args.sealedCiphertext,
       aad_digest: aadDigest,
@@ -325,7 +325,7 @@ async function submitExporterAeadMessage(
   plaintext: string,
 ): Promise<{ eventId: string; ciphertext: string }> {
   const eventId = typedId("event");
-  const ciphertext = b64url(`exporter-aead-${epoch}-${randomUUID()}`);
+  const ciphertext = base64url(`exporter-aead-${epoch}-${randomUUID()}`);
   const envelope = signedEventEnvelope({
     actorDid: author.did,
     realmId: group.realmId,
@@ -453,7 +453,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
         // §2.10.8 eager seal: after the commit is accepted and BEFORE GC of
         // history_secret[epoch], the committer publishes a RRK-targeted share.
-        const sealedCiphertext = b64url(`rrk-sealed-hs-${epoch}-${randomUUID()}`);
+        const sealedCiphertext = base64url(`rrk-sealed-hs-${epoch}-${randomUUID()}`);
         sealedHistorySecrets.push(sealedCiphertext);
         const shareEnvelope = rrkRealmKeyShareEnvelope({
           senderDid: alice.did,
@@ -613,7 +613,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
             recipientDeviceId: "ak:device:00000000-0000-7000-8000-rrkrrkrrkrrk",
             fromEpoch: epoch,
             toEpoch: epoch,
-            sealedCiphertext: b64url(`rrk-b-sealed-${epoch}-${randomUUID()}`),
+            sealedCiphertext: base64url(`rrk-b-sealed-${epoch}-${randomUUID()}`),
           }),
         });
         expect(share.status()).toBe(200);
@@ -642,7 +642,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         }),
         { context: "dave joins after total live-member loss" },
       );
-      const daveDeviceHpkePublicKey = b64url(`dave-device-hpke-${randomUUID()}`);
+      const daveDeviceHpkePublicKey = base64url(`dave-device-hpke-${randomUUID()}`);
 
       // The RRK holder comes online transiently, HPKE-opens the sealed range
       // [1,2] with the RRK private key, then RE-SEALS history_secret[1..2] to
@@ -659,7 +659,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           fromEpoch: 1,
           toEpoch: 2,
           // Re-sealed to dave's device HPKE public key (not the RRK key).
-          sealedCiphertext: b64url(
+          sealedCiphertext: base64url(
             `reseal-to-dave-${daveDeviceHpkePublicKey}-${randomUUID()}`,
           ),
         }),
@@ -890,7 +890,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           recipientDeviceId: "ak:device:00000000-0000-7000-8000-rrkrrkrrkrrk",
           fromEpoch: 1,
           toEpoch: 1,
-          sealedCiphertext: b64url(`rrk-c3-sealed-1-${randomUUID()}`),
+          sealedCiphertext: base64url(`rrk-c3-sealed-1-${randomUUID()}`),
         }),
       });
       expect(share.status()).toBe(200);
