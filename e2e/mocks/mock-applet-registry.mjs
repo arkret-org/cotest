@@ -198,7 +198,7 @@ function safeToken(value) {
 }
 
 function nextActorSequence(actorDid) {
-  const next = (actorSequences.get(actorDid) ?? 1) + 1;
+  const next = (actorSequences.get(actorDid) ?? -1) + 1;
   actorSequences.set(actorDid, next);
   return next;
 }
@@ -234,6 +234,136 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
   };
 }
 
+function detachedJws(binding, signingKey) {
+  const protectedHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const signingInput = `${protectedHeader}.${Buffer.from(
+    canonicalJson(binding),
+    "utf8",
+  ).toString("base64url")}`;
+  const signature = sign(null, Buffer.from(signingInput, "utf8"), signingKey).toString(
+    "base64url",
+  );
+  return `${protectedHeader}..${signature}`;
+}
+
+function signedGhostProvisionEvents({
+  packageInfo,
+  authorizationRef,
+  realmId,
+  ghostActorId,
+  externalId,
+  displayName,
+}) {
+  const createdAt = rfc3339Now();
+  const notBefore = new Date(Date.now() - 1_000).toISOString();
+  const verificationMethod = packageInfo.verificationMethod;
+  const externalRef = {
+    protocol: "bridge",
+    instance_id: "joint-e2e",
+    external_id: externalId,
+  };
+  const grantWithoutProof = {
+    schema: "ak.schema.accountability_grant.v1",
+    issuer: packageInfo.serviceId,
+    subject: ghostActorId,
+    accountability_scope: "contracted_service",
+    not_before: notBefore,
+    grant_status: "active",
+  };
+  const payloadDigest = `sha256:${createHash("sha256")
+    .update("ak.accountability-grant-v1\n", "utf8")
+    .update(canonicalJson(grantWithoutProof), "utf8")
+    .digest("hex")}`;
+  const accountabilityProofBinding = {
+    context: "ak.accountability-grant-proof-v1",
+    payload_digest: payloadDigest,
+    issuer: packageInfo.serviceId,
+    subject: ghostActorId,
+    verification_method: verificationMethod,
+    created_at: createdAt,
+  };
+  const grantPayload = {
+    ...grantWithoutProof,
+    proof: {
+      kind: "detached_jws",
+      alg: "EdDSA",
+      verification_method: verificationMethod,
+      payload_digest: payloadDigest,
+      created_at: createdAt,
+      jws: detachedJws(accountabilityProofBinding, packageInfo.signingKey),
+    },
+  };
+  const accountabilityEvent = {
+    event_id: typedId("event"),
+    kind: "ak.identity.accountability_grant",
+    realm_id: realmId,
+    actor_id: packageInfo.serviceId,
+    authorization_ref: authorizationRef,
+    applet_id: packageInfo.appletId,
+    actor_seq: nextActorSequence(packageInfo.serviceId),
+    created_at: createdAt,
+    hlc: currentHlc(),
+    prev_refs: [],
+    refs: [],
+    payload: grantPayload,
+  };
+  accountabilityEvent.proofs = [
+    detachedEventProof(
+      accountabilityEvent,
+      packageInfo.serviceId,
+      verificationMethod,
+      packageInfo.signingKey,
+    ),
+  ];
+
+  const profileEvent = {
+    event_id: typedId("event"),
+    kind: "ak.profile.create",
+    realm_id: realmId,
+    actor_id: ghostActorId,
+    executed_by: packageInfo.serviceId,
+    authorization_ref: authorizationRef,
+    applet_id: packageInfo.appletId,
+    actor_seq: nextActorSequence(ghostActorId),
+    created_at: createdAt,
+    hlc: currentHlc(),
+    prev_refs: [],
+    refs: [{ id: accountabilityEvent.event_id, role: "accountability", critical: true }],
+    payload: {
+      object: {
+        id: typedId("actor_profile"),
+        schema: "ak.schema.actor_profile.v1",
+        realm_id: realmId,
+        principal_id: ghostActorId,
+        actor_kind: "integration",
+        display_name: displayName ?? externalId,
+        accountable_principal_ids: [packageInfo.serviceId],
+        profile_fields: {
+          managed_by_applet: packageInfo.appletId,
+          external_ref: {
+            schema: "ak.applet.ghost_actor.external_ref.v1",
+            protocol: "bridge",
+            tenant: "joint-e2e",
+            external_user_id: externalId,
+            realm_id: realmId,
+            external_ref: externalRef,
+          },
+        },
+        created_at: createdAt,
+      },
+    },
+  };
+  profileEvent.proofs = [
+    detachedEventProof(
+      profileEvent,
+      ghostActorId,
+      verificationMethod,
+      packageInfo.signingKey,
+    ),
+  ];
+  return { accountabilityEvent, externalRef, profileEvent };
+}
+
 function signedGhostMessageEvent({
   packageInfo,
   provision,
@@ -255,7 +385,7 @@ function signedGhostMessageEvent({
     actor_seq: nextActorSequence(provision.ghost_actor_id),
     created_at: createdAt,
     hlc: currentHlc(),
-    prev_refs: [],
+    prev_refs: [provision.profile_event_ref],
     refs: [],
     executed_by: packageInfo.serviceId,
     authorization_ref: authorizationRef,
@@ -626,6 +756,20 @@ const server = createServer(async (req, res) => {
     let provision = provisionedGhosts.get(ghostKey);
     if (!provision) {
       const ghostActorId = `did:web:ghost-${packageInfo.safe}:${safeToken(externalId)}`;
+      const provisionAuthorizationRef = body.provision_authorization_ref;
+      if (!provisionAuthorizationRef) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "missing_provision_authorization_ref" }));
+        return;
+      }
+      const signedProvision = signedGhostProvisionEvents({
+        packageInfo,
+        authorizationRef: provisionAuthorizationRef,
+        realmId: body.realm_id,
+        ghostActorId,
+        externalId,
+        displayName,
+      });
       let provisionResponse;
       try {
         provisionResponse = await fetch(
@@ -636,7 +780,7 @@ const server = createServer(async (req, res) => {
             method: "POST",
             headers: {
               "content-type": "application/json",
-              authorization,
+              authorization: body.service_authorization ?? authorization,
               "Idempotency-Key": `provision-${body.applet_id}-${safeToken(externalId)}`,
             },
             body: JSON.stringify({
@@ -649,11 +793,9 @@ const server = createServer(async (req, res) => {
               external_user_id: externalId,
               ...(displayName ? { display_name: displayName } : {}),
               realm_id: body.realm_id,
-              external_ref: {
-                protocol: "bridge",
-                instance_id: "joint-e2e",
-                external_id: externalId,
-              },
+              external_ref: signedProvision.externalRef,
+              accountability_grant_event: signedProvision.accountabilityEvent,
+              profile_event: signedProvision.profileEvent,
             }),
           },
         );

@@ -78,12 +78,20 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 - **C3 `durability_seal_missing_before_gc`**:某 epoch 的 RRK share 尚未 accepted(RYW 未满足)即
   尝试 GC `history_secret[N]` → reason=`durability_seal_missing_before_gc`,MUST 保留 secret。
 
-## 阻塞
+## 实现状态
 
-整套 scenario 当前全部 `test.fixme`,实跑依赖并行进行的 soland / inkson RRK 实现:
+C1 `durability_scheme_incompatible` 已 live 化；其精确回归命令为：
+
+```powershell
+.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -PlaywrightProject chromium -Grep 'C1 durability_scheme_incompatible' -SkipNpmInstall -SkipBrowserInstall
+```
+
+通过证据：`artifacts/runs/20260726-035104/joint-e2e/playwright-report`。
+
+Phase A、Phase B、C2、C3 仍为 `test.fixme`，依赖：
 
 - `@blocking-on rrk-soland` — `content_scheme` / `durability_policy` 投影、RRK-targeted
-  `ak.realm_key.share` 接受 + RYW、恢复读取面、3 个诊断向量的 reducer 拒绝路径
+  `ak.realm_key.share` 接受 + RYW、恢复读取面，以及 C2/C3 的拒绝路径
 - `@blocking-on rrk-inkson` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
   epoch 推进时的 eager 封存挂钩、披露横幅
 

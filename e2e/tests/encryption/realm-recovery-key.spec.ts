@@ -12,24 +12,21 @@
 //   - error-code-registry: durability_scheme_incompatible /
 //     durability_recovery_recipient_unverified / durability_seal_missing_before_gc
 //
-// STATUS: every case below is `test.fixme`. The wire contract is written to the
-// spec's real expectation, but live execution depends on the parallel soland /
-// inkson RRK implementation (durability_policy projection, RRK-targeted
-// ak.realm_key.share acceptance + RYW, recovery read surface, the three reducer
-// rejection paths, and the mls-exporter-aead-v1 content seal/open + RRK
-// HPKE seal/open in the client). Per the cotest promote protocol these
-// assertions MUST NOT be weakened to pass; they pin the spec contract until the
-// blocking implementation lands. See the inline @blocking-on markers.
+// STATUS: C1 is live. The remaining cases stay `test.fixme` until the RRK share,
+// recovery-read, GC, and Inkson cryptographic paths are implemented. Their
+// assertions pin the spec contract and MUST NOT be weakened to pass.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  alignSignedEventToActorFrontierApi,
   authHeaders,
   base64url,
   canonicalJson,
   canonicalTimestamp,
+  createRealmApi,
   signedEventEnvelope,
   singleDidNotary,
   submitSignedEventApi,
@@ -686,12 +683,9 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
 
   // C1: durability_scheme_incompatible — declaring mode != none on a Realm whose
   // content_scheme is NOT mls-exporter-aead-v1 (here the mls-rfc9420 default).
-  test.fixme(
-    // @blocking-on rrk-soland: content_scheme/durability_policy reducer that
-    //   raises failed_precondition(durability_scheme_incompatible) on an
-    //   mls-rfc9420 Realm. §2.3.1 scheme constraint + §2.10.8 applicability.
+  test(
+    // Live regression for the policy-reducer admission preflight.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C1)
-    // @expected-live-by: 2026Q3
     "C1 durability_scheme_incompatible: mode != none on an mls-rfc9420 Realm is rejected",
     async ({ request }) => {
       const { user: alice, token: aliceToken } = await registeredSession(
@@ -701,44 +695,41 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       const { user: orgRrk } = await registeredSession(request, "rrk-c1-org");
 
       // Realm created WITHOUT mls-exporter-aead-v1 (explicit mls-rfc9420).
-      const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: realmCreateEnvelope({
-          ownerDid: alice.did,
-          realmId,
-          title: "RRK incompatible scheme",
-          contentScheme: CONTENT_SCHEME_RFC9420,
-        }),
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: "RRK incompatible scheme",
+        history_visibility: "joined",
+        encryption_profile: "mls_rfc9420",
+        content_scheme: CONTENT_SCHEME_RFC9420,
       });
-      expect(create.status()).toBe(200);
 
       // Writing durability_policy.mode != none via ak.realm.policy_components MUST
       // failed_precondition with reason durability_scheme_incompatible.
-      const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.realm.policy_components",
-          payload: {
-            realm_id: realmId,
-            value: {
-              durability_policy: {
-                mode: "org_recovery_key",
-                recovery_recipients: [
-                  recoveryRecipient({
-                    recipientId: "org-primary",
-                    principalId: orgRrk.did,
-                    rrkVerificationMethod: `${orgRrk.did}#realm-history-recovery-1`,
-                  }),
-                ],
-              },
+      const policyEvent = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.realm.policy_components",
+        payload: {
+          realm_id: realmId,
+          value: {
+            durability_policy: {
+              mode: "org_recovery_key",
+              recovery_recipients: [
+                recoveryRecipient({
+                  recipientId: "org-primary",
+                  principalId: orgRrk.did,
+                  rrkVerificationMethod: `${orgRrk.did}#realm-history-recovery-1`,
+                }),
+              ],
             },
           },
-        }),
+        },
       });
-      expect([400, 409, 422]).toContain(write.status());
+      await alignSignedEventToActorFrontierApi(request, aliceToken, policyEvent);
+      const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+        headers: authHeaders(aliceToken),
+        data: policyEvent,
+      });
+      expect([400, 409, 412, 422]).toContain(write.status());
       expect(wireErrCode(await write.json())).toBe("durability_scheme_incompatible");
     },
   );

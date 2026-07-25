@@ -2,14 +2,14 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期:applet registry 提交 controller-signed `ak.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ak.applet.registration`、颁发 `bot_actor_id` 与 capability grant → typed applet ingress 为外部用户生成 `ghost_actor_id` 并写 portal 消息 → Realm 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet install 后,后续 ingress 被拒。
+验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期:applet registry 提交 controller-signed `ak.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ak.applet.registration`、颁发 `bot_actor_id` 与 capability grant → applet service 提交自己签名的 accountability grant + ghost profile aggregate，再用 ghost actor 签名写 portal 消息 → Realm 成员看到 ghost 消息且能追溯 install/accountability 链 → admin 撤销 applet install 后,后续 ingress 被拒。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
 ## Spec 锚点
 
 - `arkret-spec/spec/v1/zh/extensions/applet-integration.md` §3–§4b — Applet Package、install preview/commit/revoke 与 `bot_actor_id` 颁发
-- `arkret-spec/spec/v1/zh/extensions/applet-integration.md` §5 — Ghost actor 的 accountability 模型(`actor_id = ghost_actor_id`、DID Document 的 `accountability` 指向 bot + registry)
+- `arkret-spec/spec/v1/zh/extensions/applet-integration.md` §3.4、§9.1 — Ghost actor 初始 Profile 的 `accountable_principal_ids` 只指向签署 accountability grant 的 applet service；controller 关系由 registration/install 表达
 - `arkret-spec/spec/v1/zh/extensions/applet-schema.md` — Manifest JSON schema、portal realm 路由约定
 
 ## 拓扑
@@ -17,7 +17,7 @@
 - 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 1 × mock-applet-registry — 由 cotest runner 的 `-StartMockAppletRegistry` / `-StartMocks` 启动,通过 `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 注入;由它代表"applet developer"完成 manifest 签名与外部 webhook 转发
-- 共享同一 coauth;principal actor 与 bot/ghost actor 的 token 都来自这个 coauth(ghost token 通过 applet manifest 中 `signing_key` 派生,见 spec §5)
+- 共享同一 coauth；principal actor 与 applet service 都使用可验证 session，ghost event 则由 applet registration epoch 捕获的 service signing key 签名
 
 ## Actors
 
@@ -82,8 +82,10 @@
     }
     ```
 11. mock 内部:
-    - 调 soland typed applet ingress `POST /_soland/self/applets/{applet_id}/ghosts`,path 携带 `applet_id`,body 携带 `realm_id`、`external_user` 和 message payload
-    - soland 若该 `external_user.id` 没有对应 ghost,在 install record 下颁发 `ghost_actor_id`(DID Document 的 `accountability` 数组里包含 `bot_actor_id` + `applet_service.did`)
+    - 用 applet service session 调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`
+    - 请求携带由 registration epoch key 签名的完整 `ak.identity.accountability_grant` + `ak.profile.create` Event 对；Principal Server 只验证和原子提交，不代签、不重建
+    - ghost 消息通过 `POST /_arkret/edge/applet/transactions` 提交，`actor_id=ghost_actor_id`、`executed_by=applet_service.did`，并引用安装时颁发的 message capability
+    - Realm 为私有明文时，必须在 `plaintext_visible_services` 中显式授权 applet service 的 `message_content`
     - 返回 `{ ghost_actor_id, message_id }`
 12. 断言:返回的 `ghost_actor_id` 形如 `did:web:ghost-ext-user-x-...`
 13. **alice** 进 `/timeline/${realmId}`,timeline 包含 `"hi from outside ${stamp}"` 文本
@@ -134,6 +136,14 @@
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建 Realm 或共用 Phase A,以避免 namespace 状态干扰。
 
 ## Implementation notes
+
+- 主链已 live 化。精确回归命令：
+
+  ```powershell
+  .\scripts\run-joint-e2e.ps1 -StartCoauth -StartMockAppletRegistry -RunProfile joint-full -PlaywrightProject chromium -Grep 'applet package installs, bot joins space, ghost actor relays external messages with accountability chain' -SkipNpmInstall -SkipBrowserInstall
+  ```
+
+  通过证据：`artifacts/runs/20260726-033554/joint-e2e/playwright-report`。
 
 - soland 已提供 canonical applet runnable surface:`/_arkret/self/applets/install/preview`、`/_arkret/self/applets/install`、`/_arkret/self/applets/{applet_id}/revoke`、`/_arkret/self/applets/{applet_id}/ghosts/provision`、`/_arkret/edge/applet/transactions`,以及 `GET /_arkret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
 - mock-applet-registry 提供这些 endpoint:

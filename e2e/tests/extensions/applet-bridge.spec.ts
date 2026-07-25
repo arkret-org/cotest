@@ -73,7 +73,7 @@ function capabilityGrantRefForAction(
 }
 
 test.describe("applet bridge", () => {
-  test.fixme("applet package installs, bot joins space, ghost actor relays external messages with accountability chain", async ({
+  test("applet package installs, bot joins space, ghost actor relays external messages with accountability chain", async ({
     browser,
     request,
   }) => {
@@ -91,16 +91,21 @@ test.describe("applet bridge", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     try {
-      const realmId = await createRealmApi(request, aliceToken, {
-        title: `applet-bridge Demo Space ${stamp}`,
-        discoverability: "listed",
-        history_visibility: "joined",
-      });
       const signed = await signPackage(request, registryBase, {
         package_id: `package:bridge:demo-${stamp}`,
         namespace: `bridge.demo.${stamp}`,
         display_name: "Demo Bridge Applet",
         capabilities: ["realm:portal", "message:write", "actor:provision-ghost"],
+      });
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: `applet-bridge Demo Space ${stamp}`,
+        discoverability: "listed",
+        history_visibility: "joined",
+        plaintext_visible_services: [
+          solandServiceId(),
+          "did:web:soland.local",
+          signed.applet_package.service_id,
+        ],
       });
       const registration = await installApplet(
         request,
@@ -117,6 +122,16 @@ test.describe("applet bridge", () => {
         signed.applet_package.requested_scopes,
         "ak.message.create",
       );
+      const provisionGrantRef = capabilityGrantRefForAction(
+        registration,
+        signed.applet_package.requested_scopes,
+        "ak.applet.ghost.provision",
+      );
+      const appletService = {
+        ...uniqueUser(`applet-service-${stamp}`),
+        did: signed.applet_package.service_id,
+      };
+      const appletServiceToken = await issueDevSession(request, appletService);
 
       await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_id);
       const accept = await request.post(
@@ -135,6 +150,8 @@ test.describe("applet bridge", () => {
           applet_id: registration.applet_id,
           realm_id: realmId,
           authorization_ref: messageGrantRef,
+          provision_authorization_ref: provisionGrantRef,
+          service_authorization: `Bearer ${appletServiceToken}`,
           external_user: externalUser,
           payload: { kind: "provision" },
         },
@@ -155,6 +172,8 @@ test.describe("applet bridge", () => {
           applet_id: registration.applet_id,
           realm_id: realmId,
           authorization_ref: messageGrantRef,
+          provision_authorization_ref: provisionGrantRef,
+          service_authorization: `Bearer ${appletServiceToken}`,
           external_user: externalUser,
           payload: { kind: "message", text },
         },
@@ -207,6 +226,8 @@ test.describe("applet bridge", () => {
           applet_id: registration.applet_id,
           realm_id: realmId,
           authorization_ref: messageGrantRef,
+          provision_authorization_ref: provisionGrantRef,
+          service_authorization: `Bearer ${appletServiceToken}`,
           external_user: externalUser,
           payload: { kind: "message", text: afterRevokeText },
         },
