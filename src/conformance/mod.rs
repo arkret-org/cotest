@@ -1,5 +1,6 @@
 mod agent_mls_keypackage_authorization;
 mod agent_participation;
+mod agent_signer_evidence;
 mod agent_vectors;
 mod arkret_private_kdf_and_durability;
 mod audit_release;
@@ -85,6 +86,10 @@ pub use agent_participation::{
     run_agent_participation_selection_within_ceiling_vector,
     run_agent_participation_session_overlay_vector,
     run_agent_participation_third_party_mention_gate_vector,
+};
+pub use agent_signer_evidence::{
+    AGENT_SIGNER_EVIDENCE_FIXTURE, AGENT_SIGNER_EVIDENCE_SUITE, ALL_AGENT_SIGNER_EVIDENCE_CASES,
+    run_agent_signer_evidence_vector_suite,
 };
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,

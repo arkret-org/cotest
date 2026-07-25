@@ -473,3 +473,35 @@ selection failures.
   key and separate event-signing key.
 - Verification: joint-full targeted run `20260724-235218` passed
   `alice adds a strand description` (1/1).
+## 2026-07-25 Native Agent evidence validator expected an obsolete OR-set shape
+
+- Severity: P1
+- Status: resolved in the SDK; real Savfox joint E2E passed.
+- Evidence: Soland produced a state-root-backed Agent authorization witness
+  using the registry-defined OR-set dot `{ "tag": authorize_event_id,
+  "value": authorization_record }`, while the SDK searched for the obsolete
+  `accepted_event_id` field and downgraded a valid Agent message to
+  `needs_verification`.
+- Normative source: the reducer profile registry defines
+  `ak.component.agent.key.v1` as an OR-set whose authorization Event id is the
+  dot tag; portable evidence must verify that exact canonical state.
+- Resolution: the validator now matches the canonical tag/value record and
+  rejects legacy or partially matching shapes. Unit fixtures and the live
+  Savfox `pong` workflow cover the regression.
+
+## 2026-07-25 Trusted local service WebVH resolution was blocked by actor-DID SSRF policy
+
+- Severity: P1
+- Status: resolved in Inkson and the SDK; real Savfox joint E2E passed.
+- Evidence: Inkson correctly rejected loopback `did:webvh` hosts in its generic
+  untrusted actor resolver, but applied the same policy to the configured
+  Principal Server's own source-service DID. The freshness signature key was
+  therefore unresolved even though `describe.service_id` matched the service.
+- Normative source: Agent evidence requires independent source-signature and
+  WebVH-chain verification; a configured same-origin service is a distinct
+  trust boundary from an arbitrary actor-controlled DID URL.
+- Resolution: the generic resolver remains fail-closed. A narrowly scoped
+  fallback first proves exact `describe.service_id`, scheme/host/explicit-port
+  origin equality, then fetches only that DID's `did.json` and `did.jsonl` with
+  content and size bounds and verifies the complete WebVH chain plus exact
+  current-document equality through the SDK pure verifier.

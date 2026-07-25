@@ -403,6 +403,12 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
         authorization_event_id: paired.authorized_event_ref.clone(),
         verification_method: verification_method_1,
         signing_public_key: runtime_key_1.verifying_key().to_bytes().to_vec(),
+        public_key_digest: pair_body.signing_key_binding.public_key_digest.clone(),
+        signing_key_binding_digest:
+            arkret_signatures::agent_evidence::agent_signing_key_binding_digest(
+                &pair_body.signing_key_binding,
+            )
+            .map_err(|reason| anyhow!(reason.as_str()))?,
         expires_at: Some(now + chrono::Duration::minutes(30)),
     };
     let secure_store = MemorySecureKeyStore::new();
@@ -887,6 +893,15 @@ async fn native_agent_mls_coauth_soland_restart_replacement_live_e2e() -> Result
         authorization_event_id: replacement_pair.authorized_event_ref.clone(),
         verification_method: replacement_body.verification_method.to_string(),
         signing_public_key: runtime_key_2.verifying_key().to_bytes().to_vec(),
+        public_key_digest: replacement_body
+            .signing_key_binding
+            .public_key_digest
+            .clone(),
+        signing_key_binding_digest:
+            arkret_signatures::agent_evidence::agent_signing_key_binding_digest(
+                &replacement_body.signing_key_binding,
+            )
+            .map_err(|reason| anyhow!(reason.as_str()))?,
         expires_at: Some(now + chrono::Duration::minutes(30)),
     };
     runtime
@@ -1165,7 +1180,10 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     );
     let paused_replaced =
         pair_agent_runtime_key_as(&server, &token, &paused_replacement, "runtime-key-3").await?;
-    assert_ne!(paused_replaced.authorized_event_ref, replaced.authorized_event_ref);
+    assert_ne!(
+        paused_replaced.authorized_event_ref,
+        replaced.authorized_event_ref
+    );
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
     assert_eq!(
         agent_runtime_state(&server, &token, &agent_did).await?,
@@ -3063,18 +3081,38 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
             &pairing_expires_at,
             server.service_id(),
         )?;
+    let issued_at = canonical_now();
+    let expires_at =
+        chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
+    let authorize_event_id = arkret::EventId::new(arkret::new_prefixed_uuid7("ak:event:"))?;
+    let signing_key_binding = arkret_signatures::agent_evidence::build_agent_signing_key_binding(
+        agent_id.clone(),
+        arkret::NonEmptyString::new(verification_method.clone())
+            .map_err(|reason| anyhow!(reason))?,
+        arkret::DidUrl::new(verification_method.clone()).map_err(|reason| anyhow!(reason))?,
+        signing_key.verifying_key().to_bytes(),
+        authorize_event_id.clone(),
+        issued_at,
+        Some(expires_at),
+        controller_id.clone(),
+        arkret::DidUrl::new(controller_vm.to_owned()).map_err(|reason| anyhow!(reason))?,
+        &SigningKey::from_bytes(&controller_signing_seed),
+    )
+    .map_err(|reason| anyhow!(reason.as_str()))?;
+    let signing_key_binding_digest =
+        arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&signing_key_binding)
+            .map_err(|reason| anyhow!(reason.as_str()))?;
     let authorize_payload = arkret::AgentKeyAuthorizePayload {
         agent_id: agent_id.clone(),
         key_id: verification_method.clone(),
         verification_method: verification_method.clone(),
-        public_key_digest: Some(runtime_public_key_digest),
+        public_key_digest: runtime_public_key_digest,
+        signing_key_binding_digest,
         accountable_principal_id: controller_id.clone(),
         agent_key_scope: test_agent_requested_scope(),
         audience: vec![server.service_id().to_owned()],
-        issued_at: canonical_now(),
-        expires_at: Some(
-            chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc),
-        ),
+        issued_at,
+        expires_at: Some(expires_at),
         approval_evidence: arkret::AgentKeyApprovalEvidence {
             kind: arkret::AgentKeyApprovalEvidenceKind::PairingRequest,
             evidence_ref: None,
@@ -3115,6 +3153,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     let actor_seq = actor_frontier.next_actor_seq;
     let mut authorize_event = arkret_event_draft::build_agent_key_authorize_event(
         &authorize_payload,
+        authorize_event_id,
         provisioned.principal_control_realm_id().clone(),
         agent_id.clone(),
         controller_id.clone(),
@@ -3123,6 +3162,10 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
     )?;
     authorize_event.prev_refs = actor_frontier.frontier_event_ids;
+    authorize_event.seal_basis = Some(managed_agent_seal_basis(
+        server,
+        provisioned.principal_control_realm_id().as_str(),
+    )?);
     authorize_event.created_at = canonical_now();
     authorize_event.proofs.clear();
     arkret::signatures::sign_event(
@@ -3172,7 +3215,11 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     requested_scope_disclosure.proofs[0].event_digest =
         requested_scope_disclosure.payload_digest()?;
     Ok(builder
-        .build_key_pair_request(requested_scope_disclosure, authorize_event)?
+        .build_key_pair_request(
+            requested_scope_disclosure,
+            signing_key_binding,
+            authorize_event,
+        )?
         .body)
 }
 

@@ -832,14 +832,9 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
 
     // Cache-loss rebuild starts from the request binding alone and never
     // redelivers: the request fact is sufficient and deterministic.
-    let rebuilt = fold_sidecar_exchange(
-        &scope,
-        &exchange,
-        std::slice::from_ref(&request),
-        &[],
-        &[],
-    )?
-    .ok_or_else(|| anyhow!("rebuild fold missing"))?;
+    let rebuilt =
+        fold_sidecar_exchange(&scope, &exchange, std::slice::from_ref(&request), &[], &[])?
+            .ok_or_else(|| anyhow!("rebuild fold missing"))?;
     if rebuilt.status != AgentSidecarExchangeStatus::Delivered
         || rebuilt.source_track_ref != exchange_request_context()?.source_track_ref
     {
@@ -933,15 +928,8 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
         } else {
             vec![exchange_event_id(0x34)?]
         };
-        let control = exchange_close_control(
-            0x38,
-            5,
-            "cc",
-            action,
-            basis,
-            Some(responses),
-            failure_code,
-        )?;
+        let control =
+            exchange_close_control(0x38, 5, "cc", action, basis, Some(responses), failure_code)?;
         let folded = fold_sidecar_exchange(
             &scope,
             &exchange,
@@ -1078,7 +1066,8 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
     // Projection state invariants are closed.
     let mut invalid = device_one.clone();
     invalid.status = AgentSidecarExchangeStatus::Failed;
-    invalid.failure_code = Some(NonEmptyString::new("agent_deactivated").map_err(anyhow::Error::msg)?);
+    invalid.failure_code =
+        Some(NonEmptyString::new("agent_deactivated").map_err(anyhow::Error::msg)?);
     invalid.terminal_event_id = Some(exchange_event_id(0x38)?);
     if invalid.validate().is_ok() {
         bail!("failed with responses must violate the projection schema");
@@ -1135,8 +1124,7 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
     if serde_json::from_value::<AgentSidecarExchangeProjection>(round_trip.clone()).is_err() {
         bail!("a valid exchange projection must round-trip");
     }
-    round_trip["account_data_type"] =
-        serde_json::json!("ak.agent.sidecar_projection.v1:x");
+    round_trip["account_data_type"] = serde_json::json!("ak.agent.sidecar_projection.v1:x");
     if serde_json::from_value::<AgentSidecarExchangeProjection>(round_trip).is_ok() {
         bail!("the exchange projection DTO must reject account-data key fields");
     }

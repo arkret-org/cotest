@@ -409,9 +409,28 @@
       "surfaces": [
         "account_auth",
         "device_and_keys",
+        "device_pairing_handoff",
         "blob_storage"
       ],
       "operation_spine": [
+        {
+          "operation_id": "ak.open.device_pairing.command.stage",
+          "surfaces": [
+            "device_pairing_handoff"
+          ]
+        },
+        {
+          "operation_id": "ak.open.device_pairing.query.resolve",
+          "surfaces": [
+            "device_pairing_handoff"
+          ]
+        },
+        {
+          "operation_id": "ak.open.device_pairing.query.status",
+          "surfaces": [
+            "device_pairing_handoff"
+          ]
+        },
         {
           "operation_id": "ak.gate.account.command.pair_device",
           "surfaces": [
@@ -528,6 +547,15 @@
         }
       ],
       "coverage": [
+        {
+          "kind": "joint_e2e",
+          "path": "e2e/tests/identity/multi-device.spec.ts",
+          "markers": [
+            "/_arkret/open/device-pairing/requests",
+            "/_arkret/open/device-pairing/resolve",
+            "/_arkret/open/device-pairing/requests/status"
+          ]
+        },
         {
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/push_keys/keys_devices.rs",

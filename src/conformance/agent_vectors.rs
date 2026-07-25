@@ -685,6 +685,8 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "agent_id": "did:web:agent.example",
         "key_id": "ak:agent_key:0199000000007000800000000000aa01",
         "verification_method": "did:web:agent.example#runtime-key-1",
+        "public_key_digest": format!("sha256:{}", "1".repeat(64)),
+        "signing_key_binding_digest": format!("sha256:{}", "2".repeat(64)),
         "accountable_principal_id": "did:web:alice.example",
         "agent_key_scope": {
             "actions": ["ak.event.read"],

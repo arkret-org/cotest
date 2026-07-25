@@ -24,6 +24,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const savfoxBaseUrl = savfoxBaseUrlRaw!.replace(/\/$/, "");
       const savfoxToken = savfoxTokenRaw!;
       const inkson = jointRealm.alicePage.page;
+      const agentSlug = `savfox-live-${Date.now().toString(36)}`;
 
       await jointRealm.alicePage.gotoSettings();
       await inkson.getByTestId("settings-nav-item-agents").click();
@@ -31,7 +32,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       await inkson.getByTestId("agent-admin-create-open-button").click();
       await inkson
         .getByTestId("agent-admin-provision-agent-slug")
-        .fill(`savfox-live-${Date.now().toString(36)}`);
+        .fill(agentSlug);
       await expect(
         inkson.getByTestId("agent-admin-provision-button"),
       ).toBeEnabled();
@@ -66,11 +67,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             { exact: true },
           )
           .fill(pairingLink);
-        const requestApproval = savfox.getByRole("button", {
-          name: "Request approval",
+        const startPairing = savfox.getByRole("button", {
+          name: "Start pairing",
+          exact: true,
         });
-        await expect(requestApproval).toBeEnabled();
-        await requestApproval.click();
+        await expect(startPairing).toBeEnabled();
+        await startPairing.click();
 
         const approvalModal = inkson.getByTestId(
           "agent-runtime-approval-modal",
@@ -80,8 +82,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await inkson.getByTestId("agent-runtime-approval-code").innerText()
         ).trim();
         expect(inksonCode).toMatch(/^\d{8}$/);
+        const groupedPairingCode = `${inksonCode.slice(0, 4)} ${inksonCode.slice(4)}`;
         await expect(
-          savfox.getByText(`Pairing code: ${inksonCode}`),
+          savfox.getByText(groupedPairingCode, { exact: true }),
         ).toBeVisible();
         await expect(
           savfox.getByText(
@@ -91,11 +94,15 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         await inkson.getByTestId("agent-runtime-approval-approve").click();
         await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
-        await expect(savfox.getByText(/Approved by Inkson/)).toBeVisible({
+        await expect(
+          savfox.getByText("Agent paired and channel saved.", { exact: true }),
+        ).toBeVisible({
           timeout: 180_000,
         });
 
-        await savfox.getByRole("button", { name: "Save" }).click();
+        await savfox
+          .getByRole("button", { name: "Save changes", exact: true })
+          .click();
         await expect(
           savfox.getByRole("heading", { name: "Configure Arkret" }),
         ).toHaveCount(0, { timeout: 120_000 });
@@ -103,7 +110,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .locator(".channels-card")
           .filter({ hasText: "Arkret" });
         await expect(arkretCard).toHaveCount(1);
-        await expect(arkretCard).toContainText(/Pairing\s*Active/, {
+        await expect(arkretCard).toContainText(/Pairing\s*Paired/, {
           timeout: 120_000,
         });
         await expect
@@ -119,7 +126,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               message: "Savfox should surface the live Arkret session",
             },
           )
-          .toContain("Connected");
+          .toContain("Listening");
 
         await inkson.reload();
         await expect(inkson.getByTestId("personal-agent-admin")).toBeVisible({
@@ -130,6 +137,48 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toHaveCount(0);
         await expect(
           inkson.getByTestId("agent-admin-pairing-card"),
+        ).toHaveCount(0);
+
+        await inkson.getByTestId("realm-sidebar-tab-direct").click();
+        const ownAgentRow = inkson
+          .getByTestId("contact-sidebar-self-group")
+          .getByTestId("contact-sidebar-agent-row")
+          .filter({ hasText: agentSlug });
+        await expect(ownAgentRow).toBeVisible({ timeout: 120_000 });
+        await ownAgentRow.click();
+        await expect(inkson.getByTestId("chat-panel")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(inkson.getByTestId("chat-input")).toBeVisible({
+          timeout: 30_000,
+        });
+
+        const prompt = "请只回复 pong";
+        await inkson.getByTestId("chat-input").fill(prompt);
+        await jointRealm.alicePage.clickWithPassivePromptRetry(
+          inkson.getByTestId("send-chat-button"),
+        );
+        await expect(
+          inkson.getByTestId("chat-message").filter({ hasText: prompt }),
+        ).toBeVisible({ timeout: 30_000 });
+
+        const pongBody = inkson
+          .getByTestId("content-block-text")
+          .filter({ hasText: /^pong(?:\r?\n|$)/ });
+        const pongMessage = inkson
+          .getByTestId("chat-message")
+          .filter({ has: pongBody });
+        await expect(pongMessage).toBeVisible({ timeout: 180_000 });
+        expect((await pongBody.innerText()).split(/\r?\n/, 1)[0]).toBe("pong");
+        await expect(pongMessage).toHaveAttribute(
+          "data-crypto-state",
+          "plaintext",
+        );
+        await expect(
+          pongMessage.getByTestId("member-badge-agent"),
+        ).toBeVisible();
+        await expect(
+          pongMessage.getByTestId("crypto-status-needs-verification"),
         ).toHaveCount(0);
       } finally {
         await savfoxContext.close();

@@ -8,12 +8,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use cotest::conformance::{
-    ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS, ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS,
-    ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
-    ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
-    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
-    ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
-    load_local_fixture_value, run_agent_vector_suite, run_call_signal_vector_suite,
+    ALL_AGENT_SIGNER_EVIDENCE_CASES, ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS,
+    ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS,
+    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
+    ALL_MEDIA_BINDING_VECTOR_IDS, ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS,
+    ALL_MENTION_RENDERING_VECTOR_IDS, ALL_OBJECT_ADDRESSING_VECTOR_IDS,
+    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
+    run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_call_signal_vector_suite,
     run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
     run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
     run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
@@ -206,12 +207,19 @@ fn agent_vector_suite_runs_clean() {
     assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 10);
 }
 
+#[test]
+fn agent_signer_evidence_vector_suite_runs_clean() {
+    run_agent_signer_evidence_vector_suite()
+        .expect("Agent signer-evidence vectors must execute and pass");
+    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 32);
+}
+
 // ─── P0 / VECT-SC-1..4 — sidecar vectors ───────────────────────────────────
 
 #[test]
 fn sidecar_vector_suite_runs_clean() {
     run_sidecar_vector_suite().expect("sidecar vectors must pass");
-    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 7);
+    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 10);
 }
 
 // ─── P0 / VECT-CUR-1 — cursor vectors ──────────────────────────────────────
