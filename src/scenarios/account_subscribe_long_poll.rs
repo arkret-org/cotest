@@ -18,8 +18,7 @@ use serde_json::Value;
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
     TestServerGroup, eventually, expect_account_subscribe_delta,
-    expect_account_subscribe_realm_delta, invite_create_payload,
-    member_join_payload_with_invite_ref, message_create_text_payload,
+    expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
 };
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
@@ -225,7 +224,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         },
     )
     .await?;
-    accept_invite_join_now(bob_client, &realm_id, &invite_id).await?;
+    accept_invite_join_now(bob_client, &alice, &realm_id, &invite_id).await?;
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     let bob_baseline = eventually(
@@ -414,7 +413,7 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     )
     .await?;
 
-    cancel_invite_now(&alice, &realm_id, &invite_id).await?;
+    cancel_invite_now(&alice, &realm_id, &invite_id, bob_client.actor.as_str()).await?;
 
     eventually(
         "cancelled invite is hidden from invite listings",
@@ -525,6 +524,7 @@ async fn send_message_now(
 ) -> Result<Value> {
     submit_event_now(
         actor,
+        actor,
         realm_id,
         "ak.message.create",
         message_create_text_payload(realm_id, body)?,
@@ -540,6 +540,7 @@ async fn create_invite_now(
     let invite_id = "ak:invite:01999999-0000-7000-8000-00000000b0b1".to_owned();
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
     submit_event_now(
+        inviter,
         inviter,
         realm_id,
         "ak.invite.create",
@@ -557,14 +558,18 @@ async fn create_invite_now(
 
 async fn accept_invite_join_now(
     invitee: &crate::harness::TestActorClient,
+    seal_source: &crate::harness::TestActorClient,
     realm_id: &str,
     invite_id: &str,
 ) -> Result<Value> {
     submit_event_now(
         invitee,
+        seal_source,
         realm_id,
-        "ak.member.state",
-        member_join_payload_with_invite_ref(realm_id, invitee.actor.as_str(), invite_id)?,
+        "ak.invite.accept",
+        serde_json::json!({
+            "invite_id": invite_id,
+        }),
     )
     .await
 }
@@ -573,13 +578,16 @@ async fn cancel_invite_now(
     inviter: &crate::harness::TestActorClient,
     realm_id: &str,
     invite_id: &str,
+    invitee: &str,
 ) -> Result<Value> {
     submit_event_now(
+        inviter,
         inviter,
         realm_id,
         "ak.invite.cancel",
         serde_json::json!({
             "invite_id": invite_id,
+            "invitee": invitee,
             "reason": "admin_cancel",
         }),
     )
@@ -588,6 +596,7 @@ async fn cancel_invite_now(
 
 async fn submit_event_now(
     actor: &crate::harness::TestActorClient,
+    seal_source: &crate::harness::TestActorClient,
     realm_id: &str,
     kind: &str,
     payload: Value,
@@ -620,6 +629,25 @@ async fn submit_event_now(
     );
     event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
     event["created_at"] = Value::String(created_at.clone());
+    if arkret_wire::events::kinds::is_invite_kind(kind) {
+        let seal_frontier = crate::harness::expect_json(
+            seal_source
+                .get("/_arkret/self/events/frontier")
+                .query(&[("realm_id", realm_id)]),
+            StatusCode::OK,
+        )
+        .await?;
+        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+            serde_json::from_value(seal_frontier)?;
+        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
+            state.frontier
+        else {
+            return Err(anyhow::anyhow!(
+                "Realm selector returned the wrong frontier variant"
+            ));
+        };
+        event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+    }
     if let Some(proof) = event
         .get_mut("proofs")
         .and_then(Value::as_array_mut)

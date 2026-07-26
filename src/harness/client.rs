@@ -154,6 +154,31 @@ impl TestActorClient {
             None,
         );
         event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
+        let is_control_move = arkret_wire::events::EventKind::from(kind)
+            .descriptor()
+            .is_some_and(|descriptor| descriptor.plane == Some("control"));
+        if is_control_move
+            && event["effects"]
+                .as_array()
+                .is_some_and(|effects| !effects.is_empty())
+        {
+            let seal_frontier = expect_json(
+                self.get("/_arkret/self/events/frontier")
+                    .query(&[("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await?;
+            let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                serde_json::from_value(seal_frontier)?;
+            let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
+                state.frontier
+            else {
+                return Err(anyhow!(
+                    "Realm selector returned the wrong frontier variant"
+                ));
+            };
+            event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+        }
         refresh_event_proof(&mut event)?;
         Ok(event)
     }

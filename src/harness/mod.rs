@@ -34,9 +34,9 @@ pub use event_builder::{
 };
 pub(crate) use event_builder::{
     event_envelope_with_chain, invite_create_payload, member_join_payload_value,
-    member_join_payload_with_delivery_binding, member_join_payload_with_invite_ref,
-    member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
-    message_redact_payload, message_revise_text_payload, parse_strand_id,
+    member_join_payload_with_delivery_binding, member_transition_payload,
+    message_create_text_payload, message_create_text_payload_for_strand, message_redact_payload,
+    message_revise_text_payload, parse_strand_id,
 };
 pub use proof::{
     attach_ephemeral_proof, attach_ephemeral_proof_value, ephemeral_proof_placeholder,
@@ -234,8 +234,8 @@ pub(crate) fn realm_create_payload(
         "notary_profile": "single_did",
         "digest_algorithm": "sha256",
         "notary": {
-            "type": "single_did",
-            "did": actor,
+            "kind": "single_did",
+            "did": service_id,
             "recovery_members": ["did:webvh:z6mkfixture:recovery.soland.local"],
             "controller_organization": "did:webvh:z6mkfixture:organization.primary.soland.local",
             "recovery_controller_organizations": [

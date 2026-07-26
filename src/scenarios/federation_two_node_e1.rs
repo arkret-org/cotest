@@ -347,10 +347,10 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 }
 
 fn attach_delivery_policy_cell_contract(event: &mut Value) -> Result<()> {
-    let realm_id = event["realm_id"]
-        .as_str()
-        .context("delivery policy Event lacks realm_id")?;
-    let cell = format!("ak:cell:ak.component.realm.delivery_binding_policy.v1:{realm_id}");
+    let cell = format!(
+        "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
+        arkret_wire::NULL_SUBJECT
+    );
     let payload = event["payload"].clone();
     event["preconditions"] = json!([{
         "cell": cell,

@@ -65,7 +65,7 @@
           "alg": "EdDSA",
           "key": "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH"
         },
-        "challenge_signature": "Q0hBTExFTkdF",
+        "client_nonce": "Y290ZXN0LWRldmljZS1wYWlyaW5nLW5vbmNl",
         "display_name": "New device",
         "device_metadata": {
           "platform": "browser"

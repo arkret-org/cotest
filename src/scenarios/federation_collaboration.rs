@@ -501,7 +501,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         )?,
     )?;
     sign_federation_event_with_device(&mut e2ee_welcome, ALICE_DEVICE_ID, &alice_device_key)?;
-    let e2ee_commit = signed_federation_event(
+    let mut e2ee_commit = signed_federation_event(
         E2EE_MLS_COMMIT_EVENT_ID,
         "ak.mls.commit",
         E2EE_REALM_ID,
@@ -510,7 +510,8 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         Some(&e2ee_welcome.event_id),
         mls_commit_payload(E2EE_REALM_ID),
     )?;
-    let e2ee_message = signed_federation_event(
+    sign_federation_event_with_device(&mut e2ee_commit, ALICE_DEVICE_ID, &alice_device_key)?;
+    let mut e2ee_message = signed_federation_event(
         E2EE_MESSAGE_EVENT_ID,
         "ak.message.create",
         E2EE_REALM_ID,
@@ -519,6 +520,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         Some(&e2ee_commit.event_id),
         encrypted_message_payload(E2EE_REALM_ID),
     )?;
+    sign_federation_event_with_device(&mut e2ee_message, ALICE_DEVICE_ID, &alice_device_key)?;
     for (index, (accepted_id, event)) in [
         (E2EE_MLS_GENESIS_EVENT_ID, e2ee_genesis),
         (E2EE_MLS_WELCOME_EVENT_ID, e2ee_welcome),
@@ -742,6 +744,12 @@ async fn create_federated_realm(
         &realm_id,
         federated_realm_payload(&realm_id, alice_did, visible_services),
     )?;
+    let typed_events = events
+        .iter()
+        .cloned()
+        .map(serde_json::from_value::<Event>)
+        .collect::<Result<Vec<_>, _>>()?;
+    arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&typed_events)?;
     let created = expect_json(
         server
             .http()
@@ -793,7 +801,7 @@ fn federated_realm_payload(realm_id: &str, alice_did: &str, visible_services: &[
             "digest_algorithm": "sha256",
             "plaintext_visible_services": plaintext_visible_services,
             "notary": {
-                "type": "single_did",
+                "kind": "single_did",
                 "did": alice_did,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
@@ -844,7 +852,7 @@ fn federated_e2ee_realm_payload(realm_id: &str, alice_did: &str) -> Value {
             "notary_profile": "single_did",
             "digest_algorithm": "sha256",
             "notary": {
-                "type": "single_did",
+                "kind": "single_did",
                 "did": alice_did,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
@@ -1719,7 +1727,7 @@ async fn claim_test_keypackage(
 fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
     let cell = arkret_identifiers::CellRef::new(format!(
         "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
-        event.realm_id
+        arkret_wire::NULL_SUBJECT
     ))?;
     event.preconditions = vec![arkret_wire::Precondition {
         cell: cell.clone(),

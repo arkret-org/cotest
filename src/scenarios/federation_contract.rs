@@ -297,7 +297,7 @@ fn sign_federation_contract_event(event: &mut Event) -> Result<()> {
 fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
     let cell = arkret_identifiers::CellRef::new(format!(
         "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
-        event.realm_id
+        arkret_wire::NULL_SUBJECT
     ))?;
     event.preconditions = vec![arkret_wire::Precondition {
         cell: cell.clone(),
@@ -365,7 +365,7 @@ fn federation_realm_payload(
             "digest_algorithm": "sha256",
             "plaintext_visible_services": plaintext_visible_services,
             "notary": {
-                "type": "single_did",
+                "kind": "single_did",
                 "did": creator,
                 "recovery_members": ["did:web:recovery-federation-contract.cotest.local"],
                 "controller_organization": creator,

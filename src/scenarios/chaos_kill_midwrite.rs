@@ -166,7 +166,7 @@ fn chaos_realm_event() -> Value {
                 "digest_algorithm": "sha256",
                 "plaintext_visible_services": [SERVICE_ID],
                 "notary": {
-                    "type": "single_did",
+                    "kind": "single_did",
                     "did": ACTOR_DID,
                     "recovery_members": ["did:web:recovery-chaos-midwrite.cotest.local"],
                     "controller_organization": "did:web:chaos-midwrite.cotest.local",

@@ -464,6 +464,7 @@ pub(crate) struct PrivacySecurityFixture {
 #[derive(Debug, Deserialize)]
 pub(crate) struct NamedCase {
     pub(crate) name: String,
+    pub(crate) vector_id: Option<String>,
     pub(crate) operation_id: Option<String>,
     pub(crate) operation_ids: Option<Vec<String>>,
     pub(crate) covers_vectors: Option<Vec<String>>,
@@ -475,6 +476,8 @@ pub(crate) struct NamedCase {
     pub(crate) expected_digest: Option<String>,
     pub(crate) sender_reducer_profile_digest: Option<String>,
     pub(crate) receiver_reducer_profile_digest: Option<String>,
+    pub(crate) request_contract: Option<Value>,
+    pub(crate) cases: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Deserialize)]

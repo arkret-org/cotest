@@ -129,6 +129,12 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "seal_prerequisite_closure" => {
+                validate_seal_prerequisite_closure_case(&case)?;
+            }
+            "seal_prerequisite_partial_retry" => {
+                validate_seal_prerequisite_partial_retry_case(&case)?;
+            }
             // ak.vector.federation.reducer_profile_digest.v1 — positive leg:
             // the §4.1.1 computation over the registry's resolved_digest_input
             // MUST reproduce expected_digest, and the fixture source descriptor
@@ -233,6 +239,151 @@ pub fn run_federation_fixture_suite() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn validate_seal_prerequisite_closure_case(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some("ak.vector.federation.seal_prerequisite_closure.v1") {
+        bail!("{} has the wrong vector_id", case.name);
+    }
+    let contract = case
+        .request_contract
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} lacks request_contract", case.name))?;
+    let required_contract = json!({
+        "single_realm": true,
+        "event_count_range": [1, 500],
+        "event_phase_order": ["control", "data"],
+        "seal_count_range": [0, 4096],
+        "seal_order": ["notary_seq", "id"],
+        "seal_ids_unique": true,
+        "closure": "minimal_relative_to_receiver_accepted_seals_rooted_at_seal_ref_and_seal_basis_leaves",
+        "body_contains_idempotency_key": false
+    });
+    if contract != &required_contract {
+        bail!("{} request_contract drifted", case.name);
+    }
+    const EXPECTED: &[(&str, &str)] = &[
+        (
+            "complete_control_seal_data_closure",
+            "control_and_basis_seals_resolved_topologically_then_data_events_verified",
+        ),
+        (
+            "missing_control_seal_basis_leaf",
+            "item_rejected_federation_dependencies_pending",
+        ),
+        (
+            "missing_target_seal",
+            "item_rejected_federation_dependencies_pending",
+        ),
+        (
+            "missing_nonlocal_predecessor",
+            "item_rejected_federation_dependencies_pending",
+        ),
+        (
+            "missing_seal_delta_control_event",
+            "item_rejected_federation_dependencies_pending",
+        ),
+        ("event_seal_dependency_cycle", "permanent_schema_violation"),
+        ("invalid_seal_signature", "permanent_signature_invalid"),
+        (
+            "cross_realm_event_or_seal",
+            "permanent_schema_or_realm_mismatch",
+        ),
+        ("invalid_seal_root", "permanent_state_mismatch"),
+        (
+            "unrelated_or_unsorted_or_duplicate_seal",
+            "request_schema_violation_without_receiver_reordering",
+        ),
+        (
+            "same_batch_unsealed_grant_then_data_event",
+            "grant_not_visible_for_data_event_authorization",
+        ),
+        ("seal_transport", "no_actor_frontier_advance"),
+    ];
+    validate_named_expectations(case, EXPECTED)?;
+    record_vector_event(
+        "federation.seal_prerequisite_closure",
+        contract,
+        &json!({"cases": EXPECTED}),
+        &json!({
+            "request_contract_matches": true,
+            "validated_case_count": EXPECTED.len()
+        }),
+    );
+    Ok(())
+}
+
+fn validate_seal_prerequisite_partial_retry_case(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some("ak.vector.federation.seal_partial_retry.v1") {
+        bail!("{} has the wrong vector_id", case.name);
+    }
+    const EXPECTED: &[(&str, &str)] = &[
+        (
+            "ordinary_batch_independent_success_and_pending",
+            "http_200_partial_with_success_accounted_and_pending_reason",
+        ),
+        (
+            "ordinary_batch_all_pending",
+            "http_200_partial_with_empty_accepted_and_duplicate",
+        ),
+        (
+            "atomic_founding_unit_pending",
+            "http_503_federation_dependencies_pending_with_zero_writes",
+        ),
+        (
+            "partial_retry_after_any_success",
+            "new_body_pending_only_new_idempotency_key_and_resigned_digests",
+        ),
+        (
+            "all_pending_retry",
+            "same_body_and_idempotency_key_allowed_after_backfill",
+        ),
+        (
+            "retry_budget_exhausted",
+            "operator_diagnostic_without_unbounded_retry",
+        ),
+    ];
+    validate_named_expectations(case, EXPECTED)?;
+    record_vector_event(
+        "federation.seal_prerequisite_partial_retry",
+        &json!({"vector_id": case.vector_id}),
+        &json!({"cases": EXPECTED}),
+        &json!({"validated_case_count": EXPECTED.len()}),
+    );
+    Ok(())
+}
+
+fn validate_named_expectations(case: &super::NamedCase, expected: &[(&str, &str)]) -> Result<()> {
+    let cases = case
+        .cases
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} lacks cases", case.name))?;
+    if cases.len() != expected.len() {
+        bail!(
+            "{} expected {} cases, got {}",
+            case.name,
+            expected.len(),
+            cases.len()
+        );
+    }
+    let actual = cases
+        .iter()
+        .map(|entry| {
+            let name = entry
+                .get("case")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("{} contains a case without case", case.name))?;
+            let outcome = entry
+                .get("expected")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("{} case {name} lacks expected", case.name))?;
+            Ok((name, outcome))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    if actual != expected {
+        bail!("{} case matrix drifted", case.name);
+    }
     Ok(())
 }
 

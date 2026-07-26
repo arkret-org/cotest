@@ -105,7 +105,7 @@ fn adapter_realm_payload(realm_id: &str, actor_id: &str, title: &str) -> Value {
             "notary_profile": "single_did",
             "digest_algorithm": "sha256",
             "notary": {
-                "type": "single_did",
+                "kind": "single_did",
                 "did": actor_id,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
                 "controller_organization": "did:web:protocol-payloads.cotest.local",

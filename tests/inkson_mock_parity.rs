@@ -805,7 +805,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
             "notary_profile": "single_did",
             "digest_algorithm": "sha256",
             "notary": {
-                "type": "single_did",
+                "kind": "single_did",
                 "did": ctx.alice_did,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
                 "controller_organization": "did:web:mock-parity.cotest.local",

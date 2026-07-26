@@ -21,6 +21,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
+  readRealmSealBasis,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
   signWithRegisteredEventSigner,
@@ -157,7 +158,9 @@ export function withBroadcastEphemeralProof(
   const actorDid = envelope.actor_id;
   const deviceId = envelope.device_id;
   if (typeof actorDid !== "string" || typeof deviceId !== "string") {
-    throw new Error("broadcast ephemeral proof requires actor_id and device_id");
+    throw new Error(
+      "broadcast ephemeral proof requires actor_id and device_id",
+    );
   }
   const signer = deviceSigner(actorDid, deviceId);
   const createdAt = canonicalEventTimestamp();
@@ -266,7 +269,11 @@ export function buildCallSignalEnvelope(args: {
   // RFC 7797 detached-JWS signing input = `<protected>.<payload>`; the wire
   // `jws` blanks the payload segment (`<protected>..<sig>`).
   const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const signature = nodeSign(null, Buffer.from(signingInput, "utf8"), signer.privateKey);
+  const signature = nodeSign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    signer.privateKey,
+  );
 
   envelope.proof = {
     kind: "detached_jws",
@@ -369,6 +376,28 @@ export interface RemovedParticipant {
   removed_at?: string;
 }
 
+const callLifecycleByRealmAndCall = new Map<string, string>();
+
+async function waitForRealmSealAdvance(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  previousBasis: Record<string, unknown>,
+): Promise<void> {
+  const previousStateRoot = previousBasis.state_root;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const current = await readRealmSealBasis(request, token, realmId);
+    if (current.state_root !== previousStateRoot) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `Realm Seal did not advance after Control Move in ${realmId}`,
+  );
+}
+
 export async function seedCallState(
   request: APIRequestContext,
   ownerToken: string,
@@ -382,27 +411,72 @@ export async function seedCallState(
     removedParticipants?: RemovedParticipant[];
   } = {},
 ): Promise<void> {
+  if ((opts.participants?.length ?? 0) > 1) {
+    throw new Error("ak.call.state carries at most one roster_delta per event");
+  }
+  if ((opts.removedParticipants?.length ?? 0) > 1) {
+    throw new Error(
+      "ak.call.state carries at most one moderation_delta per event",
+    );
+  }
   const eventId = typedId("event");
+  const lifecycleKey = `${realmId}\u001f${callId}`;
+  const previousState = callLifecycleByRealmAndCall.get(lifecycleKey) ?? null;
+  const nextState = opts.state ?? "active";
   const payload: Record<string, unknown> = {
     call_id: callId,
-    state: opts.state ?? "active",
+    state_transition: {
+      from: previousState,
+      to: nextState,
+    },
   };
+  const effects: Array<Record<string, unknown>> = [
+    {
+      cell: `ak:cell:ak.component.call.state.v1:${callId}`,
+      op: { kind: "transition", from: previousState, to: nextState },
+    },
+  ];
   if (opts.sessionFocus) {
-    payload.session_focus = opts.sessionFocus;
+    const focus = { mode: "sfu", session_focus: opts.sessionFocus };
+    payload.focus = focus;
+    effects.push({
+      cell: `ak:cell:ak.component.call.focus.v1:${callId}`,
+      op: { kind: "set", value: focus },
+    });
   }
-  if (opts.participants) {
-    payload.participants = opts.participants;
+  const participant = opts.participants?.[0];
+  if (participant) {
+    payload.roster_delta = { op: "join", participant };
+    effects.push({
+      cell: `ak:cell:ak.component.call.roster.v1:${callId}`,
+      op: { kind: "add", tag: eventId, value: participant },
+    });
   }
-  if (opts.removedParticipants) {
-    payload.removed_participants = opts.removedParticipants.map((entry) => ({
-      removal_event_id: eventId,
-      actor_id: entry.actor_id,
-      ...(entry.device_id ? { device_id: entry.device_id } : {}),
-      action: entry.action,
+  const removedParticipant = opts.removedParticipants?.[0];
+  if (removedParticipant) {
+    const removal = {
+      actor_id: removedParticipant.actor_id,
+      ...(removedParticipant.device_id
+        ? { device_id: removedParticipant.device_id }
+        : {}),
+      action: removedParticipant.action,
       removed_by: ownerDid,
-      removed_at: entry.removed_at ?? canonicalTimestamp(),
-    }));
+      removed_at: removedParticipant.removed_at ?? canonicalTimestamp(),
+    };
+    payload.moderation_delta = {
+      op: "remove_participant",
+      removal,
+    };
+    effects.push({
+      cell: `ak:cell:ak.component.call.moderation.v1:${callId}`,
+      op: {
+        kind: "add",
+        tag: eventId,
+        value: removal,
+      },
+    });
   }
+  const sealBasis = await readRealmSealBasis(request, ownerToken, realmId);
   await submitSignedEventApi(
     request,
     ownerToken,
@@ -411,10 +485,14 @@ export async function seedCallState(
       actorDid: ownerDid,
       realmId,
       kind: "ak.call.state",
+      sealBasis,
+      effects,
       payload,
     }),
     { context: `seed ak.call.state ${callId}` },
   );
+  await waitForRealmSealAdvance(request, ownerToken, realmId, sealBasis);
+  callLifecycleByRealmAndCall.set(lifecycleKey, nextState);
 }
 
 /** Mint a fresh `ak:call:<uuidv7>` id. The media token issuer + signaling are
@@ -477,16 +555,18 @@ export async function relayedCallSignals(
   realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
   const frames = await accountSubscribeFramesApi(request, token);
-  const frame = frames.find((candidate) => candidate.kind === "delta") as {
-    realms?: Record<
-      string,
-      {
-        ephemeral?: {
-          events?: Array<Record<string, unknown>>;
-        };
+  const frame = frames.find((candidate) => candidate.kind === "delta") as
+    | {
+        realms?: Record<
+          string,
+          {
+            ephemeral?: {
+              events?: Array<Record<string, unknown>>;
+            };
+          }
+        >;
       }
-    >;
-  } | undefined;
+    | undefined;
   const events = frame?.realms?.[realmId]?.ephemeral?.events ?? [];
   return events.filter((event) => event.kind === "ak.call.signal");
 }
@@ -536,6 +616,12 @@ export async function configureMediaService(
   serviceId: string,
   foci: MediaFocusConfig[],
 ): Promise<void> {
+  const payload = {
+    service_id: serviceId,
+    foci,
+  };
+  const cell = "ak:cell:ak.component.realm.media_service.v1:null";
+  const sealBasis = await readRealmSealBasis(request, token, realmId);
   await submitSignedEventApi(
     request,
     token,
@@ -543,13 +629,14 @@ export async function configureMediaService(
       actorDid: ownerDid,
       realmId,
       kind: "ak.realm.media_service",
-      payload: {
-        service_id: serviceId,
-        foci,
-      },
+      sealBasis,
+      preconditions: [{ cell, predicate: { op: "head_eq", value: null } }],
+      effects: [{ cell, op: { kind: "set", value: payload } }],
+      payload,
     }),
     { context: `configure media_service for ${realmId}` },
   );
+  await waitForRealmSealAdvance(request, token, realmId, sealBasis);
 }
 
 export interface MediaParticipantBinding {

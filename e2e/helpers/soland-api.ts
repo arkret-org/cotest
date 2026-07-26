@@ -182,7 +182,7 @@ export function wireErrReason(body: unknown): string | undefined {
 
 export function singleDidNotary(did: string): Record<string, unknown> {
   return {
-    type: "single_did",
+    kind: "single_did",
     did,
     recovery_members: ["did:web:recovery.soland.local"],
     controller_organization: "did:web:organization.primary.soland.local",
@@ -396,8 +396,7 @@ export async function createRealmApi(
     },
     effects: [
       {
-        cell:
-          `ak:cell:ak.component.capability.grant.v1:${foundingGrantId}`,
+        cell: `ak:cell:ak.component.capability.grant.v1:${foundingGrantId}`,
         op: {
           kind: "add",
           tag: `${foundingGrantEventId}:0`,
@@ -485,12 +484,13 @@ export async function createRealmApi(
     });
     const policyEventId = stringValue(policyEvent.event_id);
     if (!policyEventId) {
-      throw new Error("Realm delivery binding policy Event is missing event_id");
+      throw new Error(
+        "Realm delivery binding policy Event is missing event_id",
+      );
     }
     bootstrapEvents.push(policyEvent);
 
-    const memberCell =
-      `ak:cell:ak.component.member.state.v1:${ownerDid}`;
+    const memberCell = `ak:cell:ak.component.member.state.v1:${ownerDid}`;
     bootstrapEvents.push(
       signedEventEnvelope({
         actorDid: ownerDid,
@@ -534,8 +534,7 @@ export async function createRealmApi(
               "key_packages",
             ],
             service_endpoint: solandBaseUrl(opts.server),
-            did_document_digest:
-              `sha256:${sha256CanonicalJson(didDocument)}`,
+            did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
             resolved_at: createdAt,
           },
         },
@@ -543,12 +542,10 @@ export async function createRealmApi(
     );
   }
 
-  await submitSignedEventBatchApi(
-    request,
-    token,
-    bootstrapEvents,
-    { server: opts.server, context: `create realm ${data.title}` },
-  );
+  await submitSignedEventBatchApi(request, token, bootstrapEvents, {
+    server: opts.server,
+    context: `create realm ${data.title}`,
+  });
 
   // A remote Principal Server must accept the Realm founding unit before it
   // can authenticate the creator as a member of this binding Realm or verify
@@ -567,17 +564,13 @@ export async function createRealmApi(
     if (!destinationServer) {
       continue;
     }
-    const bootstrapPush = await pushFederationEvents(
-      request,
-      bootstrapEvents,
-      {
-        origin: sourceServiceId,
-        destination: destinationServiceId,
-        server: destinationServer,
-        realmId,
-        idempotencyKey: `${sourceServiceId}#realm-bootstrap#${realmId}`,
-      },
-    );
+    const bootstrapPush = await pushFederationEvents(request, bootstrapEvents, {
+      origin: sourceServiceId,
+      destination: destinationServiceId,
+      server: destinationServer,
+      realmId,
+      idempotencyKey: `${sourceServiceId}#realm-bootstrap#${realmId}`,
+    });
     expect(
       bootstrapPush.rejected ?? [],
       `federate Realm founding unit to ${destinationServiceId}`,
@@ -589,85 +582,54 @@ export async function createRealmApi(
   }
 
   for (const invitee of data.invitees ?? []) {
-    const recipientServiceId = data.invitee_service_ids?.[invitee];
-    if (recipientServiceId) {
-      const evidence = { kind: "explicit_address" };
-      const inviteId = typedId("invite");
-      const sealBasis = await readRealmSealBasis(
-        request,
-        token,
-        realmId,
-        opts.server,
-      );
-      const directedInviteEvent = signedEventEnvelope({
-        actorDid: ownerDid,
-        realmId,
-        kind: "ak.invite.create",
-        sealBasis,
-        effects: [
-          {
-            cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
-            op: { kind: "transition", from: null, to: "pending" },
-          },
-          {
-            cell: `ak:cell:ak.component.member.state.v1:${invitee}`,
-            op: { kind: "transition", from: "leave", to: "invite" },
-          },
-        ],
-        payload: {
-          invite_id: inviteId,
-          invitee,
-          invite_delivery_target: {
-            recipient_service_id: recipientServiceId,
-            recipient_service_kind: "principal_server",
-          },
-          introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
-          expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-        },
-      });
-      await advanceEnvelopeToActorFrontier(
-        request,
-        token,
-        directedInviteEvent,
-        opts.server,
-      );
-      await submitSignedEventApi(
-        request,
-        token,
-        directedInviteEvent,
-        { server: opts.server, context: `directed invite ${invitee}` },
-      );
-      continue;
-    }
-
-    const memberInviteEvent = signedEventEnvelope({
+    const recipientServiceId =
+      data.invitee_service_ids?.[invitee] ?? solandServiceId(opts.server);
+    const evidence = { kind: "explicit_address" };
+    const inviteId = typedId("invite");
+    const sealBasis = await readRealmSealBasis(
+      request,
+      token,
+      realmId,
+      opts.server,
+    );
+    const inviteEvent = signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ak.member.state",
+      kind: "ak.invite.create",
+      sealBasis,
       effects: [
+        {
+          cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
+          op: { kind: "transition", from: null, to: "pending" },
+        },
         {
           cell: `ak:cell:ak.component.member.state.v1:${invitee}`,
           op: { kind: "transition", from: "leave", to: "invite" },
         },
       ],
       payload: {
-        realm_id: realmId,
-        actor_id: invitee,
-        membership: "invite",
+        invite_id: inviteId,
+        invitee,
+        invite_delivery_target: {
+          recipient_service_id: recipientServiceId,
+          recipient_service_kind: "principal_server",
+        },
+        introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
+        expires_at: canonicalTimestamp(
+          new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ),
       },
     });
     await advanceEnvelopeToActorFrontier(
       request,
       token,
-      memberInviteEvent,
+      inviteEvent,
       opts.server,
     );
-    await submitSignedEventApi(
-      request,
-      token,
-      memberInviteEvent,
-      { server: opts.server, context: `invite ${invitee}` },
-    );
+    await submitSignedEventApi(request, token, inviteEvent, {
+      server: opts.server,
+      context: `directed invite ${invitee}`,
+    });
   }
 
   return realmId;
@@ -887,9 +849,11 @@ export type CapabilityGrantEventArgs = {
 // widening, revoked-parent re-delegation, ...) can submit the same canonical
 // envelope shape raw and assert the reducer rejection instead of the 200 the
 // happy-path helper pins.
-export function buildCapabilityGrantEnvelope(
-  args: CapabilityGrantEventArgs,
-): { envelope: Record<string, unknown>; grantId: string; eventId: string } {
+export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
+  envelope: Record<string, unknown>;
+  grantId: string;
+  eventId: string;
+} {
   const grantId = typedId("grant");
   const eventId = typedId("event");
   const issuedAt = canonicalTimestamp();
@@ -1057,12 +1021,10 @@ export async function submitKnockApi(
       membership: "knock",
     },
   });
-  const outcome = await submitSignedEventApi(
-    request,
-    token,
-    envelope,
-    { server: opts.server, context: `knock ${realmId}` },
-  );
+  const outcome = await submitSignedEventApi(request, token, envelope, {
+    server: opts.server,
+    context: `knock ${realmId}`,
+  });
   const knockRef = String(envelope.event_id ?? "");
   if (knockRef) {
     knockRefCache.set(
@@ -1355,12 +1317,10 @@ export async function submitLeaveApi(
       membership: "leave",
     },
   });
-  const response = await submitSignedEventApi(
-    request,
-    token,
-    envelope,
-    { server: opts.server, context: `leave ${realmId}` },
-  );
+  const response = await submitSignedEventApi(request, token, envelope, {
+    server: opts.server,
+    context: `leave ${realmId}`,
+  });
   return {
     ...response,
     event_id: String(envelope.event_id),
@@ -1381,11 +1341,28 @@ export async function submitInviteCreateApi(
 ) {
   const inviteId = typedId("invite");
   const expiresAt = canonicalTimestamp(new Date(Date.now() + 86_400_000));
+  const sealBasis = await readRealmSealBasis(
+    request,
+    token,
+    realmId,
+    opts.server,
+  );
   const envelope = signedEventEnvelope({
     actorDid: inviterDid,
     realmId,
     kind: "ak.invite.create",
+    sealBasis,
     refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
+    effects: [
+      {
+        cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
+        op: { kind: "transition", from: null, to: "pending" },
+      },
+      {
+        cell: `ak:cell:ak.component.member.state.v1:${subjectDid}`,
+        op: { kind: "transition", from: "leave", to: "invite" },
+      },
+    ],
     // Directed invite-create payload shape per event-payload.schema.json
     // `invite_payload` (variant: invitee + invite_delivery_target +
     // introduction_evidence_digest + expires_at). The subject is carried by
@@ -1396,17 +1373,13 @@ export async function submitInviteCreateApi(
       invitee: subjectDid,
       invite_delivery_target: {
         recipient_service_id: solandServiceId(opts.server),
+        recipient_service_kind: "principal_server",
       },
-      introduction_evidence_digest: `sha256:${sha256CanonicalJson({ inviteId, subjectDid })}`,
+      introduction_evidence_digest: `sha256:${sha256CanonicalJson({ kind: "explicit_address" })}`,
       expires_at: expiresAt,
     },
   });
-  await advanceEnvelopeToActorFrontier(
-    request,
-    token,
-    envelope,
-    opts.server,
-  );
+  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   return await request.post(
     `${solandBaseUrl(opts.server)}/_arkret/self/events`,
     {
@@ -1461,6 +1434,24 @@ export async function acceptInviteApi(
   inviteId: string,
   opts: { server?: SolandKey } = {},
 ) {
+  const resolutionResponse = await request.post(
+    `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`,
+    {
+      headers: authHeaders(token),
+      data: { realm_id: realmId, requester: actorDid },
+    },
+  );
+  const resolution = await expectJsonOk<{
+    join_candidates?: Array<{
+      join_methods?: string[];
+      seal_basis?: Record<string, unknown>;
+    }>;
+  }>(resolutionResponse, `resolve invite join candidate for ${realmId}`);
+  const sealBasis = resolution.join_candidates?.find((candidate) =>
+    candidate.join_methods?.includes("invite_accept"),
+  )?.seal_basis;
+  expect(sealBasis, "invite-accept join candidate Seal basis").toBeTruthy();
+
   return await submitSignedEventApi(
     request,
     token,
@@ -1468,6 +1459,18 @@ export async function acceptInviteApi(
       actorDid,
       realmId,
       kind: "ak.invite.accept",
+      actorSeq: 0,
+      sealBasis,
+      effects: [
+        {
+          cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
+          op: { kind: "transition", from: "pending", to: "accepted" },
+        },
+        {
+          cell: `ak:cell:ak.component.member.state.v1:${actorDid}`,
+          op: { kind: "transition", from: "invite", to: "join" },
+        },
+      ],
       payload: {
         invite_id: inviteId,
       },
@@ -1538,12 +1541,7 @@ export async function sendMessageApi(
     },
   });
   if (opts.actorSeq === undefined) {
-    await advanceEnvelopeToActorFrontier(
-      request,
-      token,
-      envelope,
-      opts.server,
-    );
+    await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   }
   await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
@@ -2136,9 +2134,7 @@ function requiresActorFrontierRefresh(
   );
 }
 
-function refreshBatchActorChain(
-  events: Array<Record<string, unknown>>,
-): void {
+function refreshBatchActorChain(events: Array<Record<string, unknown>>): void {
   for (let index = 1; index < events.length; index += 1) {
     const previous = events[index - 1];
     const current = events[index];
@@ -2176,11 +2172,15 @@ export async function advanceEnvelopeToActorFrontier(
 ): Promise<void> {
   const actorDid = stringValue(envelope.actor_id);
   if (!actorDid) {
-    throw new Error("Event envelope actor_id is required to refresh its frontier");
+    throw new Error(
+      "Event envelope actor_id is required to refresh its frontier",
+    );
   }
   const realmId = stringValue(envelope.realm_id);
   if (!realmId) {
-    throw new Error("Event envelope realm_id is required to refresh its frontier");
+    throw new Error(
+      "Event envelope realm_id is required to refresh its frontier",
+    );
   }
   const response = await request.get(
     `${solandBaseUrl(server)}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(actorDid)}&realm_id=${encodeURIComponent(realmId)}`,
@@ -2212,17 +2212,23 @@ export async function advanceEnvelopeToActorFrontier(
     body.frontier.realm_id !== realmId ||
     body.frontier.actor_id !== actorDid
   ) {
-    throw new Error("combined Event frontier response does not match its selector");
+    throw new Error(
+      "combined Event frontier response does not match its selector",
+    );
   }
   const actorSeq = body.frontier.next_actor_seq;
   if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq)) {
-    throw new Error(`Realm actor frontier for ${actorDid} has no valid next_actor_seq`);
+    throw new Error(
+      `Realm actor frontier for ${actorDid} has no valid next_actor_seq`,
+    );
   }
   if (
     !Array.isArray(body.frontier.frontier_event_ids) ||
     body.frontier.frontier_event_ids.some((value) => typeof value !== "string")
   ) {
-    throw new Error(`Realm actor frontier for ${actorDid} has invalid frontier_event_ids`);
+    throw new Error(
+      `Realm actor frontier for ${actorDid} has invalid frontier_event_ids`,
+    );
   }
   const proofVerificationMethod = Array.isArray(envelope.proofs)
     ? stringValue(
@@ -2277,12 +2283,7 @@ export async function alignSignedEventToActorFrontierApi(
   envelope: Record<string, unknown>,
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
-  await advanceEnvelopeToActorFrontier(
-    request,
-    token,
-    envelope,
-    opts.server,
-  );
+  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
 }
 
 // COT-06-004: discover a Realm's default discussion Strand via the projection face
@@ -2486,10 +2487,16 @@ export async function rawPushFederationEvents(
     },
   );
   const sourceDid = opts.relaySourceDid ?? opts.origin;
-  const headers = signedFederationPushHeaders(sourceDid, destination, url, body, {
-    expireSignature: opts.expireSignature,
-    idempotencyKey: opts.idempotencyKey,
-  });
+  const headers = signedFederationPushHeaders(
+    sourceDid,
+    destination,
+    url,
+    body,
+    {
+      expireSignature: opts.expireSignature,
+      idempotencyKey: opts.idempotencyKey,
+    },
+  );
   if (opts.tamperSignature) {
     headers.signature = `sig1=:${Buffer.alloc(64).toString("base64")}:`;
   }
@@ -2935,9 +2942,7 @@ function signedFederationPushHeaders(
   const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
   const keyid = `${sourceDid}#federation-fanout-key`;
-  const idempotencyComponent = opts.idempotencyKey
-    ? ' "idempotency-key"'
-    : "";
+  const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
     `"destination-service-id" "source-trust-domain" "destination-trust-domain" ` +
@@ -2972,9 +2977,7 @@ function signedFederationPushHeaders(
     "destination-trust-domain": destinationTrustDomain,
     "signature-input": `sig1=${signatureParams}`,
     signature: `sig1=:${signature.toString("base64")}:`,
-    ...(opts.idempotencyKey
-      ? { "idempotency-key": opts.idempotencyKey }
-      : {}),
+    ...(opts.idempotencyKey ? { "idempotency-key": opts.idempotencyKey } : {}),
   };
 }
 
@@ -3181,10 +3184,11 @@ let capabilityActionRegistryDigest: string | undefined;
 
 /** The digest of the SDK-embedded complete capability-action registry. */
 export function sdkCapabilityActionRegistryDigest(): string {
-  capabilityActionRegistryDigest ??= cotestWire<CotestWireCapabilityRegistryDigest>(
-    "capability-action-registry-digest",
-    {},
-  ).digest;
+  capabilityActionRegistryDigest ??=
+    cotestWire<CotestWireCapabilityRegistryDigest>(
+      "capability-action-registry-digest",
+      {},
+    ).digest;
   return capabilityActionRegistryDigest;
 }
 

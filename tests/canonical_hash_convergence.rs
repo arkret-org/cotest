@@ -69,7 +69,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // re-introduced a hand-rolled canonical encoder. To regenerate:
             // `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:15c143d5c08983ae167c2096cd5e06a13ad2d9c097f76a895e2f144df7051054",
+            expected_digest: "sha256:e2781d4bb3e018406edd85299e6099811468492a78336c5f42f6f85e045e6f94",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
@@ -144,7 +144,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:49a84641fe86c2b1992e8d3c9449cc104ece8515e5c8666650f54edafd6a0195",
+            expected_digest: "sha256:3d352911e07b9b9bc035084579763b20cefd205032f542e77f518fa37bd4754a",
         },
     ]
 }

@@ -2,6 +2,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import {
   authHeaders,
+  acceptInviteApi,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -54,7 +55,10 @@ export async function createRealmViaApi(
   token: string,
   opts: ApiRealmOpts,
 ): Promise<string> {
-  expect(opts.ownerDid, "createRealmViaApi requires opts.ownerDid for canonical events").toBeTruthy();
+  expect(
+    opts.ownerDid,
+    "createRealmViaApi requires opts.ownerDid for canonical events",
+  ).toBeTruthy();
   return await createRealmApi(
     request,
     token,
@@ -91,23 +95,12 @@ export async function acceptInviteViaApi(
     invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
   };
   const invite = (body.invites ?? []).find(
-    (candidate) => candidate.realm_id === realmId && candidate.invitee === actorDid,
+    (candidate) =>
+      candidate.realm_id === realmId && candidate.invitee === actorDid,
   );
   expect(invite, `pending invite for ${actorDid} in ${realmId}`).toBeTruthy();
 
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.invite.accept",
-      payload: {
-        invite_id: invite!.id,
-      },
-    }),
-    { server: opts.server, context: `accept invite ${invite!.id}` },
-  );
+  await acceptInviteApi(request, token, actorDid, realmId, invite!.id, opts);
 }
 
 export async function createSharedRealmViaApi(
@@ -161,8 +154,13 @@ export async function sendPlaintextMessageViaApi(
   body: string,
   opts: { actorDid?: string; server?: SolandKey } = {},
 ): Promise<ApiMessage> {
-  expect(opts.actorDid, "sendPlaintextMessageViaApi requires opts.actorDid for canonical events").toBeTruthy();
-  const strandId = await resolveDefaultStrandId(request, token, realmId, { server: opts.server });
+  expect(
+    opts.actorDid,
+    "sendPlaintextMessageViaApi requires opts.actorDid for canonical events",
+  ).toBeTruthy();
+  const strandId = await resolveDefaultStrandId(request, token, realmId, {
+    server: opts.server,
+  });
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
     realmId,
@@ -217,7 +215,10 @@ export async function listReadMarkersViaApi(
   });
   return events
     .filter((event) => {
-      return event.kind === "ak.read_cursor.advance" || event.event_kind === "ak.read_cursor.advance";
+      return (
+        event.kind === "ak.read_cursor.advance" ||
+        event.event_kind === "ak.read_cursor.advance"
+      );
     })
     .map((event) => (event.payload ?? event) as ReadMarker);
 }

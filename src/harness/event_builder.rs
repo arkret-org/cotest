@@ -15,6 +15,7 @@ use arkret_models_collaboration::governance::membership_invite::{
     InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
 };
 use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
+use arkret_wire::{CellRef, Effect, Event, LatticeOp, LatticeOpType};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -270,11 +271,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         "realm_id": realm_id,
         "issuer": actor,
         "subject": actor,
-        "actions": [
-            "ak.realm.admin",
-            "ak.capability.grant",
-            "ak.capability.revoke"
-        ],
+        "actions": arkret_policy::realm_bootstrap::REALM_FOUNDING_GRANT_ACTIONS,
         "capability_action_registry_digest": registry_digest,
         "resources": [{
             "kind": "realm",
@@ -602,6 +599,19 @@ fn event_envelope_with_chain_and_signing_identity(
     )
     .expect("SDK Event builder accepts cotest envelope");
     event.prev_refs = prev_event_ids;
+    match event.kind.as_str() {
+        arkret_wire::EventKind::REALM_CREATE => {
+            event.effects =
+                arkret_bootstrap::realm_create_effects(&event).expect("valid Realm create effects");
+        }
+        arkret_wire::EventKind::INVITE_ACCEPT
+        | arkret_wire::EventKind::INVITE_CANCEL
+        | arkret_wire::EventKind::INVITE_CREATE
+        | arkret_wire::EventKind::INVITE_REVOKE => {
+            event.effects = invite_effects(&event).expect("valid invite effects");
+        }
+        _ => {}
+    }
     event.unsigned.insert(
         "local_operation_idempotency_alias".to_owned(),
         json!(format!("ak:operation:{suffix}")),
@@ -619,6 +629,78 @@ fn event_envelope_with_chain_and_signing_identity(
     )
     .expect("SDK Event signer accepts cotest envelope");
     serde_json::to_value(event).expect("SDK Event serializes")
+}
+
+fn invite_effects(event: &Event) -> Result<Vec<Effect>> {
+    let invite_id = event
+        .payload
+        .get("invite")
+        .and_then(|invite| invite.get("id"))
+        .or_else(|| event.payload.get("invite_id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("invite Event payload is missing invite_id"))?;
+    let lifecycle_to = match event.kind.as_str() {
+        arkret_wire::EventKind::INVITE_CREATE => "pending",
+        arkret_wire::EventKind::INVITE_ACCEPT => "accepted",
+        arkret_wire::EventKind::INVITE_CANCEL | arkret_wire::EventKind::INVITE_REVOKE => "revoked",
+        kind => return Err(anyhow!("unsupported invite Event kind {kind}")),
+    };
+    let lifecycle_from = Some(
+        if event.kind.as_str() == arkret_wire::EventKind::INVITE_CREATE {
+            Value::Null
+        } else {
+            json!("pending")
+        },
+    );
+    let mut effects = vec![fsm_effect(
+        "ak.component.invite.lifecycle.v1",
+        invite_id,
+        lifecycle_from,
+        json!(lifecycle_to),
+    )?];
+
+    let invitee = if event.kind.as_str() == arkret_wire::EventKind::INVITE_ACCEPT {
+        Some(event.actor_id.as_str())
+    } else {
+        event
+            .payload
+            .get("invite")
+            .and_then(|invite| invite.get("invitee"))
+            .or_else(|| event.payload.get("invitee"))
+            .and_then(Value::as_str)
+    };
+    if let Some(invitee) = invitee {
+        let (from, to) = match event.kind.as_str() {
+            arkret_wire::EventKind::INVITE_CREATE => ("leave", "invite"),
+            arkret_wire::EventKind::INVITE_ACCEPT => ("invite", "join"),
+            arkret_wire::EventKind::INVITE_CANCEL | arkret_wire::EventKind::INVITE_REVOKE => {
+                ("invite", "leave")
+            }
+            _ => unreachable!("invite Event kind checked above"),
+        };
+        effects.push(fsm_effect(
+            "ak.component.member.state.v1",
+            invitee,
+            Some(json!(from)),
+            json!(to),
+        )?);
+    }
+    Ok(effects)
+}
+
+fn fsm_effect(family: &str, subject: &str, from: Option<Value>, to: Value) -> Result<Effect> {
+    Ok(Effect {
+        cell: CellRef::new(format!("ak:cell:{family}:{subject}"))?,
+        op: LatticeOp {
+            op_type: LatticeOpType::Transition,
+            tag: None,
+            value: None,
+            from,
+            to: Some(to),
+            reason: None,
+            issuer_seq: None,
+        },
+    })
 }
 
 pub(crate) fn event_envelope_with_chain(
@@ -837,22 +919,6 @@ pub(crate) fn member_join_payload_with_delivery_binding(
         Some(DeliveryStatus::Routable),
         Some(delivery_binding),
         None,
-        None,
-    )
-}
-
-pub(crate) fn member_join_payload_with_invite_ref(
-    realm_id: &str,
-    actor_id: &str,
-    invite_ref: &str,
-) -> Result<Value> {
-    member_payload(
-        realm_id,
-        actor_id,
-        MembershipPayloadState::Join,
-        Some(DeliveryStatus::Unroutable),
-        None,
-        Some(invite_ref.to_owned()),
         None,
     )
 }

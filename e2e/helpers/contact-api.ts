@@ -11,11 +11,7 @@
 // Wire shapes mirror arkret-rust-sdk core::http + core::model::invite_addressing
 // and soland src/routing/identity/account.rs + src/routing/invites.rs.
 
-import {
-  createHash,
-  sign as nodeSign,
-  type KeyObject,
-} from "node:crypto";
+import { createHash, sign as nodeSign, type KeyObject } from "node:crypto";
 import {
   expect,
   type APIRequestContext,
@@ -24,6 +20,7 @@ import {
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   alignSignedEventToActorFrontierApi,
+  acceptInviteApi,
   authHeaders,
   base64url,
   canonicalJson,
@@ -31,6 +28,8 @@ import {
   currentActorDidApi,
   expectJsonOk,
   principalControlRealmForDid,
+  readRealmSealBasis,
+  refreshEventEnvelopeProof,
   registerEventSigner,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
@@ -126,18 +125,13 @@ export type ContactTombstoneOutcome = {
 
 export type DirectConversationResolveOutcome = {
   state:
-    | "found"
-    | "authoring_required"
-    | "not_found"
-    | "retired"
-    | "non_canonical";
+    "found" | "authoring_required" | "not_found" | "retired" | "non_canonical";
   realm_id?: string;
   main_strand_id?: string;
   binding_event_ref?: string;
   created?: boolean;
   authoring_kind?:
-    | "remote_keypackage_claim"
-    | "direct_conversation_materialization";
+    "remote_keypackage_claim" | "direct_conversation_materialization";
   claim_authorization_draft?: Record<string, unknown>;
   materialization_draft?: Record<string, unknown>;
 };
@@ -366,16 +360,14 @@ export async function prepareDirectConversationIdentityArkret(
     enrollmentKey: generateWebvhKey(),
     serviceEndpoint: solandBaseUrl(opts.server),
   });
-  await submitPrincipalGenesisEntry(
-    request,
-    solandBaseUrl(opts.server),
-    built,
-  );
+  await submitPrincipalGenesisEntry(request, solandBaseUrl(opts.server), built);
   registerEventSigner({
     actorDid: built.did,
     deviceId: user.deviceId,
     verificationMethod: `${built.did}#principal-signing-key`,
-    signingSeedB64url: ed25519PrivateKeySeedB64url(principalSigningKey.privateKey),
+    signingSeedB64url: ed25519PrivateKeySeedB64url(
+      principalSigningKey.privateKey,
+    ),
   });
   return {
     user: { ...user, did: built.did },
@@ -494,7 +486,9 @@ async function solandTrustDomain(
   request: APIRequestContext,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.get(`${solandBaseUrl(opts.server)}/_arkret/describe`);
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/_arkret/describe`,
+  );
   const body = await expectJsonOk<{ trust_domain?: string }>(
     response,
     "describe trust_domain",
@@ -522,11 +516,7 @@ async function uploadDirectConversationKeyPackage(
       key_package: keyPackage,
       keypackage_digest: keypackageDigest,
       cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-      capabilities: [
-        "ak.content.v1",
-        "ak.mls.rfc9420",
-        "ak.mls.profile.full",
-      ],
+      capabilities: ["ak.content.v1", "ak.mls.rfc9420", "ak.mls.profile.full"],
       created_at: canonicalTimestamp(),
       expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
     },
@@ -651,6 +641,16 @@ export function buildInviteCreateEvent(args: {
     realmId: args.realmId,
     kind: "ak.invite.create",
     schemaId: "ak.schema.invite.v1",
+    effects: [
+      {
+        cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
+        op: { kind: "transition", from: null, to: "pending" },
+      },
+      {
+        cell: `ak:cell:ak.component.member.state.v1:${args.inviteeDid}`,
+        op: { kind: "transition", from: "leave", to: "invite" },
+      },
+    ],
     payload: {
       invite_id: inviteId,
       invitee: args.inviteeDid,
@@ -693,12 +693,16 @@ export async function deliverInviteWithConsentGrant(
     recipientServiceId,
     evidence,
   });
-  await alignSignedEventToActorFrontierApi(
+  await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
+    server: args.originServer,
+  });
+  event.seal_basis = await readRealmSealBasis(
     request,
     args.inviterToken,
-    event,
-    { server: args.originServer },
+    args.realmId,
+    args.originServer,
   );
+  refreshEventEnvelopeProof(event);
   const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
@@ -708,8 +712,7 @@ export async function deliverInviteWithConsentGrant(
       recipient_service_kind: "principal_server",
     },
     introduction_evidence: evidence,
-    idempotency_key:
-      args.idempotencyKey ?? `cotest-contact-graph:${inviteId}`,
+    idempotency_key: args.idempotencyKey ?? `cotest-contact-graph:${inviteId}`,
   };
   const outcome = (await submitPeerInviteDeliveryApi(request, body, {
     origin: solandServiceId(args.originServer),
@@ -742,12 +745,16 @@ export async function deliverInviteExplicitAddress(
     recipientServiceId,
     evidence,
   });
-  await alignSignedEventToActorFrontierApi(
+  await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
+    server: args.originServer,
+  });
+  event.seal_basis = await readRealmSealBasis(
     request,
     args.inviterToken,
-    event,
-    { server: args.originServer },
+    args.realmId,
+    args.originServer,
   );
+  refreshEventEnvelopeProof(event);
   const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
@@ -784,12 +791,14 @@ export async function listAuthzInvitesArkret(
   opts: { server?: SolandKey } = {},
 ): Promise<AuthzInvite[]> {
   const actorDid = await currentActorDidApi(request, token, opts);
-  const url = new URL("/_arkret/self/authz/invites", solandBaseUrl(opts.server));
-  url.searchParams.set("subject", actorDid);
-  const response = await request.get(
-    url.toString(),
-    { headers: authHeaders(token) },
+  const url = new URL(
+    "/_arkret/self/authz/invites",
+    solandBaseUrl(opts.server),
   );
+  url.searchParams.set("subject", actorDid);
+  const response = await request.get(url.toString(), {
+    headers: authHeaders(token),
+  });
   const body = await expectJsonOk<{ invites?: AuthzInvite[] }>(
     response,
     "list authz invites",
@@ -801,20 +810,19 @@ export async function listAuthzInvitesArkret(
 export async function acceptInviteArkret(
   request: APIRequestContext,
   token: string,
-  args: { accepterDid: string; realmId: string; inviteId: string; server?: SolandKey },
+  args: {
+    accepterDid: string;
+    realmId: string;
+    inviteId: string;
+    server?: SolandKey;
+  },
 ) {
-  return await submitSignedEventApi(
+  return await acceptInviteApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid: args.accepterDid,
-      realmId: args.realmId,
-      kind: "ak.invite.accept",
-      payload: {
-        invitee: args.accepterDid,
-        invite_id: args.inviteId,
-      },
-    }),
-    { server: args.server, context: `accept invite ${args.inviteId}` },
+    args.accepterDid,
+    args.realmId,
+    args.inviteId,
+    { server: args.server },
   );
 }

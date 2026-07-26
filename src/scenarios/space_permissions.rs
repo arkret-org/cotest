@@ -64,7 +64,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                         "notary_profile": "single_did",
                         "digest_algorithm": "sha256",
                         "notary": {
-                            "type": "single_did",
+                            "kind": "single_did",
                             "did": "did:web:alice.example",
                             "recovery_members": ["did:web:recovery.soland.local"],
                             "controller_organization": "did:web:organization.primary.soland.local",

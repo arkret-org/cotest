@@ -1155,6 +1155,11 @@ async fn submit_delegated_agent_event(
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
     refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
     let typed_event: arkret::Event = serde_json::from_value(event.clone())?;
+    if kind == arkret::events::EventKind::REALM_CREATE {
+        arkret_bootstrap::materialize_managed_agent_pcr_control(std::slice::from_ref(
+            &typed_event,
+        ))?;
+    }
     let body = expect_json(
         server
             .http()
@@ -1449,7 +1454,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         "notary_profile": "single_did",
                         "digest_algorithm": "sha256",
                         "notary": {
-                            "type": "single_did",
+                            "kind": "single_did",
                             "did": agent_id,
                             "recovery_members": [ALICE_DID],
                             "controller_organization": ALICE_DID,
