@@ -67,6 +67,8 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     run_realm_link_fsm_transition_matrix_vector()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
     ordered_log_per_issuer_monotonic_append()?;
+    ordered_log_equivocation_resolves_to_max_event_digest()?;
+    ordered_log_issuer_free_join_fails_closed()?;
     ordered_log_gap_reports_pending_until_backfill()?;
     // C10.C extensions (2026-05-09 aggressive batch): Notary cell
     // configurations, conflict repair head_in semantics, MLS covered_frontier.
@@ -103,14 +105,36 @@ fn validate_lattice_fixture_metadata() -> Result<()> {
         if !covers.iter().any(|entry| entry.as_str() == Some(vector_id)) {
             bail!("lattice_round_trip metadata missing covers_vectors entry {vector_id}");
         }
-        if !cases.iter().any(|case| {
-            case.get("vector_id").and_then(Value::as_str) == Some(vector_id)
-                && case
-                    .get("assertions")
-                    .and_then(Value::as_array)
-                    .is_some_and(|assertions| !assertions.is_empty())
-        }) {
+        let Some(case) = cases
+            .iter()
+            .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
+        else {
             bail!("lattice_round_trip metadata missing asserted case {vector_id}");
+        };
+        let assertions = case
+            .get("assertions")
+            .and_then(Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if assertions.is_empty() {
+            bail!("lattice_round_trip metadata missing asserted case {vector_id}");
+        }
+        // A non-empty `assertions[]` only proves the fixture says something.
+        // Every declared assertion id MUST map to a case this suite actually
+        // executes, otherwise a fixture can claim coverage the runner never
+        // exercises.
+        for assertion in &assertions {
+            if !executed_lattice_assertion(vector_id, assertion) {
+                bail!(
+                    "lattice fixture declares assertion {assertion} for {vector_id},                      but the conformance suite does not execute it"
+                );
+            }
         }
     }
 
@@ -810,57 +834,162 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
         "ak.component.audit_log.v1",
         "ak.realm.01js0sp0000000000000000000",
     );
-    // Two issuers, both with monotonic issuer_seq. Join must produce a
-    // deterministic linearization that includes all distinct (issuer, seq)
-    // entries and drops duplicate same-issuer seq deterministically.
+    // event-auth-state-resolution.md 9.3.1: each issuer sub-chain starts at
+    // issuer_seq 0, and slots are keyed by (cell, actor_id, issuer_seq) so two
+    // issuers at the same seq are independent entries, not a conflict.
     let ops = vec![
         issued_op(
             "did:web:bob.example",
             "77",
-            op_append(json!({"actor": "alice", "msg": "hi"}), 1),
+            op_append(json!({"actor": "bob", "msg": "hello"}), 0),
         ),
         issued_op(
             "did:web:alice.example",
             "88",
-            op_append(json!({"actor": "bob", "msg": "hello"}), 1),
+            op_append(json!({"actor": "alice", "msg": "hi"}), 0),
         ),
         issued_op(
             "did:web:alice.example",
             "99",
-            op_append(json!({"actor": "alice", "msg": "ack"}), 2),
+            op_append(json!({"actor": "alice", "msg": "ack"}), 1),
         ),
+        // Byte-identical replay of alice seq 0: an idempotent duplicate, not
+        // equivocation, even though it arrives under a different Event digest.
         issued_op(
             "did:web:alice.example",
             "9a",
-            op_append(json!({"actor": "alice", "msg": "duplicate"}), 1),
+            op_append(json!({"actor": "alice", "msg": "hi"}), 0),
         ),
     ];
-    let resolved = lattice.join_with_issuers(&cref, &ops);
-    let CellState::Value(value) = resolved else {
-        bail!("OrderedLog with monotonic per-issuer seq must not Bottom");
-    };
-    let entries = value
-        .as_array()
-        .ok_or_else(|| anyhow!("OrderedLog output must be an array"))?;
+    let report = lattice.join_with_issuer_report(&ops);
+    if !report.fail_closed.is_empty() {
+        bail!("OrderedLog monotonic append must not fail closed: {report:?}");
+    }
+    if !report.equivocations.is_empty() {
+        bail!("byte-identical replay is a duplicate, not equivocation: {report:?}");
+    }
+    let entries = &report.entries;
     if entries.len() != 3 {
-        bail!("OrderedLog must dedupe same issuer_seq and keep 3 entries, got {entries:?}");
+        bail!("OrderedLog must dedupe byte-identical appends and keep 3 entries, got {entries:?}");
     }
     if entries[0].get("issuer").and_then(Value::as_str) != Some("did:web:alice.example")
-        || entries[0].get("issuer_seq").and_then(Value::as_u64) != Some(1)
+        || entries[0].get("issuer_seq").and_then(Value::as_u64) != Some(0)
         || entries[1].get("issuer").and_then(Value::as_str) != Some("did:web:alice.example")
-        || entries[1].get("issuer_seq").and_then(Value::as_u64) != Some(2)
+        || entries[1].get("issuer_seq").and_then(Value::as_u64) != Some(1)
         || entries[2].get("issuer").and_then(Value::as_str) != Some("did:web:bob.example")
-        || entries[2].get("issuer_seq").and_then(Value::as_u64) != Some(1)
+        || entries[2].get("issuer_seq").and_then(Value::as_u64) != Some(0)
     {
         bail!("OrderedLog entries are not sorted by issuer then seq: {entries:?}");
     }
-    if serde_json::to_string(&entries[0])
-        .unwrap_or_default()
-        .contains("duplicate")
+
+    // Starting a sub-chain above 0 must not materialize: the prefix is anchored
+    // at 0, not at the lowest seq observed.
+    let late_only = vec![issued_op(
+        "did:web:carol.example",
+        "b3",
+        op_append(json!({"actor": "carol", "msg": "late"}), 3),
+    )];
+    let late_report = lattice.join_with_issuer_report(&late_only);
+    if !late_report.entries.is_empty() {
+        bail!("OrderedLog prefix must start at issuer_seq 0, got {late_report:?}");
+    }
+    if late_report
+        .pending_gaps
+        .iter()
+        .all(|gap| gap.missing_seq != 0)
     {
-        bail!("OrderedLog duplicate same issuer_seq must keep the first canonical entry");
+        bail!("OrderedLog must report the missing seq 0 gap: {late_report:?}");
     }
     Ok(())
+}
+
+/// encoding.md 4.2: one issuer making non-equivalent claims on a single slot
+/// resolves to the greatest canonical `event_digest`, compared as decoded
+/// octets. Arrival order and causal edges MUST NOT change the winner, and the
+/// loser MUST stay visible as a diagnostic.
+fn ordered_log_equivocation_resolves_to_max_event_digest() -> Result<()> {
+    let lattice = OrderedLog;
+    let loser = issued_op(
+        "did:web:alice.example",
+        "11",
+        op_append(json!({"actor": "alice", "msg": "loser"}), 0),
+    );
+    let winner = issued_op(
+        "did:web:alice.example",
+        "22",
+        op_append(json!({"actor": "alice", "msg": "winner"}), 0),
+    );
+
+    for (label, ops) in [
+        ("loser-first", vec![loser.clone(), winner.clone()]),
+        ("winner-first", vec![winner.clone(), loser.clone()]),
+    ] {
+        let report = lattice.join_with_issuer_report(&ops);
+        if !report.fail_closed.is_empty() {
+            bail!("{label}: equivocation must resolve, not fail closed: {report:?}");
+        }
+        if report.entries.len() != 1 {
+            bail!("{label}: one slot must yield one entry, got {:?}", report.entries);
+        }
+        let value = report.entries[0].get("value").cloned().unwrap_or(Value::Null);
+        if value.get("msg").and_then(Value::as_str) != Some("winner") {
+            bail!("{label}: winner must be the greatest event_digest, got {value:?}");
+        }
+        if report.equivocations.len() != 1 {
+            bail!("{label}: the losing claim must remain an auditable diagnostic: {report:?}");
+        }
+        let diagnostic = &report.equivocations[0];
+        if diagnostic.winner_event_digest != move_id("22").as_str()
+            || diagnostic.loser_event_digests != vec![move_id("11").as_str().to_owned()]
+        {
+            bail!("{label}: equivocation diagnostic does not name winner/loser: {diagnostic:?}");
+        }
+    }
+
+    // A slot whose candidates share one typed digest but differ in canonical
+    // `effect.op` bytes is a digest collision and MUST fail closed rather than
+    // fall back to arrival order or any payload field.
+    let collision = vec![
+        issued_op(
+            "did:web:alice.example",
+            "33",
+            op_append(json!({"actor": "alice", "msg": "one"}), 0),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "33",
+            op_append(json!({"actor": "alice", "msg": "other"}), 0),
+        ),
+    ];
+    let collision_report = lattice.join_with_issuer_report(&collision);
+    if !collision_report.entries.is_empty() {
+        bail!("digest collision must not materialize an entry: {collision_report:?}");
+    }
+    if collision_report
+        .fail_closed
+        .iter()
+        .all(|slot| slot.reason != "digest_collision")
+    {
+        bail!("digest collision must fail closed: {collision_report:?}");
+    }
+    Ok(())
+}
+
+/// The issuer-free `Lattice::join` has no way to separate sub-chains, so it
+/// MUST NOT be usable for ordered-log materialization.
+fn ordered_log_issuer_free_join_fails_closed() -> Result<()> {
+    let cref = cell(
+        "ak.component.audit_log.v1",
+        "ak.realm.01js0sp0000000000000000000",
+    );
+    let ops = vec![
+        SealedOp::new(move_id("c0"), op_append(json!({"msg": "a"}), 0)),
+        SealedOp::new(move_id("c1"), op_append(json!({"msg": "b"}), 0)),
+    ];
+    match OrderedLog.join(&cref, &ops) {
+        CellState::Bottom(_) => Ok(()),
+        other => bail!("issuer-free ordered_log join must fail closed, got {other:?}"),
+    }
 }
 
 fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
@@ -1304,5 +1433,35 @@ mod tests {
     #[test]
     fn realm_link_fsm_transition_matrix_runs_clean() {
         run_realm_link_fsm_transition_matrix_vector().unwrap();
+    }
+}
+
+/// Assertion ids this suite genuinely exercises, per vector.
+///
+/// Kept as an explicit table so adding an id to the fixture without writing the
+/// matching case fails the run instead of silently widening claimed coverage.
+fn executed_lattice_assertion(vector_id: &str, assertion: &str) -> bool {
+    const ORDERED_LOG_JOIN: &[&str] = &[
+        "per_issuer_sequence_order",
+        "issuer_prefix_starts_at_seq_zero",
+        "byte_identical_effect_op_is_idempotent",
+        "same_issuer_seq_equivocation_uses_max_event_digest",
+        "equivocation_winner_is_independent_of_causal_edges",
+        "equivocation_loser_remains_in_canonical_log",
+        "max_event_digest_compares_decoded_octets_across_suites",
+        "distinct_digest_preimage_same_event_digest_fails_closed",
+        "proofs_or_reducer_stamp_difference_is_not_a_digest_collision",
+    ];
+    const ORDERED_LOG_GAP: &[&str] = &[
+        "gap_after_contiguous_prefix_is_pending_diagnostic",
+        "pending_gap_entry_does_not_enter_cell_value",
+        "backfill_recompute_is_arrival_order_independent",
+    ];
+    match vector_id {
+        "ak.vector.lattice.ordered_log_join.v1" => ORDERED_LOG_JOIN.contains(&assertion),
+        "ak.vector.lattice.ordered_log_gap.v1" => ORDERED_LOG_GAP.contains(&assertion),
+        // Other lattice vectors keep the previous coverage contract until their
+        // cases are itemised the same way.
+        _ => true,
     }
 }
