@@ -220,6 +220,171 @@ fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
     if actual != expected {
         bail!("encoding rank_order did not match expected_order");
     }
+    run_accountability_scope_set_subject_vector(value)?;
+    Ok(())
+}
+
+fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
+    use arkret_models_collaboration::governance::accountability::AccountabilityScope;
+
+    const VECTOR_ID: &str = "ak.vector.identity.accountability_scope_set_subject.v1";
+    let vector = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .and_then(|vectors| {
+            vectors
+                .iter()
+                .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
+        })
+        .ok_or_else(|| anyhow!("encoding fixture missing {VECTOR_ID}"))?;
+    let issuer = value_field_str(vector, "issuer")?;
+    let subject = value_field_str(vector, "subject")?;
+    let descriptor = arkret_wire::EventKind::from("ak.identity.accountability_grant")
+        .descriptor()
+        .ok_or_else(|| anyhow!("accountability grant descriptor is missing"))?;
+    let actual_descriptor: Value = serde_json::from_str(
+        descriptor
+            .cell_subject_rule
+            .ok_or_else(|| anyhow!("accountability grant subject rule is missing"))?,
+    )?;
+    if actual_descriptor
+        != vector
+            .get("source_descriptor")
+            .and_then(|source| source.get("components"))
+            .map(|components| json!({"kind": "composite", "components": components}))
+            .ok_or_else(|| anyhow!("{VECTOR_ID} source descriptor is malformed"))?
+    {
+        bail!("{VECTOR_ID} source descriptor drifted from the generated registry");
+    }
+
+    let positive_cases = vector
+        .get("positive_cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{VECTOR_ID} missing positive_cases"))?;
+    for case in positive_cases {
+        let scope: AccountabilityScope = serde_json::from_value(
+            case.get("input")
+                .cloned()
+                .ok_or_else(|| anyhow!("{VECTOR_ID} positive case missing input"))?,
+        )?;
+        scope.validate()?;
+        let component = scope.scope_set_component()?;
+        if component != value_field_str(case, "scope_set_component")? {
+            bail!("{VECTOR_ID} scope-set component KAT mismatch");
+        }
+        let cell_subject = arkret_wire::composite_subject(&[issuer, subject, component.as_str()])?;
+        if cell_subject != value_field_str(case, "cell_subject")? {
+            bail!("{VECTOR_ID} outer cell-subject KAT mismatch");
+        }
+    }
+
+    for case in vector
+        .get("negative_cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{VECTOR_ID} missing negative_cases"))?
+    {
+        let Some(input) = case.get("input") else {
+            continue;
+        };
+        let accepted = serde_json::from_value::<AccountabilityScope>(input.clone())
+            .ok()
+            .and_then(|scope| scope.scope_set_component().ok())
+            .is_some();
+        if accepted {
+            bail!(
+                "{VECTOR_ID} accepted negative case {}",
+                value_field_str(case, "name")?
+            );
+        }
+    }
+
+    let string: AccountabilityScope = serde_json::from_value(json!("employment"))?;
+    let singleton: AccountabilityScope = serde_json::from_value(json!(["employment"]))?;
+    if string != singleton {
+        bail!("{VECTOR_ID} string and singleton-array domain equality diverged");
+    }
+    let authoring = serde_json::to_value(singleton.canonicalized_for_authoring()?)?;
+    if authoring != json!("employment") {
+        bail!("{VECTOR_ID} canonical authoring did not emit singleton as a string");
+    }
+    let reordered: AccountabilityScope =
+        serde_json::from_value(json!(["employment", "agent_operator"]))?;
+    let authoring = serde_json::to_value(reordered.canonicalized_for_authoring()?)?;
+    if authoring != json!(["agent_operator", "employment"]) {
+        bail!("{VECTOR_ID} canonical authoring did not bytewise-sort a multi-value set");
+    }
+
+    let event_for = |scope: Value, status: &str| -> Result<arkret_wire::Event> {
+        Ok(serde_json::from_value(json!({
+            "event_id": "ak:event:019f9e50-d787-74e0-8731-c9ad5eaa9190",
+            "kind": "ak.identity.accountability_grant",
+            "realm_id": "ak:realm:019f9e50-d787-74e0-8731-c9ad5eaa9180",
+            "actor_id": issuer,
+            "actor_seq": 7,
+            "created_at": "2026-07-26T01:00:00.000Z",
+            "hlc": "019f9e500000-0000-aabbccdd",
+            "prev_refs": [],
+            "effects": [],
+            "seal_basis": {
+                "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+                "control_event_set_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "state_root": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "payload": {
+                "issuer": issuer,
+                "subject": subject,
+                "accountability_scope": scope,
+                "grant_status": status
+            },
+            "proofs": []
+        }))?)
+    };
+    let materialize = |event: &mut arkret_wire::Event| -> Result<()> {
+        let scope: AccountabilityScope = serde_json::from_value(
+            event
+                .payload
+                .get("accountability_scope")
+                .cloned()
+                .ok_or_else(|| anyhow!("accountability payload scope is missing"))?,
+        )?;
+        let scope_component = scope.scope_set_component()?;
+        let cell_subject =
+            arkret_wire::composite_subject(&[issuer, subject, scope_component.as_str()])?;
+        event.effects = vec![serde_json::from_value(json!({
+            "cell": format!(
+                "ak:cell:ak.component.identity.accountability.v1:{cell_subject}"
+            ),
+            "op": {
+                "kind": "set",
+                "value": serde_json::to_value(&event.payload)?
+            }
+        }))?];
+        Ok(())
+    };
+    let mut active = event_for(json!(["employment", "agent_operator"]), "active")?;
+    let mut revoked = event_for(json!(["agent_operator", "employment"]), "revoked")?;
+    materialize(&mut active)?;
+    materialize(&mut revoked)?;
+    if active.effects[0].cell != revoked.effects[0].cell {
+        bail!("{VECTOR_ID} reordered exact-set revoke addressed a different cell");
+    }
+    arkret_schema::validate_registered_cell_writes(&active)?;
+    arkret_schema::validate_registered_cell_writes(&revoked)?;
+
+    let mut subset = event_for(json!("employment"), "revoked")?;
+    materialize(&mut subset)?;
+    if subset.effects[0].cell == active.effects[0].cell {
+        bail!("{VECTOR_ID} subset revoke collided with the superset cell");
+    }
+
+    let mut legacy = event_for(json!("employment"), "active")?;
+    materialize(&mut legacy)?;
+    legacy.effects[0].cell = arkret_wire::CellRef::new(
+        "ak:cell:ak.component.identity.accountability.v1:q76kFdC2LNwLBlUed_ICSOysggmqrOXJbAtWHO49Woc",
+    )?;
+    if arkret_schema::validate_registered_cell_writes(&legacy).is_ok() {
+        bail!("{VECTOR_ID} accepted the legacy direct-scalar subject");
+    }
     Ok(())
 }
 

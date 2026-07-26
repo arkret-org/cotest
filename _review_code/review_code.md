@@ -505,3 +505,15 @@ selection failures.
   origin equality, then fetches only that DID's `did.json` and `did.jsonl` with
   content and size bounds and verifies the complete WebVH chain plus exact
   current-document equality through the SDK pure verifier.
+
+## 2026-07-27 Realm founding grant rejected by live HTTP tests
+
+- Severity: P1
+- Status: open; independent of the accountability scope-set subject change.
+- Evidence: all four `tests/account_subscribe_long_poll.rs` cases fail during
+  their Realm bootstrap setup with `invalid_realm_founding_grant`.
+- Isolation: rebuilding the sibling Soland executable does not change the
+  result; the 149 Cotest library/conformance tests, including the new
+  accountability vector, pass.
+- Follow-up dimension: audit the Realm bootstrap Event-to-Operation projection
+  and founding capability reducer independently of accountability addressing.
