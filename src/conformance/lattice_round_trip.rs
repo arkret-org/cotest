@@ -830,10 +830,6 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
 
 fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let lattice = OrderedLog;
-    let cref = cell(
-        "ak.component.audit_log.v1",
-        "ak.realm.01js0sp0000000000000000000",
-    );
     // event-auth-state-resolution.md 9.3.1: each issuer sub-chain starts at
     // issuer_seq 0, and slots are keyed by (cell, actor_id, issuer_seq) so two
     // issuers at the same seq are independent entries, not a conflict.
@@ -929,9 +925,15 @@ fn ordered_log_equivocation_resolves_to_max_event_digest() -> Result<()> {
             bail!("{label}: equivocation must resolve, not fail closed: {report:?}");
         }
         if report.entries.len() != 1 {
-            bail!("{label}: one slot must yield one entry, got {:?}", report.entries);
+            bail!(
+                "{label}: one slot must yield one entry, got {:?}",
+                report.entries
+            );
         }
-        let value = report.entries[0].get("value").cloned().unwrap_or(Value::Null);
+        let value = report.entries[0]
+            .get("value")
+            .cloned()
+            .unwrap_or(Value::Null);
         if value.get("msg").and_then(Value::as_str) != Some("winner") {
             bail!("{label}: winner must be the greatest event_digest, got {value:?}");
         }

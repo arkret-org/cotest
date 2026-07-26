@@ -119,7 +119,7 @@ arkret-bootstrap = {path = "../arkret-rust-sdk/crates/bootstrap"}
 arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
 arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
 arkret-event-draft = {path = "../arkret-rust-sdk/crates/event-draft"}
-garth = {path = "../garth",features = ["mls"]}
+garth = {path = "../garth"}
 arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
 arkret-identifiers = {path = "../arkret-rust-sdk/crates/identifiers"}

@@ -1936,7 +1936,6 @@ async fn submit_delegated_agent_event(
     event["executed_by"] = json!(ALICE_DID);
     event["authorization_ref"] = json!(authorization_ref);
     if kind == arkret::events::EventKind::REALM_CREATE {
-        let typed_realm_id = arkret::RealmId::new(realm_id.to_owned())?;
         if actor_frontier.next_actor_seq != 0 {
             return Err(anyhow!(
                 "delegated Realm bootstrap requires an empty actor frontier"
@@ -1945,9 +1944,8 @@ async fn submit_delegated_agent_event(
         event["actor_seq"] = json!(0);
         event["hlc"] = json!("01970e589d21-0001-a13f9c2e");
         event["prev_refs"] = json!([]);
-        event["effects"] = serde_json::to_value(vec![
-            arkret_bootstrap::managed_agent_principal_control_create_effect(&typed_realm_id, 0)?,
-        ])?;
+        let create: arkret::Event = serde_json::from_value(event.clone())?;
+        event["effects"] = serde_json::to_value(arkret_bootstrap::realm_create_effects(&create)?)?;
     }
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
     refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
