@@ -73,10 +73,14 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
   reason=`durability_scheme_incompatible`(§2.3.1 / §2.10.8 适用条件)。
 - **C2 `durability_recovery_recipient_unverified`**:`recovery_recipients[].verification_method`
   解析不到 active `ArkretRealmHistoryRecoveryKey` service entry(已撤销 / 未被 service entry 指定 /
-  指向 `did_recovery` 域 key)→ 封存 fail closed,reason=`durability_recovery_recipient_unverified`,
-  MUST NOT 回退到任意公钥。
+  指向 `did_recovery` 域 key)→ **发送客户端在 HPKE seal 前** fail closed,
+  reason=`durability_recovery_recipient_unverified`,MUST NOT 回退到任意公钥，也不得发出
+  `ak.realm_key.share`。仅写入 `durability_policy` 不是该诊断的触发点。
 - **C3 `durability_seal_missing_before_gc`**:某 epoch 的 RRK share 尚未 accepted(RYW 未满足)即
-  尝试 GC `history_secret[N]` → reason=`durability_seal_missing_before_gc`,MUST 保留 secret。
+  尝试 GC 客户端持有的 `history_secret[N]` →
+  reason=`durability_seal_missing_before_gc`,MUST 保留 secret。spec 没有注册服务端
+  history-secret GC operation；采用单调保留、从不 GC 的客户端通过“首次 share 未 accepted，
+  后续仍可用同一 secret 重试并 accepted”证明该义务。
 
 ## 实现状态
 
@@ -91,8 +95,10 @@ C1 `durability_scheme_incompatible` 已 live 化；其精确回归命令为：
 Phase A、Phase B、C2、C3 仍为 `test.fixme`，依赖：
 
 - `@blocking-on rrk-soland` — `content_scheme` / `durability_policy` 投影、RRK-targeted
-  `ak.realm_key.share` 接受 + RYW、恢复读取面，以及 C2/C3 的拒绝路径
+  `ak.realm_key.share` 接受 + RYW 与恢复读取面
 - `@blocking-on rrk-inkson` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
-  epoch 推进时的 eager 封存挂钩、披露横幅
+  epoch 推进时的 eager 封存挂钩、C2 发送前 DID 验证、C3 retained-secret retry 证据和披露横幅
+- `@blocking-on rrk-cotest` — C2 的可控 DID resolver/outbound capture、C3 的首次 share
+  拒绝/丢弃 fault injection
 
 着陆后逐 Phase live 化;实跑见 arkret-work jobs 的最终集成项。

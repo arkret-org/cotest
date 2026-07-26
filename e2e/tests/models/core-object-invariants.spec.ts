@@ -14,10 +14,9 @@
 //   - models/views.md §2.2 (kind is response family), §6 / §6.3 (Board
 //     projection derived from query → contains → strand)
 //
-// Phase A is live (Space create + read-back of 4 spec-equivalent common
-// fields). Phases B–E are test.fixme — they sketch the API call and
-// assertion so a future live-ification PR only needs to remove the fixme
-// once the soland endpoints land.
+// Phase A and D are live. Phases B, C, and E are test.fixme: each pins a
+// registered spec contract, but still needs the corresponding reducer,
+// projection, or spec-shaped fixture before promotion.
 
 import { type APIRequestContext, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -80,6 +79,44 @@ async function createStrandApi(
     { context: `create strand ${title}` },
   );
   return strandId;
+}
+
+type RealmSealBasis = {
+  leaves: string[];
+  control_event_set_root: string;
+  state_root: string;
+};
+
+async function fetchRealmSealBasis(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<RealmSealBasis> {
+  const response = await request.get(
+    `${solandBaseUrl()}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  const body = (await response.json()) as {
+    frontier?: {
+      kind?: unknown;
+      seal_id?: unknown;
+      control_event_set_root?: unknown;
+      state_root?: unknown;
+    };
+  };
+  expect(
+    response.ok(),
+    `read Realm Seal frontier returned ${response.status()}: ${JSON.stringify(body)}`,
+  ).toBeTruthy();
+  expect(body.frontier?.kind).toBe("realm_seal");
+  expect(body.frontier?.seal_id).toMatch(/^ak:seal:/);
+  expect(body.frontier?.control_event_set_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
+  expect(body.frontier?.state_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
+  return {
+    leaves: [String(body.frontier?.seal_id)],
+    control_event_set_root: String(body.frontier?.control_event_set_root),
+    state_root: String(body.frontier?.state_root),
+  };
 }
 
 function relationObject(args: {
@@ -218,21 +255,15 @@ test.describe("core object invariants", () => {
     },
   );
 
-  // ── Phase B — Patch precondition CAS (PROMOTED).
-  // soland's events submit surface now evaluates the generic
-  // `preconditions[].head_eq` compare-and-swap before any effect lands
-  // (reducer/projection_state.rs `check_move_preconditions`, wired into the
-  // submit preflight in event_log/submit.rs). A `ak.strand.update` Move
-  // carrying a STALE `head_eq` predicate fails closed with
-  // `failed_precondition` (HTTP 412) and applies NO patch; a FRESH predicate
-  // matching the materialized head admits and applies. The strand fields
-  // read-back path (`GET /_soland/self/strands/{strand_id}` → `fields.status`)
-  // is the assertable head.
-  // FIXME: This needs a full spec-shaped Control Move: top-level
-  // preconditions[] plus registered effects[] and seal_basis. The historical
-  // payload-level shortcut is correctly rejected as schema_violation.
+  // ── Phase B — registered Control Move CAS.
+  // `ak.strand.update` is a data-plane Event in the event-kind registry and
+  // MUST NOT carry preconditions[] or seal_basis. The registered v1 CAS surface
+  // for this invariant is `ak.strand.move`: it writes the default-control-plane
+  // `ak.component.strand.position.v1:<board_space_id>:<strand_id>` cas_register.
+  // A stale head_eq MUST reject the whole Move; a subsequent fresh Move from
+  // the same accepted position proves that the rejected effect did not land.
   test.fixme(
-    "Phase B — stale precondition head_eq is rejected with failed_precondition and effects[] are NOT applied; a fresh head_eq applies",
+    "Phase B — stale ak.strand.move head_eq rejects atomically; the same seal basis admits a fresh position CAS",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-b-${stamp}`);
@@ -251,68 +282,115 @@ test.describe("core object invariants", () => {
         `core-invariants strand ${stamp}`,
         { status: "open" },
       );
-      const fieldsCell = `ak:cell:ak.component.strand.fields.v1:${strandId}`;
+      const boardSpaceId = typedId("space");
+      const sourceListId = typedId("space");
+      const staleExpectedListId = typedId("space");
+      const targetListId = typedId("space");
+      const positionCell =
+        `ak:cell:ak.component.strand.position.v1:${boardSpaceId}:${strandId}`;
 
-      // A ak.strand.update carrying a STALE `head_eq` precondition (claims
-      // status == "closed" when it is actually "open") MUST reject with
-      // failed_precondition and apply NO effect.
+      const initialBasis = await fetchRealmSealBasis(request, aliceToken, realmId);
+      const initialPosition = { list_space_id: sourceListId, rank: "m" };
+      const initialMove = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.strand.move",
+        preconditions: [
+          {
+            cell: positionCell,
+            predicate: { op: "head_eq", value: null },
+          },
+        ],
+        effects: [
+          {
+            cell: positionCell,
+            op: { kind: "set", value: initialPosition },
+          },
+        ],
+        sealBasis: initialBasis,
+        payload: {
+          board_space_id: boardSpaceId,
+          strand_id: strandId,
+          target_space_id: sourceListId,
+          rank: "m",
+        },
+      });
+      await alignSignedEventToActorFrontierApi(request, aliceToken, initialMove);
+      await submitSignedEventApi(request, aliceToken, initialMove, {
+        context: "establish initial Strand position",
+      });
+
+      const acceptedBasis = await fetchRealmSealBasis(request, aliceToken, realmId);
+      const targetPosition = { list_space_id: targetListId, rank: "z" };
+      const staleMoveEnvelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.strand.move",
+        preconditions: [
+          {
+            cell: positionCell,
+            predicate: {
+              op: "head_eq",
+              value: { list_space_id: staleExpectedListId, rank: "m" },
+            },
+          },
+        ],
+        effects: [
+          {
+            cell: positionCell,
+            op: { kind: "set", value: targetPosition },
+          },
+        ],
+        sealBasis: acceptedBasis,
+        payload: {
+          board_space_id: boardSpaceId,
+          strand_id: strandId,
+          from_space_id: staleExpectedListId,
+          target_space_id: targetListId,
+          rank: "z",
+          expected_position: { space_id: staleExpectedListId, rank: "m" },
+        },
+      });
+      await alignSignedEventToActorFrontierApi(request, aliceToken, staleMoveEnvelope);
       const staleMove = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.strand.update",
-          preconditions: [
-            {
-              cell: fieldsCell,
-              predicate: { op: "head_eq", value: { "fields.status": "closed" } },
-            },
-          ],
-          payload: {
-            target_ref: strandId,
-            patch: { "metadata.fields.status": "done" },
-          },
-        }),
+        data: staleMoveEnvelope,
       });
-      expect(staleMove.status()).toBeGreaterThanOrEqual(400);
+      expect(staleMove.status()).toBe(412);
       expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
-      // The materialized field MUST be unchanged.
-      const readBackStale = await request.get(
-        `${solandBaseUrl()}/_soland/self/strands/${encodeURIComponent(strandId)}`,
-        { headers: authHeaders(aliceToken) },
-      );
-      const staleBody = await readBackStale.json();
-      expect(staleBody.fields?.status).toBe("open");
-
-      // A FRESH head_eq precondition (claims the real head status == "open")
-      // MUST admit and apply the patch.
-      const freshMove = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.strand.update",
-          preconditions: [
-            {
-              cell: fieldsCell,
-              predicate: { op: "head_eq", value: { "fields.status": "open" } },
-            },
-          ],
-          payload: {
-            target_ref: strandId,
-            patch: { "metadata.fields.status": "in_progress" },
+      const basisAfterReject = await fetchRealmSealBasis(request, aliceToken, realmId);
+      expect(basisAfterReject).toEqual(acceptedBasis);
+      const freshMove = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.strand.move",
+        preconditions: [
+          {
+            cell: positionCell,
+            predicate: { op: "head_eq", value: initialPosition },
           },
-        }),
+        ],
+        effects: [
+          {
+            cell: positionCell,
+            op: { kind: "set", value: targetPosition },
+          },
+        ],
+        sealBasis: basisAfterReject,
+        payload: {
+          board_space_id: boardSpaceId,
+          strand_id: strandId,
+          from_space_id: sourceListId,
+          target_space_id: targetListId,
+          rank: "z",
+          expected_position: { space_id: sourceListId, rank: "m" },
+        },
       });
-      expect(freshMove.ok()).toBeTruthy();
-
-      const readBackFresh = await request.get(
-        `${solandBaseUrl()}/_soland/self/strands/${encodeURIComponent(strandId)}`,
-        { headers: authHeaders(aliceToken) },
-      );
-      const freshBody = await readBackFresh.json();
-      expect(freshBody.fields?.status).toBe("in_progress");
+      await alignSignedEventToActorFrontierApi(request, aliceToken, freshMove);
+      await submitSignedEventApi(request, aliceToken, freshMove, {
+        context: "fresh Strand position CAS after stale rejection",
+      });
     },
   );
 

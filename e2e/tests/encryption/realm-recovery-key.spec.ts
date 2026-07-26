@@ -13,8 +13,9 @@
 //     durability_recovery_recipient_unverified / durability_seal_missing_before_gc
 //
 // STATUS: C1 is live. The remaining cases stay `test.fixme` until the RRK share,
-// recovery-read, GC, and Inkson cryptographic paths are implemented. Their
-// assertions pin the spec contract and MUST NOT be weakened to pass.
+// recovery-read, client retention/retry, and Inkson cryptographic paths are
+// observable end to end. Their contracts pin the spec and MUST NOT be weakened
+// or redirected to unregistered server APIs.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
@@ -734,167 +735,77 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     },
   );
 
-  // C2: durability_recovery_recipient_unverified — verification_method does not
-  // resolve to an active ArkretRealmHistoryRecoveryKey service entry.
+  // C2: recipient verification is a sender-side pre-seal gate. Merely storing a
+  // durability_policy does not prove that its RecoveryRecipient is currently
+  // resolvable, and MUST NOT raise this error. The client that is about to
+  // produce the eager RRK share resolves the DID at send time and fails before
+  // emitting an Event when the VM is not designated by an active
+  // ArkretRealmHistoryRecoveryKey service entry.
   test.fixme(
-    // @blocking-on rrk-soland: durability seal recipient resolution that fails
-    //   closed (durability_recovery_recipient_unverified) when verification_method
-    //   is not designated by an active ArkretRealmHistoryRecoveryKey service
-    //   entry, MUST NOT fall back to any other key. §2.10.8 + identity-did §8.3.
-    // @blocking-on rrk-inkson: DID Document resolution of the recovery recipient
-    //   at seal time.
+    // @blocking-on rrk-inkson: expose the eager-seal attempt through a client
+    //   observable result, resolve the current recipient DID Document at seal
+    //   time, and surface durability_recovery_recipient_unverified without
+    //   enqueueing ak.realm_key.share or falling back to another key.
+    // @blocking-on rrk-cotest: add a DID resolver fixture that can publish a VM
+    //   which is present but not designated by an active
+    //   ArkretRealmHistoryRecoveryKey service entry, plus outbound Event capture.
+    // @spec-open: arkret-work/review/spec-open/
+    //   2026-07-26-rrk-share-cell-subject-variant.md
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C2)
     // @expected-live-by: 2026Q3
-    "C2 durability_recovery_recipient_unverified: recipient VM without an active RRK service entry fails closed",
-    async ({ request }) => {
-      const { user: alice, token: aliceToken } = await registeredSession(
-        request,
-        "rrk-c2-alice",
-      );
-      const { user: orgRrk } = await registeredSession(request, "rrk-c2-org");
-
-      const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: realmCreateEnvelope({
-          ownerDid: alice.did,
-          realmId,
-          title: "RRK unverified recipient",
-          contentScheme: CONTENT_SCHEME_EXPORTER_AEAD,
-        }),
-      });
-      expect(create.status()).toBe(200);
-
-      // org-rrk publishes a DID Document but its referenced verification_method
-      // is NOT designated by an active ArkretRealmHistoryRecoveryKey service
-      // entry (e.g. it points at the did_recovery-domain key, or the service
-      // entry is absent/revoked). The seal MUST fail closed.
-      const unverifiedVm = `${orgRrk.did}#did-recovery-1`; // wrong domain on purpose
-      const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.realm.policy_components",
-          payload: {
-            realm_id: realmId,
-            value: {
-              durability_policy: {
-                mode: "org_recovery_key",
-                recovery_recipients: [
-                  recoveryRecipient({
-                    recipientId: "org-primary",
-                    principalId: orgRrk.did,
-                    rrkVerificationMethod: unverifiedVm,
-                  }),
-                ],
-              },
-            },
-          },
-        }),
-      });
-      expect([400, 409, 422]).toContain(write.status());
-      const code = wireErrCode(await write.json());
-      expect(code).toBe("durability_recovery_recipient_unverified");
-      // fail-closed MUST NOT silently fall back: no RRK share is ever emitted to
-      // an arbitrary key. (Live check: assert no ak.realm_key.share appears for
-      // this realm addressed to any key other than an active RRK VM.)
+    "C2 durability_recovery_recipient_unverified: the client sealer rejects an undesignated RRK VM before emitting ak.realm_key.share",
+    async ({ browser, request }) => {
+      // Future live sequence:
+      // 1. Publish org-rrk DID material containing `#did-recovery-1`, but do not
+      //    designate it with an active ArkretRealmHistoryRecoveryKey service.
+      // 2. Store a durability_policy RecoveryRecipient that references that VM.
+      //    The policy write itself is allowed; this diagnostic is not a policy
+      //    admission error.
+      // 3. Advance an exporter-aead epoch through Inkson so its eager RRK sealer
+      //    resolves the recipient immediately before HPKE sealing.
+      // 4. Assert the client reports
+      //    durability_recovery_recipient_unverified.
+      // 5. Capture outbound self-events and assert that no ak.realm_key.share
+      //    was emitted for the recipient and no alternate VM was selected.
+      //
+      // Do not replace this with a direct policy POST assertion: that was the
+      // contract drift this test is intended to prevent.
+      void browser;
+      void request;
     },
   );
 
-  // C3: durability_seal_missing_before_gc — GC of history_secret[N] attempted
-  // before the eager RRK seal for that epoch is accepted (RYW unmet).
+  // C3: history_secret retention is a client-side RYW invariant. There is no
+  // registered server GC operation for client-held MLS exporter secrets.
   test.fixme(
-    // @blocking-on rrk-soland: the GC precondition surface that raises
-    //   failed_precondition(durability_seal_missing_before_gc) when an epoch's
-    //   RRK durability ak.realm_key.share is not yet accepted (read-your-writes).
-    // @blocking-on rrk-inkson: the client-side eager-seal-before-GC ordering
-    //   (MUST retain history_secret[N] until the seal is accepted) — the client
-    //   half of the §2.10.8 / §2.10.5 retention guard.
+    // @blocking-on rrk-inkson: expose deterministic eager-seal retry/acceptance
+    //   state and retained-secret evidence. A future client GC implementation
+    //   must additionally expose the local refusal reason
+    //   durability_seal_missing_before_gc.
+    // @blocking-on rrk-cotest: add a fault-injection fixture that rejects or
+    //   drops the first RRK share submit, then permits the retry while preserving
+    //   the same browser/client storage.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C3)
     // @expected-live-by: 2026Q3
-    "C3 durability_seal_missing_before_gc: GC before the epoch's RRK seal is accepted is rejected and the secret is retained",
-    async ({ request }) => {
-      const { user: alice, token: aliceToken } = await registeredSession(
-        request,
-        "rrk-c3-alice",
-      );
-      const { user: orgRrk } = await registeredSession(request, "rrk-c3-org");
-
-      const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
-      const realmId = typedId("realm");
-      const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: realmCreateEnvelope({
-          ownerDid: alice.did,
-          realmId,
-          title: "RRK seal-before-gc",
-          contentScheme: CONTENT_SCHEME_EXPORTER_AEAD,
-          durabilityPolicy: {
-            mode: "org_recovery_key",
-            recovery_recipients: [
-              recoveryRecipient({
-                recipientId: "org-primary",
-                principalId: orgRrk.did,
-                rrkVerificationMethod: rrkVm,
-              }),
-            ],
-          },
-        }),
-      });
-      expect(create.status()).toBe(200);
-
-      const group = await submitExporterAeadGenesis(
-        request,
-        aliceToken,
-        alice,
-        realmId,
-      );
-      await submitCommit(request, aliceToken, alice, group, 0, "rrk-c3-c1");
-
-      // Attempt to GC history_secret[1] BEFORE publishing/accepting the RRK seal
-      // for epoch 1. Whether the GC intent is signalled by a client-side guard
-      // or a server-observed precondition, the spec requires the operation to be
-      // refused with durability_seal_missing_before_gc and the secret retained.
-      const gcUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(
-        realmId,
-      )}/durability/history-secret/gc`;
-      const gc = await request.post(gcUrl, {
-        headers: authHeaders(aliceToken),
-        data: {
-          mls_group_id: group.groupId,
-          effective_scope: group.effectiveScope,
-          epoch: 1,
-        },
-      });
-      expect([400, 409, 412, 422]).toContain(gc.status());
-      expect(wireErrCode(await gc.json())).toBe("durability_seal_missing_before_gc");
-
-      // After the eager seal IS accepted, the same GC becomes permissible.
-      const share = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: rrkRealmKeyShareEnvelope({
-          senderDid: alice.did,
-          senderDeviceId: alice.deviceId,
-          group,
-          recipientPrincipalId: orgRrk.did,
-          recipientDeviceId: "ak:device:00000000-0000-7000-8000-rrkrrkrrkrrk",
-          fromEpoch: 1,
-          toEpoch: 1,
-          sealedCiphertext: base64url(`rrk-c3-sealed-1-${randomUUID()}`),
-        }),
-      });
-      expect(share.status()).toBe(200);
-
-      const gcAfterSeal = await request.post(gcUrl, {
-        headers: authHeaders(aliceToken),
-        data: {
-          mls_group_id: group.groupId,
-          effective_scope: group.effectiveScope,
-          epoch: 1,
-        },
-      });
-      expect(gcAfterSeal.status()).toBe(200);
+    "C3 eager-seal RYW: an unaccepted RRK share leaves history_secret retained and available for retry",
+    async ({ browser, request }) => {
+      // Future live sequence:
+      // 1. Drive an Inkson exporter-aead epoch commit with a valid RRK policy.
+      // 2. Fault-inject the first ak.realm_key.share submission so it is not
+      //    accepted, while retaining the same client instance/storage.
+      // 3. Assert no client cleanup removes history_secret[N]. Inkson currently
+      //    uses monotonic retention, so the observable contract is successful
+      //    retry, not a fabricated server-side GC response.
+      // 4. Remove the fault and retry the eager seal. Assert the share is
+      //    accepted and the RRK holder can HPKE-open the same epoch secret.
+      // 5. If/when Inkson adds local secret GC, separately attempt GC before
+      //    step 4 and assert local refusal
+      //    durability_seal_missing_before_gc plus retained-secret evidence.
+      //
+      // No request may target a `durability/history-secret/gc` HTTP path unless
+      // such an operation is first registered by the spec.
+      void browser;
+      void request;
     },
   );
 });

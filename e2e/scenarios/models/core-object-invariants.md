@@ -69,12 +69,30 @@
    - `event_kind` — kind 字符串，标识 lifecycle 转换的来源
 5. 这一步是 spec §3 "所有 durable canonical object SHOULD 使用以下公共字段" 的最低 wire-level guard——若 soland serializer 把任何一项静默 drop，本步立刻 fail。
 
-### Phase B — Patch precondition CAS fail（fixme，需要 soland Move endpoint）
+### Phase B — 注册的 Control Move CAS fail（fixme）
 
-6. **alice** 在 `spaceId` 内创建一个 Strand `F`（`POST /_arkret/self/realms/${realmId}/strands` 且 payload 指向 `spaceId`，或 `POST /_arkret/self/events` 提交 `ak.strand.create`），记录 `strandId` 与初始 `fields.status = "open"`。
-7. **alice** 发一个 `ak.strand.update` Move，`preconditions[].head_eq` 指向**陈旧**的 `prev_revision`（例如 `expected_revision: 0`，但服务端当前 revision 已经 ≥ 1，或者把 `fields.status` 的预期值故意写错为 `"closed"` 而当前态是 `"open"`）。
-8. 断言：HTTP 4xx + `error_code = "failed_precondition"` + `reason` 来自 spec §5.1 reason-code 表或 `event-and-patch.md` §4.2.4 reducer 失败枚举。
-9. 断言：再次 `GET /_arkret/self/realms/${realmId}/strands/${strandId}`，`fields.status` 仍然是步骤 6 写入的初值；任何 cell（`ak.component.strand.fields.v1` 等）的 head 都没有被该失败 Move 触动——验证 spec §2.2 "preconditions 与 effects 同步原子"。
+`ak.strand.update` 在 event-kind registry 中是 data-plane Event，不能携带
+`preconditions[]` 或 `seal_basis`。本 Phase 使用已注册的 control-plane
+`ak.strand.move` 和 `ak.component.strand.position.v1` cas_register。
+
+6. **alice** 创建 Strand `F`，并准备 Board Space `B`、源 List `L1`、错误前像 List
+   `L_stale` 与目标 List `L2`。
+7. 查询 `GET /_arkret/self/events/frontier?realm_id=<realmId>`，取得当前 Realm Seal
+   view；提交完整 Control Move，把 position cell 从 `null` 写为
+   `{list_space_id:L1, rank:"m"}`：
+   - 顶层 `seal_basis={leaves, control_event_set_root, state_root}`；
+   - 顶层 `preconditions[].head_eq=null`；
+   - 顶层 `effects[]` 写
+     `ak:cell:ak.component.strand.position.v1:<B>:<F>`；
+   - payload 为注册的 `ak.strand.move` closed shape。
+8. 以新的 accepted Seal view 提交 stale Move：payload
+   `expected_position={space_id:L_stale,rank:"m"}`，顶层 `head_eq` 对应
+   `{list_space_id:L_stale,rank:"m"}`，effect 尝试写入
+   `{list_space_id:L2,rank:"z"}`。
+9. 断言 stale Move 返回 HTTP 412 +
+   `error_code="failed_precondition"`，Realm Seal frontier 未推进；随后使用同一 Seal basis
+   提交 fresh Move，其 `head_eq` 与 `{list_space_id:L1,rank:"m"}` 相等，并写入相同目标值。
+   断言 fresh Move 成功，同时证明 stale Move 没有局部应用 effect。
 
 ### Phase C — Cascade / archive / delete（fixme，需要 soland lifecycle reducer）
 
@@ -112,7 +130,8 @@
 
 - Phase A 步骤 3：`/_soland/self/spaces/${spaceId}` 返回 `space_id` / `owner` / `members` / `deleted` 四字段齐全
 - Phase A 步骤 4：`/_arkret/self/events?realms=${realmId}` 返回的 Space event item 含 `event_id` / `created_at` / `sender` / `event_kind` 四字段，且 `payload.space_id == spaceId`
-- Phase B 步骤 8-9：陈旧 precondition Move 返回 `failed_precondition` 且 cell head 未变
+- Phase B 步骤 8-9：陈旧 position CAS 返回 `failed_precondition`、Seal frontier 不变，
+  随后的 fresh CAS 成功
 - Phase C 步骤 11：archive 不级联子 Space
 - Phase C 步骤 12：存在 live 子结构时 tombstone MUST `space_has_live_dependents`
 - Phase C 步骤 14：tombstone 后普通 write 返回 `realm_terminal_state` / `space_already_terminal`
