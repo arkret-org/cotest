@@ -1,4 +1,4 @@
-use arkret_models_collaboration::events_payloads::morph_message::{
+use arkret_models_collaboration::events_payloads::{
     ContentBlock, DisappearingMessageExpiry, DisappearingMessageExpiryTrigger, MessageCreatePayload,
 };
 use arkret_wire::StrandId;

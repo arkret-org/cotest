@@ -1100,7 +1100,11 @@ pub(crate) fn bootstrap_device_authorize_payload(
         "sig".to_owned(),
         json!(URL_SAFE_NO_PAD.encode(signature.to_bytes())),
     );
-    payload.device_signature = Some(arkret_models_collaboration::events_payloads::preview_realm_reaction::SignatureMaterial::Variant1(signature_material));
+    payload.device_signature = Some(
+        arkret_models_collaboration::events_payloads::SignatureMaterial::Variant1(
+            signature_material,
+        ),
+    );
     serde_json::to_value(&payload).context("serialize device.authorize payload")
 }
 

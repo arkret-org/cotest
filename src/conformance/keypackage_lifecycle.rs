@@ -5,7 +5,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
-use arkret_models_collaboration::events_payloads::list_message_mimi_mls::{
+use arkret_models_collaboration::events_payloads::{
     MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
 };
 use arkret_models_crypto::{

@@ -33,10 +33,10 @@ use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId, Type
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
 };
+use arkret_models_collaboration::events_payloads::SignatureMaterial;
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceOrPrincipalRef,
 };
-use arkret_models_collaboration::events_payloads::preview_realm_reaction::SignatureMaterial;
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,

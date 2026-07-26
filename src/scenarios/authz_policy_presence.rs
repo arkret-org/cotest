@@ -127,7 +127,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         &grant_binding,
     )?;
     typed_grant.proofs.push(grant_proof);
-    let grant_payload = arkret_models_collaboration::events_payloads::capability_circle_consent_contact::CapabilityGrantPayload {
+    let grant_payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
         grant: Some(typed_grant),
         grant_id,
         subject: None,

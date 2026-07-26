@@ -7,11 +7,8 @@ use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
 use arkret_identifiers::{Did, EventId, Hash, InviteId, MessageId, RealmId, StrandId};
-use arkret_models_collaboration::events_payloads::list_message_mimi_mls::{
-    MessageRedactPayload, MessageRevisePayload,
-};
-use arkret_models_collaboration::events_payloads::morph_message::{
-    ContentBlock, MessageCreatePayload,
+use arkret_models_collaboration::events_payloads::{
+    ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
 use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget;
 use arkret_models_collaboration::governance::membership_invite::{

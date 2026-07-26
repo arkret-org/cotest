@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::events_payloads::list_message_mimi_mls::MlsWelcomePayloadClaimRef;
+use arkret_models_collaboration::events_payloads::MlsWelcomePayloadClaimRef;
 use serde::Deserialize;
 use serde_json::json;
 
