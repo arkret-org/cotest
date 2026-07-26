@@ -2033,7 +2033,7 @@ try {
         $imageBuildArgs = @{
             ImageTag = $SolandImage
         }
-        if ($DockerCacheFrom.Count -gt 0) {
+        if (@($DockerCacheFrom).Count -gt 0) {
             $imageBuildArgs.CacheFrom = $DockerCacheFrom
         }
         if ($DockerCacheTo) {
@@ -2572,7 +2572,7 @@ try {
         $InksonBaseUrl
         $inksonBetaBaseUrl
     ) | Where-Object { $_ } | Select-Object -Unique
-    $solandCorsAllowOrigin = if ($solandCorsOrigins.Count -gt 0) {
+    $solandCorsAllowOrigin = if (@($solandCorsOrigins).Count -gt 0) {
         $solandCorsOrigins -join ","
     } else {
         "http://127.0.0.1"

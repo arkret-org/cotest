@@ -77,6 +77,7 @@ export default defineConfig({
         "joint/*.spec.ts",
         "identity/device-key-lifecycle.spec.ts",
         "identity/oidc-login-flow.spec.ts",
+        "identity/passkey-login-flow.spec.ts",
       ],
       use: { ...devices["Desktop Chrome"], baseURL },
     },
