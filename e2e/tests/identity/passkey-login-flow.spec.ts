@@ -12,23 +12,34 @@ import {
 async function installVirtualAuthenticator(context: BrowserContext, page: Page) {
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
-  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
-    options: {
-      protocol: "ctap2",
-      transport: "internal",
-      hasResidentKey: true,
-      hasUserVerification: true,
-      isUserVerified: true,
-      automaticPresenceSimulation: true,
-    },
-  });
+  const authenticatorIds: string[] = [];
+  const add = async (transport: "internal" | "usb" = "internal") => {
+    const { authenticatorId } = await cdp.send(
+      "WebAuthn.addVirtualAuthenticator",
+      {
+        options: {
+          protocol: "ctap2",
+          transport,
+          hasResidentKey: true,
+          hasUserVerification: true,
+          isUserVerified: true,
+          automaticPresenceSimulation: true,
+        },
+      },
+    );
+    authenticatorIds.push(authenticatorId);
+    return authenticatorId;
+  };
+  await add();
   return {
     cdp,
-    authenticatorId,
+    add,
     async dispose() {
-      await cdp
-        .send("WebAuthn.removeVirtualAuthenticator", { authenticatorId })
-        .catch(() => undefined);
+      for (const authenticatorId of authenticatorIds) {
+        await cdp
+          .send("WebAuthn.removeVirtualAuthenticator", { authenticatorId })
+          .catch(() => undefined);
+      }
       await cdp.send("WebAuthn.disable").catch(() => undefined);
       await cdp.detach().catch(() => undefined);
     },
@@ -37,6 +48,7 @@ async function installVirtualAuthenticator(context: BrowserContext, page: Page) 
 
 test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
   const coauth = coauthBaseUrl();
+  const secondaryCoauth = optionalEnv("COTEST_COAUTH_SECONDARY_BASE_URL");
   const optIn =
     optionalEnv("COTEST_REAL_PASSKEY") ?? optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
@@ -104,23 +116,44 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         expect(logout.ok()).toBe(true);
 
         let finishBody: unknown;
-        page.on("request", (outgoing) => {
-          if (
-            new URL(outgoing.url()).pathname ===
-            "/_coauth/account/auth/passkey/auth/finish"
-          ) {
-            finishBody = outgoing.postDataJSON();
+        let completedOnSecondary = false;
+        const finishPath = "/_coauth/account/auth/passkey/auth/finish";
+        await page.route(`**${finishPath}`, async (route) => {
+          const outgoing = route.request();
+          finishBody = outgoing.postDataJSON();
+          if (!secondaryCoauth) {
+            await route.continue();
+            return;
           }
+
+          const headers = await outgoing.allHeaders();
+          delete headers["content-length"];
+          delete headers.host;
+          const response = await route.fetch({
+            url: `${secondaryCoauth}${finishPath}`,
+            headers,
+          });
+          completedOnSecondary = true;
+          await route.fulfill({ response });
         });
 
         await page.goto(`${coauth}/login`);
-        await page.locator("#login-handle").fill(handle);
+        const loginHandle = page.locator("#login-handle");
+        await expect(loginHandle).toBeVisible({ timeout: 60_000 });
+        await loginHandle.click();
+        await loginHandle.fill(handle);
+        await expect(loginHandle).toHaveValue(handle, { timeout: 5_000 });
         await page.getByTestId("coauth-login-identifier-submit").click();
-        await page.getByTestId("coauth-login-passkey").click();
+        await page.getByTestId("coauth-login-passkey").focus();
+        await page.keyboard.press("Enter");
         await expect(page).toHaveURL(new RegExp(`${coauth!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`), {
           timeout: 30_000,
         });
+        await page.unroute(`**${finishPath}`);
         expect(finishBody).toBeTruthy();
+        if (secondaryCoauth) {
+          expect(completedOnSecondary).toBe(true);
+        }
 
         const replay = await context.request.post(
           `${coauth}/_coauth/account/auth/passkey/auth/finish`,
@@ -130,6 +163,18 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
       });
 
       await test.step("credential projection is redacted and the last passkey is protected", async () => {
+        const crossOrigin = await context.request.post(
+          `${coauth}/_coauth/account/auth/passkey/register/start`,
+          {
+            data: {},
+            headers: {
+              origin: "https://evil.example",
+              "sec-fetch-site": "cross-site",
+            },
+          },
+        );
+        expect(crossOrigin.status()).toBe(403);
+
         const listed = await context.request.get(`${coauth}/_coauth/self/passkeys`);
         expect(listed.ok()).toBe(true);
         const body = (await listed.json()) as {
@@ -163,6 +208,44 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
           { data: {} },
         );
         expect(revoke.status()).toBe(409);
+
+        await page.goto(`${coauth}/security`);
+        await authenticator.add("usb");
+        await page.locator("#new-passkey-label").fill("Replacement passkey");
+        await page.getByTestId("coauth-add-passkey").click();
+        await expect(
+          page.getByText("Replacement passkey", { exact: true }),
+        ).toBeVisible({ timeout: 30_000 });
+
+        const withReplacement = await context.request.get(
+          `${coauth}/_coauth/self/passkeys`,
+        );
+        expect(withReplacement.ok()).toBe(true);
+        const replacementBody = (await withReplacement.json()) as {
+          passkeys: Array<{ id: string; label?: string }>;
+        };
+        expect(replacementBody.passkeys).toHaveLength(2);
+        const original = replacementBody.passkeys.find(
+          (candidate) => candidate.label === "Renamed passkey",
+        );
+        expect(original).toBeTruthy();
+
+        const revokeOriginal = await context.request.post(
+          `${coauth}/_coauth/self/passkeys/${original!.id}/revoke`,
+          { data: {} },
+        );
+        expect(revokeOriginal.ok()).toBe(true);
+
+        const active = await context.request.get(
+          `${coauth}/_coauth/self/passkeys`,
+        );
+        expect(active.ok()).toBe(true);
+        const activeBody = (await active.json()) as {
+          passkeys: Array<{ label?: string }>;
+        };
+        expect(activeBody.passkeys).toEqual([
+          expect.objectContaining({ label: "Replacement passkey" }),
+        ]);
       });
 
       await test.step("passkey continues OIDC and mints the canonical proof-bound session grant", async () => {

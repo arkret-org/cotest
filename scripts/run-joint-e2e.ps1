@@ -55,6 +55,10 @@ param(
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
+    # Start a second Coauth process with the same public origin, secrets, and
+    # PostgreSQL database but a separate listener. Passkey E2E uses it to prove
+    # that a ceremony started on one process can finish on another.
+    [switch]$DualCoauth,
     [string]$CoauthBin,
     [string]$CoauthPostgresImage = "postgres:16-alpine",
     # Optional externally-provisioned Postgres DSN for coauth. When set, the
@@ -1886,6 +1890,9 @@ function Get-RelativePathCompat {
 if ($StartCoauth -and $CoauthCommand) {
     throw "Use either -StartCoauth or -CoauthCommand, not both."
 }
+if ($DualCoauth -and -not $StartCoauth) {
+    throw "-DualCoauth requires -StartCoauth so both processes share generated configuration."
+}
 if ($StartCoauth -and -not $CoauthBaseUrl) {
     $coauthPort = Get-FreeTcpPort
     # WebAuthn RP IDs are effective domains. An IP-literal origin has no
@@ -1895,6 +1902,13 @@ if ($StartCoauth -and -not $CoauthBaseUrl) {
     $CoauthBaseUrl = "http://localhost:$coauthPort"
 } else {
     $coauthPort = $null
+}
+$coauthSecondaryPort = $null
+$coauthSecondaryBaseUrl = $null
+$CoauthSecondaryCommand = $null
+if ($DualCoauth) {
+    $coauthSecondaryPort = Get-FreeTcpPort
+    $coauthSecondaryBaseUrl = "http://127.0.0.1:$coauthSecondaryPort"
 }
 
 # CT-6: starid + teabay joint participants. Mirror the -StartCoauth port
@@ -2350,6 +2364,17 @@ try {
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
+        if ($DualCoauth) {
+            $coauthSecondaryConfigPath = Join-Path $jointDir "coauth-secondary.yaml"
+            $primaryBind = "address: `"127.0.0.1:$coauthPort`""
+            $secondaryBind = "address: `"127.0.0.1:$coauthSecondaryPort`""
+            $primaryConfig = Get-Content -LiteralPath $coauthConfigPath -Raw
+            if (-not $primaryConfig.Contains($primaryBind)) {
+                throw "Could not locate primary Coauth bind '$primaryBind' in $coauthConfigPath"
+            }
+            $primaryConfig.Replace($primaryBind, $secondaryBind) |
+                Set-Content -LiteralPath $coauthSecondaryConfigPath -Encoding UTF8
+        }
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir -TimeoutSeconds $StartupTimeoutSeconds
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
@@ -2373,6 +2398,9 @@ try {
         # the debug-only, loopback-only transport seam alongside test endpoints.
         $CoauthCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
+        if ($DualCoauth) {
+            $CoauthSecondaryCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
+        }
     }
 
     # CT-6: starid (DID resolver) - no external deps. Spawned
@@ -2679,6 +2707,10 @@ try {
             $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
         }
     }
+    if ($CoauthSecondaryCommand) {
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-secondary" -Command $CoauthSecondaryCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$coauthSecondaryBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
 
     $inksonService = $null
     $inksonBetaService = $null
@@ -2827,12 +2859,18 @@ try {
         # lifecycle specs. Keep these critical regressions in the default
         # joint-smoke gate instead of requiring a manual opt-in.
         $env:COTEST_REAL_OIDC_LOGIN = "1"
+        if ($coauthSecondaryBaseUrl) {
+            $env:COTEST_COAUTH_SECONDARY_BASE_URL = $coauthSecondaryBaseUrl
+        } else {
+            Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue
+        }
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue
     }
     if ($StaridBaseUrl) {
         $env:COTEST_STARID_BASE_URL = $StaridBaseUrl.TrimEnd("/")
@@ -3448,6 +3486,8 @@ $summary = [pscustomobject]@{
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     inkson_base_url = $InksonBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
+    coauth_secondary_base_url = $coauthSecondaryBaseUrl
+    dual_coauth = [bool]$DualCoauth
     coauth_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     coauth_config = $coauthConfigPath
     coauth_postgres_container = if ($ephemeralPostgres) { $ephemeralPostgres.ContainerName } else { $null }
@@ -3581,6 +3621,9 @@ if ($DualSoland -and $inksonBetaBaseUrl) {
 }
 if ($CoauthBaseUrl) {
     Write-Host "  coauth      : $CoauthBaseUrl"
+}
+if ($coauthSecondaryBaseUrl) {
+    Write-Host "  coauth-beta : $coauthSecondaryBaseUrl"
 }
 if ($StaridBaseUrl) {
     Write-Host "  starid      : $StaridBaseUrl"
