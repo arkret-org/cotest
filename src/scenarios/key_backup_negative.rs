@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did};
 use arkret_models_crypto::{
-    BackupClass, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
     KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm,
 };
@@ -140,7 +140,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
         backup_id: BackupId::new(backup_id.to_owned())?,
         actor_id: Did::new(actor.to_owned())?,
         device_id: Some(DeviceId::new(device_id.to_owned())?),
-        backup_class: BackupClass::MlsHistory,
+        backup_kind: BackupKind::MlsHistory,
         mixed_secret_storage: false,
         backup_version: "kb_1".to_owned(),
         created_at,
@@ -171,10 +171,10 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(actor.to_owned())?,
                 device_id: Some(device_id.to_owned()),
-                backup_class: BackupClass::MlsHistory,
+                backup_kind: BackupKind::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,
-                item_types: vec!["mls_group_state".to_owned()],
+                item_kinds: vec!["mls_group_state".to_owned()],
                 managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
@@ -183,7 +183,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
-            item_type: "mls_group_state".to_owned(),
+            item_kind: "mls_group_state".to_owned(),
             realm_id: None,
             managed_principal_binding: None,
             mls_group_id: Some("group_d3".to_owned()),
@@ -225,7 +225,7 @@ fn key_backup_signed_fields() -> Vec<String> {
     [
         "backup_id",
         "actor_id",
-        "backup_class",
+        "backup_kind",
         "backup_version",
         "series_id",
         "series_seq",

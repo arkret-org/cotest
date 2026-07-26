@@ -644,7 +644,7 @@ async function sendEncryptedTimelineMessage(
   const postData = response.request().postData() ?? "";
   const submittedEvent = JSON.parse(postData);
   expect(submittedEvent.payload?.encrypted_content).toMatchObject({
-    scheme: "mls-exporter-aead-v1",
+    scheme: "mls_exporter_aead_v1",
     key_ref: { algorithm: "MLS-EXPORTER-AEAD" },
   });
   expect(postData).not.toContain(body);
@@ -1417,7 +1417,7 @@ test.describe("MLS group encryption", () => {
       expect(rawEvents.status()).toBe(200);
       const rawWire = JSON.stringify(await rawEvents.json());
       expect(rawWire).toContain("encrypted_content");
-      expect(rawWire).toContain('"scheme":"mls-exporter-aead-v1"');
+      expect(rawWire).toContain('"scheme":"mls_exporter_aead_v1"');
       expect(rawWire).not.toContain(plaintext);
       expect(rawWire).not.toContain(bobPlaintext);
 

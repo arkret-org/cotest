@@ -68,14 +68,14 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round 4 / A2 — security-closure-vectors runner contract.
+    /// Round 4 / A2 — security-closure-fixture runner contract.
     /// Confirms the 12 `ak.vector.*` ids are present and every step
     /// exposes the full `runner {given_state, operation, transcript,
     /// expected_state_transition, expected_external_response,
     /// expected_audit_reason}` quad.
-    security_closure_vectors_suite_matches_reference_semantics,
-    "security_closure_vectors",
-    cotest::conformance::run_security_closure_vectors_suite,
+    security_closure_fixture_suite_matches_reference_semantics,
+    "security_closure_fixture",
+    cotest::conformance::run_security_closure_fixture_suite,
 );
 
 conformance_test!(

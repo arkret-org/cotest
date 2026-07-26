@@ -338,29 +338,30 @@ fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<AgentParticip
         .into_iter()
         .flatten()
         .any(|constraint| {
-            if constraint.get("constraint_type").and_then(Value::as_str) != Some("claim_based") {
+            if constraint.get("constraint_kind").and_then(Value::as_str) != Some("claim_based") {
                 return false;
             }
-            let controller_requirement = match constraint.get("subtype").and_then(Value::as_str) {
-                Some("approval") => {
-                    constraint.get("approval_required").and_then(Value::as_bool) == Some(true)
-                        && (constraint.get("approval_relation").and_then(Value::as_str)
-                            == Some("controller")
-                            || constraint
-                                .get("controller_approval_required")
-                                .and_then(Value::as_bool)
-                                == Some(true))
-                }
-                Some("accountability") => {
-                    constraint
-                        .get("accountability_required")
-                        .and_then(Value::as_bool)
-                        == Some(true)
-                        && constraint.get("approval_relation").and_then(Value::as_str)
-                            == Some("controller")
-                }
-                _ => false,
-            };
+            let controller_requirement =
+                match constraint.get("constraint_subkind").and_then(Value::as_str) {
+                    Some("approval") => {
+                        constraint.get("approval_required").and_then(Value::as_bool) == Some(true)
+                            && (constraint.get("approval_relation").and_then(Value::as_str)
+                                == Some("controller")
+                                || constraint
+                                    .get("controller_approval_required")
+                                    .and_then(Value::as_bool)
+                                    == Some(true))
+                    }
+                    Some("accountability") => {
+                        constraint
+                            .get("accountability_required")
+                            .and_then(Value::as_bool)
+                            == Some(true)
+                            && constraint.get("approval_relation").and_then(Value::as_str)
+                                == Some("controller")
+                    }
+                    _ => false,
+                };
             let applies = constraint
                 .get("applies_to_actions")
                 .and_then(Value::as_array)

@@ -393,7 +393,7 @@ test.describe("cross-server federation", () => {
         invitee: bob.did,
         invite_delivery_target: {
           recipient_service_id: solandServiceId("beta"),
-          recipient_service_type: "principal_server",
+          recipient_service_kind: "principal_server",
         },
         introduction_evidence_digest: `sha256:${"ab".repeat(32)}`,
         expires_at: new Date(Date.now() + 86_400_000).toISOString(),

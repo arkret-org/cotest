@@ -63,7 +63,7 @@ function secretStorageEnvelope(opts: {
   const signedFields = [
     "backup_id",
     "actor_id",
-    "backup_class",
+    "backup_kind",
     "backup_version",
     "series_id",
     "series_seq",
@@ -76,7 +76,7 @@ function secretStorageEnvelope(opts: {
     backup_id: backupId,
     actor_id: opts.actorId,
     device_id: opts.deviceId,
-    backup_class: backupClass,
+    backup_kind: backupClass,
     mixed_secret_storage: opts.mixed,
     backup_version: "kb_1",
     created_at: createdAt,
@@ -106,13 +106,13 @@ function secretStorageEnvelope(opts: {
         schema: "ak.schema.key_backup.v1",
         actor_id: opts.actorId,
         device_id: opts.deviceId,
-        backup_class: backupClass,
+        backup_kind: backupClass,
         backup_version: "kb_1",
         created_at: createdAt,
-        item_types: itemTypes,
+        item_kinds: itemTypes,
       },
     },
-    contents: itemTypes.map((item_type) => ({ item_type, secret_id: item_type })),
+    contents: itemTypes.map((item_kind) => ({ item_kind, secret_id: item_kind })),
     ciphertext: randomBytes(48).toString("base64url"),
     ciphertext_digest: "sha256:" + randomBytes(32).toString("hex"),
     series_id: seriesId,
@@ -153,7 +153,7 @@ test.describe("account recovery", () => {
     const token = await issueDevSession(request, alice);
 
     const backupsResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/keys/backups?backup_class=did_recovery`,
+      `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`,
       {
         headers: { authorization: `Bearer ${token}` },
       },
@@ -226,7 +226,7 @@ test.describe("account recovery", () => {
         )
         .toBe("active");
 
-      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_class=did_recovery`;
+      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`;
       await expect
         .poll(
           async () => {

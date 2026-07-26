@@ -102,15 +102,15 @@ fn suite_registry() -> BTreeMap<&'static str, &'static str> {
     let mut map = BTreeMap::new();
     map.insert(
         "discovery_profile_fixture",
-        "discovery_profile_fixture.json",
+        "discovery-profile-fixture.json",
     );
     map.insert(
         "event_kind_lattice_dispatch_fixture",
-        "event_kind_lattice_dispatch_fixture.json",
+        "event-kind-lattice-dispatch-fixture.json",
     );
     map.insert(
         "event_kind_payload_coverage_fixture",
-        "event_kind_payload_coverage_fixture.json",
+        "event-kind-payload-coverage-fixture.json",
     );
     map.insert("event_envelope_fixture", "");
     map.insert(

@@ -51,6 +51,8 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_actor_chain_realm_scope = false;
     let mut seen_conflict_recovery = false;
     let mut seen_same_seal_bottom_serialization = false;
+    let mut seen_realm_create_effects_closure = false;
+    let mut seen_null_cell_subject_wire_form = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -495,6 +497,38 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "realm_create_effects_closure" => {
+                validate_realm_create_effects_closure(vector, name)?;
+                seen_realm_create_effects_closure = true;
+                record_vector_event(
+                    "state_resolution.cba.realm_create_effects_closure",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "required_effect_count": 4,
+                        "genesis_state_root": "byte_identical_across_independent_implementations",
+                    }),
+                    &json!({
+                        "required_effect_count": required_array(vector, "/required_effects", name)?.len(),
+                        "genesis_state_root": pointer_str(vector, "/expected/genesis_state_root"),
+                    }),
+                );
+            }
+            "null_cell_subject_wire_form" => {
+                validate_null_cell_subject_wire_form(vector, name)?;
+                seen_null_cell_subject_wire_form = true;
+                record_vector_event(
+                    "state_resolution.cba.null_cell_subject_wire_form",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "wire_subject_segment": "null",
+                        "state_root": "byte_identical_across_independent_implementations",
+                    }),
+                    &json!({
+                        "wire_subject_segment": pointer_str(vector, "/expected/wire_subject_segment"),
+                        "state_root": pointer_str(vector, "/expected/state_root"),
+                    }),
+                );
+            }
             _ => bail!("unknown cba lattice vector: {name}"),
         }
     }
@@ -516,16 +550,158 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_concurrent_revocation
         && seen_actor_chain_realm_scope
         && seen_conflict_recovery
-        && seen_same_seal_bottom_serialization)
+        && seen_same_seal_bottom_serialization
+        && seen_realm_create_effects_closure
+        && seen_null_cell_subject_wire_form)
     {
         bail!(
-            "cba lattice fixture must cover all 18 normative vectors \
+            "cba lattice fixture must cover all 20 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / \
               threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
-              conflict_recovery / same_seal_bottom_serialization)"
+              conflict_recovery / same_seal_bottom_serialization / realm_create_effects_closure / \
+              null_cell_subject_wire_form)"
         );
+    }
+
+    Ok(())
+}
+
+fn validate_null_cell_subject_wire_form(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(
+        vector,
+        "/expected/wire_subject_segment",
+        "null",
+        vector_name,
+    )?;
+    for path in ["/expected/leaf_sequence", "/expected/state_root"] {
+        require_str_eq(
+            vector,
+            path,
+            "byte_identical_across_independent_implementations",
+            vector_name,
+        )?;
+    }
+
+    let negatives = required_array(vector, "/negative_cases", vector_name)?;
+    let mut negative_names = BTreeSet::new();
+    for case in negatives {
+        let name = required_str(case, "name")?;
+        if !negative_names.insert(name) {
+            bail!("vector {vector_name} repeats negative case {name}");
+        }
+        let family = required_str(case, "cell_family")?;
+        if !family.starts_with("ak.component.") {
+            bail!("vector {vector_name} negative case {name} has invalid cell family");
+        }
+        if required_str(case, "bad_subject_segment")? == "null" {
+            bail!("vector {vector_name} negative case {name} is not a malformed subject");
+        }
+        if required_str(case, "expected")? != "schema_violation" {
+            bail!("vector {vector_name} negative case {name} must be a schema violation");
+        }
+    }
+    let expected_names = BTreeSet::from([
+        "realm_id_encoded_into_subject",
+        "realm_role_classification_encoded_into_subject",
+        "empty_trailing_segment",
+    ]);
+    if negative_names != expected_names {
+        bail!("vector {vector_name} null-subject negative coverage drifted");
+    }
+
+    Ok(())
+}
+
+fn validate_realm_create_effects_closure(vector: &Value, vector_name: &str) -> Result<()> {
+    let effects = required_array(vector, "/required_effects", vector_name)?;
+    if effects.len() != 4 {
+        bail!("vector {vector_name} must define exactly four realm-create effects");
+    }
+
+    let mut effect_kinds = std::collections::BTreeMap::new();
+    for effect in effects {
+        let cell = required_str(effect, "cell")?;
+        let op_kind = required_str(effect, "op_kind")?;
+        if effect_kinds.insert(cell, op_kind).is_some() {
+            bail!("vector {vector_name} repeats realm-create effect cell {cell}");
+        }
+    }
+    for (cell, op_kind) in [
+        ("ak:cell:ak.component.realm.metadata.v1:null", "set"),
+        (
+            "ak:cell:ak.component.member.state.v1:<payload.object.created_by>",
+            "transition",
+        ),
+        ("ak:cell:ak.component.realm.create.v1:null", "append"),
+        ("ak:cell:ak.component.notary.v1:null", "set"),
+    ] {
+        if effect_kinds.get(cell) != Some(&op_kind) {
+            bail!("vector {vector_name} must bind realm-create cell {cell} to op_kind={op_kind}");
+        }
+    }
+    let member_effect = effects
+        .iter()
+        .find(|effect| {
+            effect.get("cell").and_then(Value::as_str)
+                == Some("ak:cell:ak.component.member.state.v1:<payload.object.created_by>")
+        })
+        .expect("member effect checked above");
+    require_str_eq(member_effect, "/from", "leave", vector_name)?;
+    require_str_eq(member_effect, "/to", "join", vector_name)?;
+    let create_effect = effects
+        .iter()
+        .find(|effect| {
+            effect.get("cell").and_then(Value::as_str)
+                == Some("ak:cell:ak.component.realm.create.v1:null")
+        })
+        .expect("realm-create effect checked above");
+    if required_u64(create_effect, "/issuer_seq", vector_name)? != 0 {
+        bail!("vector {vector_name} realm-create ordered-log issuer_seq must be zero");
+    }
+
+    require_str_eq(
+        vector,
+        "/expected/genesis_state_root",
+        "byte_identical_across_independent_implementations",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/expected/creator_member_cell_proof",
+        "inclusion",
+        vector_name,
+    )?;
+    require_bool_eq(
+        vector,
+        "/expected/realm_metadata_cell_present_in_genesis_leaf_set",
+        true,
+        vector_name,
+    )?;
+    let branches: BTreeSet<&str> =
+        required_array(vector, "/expected/branches_covered", vector_name)?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+    let expected_branches =
+        BTreeSet::from(["collaboration", "principal_control", "direct_conversation"]);
+    if branches != expected_branches {
+        bail!("vector {vector_name} realm-create branch coverage drifted");
+    }
+
+    let negative_names: BTreeSet<&str> = required_array(vector, "/negative_cases", vector_name)?
+        .iter()
+        .map(|case| required_str(case, "name"))
+        .collect::<Result<_>>()?;
+    let expected_negative_names = BTreeSet::from([
+        "missing_member_state_effect",
+        "creator_non_membership_proof",
+        "metadata_cell_only_after_first_update",
+        "extra_unregistered_effect",
+    ]);
+    if negative_names != expected_negative_names {
+        bail!("vector {vector_name} realm-create negative coverage drifted");
     }
 
     Ok(())
@@ -963,7 +1139,7 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
 }
 
 fn validate_seal_compaction_interval_enforced(vector: &Value, vector_name: &str) -> Result<()> {
-    require_str_eq(vector, "/realm/notary_type", "open_set", vector_name)?;
+    require_str_eq(vector, "/realm/notary/kind", "open_set", vector_name)?;
     let interval = required_u64(
         vector,
         "/realm/seal_compaction_max_interval_ms",
@@ -1050,7 +1226,7 @@ fn validate_seal_compaction_interval_enforced(vector: &Value, vector_name: &str)
 }
 
 fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Result<()> {
-    require_str_eq(vector, "/notary_profile/type", "threshold", vector_name)?;
+    require_str_eq(vector, "/notary_profile/kind", "threshold", vector_name)?;
     let proposer = required_pointer_str(vector, "/notary_profile/proposer_id", vector_name)?;
     let signer = required_pointer_str(vector, "/notary_profile/signer_id", vector_name)?;
     if proposer == signer {
@@ -1255,7 +1431,7 @@ fn validate_threshold_forensic_attribution(vector: &Value, vector_name: &str) ->
     for case in required_array(vector, "/cases", vector_name)? {
         let case_name = required_pointer_str(case, "/name", vector_name)?;
         seen.insert(case_name.to_owned());
-        require_str_eq(case, "/notary/type", "threshold", vector_name)?;
+        require_str_eq(case, "/notary/kind", "threshold", vector_name)?;
         let member_count = required_array(case, "/notary/members", vector_name)?.len() as u64;
         let threshold = required_u64(case, "/notary/threshold", vector_name)?;
         if threshold == 0 || threshold > member_count {

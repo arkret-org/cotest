@@ -2,9 +2,9 @@
 
 ## 目标
 
-把 `models/morph.md` §4.1 (`schema_refs[]` Evolution Policy) 与 `ak.profile.morph.schema_migration_transformations.v1` opt-in profile 当作 e2e 合约:验证 soland 对 `ak.morph.schema_migrate` 与 `ak.morph.update`-on-`schema_refs[]` 两条演进路径的判定 — additive fast-path 必须接受、breaking / transformation 必须 opt-in profile + capability,未声明 profile 时 reducer fail-closed,且支持的 transformation 类型与 capability point 必须严格落在 profile 声明的清单内。同时把 `morph-type-decision-table.json` 当作 reducer 选源真源,断言 soland describe / event 路径不混淆 §4 顺序 1–4 的来源。
+把 `models/morph.md` §4.1 (`schema_refs[]` Evolution Policy) 与 `ak.profile.morph.schema_migration_transformations.v1` opt-in profile 当作 e2e 合约:验证 soland 对 `ak.morph.schema_migrate` 与 `ak.morph.update`-on-`schema_refs[]` 两条演进路径的判定 — additive fast-path 必须接受、breaking / transformation 必须 opt-in profile + capability,未声明 profile 时 reducer fail-closed,且支持的 transformation 类型与 capability point 必须严格落在 profile 声明的清单内。同时把 `morph-kind-decision-table.json` 当作 reducer 选源真源,断言 soland describe / event 路径不混淆 §4 顺序 1–4 的来源。
 
-不验证:`morph_type` create-lock(见 models 通用 invariants suite, G1.T6)、reducer 对 Morph lifecycle (`active/archived/redacted`) 的 transition 校验、Morph reducer 在跨 Realm capability `allowed_morph_types` 上的判定(归 authz/capability-chain)。本文件只聚焦 *schema EVOLUTION over time*。
+不验证:`morph_kind` create-lock(见 models 通用 invariants suite, G1.T6)、reducer 对 Morph lifecycle (`active/archived/redacted`) 的 transition 校验、Morph reducer 在跨 Realm capability `allowed_morph_kinds` 上的判定(归 authz/capability-chain)。本文件只聚焦 *schema EVOLUTION over time*。
 
 ## Spec 锚点
 
@@ -16,7 +16,7 @@
   - §4.1 S3 — `ak.morph.schema_migrate` 一等 event;`compatibility_class ∈ {additive, breaking, transformation}`;breaking/transformation 需 `ak.profile.morph.schema_migration_transformations.v1` opt-in
 - `arkret-spec/spec/v1/zh/models/morph.md` §6 — Schema Evolution 通用约束
 - Profile 定义:`arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json` → `ak.profile.morph.schema_migration_transformations.v1`(`required_event_kinds: [ak.morph.schema_migrate]`、`feature_discovery.required: [supported_compatibility_classes, transformation_rules_dialect, schema_migrate_capability_action]`)
-- Type 决策表(canonical):`arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json`(4 个 precedence 顺序、3 条 merge_rules、4 个 conflict_resolution case、4 个 conformance_must_test)
+- Type 决策表(canonical):`arkret-spec/spec/v1/artifacts/registry/morph-kind-decision-table.json`(4 个 precedence 顺序、3 条 merge_rules、4 个 conflict_resolution case、4 个 conformance_must_test)
 - Event kind:`arkret-spec/spec/v1/artifacts/registry/event-kind-registry.json` → `ak.morph.schema_migrate` (category=morph, reducer_input=true, status=active)
 - Error code:`arkret-spec/spec/v1/artifacts/registry/error-code-registry.json`
   - `morph_schema_refs_evolution_unauthorized`(`ak.morph.update` 修改 schema_refs[] 缺 capability)
@@ -28,7 +28,7 @@
 
 - 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_arkret/describe`、`/_arkret/self/realms`、`/_arkret/self/realms/:id/events`
 - 1 × coauth (auth) — 给 alice 颁 dev session;`ak.morph.schema.migrate` capability action 通过 dev token 默认 grant 或在 Realm policy 中显式声明
-- 1 × cotest harness (Playwright `request` fixture) — 加载 `morph-type-decision-table.json` + `conformance-profiles.json` 中的 profile 块,把 capability 点清单直接作为 negative input source
+- 1 × cotest harness (Playwright `request` fixture) — 加载 `morph-kind-decision-table.json` + `conformance-profiles.json` 中的 profile 块,把 capability 点清单直接作为 negative input source
 
 不需要 dual-soland;不需要 browser context;不需要新增 mock。
 
@@ -106,7 +106,7 @@
 
 ### Phase E — Type registry alignment (LIVE)
 
-21. **harness** 加载 `arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json` → 收集 `precedence[*].source` 4 项与 `precedence[*].consumed_by[*]` decision name set(`reducer.field_validation`、`capability.allowed_morph_types_match`、`view.default_renderer_pick`、...)
+21. **harness** 加载 `arkret-spec/spec/v1/artifacts/registry/morph-kind-decision-table.json` → 收集 `precedence[*].source` 4 项与 `precedence[*].consumed_by[*]` decision name set(`reducer.field_validation`、`capability.allowed_morph_types_match`、`view.default_renderer_pick`、...)
 22. **harness** 同时加载 `ak.profile.morph.schema_migration_transformations.v1` profile 块,断言以下结构性约束:
     - `required_event_kinds` 含 `ak.morph.schema_migrate`
     - `additional_requirements` 含 `capability_must`、`from_set_check_must`、`deterministic_transformation_must`
@@ -121,7 +121,7 @@
 - Phase B:additive `ak.morph.update` schema_refs[] 接受;additive `ak.morph.schema_migrate` 不需 profile;v1 历史 event `requirements.schema[]` 未被 silently rewrite
 - Phase C:breaking/transformation 在无 profile 时 reject;Realm 声明 profile + capability 后接受;audit 含 `schema_migration_breaking` marker;撤 capability 后 `capability_denied`
 - Phase D (fixme):`ak.vector.morph.*` fixture 驱动的 transform 投影与 expected_output byte-equal(等 fixture 落地)
-- Phase E (LIVE):`morph-type-decision-table.json` 与 `ak.profile.morph.schema_migration_transformations.v1` profile 块结构正确解析;`precedence[*].consumed_by` ∩ `MUST_NOT_consume_by` 为空;`required_event_kinds` 含 `ak.morph.schema_migrate`
+- Phase E (LIVE):`morph-kind-decision-table.json` 与 `ak.profile.morph.schema_migration_transformations.v1` profile 块结构正确解析;`precedence[*].consumed_by` ∩ `MUST_NOT_consume_by` 为空;`required_event_kinds` 含 `ak.morph.schema_migrate`
 
 ## Edge cases / sub-tests
 

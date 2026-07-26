@@ -21,7 +21,7 @@ use std::collections::BTreeSet;
 use arkret_identifiers::Did;
 use arkret_models_identity::{
     DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
-    HandleHintBindingSource, RecipientServiceType,
+    HandleHintBindingSource, RecipientServiceKind,
 };
 use chrono::{Duration, Utc};
 use proptest::prelude::*;
@@ -131,7 +131,7 @@ fn member_delivery_binding() -> DeliveryBindingHint {
     modes.insert(DeliveryMode::Events);
     DeliveryBindingHint {
         recipient_service_id: Did::new("did:web:rs.example".to_owned()).unwrap(),
-        recipient_service_type: RecipientServiceType::PrincipalServer,
+        recipient_service_kind: RecipientServiceKind::PrincipalServer,
         binding_source: HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: modes,
         service_acceptance_ref: None,

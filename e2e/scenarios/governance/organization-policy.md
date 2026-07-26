@@ -90,7 +90,7 @@ cotest 还守护 directory / teabay 的 verified badge 与上面**同一**已验
   - SOL-ORG-05:`effective-policy` 仅从 **active verified** 关系派生 organization 层,并暴露 official badge / inheritance_mode。
   - SOL-ORG-06 / TBY-ORG-*:directory verified badge 读同一关系语义。
   - COA-ORG-02/03/04:coauth organization bootstrap / delegation 签发面。
-- 在上述 soland / coauth / teabay 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event_kind_payload_coverage_fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。
+- 在上述 soland / coauth / teabay 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event-kind-payload-coverage-fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。
 
 ## 总耗时预估
 

@@ -385,7 +385,7 @@ fn run_preview_token_scoped_stripped_state_case(case: &Value) -> Result<()> {
     for required in [
         "bob_preview",
         "mallory_scope_confused_target",
-        "link_type_rewritten_to_invite",
+        "address_link_kind_rewritten_to_invite",
     ] {
         if !seen.contains(required) {
             bail!("preview token vector missing request {required}");
@@ -398,7 +398,8 @@ fn evaluate_preview_request(case: &Value, request: &Value) -> Result<Value> {
     let token = required_object(case, "token")?;
     if required_str(request, "caller")? != required_str_obj(token, "aud")?
         || required_str(request, "target_digest")? != required_str_obj(token, "target_digest")?
-        || required_str(request, "link_type")? != required_str_obj(token, "link_type")?
+        || required_str(request, "address_link_kind")?
+            != required_str_obj(token, "address_link_kind")?
     {
         return Ok(json!({"decision": "reject", "public_error_shape": "not_found"}));
     }
@@ -485,7 +486,8 @@ fn evaluate_history_sharing_scenario(scenario: &Value) -> Result<Value> {
     // (device-lifecycle §13 canonical gate) are separate decisions: a reader
     // can be allowed to read pre-join history yet still be denied the key when
     // the requesting key source is not in the matched rule's `key_sources`.
-    let pre_join_ok = required_str_obj(policy, "pre_join_history")? == "allow_if_visibility_allows";
+    let pre_join_ok =
+        required_str_obj(policy, "pre_join_history")? == "visibility_condition_allowed";
     let receiver_ok = scenario
         .get("receiver_state_valid")
         .and_then(Value::as_bool)

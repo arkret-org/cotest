@@ -16,19 +16,19 @@
 //!   * unknown keyword and wrong hierarchy order fail closed (`parse_address` returns Err); retired
 //!     `via` hints are ignored.
 //!   * `<realm>` disambiguation: UUIDv7 → RealmRef::RealmId, dotted/domain → RealmRef::Alias.
-//!   * `target_digest` covers ONLY the identity tuple + link_type — adding / removing action/tok/lt
-//!     does NOT change it; switching strand/message DOES; absent hierarchy fields are OMITTED (not
-//!     `null`) in the canonical shape.
+//!   * `target_digest` covers ONLY the identity tuple + address_link_kind — adding / removing
+//!     action/tok/lt does NOT change it; switching strand/message DOES; absent hierarchy fields are
+//!     OMITTED (not `null`) in the canonical shape.
 //!   * scope-confusion: an A-object token fails `verify_token_target` against a B-object address;
-//!     the token's link_type wins over a disagreeing URL `lt` hint (modeled via the
-//!     `effective_link_type` argument).
+//!     the token's address_link_kind wins over a disagreeing URL `lt` hint (modeled via the
+//!     `effective_address_link_kind` argument).
 //!   * `DirectoryTargetResolutionOutcome` deserializes the §9.1 common fields (`as_of`,
 //!     `source_refs`, `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_discovery::{DirectoryTargetResolutionOutcome, TargetKind};
 use arkret_wire::{
-    AddressAction, LinkType, RealmRef, TargetDescriptor, build_address, build_https_landing,
+    AddressAction, AddressLinkKind, RealmRef, TargetDescriptor, build_address, build_https_landing,
     parse_address, target_digest, verify_token_target,
 };
 use chrono::{TimeZone, Utc};
@@ -52,8 +52,8 @@ pub const VECTOR_ID_OA_DIGEST_OMITS_ABSENT: &str =
     "ak.cotest_vector.object_addressing.target_digest.omits_absent_levels.v1";
 pub const VECTOR_ID_OA_SCOPE_CONFUSION_REPLAY: &str =
     "ak.cotest_vector.object_addressing.scope_confusion.cross_object_replay_rejected.v1";
-pub const VECTOR_ID_OA_SCOPE_TOKEN_LINK_TYPE_WINS: &str =
-    "ak.cotest_vector.object_addressing.scope_confusion.token_link_type_wins.v1";
+pub const VECTOR_ID_OA_SCOPE_TOKEN_ADDRESS_LINK_KIND_WINS: &str =
+    "ak.cotest_vector.object_addressing.scope_confusion.token_address_link_kind_wins.v1";
 pub const VECTOR_ID_OA_RESOLVE_TARGET_COMMON_FIELDS: &str =
     "ak.cotest_vector.object_addressing.resolve_target.common_fields_shape.v1";
 pub const VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW: &str =
@@ -68,7 +68,7 @@ pub const ALL_OBJECT_ADDRESSING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_OA_DIGEST_TRACKS_OBJECT,
     VECTOR_ID_OA_DIGEST_OMITS_ABSENT,
     VECTOR_ID_OA_SCOPE_CONFUSION_REPLAY,
-    VECTOR_ID_OA_SCOPE_TOKEN_LINK_TYPE_WINS,
+    VECTOR_ID_OA_SCOPE_TOKEN_ADDRESS_LINK_KIND_WINS,
     VECTOR_ID_OA_RESOLVE_TARGET_COMMON_FIELDS,
     VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW,
 ];
@@ -246,7 +246,7 @@ fn digest_for(addr: &str) -> Result<String> {
 
 /// OA-COT-2.1 — adding / removing `via`, `action`, `tok`, `lt` on the SAME
 /// identity tuple does NOT change `target_digest` (the digest is computed over
-/// the identity tuple + link_type only).
+/// the identity tuple + address_link_kind only).
 pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // Baseline strand target (reference link).
     let base = digest_for(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))?;
@@ -262,9 +262,9 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
         bail!("adding via/action hints MUST NOT change target_digest");
     }
 
-    // An invite link adds lt=invite + tok=...; link_type is part of the
+    // An invite link adds lt=invite + tok=...; address_link_kind is part of the
     // descriptor, so to isolate the via/action/tok effect we keep the SAME
-    // link_type for both sides by parsing two reference forms that differ only
+    // address_link_kind for both sides by parsing two reference forms that differ only
     // in their (ignored) hints. The invite/reference distinction is asserted
     // separately below.
     let no_hints = digest_for(&format!(
@@ -274,7 +274,7 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
         bail!("the default action=view hint MUST NOT change target_digest");
     }
 
-    // Reference vs invite: the descriptor's link_type DOES participate in the
+    // Reference vs invite: the descriptor's address_link_kind DOES participate in the
     // digest, but a token's `tok` value never does. Build two invite addresses
     // with different tokens but the same identity — same digest.
     let invite_tok_x = digest_for(&format!(
@@ -286,9 +286,9 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     if invite_tok_x != invite_tok_y {
         bail!("the opaque `tok` value MUST NOT change target_digest");
     }
-    // Sanity: invite differs from reference (link_type IS part of the tuple).
+    // Sanity: invite differs from reference (address_link_kind IS part of the tuple).
     if invite_tok_x == base {
-        bail!("link_type IS part of the digest tuple — invite vs reference MUST differ");
+        bail!("address_link_kind IS part of the digest tuple — invite vs reference MUST differ");
     }
     Ok(())
 }
@@ -359,8 +359,8 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // omitted form, not the null form.
     let digest = target_digest(&desc).map_err(|e| anyhow!("digest: {e}"))?;
 
-    let omitted_bytes = b"{\"link_type\":\"reference\",\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
-    let null_bytes = b"{\"strand_id\":null,\"link_type\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
+    let omitted_bytes = b"{\"address_link_kind\":\"reference\",\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
+    let null_bytes = b"{\"strand_id\":null,\"address_link_kind\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
     let omitted_expected = super::sha256_prefixed(omitted_bytes);
     let null_expected = super::sha256_prefixed(null_bytes);
 
@@ -380,12 +380,12 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
 // OA-COT-3 — scope-confusion
 // ════════════════════════════════════════════════════════════════════════════
 
-/// Build the signed-token descriptor for an invite address (link_type pinned to
+/// Build the signed-token descriptor for an invite address (address_link_kind pinned to
 /// Invite, as a real minted token would carry).
 fn token_descriptor_for(addr: &str) -> Result<TargetDescriptor> {
     let parsed = parse_address(addr).map_err(|e| anyhow!("parse {addr}: {e}"))?;
     let mut desc = TargetDescriptor::from_parsed(&parsed);
-    desc.link_type = LinkType::Invite;
+    desc.address_link_kind = AddressLinkKind::Invite;
     Ok(desc)
 }
 
@@ -403,7 +403,7 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
     ))?;
 
     // Positive control: A-token validates against the A-address.
-    if !verify_token_target(&token_desc, &addr_a, LinkType::Invite) {
+    if !verify_token_target(&token_desc, &addr_a, AddressLinkKind::Invite) {
         bail!("an A-object token MUST validate against its own A-address");
     }
 
@@ -412,7 +412,7 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
         "web+arkret:realm/{R}/strand/{F2}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_b: {e}"))?;
-    if verify_token_target(&token_desc, &addr_b, LinkType::Invite) {
+    if verify_token_target(&token_desc, &addr_b, AddressLinkKind::Invite) {
         bail!("an A-object token MUST NOT validate against a B-object address (scope confusion)");
     }
 
@@ -421,65 +421,65 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
         "web+arkret:realm/{R}/strand/{F}/m/{M}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_msg: {e}"))?;
-    if verify_token_target(&token_desc, &addr_msg, LinkType::Invite) {
+    if verify_token_target(&token_desc, &addr_msg, AddressLinkKind::Invite) {
         bail!("a strand-scoped token MUST NOT validate against a message under it");
     }
     Ok(())
 }
 
-/// OA-COT-3.2 — when the URL `lt` hint disagrees with the token's link_type,
-/// the TOKEN's link_type wins. Modeled via the `effective_link_type` argument:
-/// the comparison is performed under the (trusted) effective link_type, not
+/// OA-COT-3.2 — when the URL `lt` hint disagrees with the token's address_link_kind,
+/// the TOKEN's address_link_kind wins. Modeled via the `effective_address_link_kind` argument:
+/// the comparison is performed under the (trusted) effective address_link_kind, not
 /// whatever the untrusted address query claimed.
-pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
+pub fn run_scope_token_address_link_kind_wins_vector() -> Result<()> {
     // The token was minted as an INVITE for strand A.
     let token_desc = token_descriptor_for(&format!(
         "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))?;
 
     // The presented URL, however, was DOWNGRADED to a reference link (the
-    // attacker stripped `lt=invite`). Its parsed link_type is Reference.
+    // attacker stripped `lt=invite`). Its parsed address_link_kind is Reference.
     let downgraded = parse_address(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))
         .map_err(|e| anyhow!("downgraded: {e}"))?;
-    if downgraded.link_type != LinkType::Reference {
+    if downgraded.address_link_kind != AddressLinkKind::Reference {
         bail!("vector setup: the downgraded URL MUST parse as a reference link");
     }
 
-    // Comparing under the URL's (untrusted) reference link_type MUST fail —
-    // the digests differ because link_type participates in the tuple.
-    if verify_token_target(&token_desc, &downgraded, LinkType::Reference) {
+    // Comparing under the URL's (untrusted) reference address_link_kind MUST fail —
+    // the digests differ because address_link_kind participates in the tuple.
+    if verify_token_target(&token_desc, &downgraded, AddressLinkKind::Reference) {
         bail!("a reference-typed comparison MUST NOT match an invite token descriptor");
     }
 
-    // Comparing under the TOKEN's effective Invite link_type MUST succeed —
-    // the token's link_type wins over the URL hint.
-    if !verify_token_target(&token_desc, &downgraded, LinkType::Invite) {
+    // Comparing under the TOKEN's effective Invite address_link_kind MUST succeed —
+    // the token's address_link_kind wins over the URL hint.
+    if !verify_token_target(&token_desc, &downgraded, AddressLinkKind::Invite) {
         bail!(
-            "the token's link_type MUST win over a disagreeing URL `lt` hint \
-             (compare under effective_link_type = Invite)"
+            "the token's address_link_kind MUST win over a disagreeing URL `lt` hint \
+             (compare under effective_address_link_kind = Invite)"
         );
     }
 
     // Symmetric case: a reference token presented under an invite URL still
-    // compares under the trusted (reference) link_type → no privilege escalation.
+    // compares under the trusted (reference) address_link_kind → no privilege escalation.
     let ref_token = {
         let parsed = parse_address(&format!("web+arkret:realm/{R}/strand/{F}?via={VIA}"))
             .map_err(|e| anyhow!("ref token addr: {e}"))?;
         TargetDescriptor::from_parsed(&parsed)
     };
-    if ref_token.link_type != LinkType::Reference {
-        bail!("vector setup: reference token descriptor MUST carry Reference link_type");
+    if ref_token.address_link_kind != AddressLinkKind::Reference {
+        bail!("vector setup: reference token descriptor MUST carry Reference address_link_kind");
     }
     let upgraded_url = parse_address(&format!(
         "web+arkret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("upgraded url: {e}"))?;
-    // Under the trusted Reference link_type the reference token matches; it
+    // Under the trusted Reference address_link_kind the reference token matches; it
     // MUST NOT match under a forged Invite effective type.
-    if !verify_token_target(&ref_token, &upgraded_url, LinkType::Reference) {
-        bail!("a reference token MUST match under its own (reference) effective link_type");
+    if !verify_token_target(&ref_token, &upgraded_url, AddressLinkKind::Reference) {
+        bail!("a reference token MUST match under its own (reference) effective address_link_kind");
     }
-    if verify_token_target(&ref_token, &upgraded_url, LinkType::Invite) {
+    if verify_token_target(&ref_token, &upgraded_url, AddressLinkKind::Invite) {
         bail!("a reference token MUST NOT be upgraded to invite via the URL `lt` hint");
     }
     Ok(())
@@ -513,7 +513,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             {
                 "realm_id": format!("ak:realm:{R}"),
                 "service_id": "did:web:relay.example",
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "role": "primary",
                 "operations": ["ak.self.events.command.submit"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
@@ -531,7 +531,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             {
                 "realm_id": format!("ak:realm:{R}"),
                 "service_id": "did:web:teabay.example",
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "role": "mirror",
                 "operations": ["ak.self.events.command.submit"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
@@ -655,7 +655,7 @@ pub fn run_object_addressing_vector_suite() -> Result<()> {
     run_target_digest_omits_absent_vector()?;
     // OA-COT-3 — scope-confusion (2 cases).
     run_scope_confusion_replay_vector()?;
-    run_scope_token_link_type_wins_vector()?;
+    run_scope_token_address_link_kind_wins_vector()?;
     // OA-COT-4 — resolve_target response shape (2 cases).
     run_resolve_target_common_fields_vector()?;
     run_resolve_target_realm_preview_vector()?;

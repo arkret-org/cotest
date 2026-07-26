@@ -80,7 +80,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert_eq!(ice["ttl_seconds"], 300);
     assert_eq!(ice["refresh_lead_seconds"], 75);
     assert!(
-        ice.get("force_turn").is_none(),
+        ice.get("turn_required").is_none(),
         "the default false value is omitted from the canonical response"
     );
     assert!(ice["issued_at"].is_string());
@@ -136,8 +136,8 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(turn_only["force_turn"], true);
-    // In force_turn mode soland returns only the TURN server, carried in
+    assert_eq!(turn_only["turn_required"], true);
+    // In turn_required mode soland returns only the TURN server, carried in
     // `ice_servers` (there is no separate `turn_servers` response field).
     let turn_only_servers = turn_only["ice_servers"].as_array().unwrap();
     assert_eq!(turn_only_servers.len(), 1);

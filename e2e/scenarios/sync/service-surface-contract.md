@@ -30,7 +30,7 @@
 ## 拓扑
 
 - 1 × soland (principal server) — `solandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/snapshot/*` 与 `/_arkret/self/events/*` namespace
-- 1 × coauth (auth server) — `coauthBaseUrl()`;同样暴露 canonical `/_arkret/describe`,但 `service_type=auth_server`,不 claim `principal_server` profile
+- 1 × coauth (auth server) — `coauthBaseUrl()`;同样暴露 canonical `/_arkret/describe`,但 `service_kind=auth_server`,不 claim `principal_server` profile
 - 1 × harness — Playwright `request` fixture,纯 HTTP;无 browser context
 
 `coauthBaseUrl()` 在某些 run profile 下返回 `undefined`(即未配置 `COTEST_COAUTH_BASE_URL`)。本 scenario 中所有 coauth 子断言 MUST 在该值缺失时通过 `test.skip(!coauthBaseUrl(), ...)` 跳过,不得让 suite 在单服务器 profile 上 fail。
@@ -59,8 +59,8 @@
 1. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
 2. 断言:
    - HTTP 200,`Content-Type: application/json`
-   - body 含 spec §3 必填字段:`service_id`、`trust_domain`、`service_type`、`protocol_version`、`supported_profiles`、`supported_operations`、`supported_bindings`(数组,不是单数 `binding`)、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
-   - `service_type === "principal_server"`(soland 是 principal server,见 `service-surface.md` §2.5)
+   - body 含 spec §3 必填字段:`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`supported_operations`、`supported_bindings`(数组,不是单数 `binding`)、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
+   - `service_kind === "principal_server"`(soland 是 principal server,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
    - `supported_bindings[0].kind === "http_json"`、`supported_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
    - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` 全部存在且是数组
@@ -70,7 +70,7 @@
 3. `GET ${coauthBaseUrl()}/_arkret/describe`(仅当 `coauthBaseUrl()` 已配置)
 4. 断言:
    - HTTP 200,JSON
-   - `service_type === "auth_server"`(spec §3 服务类型命名规则)
+   - `service_kind === "auth_server"`(spec §3 服务类型命名规则)
    - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `ak.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
    - `auth_metadata.account_authority.gate_account_base` 是绝对 URL,且 `auth_metadata.methods[]` 非空(coauth 是 Account Authority)
    - 同样 §3.0 六个 claim-level 字段都存在
@@ -149,7 +149,7 @@
 
 ## Observable assertions(合并清单)
 
-- Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_type` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
+- Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_kind` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
 - Phase B:未知路径 → 404 `unrecognized_endpoint`;错误 method → 405 `method_not_allowed`;两者都符合 §5 错误 envelope,不返回 HTML/栈信息
 - Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ak:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
 - Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op;同 `event_id` 不同 body → `duplicate_conflict` / 409;事件只投影一次

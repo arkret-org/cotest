@@ -70,7 +70,7 @@ fn strong_catalog() -> EventPayloadValidatorCatalog {
 
 #[test]
 fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() -> Result<()> {
-    let fixture = load_fixture("event_kind_payload_coverage_fixture.json")?;
+    let fixture = load_fixture("event-kind-payload-coverage-fixture.json")?;
     let catalog = strong_catalog();
 
     let positives = fixture

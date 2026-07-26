@@ -1,7 +1,7 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_crypto::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
+use arkret_models_crypto::{BackupKind, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -138,7 +138,7 @@ struct RecoverySessionState {
 struct BackupEnvelopeState {
     backup_id: String,
     actor_id: String,
-    backup_class: String,
+    backup_kind: String,
     series_id: String,
     series_seq: u64,
     ciphertext_digest: String,
@@ -161,7 +161,7 @@ fn backup_envelope_state(value: &Value) -> Result<BackupEnvelopeState> {
     Ok(BackupEnvelopeState {
         backup_id: required_str(value, "backup_id")?.to_owned(),
         actor_id: required_str(value, "actor_id")?.to_owned(),
-        backup_class: required_str(value, "backup_class")?.to_owned(),
+        backup_kind: required_str(value, "backup_kind")?.to_owned(),
         series_id: required_str(value, "series_id")?.to_owned(),
         series_seq: value
             .get("series_seq")
@@ -175,11 +175,11 @@ fn proof_digest_str(proof: &KeyBackupUnlockProof) -> Result<&str> {
     Ok(proof.proof_digest.as_str())
 }
 
-fn backup_class_str(backup_class: BackupClass) -> &'static str {
-    match backup_class {
-        BackupClass::DidRecovery => "did_recovery",
-        BackupClass::SecretStorage => "secret_storage",
-        BackupClass::MlsHistory => "mls_history",
+fn backup_class_str(backup_kind: BackupKind) -> &'static str {
+    match backup_kind {
+        BackupKind::DidRecovery => "did_recovery",
+        BackupKind::SecretStorage => "secret_storage",
+        BackupKind::MlsHistory => "mls_history",
     }
 }
 
@@ -204,7 +204,7 @@ fn authorize_unlock(
         || proof.recovery_session_id.as_str() != session.recovery_session_id
         || proof.principal_id.as_str() != session.principal_id
         || proof.requesting_device_id.as_str() != session.requesting_device_id
-        || backup_class_str(proof.backup_class) != envelope.backup_class
+        || backup_class_str(proof.backup_kind) != envelope.backup_kind
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest
         || proof_digest_str(proof)
@@ -358,7 +358,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
     let plaintext: KeyBackupPlaintext = serde_json::from_value(plaintext_value)?;
     if expected_bool(vector, "plaintext_metadata_matches_envelope")?
         && (plaintext.backup_id.as_str() != envelope.backup_id
-            || backup_class_str(plaintext.backup_class) != envelope.backup_class
+            || backup_class_str(plaintext.backup_kind) != envelope.backup_kind
             || plaintext.series_id.as_str() != envelope.series_id
             || plaintext.series_seq != envelope.series_seq)
     {

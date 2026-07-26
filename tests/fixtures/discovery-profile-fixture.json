@@ -1,15 +1,15 @@
 {
   "profile": "ak.profile.discovery_vectors.v1",
   "version": "2026-05-09",
-  "comment": "Discovery profile (ak.profile.discovery.v1) black-box vectors covering: (a) advertise vs core/extension tier filtering — `core` surfaces are implied by claiming v1 protocol support, `extension` surfaces require explicit advertisement; (b) `interop_bridge` tier handling when an external protocol (MIMI / Applet) is supported vs NOT supported — bridge operations are NEVER implied and are not part of any core/extension profile; (c) post-C16 (spec 2026-05-08) surface naming: `blob_storage` (split out from a previous combined media surface), `realtime_media` (renamed from media), `moderation_reports` (renamed from moderation). The validator walks each vector, checks the advertised `surfaces[]` against the core/extension/interop_bridge tier rules, and asserts the SUT capability response matches the spec-mandated discovery semantics.",
-  "tier_rules": {
+  "comment": "Discovery profile (ak.profile.discovery.v1) black-box vectors covering: (a) advertise vs core/extension surface-class filtering — `core` surfaces are implied by claiming v1 protocol support, `extension` surfaces require explicit advertisement; (b) `interop_bridge` surface-class handling when an external protocol (MIMI / Applet) is supported vs NOT supported — bridge operations are NEVER implied and are not part of any core/extension profile; (c) post-C16 (spec 2026-05-08) surface naming: `blob_storage` (split out from a previous combined media surface), `realtime_media` (renamed from media), `moderation_reports` (renamed from moderation). The validator walks each vector, checks the advertised `surfaces[]` against the core/extension/interop_bridge surface-class rules, and asserts the SUT capability response matches the spec-mandated discovery semantics.",
+  "surface_class_rules": {
     "core": "MUST be advertised whenever the SUT claims `ak.profile.arkret_v1.core`. Absent advertisement is a discovery contract violation; the discovery client MUST treat the SUT as non-conformant.",
     "extension": "MUST be advertised explicitly. A core-only SUT MUST NOT auto-imply any extension surface. Discovery clients MUST gate extension calls on the surface appearing in the advertised set.",
     "interop_bridge": "Bridge surfaces MUST be advertised only when the external protocol (MIMI Internet-Drafts / third-party Applet host) is actually supported. Bridge advertisement implies neither core nor extension support. Discovery clients MUST NOT assume an interop_bridge surface implies the corresponding `bridges_to` in-spec surface is supported (and vice-versa).",
     "deployment_local": "Deployment-specific surfaces (account_auth, etc) — out of scope for discovery profile vectors."
   },
   "surface_catalog": {
-    "comment": "Spec authority: registry/operation-registry.json `surface_groups[]`. Each entry pairs a canonical surface name with its tier; the validator uses this to detect drift between the fixture and the live operation registry.",
+    "comment": "Spec authority: registry/operation-registry.json `surface_groups[]`. Each entry pairs a canonical surface name with its surface_class; the validator uses this to detect drift between the fixture and the live operation registry.",
     "core": [
       "service_discovery",
       "identity_registry",
@@ -173,7 +173,7 @@
         "client_must_not_call": [
           "ak.edge.applet.query.ping"
         ],
-        "comment": "interop_bridge tier surfaces MUST be explicitly advertised, and only when the external protocol is actually supported. Advertising mimi_interop does NOT imply applet or any extension surface."
+        "comment": "interop_bridge surface-class entries MUST be explicitly advertised, and only when the external protocol is actually supported. Advertising mimi_interop does NOT imply applet or any extension surface."
       }
     },
     {

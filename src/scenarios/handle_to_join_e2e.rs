@@ -40,7 +40,7 @@ use arkret_identifiers::{Did, EventId, Hash};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
-use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceType};
+use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
 use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
 use arkret_models_identity::handle_claim::DeliveryBindingHint;
 use arkret_wire::{Audience, Proof};
@@ -501,7 +501,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_service_id: principal.clone(),
-            recipient_service_type: RecipientServiceType::PrincipalServer,
+            recipient_service_kind: RecipientServiceKind::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(

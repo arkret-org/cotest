@@ -14,7 +14,7 @@
       "event_kind": "ak.realm.create",
       "cell_family": "ak.component.realm.create.v1",
       "lattice": "ordered_log",
-      "bottom": "expose",
+      "bottom": "inert",
       "payload_shape": { "name": "string", "kind": "collaboration" }
     },
     {

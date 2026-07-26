@@ -293,7 +293,7 @@ test.describe("private read marker", () => {
       discoverability: "listed",
       history_visibility: "shared",
       encryption_profile: "mls_rfc9420",
-      content_scheme: "mls-exporter-aead-v1",
+      content_scheme: "mls_exporter_aead_v1",
       invitees: [alice.did],
       ownerDid: bob.did,
     });
@@ -516,7 +516,7 @@ async function sendEncryptedMentionMessage(
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      mention_sidecar_hash: [mentionSidecarHash(realmId, mentionDid)],
+      mention_sidecar_digest: [mentionSidecarHash(realmId, mentionDid)],
       encrypted_content: encryptedEnvelope(ciphertext, realmId),
     },
   });
@@ -536,7 +536,7 @@ function encryptedEnvelope(
 ): Record<string, unknown> {
   const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
-    scheme: "mls-exporter-aead-v1",
+    scheme: "mls_exporter_aead_v1",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,

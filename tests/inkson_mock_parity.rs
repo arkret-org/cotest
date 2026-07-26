@@ -1077,7 +1077,7 @@ fn normalize_server_describe(body: Value) -> Value {
         .unwrap_or(false);
     json!({
         "protocol_version": body.get("protocol_version").cloned().unwrap_or(Value::Null),
-        "service_type": body.get("service_type").cloned().unwrap_or(Value::Null),
+        "service_kind": body.get("service_kind").cloned().unwrap_or(Value::Null),
         "supports_core_events": supported_features || supported_operations,
     })
 }

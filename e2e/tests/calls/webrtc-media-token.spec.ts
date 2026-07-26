@@ -61,7 +61,7 @@ test.describe("media token exchange", () => {
       const body = await response.json();
 
       // Outcome shape (CallMediaTokenExchangeOutcome). The backend kind is
-      // surfaced on the wire as `type` (serde rename of `backend_type`).
+      // surfaced on the wire as `type` (serde rename of `backend_kind`).
       expect(body.focus_id).toBe(LIVEKIT_FOCUS.focus_id);
       expect(body.type).toBe("livekit");
       expect(body.connect_url).toBe(LIVEKIT_FOCUS.connect_url);

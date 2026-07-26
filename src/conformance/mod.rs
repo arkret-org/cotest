@@ -122,7 +122,7 @@ pub use blob_stream_aead::{
 };
 pub use call_signal::{
     ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_proof_detached_jws_vector,
-    run_seq_monotonic_vector, run_signal_type_enum_vector,
+    run_seq_monotonic_vector, run_signal_kind_enum_vector,
 };
 pub use call_state_core::{
     ALL_CALL_STATE_CORE_VECTOR_IDS, run_call_state_core_fixture_suite,
@@ -250,7 +250,7 @@ pub use object_addressing_vectors::{
     run_object_addressing_vector_suite, run_realm_id_vs_alias_vector,
     run_realm_strand_message_forms_vector, run_resolve_target_common_fields_vector,
     run_resolve_target_realm_preview_vector, run_scheme_fragment_equivalence_vector,
-    run_scope_confusion_replay_vector, run_scope_token_link_type_wins_vector,
+    run_scope_confusion_replay_vector, run_scope_token_address_link_kind_wins_vector,
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,
 };
@@ -302,7 +302,7 @@ pub use security_closure::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
     SECURITY_CLOSURE_VECTORS_PROFILE, SecurityClosureExpected, SecurityClosureFixture,
     SecurityClosureRunner, SecurityClosureStep, SecurityClosureVector,
-    run_security_closure_vectors_suite, validate_security_closure_fixture,
+    run_security_closure_fixture_suite, validate_security_closure_fixture,
 };
 pub use security_negative::run_security_negative_profile_suite;
 pub use service_closure_hardening::{

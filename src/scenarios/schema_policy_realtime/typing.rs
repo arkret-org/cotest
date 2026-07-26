@@ -176,13 +176,13 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     Ok(())
 }
 
-fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value> {
+fn account_data_entry<'a>(sync: &'a Value, account_data_key: &str) -> Option<&'a Value> {
     sync["account_data"]["events"]
         .as_array()
         .and_then(|events| {
             events
                 .iter()
-                .find(|event| event["payload"]["key"] == data_type)
+                .find(|event| event["payload"]["key"] == account_data_key)
         })
 }
 

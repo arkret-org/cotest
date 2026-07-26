@@ -1,6 +1,6 @@
-//! Round 4 / A2 — security-closure-vectors runner contract.
+//! Round 4 / A2 — security-closure-fixture runner contract.
 //!
-//! Loads `arkret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`
+//! Loads `arkret-spec/spec/v1/artifacts/fixtures/security-closure-fixture.json`
 //! (13 vector ids, runner contract introduced by spec commit
 //! `892c5d7 test: add security closure runner contract`) and verifies the
 //! wire-level shape every conformant implementer is expected to expose:
@@ -20,8 +20,8 @@
 //! scenarios can compare an observed
 //! `(transcript, state_transition, external_response, audit_reason)` quad
 //! against the fixture. Vectors whose implementer-side wire support is not
-//! yet ready stay behind `#[ignore]` in `tests/security_closure_vectors.rs`
-//! as active local runner-contract checks in `tests/security_closure_vectors.rs`.
+//! yet ready stay behind `#[ignore]` in `tests/security_closure_fixture.rs`
+//! as active local runner-contract checks in `tests/security_closure_fixture.rs`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -33,9 +33,9 @@ use serde_json::Value;
 
 use super::{fixture_path, validate_profile};
 
-/// Canonical fixture filename. The Python lint (`check_security_closure_vectors`)
+/// Canonical fixture filename. The Python lint (`check_security_closure_fixture`)
 /// pins the same path on the spec side.
-pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-vectors.json";
+pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-fixture.json";
 
 /// Canonical conformance profile for the security closure fixture suite.
 pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ak.vector_group.privacy_security.v1";
@@ -66,7 +66,7 @@ pub struct SecurityClosureFixture {
     pub version: String,
     #[serde(default)]
     pub description: String,
-    pub security_closure_vectors: Vec<SecurityClosureVector>,
+    pub security_closure_fixture: Vec<SecurityClosureVector>,
 }
 
 /// One vector with N steps.
@@ -125,17 +125,15 @@ impl SecurityClosureFixture {
     /// fixtures and by the spec-roots override path).
     pub fn load_from(path: &Path) -> Result<Self> {
         let raw = fs::read_to_string(path)
-            .with_context(|| format!("read security-closure-vectors fixture {}", path.display()))?;
-        let value: Value = serde_json::from_str(&raw).with_context(|| {
-            format!("parse security-closure-vectors fixture {}", path.display())
-        })?;
+            .with_context(|| format!("read security-closure-fixture {}", path.display()))?;
+        let value: Value = serde_json::from_str(&raw)
+            .with_context(|| format!("parse security-closure-fixture {}", path.display()))?;
         validate_profile(&value, SECURITY_CLOSURE_VECTORS_PROFILE)?;
-        let fixture: SecurityClosureFixture = serde_json::from_value(value).with_context(|| {
-            format!("decode security-closure-vectors fixture {}", path.display())
-        })?;
-        if fixture.suite != "security_closure_vectors" {
+        let fixture: SecurityClosureFixture = serde_json::from_value(value)
+            .with_context(|| format!("decode security-closure-fixture {}", path.display()))?;
+        if fixture.suite != "security_closure_fixture" {
             bail!(
-                "security-closure-vectors suite drifted: expected `security_closure_vectors`, got `{}`",
+                "security-closure-fixture suite drifted: expected `security_closure_fixture`, got `{}`",
                 fixture.suite,
             );
         }
@@ -144,19 +142,17 @@ impl SecurityClosureFixture {
 
     /// Look up a vector by id. Returns an error if missing.
     pub fn vector(&self, vector_id: &str) -> Result<&SecurityClosureVector> {
-        self.security_closure_vectors
+        self.security_closure_fixture
             .iter()
             .find(|v| v.vector_id == vector_id)
-            .ok_or_else(|| {
-                anyhow!("security-closure-vectors fixture missing vector_id `{vector_id}`")
-            })
+            .ok_or_else(|| anyhow!("security-closure-fixture missing vector_id `{vector_id}`"))
     }
 
     /// Index every step by `(vector_id, step.name)` for quick lookup from
     /// individual scenario tests.
     pub fn step_index(&self) -> BTreeMap<(String, String), &SecurityClosureStep> {
         let mut out = BTreeMap::new();
-        for vector in &self.security_closure_vectors {
+        for vector in &self.security_closure_fixture {
             for step in &vector.steps {
                 out.insert((vector.vector_id.clone(), step.name.clone()), step);
             }
@@ -225,58 +221,58 @@ impl SecurityClosureStep {
 /// * every required vector_id is present
 /// * every step exposes the full 6-field `runner{}` contract
 /// * `expected_state_transition.outcome` (when set) matches `expected.outcome` (mirrors the
-///   spec-side lint `check_security_closure_vectors`)
-pub fn run_security_closure_vectors_suite() -> Result<()> {
+///   spec-side lint `check_security_closure_fixture`)
+pub fn run_security_closure_fixture_suite() -> Result<()> {
     let fixture = SecurityClosureFixture::load()?;
     validate_security_closure_fixture(&fixture)
 }
 
-/// Same as [`run_security_closure_vectors_suite`] but takes the parsed
+/// Same as [`run_security_closure_fixture_suite`] but takes the parsed
 /// fixture directly. Used by unit tests against synthetic data.
 pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Result<()> {
     if fixture.profile != SECURITY_CLOSURE_VECTORS_PROFILE {
         bail!(
-            "security-closure-vectors fixture profile drift: expected `{}`, got `{}`",
+            "security-closure-fixture profile drift: expected `{}`, got `{}`",
             SECURITY_CLOSURE_VECTORS_PROFILE,
             fixture.profile,
         );
     }
     let mut seen = std::collections::BTreeSet::new();
-    for vector in &fixture.security_closure_vectors {
+    for vector in &fixture.security_closure_fixture {
         if !seen.insert(vector.vector_id.clone()) {
             bail!(
-                "security-closure-vectors fixture duplicates vector_id `{}`",
+                "security-closure-fixture duplicates vector_id `{}`",
                 vector.vector_id
             );
         }
         if vector.steps.is_empty() {
             bail!(
-                "security-closure-vectors vector `{}` has zero steps",
+                "security-closure-fixture vector `{}` has zero steps",
                 vector.vector_id
             );
         }
         for step in &vector.steps {
             if step.name.is_empty() {
                 bail!(
-                    "security-closure-vectors[{}] has empty step.name",
+                    "security-closure-fixture[{}] has empty step.name",
                     vector.vector_id
                 );
             }
             if step.runner.operation.is_empty() {
                 bail!(
-                    "security-closure-vectors[{}].{}.runner.operation must be non-empty",
+                    "security-closure-fixture[{}].{}.runner.operation must be non-empty",
                     vector.vector_id,
                     step.name,
                 );
             }
             if step.runner.expected_audit_reason.is_empty() {
                 bail!(
-                    "security-closure-vectors[{}].{}.runner.expected_audit_reason must be non-empty",
+                    "security-closure-fixture[{}].{}.runner.expected_audit_reason must be non-empty",
                     vector.vector_id,
                     step.name,
                 );
             }
-            // The spec-side `check_security_closure_vectors` lint enforces
+            // The spec-side `check_security_closure_fixture` lint enforces
             // outcome consistency between `expected.outcome` and
             // `runner.expected_state_transition.outcome`. We mirror that
             // here so a stale fixture drops out loudly.
@@ -288,7 +284,7 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
                 && state_outcome != step.expected.outcome
             {
                 bail!(
-                    "security-closure-vectors[{}].{}.runner.expected_state_transition.outcome `{}` \
+                    "security-closure-fixture[{}].{}.runner.expected_state_transition.outcome `{}` \
                          does not match expected.outcome `{}`",
                     vector.vector_id,
                     step.name,
@@ -300,7 +296,7 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
     }
     for required in REQUIRED_SECURITY_CLOSURE_VECTOR_IDS {
         if !seen.contains(*required) {
-            bail!("security-closure-vectors fixture missing required vector_id `{required}`");
+            bail!("security-closure-fixture missing required vector_id `{required}`");
         }
     }
     Ok(())
@@ -317,7 +313,7 @@ mod tests {
         for required in REQUIRED_SECURITY_CLOSURE_VECTOR_IDS {
             assert!(
                 fixture
-                    .security_closure_vectors
+                    .security_closure_fixture
                     .iter()
                     .any(|v| v.vector_id == *required),
                 "fixture missing required vector_id {required}"
@@ -331,7 +327,7 @@ mod tests {
         // Pick the first step of the first vector and feed its expected
         // back as the observed runner.
         let vector = fixture
-            .security_closure_vectors
+            .security_closure_fixture
             .first()
             .expect("fixture non-empty");
         let step = vector.steps.first().expect("vector has at least one step");
@@ -347,7 +343,7 @@ mod tests {
     #[test]
     fn compare_detects_audit_reason_drift() {
         let fixture = SecurityClosureFixture::load().expect("spec fixture parses");
-        let vector = fixture.security_closure_vectors.first().unwrap();
+        let vector = fixture.security_closure_fixture.first().unwrap();
         let step = vector.steps.first().unwrap();
         let mut observed = ObservedRunner {
             transcript: step.runner.transcript.clone(),

@@ -80,8 +80,8 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
 
 fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> {
     let input = required_field(case, "input")?;
-    if required_str(input, "service_type")? != "mimi_provider_facade" {
-        bail!("provider directory must advertise mimi_provider_facade service_type");
+    if required_str(input, "service_kind")? != "mimi_provider_facade" {
+        bail!("provider directory must advertise mimi_provider_facade service_kind");
     }
     let supported = string_set(input, "supported_profiles")?;
     if !supported.contains("ak.profile.mimi_interop.v1") {

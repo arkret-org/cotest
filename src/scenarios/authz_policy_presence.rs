@@ -542,9 +542,9 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             "policy_id": "ak:policy:presence-policy-allow",
             "scope": policy_realm_id,
             "subject_ref": alice.actor,
-            "policy_type": "ak.message.create",
+            "policy_kind": "ak.message.create",
             // Realm-scoped resource constraint: soland matches `resource.kind`
-            // against the request's `source.service_type`, so leave `kind` unset
+            // against the request's `source.service_kind`, so leave `kind` unset
             // (the policy applies to the realm regardless of calling service) and
             // constrain only on realm_id.
             "resource": {"realm_id": policy_realm_id},
@@ -568,7 +568,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "actor_id": alice.actor.as_str(),
                 "source": {
                     "service_id": "did:web:soland.cotest.local",
-                    "service_type": "principal_server",
+                    "service_kind": "principal_server",
                     "signed_transport": true
                 }
             })),
@@ -597,7 +597,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "actor_id": alice.actor.as_str(),
                 "source": {
                     "service_id": "did:web:soland.cotest.local",
-                    "service_type": "principal_server",
+                    "service_kind": "principal_server",
                     "signed_transport": true
                 }
             })),
@@ -622,7 +622,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "actor_id": "alice",
                 "source": {
                     "service_id": "did:web:soland.cotest.local",
-                    "service_type": "principal_server",
+                    "service_kind": "principal_server",
                     "signed_transport": true
                 }
             })),

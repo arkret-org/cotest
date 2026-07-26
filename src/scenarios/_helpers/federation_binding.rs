@@ -97,7 +97,7 @@ pub fn peer_service_binding_ref_with_delivery(
             .context("invalid federation realm_policy_digest")?,
         membership_frontier: membership_frontier.to_vec(),
         delivery_binding_frontier: delivery_binding_frontier.to_vec(),
-        destination_service_type: "principal_server".to_owned(),
+        destination_service_kind: "principal_server".to_owned(),
         reducer_profile_digest: Hash::new(registry_reducer_profile_digest(
             FEDERATION_MINIMAL_PROFILE_ID,
         )?)

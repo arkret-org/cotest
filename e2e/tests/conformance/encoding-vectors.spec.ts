@@ -40,7 +40,7 @@ type EncodingVector = {
   expected_canonical_bytes_utf8?: string;
   expected_digest?: string;
   rejected_inputs?: unknown[];
-  rejected_input_classes?: string[];
+  rejected_input_categories?: string[];
   rejection_reason_codes?: string[];
   expected_ascending?: string[];
   payload_metadata?: unknown;

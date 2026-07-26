@@ -15,7 +15,7 @@
   - §5 — Snapshot signature 必须覆盖 manifest payload(去掉 `signature` 自身)的 canonical 编码;签名 DID 必须属于 Realm owner / admin / trusted issuer / witness quorum / policy-approved issuer
   - §6 — Event-set commitment 与 inclusion challenge 的能力边界(本 scenario 只断言 manifest digest 与 chunk hash,inclusion challenge 主流程在 `conformance/snapshot-inclusion-challenge` 单独覆盖)
 - `arkret-spec/spec/v1/zh/conformance/query-schema.md`
-  - §2 — Query 对象顶层字段集(realm_ids / object_types / morph_types / facets / filters / relation / order_by / projection / cursor / limit / consistency)
+  - §2 — Query 对象顶层字段集(realm_ids / object_kinds / morph_kinds / facets / filters / relation / order_by / projection / cursor / limit / consistency)
   - §3 — Filter `{ field, op, value }`,op 在 `{eq, neq, in, not_in, lt, lte, gt, gte, contains, exists, prefix, full_text}`
   - §4 — Boolean filter (`and` / `or` / `not`),嵌套深度可受限
   - §6 — Sort `{ field, direction in {asc,desc}, nulls in {first,last} }`
@@ -102,7 +102,7 @@
       "input": {
         "query": {
           "realm_ids": ["ak:realm:..."],
-          "object_types": ["strand"],
+          "object_kinds": ["strand"],
           "filters": [{ "field": "fields.status", "op": "eq", "value": "todo" }],
           "order_by": [{ "field": "rank", "direction": "asc", "nulls": "last" }],
           "limit": 2
@@ -140,7 +140,7 @@
 
 22. **harness** 加载 `ak.vector.scalability.page_size_over_max.v1`(query `limit` = 1,001,超过 §2 单次 sync / projection page 1,000 上限)
 23. `POST /_arkret/_conformance/query` → MUST HTTP 4xx + `error.code === "scalability_limit_exceeded"`(或等价 `payload_too_large` / `quota_exceeded`,见 §8),响应 MUST NOT 截断到 1,000 后静默接受
-24. **harness** 加载 `ak.vector.scalability.batch_size_over_max.v1`(snapshot chunk 数 > 1,000,或 events[] > 1,000)
+24. **harness** 加载 `ak.vector.scalability.batch_item_count_over_max.v1`(snapshot chunk 数 > 1,000,或 events[] > 1,000)
 25. `POST /_arkret/_conformance/snapshot` → MUST 4xx + `error.code ∈ {scalability_limit_exceeded, payload_too_large}`
 26. **harness** 加载 `ak.vector.scalability.relation_depth_over_max.v1`(query.relation.depth = 33,超过 §2 关系展开深度 32)
 27. `POST /_arkret/_conformance/query` → MUST 4xx + `error.code === "scalability_limit_exceeded"`

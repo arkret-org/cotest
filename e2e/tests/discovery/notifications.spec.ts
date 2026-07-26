@@ -445,7 +445,7 @@ test.describe("notifications", () => {
       discoverability: "listed",
       history_visibility: "shared",
       encryption_profile: "mls_rfc9420",
-      content_scheme: "mls-exporter-aead-v1",
+      content_scheme: "mls_exporter_aead_v1",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await putAccountDataViaEventApi(
@@ -479,7 +479,7 @@ test.describe("notifications", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        mention_sidecar_hash: [sidecarHash],
+        mention_sidecar_digest: [sidecarHash],
         encrypted_content: encryptedEnvelope(
           "ak.message.v1",
           "opaque-ciphertext-for-sealed-keyword",
@@ -673,7 +673,7 @@ function isEncryptedDndAccountData(value: unknown): boolean {
     value.version === "1.0" &&
     value.aead_profile === "ak.aead.xchacha20_poly1305.v1" &&
     value.aad.schema === "ak.schema.account_data_encrypted_value.v1" &&
-    value.aad.data_type === "ak.dnd_schedule" &&
+    value.aad.account_data_key === "ak.dnd_schedule" &&
     typeof value.ciphertext === "string" &&
     value.ciphertext.length > 0 &&
     typeof value.nonce === "string" &&
@@ -689,7 +689,7 @@ function encryptedEnvelope(
   void contentType;
   const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
-    scheme: "mls-rfc9420",
+    scheme: "mls_rfc9420",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,

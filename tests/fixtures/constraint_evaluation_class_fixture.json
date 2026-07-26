@@ -6,12 +6,12 @@
     "evaluation_classes": ["stateless", "grant_local", "space_state", "external"],
     "fast_path_classes": ["stateless", "grant_local"],
     "slow_path_classes": ["space_state", "external"],
-    "constraint_families": ["temporal", "field_access", "type_restriction", "scope_limitation", "delegation_control", "quota", "claim_based", "confidentiality"]
+    "constraint_families": ["temporal", "field_access", "kind_restriction", "scope_limitation", "delegation_control", "quota", "claim_based", "confidentiality"]
   },
   "canonical_mapping": {
     "temporal": "stateless",
     "field_access": "stateless",
-    "type_restriction": "stateless",
+    "kind_restriction": "stateless",
     "scope_limitation": "grant_local",
     "delegation_control": "grant_local",
     "quota": "space_state",
@@ -39,7 +39,7 @@
     },
     {
       "name": "type_restriction_stateless_fast_path",
-      "family": "type_restriction",
+      "family": "kind_restriction",
       "evaluation_class": "stateless",
       "fast_path_eligible": true,
       "needs_space_state": false,
@@ -100,7 +100,7 @@
   "negative_vectors": [
     {
       "name": "temporal_falsely_marked_external_rejected",
-      "comment": "A grant declares constraint_type=temporal but evaluation_class=external. This contradicts the canonical mapping (temporal MUST be stateless); the validator MUST reject as drift.",
+      "comment": "A grant declares constraint_kind=temporal but evaluation_class=external. This contradicts the canonical mapping (temporal MUST be stateless); the validator MUST reject as drift.",
       "family": "temporal",
       "declared_evaluation_class": "external",
       "expected": {

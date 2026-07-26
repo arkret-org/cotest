@@ -90,7 +90,7 @@ export async function grantCircleMemberManageCapability(
     ],
     constraints: [
       {
-        constraint_type: "scope_limitation",
+        constraint_kind: "scope_limitation",
         effect: "allow",
         allowed_circle_ids: [args.circleId],
       },
@@ -153,7 +153,7 @@ export async function grantCircleManageCapability(
     ],
     constraints: [
       {
-        constraint_type: "scope_limitation",
+        constraint_kind: "scope_limitation",
         effect: "allow",
         allowed_circle_ids: [args.circleId],
       },

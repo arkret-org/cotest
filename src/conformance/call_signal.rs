@@ -4,14 +4,14 @@
 //! accepted non-spec signal types (`offer` / `ice` / `device_change`)
 //! server-side. The canonical `POST /_arkret/self/ephemeral` relay is
 //! content-agnostic — it broadcasts the verbatim signed envelope — and the
-//! *receiver* enforces both the canonical signal_type enum and `seq`
+//! *receiver* enforces both the canonical signal_kind enum and `seq`
 //! monotonicity (§5.1). These vectors drive the real SDK surfaces a receiver
 //! runs, plus a REAL ed25519 detached-JWS round-trip proving the proof the
 //! cotest e2e helper mints (`e2e/helpers/webrtc.ts buildCallSignalEnvelope`) is
 //! genuinely verifiable, not a shape stub.
 //!
 //! Registered vector ids:
-//! - `ak.vector.call_signal.signal_type_enum.v1`
+//! - `ak.vector.call_signal.signal_kind_enum.v1`
 //! - `ak.vector.call_signal.seq_monotonic.v1`
 //! - `ak.vector.call_signal.proof_detached_jws.v1`
 
@@ -21,31 +21,31 @@ use arkret_models_collaboration::events_payloads::ephemeral::{
     validate_signal_seq,
 };
 use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
-use arkret_wire::{CALL_SIGNAL_TYPES, Proof};
+use arkret_wire::{CALL_SIGNAL_KINDS, Proof};
 use chrono::{TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
 
-pub const VECTOR_ID_SIGNAL_TYPE_ENUM: &str = "ak.vector.call_signal.signal_type_enum.v1";
+pub const VECTOR_ID_SIGNAL_KIND_ENUM: &str = "ak.vector.call_signal.signal_kind_enum.v1";
 pub const VECTOR_ID_SEQ_MONOTONIC: &str = "ak.vector.call_signal.seq_monotonic.v1";
 pub const VECTOR_ID_PROOF_DETACHED_JWS: &str = "ak.vector.call_signal.proof_detached_jws.v1";
 
 pub const ALL_CALL_SIGNAL_VECTOR_IDS: &[&str] = &[
-    VECTOR_ID_SIGNAL_TYPE_ENUM,
+    VECTOR_ID_SIGNAL_KIND_ENUM,
     VECTOR_ID_SEQ_MONOTONIC,
     VECTOR_ID_PROOF_DETACHED_JWS,
 ];
 
-// ─── VECT-CS-1 — signal_type_enum (canonical 14-value set) ─────────────────
+// ─── VECT-CS-1 — signal_kind_enum (canonical 14-value set) ─────────────────
 
 /// The receiver MUST accept exactly the spec 14-value enum and MUST reject the
 /// retired non-spec types (`offer` / `ice` / `device_change`) the old soland
 /// stack used.
-pub fn run_signal_type_enum_vector() -> Result<()> {
-    if CALL_SIGNAL_TYPES.len() != 14 {
+pub fn run_signal_kind_enum_vector() -> Result<()> {
+    if CALL_SIGNAL_KINDS.len() != 14 {
         bail!(
-            "CALL_SIGNAL_TYPES drifted: expected 14 values, got {}",
-            CALL_SIGNAL_TYPES.len()
+            "CALL_SIGNAL_KINDS drifted: expected 14 values, got {}",
+            CALL_SIGNAL_KINDS.len()
         );
     }
     for expected in [
@@ -64,21 +64,21 @@ pub fn run_signal_type_enum_vector() -> Result<()> {
         "moderation",
         "error",
     ] {
-        if !CALL_SIGNAL_TYPES.contains(&expected) {
-            bail!("canonical signal_type `{expected}` missing from CALL_SIGNAL_TYPES");
+        if !CALL_SIGNAL_KINDS.contains(&expected) {
+            bail!("canonical signal_kind `{expected}` missing from CALL_SIGNAL_KINDS");
         }
     }
     // The retired non-spec types MUST NOT be canonical, and an envelope carrying
     // one MUST be rejected by the receiver-side validator.
     for retired in ["offer", "ice", "device_change"] {
-        if CALL_SIGNAL_TYPES.contains(&retired) {
-            bail!("retired non-spec signal_type `{retired}` leaked into CALL_SIGNAL_TYPES");
+        if CALL_SIGNAL_KINDS.contains(&retired) {
+            bail!("retired non-spec signal_kind `{retired}` leaked into CALL_SIGNAL_KINDS");
         }
         let env = call_signal_envelope_value(retired, 1);
         let parsed: EphemeralEnvelope = serde_json::from_value(env)
             .map_err(|err| anyhow!("envelope deserialise failed: {err}"))?;
         if validate_call_signal_envelope(&parsed).is_ok() {
-            bail!("receiver accepted a retired signal_type `{retired}` — must be rejected");
+            bail!("receiver accepted a retired signal_kind `{retired}` — must be rejected");
         }
     }
     // A canonical envelope validates.
@@ -170,7 +170,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         ),
         "payload": {
             "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
-            "signal_type": "invite",
+            "signal_kind": "invite",
             "seq": 12,
             "data": {}
         }
@@ -252,7 +252,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-fn call_signal_envelope_value(signal_type: &str, seq: u64) -> Value {
+fn call_signal_envelope_value(signal_kind: &str, seq: u64) -> Value {
     json!({
         "kind": "ak.call.signal",
         "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
@@ -262,7 +262,7 @@ fn call_signal_envelope_value(signal_type: &str, seq: u64) -> Value {
         "expires_at": "2026-04-26T00:00:30.000Z",
         "payload": {
             "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
-            "signal_type": signal_type,
+            "signal_kind": signal_kind,
             "seq": seq,
             "data": {}
         },
@@ -290,7 +290,7 @@ pub fn run_call_signal_vector_suite() -> Result<()> {
             ALL_CALL_SIGNAL_VECTOR_IDS.len()
         );
     }
-    run_signal_type_enum_vector()?;
+    run_signal_kind_enum_vector()?;
     run_seq_monotonic_vector()?;
     run_proof_detached_jws_vector()?;
     Ok(())

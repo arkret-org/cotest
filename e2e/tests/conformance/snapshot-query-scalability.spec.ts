@@ -289,7 +289,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         query: { limit: 1001 },
       },
       {
-        vector_id: "ak.vector.scalability.batch_size_over_max.v1",
+        vector_id: "ak.vector.scalability.batch_item_count_over_max.v1",
         rows: Array.from({ length: 1001 }, (_, index) => ({ id: `row-${index}` })),
         query: { limit: 10 },
       },

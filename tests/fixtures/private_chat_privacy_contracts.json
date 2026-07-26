@@ -6,7 +6,7 @@
     "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",
     "arkret-spec/spec/v1/artifacts/schemas/contact-operations.schema.json",
     "arkret-spec/spec/v1/artifacts/schemas/event-payload.schema.json",
-    "arkret-spec/spec/v1/artifacts/registry/account-data-type-registry.json"
+    "arkret-spec/spec/v1/artifacts/registry/account-data-key-registry.json"
   ],
   "account_data_cases": {
     "positive": {
@@ -94,7 +94,7 @@
         "bridge": "mimi_interop",
         "payload": {
           "room_id": "mimi-room-7d9e",
-          "notification_type": "blind_wakeup",
+          "notification_kind": "blind_wakeup",
           "target": "opaque-bridge-target"
         }
       },

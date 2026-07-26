@@ -95,8 +95,8 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(describe_a["service_type"], "principal_server");
-    assert_eq!(describe_b["service_type"], "principal_server");
+    assert_eq!(describe_a["service_kind"], "principal_server");
+    assert_eq!(describe_b["service_kind"], "principal_server");
 
     let bob_document = expect_json(
         server_a
@@ -144,7 +144,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.realm.delivery_binding_policy",
         json!({
             "realm_id": realm_id,
-            "allow_binding_sources": ["explicit"],
+            "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [server_a.service_id()]
         }),
         StatusCode::OK,
@@ -161,7 +161,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             &alice_did,
             json!({
                 "recipient_service_id": server_a.service_id(),
-                "recipient_service_type": "principal_server",
+                "recipient_service_kind": "principal_server",
                 "binding_scope": "realm",
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
@@ -196,7 +196,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         Some(&founding_grant.event_id),
         json!({
             "realm_id": realm_id,
-            "allow_binding_sources": ["explicit"],
+            "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [server_a.service_id(), server_b.service_id()]
         }),
     )?;
@@ -411,7 +411,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         Some(&e2ee_founding_grant.event_id),
         json!({
             "realm_id": E2EE_REALM_ID,
-            "allow_binding_sources": ["explicit"],
+            "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [server_b.service_id()]
         }),
     )?;
@@ -767,7 +767,7 @@ fn federated_realm_payload(realm_id: &str, alice_did: &str, visible_services: &[
         .map(|service_id| {
             json!({
                 "service_id": service_id,
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "data_classes": ["message_content"],
                 "purposes": ["federated_plaintext_delivery"],
                 "visibility": "private_plaintext"
@@ -810,7 +810,7 @@ fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_id:
         member_did,
         json!({
             "recipient_service_id": service_id,
-            "recipient_service_type": "principal_server",
+            "recipient_service_kind": "principal_server",
             "binding_scope": "realm",
             "binding_source": "explicit",
             "delivery_modes": ["events", "sync", "to_device", "push", "key_packages"],
@@ -838,7 +838,7 @@ fn federated_e2ee_realm_payload(realm_id: &str, alice_did: &str) -> Value {
             // realm.schema.json: pre-join history visibility (shared/invited/
             // world_readable) on an MLS-backed Realm requires the
             // history-capable content envelope scheme.
-            "content_scheme": "mls-exporter-aead-v1",
+            "content_scheme": "mls_exporter_aead_v1",
             "security_class": "standard",
             "federation_policy": "open",
             "notary_profile": "single_did",
@@ -1001,7 +1001,7 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
         "strand_id": strand_id,
         "track_name": "discussion",
         "encrypted_content": {
-            "scheme": "mls-rfc9420",
+            "scheme": "mls_rfc9420",
             "version": "1.0",
             "group_id": E2EE_MLS_GROUP_ID,
             "epoch": 1,
@@ -1654,7 +1654,7 @@ async fn claim_test_keypackage(
         timeout_ms: Some(5_000),
         strand_id: None,
         pair_key: None,
-        allow_last_resort: Some(false),
+        last_resort_allowed: Some(false),
         requester_authorization: PeerKeyPackageRequesterAuthorization {
             verification_method: NonEmptyString::new(verification_method.clone())
                 .map_err(anyhow::Error::msg)?,

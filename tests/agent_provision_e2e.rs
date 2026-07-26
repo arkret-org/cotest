@@ -38,7 +38,7 @@ use arkret_models_collaboration::events_payloads::device_identity::{
 };
 use arkret_models_collaboration::events_payloads::preview_realm_reaction::SignatureMaterial;
 use arkret_models_crypto::{
-    BackupClass, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
     KeyBackupEncryption, KeyBackupFrontierRef, KeyBackupRecipientMethod,
     KeyBackupSignatureAlgorithm, ManagedFrontierRef, ManagedPrincipalBinding, RecoveryHpkeSuite,
@@ -1620,7 +1620,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     let signed_fields = [
         "backup_id",
         "actor_id",
-        "backup_class",
+        "backup_kind",
         "backup_version",
         "series_id",
         "series_seq",
@@ -1638,7 +1638,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         backup_id: backup_id.clone(),
         actor_id: Did::new(ALICE_DID.to_owned())?,
         device_id: Some(DeviceId::new(ALICE_DEVICE.to_owned())?),
-        backup_class: BackupClass::MlsHistory,
+        backup_kind: BackupKind::MlsHistory,
         mixed_secret_storage: false,
         backup_version: "kb_1".to_owned(),
         created_at,
@@ -1670,10 +1670,10 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(ALICE_DID.to_owned())?,
                 device_id: Some(ALICE_DEVICE.to_owned()),
-                backup_class: BackupClass::MlsHistory,
+                backup_kind: BackupKind::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,
-                item_types: vec!["mls_group_state".to_owned()],
+                item_kinds: vec!["mls_group_state".to_owned()],
                 managed_principal_bindings: vec![binding.clone()],
                 recipient_method: Some(KeyBackupRecipientMethod::RecoveryPublicKey),
                 recipient_key_ref: Some(recipient_key_ref.clone()),
@@ -1682,7 +1682,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
-            item_type: "mls_group_state".to_owned(),
+            item_kind: "mls_group_state".to_owned(),
             realm_id: Some(provisioned.principal_control_realm_id().clone()),
             managed_principal_binding: Some(binding),
             mls_group_id: Some(group_id),
@@ -1785,7 +1785,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     let mut active_series = json!({
         "schema": "ak.schema.key_backup_active_series.v1",
         "actor_id": ALICE_DID,
-        "backup_class": "mls_history",
+        "backup_kind": "mls_history",
         "active_series_id": series_id,
         "series_pointer_version": series_pointer_version,
         "previous_series_ids": previous_series_ids,
@@ -1802,7 +1802,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             "signed_fields": [
                 "schema",
                 "actor_id",
-                "backup_class",
+                "backup_kind",
                 "active_series_id",
                 "series_pointer_version",
                 "previous_series_ids",

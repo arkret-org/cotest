@@ -949,7 +949,7 @@ test.describe("chat advanced", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        mention_sidecar_hash: [sidecarHash],
+        mention_sidecar_digest: [sidecarHash],
         encrypted_content: encryptedEnvelope(
           "ak.message.v1",
           "opaque-e2ee-mention",
@@ -971,7 +971,7 @@ test.describe("chat advanced", () => {
     const rawServerView = JSON.stringify(messageEvent);
     expect(rawServerView).not.toContain(bob.did);
     expect(rawServerView).not.toContain(plaintext);
-    expect(rawServerView).toContain("mention_sidecar_hash");
+    expect(rawServerView).toContain("mention_sidecar_digest");
     expect(rawServerView).toContain(sidecarHash);
   });
 });
@@ -988,7 +988,7 @@ function encryptedEnvelope(
   void contentType;
   const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
-    scheme: "mls-rfc9420",
+    scheme: "mls_rfc9420",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,

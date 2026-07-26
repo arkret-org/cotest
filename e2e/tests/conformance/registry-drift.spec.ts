@@ -78,7 +78,7 @@ type DriftRegistry = {
 
 type OperationRegistry = {
   operations: Array<{ operation_id: string; http?: string; grpc?: string; mq?: string }>;
-  surface_groups: Array<{ surface: string; tier: string; operations: string[] }>;
+  surface_groups: Array<{ surface: string; surface_class: string; operations: string[] }>;
 };
 
 type ConformanceProfiles = {

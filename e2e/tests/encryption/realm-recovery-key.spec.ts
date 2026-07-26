@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/encryption/realm-recovery-key.md
 //
 // Spec refs:
-//   - crypto-media/encryption-and-audit.md §2.10   (mls-exporter-aead-v1 scheme)
+//   - crypto-media/encryption-and-audit.md §2.10   (mls_exporter_aead_v1 scheme)
 //   - crypto-media/encryption-and-audit.md §2.10.1 (history_secret[N] / K_content[N])
 //   - crypto-media/encryption-and-audit.md §2.10.4 (ak.realm_key.share delivery)
 //   - crypto-media/encryption-and-audit.md §2.10.5 (retention + per-epoch FS)
@@ -49,10 +49,10 @@ const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
 const MLS_CIPHER_SUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 
 // Content scheme that makes per-epoch history_secret shareable (§2.10). RRK
-// durability is ONLY meaningful for this scheme; the mls-rfc9420 default has no
+// durability is ONLY meaningful for this scheme; the mls_rfc9420 default has no
 // deliverable history_secret (§2.10.8 applicability + C1 below).
-const CONTENT_SCHEME_EXPORTER_AEAD = "mls-exporter-aead-v1";
-const CONTENT_SCHEME_RFC9420 = "mls-rfc9420";
+const CONTENT_SCHEME_EXPORTER_AEAD = "mls_exporter_aead_v1";
+const CONTENT_SCHEME_RFC9420 = "mls_rfc9420";
 
 function sha256Hash(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -232,7 +232,7 @@ async function registeredSession(
 }
 
 // Submit ak.mls.genesis (epoch 0) for a fresh group bound to realmId, with the
-// content_scheme=mls-exporter-aead-v1 policy_root locked in.
+// content_scheme=mls_exporter_aead_v1 policy_root locked in.
 async function submitExporterAeadGenesis(
   request: APIRequestContext,
   token: string,
@@ -246,7 +246,7 @@ async function submitExporterAeadGenesis(
     realmId,
     effectiveScope: { kind: "realm", realm_id: realmId },
     // policy_root MUST carry content_scheme (§2.10), so the RRK suite pins a
-    // distinct root from the plain mls-rfc9420 groups.
+    // distinct root from the plain mls_rfc9420 groups.
     policyRoot: digestNibble("a"),
     frontierRef: genesisEventId,
   };
@@ -312,7 +312,7 @@ async function submitCommit(
   return eventId;
 }
 
-// Submit an mls-exporter-aead-v1 encrypted content event at epoch N. The
+// Submit an mls_exporter_aead_v1 encrypted content event at epoch N. The
 // ciphertext is opaque to soland; the plaintext MUST NOT appear on the wire.
 async function submitExporterAeadMessage(
   request: APIRequestContext,
@@ -373,7 +373,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     //   ak.realm.create, RRK-targeted ak.realm_key.share acceptance with the
     //   eager-seal RYW guard, and the org recovery read surface that returns the
     //   durable RRK shares for HPKE-open.
-    // @blocking-on rrk-inkson: mls-exporter-aead-v1 content seal/open, per-epoch
+    // @blocking-on rrk-inkson: mls_exporter_aead_v1 content seal/open, per-epoch
     //   history_secret derivation, and the RRK HPKE seal at commit time.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (Phase A)
     // @expected-live-by: 2026Q3
@@ -683,11 +683,11 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
   // ---------------------------------------------------------------------------
 
   // C1: durability_scheme_incompatible — declaring mode != none on a Realm whose
-  // content_scheme is NOT mls-exporter-aead-v1 (here the mls-rfc9420 default).
+  // content_scheme is NOT mls_exporter_aead_v1 (here the mls_rfc9420 default).
   test(
     // Live regression for the policy-reducer admission preflight.
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C1)
-    "C1 durability_scheme_incompatible: mode != none on an mls-rfc9420 Realm is rejected",
+    "C1 durability_scheme_incompatible: mode != none on an mls_rfc9420 Realm is rejected",
     async ({ request }) => {
       const { user: alice, token: aliceToken } = await registeredSession(
         request,
@@ -695,7 +695,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       );
       const { user: orgRrk } = await registeredSession(request, "rrk-c1-org");
 
-      // Realm created WITHOUT mls-exporter-aead-v1 (explicit mls-rfc9420).
+      // Realm created WITHOUT mls_exporter_aead_v1 (explicit mls_rfc9420).
       const realmId = await createRealmApi(request, aliceToken, {
         title: "RRK incompatible scheme",
         history_visibility: "joined",

@@ -120,8 +120,8 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         anyhow!("privacy fixture {} missing derived prefixes", case.name)
                     })?
                     .len();
-                let provider_enforced_batch_size = input
-                    .pointer("/private_contact_discovery_config/batch_size")
+                let provider_enforced_batch_item_count = input
+                    .pointer("/private_contact_discovery_config/batch_item_count")
                     .and_then(Value::as_u64)
                     .ok_or_else(|| {
                         anyhow!(
@@ -140,8 +140,8 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     })?;
                 if blinded_count == 0
                     || derived_prefix_count != blinded_count
-                    || provider_enforced_batch_size != blinded_count as u64
-                    || provider_enforced_batch_size <= real_identifier_count
+                    || provider_enforced_batch_item_count != blinded_count as u64
+                    || provider_enforced_batch_item_count <= real_identifier_count
                 {
                     bail!(
                         "privacy fixture {} does not preserve and pad PSI cardinality",
@@ -173,20 +173,20 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     &json!({
                         "blinded_elements": blinded_count,
                         "derived_prefixes": derived_prefix_count,
-                        "provider_enforced_batch_size": provider_enforced_batch_size,
+                        "provider_enforced_batch_item_count": provider_enforced_batch_item_count,
                         "real_identifiers": real_identifier_count,
                     }),
                     &json!({
                         "derived_prefixes_match_blinded_elements": true,
-                        "wire_cardinality_matches_advertised_batch_size": true,
+                        "wire_cardinality_matches_advertised_batch_item_count": true,
                         "wire_cardinality_hides_real_identifier_count": true,
                     }),
                     &json!({
                         "derived_prefixes_match_blinded_elements": derived_prefix_count == blinded_count,
-                        "wire_cardinality_matches_advertised_batch_size":
-                            provider_enforced_batch_size == blinded_count as u64,
+                        "wire_cardinality_matches_advertised_batch_item_count":
+                            provider_enforced_batch_item_count == blinded_count as u64,
                         "wire_cardinality_hides_real_identifier_count":
-                            provider_enforced_batch_size > real_identifier_count,
+                            provider_enforced_batch_item_count > real_identifier_count,
                     }),
                 );
             }
@@ -921,10 +921,15 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
             case.name
         );
     }
-    if expected.get("same_timing_class").and_then(Value::as_str)
+    if expected
+        .get("timing_equivalence_group")
+        .and_then(Value::as_str)
         != Some("directory_hidden_not_found")
     {
-        bail!("privacy fixture {} same_timing_class drifted", case.name);
+        bail!(
+            "privacy fixture {} timing_equivalence_group drifted",
+            case.name
+        );
     }
     let body_shape = expected
         .get("same_body_shape")
@@ -978,7 +983,7 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
         &json!({
             "same_http_status": 404,
             "same_error_code": "not_found",
-            "same_timing_class": "directory_hidden_not_found",
+            "timing_equivalence_group": "directory_hidden_not_found",
         }),
         &json!({
             "operation_id": case.operation_id.clone(),

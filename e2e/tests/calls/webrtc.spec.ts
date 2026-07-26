@@ -141,10 +141,10 @@ test.describe("calls — canonical wire", () => {
       (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
     );
     const bobTypes = bobView.map(
-      (e) => (e.payload as Record<string, unknown>).signal_type,
+      (e) => (e.payload as Record<string, unknown>).signal_kind,
     );
     const aliceTypes = aliceView.map(
-      (e) => (e.payload as Record<string, unknown>).signal_type,
+      (e) => (e.payload as Record<string, unknown>).signal_kind,
     );
     expect(bobTypes).toEqual(expect.arrayContaining(["invite", "hangup"]));
     expect(bobTypes).not.toContain("answer");

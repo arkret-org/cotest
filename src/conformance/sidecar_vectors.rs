@@ -254,7 +254,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
     }
     let removal = PendingSidecarAccessReconciliationItem {
         agent_id: Did::new("did:webvh:z6mkfixture:assistant.agents.example")?,
-        stage: PendingSidecarAccessReconciliationStage::MlsRemove,
+        provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
         reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
         membership_frontier: Some(vec![EventId::new(
             "ak:event:01964137-0000-7000-8000-000000000041",
@@ -361,7 +361,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         private_request_event_id: request_id.clone(),
         user_facing_response_event_ids: vec![response_id.clone()],
         status: AgentSidecarExchangeStatus::Complete,
-        failure_code: None,
+        failure_reason_code: None,
         terminal_event_id: Some(terminal_id.clone()),
         folded_frontier: AgentSidecarExchangeFoldedFrontier {
             event_ids: vec![terminal_id],
@@ -559,7 +559,7 @@ fn exchange_close_control(
     action: AgentSidecarExchangeControlAction,
     basis: Vec<EventId>,
     responses: Option<Vec<EventId>>,
-    failure_code: Option<&str>,
+    failure_reason_code: Option<&str>,
 ) -> Result<SidecarExchangeControlFact> {
     Ok(SidecarExchangeControlFact {
         event_id: exchange_event_id(suffix)?,
@@ -575,7 +575,7 @@ fn exchange_close_control(
             basis_event_ids: basis,
             action,
             response_event_ids: responses,
-            failure_code: failure_code
+            failure_reason_code: failure_reason_code
                 .map(|code| NonEmptyString::new(code).map_err(anyhow::Error::msg))
                 .transpose()?,
             expected_coordinator_agent_id: None,
@@ -913,7 +913,7 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
             AgentSidecarExchangeStatus::Failed,
         ),
     ];
-    for (action, with_response, failure_code, expected_status) in cases {
+    for (action, with_response, failure_reason_code, expected_status) in cases {
         let responses = if with_response {
             vec![exchange_event_id(0x35)?]
         } else {
@@ -928,8 +928,15 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
         } else {
             vec![exchange_event_id(0x34)?]
         };
-        let control =
-            exchange_close_control(0x38, 5, "cc", action, basis, Some(responses), failure_code)?;
+        let control = exchange_close_control(
+            0x38,
+            5,
+            "cc",
+            action,
+            basis,
+            Some(responses),
+            failure_reason_code,
+        )?;
         let folded = fold_sidecar_exchange(
             &scope,
             &exchange,
@@ -948,7 +955,12 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
             (AgentSidecarExchangeControlAction::Fail, false) => Some("agent_deactivated"),
             (AgentSidecarExchangeControlAction::ReassignCoordinator, false) => unreachable!(),
         };
-        if folded.failure_code.as_ref().map(|code| code.as_str()) != expected_failure {
+        if folded
+            .failure_reason_code
+            .as_ref()
+            .map(|code| code.as_str())
+            != expected_failure
+        {
             bail!("derived failure code drifted for {action:?}");
         }
         if expected_status == AgentSidecarExchangeStatus::Failed
@@ -1066,7 +1078,7 @@ pub fn run_sidecar_exchange_projection_recovery_vector() -> Result<()> {
     // Projection state invariants are closed.
     let mut invalid = device_one.clone();
     invalid.status = AgentSidecarExchangeStatus::Failed;
-    invalid.failure_code =
+    invalid.failure_reason_code =
         Some(NonEmptyString::new("agent_deactivated").map_err(anyhow::Error::msg)?);
     invalid.terminal_event_id = Some(exchange_event_id(0x38)?);
     if invalid.validate().is_ok() {
@@ -1104,7 +1116,7 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
     }
 
     // The account-data registry carries no exchange projection key surface.
-    let account_registry = super::load_artifact_json("registry/account-data-type-registry.json")?;
+    let account_registry = super::load_artifact_json("registry/account-data-key-registry.json")?;
     if serde_json::to_string(&account_registry)?.contains("sidecar_projection") {
         bail!("the exchange projection must not register any account-data key");
     }
@@ -1124,7 +1136,7 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
     if serde_json::from_value::<AgentSidecarExchangeProjection>(round_trip.clone()).is_err() {
         bail!("a valid exchange projection must round-trip");
     }
-    round_trip["account_data_type"] = serde_json::json!("ak.agent.sidecar_projection.v1:x");
+    round_trip["account_data_key"] = serde_json::json!("ak.agent.sidecar_projection.v1:x");
     if serde_json::from_value::<AgentSidecarExchangeProjection>(round_trip).is_ok() {
         bail!("the exchange projection DTO must reject account-data key fields");
     }

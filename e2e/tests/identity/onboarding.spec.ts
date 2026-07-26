@@ -368,7 +368,7 @@ test.describe("account onboarding", () => {
       expect(backupResponse.ok(), await backupResponse.text()).toBe(true);
       expect(backupResponse.request().postDataJSON()).toMatchObject({
         actor_id: principalDid,
-        backup_class: "did_recovery",
+        backup_kind: "did_recovery",
         encryption: {
           recipient_method: "recovery_public_key",
         },

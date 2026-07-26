@@ -234,7 +234,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
           sent_at: sentAtIso,
           expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
           payload: {
-            receipt_type: "read",
+            receipt_kind: "read",
             schema: "ak.schema.read_receipt.v1",
             realm_id: fixture.realmId,
             actor_id: fixture.bob.did,

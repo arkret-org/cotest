@@ -276,7 +276,7 @@ selection failures.
 - Normative source: `identity/key-management.md` section 7.10 says clients
   should automatically and continuously maintain a `secret_storage` backup
   when the account secret or encrypted private account data is created or
-  rotated. `artifacts/registry/account-data-type-registry.json` classifies
+  rotated. `artifacts/registry/account-data-key-registry.json` classifies
   `ak.dnd_schedule` as encrypted principal-private account data.
 - Resolution: after Soland accepts the encrypted DND value, Inkson now waits
   for the shared recovery-public-key account-secret backup path before

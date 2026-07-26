@@ -42,7 +42,7 @@
     },
     {
       "name": "server_side_blob_storage_opaque",
-      "comment": "After client encrypts, the upload is ak.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
+      "comment": "After client encrypts, the upload is ak.schema.key_backup.v1: {backup_id, actor_id, backup_kind, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
       "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "blob_size_bytes": 4096,

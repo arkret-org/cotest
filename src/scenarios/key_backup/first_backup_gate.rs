@@ -3,7 +3,7 @@
 //! Principal onboarding and recovery readiness are distinct from DID update
 //! key retirement. Normal use remains blocked until cold custody is confirmed,
 //! an active recovery policy binds separate signing/HPKE keys, and the first
-//! `backup_class=did_recovery` envelope is durable.
+//! `backup_kind=did_recovery` envelope is durable.
 
 use anyhow::{Result, anyhow};
 

@@ -18,7 +18,7 @@ live soland instance.
 
 - `POST /_arkret/self/rtc/token` for the committed `session_focus` returns a
   `CallMediaTokenExchangeOutcome`:
-  - `backend_type = livekit`, `connect_url` echoes the focus config.
+  - `backend_kind = livekit`, `connect_url` echoes the focus config.
   - `participant_binding.scheme = ak.media.participant_binding.v1` with the full
     bound tuple (issuer_kid / realm_id / call_id / focus_id / actor_id /
     device_id / participant_identity / expires_at / sig).

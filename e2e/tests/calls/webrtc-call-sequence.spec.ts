@@ -124,7 +124,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     );
     const byType = (view: Array<Record<string, unknown>>, t: string) =>
       view.filter(
-        (e) => (e.payload as Record<string, unknown>).signal_type === t,
+        (e) => (e.payload as Record<string, unknown>).signal_kind === t,
       );
     expect(byType(bobView, "invite").length).toBe(1);
     expect(byType(aliceView, "answer").length).toBe(1);
@@ -227,7 +227,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     ).filter(
       (env) =>
         (env.payload as Record<string, unknown>)?.call_id === callId &&
-        (env.payload as Record<string, unknown>)?.signal_type === "focus_join",
+        (env.payload as Record<string, unknown>)?.signal_kind === "focus_join",
     );
     // Alice (sender) does not self-echo; she sees bob + carol joining the same
     // focus.
@@ -238,7 +238,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     expect(joiners).not.toContain(alice.did);
     for (const env of aliceView) {
       expect(
-        (env.payload as Record<string, unknown>).signal_type,
+        (env.payload as Record<string, unknown>).signal_kind,
       ).toBe("focus_join");
       expect(
         ((env.payload as Record<string, unknown>).data as Record<string, unknown>)

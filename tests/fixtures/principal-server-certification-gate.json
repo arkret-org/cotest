@@ -7,7 +7,7 @@
       "expect": "not_certified",
       "describe": {
         "service": "soland",
-        "service_type": "principal_server",
+        "service_kind": "principal_server",
         "supported_profiles": [
           "ak.profile.principal_server_events_api.v1"
         ],

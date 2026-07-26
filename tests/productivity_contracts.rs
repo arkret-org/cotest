@@ -69,8 +69,8 @@ fn productivity_registry_entries_are_present_and_exact() {
     }
     assert!(!actions.contains("ak.pin.*"));
 
-    let account_registry = load_registry("account-data-type-registry.json");
-    let key_patterns: BTreeSet<_> = account_registry["account_data_types"]
+    let account_registry = load_registry("account-data-key-registry.json");
+    let key_patterns: BTreeSet<_> = account_registry["account_data_key_patterns"]
         .as_array()
         .unwrap()
         .iter()
@@ -142,7 +142,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
                 "max_ttl_ms": 3600000,
                 "allowed_triggers": ["on_send", "on_first_read"],
                 "default_grace_ms": 0,
-                "allow_plaintext_realms": false
+                "plaintext_realms_allowed": false
             }),
         )
         .unwrap();

@@ -77,8 +77,8 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(describe_a["service_type"], "principal_server");
-    assert_eq!(describe_b["service_type"], "principal_server");
+    assert_eq!(describe_a["service_kind"], "principal_server");
+    assert_eq!(describe_b["service_kind"], "principal_server");
     assert_ne!(
         server_a.service_id(),
         server_b.service_id(),
@@ -110,14 +110,14 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         "plaintext_visible_services": [
             {
                 "service_id": server_a.service_id(),
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "data_classes": ["message_content"],
                 "purposes": ["federated_plaintext_delivery"],
                 "visibility": "private_plaintext",
             },
             {
                 "service_id": server_b.service_id(),
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "data_classes": ["message_content"],
                 "purposes": ["federated_plaintext_delivery"],
                 "visibility": "private_plaintext",
@@ -128,7 +128,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                 "did": server_a.service_id(),
                 "endpoint": server_a.base_url().as_str(),
                 "role": "federation_peer",
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "plaintext_visible": true,
                 "visibility_scope": "plaintext_events",
             },
@@ -136,7 +136,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                 "did": server_b.service_id(),
                 "endpoint": server_b.base_url().as_str(),
                 "role": "federation_peer",
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "plaintext_visible": true,
                 "visibility_scope": "plaintext_events",
             },
@@ -160,7 +160,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         "ak.realm.delivery_binding_policy",
         json!({
             "realm_id": realm_id,
-            "allow_binding_sources": ["explicit"],
+            "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [server_b.service_id()]
         }),
         2,
@@ -181,7 +181,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
             &actor_a.actor,
             json!({
                 "recipient_service_id": server_b.service_id(),
-                "recipient_service_type": "principal_server",
+                "recipient_service_kind": "principal_server",
                 "binding_scope": "realm",
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],

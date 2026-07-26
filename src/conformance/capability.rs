@@ -436,7 +436,7 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
             resource_scope = false;
         }
         for constraint in &delegation.constraints {
-            match constraint.get("constraint_type").and_then(Value::as_str) {
+            match constraint.get("constraint_kind").and_then(Value::as_str) {
                 Some("temporal") => {
                     if let Some(not_before) = constraint.get("not_before").and_then(Value::as_str)
                         && query.request_time.as_str() < not_before
@@ -980,7 +980,7 @@ pub fn run_capability_facet_fixture_suite() -> Result<()> {
         critical: true,
     };
     let matching = ObjectTarget {
-        object_type: "morph".to_owned(),
+        object_kind: "morph".to_owned(),
         facets: Some(BTreeSet::from([
             "assignable".to_owned(),
             "renderable".to_owned(),
@@ -992,7 +992,7 @@ pub fn run_capability_facet_fixture_suite() -> Result<()> {
     }
 
     let missing_facets = ObjectTarget {
-        object_type: "morph".to_owned(),
+        object_kind: "morph".to_owned(),
         facets: None,
     };
     if grant.allows(&missing_facets) {
@@ -1000,11 +1000,11 @@ pub fn run_capability_facet_fixture_suite() -> Result<()> {
     }
 
     let label_only = ObjectTarget {
-        object_type: "assignable_stateful_morph".to_owned(),
+        object_kind: "assignable_stateful_morph".to_owned(),
         facets: Some(BTreeSet::from(["renderable".to_owned()])),
     };
     if grant.allows(&label_only) {
-        bail!("capability facet suite allowed object_type labels to satisfy facet constraints");
+        bail!("capability facet suite allowed object_kind labels to satisfy facet constraints");
     }
 
     Ok(())
@@ -1016,13 +1016,13 @@ struct FacetGrant {
 }
 
 struct ObjectTarget {
-    object_type: String,
+    object_kind: String,
     facets: Option<BTreeSet<String>>,
 }
 
 impl FacetGrant {
     fn allows(&self, target: &ObjectTarget) -> bool {
-        let _ = &target.object_type;
+        let _ = &target.object_kind;
         match &target.facets {
             Some(facets) => self.allowed_facets.is_subset(facets),
             None => !self.critical && self.allowed_facets.is_empty(),

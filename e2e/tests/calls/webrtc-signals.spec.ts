@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/calls/webrtc-signals.md
 // Spec refs:
 //   - crypto-media/webrtc-signaling.md §5 / §5.1 (ephemeral envelope + proof,
-//     canonical 14-value signal_type enum)
+//     canonical 14-value signal_kind enum)
 //   - service-http-binding.md §162 (ak.call.signal.send capability on
 //     POST /_arkret/self/ephemeral)
 //
@@ -83,11 +83,11 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       expect(env.kind).toBe("ak.call.signal");
       expect(env.actor_id).toBe(alice.did);
       const payload = env.payload as Record<string, unknown>;
-      // Canonical signal_type + monotonic seq survive the relay verbatim.
+      // Canonical signal_kind + monotonic seq survive the relay verbatim.
       expect(CALL_SIGNAL_TYPES as readonly string[]).toContain(
-        payload.signal_type,
+        payload.signal_kind,
       );
-      expect(payload.signal_type).toBe(signalType);
+      expect(payload.signal_kind).toBe(signalType);
       expect(payload.seq).toBe(1);
       // Proof is present and spec-shaped (§5.1 detached-JWS).
       const proof = env.proof as Record<string, unknown>;

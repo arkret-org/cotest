@@ -94,7 +94,7 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.realm.notary",
             json!({
                 "realm_id": "ak:realm:01904100-0000-7000-8000-cfc039892036",
-                "notary": {"type": "single_did", "did": "did:web:notary.example"}
+                "notary": {"kind": "single_did", "did": "did:web:notary.example"}
             }),
             true,
         ),

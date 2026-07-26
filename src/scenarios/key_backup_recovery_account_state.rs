@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId, TypedTrustDomainId};
 use arkret_models_crypto::{
-    BackupClass, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
     KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicy,
     RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
@@ -83,7 +83,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
     let secret_storage = list_backups_by_class(&alice, "secret_storage").await?;
     assert!(
         secret_storage.is_empty(),
-        "backup_class filter must not return did_recovery rows for secret_storage"
+        "backup_kind filter must not return did_recovery rows for secret_storage"
     );
 
     Ok(())
@@ -91,18 +91,18 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
 
 fn account_recovery_configured(active_policy: &Value, backups: &[Value]) -> bool {
     !active_policy.is_null()
-        && backups.iter().any(|backup| {
-            backup.get("backup_class").and_then(Value::as_str) == Some("did_recovery")
-        })
+        && backups
+            .iter()
+            .any(|backup| backup.get("backup_kind").and_then(Value::as_str) == Some("did_recovery"))
 }
 
 async fn list_backups_by_class(
     alice: &crate::harness::TestActorClient,
-    backup_class: &str,
+    backup_kind: &str,
 ) -> Result<Vec<Value>> {
     let body = expect_json(
         alice.get(&format!(
-            "/_arkret/self/keys/backups?backup_class={backup_class}"
+            "/_arkret/self/keys/backups?backup_kind={backup_kind}"
         )),
         StatusCode::OK,
     )
@@ -171,7 +171,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
         backup_id: BackupId::new(DID_RECOVERY_BACKUP_ID.to_owned())?,
         actor_id: Did::new(principal_id.to_owned())?,
         device_id: Some(DeviceId::new(DEVICE_A.to_owned())?),
-        backup_class: BackupClass::DidRecovery,
+        backup_kind: BackupKind::DidRecovery,
         mixed_secret_storage: false,
         backup_version: "kb_1".to_owned(),
         created_at,
@@ -204,10 +204,10 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 schema: "ak.schema.key_backup.v1".to_owned(),
                 actor_id: Did::new(principal_id.to_owned())?,
                 device_id: Some(DEVICE_A.to_owned()),
-                backup_class: BackupClass::DidRecovery,
+                backup_kind: BackupKind::DidRecovery,
                 backup_version: "kb_1".to_owned(),
                 created_at,
-                item_types: vec!["recovery_secret".to_owned()],
+                item_kinds: vec!["recovery_secret".to_owned()],
                 managed_principal_bindings: Vec::new(),
                 recipient_method: None,
                 recipient_key_ref: None,
@@ -216,7 +216,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
-            item_type: "recovery_secret".to_owned(),
+            item_kind: "recovery_secret".to_owned(),
             realm_id: None,
             managed_principal_binding: None,
             mls_group_id: None,
@@ -242,7 +242,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             signed_fields: [
                 "backup_id",
                 "actor_id",
-                "backup_class",
+                "backup_kind",
                 "backup_version",
                 "series_id",
                 "series_seq",

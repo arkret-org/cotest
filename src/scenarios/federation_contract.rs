@@ -339,7 +339,7 @@ fn federation_realm_payload(
         .map(|service_id| {
             json!({
                 "service_id": service_id,
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "data_classes": ["message_content"],
                 "purposes": ["federated_plaintext_delivery"],
                 "visibility": "private_plaintext"
@@ -509,7 +509,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         Some(&founding_grant.event_id),
         json!({
             "realm_id": realm_id,
-            "allow_binding_sources": ["explicit"],
+            "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [remote_service_id]
         }),
     )?;
@@ -527,7 +527,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             remote_service_id,
             json!({
                 "recipient_service_id": remote_service_id,
-                "recipient_service_type": "principal_server",
+                "recipient_service_kind": "principal_server",
                 "binding_scope": "realm",
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],
@@ -828,7 +828,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "ak.realm.delivery_binding_policy",
         json!({
             "realm_id": realm_id,
-            "allow_binding_sources": ["explicit"],
+            "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [server.service_id()]
         }),
         StatusCode::OK,
@@ -854,7 +854,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
             "did:web:alice.example",
             json!({
                 "recipient_service_id": server.service_id(),
-                "recipient_service_type": "principal_server",
+                "recipient_service_kind": "principal_server",
                 "binding_scope": "realm",
                 "binding_source": "explicit",
                 "delivery_modes": ["events", "sync"],

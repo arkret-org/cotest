@@ -25,8 +25,8 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     let description = sdk.describe().await?;
     assert_eq!(description.protocol_version, "1.0");
     assert_eq!(
-        description.service_type,
-        arkret_wire::ServiceType::PrincipalServer
+        description.service_kind,
+        arkret_wire::ServiceKind::PrincipalServer
     );
 
     let server_describe = expect_json(
@@ -79,7 +79,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     )
     .await?;
     assert!(
-        directory["resource_types"]
+        directory["resource_kinds"]
             .as_array()
             .is_some_and(|items| !items.is_empty())
     );

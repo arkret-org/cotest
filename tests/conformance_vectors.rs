@@ -164,7 +164,7 @@ fn media_binding_vector_suite_runs_clean() {
 
 // ─── webrtc-signaling.md §5.1 — ak.call.signal receiver vectors ────────────
 //
-// signal_type enum (rejects retired offer/ice/device_change) + seq
+// signal_kind enum (rejects retired offer/ice/device_change) + seq
 // monotonicity (receiver-side rollback drop) + a REAL ed25519 detached-JWS
 // round-trip proving the cotest e2e helper's proof is genuinely verifiable.
 
@@ -357,8 +357,8 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 //     keyword/order/missing-via, realm-id vs alias.
 //   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks strand/message
 //     identity, omitted-key (not null) canonical shape.
-//   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected, token link_type wins over
-//     URL `lt` hint.
+//   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected, token address_link_kind
+//     wins over URL `lt` hint.
 //   * OA-COT-4 (2 cases) — resolve_target response shape: §9.1 common fields
 //     + target_kind; realm target carries realm_preview.
 
@@ -389,8 +389,8 @@ fn test_oa_cot_5_share_resolve_open_live() {
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
     //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
     //      target_kind=strand, object_preview, join_rule, as_of, source_refs, via_services }`.
-    //   4. Recipient opens the strand; soland's access gate honors the invite link_type (NOT the
-    //      URL `lt` hint) for the join decision.
+    //   4. Recipient opens the strand; soland's access gate honors the invite address_link_kind
+    //      (NOT the URL `lt` hint) for the join decision.
     unreachable!("integration target gated on teabay strand/message access-gate (R3.3)");
 }
 
@@ -744,7 +744,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
         CandidateIntent, MemberDeliveryBindingCandidate,
     };
-    use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceType};
+    use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
     use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
     use arkret_models_identity::handle_claim::DeliveryBindingHint;
     use arkret_wire::{Audience, Proof};
@@ -766,7 +766,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_service_id: principal.clone(),
-            recipient_service_type: RecipientServiceType::PrincipalServer,
+            recipient_service_kind: RecipientServiceKind::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: None,

@@ -130,7 +130,7 @@ test.describe("key backup + restore", () => {
       // The settings page MUST NOT ask for a user passphrase.
       await expect(device.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
 
-      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_class=did_recovery`;
+      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`;
       await expect
         .poll(
           async () => {
@@ -148,11 +148,11 @@ test.describe("key backup + restore", () => {
                 : [];
             return backups.some(
               (backup: any) =>
-                backup?.backup_class === "did_recovery" &&
+                backup?.backup_kind === "did_recovery" &&
                 backup?.encryption?.recipient_method === "recovery_public_key" &&
                 Array.isArray(backup?.contents) &&
                 backup.contents.some(
-                  (item: any) => item?.item_type === "recovery_key_share",
+                  (item: any) => item?.item_kind === "recovery_key_share",
                 ),
             );
           },
@@ -532,7 +532,7 @@ test.describe("key backup + restore", () => {
             keyBackupPuts.some(
               (hit) =>
                 hit.status === 200 &&
-                /"backup_class"\s*:\s*"mls_history"/.test(
+                /"backup_kind"\s*:\s*"mls_history"/.test(
                   keyBackupWireData(hit),
                 ),
             ),
@@ -546,7 +546,7 @@ test.describe("key backup + restore", () => {
             keyBackupPuts.some(
               (hit) =>
                 hit.status === 200 &&
-                /"item_type"\s*:\s*"mls_account_secret"/.test(
+                /"item_kind"\s*:\s*"mls_account_secret"/.test(
                   keyBackupWireData(hit),
                 ),
             ),
@@ -1089,7 +1089,7 @@ async function expectMlsAccountSecretBackupUploaded(
         keyBackupPuts.some(
           (hit) =>
             hit.status === 200 &&
-            /"item_type"\s*:\s*"mls_account_secret"/.test(
+            /"item_kind"\s*:\s*"mls_account_secret"/.test(
               keyBackupWireData(hit),
             ),
         ),
@@ -1102,7 +1102,7 @@ function mlsHistoryBackupPutCount(keyBackupPuts: KeyBackupPut[]): number {
   return keyBackupPuts.filter(
     (hit) =>
       hit.status === 200 &&
-      /"backup_class"\s*:\s*"mls_history"/.test(keyBackupWireData(hit)),
+      /"backup_kind"\s*:\s*"mls_history"/.test(keyBackupWireData(hit)),
   ).length;
 }
 
@@ -1112,7 +1112,7 @@ function mlsPrivatePlaintextBackupPutCount(
   return keyBackupPuts.filter(
     (hit) =>
       hit.status === 200 &&
-      /"item_type"\s*:\s*"mls_private_plaintext"/.test(
+      /"item_kind"\s*:\s*"mls_private_plaintext"/.test(
         keyBackupWireData(hit),
       ),
   ).length;

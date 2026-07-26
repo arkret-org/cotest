@@ -1,5 +1,5 @@
 //! Round 4 / A2 — per-vector scenario stubs for the security closure
-//! fixture (`arkret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`).
+//! fixture (`arkret-spec/spec/v1/artifacts/fixtures/security-closure-fixture.json`).
 //!
 //! Every vector listed in the spec snapshot is registered here. For each
 //! one we:
@@ -29,23 +29,23 @@ pub const VECTOR_IDS: &[&str] = REQUIRED_SECURITY_CLOSURE_VECTOR_IDS;
 /// gate for an implementer that does not yet expose a SUT runner.
 pub fn assert_vector_present(vector_id: &str) -> Result<()> {
     let fixture =
-        SecurityClosureFixture::load().context("loading security-closure-vectors.json")?;
+        SecurityClosureFixture::load().context("loading security-closure-fixture.json")?;
     let vector = fixture.vector(vector_id).context("vector lookup")?;
     if vector.steps.is_empty() {
         return Err(anyhow!(
-            "security_closure_vectors[{vector_id}] has zero steps"
+            "security_closure_fixture[{vector_id}] has zero steps"
         ));
     }
     for step in &vector.steps {
         if step.runner.operation.is_empty() {
             return Err(anyhow!(
-                "security_closure_vectors[{vector_id}].{}.runner.operation must be non-empty",
+                "security_closure_fixture[{vector_id}].{}.runner.operation must be non-empty",
                 step.name
             ));
         }
         if step.runner.expected_audit_reason.is_empty() {
             return Err(anyhow!(
-                "security_closure_vectors[{vector_id}].{}.runner.expected_audit_reason must be non-empty",
+                "security_closure_fixture[{vector_id}].{}.runner.expected_audit_reason must be non-empty",
                 step.name
             ));
         }
@@ -57,7 +57,7 @@ pub fn assert_vector_present(vector_id: &str) -> Result<()> {
 /// expected runner output back through the typed comparison helper.
 pub fn assert_vector_runner_contract(vector_id: &str) -> Result<()> {
     let fixture =
-        SecurityClosureFixture::load().context("loading security-closure-vectors.json")?;
+        SecurityClosureFixture::load().context("loading security-closure-fixture.json")?;
     let vector = fixture.vector(vector_id).context("vector lookup")?;
     for step in &vector.steps {
         let observed = ObservedRunner {

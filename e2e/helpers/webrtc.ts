@@ -38,7 +38,7 @@ import {
 
 // ── Spec signal-type enum (webrtc-signaling.md §5.1) ─────────────────────────
 //
-// The canonical `payload.signal_type` enum from `arkret_sdk::CALL_SIGNAL_TYPES`
+// The canonical `payload.signal_kind` enum from `arkret_sdk::CALL_SIGNAL_TYPES`
 // (14 values). The retired soland stack accepted `offer` / `ice` /
 // `device_change`; those are NOT spec signal types and a spec-faithful receiver
 // (`validate_call_signal_envelope`) rejects them with `schema_violation`. The
@@ -234,7 +234,7 @@ export function buildCallSignalEnvelope(args: {
     expires_at: canonicalTimestamp(expiresAt),
     payload: {
       call_id: args.callId,
-      signal_type: args.signalType,
+      signal_kind: args.signalType,
       seq: args.seq,
       data: args.data ?? {},
     },
@@ -304,7 +304,7 @@ export async function grantCallCapability(
   const resources = [{ kind: "realm", realm_id: realmId }];
   const issuedAt = canonicalTimestamp();
   const delegationConstraint: Record<string, unknown> = {
-    constraint_type: "delegation_control",
+    constraint_kind: "delegation_control",
     effect: "allow",
     max_delegation_depth: 0,
   };
@@ -457,7 +457,7 @@ export async function postCallSignal(
   expect(
     response.status(),
     `relay ak.call.signal ${String(
-      (envelope.payload as Record<string, unknown>)?.signal_type,
+      (envelope.payload as Record<string, unknown>)?.signal_kind,
     )} returned ${response.status()}: ${text}`,
   ).toBe(200);
   const body = JSON.parse(text) as Record<string, unknown>;

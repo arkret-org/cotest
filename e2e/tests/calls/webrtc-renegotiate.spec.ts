@@ -123,7 +123,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
       1, 2,
     ]);
     const last = received[1].payload as Record<string, unknown>;
-    expect(last.signal_type).toBe("renegotiate");
+    expect(last.signal_kind).toBe("renegotiate");
     expect((last.data as Record<string, unknown>).reason).toBe("ice_restart");
     // Proof intact on the relayed renegotiate frame.
     const proof = received[1].proof as Record<string, unknown>;

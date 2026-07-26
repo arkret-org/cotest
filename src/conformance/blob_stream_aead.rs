@@ -89,7 +89,7 @@ fn params() -> StreamEncryptParams {
         key_ref: key_ref(),
         epoch: 42,
         media_type: "video/mp4".to_owned(),
-        segment_size: CONFORMANCE_SEGMENT_SIZE,
+        segment_bytes: CONFORMANCE_SEGMENT_SIZE,
     }
 }
 
@@ -121,16 +121,16 @@ fn stream_fields(env: &EncryptedAttachment) -> Result<&StreamEncryptedAttachment
 
 fn split_segments(ciphertext: &[u8], env: &EncryptedAttachment) -> Result<Vec<Vec<u8>>> {
     let stream = stream_fields(env)?;
-    let segment_size = stream.segment_size as usize;
+    let segment_bytes = stream.segment_bytes as usize;
     let segment_count = stream.segment_count;
     let mut out = Vec::with_capacity(segment_count as usize);
     let mut offset = 0usize;
     for index in 0..segment_count {
         let last_index = segment_count - 1;
         let plaintext_len = if index < last_index {
-            segment_size
+            segment_bytes
         } else {
-            (stream.size_bytes - (segment_size as u64) * last_index) as usize
+            (stream.size_bytes - (segment_bytes as u64) * last_index) as usize
         };
         let ciphertext_len = plaintext_len + SEGMENT_TAG_LEN;
         let end = offset + ciphertext_len;
@@ -169,10 +169,10 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
     if raw["alg"].as_str() != Some(ALG_STREAM_XCHACHA) {
         bail!("stream roundtrip produced alg {}", raw["alg"]);
     }
-    if stream.segment_size != u64::from(CONFORMANCE_SEGMENT_SIZE) || stream.segment_count != 3 {
+    if stream.segment_bytes != u64::from(CONFORMANCE_SEGMENT_SIZE) || stream.segment_count != 3 {
         bail!(
-            "expected segment_size={CONFORMANCE_SEGMENT_SIZE} segment_count=3, got {}/{}",
-            stream.segment_size,
+            "expected segment_bytes={CONFORMANCE_SEGMENT_SIZE} segment_count=3, got {}/{}",
+            stream.segment_bytes,
             stream.segment_count
         );
     }

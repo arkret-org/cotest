@@ -32,11 +32,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         alice.post("/_soland/self/policies").json(&json!({
             "scope": realm_id,
             "subject_ref": bob.actor,
-            "policy_type": "ak.message.create",
+            "policy_kind": "ak.message.create",
             "effect": "hard_deny",
             "actions": ["ak.message.create"],
             // Realm-scoped resource: soland matches resource.kind against the
-            // request source.service_type, so constrain on realm_id only.
+            // request source.service_kind, so constrain on realm_id only.
             "resource": {"realm_id": realm_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}]
         })),
@@ -53,7 +53,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         alice.post("/_soland/self/policies").json(&json!({
             "scope": realm_id,
             "subject_ref": bob.actor,
-            "policy_type": "ak.message.create",
+            "policy_kind": "ak.message.create",
             "effect": "deny",
             "actions": ["ak.message.create"],
             "resource": {"kind": "realm", "realm_id": realm_id}
@@ -94,7 +94,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "realm_id": realm_id,
             "source": {
                 "service_id": "did:web:soland.cotest.local",
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "signed_transport": true
             }
         })),
@@ -122,7 +122,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "policy_id": policy_id,
             "scope": realm_id,
             "subject_ref": bob.actor,
-            "policy_type": "ak.message.create",
+            "policy_kind": "ak.message.create",
             "effect": "hard_deny",
             "actions": ["ak.message.create"],
             "resource": {"kind": "realm", "realm_id": realm_id},
@@ -143,7 +143,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "realm_id": realm_id,
             "source": {
                 "service_id": "did:web:soland.cotest.local",
-                "service_type": "principal_server",
+                "service_kind": "principal_server",
                 "signed_transport": true
             }
         })),

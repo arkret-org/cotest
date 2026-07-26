@@ -11,7 +11,7 @@
       },
       "describe": {
         "service": "soland",
-        "service_type": "principal_server",
+        "service_kind": "principal_server",
         "supported_profiles": [
           "ak.profile.principal_server.v1"
         ],
@@ -113,7 +113,7 @@
       },
       "describe": {
         "service": "coauth",
-        "service_type": "auth_server",
+        "service_kind": "auth_server",
         "supported_profiles": [
           "ak.profile.principal_server.v1"
         ],

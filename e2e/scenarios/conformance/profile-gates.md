@@ -30,7 +30,7 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
   `verified_profiles=[]`
 - 关联 artifact:
   - `arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json` —
-    `implementation_profiles[]` / `profile_tiers.v1_profile_catalog` /
+    `implementation_profiles[]` / `profile_sets.v1_profile_catalog` /
     `extension_profile_implementation` / `default_unsupported_behavior`
   - `arkret-spec/spec/v1/artifacts/registry/event-kind-registry.json` — Phase B 用来挑
     "在目录中但不在 soland 声明范围内" 的标准 kind
@@ -121,8 +121,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 ### Phase E — profile catalog integrity
 
 18. **harness** 读 `conformance-profiles.json`,计算
-    `catalog_known = implementation_profiles ∪ profile_tiers.v1_profile_catalog ∪
-    profile_tiers.extension_profile_implementation`(并集 — `mimi_interop` 属 extension
+    `catalog_known = implementation_profiles ∪ profile_sets.v1_profile_catalog ∪
+    profile_sets.extension_profile_implementation`(并集 — `mimi_interop` 属 extension
     tier,不在 stable catalog 但在 `implementation_profiles` 中)
 19. 断言 `claimed_profiles[].profile_id` ⊆ `catalog_known`(零容忍 typo,例如
     `ak.profile.principal-server.v1`)

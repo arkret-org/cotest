@@ -130,9 +130,9 @@ fn validate_decoded_canonical_size_matrix(case: &Value, generator: &Value) -> Re
             256,
             "selector_too_complex",
         ),
-        ("resource_selector.requires_claims", 32, "schema_violation"),
+        ("resource_selector.required_claims", 32, "schema_violation"),
         (
-            "resource_selector.requires_claims[].trusted_issuers",
+            "resource_selector.required_claims[].trusted_issuers",
             16,
             "schema_violation",
         ),

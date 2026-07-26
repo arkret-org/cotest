@@ -36,7 +36,7 @@ import {
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
   typedId,
-  type InviteDeliveryRequestBody,
+  type InviteDeliveryRequestBodyBodyBody,
 } from "./soland-api";
 import type { JointUser } from "./users";
 import { ed25519PrivateKeySeedB64url } from "./encoding";
@@ -571,13 +571,13 @@ async function uploadDirectConversationKeyPackage(
 export type InviteReceivePolicy = {
   schema: string;
   subject_id: string;
-  allowed_introduction_kinds: string[];
+  holder_allowed_introduction_kinds: string[];
   explicit_address_behavior: "drop" | "quarantine" | "notify";
   unknown_invites: "drop" | "quarantine";
   trusted_realm_ids?: string[];
   trusted_principal_services?: string[];
-  blocked_principal_services?: string[];
-  blocked_subjects?: string[];
+  denied_principal_services?: string[];
+  denied_subjects?: string[];
   disclosure?: {
     high_trust?: "opaque" | "outcome";
     low_trust?: "opaque" | "outcome";
@@ -656,7 +656,7 @@ export function buildInviteCreateEvent(args: {
       invitee: args.inviteeDid,
       invite_delivery_target: {
         recipient_service_id: args.recipientServiceId,
-        recipient_service_type: "principal_server",
+        recipient_service_kind: "principal_server",
       },
       introduction_evidence_digest: evidenceDigest,
       expires_at: expiresAt,
@@ -699,13 +699,13 @@ export async function deliverInviteWithConsentGrant(
     event,
     { server: args.originServer },
   );
-  const body: InviteDeliveryRequestBody = {
+  const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
     invite_address: {
       subject_id: args.inviteeDid,
       recipient_service_id: recipientServiceId,
-      recipient_service_type: "principal_server",
+      recipient_service_kind: "principal_server",
     },
     introduction_evidence: evidence,
     idempotency_key:
@@ -748,13 +748,13 @@ export async function deliverInviteExplicitAddress(
     event,
     { server: args.originServer },
   );
-  const body: InviteDeliveryRequestBody = {
+  const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
     invite_address: {
       subject_id: args.inviteeDid,
       recipient_service_id: recipientServiceId,
-      recipient_service_type: "principal_server",
+      recipient_service_kind: "principal_server",
     },
     introduction_evidence: evidence,
     idempotency_key:

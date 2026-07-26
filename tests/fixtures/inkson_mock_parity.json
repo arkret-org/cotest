@@ -133,7 +133,7 @@
       "id": "keys_backups_did_recovery_filter",
       "operation_id": "ak.self.keys.backups.query.list",
       "method": "GET",
-      "path": "/_arkret/self/keys/backups?backup_class=did_recovery",
+      "path": "/_arkret/self/keys/backups?backup_kind=did_recovery",
       "auth": "alice"
     },
     {

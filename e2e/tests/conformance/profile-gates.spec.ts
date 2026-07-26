@@ -84,7 +84,7 @@ type ConformanceCatalog = {
   // ak.profile.mls_governance_binding.full.v1.
   hardening_profiles?: string[];
   candidate_profiles?: string[];
-  profile_tiers?: {
+  profile_sets?: {
     v1_profile_catalog?: string[];
     v1_minimal_interop_floor?: string[];
     extension_profile_implementation?: string[];
@@ -182,7 +182,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
   }, testInfo) => {
     // spec: conformance-profiles.md §2.1 (v1_profile_catalog tiering);
     //       artifact: conformance-profiles.json (implementation_profiles ∪
-    //       profile_tiers.v1_profile_catalog ∪ profile_tiers.extension_profile_implementation
+    //       profile_sets.v1_profile_catalog ∪ profile_sets.extension_profile_implementation
     //       ∪ hardening_profiles).
     //
     // Every entry in soland's claimed_profiles MUST resolve to a profile id known by
@@ -196,8 +196,8 @@ test.describe("conformance profile gates @fully-implemented", () => {
 
     const knownProfiles = new Set<string>([
       ...(catalog.implementation_profiles ?? []),
-      ...(catalog.profile_tiers?.v1_profile_catalog ?? []),
-      ...(catalog.profile_tiers?.extension_profile_implementation ?? []),
+      ...(catalog.profile_sets?.v1_profile_catalog ?? []),
+      ...(catalog.profile_sets?.extension_profile_implementation ?? []),
       ...(catalog.hardening_profiles ?? []),
       ...(catalog.candidate_profiles ?? []),
     ]);

@@ -10,8 +10,8 @@ use arkret_wire::events::{EventKind, EventProductClass, EventRegistryCategory};
 use arkret_wire::{
     CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, ExporterLabelId, HPKE_SUITES,
     MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
-    SERVICE_OPERATION_DESCRIPTORS, SERVICE_TYPE_DESCRIPTORS, SIGNATURE_ALGORITHMS,
-    ServiceOperationId, ServiceType,
+    SERVICE_KIND_DESCRIPTORS, SERVICE_OPERATION_DESCRIPTORS, SIGNATURE_ALGORITHMS, ServiceKind,
+    ServiceOperationId,
 };
 use serde_json::Value;
 
@@ -103,15 +103,15 @@ fn open_value_spaces_round_trip_without_changing_registry_facts() {
 
 #[test]
 fn generated_metadata_keeps_product_and_security_domains_separate() {
-    assert!(ServiceType::PrincipalServer.valid_in("service_describe"));
-    assert!(!ServiceType::MimiProviderFacade.valid_in("service_describe"));
+    assert!(ServiceKind::PrincipalServer.valid_in("service_describe"));
+    assert!(!ServiceKind::MimiProviderFacade.valid_in("service_describe"));
     assert_generated_set(
         "service types",
-        SERVICE_TYPE_DESCRIPTORS
+        SERVICE_KIND_DESCRIPTORS
             .iter()
-            .map(|row| row.service_type.as_str()),
-        "service-type-registry.json",
-        "service_types",
+            .map(|row| row.service_kind.as_str()),
+        "service-kind-registry.json",
+        "service_kinds",
         "canonical_id",
     );
     assert_generated_set(
@@ -207,8 +207,8 @@ fn account_data_patterns_match_dynamic_keys() {
         REGISTERED_ACCOUNT_DATA_PATTERNS
             .iter()
             .map(|row| row.key_pattern),
-        "account-data-type-registry.json",
-        "account_data_types",
+        "account-data-key-registry.json",
+        "account_data_key_patterns",
         "key_pattern",
     );
     assert_eq!(

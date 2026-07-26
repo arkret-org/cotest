@@ -2,20 +2,20 @@
 
 ## 目标
 
-验证 `content_scheme=mls-exporter-aead-v1` 的 Realm 的**组织级历史持久性**:Realm 声明
+验证 `content_scheme=mls_exporter_aead_v1` 的 Realm 的**组织级历史持久性**:Realm 声明
 `durability_policy`(`org_recovery_key` 单点 / `threshold` k-of-n)后,推进 epoch 的
 `ak.mls.commit` 提交方在 eager 时序下为每个恢复方(RRK)发布 RRK-targeted
 `ak.realm_key.share`,把 per-epoch `history_secret` HPKE 封装给该恢复方的离线公钥;
 当全体成员设备失效 / 全员离职后,组织用 RRK 私钥 HPKE-open 还原历史;无活成员时
 RRK 持有者临时上线把授权 epoch 区间 re-seal 给后加入者。
 
-不验证:`mls-rfc9420`(PrivateMessage)Realm 的成员级 durable 备份(走
+不验证:`mls_rfc9420`(PrivateMessage)Realm 的成员级 durable 备份(走
 encryption/key-backup-restore),audited-e2ee 反审 release(走 encryption/audited-e2ee),
 notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 
 ## Spec 锚点
 
-- `crypto-media/encryption-and-audit.md` §2.10 — 可共享历史内容 scheme `mls-exporter-aead-v1`
+- `crypto-media/encryption-and-audit.md` §2.10 — 可共享历史内容 scheme `mls_exporter_aead_v1`
 - `crypto-media/encryption-and-audit.md` §2.10.1 — `history_secret[N]` / `K_content[N]` 派生
 - `crypto-media/encryption-and-audit.md` §2.10.4 — `ak.realm_key.share` 历史密钥交付
 - `crypto-media/encryption-and-audit.md` §2.10.5 — 保留义务与 per-epoch FS 边界
@@ -46,10 +46,10 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 1. org-rrk 发布 DID Document,含 active `ArkretRealmHistoryRecoveryKey` service entry
    (`serviceEndpoint.verificationMethod` 指向一把 `keyAgreement` HPKE VM,`domain=mls_history`,
    独立于 `did_recovery` 域)。
-2. alice 建 Realm:`encryption_profile=mls_rfc9420`、`content_scheme=mls-exporter-aead-v1`、
+2. alice 建 Realm:`encryption_profile=mls_rfc9420`、`content_scheme=mls_exporter_aead_v1`、
    `durability_policy={mode:org_recovery_key, recovery_recipients:[org-rrk RRK]}`。
 3. alice 提交 `ak.mls.genesis`,推进若干 `ak.mls.commit`(epoch 1..N);每个 epoch alice+bob
-   产生 `mls-exporter-aead-v1` 加密内容。
+   产生 `mls_exporter_aead_v1` 加密内容。
 4. 每个 epoch commit accepted 后,封存方 eager 发布 RRK-targeted `ak.realm_key.share`
    (`key_scope.from_epoch=to_epoch=N`,`recipient_principal_id=org-rrk`,`ciphertext`=封给 RRK 公钥),
    且在 RYW 落盘前 MUST NOT GC `history_secret[N]`。
@@ -68,7 +68,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 
 ### Phase C — 诊断向量(负向)
 
-- **C1 `durability_scheme_incompatible`**:在 `content_scheme=mls-rfc9420`(或缺省)的 Realm 上
+- **C1 `durability_scheme_incompatible`**:在 `content_scheme=mls_rfc9420`(或缺省)的 Realm 上
   `ak.realm.policy_components` 写 `durability_policy.mode != none` → `failed_precondition`
   reason=`durability_scheme_incompatible`(§2.3.1 / §2.10.8 适用条件)。
 - **C2 `durability_recovery_recipient_unverified`**:`recovery_recipients[].verification_method`
@@ -96,7 +96,7 @@ Phase A、Phase B、C2、C3 仍为 `test.fixme`，依赖：
 
 - `@blocking-on rrk-soland` — `content_scheme` / `durability_policy` 投影、RRK-targeted
   `ak.realm_key.share` 接受 + RYW 与恢复读取面
-- `@blocking-on rrk-inkson` — `mls-exporter-aead-v1` 内容封装 / 解封、RRK HPKE seal/open、
+- `@blocking-on rrk-inkson` — `mls_exporter_aead_v1` 内容封装 / 解封、RRK HPKE seal/open、
   epoch 推进时的 eager 封存挂钩、C2 发送前 DID 验证、C3 retained-secret retry 证据和披露横幅
 - `@blocking-on rrk-cotest` — C2 的可控 DID resolver/outbound capture、C3 的首次 share
   拒绝/丢弃 fault injection

@@ -140,8 +140,8 @@ async function startSharedDescribeBinding(
       return;
     }
 
-    const serviceType = requestUrl.searchParams.get("service_type");
-    const description = serviceType ? descriptions[serviceType] : undefined;
+    const serviceKind = requestUrl.searchParams.get("service_kind");
+    const description = serviceKind ? descriptions[serviceKind] : undefined;
     if (!description) {
       res.writeHead(400, { "content-type": "application/json" });
       res.end(
@@ -149,9 +149,9 @@ async function startSharedDescribeBinding(
           ok: false,
           error: {
             code: "invalid_param",
-            message: serviceType
-              ? `service_type ${JSON.stringify(serviceType)} is not available on this binding`
-              : "service_type is required when multiple roles share this binding",
+            message: serviceKind
+              ? `service_kind ${JSON.stringify(serviceKind)} is not available on this binding`
+              : "service_kind is required when multiple roles share this binding",
           },
           request_id: `ak:request:${randomUUID()}`,
         }),
@@ -204,7 +204,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     // §17 — canonical ServiceDescribe required fields
     expect(body.service_id, "service_id").toBeTruthy();
     expect(body.trust_domain, "trust_domain").toMatch(/^ak:trust_domain:/);
-    expect(body.service_type, "service_type").toBe("principal_server");
+    expect(body.service_kind, "service_kind").toBe("principal_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
     expect(Array.isArray(body.supported_profiles), "supported_profiles is array").toBe(true);
     expect(Array.isArray(body.supported_operations), "supported_operations is array").toBe(true);
@@ -250,13 +250,13 @@ test.describe("describes soland surface @fully-implemented", () => {
     request,
   }) => {
     const selected = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_type=principal_server`,
+      `${solandBaseUrl()}/_arkret/describe?service_kind=principal_server`,
     );
     expect(selected.status()).toBe(200);
-    expect((await selected.json()).service_type).toBe("principal_server");
+    expect((await selected.json()).service_kind).toBe("principal_server");
 
     const rejected = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_type=auth_server`,
+      `${solandBaseUrl()}/_arkret/describe?service_kind=auth_server`,
     );
     expect(rejected.status()).toBe(400);
     expect(wireErrCode(await rejected.json())).toBe("invalid_param");
@@ -267,7 +267,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
   test("coauth /_arkret/describe returns auth_server shape and does not claim identity_registry", async ({
     request,
   }, testInfo) => {
-    // spec: service-surface.md §3 (service_type naming — auth_server),
+    // spec: service-surface.md §3 (service_kind naming — auth_server),
     //       G3.C3 (coauth MUST NOT claim canonical identity_registry profile).
     //
     // coauthBaseUrl() returns undefined when COTEST_COAUTH_BASE_URL is not configured
@@ -280,8 +280,8 @@ test.describe("describes coauth surface @fully-implemented", () => {
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
     const body = await resp.json();
 
-    // §3 — service_type registered values
-    expect(body.service_type, "service_type").toBe("auth_server");
+    // §3 — service_kind registered values
+    expect(body.service_kind, "service_kind").toBe("auth_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
 
     // §3.0 — six claim-level fields present
@@ -332,13 +332,13 @@ test.describe("describes coauth surface @fully-implemented", () => {
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
 
     const selected = await request.get(
-      `${baseUrl}/_arkret/describe?service_type=auth_server`,
+      `${baseUrl}/_arkret/describe?service_kind=auth_server`,
     );
     expect(selected.status()).toBe(200);
-    expect((await selected.json()).service_type).toBe("auth_server");
+    expect((await selected.json()).service_kind).toBe("auth_server");
 
     const rejected = await request.get(
-      `${baseUrl}/_arkret/describe?service_type=principal_server`,
+      `${baseUrl}/_arkret/describe?service_kind=principal_server`,
     );
     expect(rejected.status()).toBe(400);
     expect(wireErrCode(await rejected.json())).toBe("invalid_param");
@@ -357,9 +357,9 @@ test.describe("shared public describe binding @fully-implemented", () => {
 
     const [principalResponse, authResponse] = await Promise.all([
       request.get(
-        `${solandBaseUrl()}/_arkret/describe?service_type=principal_server`,
+        `${solandBaseUrl()}/_arkret/describe?service_kind=principal_server`,
       ),
-      request.get(`${coauth}/_arkret/describe?service_type=auth_server`),
+      request.get(`${coauth}/_arkret/describe?service_kind=auth_server`),
     ]);
     expect(principalResponse.status()).toBe(200);
     expect(authResponse.status()).toBe(200);
@@ -376,16 +376,16 @@ test.describe("shared public describe binding @fully-implemented", () => {
       expect(wireErrCode(await missing.json())).toBe("invalid_param");
 
       const invalid = await request.get(
-        `${shared.baseUrl}/_arkret/describe?service_type=directory_service`,
+        `${shared.baseUrl}/_arkret/describe?service_kind=directory_service`,
       );
       expect(invalid.status()).toBe(400);
       expect(wireErrCode(await invalid.json())).toBe("invalid_param");
 
       const selectedPrincipal = await request.get(
-        `${shared.baseUrl}/_arkret/describe?service_type=principal_server`,
+        `${shared.baseUrl}/_arkret/describe?service_kind=principal_server`,
       );
       const selectedAuth = await request.get(
-        `${shared.baseUrl}/_arkret/describe?service_type=auth_server`,
+        `${shared.baseUrl}/_arkret/describe?service_kind=auth_server`,
       );
       expect(selectedPrincipal.status()).toBe(200);
       expect(selectedAuth.status()).toBe(200);
@@ -399,8 +399,8 @@ test.describe("shared public describe binding @fully-implemented", () => {
       // either role's DID and advertised service bindings.
       expect(selectedPrincipalBody).toEqual(principal);
       expect(selectedAuthBody).toEqual(auth);
-      expect(selectedPrincipalBody.service_type).toBe("principal_server");
-      expect(selectedAuthBody.service_type).toBe("auth_server");
+      expect(selectedPrincipalBody.service_kind).toBe("principal_server");
+      expect(selectedAuthBody.service_kind).toBe("auth_server");
       expect(selectedPrincipalBody.service_id).not.toBe(selectedAuthBody.service_id);
       expect(selectedPrincipalBody.supported_operations).not.toEqual(
         selectedAuthBody.supported_operations,

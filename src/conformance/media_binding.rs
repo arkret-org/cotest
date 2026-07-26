@@ -110,8 +110,8 @@ const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
     "livekit",
     "mediasoup",
     "janus",
-    "arkret-native",
-    "moq-relay",
+    "arkret_native",
+    "moq_relay",
 ];
 
 fn known_backend_type(label: &str) -> bool {

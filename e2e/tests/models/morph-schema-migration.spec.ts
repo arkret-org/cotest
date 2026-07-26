@@ -7,7 +7,7 @@
 //   defined in arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
 //   — opt-in Realm profile permitting ak.morph.schema_migrate events with
 //     compatibility_class ∈ {breaking, transformation}.
-// Decision table (canonical): arkret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
+// Decision table (canonical): arkret-spec/spec/v1/artifacts/registry/morph-kind-decision-table.json
 //   — 4 precedence sources for "what a Morph is and what it allows" merge.
 // Event kind: ak.morph.schema_migrate (event-kind-registry.json, category=morph,
 //             status=active, reducer_input=true).
@@ -22,7 +22,7 @@
 // + schema_migration_breaking audit emission; Phase D the deterministic
 // transformation vectors (ak.vector.morph.*).
 //
-// Phase E is a pure artifact schema probe (load morph-type-decision-table.json
+// Phase E is a pure artifact schema probe (load morph-kind-decision-table.json
 // and the migration profile block, assert structural invariants). No soland
 // writes required, so it is tagged @fully-implemented and ships live today.
 
@@ -60,7 +60,7 @@ function loadJson<T = unknown>(path: string): T {
   return JSON.parse(readFileSync(path, "utf8")) as T;
 }
 
-// Shape of morph-type-decision-table.json. Mirrors morph.md §4 four-source
+// Shape of morph-kind-decision-table.json. Mirrors morph.md §4 four-source
 // merge precedence. We only describe the fields the test touches; unknown
 // fields pass through.
 type DecisionTablePrecedence = {
@@ -108,7 +108,7 @@ type MigrationProfileBlock = {
 };
 
 // conformance-profiles.json top-level shape (only the keys this test touches).
-// Real document has many more sibling keys (profile_tiers, profile_roles, ...);
+// Real document has many more sibling keys (profile_sets, profile_roles, ...);
 // we deliberately only carve out the slice we read so spec growth doesn't
 // constantly drift this type. Profile-id → requirements mapping lives under
 // `profile_requirements`; the global v1 catalog list lives under
@@ -131,20 +131,20 @@ test.describe("morph schema migration @fully-implemented", () => {
   // can't be parsed, this surfaces as test setup failure (which is exactly
   // what we want — the spec build is broken, not the wire).
   const decisionTable = loadJson<MorphDecisionTable>(
-    resolve(registryRoot, "morph-type-decision-table.json"),
+    resolve(registryRoot, "morph-kind-decision-table.json"),
   );
   const profilesDoc = loadJson<ConformanceProfilesDoc>(
     resolve(profilesRoot, "conformance-profiles.json"),
   );
 
-  test("Phase E — morph-type-decision-table.json parses and exposes the four §4 precedence sources", async ({}, testInfo) => {
+  test("Phase E — morph-kind-decision-table.json parses and exposes the four §4 precedence sources", async ({}, testInfo) => {
     // spec: morph.md §4 (four sources merge precedence) + the artifact
     //       itself which is marked source_of_truth=true.
     expect(decisionTable.source_of_truth).toBe(true);
     expect(decisionTable.applies_to).toBe("ak:morph:");
 
     // §4 lists exactly four declaration sources (1 schema_refs[], 2 realm
-    // profile, 3 morph_type, 4 facets). The artifact MUST mirror that.
+    // profile, 3 morph_kind, 4 facets). The artifact MUST mirror that.
     expect(decisionTable.precedence.length).toBeGreaterThanOrEqual(4);
     const orders = decisionTable.precedence.map((p) => p.order).sort((a, b) => a - b);
     expect(orders).toEqual([1, 2, 3, 4]);
@@ -582,14 +582,14 @@ async function createCustomerRiskMorph(
           // surface GET /_arkret/self/realms/{realm_id}/morphs/{morph_id} is the
           // *document* Morph projection (response document_morph_projection_outcome,
           // which carries `document.schema_refs` and `document.fields`). It serves
-          // only morph_type=="document" (soland projection_query.rs
+          // only morph_kind=="document" (soland projection_query.rs
           // get_document_projection). Business morph field state is otherwise read
           // via the canonical event/snapshot history, which has no HTTP field-read
           // surface — so this HTTP migration read-back test uses a document Morph.
-          // morph_type is orthogonal to schema_refs (the customer_risk reference
+          // morph_kind is orthogonal to schema_refs (the customer_risk reference
           // schemas the §4.1 S3 transformation vectors evolve), and immutable per
           // §4.1 S2, so the migration semantics are unchanged.
-          morph_type: "document",
+          morph_kind: "document",
           stage: "in_progress",
           schema_refs: schemaRefs,
           fields,

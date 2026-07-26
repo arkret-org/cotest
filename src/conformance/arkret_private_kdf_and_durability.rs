@@ -216,7 +216,7 @@ fn run_rrk_recipient_validation(case: &Value) -> Result<()> {
     let input = &case["input"];
     let active = required_str(input, "verification_method_state")? == "active";
     let designated =
-        required_str(input, "did_service_type")? == "ArkretRealmHistoryRecoveryKey" && active;
+        required_str(input, "did_service_kind")? == "ArkretRealmHistoryRecoveryKey" && active;
     if active && designated {
         bail!("revoked RRK method was unexpectedly accepted");
     }

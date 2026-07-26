@@ -60,7 +60,7 @@ test.describe("personal blocklist", () => {
     expect(JSON.stringify(accountData)).toContain("delta");
   });
 
-  test("Complement account_data control: same data_type overwrites and sync returns latest entry", async ({
+  test("Complement account_data control: same account_data_key overwrites and sync returns latest entry", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -117,7 +117,7 @@ test.describe("personal blocklist", () => {
       entries?: Array<Record<string, unknown>>;
     };
     const listEntries = (listBody.entries ?? []).filter(
-      (entry) => entry.data_type === dataType,
+      (entry) => entry.account_data_key === dataType,
     );
     expect(listEntries).toHaveLength(1);
     const listEntry = listEntries[0];
@@ -534,7 +534,7 @@ async function blocklistStoredOpaque(
   target: string,
   subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataEntry(
+  const blocklist = await blocklistAccountDataRow(
     request,
     token,
     subscribeOpts,
@@ -563,7 +563,7 @@ function isEncryptedAccountDataCarrier(
     typeof content.aad_digest === "string" &&
     /^sha256:[0-9a-f]{64}$/.test(content.aad_digest) &&
     aad.schema === "ak.schema.account_data_encrypted_value.v1" &&
-    aad.data_type === BLOCKLIST_DATA_TYPE &&
+    aad.account_data_key === BLOCKLIST_DATA_TYPE &&
     typeof content.ciphertext === "string" &&
     content.ciphertext.length > 0 &&
     typeof content.ciphertext_digest === "string" &&
@@ -579,7 +579,7 @@ async function blocklistClearedOrTombstoned(
   target: string,
   subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<boolean> {
-  const blocklist = await blocklistAccountDataEntry(
+  const blocklist = await blocklistAccountDataRow(
     request,
     token,
     subscribeOpts,
@@ -594,7 +594,7 @@ async function blocklistClearedOrTombstoned(
   return content.tombstone === true || isEncryptedAccountDataCarrier(content);
 }
 
-async function blocklistAccountDataEntry(
+async function blocklistAccountDataRow(
   request: APIRequestContext,
   token: string,
   subscribeOpts?: () => AccountSubscribeOpts,

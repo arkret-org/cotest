@@ -1,8 +1,8 @@
-//! Round 4 / A2 — security-closure-vectors integration test surface.
+//! Round 4 / A2 — security-closure-fixture integration test surface.
 //!
 //! Two layers:
 //!
-//! 1. The **wire-shape gate** (always-runs): loads `security-closure-vectors.json` and confirms
+//! 1. The **wire-shape gate** (always-runs): loads `security-closure-fixture.json` and confirms
 //!    every one of the 13 `ak.vector.*` ids the round-4 spec promotes is present and exposes the
 //!    typed `runner{}` contract introduced by spec commit `892c5d7 test: add security closure
 //!    runner contract`.
@@ -17,13 +17,13 @@
 
 use cotest::conformance::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
-    SecurityClosureFixture, run_security_closure_vectors_suite,
+    SecurityClosureFixture, run_security_closure_fixture_suite,
 };
 use cotest::scenarios::federation_idempotency_historical_only::{
     HISTORICAL_ONLY_REASON, VECTOR_ID as FEDERATION_HISTORICAL_VECTOR_ID,
     run_federation_idempotency_historical_only,
 };
-use cotest::scenarios::security_closure_vectors::{
+use cotest::scenarios::security_closure_fixture::{
     VECTOR_CONSENT_CACHE_INVALIDATION, VECTOR_CONSENT_SCOPE_CASCADE,
     VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING, VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
     VECTOR_IDENTITY_LINK_EAGER_INVALIDATION, VECTOR_IDENTITY_LINK_POLICY_TIGHTENING_INVALIDATION,
@@ -35,8 +35,8 @@ use cotest::scenarios::security_closure_vectors::{
 
 #[test]
 fn security_closure_fixture_round_trips_full_runner_contract() {
-    run_security_closure_vectors_suite()
-        .expect("security-closure-vectors.json must satisfy round-4 lint pins");
+    run_security_closure_fixture_suite()
+        .expect("security-closure-fixture.json must satisfy round-4 lint pins");
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn fixture_carries_every_required_vector_id() {
     for vector_id in REQUIRED_SECURITY_CLOSURE_VECTOR_IDS {
         assert!(
             fixture
-                .security_closure_vectors
+                .security_closure_fixture
                 .iter()
                 .any(|v| v.vector_id == *vector_id),
             "round-4 security closure fixture missing required vector_id {vector_id}",
@@ -388,7 +388,7 @@ fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
         && std::env::var_os("COTEST_SPEC_ROOT").is_none()
     {
         // Both override env vars unset → resolved path must end with
-        // `arkret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`.
+        // `arkret-spec/spec/v1/artifacts/fixtures/security-closure-fixture.json`.
         let canonical_tail = std::path::Path::new("arkret-spec")
             .join("spec")
             .join("v1")
@@ -429,10 +429,10 @@ fn federation_c3_vector_loads_from_security_closure_fixture() {
     // wire-shape gate.
     assert_eq!(
         FEDERATION_HISTORICAL_VECTOR_ID, VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
-        "federation_idempotency_historical_only::VECTOR_ID drifted from security_closure_vectors pin",
+        "federation_idempotency_historical_only::VECTOR_ID drifted from security_closure_fixture pin",
     );
     assert_vector_present(FEDERATION_HISTORICAL_VECTOR_ID)
-        .expect("C3 vector must parse out of security-closure-vectors.json");
+        .expect("C3 vector must parse out of security-closure-fixture.json");
 
     // The fixture's first step expectation MUST include the historical_only
     // outcome on the post-revoke replay — pin it explicitly so a fixture

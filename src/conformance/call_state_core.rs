@@ -147,7 +147,7 @@ fn unsigned_token_outcome(
     let identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned();
     CallMediaTokenExchangeOutcome {
         focus_id: request.focus_id.clone(),
-        backend_type: "livekit".to_owned(),
+        backend_kind: "livekit".to_owned(),
         connect_url: "wss://livekit-fra.example.com".to_owned(),
         backend_token: "opaque-backend-token".to_owned(),
         participant_identity: identity.clone(),

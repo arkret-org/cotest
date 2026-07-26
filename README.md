@@ -38,7 +38,7 @@ The harness constructs fixtures with current v1 wire names only:
 The current harness tracks the sibling `arkret-spec` checkout and includes:
 
 - **12 new security-closure vectors** (`ak.vector.*` from
-  `security-closure-vectors.json`) driven through a runner contract
+  `security-closure-fixture.json`) driven through a runner contract
   `{given_state, operation}` → assertions on
   `{transcript, expected_state_transition, expected_external_response,
   expected_audit_reason}`.

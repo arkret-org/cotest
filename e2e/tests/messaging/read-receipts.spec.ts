@@ -80,7 +80,7 @@ test.describe("read receipts + privacy", () => {
           sent_at: sentAt.toISOString(),
           expires_at: expiresAt.toISOString(),
           payload: {
-            receipt_type: "read",
+            receipt_kind: "read",
             schema: "ak.schema.read_receipt.v1",
             realm_id: realmId,
             actor_id: alice.did,
@@ -523,7 +523,7 @@ function receiptEnvelope(
     sent_at: sentAt.toISOString(),
     expires_at: new Date(sentAt.getTime() + ttlMs).toISOString(),
     payload: {
-      receipt_type: "read",
+      receipt_kind: "read",
       schema: "ak.schema.read_receipt.v1",
       realm_id: fixture.realmId,
       actor_id: fixture.alice.did,

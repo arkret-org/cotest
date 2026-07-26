@@ -26,7 +26,7 @@ use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
 use arkret_models_collaboration::sync_frames::account_sync::{
     NotificationDelta, NotificationDeltaAction,
 };
-use arkret_wire::{AgentHumanApprovalErrorDetails, CapabilityActionId, ErrorEnvelope};
+use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, ErrorEnvelope};
 use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
@@ -527,7 +527,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         };
         Ok(serde_json::from_value(serde_json::json!({
             "id": "ak:notification:01964137-0000-7000-8000-000000000001",
-            "type": "agent",
+            "notification_kind": "agent",
             "action": action,
             "data": data
         }))?)
@@ -575,7 +575,7 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     }
     let genesis = serde_json::json!({
         "created_by": agent,
-        "notary": {"type": "single_did", "did": agent},
+        "notary": {"kind": "single_did", "did": agent},
         "purpose": "principal_control",
         "encryption_profile": "e2ee_required",
         "event_encryption_floor": "e2ee_required"
@@ -1202,7 +1202,7 @@ pub fn validate_agent_human_approval_http_response(status: u16, body: &Value) ->
         .get("details")
         .ok_or_else(|| anyhow!("human-approval response missing error.details"))?;
     validate_human_approval_details_schema(details)?;
-    let typed: AgentHumanApprovalErrorDetails = serde_json::from_value(details.clone())
+    let typed: AgentHumanApprovalProblem = serde_json::from_value(details.clone())
         .map_err(|error| anyhow!("decode typed human-approval details: {error}"))?;
     Ok(typed.approval_request_id().to_owned())
 }
@@ -1226,7 +1226,7 @@ impl MiniHumanApprovalGate {
     }
 
     fn approval_required_response(&self) -> Result<Value> {
-        let details = AgentHumanApprovalErrorDetails::new(self.approval_request_id.clone())?;
+        let details = AgentHumanApprovalProblem::new(self.approval_request_id.clone())?;
         Ok(serde_json::to_value(
             ErrorEnvelope::claim_required_human_approval("controller approval required", details)
                 .with_request_id("cotest-human-approval"),
@@ -1291,14 +1291,14 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
             "operation_id",
             "proof_kind",
             "requested_scope_requires_controller_approval",
-            "risk_class",
+            "risk_tier",
         ],
         "human-approval request",
     )?;
     if request.get("operation_id").and_then(Value::as_str)
         != Some(arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT)
         || request.get("proof_kind").and_then(Value::as_str) != Some("agent_key_proof")
-        || request.get("risk_class").and_then(Value::as_str) != Some("high")
+        || request.get("risk_tier").and_then(Value::as_str) != Some("high")
         || request
             .get("requested_scope_requires_controller_approval")
             .and_then(Value::as_bool)

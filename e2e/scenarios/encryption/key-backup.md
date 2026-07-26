@@ -10,7 +10,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 - `identity/key-management.md` §3.3 — Recovery Key = 唯一内容恢复凭证(24 词 BIP-39)
 - `identity/key-management.md` §7 — Key backup 概览
-- `identity/key-management.md` §7.1 — Backup 内容隔离(`backup_class`)
+- `identity/key-management.md` §7.1 — Backup 内容隔离(`backup_kind`)
 - `identity/key-management.md` §7.2 — Envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
 - `identity/key-management.md` §7.3 — Restore strand(Recovery Key, commitment 校验, 解密)
 - `identity/key-management.md` §7.4 — Ownership proof / decryption proof
@@ -47,11 +47,11 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 1. alice 进 `/settings/recovery`(RecoveryPanel)点 "Generate"(`recovery-key-regenerate`);或首次创建 encrypted Realm 时自动弹出 `MlsBackupPrompt`(`mls-backup-modal`),点 `mls-backup-submit` 自动生成 — **无用户口令输入**(spec §7.7/§7.10)
 2. UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写(`mls-backup-generated-key` / `recovery-key-current`);本地只保存 SHA-256 指纹,词串不上传
-3. 客户端用 Recovery Key 建立 `recovery_public_key` 恢复根,发布 `backup_class="did_recovery"` envelope 并保存本地 recovery public key metadata。若此时本地已经存在 account MLS secret,客户端同时上传 HPKE `recovery_public_key` 的 `mls_account_secret` envelope;若 account MLS secret 尚未生成,则在首次加密写入后由 §7.10 自动补传。
+3. 客户端用 Recovery Key 建立 `recovery_public_key` 恢复根,发布 `backup_kind="did_recovery"` envelope 并保存本地 recovery public key metadata。若此时本地已经存在 account MLS secret,客户端同时上传 HPKE `recovery_public_key` 的 `mls_account_secret` envelope;若 account MLS secret 尚未生成,则在首次加密写入后由 §7.10 自动补传。
 4. 首次 encrypted write 生成/轮换 account MLS secret 后,客户端自动上传 `PUT /_arkret/self/keys/backups/<backup_id>`:
-   - `backup_class: "secret_storage"`
+   - `backup_kind: "secret_storage"`
    - `encryption.recipient_method: "recovery_public_key"`
-   - `contents[].item_type: "mls_account_secret"`
+   - `contents[].item_kind: "mls_account_secret"`
    - `ciphertext` / `ciphertext_digest` 等 envelope metadata
 5. 断言:`GET /_arkret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
 6. UI 显示 recovery root 已配置;`mls_account_secret` 与自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发

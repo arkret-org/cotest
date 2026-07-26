@@ -9,8 +9,8 @@
 ## Spec 锚点
 
 - `identity/key-management.md` §3.3 — Recovery Key(24 词 BIP-39,唯一内容恢复凭证)+ threshold scheme + trusted recovery service
-- `identity/key-management.md` §7 — Key backup 概览,`backup_class` domain
-- `identity/key-management.md` §7.1 — 各 backup_class 的内容隔离
+- `identity/key-management.md` §7 — Key backup 概览,`backup_kind` domain
+- `identity/key-management.md` §7.1 — 各 backup_kind 的内容隔离
 - `identity/key-management.md` §7.2 — Backup envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
 - `identity/key-management.md` §7.3 — Restore strand(凭证 = Recovery Key)
 - `identity/key-management.md` §7.4 — Ownership proof vs decryption proof
@@ -45,14 +45,14 @@
    - 按规范 HKDF 从 Recovery Key 派生代际 DID root、独立 recovery-proof signing key 与 backup-only HPKE key
    - entry 0 的 `updateKeys` 使用 root;root 不进入 DID Document `verificationMethod`
    - 发布或确认同时绑定 recovery signing / HPKE pair 的 genesis recovery policy accepted
-   - 上传 `backup_class="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope；或保存 root-signed offline-sealed receipt 并要求用户二次确认离线持有
+   - 上传 `backup_kind="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope；或保存 root-signed offline-sealed receipt 并要求用户二次确认离线持有
    - 只用配对的 X25519 backup key HPKE 加密账户 secret;不得把 signing key 当 recipient
-4. `PUT /_arkret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
+4. `PUT /_arkret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_kind: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
 5. 服务端**只能存** ciphertext,不接受 Recovery Key 词串明文
 6. 断言:
    - `GET /_arkret/root/identity/recovery-policy` 返回 non-null `active_policy`
-   - `GET /_arkret/self/keys/backups?backup_class=did_recovery` 至少 1 条
-   - `GET /_arkret/self/keys/backups?backup_class=secret_storage` 至少 1 条(有本地 account MLS secret 时)
+   - `GET /_arkret/self/keys/backups?backup_kind=did_recovery` 至少 1 条
+   - `GET /_arkret/self/keys/backups?backup_kind=secret_storage` 至少 1 条(有本地 account MLS secret 时)
    - metadata **不含** Recovery Key plaintext;此后新材料按 §7.10 自动持续备份
 
 ### Phase B — (可选)alice 在 E2EE Realm 中收发消息

@@ -67,7 +67,7 @@
 
 22. 重建一个 E2EE Realm,加 notification rule `contains_keyword: "urgent"`(只 client 可求值,因为服务端看不到明文)
 23. alice 发 `"this is urgent"`
-24. 服务端为 `mention_sidecar_hash` 命中的接收者派生脱敏 notification projection,并在 push 面走 blind wake-up(spec §4.5)
+24. 服务端为 `mention_sidecar_digest` 命中的接收者派生脱敏 notification projection,并在 push 面走 blind wake-up(spec §4.5)
 25. 客户端从 `/_arkret/self/account/subscribe` 拉取 projection,本地解密 → 求值 rule → 显示 urgent notification
 
 ## Edge cases

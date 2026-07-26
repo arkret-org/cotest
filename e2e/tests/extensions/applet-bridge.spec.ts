@@ -876,10 +876,10 @@ async function rawInstallApplet(
         effective_scope: effectiveScope,
         approval_request: {
           approve_actions: signed.applet_package.requested_scopes,
-          allow_ghost_actors: true,
-          allow_delegated_native_actors: false,
-          allow_e2ee_join: false,
-          allow_widget: false,
+          ghost_actors_allowed: true,
+          delegated_native_actors_allowed: false,
+          e2ee_join_allowed: false,
+          widget_allowed: false,
         },
       },
     },
@@ -902,8 +902,8 @@ async function rawInstallApplet(
         bot_membership: "join",
         ghost_actor_mode: "policy_declared",
       },
-      e2ee_policy: { allow_mls_join: false },
-      widget_policy: { allow_widget: false },
+      e2ee_policy: { mls_join_allowed: false },
+      widget_policy: { widget_allowed: false },
     },
   });
 }

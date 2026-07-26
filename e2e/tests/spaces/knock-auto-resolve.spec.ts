@@ -51,7 +51,7 @@ function expectGateReject(resp: APIResponse, body: string) {
   );
 }
 
-// claim_required gate `g-vc`: requires_claims must be covered by the
+// claim_required gate `g-vc`: required_claims must be covered by the
 // presentation's claims[]. The mock returns { claim_presentation, jws }.
 async function issueClaim(
   request: APIRequestContext,
@@ -111,7 +111,7 @@ function vcGate(): Record<string, unknown> {
     gate_id: "g-vc",
     kind: "claim_required",
     auto_resolve: true,
-    requires_claims: ["acme:employee"],
+    required_claims: ["acme:employee"],
   };
 }
 

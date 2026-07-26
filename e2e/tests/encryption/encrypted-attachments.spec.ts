@@ -190,7 +190,7 @@ function encryptedAttachmentEnvelope(
 ): Record<string, unknown> {
   const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
-    scheme: "mls-rfc9420",
+    scheme: "mls_rfc9420",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,

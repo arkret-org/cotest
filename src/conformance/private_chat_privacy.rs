@@ -119,9 +119,9 @@ pub fn run_private_chat_privacy_contract_suite() -> Result<()> {
 }
 
 fn validate_realm_remark_registry() -> Result<()> {
-    let registry = load_artifact_json("registry/account-data-type-registry.json")?;
+    let registry = load_artifact_json("registry/account-data-key-registry.json")?;
     let entry = registry
-        .get("account_data_types")
+        .get("account_data_key_patterns")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()

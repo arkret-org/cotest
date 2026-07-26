@@ -7,23 +7,23 @@ use super::{emit_vector, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
 /// Round-21 — Discovery profile (`ak.profile.discovery.v1`) black-box
-/// vectors covering tier filtering and post-C16 surface naming.
+/// vectors covering surface-class filtering and post-C16 surface naming.
 ///
 /// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
-/// `capability_tiers`. The fixture asserts:
+/// `surface_classes`. The fixture asserts:
 ///   * core surfaces are implied by claiming `ak.profile.arkret_v1.core` — events_sync /
 ///     identity_registry / service_discovery MUST appear and the discovery client MAY call ops in
 ///     those surfaces;
 ///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST
 ///     be advertised explicitly — a core-only SUT MUST NOT auto-imply them, and discovery clients
 ///     MUST gate extension calls on the advertised set;
-///   * `interop_bridge` tier surfaces (applet, mimi_interop) MUST be advertised only when the
+///   * `interop_bridge` surface-class entries (applet, mimi_interop) MUST be advertised only when the
 ///     external protocol is supported, and bridge advertisement is INDEPENDENT of core/extension
 ///     advertisement (no implication via `bridges_to`).
 pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
-    let fixture = load_local_fixture("discovery_profile_fixture.json")?;
+    let fixture = load_local_fixture("discovery-profile-fixture.json")?;
     validate_profile(&fixture, "ak.profile.discovery_vectors.v1")?;
 
     // Cross-check the fixture's surface_catalog against the LIVE operation
@@ -41,7 +41,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("operation-registry.surface_groups missing"))?
     {
         let surface = required_str(group, "surface")?;
-        let tier = required_str(group, "tier")?;
+        let surface_class = required_str(group, "surface_class")?;
         let mut ops: BTreeSet<String> = BTreeSet::new();
         for op in group
             .get("operations")
@@ -53,7 +53,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
                 ops.insert(s.to_owned());
             }
         }
-        match tier {
+        match surface_class {
             "core" => {
                 live_core.insert(surface.to_owned());
             }
@@ -64,7 +64,9 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
                 live_bridge.insert(surface.to_owned());
             }
             "deployment_local" => {}
-            other => bail!("operation-registry surface {surface} has unknown tier {other}"),
+            other => {
+                bail!("operation-registry surface {surface} has unknown surface_class {other}")
+            }
         }
         surface_to_ops.insert(surface.to_owned(), ops);
     }
@@ -347,8 +349,8 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("view schema missing $defs.query.properties"))?;
     for field in [
         "realm_ids",
-        "object_types",
-        "morph_types",
+        "object_kinds",
+        "morph_kinds",
         "facets",
         "filters",
         "order_by",

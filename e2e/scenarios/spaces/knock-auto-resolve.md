@@ -34,7 +34,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
    ```json
    {
      "gates": [
-       { "gate_id": "g-vc", "kind": "claim_required", "auto_resolve": true, "requires_claims": ["acme:employee"] },
+       { "gate_id": "g-vc", "kind": "claim_required", "auto_resolve": true, "required_claims": ["acme:employee"] },
        { "gate_id": "g-captcha", "kind": "challenge_response", "auto_resolve": true, "provider_did": "did:web:captcha.example", "challenge_kinds": ["captcha"], "max_proof_age": "PT5M" }
      ],
      "combinator": "all"

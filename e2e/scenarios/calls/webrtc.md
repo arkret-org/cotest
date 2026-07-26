@@ -35,7 +35,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 1. alice 进 bob 的 contact / DM 视图,点 "Call"
 2. inkson 客户端:
-   - 创建 Call Morph:`{ morph_type: "call", mode: "p2p", state: "ringing", participants: [alice.did, bob.did], recording_policy: "none" }`
+   - 创建 Call Morph:`{ morph_kind: "call", mode: "p2p", state: "ringing", participants: [alice.did, bob.did], recording_policy: "none" }`
    - 提交 `ak.morph.create`
    - 调 `POST /_arkret/self/rtc/ice-config?call_id=<callId>&device_id=<alice_dev>` 拿 ICE config:`{ stun_servers, turn_servers: [{ url, username: "pairwise-pseudonym", credential, expires_at }] }`(spec §6)
 3. alice 客户端用浏览器 RTCPeerConnection 创建 offer SDP
@@ -112,7 +112,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 - **E18.2 信令乱序**:candidate signal 比 offer 先到 → bob 客户端缓冲或拒绝
 - **E18.3 carol 中途加入 1:1 call**:Phase A 进行中,carol 尝试 join → 应拒绝(p2p mode 不允许第三方);切换到 SFU 需要 alice 显式升级
 - **E18.4 alice ban carol mid-call**:alice 在 group call 中 ban carol → MLS Remove(若 E2EE call)+ carol 被踢出 media path
-- **E18.5 force_turn**:NAT 严格环境,客户端 force-TURN → 媒体经 TURN relay,断言 candidate type 全是 `relay`
+- **E18.5 turn_required**:NAT 严格环境,客户端 force-TURN → 媒体经 TURN relay,断言 candidate type 全是 `relay`
 - **E18.6 mute remote**:alice 持 `call.moderate`,强 mute carol → carol 媒体被服务端拒绝转发,carol UI 显示 "muted by moderator"
 - **E18.7 pseudonym TURN credentials**:断言 turn_servers[].username 不暴露 alice.did 明文(应当是 pairwise pseudonym,spec §6)
 

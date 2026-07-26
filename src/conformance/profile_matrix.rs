@@ -226,8 +226,8 @@ fn load_profile_dependency_graph(
     if graph.get("kind").and_then(Value::as_str) != Some("profiles_dependency_graph") {
         bail!("profiles-dependency-graph.json kind must be profiles_dependency_graph");
     }
-    if graph.get("source_of_truth").and_then(Value::as_bool) != Some(true) {
-        bail!("profiles-dependency-graph.json must declare source_of_truth=true");
+    if graph.get("source_of_truth").and_then(Value::as_bool) != Some(false) {
+        bail!("profiles-dependency-graph.json must declare source_of_truth=false");
     }
 
     let mut parsed = ProfileDependencyGraph::default();

@@ -283,7 +283,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
 }
 /// Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors.
 ///
-/// Cross-checks `tests/fixtures/event_kind_lattice_dispatch_fixture.json`
+/// Cross-checks `tests/fixtures/event-kind-lattice-dispatch-fixture.json`
 /// against the LIVE event-kind-registry (registry/event-kind-registry.json).
 /// The fixture declares EXPECTED canonical lattices per cell-family AND the
 /// validator confirms the live registry matches. Drift from either side
@@ -302,7 +302,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
 pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
-    let fixture = load_local_fixture("event_kind_lattice_dispatch_fixture.json")?;
+    let fixture = load_local_fixture("event-kind-lattice-dispatch-fixture.json")?;
     validate_profile(
         &fixture,
         "ak.profile.event_kind_lattice_dispatch_vectors.v1",
@@ -343,35 +343,43 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         {
             continue;
         }
-        let Some(family) = entry.get("cell_family").and_then(Value::as_str) else {
-            continue;
-        };
-        if !family.starts_with("ak.component.") {
-            bail!(
-                "live event-kind-registry: cell_family {family} does not start with `ak.component.`"
-            );
+        let writes = entry
+            .get("cell_writes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten();
+        for write in std::iter::once(entry)
+            .filter(|row| row.get("cell_family").is_some())
+            .chain(writes)
+        {
+            let family = required_str(write, "cell_family")?;
+            if !family.starts_with("ak.component.") {
+                bail!(
+                    "live event-kind-registry: cell_family {family} does not start with `ak.component.`"
+                );
+            }
+            let lattice = required_str(write, "lattice")?;
+            if !CORE_LATTICES.contains(&lattice) {
+                bail!(
+                    "live event-kind-registry: cell_family {family} declares non-core lattice {lattice}"
+                );
+            }
+            let bottom = required_str(write, "bottom")?;
+            if !VALID_BOTTOM_MODES.contains(&bottom) {
+                bail!(
+                    "live event-kind-registry: cell_family {family} declares invalid bottom={bottom}"
+                );
+            }
+            family_to_lattice
+                .entry(family.to_owned())
+                .or_default()
+                .insert(lattice.to_owned());
+            family_to_bottom
+                .entry(family.to_owned())
+                .or_default()
+                .insert(bottom.to_owned());
+            all_live_families.insert(family.to_owned());
         }
-        let lattice = required_str(entry, "lattice")?;
-        if !CORE_LATTICES.contains(&lattice) {
-            bail!(
-                "live event-kind-registry: cell_family {family} declares non-core lattice {lattice}"
-            );
-        }
-        let bottom = required_str(entry, "bottom")?;
-        if !VALID_BOTTOM_MODES.contains(&bottom) {
-            bail!(
-                "live event-kind-registry: cell_family {family} declares invalid bottom={bottom}"
-            );
-        }
-        family_to_lattice
-            .entry(family.to_owned())
-            .or_default()
-            .insert(lattice.to_owned());
-        family_to_bottom
-            .entry(family.to_owned())
-            .or_default()
-            .insert(bottom.to_owned());
-        all_live_families.insert(family.to_owned());
     }
     // Single-lattice-per-family invariant.
     for (family, lattices) in &family_to_lattice {
@@ -587,7 +595,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
 pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
-    let fixture = load_local_fixture("event_kind_payload_coverage_fixture.json")?;
+    let fixture = load_local_fixture("event-kind-payload-coverage-fixture.json")?;
     validate_profile(
         &fixture,
         "ak.profile.event_kind_payload_coverage_vectors.v1",
@@ -647,14 +655,29 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
         if status != "active" {
             bail!("vector {name} event_kind {kind} status={status} (expected active)");
         }
-        let live_family = live_family.as_deref().ok_or_else(|| {
-            anyhow!("vector {name} event_kind {kind} has no cell_family in registry")
-        })?;
+        let contract_write = event_kinds
+            .iter()
+            .find(|entry| entry.get("event_kind").and_then(Value::as_str) == Some(kind))
+            .and_then(|entry| entry.get("cell_writes"))
+            .and_then(Value::as_array)
+            .and_then(|writes| {
+                writes.iter().find(|write| {
+                    write.get("cell_family").and_then(Value::as_str) == Some(claimed_family)
+                })
+            });
+        let live_family = live_family
+            .as_deref()
+            .or_else(|| contract_write.and_then(|write| write.get("cell_family")?.as_str()))
+            .ok_or_else(|| {
+                anyhow!("vector {name} event_kind {kind} has no matching cell_family in registry")
+            })?;
         let live_lattice = live_lattice
             .as_deref()
+            .or_else(|| contract_write.and_then(|write| write.get("lattice")?.as_str()))
             .ok_or_else(|| anyhow!("vector {name} event_kind {kind} has no lattice in registry"))?;
         let live_bottom = live_bottom
             .as_deref()
+            .or_else(|| contract_write.and_then(|write| write.get("bottom")?.as_str()))
             .ok_or_else(|| anyhow!("vector {name} event_kind {kind} has no bottom in registry"))?;
         if live_family != claimed_family {
             bail!(
@@ -1012,7 +1035,7 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// C1 Round 23 — constraint family × subtype coverage.
+/// C1 Round 23 — constraint family × constraint_subkind coverage.
 pub fn run_constraint_family_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -1022,7 +1045,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
     let valid_types: BTreeSet<&str> = [
         "temporal",
         "field_access",
-        "type_restriction",
+        "kind_restriction",
         "scope_limitation",
         "delegation_control",
         "quota",
@@ -1046,16 +1069,16 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
     let mut covered_types: BTreeSet<String> = BTreeSet::new();
     for v in vectors {
         let name = required_str(v, "name")?;
-        let ct = required_str(v, "constraint_type")?;
+        let ct = required_str(v, "constraint_kind")?;
         if !valid_types.contains(ct) {
-            bail!("vector {name} constraint_type {ct} not in schema enum");
+            bail!("vector {name} constraint_kind {ct} not in schema enum");
         }
         let constraint = v
             .get("constraint")
             .ok_or_else(|| anyhow!("vector {name} missing constraint object"))?;
-        let body_ct = required_str(constraint, "constraint_type")?;
+        let body_ct = required_str(constraint, "constraint_kind")?;
         if body_ct != ct {
-            bail!("vector {name} constraint.constraint_type {body_ct} != outer {ct}");
+            bail!("vector {name} constraint.constraint_kind {body_ct} != outer {ct}");
         }
         let effect = required_str(constraint, "effect")?;
         if !valid_effects.contains(effect) {
@@ -1095,7 +1118,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         emit_vector(
             "constraint_family.shape",
             v,
-            json!({"name": name, "constraint_type": ct, "evaluation_class": class, "effect": effect, "fast_path_eligible": fast}),
+            json!({"name": name, "constraint_kind": ct, "evaluation_class": class, "effect": effect, "fast_path_eligible": fast}),
         );
     }
 
@@ -1148,7 +1171,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("constraint_family fixture missing negative_vectors[]"))?;
     let mut saw_unknown = false;
     let mut saw_loosen = false;
-    let mut saw_unknown_subtype = false;
+    let mut saw_unknown_subkind = false;
     for v in negatives {
         let name = required_str(v, "name")?;
         let drift = v
@@ -1156,19 +1179,19 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
         match drift {
-            "unknown_constraint_type" => {
+            "unknown_constraint_kind" => {
                 let body_ct = v
-                    .pointer("/constraint/constraint_type")
+                    .pointer("/constraint/constraint_kind")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("negative {name} missing constraint.constraint_type"))?;
+                    .ok_or_else(|| anyhow!("negative {name} missing constraint.constraint_kind"))?;
                 if valid_types.contains(body_ct) {
-                    bail!("negative {name} constraint_type {body_ct} is actually valid");
+                    bail!("negative {name} constraint_kind {body_ct} is actually valid");
                 }
                 saw_unknown = true;
             }
             "evaluation_class_loosened" => {
                 let claimed = required_str(v, "claimed_evaluation_class")?;
-                let ct = required_str(v, "constraint_type")?;
+                let ct = required_str(v, "constraint_kind")?;
                 let canonical = canonical_evaluation_class(ct);
                 let canon_rank = class_strictness_rank(canonical);
                 let claimed_rank = class_strictness_rank(claimed);
@@ -1179,15 +1202,15 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
                 }
                 saw_loosen = true;
             }
-            "unknown_subtype" => {
-                saw_unknown_subtype = true;
+            "unknown_subkind" => {
+                saw_unknown_subkind = true;
             }
             other => bail!("negative {name} unknown drift.kind {other}"),
         }
     }
-    if !(saw_unknown && saw_loosen && saw_unknown_subtype) {
+    if !(saw_unknown && saw_loosen && saw_unknown_subkind) {
         bail!(
-            "constraint_family fixture must cover unknown_constraint_type, evaluation_class loosen, unknown_subtype negatives"
+            "constraint_family fixture must cover unknown_constraint_kind, evaluation_class loosen, unknown_subkind negatives"
         );
     }
 
@@ -1219,12 +1242,12 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         }
         for f in &families {
             if !valid_types.contains(*f) {
-                bail!("composition {name} family {f} not a valid constraint_type");
+                bail!("composition {name} family {f} not a valid constraint_kind");
             }
         }
         // Combine class via strictness max; trust the fixture's declared
         // canonical_for_family hints if absent, fall back to per-family
-        // canonical (subtype-blind).
+        // canonical (constraint_subkind-blind).
         let mut max_rank: u8 = 0;
         let mut max_class: &str = "stateless";
         for f in &families {
@@ -1269,7 +1292,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
 /// C2 Round 26 — constraint evaluation_class fast-path classification.
 ///
 /// Spec: `extensions/constraint-schema.md` §2.3 evaluation_class table. Each
-/// (family, subtype) tuple maps to one canonical evaluation_class. The
+/// (family, constraint_subkind) tuple maps to one canonical evaluation_class. The
 /// validator re-derives the class from the family per the canonical mapping
 /// and asserts fast/slow path classification matches.
 pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
@@ -1385,7 +1408,7 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
     let required_families = [
         "temporal",
         "field_access",
-        "type_restriction",
+        "kind_restriction",
         "scope_limitation",
         "delegation_control",
         "quota",
@@ -1430,17 +1453,17 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-fn canonical_evaluation_class(constraint_type: &str) -> &'static str {
+fn canonical_evaluation_class(constraint_kind: &str) -> &'static str {
     // Per `authz/constraint-schema.md` §2.3 evaluation_class table. Used by
     // both the C1 constraint_family suite (loosen-rejection check) and the
     // C2 constraint_evaluation_class suite (canonical_mapping lint).
     //
-    // Subtype-specific deviations (e.g. field_access w/ condition →
+    // Subkind-specific deviations (e.g. field_access w/ condition →
     // space_state) are handled by the per-vector validators when needed.
-    match constraint_type {
+    match constraint_kind {
         "temporal" => "stateless",
         "field_access" => "stateless",
-        "type_restriction" => "stateless",
+        "kind_restriction" => "stateless",
         "scope_limitation" => "grant_local",
         "delegation_control" => "grant_local",
         "quota" => "space_state",

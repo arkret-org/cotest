@@ -79,7 +79,7 @@ test.describe("call moderation (spec wire)", () => {
     );
     const frame = received.find(
       (e) =>
-        (e.payload as Record<string, unknown>).signal_type === "moderation",
+        (e.payload as Record<string, unknown>).signal_kind === "moderation",
     );
     expect(frame, "moderation frame relayed to target member").toBeTruthy();
     const data = (frame!.payload as Record<string, unknown>).data as Record<
@@ -124,7 +124,7 @@ test.describe("call moderation (spec wire)", () => {
     );
     const frame = received.find(
       (e) =>
-        (e.payload as Record<string, unknown>).signal_type === "moderation",
+        (e.payload as Record<string, unknown>).signal_kind === "moderation",
     );
     expect(frame).toBeTruthy();
     const data = (frame!.payload as Record<string, unknown>).data as Record<
@@ -187,7 +187,7 @@ test.describe("call moderation (spec wire)", () => {
     ).filter(
       (env) =>
         (env.payload as Record<string, unknown>)?.call_id === callId &&
-        (env.payload as Record<string, unknown>)?.signal_type === "moderation",
+        (env.payload as Record<string, unknown>)?.signal_kind === "moderation",
     );
     expect(received.length).toBe(1);
   });

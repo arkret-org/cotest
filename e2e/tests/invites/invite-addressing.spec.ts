@@ -47,7 +47,7 @@ test.describe("invite addressing", () => {
     const introductionEvidence = { kind: "explicit_address" };
     const inviteDeliveryTarget = {
       recipient_service_id: recipientServiceId,
-      recipient_service_type: "principal_server" as const,
+      recipient_service_kind: "principal_server" as const,
     };
     const inviteEvent = signedEventEnvelope({
       actorDid: "did:web:cotest-inviter.example",

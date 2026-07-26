@@ -235,8 +235,8 @@ async function registerSingleAssigneeProfile(
   const relationProfiles = [
     {
       relation_kind: "assigned_to",
-      from_type: "strand",
-      to_type: "did",
+      from_kind: "strand",
+      to_kind: "did",
       relation_scope: "realm",
       cardinality: "many_to_one",
       max_to_per_from: 1,

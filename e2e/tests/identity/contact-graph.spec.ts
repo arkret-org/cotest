@@ -391,7 +391,7 @@ test.describe("contact graph (same principal server)", () => {
     });
     expect(tomb.state).toBe("tombstoned");
     const policy = await getInviteReceivePolicyArkret(request, aliceToken);
-    expect(policy.blocked_subjects ?? []).toContain(bob.did);
+    expect(policy.denied_subjects ?? []).toContain(bob.did);
 
     // bob tries to pull alice into a realm with the (now revoked) consent_grant.
     const realmId = await createRealmApi(request, bobToken, {
@@ -407,7 +407,7 @@ test.describe("contact graph (same principal server)", () => {
       originServer: "default",
       recipientServer: "default",
     });
-    // blocked_subjects hit: drop + opaque (no disclosed_outcome leak).
+    // denied_subjects hit: drop + opaque (no disclosed_outcome leak).
     expect(delivery.status).toBe("deferred");
     expect(delivery.disclosed_outcome).toBeUndefined();
 

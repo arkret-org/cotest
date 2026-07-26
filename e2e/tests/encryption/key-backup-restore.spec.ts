@@ -213,11 +213,11 @@ function makeBackupBody(
   const ciphertext = `backup-ciphertext-${randomUUID()}`;
   const contents = [
     {
-      item_type: "self_signing_key",
+      item_kind: "self_signing_key",
       secret_id: "ssk",
     },
     {
-      item_type: "mls_group_secrets_backup_key",
+      item_kind: "mls_group_secrets_backup_key",
       secret_id: "mls-history",
     },
   ];
@@ -225,7 +225,7 @@ function makeBackupBody(
     backup_id: backupId,
     actor_id: actor.did,
     device_id: actor.deviceId,
-    backup_class: "secret_storage",
+    backup_kind: "secret_storage",
     backup_version: "kb_1",
     // §7.6 series chain — every envelope is a genesis of its own series here.
     series_id: `ak:backup_series:${uuidV7()}`,
@@ -260,10 +260,10 @@ function makeBackupBody(
         schema: "ak.schema.key_backup.v1",
         actor_id: actor.did,
         device_id: actor.deviceId,
-        backup_class: "secret_storage",
+        backup_kind: "secret_storage",
         backup_version: "kb_1",
         created_at: createdAt,
-        item_types: contents.map((item) => item.item_type),
+        item_kinds: contents.map((item) => item.item_kind),
       },
     },
     contents,
@@ -284,7 +284,7 @@ function makeBackupBody(
       signed_fields: [
         "backup_id",
         "actor_id",
-        "backup_class",
+        "backup_kind",
         "backup_version",
         "series_id",
         "series_seq",

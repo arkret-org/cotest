@@ -209,7 +209,7 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
     new Set(serviceIds.map((service) => service.trim()).filter(Boolean)),
   ).map((serviceId) => ({
     service_id: serviceId,
-    service_type: "principal_server",
+    service_kind: "principal_server",
     data_classes: [
       "message_content",
       "attachment_plaintext",
@@ -426,11 +426,11 @@ export async function createRealmApi(
     );
     const deliveryPolicy = {
       realm_id: realmId,
-      allow_binding_sources: ["did_document_default"],
-      allow_did_document_default: true,
+      allowed_binding_sources: ["did_document_default"],
+      did_document_default_allowed: true,
       allowed_recipient_services: [data.creator_service_id],
       required_endorsers: [],
-      allow_unroutable_membership: true,
+      unroutable_membership_allowed: true,
       rebind_authorization: "member",
     };
     const policyCell =
@@ -502,7 +502,7 @@ export async function createRealmApi(
           delivery_status: "routable",
           delivery_binding: {
             recipient_service_id: data.creator_service_id,
-            recipient_service_type: "principal_server",
+            recipient_service_kind: "principal_server",
             binding_scope: "realm",
             binding_source: "did_document_default",
             delivery_modes: [
@@ -542,7 +542,7 @@ export async function createRealmApi(
           invitee,
           invite_delivery_target: {
             recipient_service_id: recipientServiceId,
-            recipient_service_type: "principal_server",
+            recipient_service_kind: "principal_server",
           },
           introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
           expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
@@ -1710,7 +1710,7 @@ function encryptedAccountDataValue(
   const version = "1.0";
   const accountSecret = randomBytes(32);
   const keyInfo = Buffer.from(
-    canonicalJson({ schema, actor_id: actorDid, data_type: dataType }),
+    canonicalJson({ schema, actor_id: actorDid, account_data_key: dataType }),
     "utf8",
   );
   const key = Buffer.from(
@@ -1726,7 +1726,7 @@ function encryptedAccountDataValue(
     schema,
     version,
     actor_id: actorDid,
-    data_type: dataType,
+    account_data_key: dataType,
   };
   const aadBytes = Buffer.from(canonicalJson(aad), "utf8");
   const plaintext = Buffer.from(canonicalJson(content), "utf8");
@@ -2372,13 +2372,13 @@ export async function rawPushFederationEvents(
   });
 }
 
-export type InviteDeliveryRequestBody = {
+export type InviteDeliveryRequestBodyBodyBody = {
   schema: "ak.schema.invite_delivery_request.v1";
   invite_event: Record<string, unknown>;
   invite_address: {
     subject_id: string;
     recipient_service_id: string;
-    recipient_service_type?: "principal_server";
+    recipient_service_kind?: "principal_server";
   };
   introduction_evidence: Record<string, unknown>;
   idempotency_key: string;
@@ -2386,7 +2386,7 @@ export type InviteDeliveryRequestBody = {
 
 export async function submitPeerInviteDeliveryApi(
   request: APIRequestContext,
-  body: InviteDeliveryRequestBody,
+  body: InviteDeliveryRequestBodyBodyBody,
   opts: {
     origin: string;
     destination?: string;
@@ -2403,7 +2403,7 @@ export async function submitPeerInviteDeliveryApi(
 
 export async function rawSubmitPeerInviteDeliveryApi(
   request: APIRequestContext,
-  body: InviteDeliveryRequestBody,
+  body: InviteDeliveryRequestBodyBodyBody,
   opts: {
     origin: string;
     destination?: string;
@@ -2739,7 +2739,7 @@ function peerEventsSubmitBody(
       })}`,
       membership_frontier: frontier,
       delivery_binding_frontier: frontier,
-      destination_service_type: "principal_server",
+      destination_service_kind: "principal_server",
       // §4.1.1 registry-derived canonical digest (override only exists for
       // the reducer_profile_mismatch negative case).
       reducer_profile_digest:
