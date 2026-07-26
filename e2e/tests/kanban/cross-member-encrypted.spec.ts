@@ -42,6 +42,7 @@ import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
+  openDpopUserPageFromSession,
   openUserPage,
   type JointUserPage,
 } from "../../helpers/users";
@@ -477,13 +478,9 @@ test.describe("cross-member encrypted kanban", () => {
 
     const alice = aliceSession.user;
     const bob = bobSession.user;
-    const alicePage = await openUserPage(browser, alice, {
-      grantJwt: aliceSession.grantJwt,
-      dpopSeedB64url: aliceSession.dpopSeedB64url,
-      eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
-      grantId: aliceSession.grantId,
-      grantAudience: aliceSession.grantAudience,
-    });
+    const aliceFlow = await openDpopUserPageFromSession(browser, aliceSession);
+    expect(aliceFlow).toBeTruthy();
+    const alicePage = aliceFlow!.page;
     let bobPage: JointUserPage | undefined;
 
     const boardTitle = `Enc XM Board ${stamp}`;
@@ -519,13 +516,9 @@ test.describe("cross-member encrypted kanban", () => {
       // Bob now completes the atomic PCR create + founding-device authorization.
       // This publishes his real event-signer KeyPackage after the invite already
       // exists, exercising the deferred Welcome reconciliation path.
-      bobPage = await openUserPage(browser, bob, {
-        grantJwt: bobSession.grantJwt,
-        dpopSeedB64url: bobSession.dpopSeedB64url,
-        eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
-        grantId: bobSession.grantId,
-        grantAudience: bobSession.grantAudience,
-      });
+      const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
+      expect(bobFlow).toBeTruthy();
+      bobPage = bobFlow!.page;
       await bobPage.gotoHome();
       await bobPage.completeRecoveryKeySetupIfPrompted();
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
@@ -657,13 +650,9 @@ test.describe("cross-member encrypted kanban", () => {
 
     const alice = aliceSession.user;
     const bob = bobSession.user;
-    const alicePage = await openUserPage(browser, alice, {
-      grantJwt: aliceSession.grantJwt,
-      dpopSeedB64url: aliceSession.dpopSeedB64url,
-      eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
-      grantId: aliceSession.grantId,
-      grantAudience: aliceSession.grantAudience,
-    });
+    const aliceFlow = await openDpopUserPageFromSession(browser, aliceSession);
+    expect(aliceFlow).toBeTruthy();
+    const alicePage = aliceFlow!.page;
     let bobPage: JointUserPage | undefined;
 
     const boardTitle = `Shared History Board ${stamp}`;
@@ -708,13 +697,9 @@ test.describe("cross-member encrypted kanban", () => {
       expect(inviteStatus).toContain("invited");
       expect(inviteStatus).not.toContain("MLS Welcome queued");
 
-      bobPage = await openUserPage(browser, bob, {
-        grantJwt: bobSession.grantJwt,
-        dpopSeedB64url: bobSession.dpopSeedB64url,
-        eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
-        grantId: bobSession.grantId,
-        grantAudience: bobSession.grantAudience,
-      });
+      const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
+      expect(bobFlow).toBeTruthy();
+      bobPage = bobFlow!.page;
       await bobPage.gotoHome();
       await bobPage.completeRecoveryKeySetupIfPrompted();
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();

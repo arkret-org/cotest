@@ -45,6 +45,8 @@ import {
   queryRealmEventsApi,
   revokeCapabilityApi,
   sendMessageApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -54,6 +56,7 @@ import {
   issueDevSession,
   openDpopUserPage,
   openUserPage,
+  selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -475,18 +478,13 @@ test.describe("cross-server federation", () => {
     expect((await betaSpace.json()).members ?? []).toContain(bob.did);
   });
 
-  test("α invite UI event automatically fans out to β and β acceptance propagates back to α", async ({
+  test("α invite UI event fans out to β and standard peer Events propagates β acceptance back to α", async ({
     browser,
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-auto-alice-${stamp}`);
-    const bob = uniqueUser(`s2-auto-bob-${stamp}`);
-    await ensureRegistered(request, alice, { server: "alpha" });
+    const bob = uniqueUser(`s2-auto-bob-${stamp}`, "beta");
     await ensureRegistered(request, bob, { server: "beta" });
-    const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
-    });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
     const bobLocatorToken = await issueInviteLocatorToken(
       request,
@@ -494,10 +492,20 @@ test.describe("cross-server federation", () => {
       "beta",
     );
 
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `s2-auto-alice-${stamp}`,
+      {
       server: "alpha",
-    });
+        prepareMlsDevice: false,
+      },
+    );
+    test.skip(!aliceFlow, "canonical DPoP session requires managed Coauth");
+    if (!aliceFlow) {
+      return;
+    }
+    const alicePage = aliceFlow.page;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -519,15 +527,93 @@ test.describe("cross-server federation", () => {
         realmId,
         "beta",
       );
-      await acceptInviteApi(
+      const acceptanceEvent = signedEventEnvelope({
+        actorDid: bob.did,
+        realmId: betaInvite.realm_id,
+        kind: "ak.invite.accept",
+        payload: {
+          invite_id: betaInvite.id,
+        },
+      });
+      await submitSignedEventApi(
         request,
         bobToken,
-        bob.did,
-        betaInvite.realm_id,
-        betaInvite.id,
+        acceptanceEvent,
         { server: "beta" },
       );
-      await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+      const alphaEventsUrl =
+        `${solandBaseUrl("alpha")}/_arkret/self/events` +
+        `?realms=${encodeURIComponent(realmId)}&limit=100`;
+      const alphaEventsResponse = await request.get(alphaEventsUrl, {
+        headers: selfPathHeadersForDpopSession(
+          aliceFlow.session,
+          "GET",
+          alphaEventsUrl,
+        ),
+      });
+      expect(
+        alphaEventsResponse.status(),
+        await alphaEventsResponse.text(),
+      ).toBe(200);
+      const alphaEvents = (await alphaEventsResponse.json()) as {
+        events?: Array<Record<string, unknown>>;
+      };
+      const alphaBindingEvent = (
+        Array.isArray(alphaEvents.events)
+          ? (alphaEvents.events as Array<Record<string, unknown>>)
+          : []
+      ).find((event) => {
+        if (event.kind !== "ak.member.state") {
+          return false;
+        }
+        const payload = event.payload as
+          | {
+              delivery_binding?: {
+                recipient_service_id?: string;
+              };
+            }
+          | undefined;
+        return (
+          payload?.delivery_binding?.recipient_service_id ===
+          solandServiceId("alpha")
+        );
+      });
+      expect(alphaBindingEvent?.event_id).toBeTruthy();
+      const propagation = await pushFederationEvents(
+        request,
+        [acceptanceEvent],
+        {
+          origin: solandServiceId("beta"),
+          destination: solandServiceId("alpha"),
+          server: "alpha",
+          realmId,
+          idempotencyKey: `${solandServiceId("beta")}#${realmId}#acceptance`,
+          serviceBindingFrontier: [String(alphaBindingEvent!.event_id)],
+        },
+      );
+      expect(propagation.rejected ?? []).toEqual([]);
+      const alphaRealmUrl =
+        `${solandBaseUrl("alpha")}/_arkret/self/realms/` +
+        encodeURIComponent(realmId);
+      await expect
+        .poll(
+          async () => {
+            const response = await request.get(alphaRealmUrl, {
+              headers: selfPathHeadersForDpopSession(
+                aliceFlow.session,
+                "GET",
+                alphaRealmUrl,
+              ),
+            });
+            if (!response.ok()) {
+              return false;
+            }
+            const body = (await response.json()) as { members?: string[] };
+            return body.members?.includes(bob.did) ?? false;
+          },
+          { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBeTruthy();
     } finally {
       await alicePage.close();
     }

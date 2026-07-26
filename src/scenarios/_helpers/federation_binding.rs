@@ -115,6 +115,7 @@ pub fn peer_events_submit_body(
     Ok(EventsSubmitFederationRequestBody {
         service_binding_ref: peer_service_binding_ref(realm_id, &frontier)?,
         events,
+        seals: Vec::new(),
         signer_key_evidence: Vec::new(),
         agent_signer_evidence_bundle: None,
         idempotency_key: idempotency_key.map(str::to_owned),
@@ -140,6 +141,7 @@ pub fn peer_events_submit_body_with_delivery_frontier(
             delivery_binding_frontier,
         )?,
         events,
+        seals: Vec::new(),
         signer_key_evidence: Vec::new(),
         agent_signer_evidence_bundle: None,
         idempotency_key: idempotency_key.map(str::to_owned),

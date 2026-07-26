@@ -52,6 +52,10 @@ test.describe("GDPR / audit / retention", () => {
   test("GDPR export returns a JSON bundle containing account/profile/realms/devices/audit_log facets", async ({
     request,
   }) => {
+    test.skip(
+      true,
+      "the incomplete product-private account export rail was intentionally removed; restore this coverage with the complete data-portability workflow",
+    );
     // spec: identity/account-lifecycle.md §8 — export MUST surface
     // the principal's data in a single bundle. v1 ships account /
     // profile / realms / devices / audit_log; the `messages` slot
@@ -163,20 +167,18 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(false);
   });
 
-  test("audit log contains org.arkret.soland.audit.exported, org.arkret.soland.audit.erasure_initiated, ak.audit.erasure_receipt entries", async ({
+  test("audit log contains org.arkret.soland.audit.erasure_initiated and ak.audit.erasure_receipt entries", async ({
     request,
   }) => {
-    // spec: account-lifecycle.md §3 + §8 — every export / erasure
-    // lifecycle event MUST appear in the actor's audit log.
+    // spec: account-lifecycle.md §3 — every erasure lifecycle event MUST
+    // appear in the actor's audit log. Account export coverage is separately
+    // skipped until the complete data-portability workflow replaces the
+    // intentionally removed incomplete product-private endpoint.
     const stamp = Date.now();
     const alice = uniqueUser(`s27-audit-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
-      headers: { authorization: `Bearer ${aliceToken}` },
-    });
-    expect(exportResp.status()).toBe(200);
     const eraseResp = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
@@ -190,7 +192,6 @@ test.describe("GDPR / audit / retention", () => {
     const auditEvents = eraseBody.audit_log as Array<{ action: string }>;
     expect(Array.isArray(auditEvents)).toBe(true);
     const actions = auditEvents.map((e) => e.action);
-    expect(actions).toContain("org.arkret.soland.audit.exported");
     expect(actions).toContain("org.arkret.soland.audit.erasure_initiated");
     expect(actions).toContain("ak.audit.erasure_receipt");
     const receiptEvent = auditEvents.find((e) => e.action === "ak.audit.erasure_receipt") as

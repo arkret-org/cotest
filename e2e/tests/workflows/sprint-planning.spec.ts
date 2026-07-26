@@ -216,9 +216,10 @@ test.describe("workflow: sprint planning", () => {
 
       // Add 5 cards back-to-back. inkson surfaces each card's draft-state
       // independently (data-card-draft) so the batch is observable even
-      // before every create event acks.
+      // before every create event acks. The composer intentionally stays open
+      // after Save so consecutive cards can be entered without reopening it.
+      await backlogColumn.getByTestId("add-card-button").click();
       for (const story of stories) {
-        await backlogColumn.getByTestId("add-card-button").click();
         await backlogColumn.getByTestId("new-card-title-input").fill(story);
         await backlogColumn.getByTestId("save-card-button").click();
         await expect(

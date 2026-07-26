@@ -544,10 +544,8 @@ export async function configureMediaService(
       realmId,
       kind: "ak.realm.media_service",
       payload: {
-        media_service: {
-          service_id: serviceId,
-          foci,
-        },
+        service_id: serviceId,
+        foci,
       },
     }),
     { context: `configure media_service for ${realmId}` },

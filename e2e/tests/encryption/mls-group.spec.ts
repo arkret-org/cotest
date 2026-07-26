@@ -524,8 +524,10 @@ async function submitMlsGenesis(
 }
 
 // Submit a ak.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`.
-// `concurrentCommit` flags a racing fork at the same base epoch (E11.1). Returns
-// the raw submit response so callers can assert accepted ids or wire codes.
+// `concurrentCommit` keeps the local epoch-ref cursor on the racing base rather
+// than treating the accepted fork as the canonical next epoch. The wire
+// payload itself stays schema-valid; soland detects the fork from the shared
+// base epoch plus distinct commit material.
 async function submitMlsCommit(
   request: import("@playwright/test").APIRequestContext,
   token: string,
@@ -566,9 +568,6 @@ async function submitMlsCommit(
     commit_digest: sha256Digest(Buffer.from(label, "utf8")),
     governance_binding: governanceBinding,
   };
-  if (args.concurrentCommit) {
-    payload.concurrent_commit = true;
-  }
   const envelope = signedEventEnvelope({
     actorDid: committer.did,
     realmId,
