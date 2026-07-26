@@ -28,6 +28,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
+  refreshEventEnvelopeProof,
   signedEventEnvelope,
   singleDidNotary,
   submitSignedEventApi,
@@ -177,46 +178,153 @@ function realmKeyScope(
 // committer publishes after each epoch commit (§2.10.8): recipient is the
 // offline org RRK principal, ciphertext is history_secret[from..to] HPKE-sealed
 // to the RRK public key. provider-initiated (no recipient claim).
-function rrkRealmKeyShareEnvelope(args: {
+function realmKeyDeliveryCellSubject(components: string[]): string {
+  return createHash("sha256")
+    .update(canonicalJson(components))
+    .digest("base64url");
+}
+
+function signedRealmKeyShareEnvelope(args: {
   senderDid: string;
   senderDeviceId: string;
   group: MlsGroupContext;
   recipientPrincipalId: string;
-  recipientDeviceId: string;
+  sourceAuthorizationRef: string;
+  target:
+    | {
+        shareKind: "realm_recovery_key";
+        recoveryRecipientId: string;
+        recipientVerificationMethod: string;
+      }
+    | {
+        shareKind: "member_device";
+        recipientDeviceId: string;
+      };
   fromEpoch: number;
   toEpoch: number;
   sealedCiphertext: string;
 }) {
   const keyScope = realmKeyScope(args.group, args.fromEpoch, args.toEpoch);
   const createdAt = canonicalTimestamp();
+  const targetFields =
+    args.target.shareKind === "realm_recovery_key"
+      ? {
+          recipient_verification_method:
+            args.target.recipientVerificationMethod,
+          recovery_recipient_id: args.target.recoveryRecipientId,
+        }
+      : { recipient_device_id: args.target.recipientDeviceId };
   const aadDigest = sha256Hash(
     canonicalJson({
+      share_kind: args.target.shareKind,
       recipient_principal_id: args.recipientPrincipalId,
-      recipient_device_id: args.recipientDeviceId,
+      ...targetFields,
       sender_device_id: args.senderDeviceId,
+      source_authorization_ref: args.sourceAuthorizationRef,
       key_scope: keyScope,
     }),
   );
-  return signedEventEnvelope({
+  const transcript = {
+    context: "ak.realm-key-share-sender-proof-v1",
+    share_kind: args.target.shareKind,
+    sender_device_id: args.senderDeviceId,
+    source_authorization_ref: args.sourceAuthorizationRef,
+    recipient_principal_id: args.recipientPrincipalId,
+    ...targetFields,
+    key_scope: keyScope,
+    ciphertext: args.sealedCiphertext,
+    aad_digest: aadDigest,
+    created_at: createdAt,
+  };
+  const payload = {
+    share_kind: args.target.shareKind,
+    recipient_principal_id: args.recipientPrincipalId,
+    ...targetFields,
+    sender_device_id: args.senderDeviceId,
+    source_authorization_ref: args.sourceAuthorizationRef,
+    key_scope: keyScope,
+    sender_device_signature: {
+      verification_method: `${args.senderDid}#${args.senderDeviceId}`,
+      alg: "EdDSA",
+      transcript_digest: sha256Hash(canonicalJson(transcript)),
+      signature: base64url(`rrk-share-sig-${randomUUID()}`),
+    },
+    ciphertext: args.sealedCiphertext,
+    aad_digest: aadDigest,
+    created_at: createdAt,
+  };
+  const envelope = signedEventEnvelope({
     actorDid: args.senderDid,
     realmId: args.group.realmId,
     kind: "ak.realm_key.share",
-    payload: {
-      recipient_principal_id: args.recipientPrincipalId,
-      recipient_device_id: args.recipientDeviceId,
-      sender_device_id: args.senderDeviceId,
-      key_scope: keyScope,
-      // §2.10.3 authorship: a real seal carries a detached device signature
-      // over the canonical share metadata + ciphertext ref. Shape-valid token
-      // here; receiver-side verification is the live soland concern.
-      sender_device_signature: {
-        kid: `${args.senderDid}#${args.senderDeviceId}`,
-        alg: "EdDSA",
-        sig: base64url(`rrk-share-sig-${randomUUID()}`),
+    payload,
+  });
+  const effectiveScopeId = args.group.effectiveScope.realm_id;
+  const recipientTargetId =
+    args.target.shareKind === "realm_recovery_key"
+      ? args.target.recoveryRecipientId
+      : args.target.recipientDeviceId;
+  envelope.effects = [
+    {
+      cell: `ak:cell:ak.component.realm_key.delivery.v1:${realmKeyDeliveryCellSubject(
+        [
+          args.target.shareKind,
+          args.recipientPrincipalId,
+          recipientTargetId,
+          effectiveScopeId,
+        ],
+      )}`,
+      op: {
+        kind: "append",
+        issuer_seq: envelope.actor_seq,
+        value: {
+          delivery_outcome: "shared",
+          share_kind: args.target.shareKind,
+          recipient_principal_id: args.recipientPrincipalId,
+          recipient_target_id: recipientTargetId,
+          effective_scope_id: effectiveScopeId,
+          policy_digest: keyScope.policy_digest,
+          from_epoch: args.fromEpoch,
+          to_epoch: args.toEpoch,
+          sender_device_id: args.senderDeviceId,
+          source_authorization_ref: args.sourceAuthorizationRef,
+          payload_digest: sha256Hash(canonicalJson(payload)),
+        },
       },
-      ciphertext: args.sealedCiphertext,
-      aad_digest: aadDigest,
-      created_at: createdAt,
+    },
+  ];
+  refreshEventEnvelopeProof(envelope);
+  return envelope;
+}
+
+function rrkDurabilityShareEnvelope(args: Omit<
+  Parameters<typeof signedRealmKeyShareEnvelope>[0],
+  "target"
+> & {
+  recoveryRecipientId: string;
+  recipientVerificationMethod: string;
+}) {
+  return signedRealmKeyShareEnvelope({
+    ...args,
+    target: {
+      shareKind: "realm_recovery_key",
+      recoveryRecipientId: args.recoveryRecipientId,
+      recipientVerificationMethod: args.recipientVerificationMethod,
+    },
+  });
+}
+
+function memberDeviceRealmKeyShareEnvelope(args: Omit<
+  Parameters<typeof signedRealmKeyShareEnvelope>[0],
+  "target"
+> & {
+  recipientDeviceId: string;
+}) {
+  return signedRealmKeyShareEnvelope({
+    ...args,
+    target: {
+      shareKind: "member_device",
+      recipientDeviceId: args.recipientDeviceId,
     },
   });
 }
@@ -410,15 +518,17 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
           }),
         ],
       };
+      const realmCreate = realmCreateEnvelope({
+        ownerDid: alice.did,
+        realmId,
+        title: "RRK org recovery",
+        contentScheme: CONTENT_SCHEME_EXPORTER_AEAD,
+        durabilityPolicy,
+      });
+      const sourceAuthorizationRef = String(realmCreate.event_id);
       const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: realmCreateEnvelope({
-          ownerDid: alice.did,
-          realmId,
-          title: "RRK org recovery",
-          contentScheme: CONTENT_SCHEME_EXPORTER_AEAD,
-          durabilityPolicy,
-        }),
+        data: realmCreate,
       });
       expect(create.status()).toBe(200);
 
@@ -453,12 +563,14 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         // history_secret[epoch], the committer publishes a RRK-targeted share.
         const sealedCiphertext = base64url(`rrk-sealed-hs-${epoch}-${randomUUID()}`);
         sealedHistorySecrets.push(sealedCiphertext);
-        const shareEnvelope = rrkRealmKeyShareEnvelope({
+        const shareEnvelope = rrkDurabilityShareEnvelope({
           senderDid: alice.did,
           senderDeviceId: alice.deviceId,
           group,
           recipientPrincipalId: orgRrk.did,
-          recipientDeviceId: "ak:device:00000000-0000-7000-8000-rrkrrkrrkrrk",
+          recoveryRecipientId: "org-primary",
+          recipientVerificationMethod: rrkVm,
+          sourceAuthorizationRef,
           fromEpoch: epoch,
           toEpoch: epoch,
           sealedCiphertext,
@@ -551,32 +663,37 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         request,
         "rrk-b-alice",
       );
-      const { user: orgRrk } = await registeredSession(request, "rrk-b-org");
-      const { user: dave, token: daveToken } = await registeredSession(
+      const { user: orgRrk, token: orgRrkToken } = await registeredSession(
+        request,
+        "rrk-b-org",
+      );
+      const { user: dave } = await registeredSession(
         request,
         "rrk-b-dave",
       );
 
       const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
       const realmId = typedId("realm");
+      const realmCreate = realmCreateEnvelope({
+        ownerDid: alice.did,
+        realmId,
+        title: "RRK fallback re-share",
+        contentScheme: CONTENT_SCHEME_EXPORTER_AEAD,
+        durabilityPolicy: {
+          mode: "org_recovery_key",
+          recovery_recipients: [
+            recoveryRecipient({
+              recipientId: "org-primary",
+              principalId: orgRrk.did,
+              rrkVerificationMethod: rrkVm,
+            }),
+          ],
+        },
+      });
+      const sourceAuthorizationRef = String(realmCreate.event_id);
       const create = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(aliceToken),
-        data: realmCreateEnvelope({
-          ownerDid: alice.did,
-          realmId,
-          title: "RRK fallback re-share",
-          contentScheme: CONTENT_SCHEME_EXPORTER_AEAD,
-          durabilityPolicy: {
-            mode: "org_recovery_key",
-            recovery_recipients: [
-              recoveryRecipient({
-                recipientId: "org-primary",
-                principalId: orgRrk.did,
-                rrkVerificationMethod: rrkVm,
-              }),
-            ],
-          },
-        }),
+        data: realmCreate,
       });
       expect(create.status()).toBe(200);
 
@@ -603,12 +720,14 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         );
         const share = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
           headers: authHeaders(aliceToken),
-          data: rrkRealmKeyShareEnvelope({
+          data: rrkDurabilityShareEnvelope({
             senderDid: alice.did,
             senderDeviceId: alice.deviceId,
             group,
             recipientPrincipalId: orgRrk.did,
-            recipientDeviceId: "ak:device:00000000-0000-7000-8000-rrkrrkrrkrrk",
+            recoveryRecipientId: "org-primary",
+            recipientVerificationMethod: rrkVm,
+            sourceAuthorizationRef,
             fromEpoch: epoch,
             toEpoch: epoch,
             sealedCiphertext: base64url(`rrk-b-sealed-${epoch}-${randomUUID()}`),
@@ -647,13 +766,14 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       // dave's device HPKE public key as a fresh ak.realm_key.share. The
       // sender_device of this re-share is the RRK holder's device.
       const reSeal = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(daveToken),
-        data: rrkRealmKeyShareEnvelope({
+        headers: authHeaders(orgRrkToken),
+        data: memberDeviceRealmKeyShareEnvelope({
           senderDid: orgRrk.did,
-          senderDeviceId: "ak:device:00000000-0000-7000-8000-rrkrrkrrkrrk",
+          senderDeviceId: orgRrk.deviceId,
           group,
           recipientPrincipalId: dave.did,
           recipientDeviceId: dave.deviceId,
+          sourceAuthorizationRef,
           fromEpoch: 1,
           toEpoch: 2,
           // Re-sealed to dave's device HPKE public key (not the RRK key).
@@ -749,8 +869,6 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     // @blocking-on rrk-cotest: add a DID resolver fixture that can publish a VM
     //   which is present but not designated by an active
     //   ArkretRealmHistoryRecoveryKey service entry, plus outbound Event capture.
-    // @spec-open: arkret-work/review/spec-open/
-    //   2026-07-26-rrk-share-cell-subject-variant.md
     // @user-promise: e2e/scenarios/encryption/realm-recovery-key.md (C2)
     // @expected-live-by: 2026Q3
     "C2 durability_recovery_recipient_unverified: the client sealer rejects an undesignated RRK VM before emitting ak.realm_key.share",
