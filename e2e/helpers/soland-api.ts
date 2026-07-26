@@ -309,8 +309,10 @@ export async function createRealmApi(
     notary: singleDidNotary(solandServiceId(opts.server)),
     created_at: createdAt,
   };
-  const realmCreateCell = `ak:cell:ak.component.realm.create.v1:${realmId}`;
+  const realmCreateCell = "ak:cell:ak.component.realm.create.v1:null";
+  const realmCreateEventId = typedId("event");
   const realmCreateEvent = signedEventEnvelope({
+    eventId: realmCreateEventId,
     actorDid: ownerDid,
     realmId,
     kind: "ak.realm.create",
@@ -324,8 +326,20 @@ export async function createRealmApi(
     ],
     effects: [
       {
-        cell: realmCreateCell,
+        cell: "ak:cell:ak.component.realm.metadata.v1:null",
         op: { kind: "set", value: realmObject },
+      },
+      {
+        cell: `ak:cell:ak.component.member.state.v1:${ownerDid}`,
+        op: { kind: "transition", from: "leave", to: "join" },
+      },
+      {
+        cell: realmCreateCell,
+        op: { kind: "append", value: realmId, issuer_seq: 0 },
+      },
+      {
+        cell: "ak:cell:ak.component.notary.v1:null",
+        op: { kind: "set", value: realmObject.notary },
       },
     ],
     payload: {
@@ -334,10 +348,6 @@ export async function createRealmApi(
       object: realmObject,
     },
   });
-  const realmCreateEventId = stringValue(realmCreateEvent.event_id);
-  if (!realmCreateEventId) {
-    throw new Error("Realm create Event is missing event_id");
-  }
   const foundingGrantId = typedId("grant");
   const unsignedFoundingGrant: Record<string, unknown> = {
     id: foundingGrantId,
@@ -349,6 +359,7 @@ export async function createRealmApi(
       "ak.realm.admin",
       "ak.capability.grant",
       "ak.capability.revoke",
+      "ak.realm_key.share",
     ],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
@@ -360,7 +371,19 @@ export async function createRealmApi(
     ],
     issued_at: createdAt,
   };
+  const foundingGrant = {
+    ...unsignedFoundingGrant,
+    proofs: [
+      buildCapabilityGrantProof({
+        issuerDid: ownerDid,
+        payload: unsignedFoundingGrant,
+        createdAt,
+      }),
+    ],
+  };
+  const foundingGrantEventId = typedId("event");
   const foundingGrantEvent = signedEventEnvelope({
+    eventId: foundingGrantEventId,
     actorDid: ownerDid,
     realmId,
     kind: "ak.capability.grant",
@@ -369,26 +392,24 @@ export async function createRealmApi(
     prevRefs: [realmCreateEventId],
     payload: {
       grant_id: foundingGrantId,
-      grant: {
-        ...unsignedFoundingGrant,
-        proofs: [
-          buildCapabilityGrantProof({
-            issuerDid: ownerDid,
-            payload: unsignedFoundingGrant,
-            createdAt,
-          }),
-        ],
-      },
+      grant: foundingGrant,
     },
+    effects: [
+      {
+        cell:
+          `ak:cell:ak.component.capability.grant.v1:${foundingGrantId}`,
+        op: {
+          kind: "add",
+          tag: `${foundingGrantEventId}:0`,
+          value: foundingGrant,
+        },
+      },
+    ],
   });
-  const foundingGrantEventId = stringValue(foundingGrantEvent.event_id);
-  if (!foundingGrantEventId) {
-    throw new Error("Realm founding grant Event is missing event_id");
-  }
   const bootstrapEvents = [realmCreateEvent, foundingGrantEvent];
   if (plaintextVisibleServices.length > 0) {
     const plaintextVisibleServicesCell =
-      `ak:cell:ak.component.realm.plaintext_visible_services.v1:${realmId}`;
+      "ak:cell:ak.component.realm.plaintext_visible_services.v1:null";
     bootstrapEvents.push(
       signedEventEnvelope({
         actorDid: ownerDid,
@@ -434,7 +455,7 @@ export async function createRealmApi(
       rebind_authorization: "member",
     };
     const policyCell =
-      `ak:cell:ak.component.realm.delivery_binding_policy.v1:${realmId}`;
+      "ak:cell:ak.component.realm.delivery_binding_policy.v1:null";
     const predecessorId = stringValue(
       bootstrapEvents[bootstrapEvents.length - 1]?.event_id,
     );
@@ -529,16 +550,72 @@ export async function createRealmApi(
     { server: opts.server, context: `create realm ${data.title}` },
   );
 
+  // A remote Principal Server must accept the Realm founding unit before it
+  // can authenticate the creator as a member of this binding Realm or verify
+  // a later invite's Seal basis. Seed every known dual-Soland destination
+  // atomically before submitting the directed Control invite.
+  const sourceServiceId = solandServiceId(opts.server);
+  const remoteInviteServices = new Set(
+    Object.values(data.invitee_service_ids ?? {}).filter(
+      (serviceId) => serviceId !== sourceServiceId,
+    ),
+  );
+  for (const destinationServiceId of remoteInviteServices) {
+    const destinationServer = (["alpha", "beta"] as const).find(
+      (candidate) => solandServiceId(candidate) === destinationServiceId,
+    );
+    if (!destinationServer) {
+      continue;
+    }
+    const bootstrapPush = await pushFederationEvents(
+      request,
+      bootstrapEvents,
+      {
+        origin: sourceServiceId,
+        destination: destinationServiceId,
+        server: destinationServer,
+        realmId,
+        idempotencyKey: `${sourceServiceId}#realm-bootstrap#${realmId}`,
+      },
+    );
+    expect(
+      bootstrapPush.rejected ?? [],
+      `federate Realm founding unit to ${destinationServiceId}`,
+    ).toEqual([]);
+    expect([
+      ...(bootstrapPush.accepted ?? []),
+      ...(bootstrapPush.duplicate ?? []),
+    ]).toHaveLength(bootstrapEvents.length);
+  }
+
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId = data.invitee_service_ids?.[invitee];
     if (recipientServiceId) {
       const evidence = { kind: "explicit_address" };
+      const inviteId = typedId("invite");
+      const sealBasis = await readRealmSealBasis(
+        request,
+        token,
+        realmId,
+        opts.server,
+      );
       const directedInviteEvent = signedEventEnvelope({
         actorDid: ownerDid,
         realmId,
         kind: "ak.invite.create",
+        sealBasis,
+        effects: [
+          {
+            cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
+            op: { kind: "transition", from: null, to: "pending" },
+          },
+          {
+            cell: `ak:cell:ak.component.member.state.v1:${invitee}`,
+            op: { kind: "transition", from: "leave", to: "invite" },
+          },
+        ],
         payload: {
-          invite_id: typedId("invite"),
+          invite_id: inviteId,
           invitee,
           invite_delivery_target: {
             recipient_service_id: recipientServiceId,
@@ -567,6 +644,12 @@ export async function createRealmApi(
       actorDid: ownerDid,
       realmId,
       kind: "ak.member.state",
+      effects: [
+        {
+          cell: `ak:cell:ak.component.member.state.v1:${invitee}`,
+          op: { kind: "transition", from: "leave", to: "invite" },
+        },
+      ],
       payload: {
         realm_id: realmId,
         actor_id: invitee,
@@ -729,7 +812,11 @@ export async function grantServiceDelegationApi(
 ): Promise<string> {
   const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
-  const action = args.action ?? "ak.realm.delivery_binding_policy";
+  // `ak.realm.delivery_binding_policy` is an Event kind, not a capability
+  // action. Use a core collaboration action advertised by both federation
+  // peers; the service-DID subject and Realm resource make this a service
+  // delegation, independently of which registered action is delegated.
+  const action = args.action ?? "ak.message.create";
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     schema: "ak.schema.capability.v1",
@@ -2148,6 +2235,42 @@ export async function advanceEnvelopeToActorFrontier(
   refreshEventEnvelopeProof(envelope, proofVerificationMethod);
 }
 
+export async function readRealmSealBasis(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  server?: SolandKey,
+): Promise<Record<string, unknown>> {
+  const response = await request.get(
+    `${solandBaseUrl(server)}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  const body = await expectJsonOk<{
+    frontier?: {
+      kind?: unknown;
+      seal_id?: unknown;
+      control_event_set_root?: unknown;
+      state_root?: unknown;
+    };
+  }>(response, `read Realm Seal frontier for ${realmId}`);
+  const frontier = body.frontier;
+  if (
+    frontier?.kind !== "realm_seal" ||
+    typeof frontier.seal_id !== "string" ||
+    typeof frontier.control_event_set_root !== "string" ||
+    typeof frontier.state_root !== "string"
+  ) {
+    throw new Error(
+      `Realm Seal frontier for ${realmId} has an invalid shape: ${JSON.stringify(body)}`,
+    );
+  }
+  return {
+    leaves: [frontier.seal_id],
+    control_event_set_root: frontier.control_event_set_root,
+    state_root: frontier.state_root,
+  };
+}
+
 export async function alignSignedEventToActorFrontierApi(
   request: APIRequestContext,
   token: string,
@@ -2294,6 +2417,8 @@ export function makeFederationEvent(args: {
   realmId: string;
   kind: string;
   payload: Record<string, unknown>;
+  effects?: Array<Record<string, unknown>>;
+  sealBasis?: Record<string, unknown>;
 }) {
   return signedEventEnvelope({
     eventId: args.eventId,
@@ -2301,6 +2426,8 @@ export function makeFederationEvent(args: {
     realmId: args.realmId,
     kind: args.kind,
     schemaId: schemaIdForEventKind(args.kind),
+    effects: args.effects,
+    sealBasis: args.sealBasis,
     payload: args.payload,
   });
 }
@@ -2353,7 +2480,6 @@ export async function rawPushFederationEvents(
   const body = peerEventsSubmitBody(
     opts.realmId,
     events.map(federationEventWireBody),
-    opts.idempotencyKey,
     {
       reducerProfileDigest: opts.reducerProfileDigestOverride,
       serviceBindingFrontier: opts.serviceBindingFrontier,
@@ -2362,6 +2488,7 @@ export async function rawPushFederationEvents(
   const sourceDid = opts.relaySourceDid ?? opts.origin;
   const headers = signedFederationPushHeaders(sourceDid, destination, url, body, {
     expireSignature: opts.expireSignature,
+    idempotencyKey: opts.idempotencyKey,
   });
   if (opts.tamperSignature) {
     headers.signature = `sig1=:${Buffer.alloc(64).toString("base64")}:`;
@@ -2715,7 +2842,6 @@ function batchFrontierEventIds(
 function peerEventsSubmitBody(
   realmId: string,
   events: Array<Record<string, unknown>>,
-  idempotencyKey?: string,
   overrides: {
     reducerProfileDigest?: string;
     serviceBindingFrontier?: string[];
@@ -2747,7 +2873,6 @@ function peerEventsSubmitBody(
         reducerProfileDigest(FEDERATION_REDUCER_PROFILE_ID),
     },
     events,
-    idempotency_key: idempotencyKey,
   }) as Record<string, unknown>;
 }
 
@@ -2795,7 +2920,7 @@ function signedFederationPushHeaders(
   destinationDid: string,
   targetUri: string,
   body: unknown,
-  opts: { expireSignature?: boolean } = {},
+  opts: { expireSignature?: boolean; idempotencyKey?: string } = {},
 ): Record<string, string> {
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
@@ -2810,10 +2935,13 @@ function signedFederationPushHeaders(
   const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
   const keyid = `${sourceDid}#federation-fanout-key`;
+  const idempotencyComponent = opts.idempotencyKey
+    ? ' "idempotency-key"'
+    : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
     `"destination-service-id" "source-trust-domain" "destination-trust-domain" ` +
-    `"request-canonical-digest");created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
+    `"request-canonical-digest"${idempotencyComponent});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
     `"@method": POST`,
     `"@target-uri": ${targetUri}`,
@@ -2824,6 +2952,9 @@ function signedFederationPushHeaders(
     `"source-trust-domain": ${sourceTrustDomain}`,
     `"destination-trust-domain": ${destinationTrustDomain}`,
     `"request-canonical-digest": ${requestDigest}`,
+    ...(opts.idempotencyKey
+      ? [`"idempotency-key": ${opts.idempotencyKey}`]
+      : []),
     `"@signature-params": ${signatureParams}`,
   ].join("\n");
   const signature = sign(
@@ -2841,6 +2972,9 @@ function signedFederationPushHeaders(
     "destination-trust-domain": destinationTrustDomain,
     "signature-input": `sig1=${signatureParams}`,
     signature: `sig1=:${signature.toString("base64")}:`,
+    ...(opts.idempotencyKey
+      ? { "idempotency-key": opts.idempotencyKey }
+      : {}),
   };
 }
 

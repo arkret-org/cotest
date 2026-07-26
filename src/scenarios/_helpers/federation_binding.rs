@@ -109,7 +109,7 @@ pub fn peer_service_binding_ref_with_delivery(
 pub fn peer_events_submit_body(
     realm_id: &str,
     events: Vec<Event>,
-    idempotency_key: Option<&str>,
+    _idempotency_key: Option<&str>,
 ) -> Result<EventsSubmitFederationRequestBody> {
     let frontier = batch_frontier_event_ids(&events)?;
     Ok(EventsSubmitFederationRequestBody {
@@ -118,7 +118,6 @@ pub fn peer_events_submit_body(
         seals: Vec::new(),
         signer_key_evidence: Vec::new(),
         agent_signer_evidence_bundle: None,
-        idempotency_key: idempotency_key.map(str::to_owned),
     })
 }
 
@@ -131,7 +130,7 @@ pub fn peer_events_submit_body_with_delivery_frontier(
     realm_id: &str,
     events: Vec<Event>,
     delivery_binding_frontier: &[EventId],
-    idempotency_key: Option<&str>,
+    _idempotency_key: Option<&str>,
 ) -> Result<EventsSubmitFederationRequestBody> {
     let membership_frontier = batch_frontier_event_ids(&events)?;
     Ok(EventsSubmitFederationRequestBody {
@@ -144,6 +143,5 @@ pub fn peer_events_submit_body_with_delivery_frontier(
         seals: Vec::new(),
         signer_key_evidence: Vec::new(),
         agent_signer_evidence_bundle: None,
-        idempotency_key: idempotency_key.map(str::to_owned),
     })
 }

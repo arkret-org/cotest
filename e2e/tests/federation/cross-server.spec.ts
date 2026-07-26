@@ -384,12 +384,64 @@ test.describe("cross-server federation", () => {
       (left, right) =>
         Number(left.actor_seq ?? 0) - Number(right.actor_seq ?? 0),
     );
+    const bootstrapPush = await pushFederationEvents(
+      request,
+      bootstrapEvents,
+      {
+        origin: solandServiceId("alpha"),
+        destination: solandServiceId("beta"),
+        server: "beta",
+        realmId,
+        idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-bootstrap`,
+      },
+    );
+    expect(bootstrapPush.rejected ?? []).toEqual([]);
+    expect([
+      ...(bootstrapPush.accepted ?? []),
+      ...(bootstrapPush.duplicate ?? []),
+    ]).toHaveLength(bootstrapEvents.length);
+
+    const frontierResponse = await request.get(
+      `${solandBaseUrl("alpha")}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const frontierBody = (await frontierResponse.json()) as {
+      frontier?: {
+        kind?: unknown;
+        seal_id?: unknown;
+        control_event_set_root?: unknown;
+        state_root?: unknown;
+      };
+    };
+    expect(
+      frontierResponse.ok(),
+      `read α Realm Seal frontier: ${JSON.stringify(frontierBody)}`,
+    ).toBeTruthy();
+    expect(frontierBody.frontier?.kind).toBe("realm_seal");
+    const inviteId = typedId("invite");
     const inviteEvent = makeFederationEvent({
       realmId,
       kind: "ak.invite.create",
       actorDid: alice.did,
+      effects: [
+        {
+          cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
+          op: { kind: "transition", from: null, to: "pending" },
+        },
+        {
+          cell: `ak:cell:ak.component.member.state.v1:${bob.did}`,
+          op: { kind: "transition", from: "leave", to: "invite" },
+        },
+      ],
+      sealBasis: {
+        leaves: [String(frontierBody.frontier?.seal_id)],
+        control_event_set_root: String(
+          frontierBody.frontier?.control_event_set_root,
+        ),
+        state_root: String(frontierBody.frontier?.state_root),
+      },
       payload: {
-        invite_id: typedId("invite"),
+        invite_id: inviteId,
         invitee: bob.did,
         invite_delivery_target: {
           recipient_service_id: solandServiceId("beta"),
@@ -405,29 +457,24 @@ test.describe("cross-server federation", () => {
       inviteEvent,
       "alpha",
     );
-    const bootstrapPush = await pushFederationEvents(
-      request,
-      bootstrapEvents,
-      {
-        origin: solandServiceId("alpha"),
-        destination: solandServiceId("beta"),
-        server: "beta",
-        realmId,
-        idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-bootstrap`,
-      },
-    );
-    expect(bootstrapPush.rejected ?? []).toEqual([]);
-    expect(bootstrapPush.accepted ?? []).toHaveLength(bootstrapEvents.length);
-
-    const push = await pushFederationEvents(request, [inviteEvent], {
-      origin: solandServiceId("alpha"),
-      destination: solandServiceId("beta"),
-      server: "beta",
-      realmId,
-      idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-smoke`,
+    await submitSignedEventApi(request, aliceToken, inviteEvent, {
+      server: "alpha",
+      context: "submit α invite for federated Seal-closure delivery",
     });
-    expect(push.accepted).toContain(inviteEvent.event_id);
-    expect(push.rejected ?? []).toEqual([]);
+
+    await expect
+      .poll(
+        async () => {
+          const invites = await listInvitesApi(request, bobToken, {
+            server: "beta",
+          });
+          return invites.some(
+            (item) => item.realm_id === realmId && item.invitee === bob.did,
+          );
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
 
     const replay = await pushFederationEvents(request, [inviteEvent], {
       origin: solandServiceId("alpha"),
@@ -623,8 +670,8 @@ test.describe("cross-server federation", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-msg-alice-${stamp}`);
-    const bob = uniqueUser(`s2-msg-bob-${stamp}`);
+    const alice = uniqueUser(`s2-msg-alice-${stamp}`, "alpha");
+    const bob = uniqueUser(`s2-msg-bob-${stamp}`, "beta");
     await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, bob, { server: "beta" });
     const aliceToken = await issueDevSession(request, alice, {
@@ -939,8 +986,8 @@ test.describe("cross-server federation", () => {
     // revoked-peer set from the durable capability grant cells and
     // `dynamic_peer_event_targets` (event_log/submit.rs) skips those peers.
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-revoke-alice-${stamp}`);
-    const bob = uniqueUser(`s2-revoke-bob-${stamp}`);
+    const alice = uniqueUser(`s2-revoke-alice-${stamp}`, "alpha");
+    const bob = uniqueUser(`s2-revoke-bob-${stamp}`, "beta");
     await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, bob, { server: "beta" });
     const aliceToken = await issueDevSession(request, alice, {
@@ -959,6 +1006,7 @@ test.describe("cross-server federation", () => {
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
+        creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
