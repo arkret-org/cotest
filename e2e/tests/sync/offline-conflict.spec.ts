@@ -10,11 +10,11 @@ import {
 } from "../../helpers/api";
 import {
   acceptInviteApi,
+  advanceEnvelopeToActorFrontier,
   authHeaders,
   createRealmApi,
   listInvitesApi,
   makeFederationEvent,
-  peerEventFrontierApi,
   pushFederationEvents,
   queryPeerEventsApi,
   queryRealmEventsApi,
@@ -191,8 +191,8 @@ test.describe("offline sync + conflict repair", () => {
       );
 
       const stamp = Date.now();
-      const alice = uniqueUser(`g2t3-backfill-alice-${stamp}`);
-      const bob = uniqueUser(`g2t3-backfill-bob-${stamp}`);
+      const alice = uniqueUser(`g2t3-backfill-alice-${stamp}`, "alpha");
+      const bob = uniqueUser(`g2t3-backfill-bob-${stamp}`, "beta");
       await ensureRegistered(request, alice, { server: "alpha" });
       await ensureRegistered(request, bob, { server: "beta" });
       const aliceToken = await issueDevSession(request, alice, {
@@ -210,6 +210,7 @@ test.describe("offline sync + conflict repair", () => {
           invitees: [bob.did],
           invitee_service_ids: { [bob.did]: solandServiceId("beta") },
           ownerDid: alice.did,
+          creator_service_id: solandServiceId("alpha"),
           plaintext_visible_services: [
             solandServiceId("alpha"),
             solandServiceId("beta"),
@@ -236,7 +237,7 @@ test.describe("offline sync + conflict repair", () => {
       await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
 
       // Offline window: alice writes an event that bob never pulled.
-      const missingBody = `offline backfill ${stamp}`;
+      const missingBody = `offline payload body ${stamp}`;
       const missingEvent = makeFederationEvent({
         realmId,
         kind: "ak.message.create",
@@ -250,12 +251,56 @@ test.describe("offline sync + conflict repair", () => {
           },
         },
       });
+      await advanceEnvelopeToActorFrontier(
+        request,
+        aliceToken,
+        missingEvent,
+        "alpha",
+      );
+      const alphaEventsBeforeOfflineWrite = await queryRealmEventsApi(
+        request,
+        aliceToken,
+        realmId,
+        { server: "alpha", limit: 100 },
+      );
+      const creatorBindingEvent = (
+        Array.isArray(alphaEventsBeforeOfflineWrite.events)
+          ? alphaEventsBeforeOfflineWrite.events
+          : []
+      ).find((event) => {
+        if (!event || typeof event !== "object") {
+          return false;
+        }
+        const envelope = event as Record<string, unknown>;
+        const payload =
+          envelope.payload && typeof envelope.payload === "object"
+            ? (envelope.payload as Record<string, unknown>)
+            : undefined;
+        const binding =
+          payload?.delivery_binding &&
+          typeof payload.delivery_binding === "object"
+            ? (payload.delivery_binding as Record<string, unknown>)
+            : undefined;
+        return (
+          envelope.kind === "ak.member.state" &&
+          payload?.actor_id === alice.did &&
+          payload.membership === "join" &&
+          binding?.recipient_service_id === solandServiceId("alpha")
+        );
+      }) as Record<string, unknown> | undefined;
+      expect(
+        creatorBindingEvent?.event_id,
+        "creator routable delivery-binding frontier",
+      ).toEqual(expect.any(String));
       await pushFederationEvents(request, [missingEvent], {
-        origin: solandServiceId("alpha"),
+        // Relay through the configured peer profile. A service's own
+        // ServiceDescribe is not negotiated as a remote profile.
+        origin: solandServiceId("beta"),
         destination: solandServiceId("alpha"),
         server: "alpha",
         realmId,
-        idempotencyKey: `${solandServiceId("alpha")}#cotest-offline-source`,
+        idempotencyKey: `${solandServiceId("beta")}#cotest-offline-source`,
+        serviceBindingFrontier: [String(creatorBindingEvent!.event_id)],
       });
       await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
@@ -267,16 +312,6 @@ test.describe("offline sync + conflict repair", () => {
         { server: "beta", limit: 100 },
       );
       expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
-      const alphaFrontier = await peerEventFrontierApi(request, realmId, {
-        server: "alpha",
-      });
-      const betaFrontierBefore = await peerEventFrontierApi(request, realmId, {
-        server: "beta",
-      });
-      expect(betaFrontierBefore.frontier_root).not.toBe(
-        alphaFrontier.frontier_root,
-      );
-
       // On reconnect: pull the missing event via the peer events query endpoint
       // and ingest it so bob's timeline catches up.
       const backfill = await queryPeerEventsApi(request, {
@@ -285,29 +320,74 @@ test.describe("offline sync + conflict repair", () => {
         realmId,
         limit: 100,
       });
-      const backfilledEvents = (backfill.events ?? [])
-        .map((entry: { event?: Record<string, unknown> }) => entry.event)
-        .filter(Boolean) as Array<Record<string, unknown>>;
+      const backfilledEvents = backfill.events ?? [];
       expect(backfilledEvents.map((event) => event.event_id)).toContain(
         missingEvent.event_id,
       );
-      const ingest = await pushFederationEvents(request, backfilledEvents, {
+      const betaBeforeEventIds = new Set(
+        (Array.isArray(betaBeforeEvents.events)
+          ? (betaBeforeEvents.events as Array<Record<string, unknown>>)
+          : []
+        )
+          .map((event) => event.event_id)
+          .filter((eventId): eventId is string => typeof eventId === "string"),
+      );
+      const eventsToIngest = backfilledEvents.filter(
+        (event) =>
+          typeof event.event_id === "string" &&
+          !betaBeforeEventIds.has(event.event_id),
+      );
+      expect(eventsToIngest.map((event) => event.event_id)).toContain(
+        missingEvent.event_id,
+      );
+      const betaBindingEvent = backfilledEvents.find((event) => {
+        const payload =
+          event.payload && typeof event.payload === "object"
+            ? (event.payload as Record<string, unknown>)
+            : undefined;
+        const target =
+          payload?.invite_delivery_target &&
+          typeof payload.invite_delivery_target === "object"
+            ? (payload.invite_delivery_target as Record<string, unknown>)
+            : undefined;
+        return (
+          event.kind === "ak.invite.create" &&
+          payload?.invitee === bob.did &&
+          target?.recipient_service_id === solandServiceId("beta")
+        );
+      });
+      expect(
+        betaBindingEvent?.event_id,
+        "beta invite delivery-binding frontier",
+      ).toEqual(expect.any(String));
+      const ingest = await pushFederationEvents(request, eventsToIngest, {
         origin: solandServiceId("alpha"),
         destination: solandServiceId("beta"),
         server: "beta",
         realmId,
         idempotencyKey: `${solandServiceId("beta")}#cotest-offline-backfill`,
+        serviceBindingFrontier: [String(betaBindingEvent!.event_id)],
       });
       expect(ingest.rejected ?? []).toEqual([]);
       expect(ingest.accepted).toContain(String(missingEvent.event_id));
       await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
 
-      // Timeline caught up to head: bob's frontier now covers alpha's heads.
-      const betaFrontierAfter = await peerEventFrontierApi(request, realmId, {
+      // Timeline caught up: beta's peer-readable event set now covers every
+      // event returned by alpha for this Realm. The standard peer frontier
+      // surface is intentionally fail-closed for this profile.
+      const betaAfter = await queryPeerEventsApi(request, {
         server: "beta",
+        sourceDid: solandServiceId("alpha"),
+        realmId,
+        limit: 100,
       });
-      for (const eventId of alphaFrontier.heads) {
-        expect(betaFrontierAfter.heads).toContain(eventId);
+      const betaAfterEventIds = new Set(
+        (betaAfter.events ?? [])
+          .map((event) => event.event_id)
+          .filter((eventId): eventId is string => typeof eventId === "string"),
+      );
+      for (const event of backfilledEvents) {
+        expect(betaAfterEventIds).toContain(String(event.event_id));
       }
     },
   );

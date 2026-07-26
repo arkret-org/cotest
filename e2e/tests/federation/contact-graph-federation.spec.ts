@@ -29,6 +29,7 @@ import {
 import {
   authHeaders,
   createRealmApi,
+  queryPeerEventsApi,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -407,8 +408,8 @@ test.describe("contact graph federation (α/β)", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`cgf-s4-alice-${stamp}`);
-    const bob = uniqueUser(`cgf-s4-bob-${stamp}`);
+    const alice = uniqueUser(`cgf-s4-alice-${stamp}`, "alpha");
+    const bob = uniqueUser(`cgf-s4-bob-${stamp}`, "beta");
 
     // bob lives on β. alice is registered on BOTH α (her home, where she signs
     // the realm + delivery) AND β (so the bob->alice invite consent cell, which
@@ -456,12 +457,43 @@ test.describe("contact graph federation (α/β)", () => {
     ).toMatch(/^ak:event:/);
 
     // On α: alice creates the realm she wants to pull bob into.
+    const bootstrapInvitee = uniqueUser(`cgf-s4-bootstrap-${stamp}`, "beta");
     const realmId = await createRealmApi(
       request,
       aliceTokenAlpha,
-      { title: `S4-fed pull ${stamp}`, ownerDid: alice.did },
+      {
+        title: `S4-fed pull ${stamp}`,
+        ownerDid: alice.did,
+        invitees: [bootstrapInvitee.did],
+        invitee_service_ids: {
+          [bootstrapInvitee.did]: solandServiceId("beta"),
+        },
+        creator_service_id: solandServiceId("alpha"),
+        plaintext_visible_services: [
+          solandServiceId("alpha"),
+          solandServiceId("beta"),
+        ],
+      },
       { server: "alpha" },
     );
+    await expect
+      .poll(
+        async () => {
+          const events = await queryPeerEventsApi(request, {
+            server: "beta",
+            sourceDid: solandServiceId("alpha"),
+            realmId,
+            limit: 100,
+          });
+          return (events.events ?? []).some(
+            (event) =>
+              event.kind === "ak.realm.create" &&
+              event.realm_id === realmId,
+          );
+        },
+        { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+      )
+      .toBeTruthy();
 
     // Cross-PS private delivery: α signs, β receives + verifies the grant
     // against ITS consent cells (subject=bob gave inviter=alice invite).

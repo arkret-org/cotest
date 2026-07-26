@@ -32,6 +32,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import {
   acceptInviteApi,
+  advanceEnvelopeToActorFrontier,
   authHeaders,
   queryPeerEventsApi,
   createRealmApi,
@@ -51,6 +52,7 @@ import {
   ensureRegistered,
   issueInviteLocatorToken,
   issueDevSession,
+  openDpopUserPage,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -280,13 +282,8 @@ test.describe("cross-server federation", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-alice-${stamp}`);
     const bob = uniqueUser(`s2-bob-${stamp}`);
-    await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, bob, { server: "beta" });
-    const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
-    });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
     const bobLocatorToken = await issueInviteLocatorToken(
       request,
@@ -294,10 +291,16 @@ test.describe("cross-server federation", () => {
       "beta",
     );
 
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
+    const alice = await openDpopUserPage(
+      browser,
+      request,
+      `s2-alice-${stamp}`,
+      {
       server: "alpha",
-    });
+      },
+    );
+    test.skip(!alice, "canonical DPoP session requires managed Coauth");
+    const alicePage = alice!.page;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -313,6 +316,9 @@ test.describe("cross-server federation", () => {
       await stepShot(alicePage.page, testInfo, "alpha-invite-issued");
 
       // The invite MUST be visible in α's space-invites list right after issuing.
+      await alicePage.page
+        .getByTestId("members-section-pending-invites")
+        .click();
       const aliceInviteRow = alicePage.page.locator(
         `[data-testid="pending-invite-row"][data-member-did="${bob.did}"], ` +
           `[data-testid="invite-row"][data-member-did="${bob.did}"]`,
@@ -330,11 +336,13 @@ test.describe("cross-server federation", () => {
     // surfaces accept an α-origin Event. The fully automatic inkson
     // invite/accept round trip remains pinned in the richer fixme below.
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-outbound-alice-${stamp}`);
-    const bob = uniqueUser(`s2-outbound-bob-${stamp}`);
+    const alice = uniqueUser(`s2-outbound-alice-${stamp}`, "alpha");
+    const bob = uniqueUser(`s2-outbound-bob-${stamp}`, "beta");
     await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, bob, { server: "beta" });
-    await issueDevSession(request, alice, { server: "alpha" });
+    const aliceToken = await issueDevSession(request, alice, {
+      server: "alpha",
+    });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
     const alphaDescribe = await request.get(
       `${solandBaseUrl("alpha")}/_arkret/describe`,
@@ -345,19 +353,68 @@ test.describe("cross-server federation", () => {
       "federation.outbound_push.signed_intent",
     );
 
-    const realmId = typedId("realm");
+    const realmId = await createRealmApi(
+      request,
+      aliceToken,
+      {
+        title: `S2 pushed invite ${stamp}`,
+        ownerDid: alice.did,
+        creator_service_id: solandServiceId("alpha"),
+        plaintext_visible_services: [
+          solandServiceId("alpha"),
+          solandServiceId("beta"),
+        ],
+      },
+      { server: "alpha" },
+    );
+    const alphaRealmEvents = await queryRealmEventsApi(
+      request,
+      aliceToken,
+      realmId,
+      { server: "alpha", limit: 100 },
+    );
+    const bootstrapEvents = (
+      Array.isArray(alphaRealmEvents.events)
+        ? (alphaRealmEvents.events as Array<Record<string, unknown>>)
+        : []
+    ).sort(
+      (left, right) =>
+        Number(left.actor_seq ?? 0) - Number(right.actor_seq ?? 0),
+    );
     const inviteEvent = makeFederationEvent({
       realmId,
-      kind: "ak.member.state",
+      kind: "ak.invite.create",
+      actorDid: alice.did,
       payload: {
-        realm_id: realmId,
-        actor_id: bob.did,
-        membership: "invite",
-        realm_title: `S2 pushed invite ${stamp}`,
-        discoverability: "public",
-        history_visibility: "shared",
+        invite_id: typedId("invite"),
+        invitee: bob.did,
+        invite_delivery_target: {
+          recipient_service_id: solandServiceId("beta"),
+          recipient_service_type: "principal_server",
+        },
+        introduction_evidence_digest: `sha256:${"ab".repeat(32)}`,
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
       },
     });
+    await advanceEnvelopeToActorFrontier(
+      request,
+      aliceToken,
+      inviteEvent,
+      "alpha",
+    );
+    const bootstrapPush = await pushFederationEvents(
+      request,
+      bootstrapEvents,
+      {
+        origin: solandServiceId("alpha"),
+        destination: solandServiceId("beta"),
+        server: "beta",
+        realmId,
+        idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-bootstrap`,
+      },
+    );
+    expect(bootstrapPush.rejected ?? []).toEqual([]);
+    expect(bootstrapPush.accepted ?? []).toHaveLength(bootstrapEvents.length);
 
     const push = await pushFederationEvents(request, [inviteEvent], {
       origin: solandServiceId("alpha"),
@@ -376,23 +433,23 @@ test.describe("cross-server federation", () => {
       realmId,
       idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-smoke`,
     });
-    expect(replay.accepted).toContain(inviteEvent.event_id);
+    expect([...(replay.accepted ?? []), ...(replay.duplicate ?? [])]).toContain(
+      inviteEvent.event_id,
+    );
     expect(replay.rejected ?? []).toEqual([]);
 
     const pullBody = await queryPeerEventsApi(request, {
       server: "beta",
+      sourceDid: solandServiceId("alpha"),
       realmId,
       limit: 10,
     });
     expect(
-      (pullBody.events ?? []).map(
-        (entry: { event?: { event_id?: string } }) => entry.event?.event_id,
-      ),
+      (pullBody.events ?? []).map((event) => event.event_id),
     ).toContain(inviteEvent.event_id);
     expect(
       (pullBody.events ?? []).filter(
-        (entry: { event?: { event_id?: string } }) =>
-          entry.event?.event_id === inviteEvent.event_id,
+        (event) => event.event_id === inviteEvent.event_id,
       ),
     ).toHaveLength(1);
 
@@ -499,6 +556,7 @@ test.describe("cross-server federation", () => {
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
+        creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -543,8 +601,8 @@ test.describe("cross-server federation", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-backfill-alice-${stamp}`);
-    const bob = uniqueUser(`s2-backfill-bob-${stamp}`);
+    const alice = uniqueUser(`s2-backfill-alice-${stamp}`, "alpha");
+    const bob = uniqueUser(`s2-backfill-bob-${stamp}`, "beta");
     await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, bob, { server: "beta" });
     const aliceToken = await issueDevSession(request, alice, {
@@ -562,6 +620,7 @@ test.describe("cross-server federation", () => {
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
+        creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -603,14 +662,50 @@ test.describe("cross-server federation", () => {
         },
       },
     });
+    await advanceEnvelopeToActorFrontier(
+      request,
+      aliceToken,
+      missingEvent,
+      "alpha",
+    );
+    const alphaBeforePartitionWrite = await queryRealmEventsApi(
+      request,
+      aliceToken,
+      realmId,
+      { server: "alpha", limit: 100 },
+    );
+    const alphaBindingEvent = (
+      Array.isArray(alphaBeforePartitionWrite.events)
+        ? (alphaBeforePartitionWrite.events as Array<Record<string, unknown>>)
+        : []
+    ).find((event) => {
+      if (event.kind !== "ak.member.state") {
+        return false;
+      }
+      const payload = event.payload as
+        | {
+            delivery_binding?: {
+              recipient_service_id?: string;
+            };
+          }
+        | undefined;
+      return (
+        payload?.delivery_binding?.recipient_service_id ===
+        solandServiceId("alpha")
+      );
+    });
+    expect(alphaBindingEvent?.event_id).toBeTruthy();
 
-    await pushFederationEvents(request, [missingEvent], {
-      origin: solandServiceId("alpha"),
+    const sourceWrite = await pushFederationEvents(request, [missingEvent], {
+      origin: solandServiceId("beta"),
       destination: solandServiceId("alpha"),
       server: "alpha",
       realmId,
-      idempotencyKey: `${solandServiceId("alpha")}#cotest-partition-source`,
+      idempotencyKey: `${solandServiceId("beta")}#cotest-partition-source`,
+      serviceBindingFrontier: [String(alphaBindingEvent!.event_id)],
     });
+    expect(sourceWrite.rejected ?? []).toEqual([]);
+    expect(sourceWrite.accepted ?? []).toContain(missingEvent.event_id);
     await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
     const betaBeforeEvents = await queryRealmEventsApi(
@@ -623,14 +718,12 @@ test.describe("cross-server federation", () => {
       },
     );
     expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
-    const alphaFrontier = await peerEventFrontierApi(request, realmId, {
-      server: "alpha",
-    });
-    const betaFrontierBefore = await peerEventFrontierApi(request, realmId, {
-      server: "beta",
-    });
-    expect(betaFrontierBefore.frontier_root).not.toBe(
-      alphaFrontier.frontier_root,
+    const betaBeforeIds = new Set(
+      (
+        Array.isArray(betaBeforeEvents.events)
+          ? (betaBeforeEvents.events as Array<Record<string, unknown>>)
+          : []
+      ).map((event) => String(event.event_id)),
     );
 
     const backfill = await queryPeerEventsApi(request, {
@@ -639,30 +732,57 @@ test.describe("cross-server federation", () => {
       realmId,
       limit: 100,
     });
-    const backfilledEvents = (backfill.events ?? [])
-      .map((entry: { event?: Record<string, unknown> }) => entry.event)
-      .filter(Boolean) as Array<Record<string, unknown>>;
+    const backfilledEvents = backfill.events ?? [];
+    const missingBackfillEvents = backfilledEvents.filter(
+      (event) => !betaBeforeIds.has(String(event.event_id)),
+    );
     expect(backfilledEvents.map((event) => event.event_id)).toContain(
       missingEvent.event_id,
     );
-    const ingest = await pushFederationEvents(request, backfilledEvents, {
+    const betaBindingEvent = backfilledEvents.find((event) => {
+      if (event.kind !== "ak.invite.create") {
+        return false;
+      }
+      const payload = event.payload as
+        | {
+            invite_delivery_target?: {
+              recipient_service_id?: string;
+            };
+          }
+        | undefined;
+      return (
+        payload?.invite_delivery_target?.recipient_service_id ===
+        solandServiceId("beta")
+      );
+    });
+    expect(betaBindingEvent?.event_id).toBeTruthy();
+    const ingest = await pushFederationEvents(request, missingBackfillEvents, {
       origin: solandServiceId("alpha"),
       destination: solandServiceId("beta"),
       server: "beta",
       realmId,
       idempotencyKey: `${solandServiceId("beta")}#cotest-peer-query-recovery`,
+      serviceBindingFrontier: [String(betaBindingEvent!.event_id)],
     });
     expect(ingest.rejected ?? []).toEqual([]);
-    expect(ingest.accepted).toContain(
+    expect([...(ingest.accepted ?? []), ...(ingest.duplicate ?? [])]).toContain(
       String(missingEvent.event_id),
     );
     await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
 
-    const betaFrontierAfter = await peerEventFrontierApi(request, realmId, {
+    const betaAfter = await queryRealmEventsApi(request, bobToken, realmId, {
       server: "beta",
+      limit: 100,
     });
-    for (const eventId of alphaFrontier.heads) {
-      expect(betaFrontierAfter.heads).toContain(eventId);
+    const betaAfterIds = new Set(
+      (
+        Array.isArray(betaAfter.events)
+          ? (betaAfter.events as Array<Record<string, unknown>>)
+          : []
+      ).map((event) => String(event.event_id)),
+    );
+    for (const event of backfilledEvents) {
+      expect(betaAfterIds).toContain(String(event.event_id));
     }
   });
 

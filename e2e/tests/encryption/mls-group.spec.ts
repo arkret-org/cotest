@@ -24,6 +24,7 @@ import {
   addRealmMemberApi,
   createRealmApi,
   principalControlRealmForDid,
+  queryRealmEventsApi,
   registerEventSigner,
   singleDidNotary,
   signedEventEnvelope,
@@ -1310,6 +1311,46 @@ test.describe("MLS group encryption", () => {
 
       // Route-context bootstrap is where Bob applies pending MLS Welcome state.
       await bobPage.gotoTimelineRealm(realmId);
+
+      // Bob did not have a published KeyPackage when Alice first issued the
+      // invite, so admission is completed asynchronously after Bob boots and
+      // accepts. Drive Alice's membership refresh and wait for the accepted
+      // Welcome before attempting the first encrypted write.
+      const aliceDevToken = await issueDevSession(request, alice);
+      await alicePage.gotoRealmAdminSection(realmId, "members");
+      const refreshMembers = alicePage.page.getByTestId(
+        "refresh-members-button",
+      );
+      const bobMemberRow = alicePage.page.locator(
+        `[data-testid="member-row"][data-member-did="${bob.did}"]`,
+      );
+      await expect
+        .poll(
+          async () => {
+            await refreshMembers.click();
+            return bobMemberRow.count();
+          },
+          { timeout: 120_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBeGreaterThan(0);
+      await expect
+        .poll(
+          async () => {
+            await refreshMembers.click();
+            const timeline = await queryRealmEventsApi(
+              request,
+              aliceDevToken,
+              realmId,
+            );
+            return ((timeline.events ?? []) as Array<Record<string, any>>).some(
+              (event) =>
+                event.kind === "ak.mls.welcome" &&
+                event.payload?.recipient_principal_id === bob.did,
+            );
+          },
+          { timeout: 120_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBeTruthy();
 
       const plaintext = `joined member decrypts post-join ciphertext ${stamp}`;
       const submittedWire = await sendEncryptedTimelineMessage(

@@ -247,6 +247,13 @@ export async function createRealmApi(
      * opt in here so the helper emits the canonical `ak.invite.create` event.
      */
     invitee_service_ids?: Record<string, string>;
+    /**
+     * Materialize the creator's home Principal Server as a canonical routable
+     * member binding inside the founding batch. Cross-server Realms need this
+     * so a remote member can route its accept/join and later Events back to
+     * the creator.
+     */
+    creator_service_id?: string;
     plaintext_visible_services?: string[];
     public?: boolean;
     federation_policy?: string;
@@ -296,7 +303,10 @@ export async function createRealmApi(
     federation_policy: data.federation_policy ?? "restricted",
     notary_profile: "single_did",
     digest_algorithm: "sha256",
-    notary: singleDidNotary(ownerDid),
+    // This helper creates Principal-Server-hosted collaboration Realms. The
+    // service owns the notary key and materializes Event Seals; the principal
+    // remains the Realm creator and founding capability holder.
+    notary: singleDidNotary(solandServiceId(opts.server)),
     created_at: createdAt,
   };
   const realmCreateCell = `ak:cell:ak.component.realm.create.v1:${realmId}`;
@@ -319,9 +329,8 @@ export async function createRealmApi(
       },
     ],
     payload: {
-      // `plaintext_visible_services` lives on the realm object only — the
-      // realm_create_payload root is additionalProperties:false and rejects
-      // it (it stays inside `object` below, which is additionalProperties:true).
+      // Keep the declaration in the Realm object as descriptive metadata.
+      // The dedicated bootstrap facet below is the authorization authority.
       object: realmObject,
     },
   });
@@ -372,38 +381,155 @@ export async function createRealmApi(
       },
     },
   });
+  const foundingGrantEventId = stringValue(foundingGrantEvent.event_id);
+  if (!foundingGrantEventId) {
+    throw new Error("Realm founding grant Event is missing event_id");
+  }
+  const bootstrapEvents = [realmCreateEvent, foundingGrantEvent];
+  if (plaintextVisibleServices.length > 0) {
+    const plaintextVisibleServicesCell =
+      `ak:cell:ak.component.realm.plaintext_visible_services.v1:${realmId}`;
+    bootstrapEvents.push(
+      signedEventEnvelope({
+        actorDid: ownerDid,
+        realmId,
+        kind: "ak.realm.plaintext_visible_services",
+        actorSeq: 2,
+        createdAt,
+        prevRefs: [foundingGrantEventId],
+        preconditions: [
+          {
+            cell: plaintextVisibleServicesCell,
+            predicate: { op: "head_eq", value: null },
+          },
+        ],
+        effects: [
+          {
+            cell: plaintextVisibleServicesCell,
+            op: {
+              kind: "set",
+              value: { services: plaintextVisibleServices },
+            },
+          },
+        ],
+        payload: { services: plaintextVisibleServices },
+      }),
+    );
+  }
+  if (data.creator_service_id) {
+    const didDocumentResponse = await request.get(
+      `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(ownerDid)}/did-document`,
+    );
+    const didDocument = await expectJsonOk<Record<string, unknown>>(
+      didDocumentResponse,
+      `resolve creator DID document ${ownerDid}`,
+    );
+    const deliveryPolicy = {
+      realm_id: realmId,
+      allow_binding_sources: ["did_document_default"],
+      allow_did_document_default: true,
+      allowed_recipient_services: [data.creator_service_id],
+      required_endorsers: [],
+      allow_unroutable_membership: true,
+      rebind_authorization: "member",
+    };
+    const policyCell =
+      `ak:cell:ak.component.realm.delivery_binding_policy.v1:${realmId}`;
+    const predecessorId = stringValue(
+      bootstrapEvents[bootstrapEvents.length - 1]?.event_id,
+    );
+    if (!predecessorId) {
+      throw new Error("Realm bootstrap predecessor is missing event_id");
+    }
+    const policyEvent = signedEventEnvelope({
+      actorDid: ownerDid,
+      realmId,
+      kind: "ak.realm.delivery_binding_policy",
+      actorSeq: bootstrapEvents.length,
+      createdAt,
+      prevRefs: [predecessorId],
+      preconditions: [
+        {
+          cell: policyCell,
+          predicate: { op: "head_eq", value: null },
+        },
+      ],
+      effects: [
+        {
+          cell: policyCell,
+          op: { kind: "set", value: deliveryPolicy },
+        },
+      ],
+      payload: deliveryPolicy,
+    });
+    const policyEventId = stringValue(policyEvent.event_id);
+    if (!policyEventId) {
+      throw new Error("Realm delivery binding policy Event is missing event_id");
+    }
+    bootstrapEvents.push(policyEvent);
+
+    const memberCell =
+      `ak:cell:ak.component.member.state.v1:${ownerDid}`;
+    bootstrapEvents.push(
+      signedEventEnvelope({
+        actorDid: ownerDid,
+        realmId,
+        kind: "ak.member.state",
+        actorSeq: bootstrapEvents.length,
+        createdAt,
+        prevRefs: [policyEventId],
+        preconditions: [
+          {
+            cell: memberCell,
+            predicate: { op: "head_eq", value: "join" },
+          },
+        ],
+        effects: [
+          {
+            cell: memberCell,
+            op: {
+              kind: "transition",
+              from: "join",
+              to: "join",
+              reason: "creator_delivery_binding",
+            },
+          },
+        ],
+        payload: {
+          realm_id: realmId,
+          actor_id: ownerDid,
+          membership: "join",
+          delivery_status: "routable",
+          delivery_binding: {
+            recipient_service_id: data.creator_service_id,
+            recipient_service_type: "principal_server",
+            binding_scope: "realm",
+            binding_source: "did_document_default",
+            delivery_modes: [
+              "events",
+              "sync",
+              "to_device",
+              "push",
+              "key_packages",
+            ],
+            service_endpoint: solandBaseUrl(opts.server),
+            did_document_digest:
+              `sha256:${sha256CanonicalJson(didDocument)}`,
+            resolved_at: createdAt,
+          },
+        },
+      }),
+    );
+  }
 
   await submitSignedEventBatchApi(
     request,
     token,
-    [realmCreateEvent, foundingGrantEvent],
+    bootstrapEvents,
     { server: opts.server, context: `create realm ${data.title}` },
   );
 
   for (const invitee of data.invitees ?? []) {
-    const memberInviteEvent = signedEventEnvelope({
-      actorDid: ownerDid,
-      realmId,
-      kind: "ak.member.state",
-      payload: {
-        realm_id: realmId,
-        actor_id: invitee,
-        membership: "invite",
-      },
-    });
-    await advanceEnvelopeToActorFrontier(
-      request,
-      token,
-      memberInviteEvent,
-      opts.server,
-    );
-    await submitSignedEventApi(
-      request,
-      token,
-      memberInviteEvent,
-      { server: opts.server, context: `invite ${invitee}` },
-    );
-
     const recipientServiceId = data.invitee_service_ids?.[invitee];
     if (recipientServiceId) {
       const evidence = { kind: "explicit_address" };
@@ -434,7 +560,31 @@ export async function createRealmApi(
         directedInviteEvent,
         { server: opts.server, context: `directed invite ${invitee}` },
       );
+      continue;
     }
+
+    const memberInviteEvent = signedEventEnvelope({
+      actorDid: ownerDid,
+      realmId,
+      kind: "ak.member.state",
+      payload: {
+        realm_id: realmId,
+        actor_id: invitee,
+        membership: "invite",
+      },
+    });
+    await advanceEnvelopeToActorFrontier(
+      request,
+      token,
+      memberInviteEvent,
+      opts.server,
+    );
+    await submitSignedEventApi(
+      request,
+      token,
+      memberInviteEvent,
+      { server: opts.server, context: `invite ${invitee}` },
+    );
   }
 
   return realmId;
@@ -1926,7 +2076,7 @@ function refreshBatchActorChain(
   }
 }
 
-async function advanceEnvelopeToActorFrontier(
+export async function advanceEnvelopeToActorFrontier(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
@@ -2164,6 +2314,7 @@ export async function pushFederationEvents(
     realmId: string;
     server?: SolandKey;
     idempotencyKey?: string;
+    serviceBindingFrontier?: string[];
   },
 ) {
   const response = await rawPushFederationEvents(request, events, opts);
@@ -2194,6 +2345,7 @@ export async function rawPushFederationEvents(
     // Negative-coverage hook: submit a digest that diverges from the
     // receiver's registry-derived value (expect reducer_profile_mismatch).
     reducerProfileDigestOverride?: string;
+    serviceBindingFrontier?: string[];
   },
 ) {
   const destination = opts.destination ?? solandServiceId(opts.server);
@@ -2202,7 +2354,10 @@ export async function rawPushFederationEvents(
     opts.realmId,
     events.map(federationEventWireBody),
     opts.idempotencyKey,
-    { reducerProfileDigest: opts.reducerProfileDigestOverride },
+    {
+      reducerProfileDigest: opts.reducerProfileDigestOverride,
+      serviceBindingFrontier: opts.serviceBindingFrontier,
+    },
   );
   const sourceDid = opts.relaySourceDid ?? opts.origin;
   const headers = signedFederationPushHeaders(sourceDid, destination, url, body, {
@@ -2561,9 +2716,16 @@ function peerEventsSubmitBody(
   realmId: string,
   events: Array<Record<string, unknown>>,
   idempotencyKey?: string,
-  overrides: { reducerProfileDigest?: string } = {},
+  overrides: {
+    reducerProfileDigest?: string;
+    serviceBindingFrontier?: string[];
+  } = {},
 ): Record<string, unknown> {
-  const frontier = batchFrontierEventIds(events);
+  const frontier =
+    overrides.serviceBindingFrontier &&
+    overrides.serviceBindingFrontier.length > 0
+      ? overrides.serviceBindingFrontier
+      : batchFrontierEventIds(events);
   return stripUndefined({
     service_binding_ref: {
       realm_id: realmId,

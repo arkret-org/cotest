@@ -106,6 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inkson-base-url", required=True)
     parser.add_argument("--oauth-client-id", required=True)
     parser.add_argument("--soland-base-url", required=True)
+    parser.add_argument("--soland-beta-base-url")
     parser.add_argument("--admin-audience")
     parser.add_argument("--session-grant-introspection-bearer", required=True)
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
@@ -123,6 +124,11 @@ def main() -> int:
     )
     coauth_base = trailing_slash(args.coauth_base_url)
     soland_base = trailing_slash(args.soland_base_url)
+    soland_beta_base = (
+        trailing_slash(args.soland_beta_base_url)
+        if args.soland_beta_base_url
+        else None
+    )
     inkson_callback = trailing_slash(args.inkson_base_url) + "auth/callback"
     admin_audience = args.admin_audience or coauth_base.rstrip("/") + "/api/v1"
 
@@ -206,15 +212,28 @@ def main() -> int:
     )
     src = replace_top_level_section(src, "clients", clients)
 
-    arkret = (
-        "arkret:\n"
-        "  principal_servers:\n"
+    principal_servers = (
         "  - name: soland\n"
         f"    endpoint: {yaml_string(soland_base)}\n"
         "    session_grant_introspection_bearer: "
         f"{yaml_string(args.session_grant_introspection_bearer)}\n"
         "    embedded_webvh_registration_bearer: "
         f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
+    )
+    if soland_beta_base:
+        principal_servers += (
+            "  - name: soland-beta\n"
+            f"    endpoint: {yaml_string(soland_beta_base)}\n"
+            "    session_grant_introspection_bearer: "
+            f"{yaml_string(args.session_grant_introspection_bearer)}\n"
+            "    embedded_webvh_registration_bearer: "
+            f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
+        )
+    arkret = (
+        "arkret:\n"
+        "  principal_servers:\n"
+        f"{principal_servers}"
+        "  identity_provider: soland\n"
         "  deployment_profile: organization\n"
         "  principal_method: \"did:webvh\"\n"
         "  trust_domain: ak:trust_domain:local.host\n"

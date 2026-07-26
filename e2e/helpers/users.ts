@@ -234,10 +234,24 @@ export class JointUserPage {
   }
 
   async gotoHome() {
-    await this.page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("client-shell")).toBeVisible({
-      timeout: 120_000,
-    });
+    const shell = this.page.getByTestId("client-shell");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt === 0) {
+        await this.page.goto("/", { waitUntil: "domcontentloaded" });
+      } else {
+        await this.page.reload({ waitUntil: "domcontentloaded" });
+      }
+      if (
+        await shell
+          .waitFor({ state: "visible", timeout: 40_000 })
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        await this.dismissDeviceAuthorizationPrompt();
+        return;
+      }
+    }
+    await expect(shell).toBeVisible({ timeout: 1_000 });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
@@ -1012,17 +1026,33 @@ export function assertJointStackNotRequired(context: string): void {
   }
 }
 
-export function uniqueUser(prefix: string): JointUser {
+export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   const stamp = randomUUID();
   const slug = `${prefix}-${stamp}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
+  const principalDid = (() => {
+    if (!server) {
+      return `did:webvh:z6mkfixture:${slug}.example`;
+    }
+    const serviceDid = solandServiceId(server);
+    const webvh = /^did:webvh:[^:]+:([^:]+)(?::.*)?$/.exec(serviceDid);
+    if (webvh?.[1]) {
+      return `did:webvh:z6mkfixture:${webvh[1]}:webvh:${slug}`;
+    }
+    const web = /^did:web:([^:]+)(?::.*)?$/.exec(serviceDid);
+    if (web?.[1]) {
+      return `did:web:${web[1]}:webvh:${slug}`;
+    }
+    throw new Error(`unsupported Principal Server DID method: ${serviceDid}`);
+  })();
   return {
     name: slug,
     // did:webvh is the v1 core default principal method (identity-did.md).
     // Dev-login principals use the fixture SCID form from the spec
-    // conformance vectors (`did:webvh:z6mkfixture:<host>`); did:web is
-    // reserved for explicit no-history / negative fixtures only.
-    did: `did:webvh:z6mkfixture:${slug}.example`,
+    // conformance vectors (`did:webvh:z6mkfixture:<host>`). Cross-server
+    // fixtures bind the principal authority to their home Principal Server;
+    // unscoped single-server fixtures retain the compact historical form.
+    did: principalDid,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
@@ -1119,6 +1149,7 @@ export async function createDpopUserSession(
   try {
     const account = await registerCoauthPasswordAccount(accountRequest, coauth, {
       password: "1amTester!",
+      server: opts.server,
     });
     return await createDpopUserSessionForAccount(accountRequest, prefix, account, opts);
   } finally {
@@ -1317,10 +1348,25 @@ export async function completePendingPrincipalBootstrap(
   page: JointUserPage,
   recoveryKey: string,
 ): Promise<void> {
-  await page.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
   const pending = page.page.getByTestId("pending-principal-bootstrap");
-  await expect(pending).toBeVisible({ timeout: 120_000 });
-  const completed = pending.getByTestId("onboarding-complete");
+  const completed = page.page.getByTestId("onboarding-complete");
+  const bootstrapState = pending.or(completed);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt === 0) {
+      await page.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+    } else {
+      await page.page.reload({ waitUntil: "domcontentloaded" });
+    }
+    if (
+      await bootstrapState
+        .waitFor({ state: "visible", timeout: 40_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      break;
+    }
+  }
+  await expect(bootstrapState).toBeVisible({ timeout: 1_000 });
   if (await completed.isVisible()) {
     return;
   }

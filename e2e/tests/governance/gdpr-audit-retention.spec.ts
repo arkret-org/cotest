@@ -284,8 +284,8 @@ test.describe("GDPR / audit / retention", () => {
       test.skip(!hasDualSoland(), "requires DualSoland runner topology");
 
       const stamp = Date.now();
-      const alice = uniqueUser(`s27-fanout-alice-${stamp}`);
-      const bob = uniqueUser(`s27-fanout-bob-${stamp}`);
+      const alice = uniqueUser(`s27-fanout-alice-${stamp}`, "alpha");
+      const bob = uniqueUser(`s27-fanout-bob-${stamp}`, "beta");
       await ensureRegistered(request, alice, { server: "alpha" });
       await ensureRegistered(request, bob, { server: "beta" });
       const [aliceToken, bobToken] = await Promise.all([
@@ -303,6 +303,7 @@ test.describe("GDPR / audit / retention", () => {
           invitees: [bob.did],
           invitee_service_ids: { [bob.did]: solandServiceId("beta") },
           ownerDid: alice.did,
+          creator_service_id: solandServiceId("alpha"),
           plaintext_visible_services: [
             solandServiceId("alpha"),
             solandServiceId("beta"),

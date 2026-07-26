@@ -202,6 +202,7 @@ test.describe("contact graph (same principal server)", () => {
     expect(draft).toBeTruthy();
     expect(draft.realm_event?.proofs).toEqual([]);
     expect(draft.founding_grant_event?.proofs).toEqual([]);
+    expect(draft.creator_member_event?.proofs).toEqual([]);
     expect(draft.peer_member_event?.proofs).toEqual([]);
     expect(draft.main_strand_event?.proofs).toEqual([]);
     expect(draft.binding_event?.proofs).toEqual([]);

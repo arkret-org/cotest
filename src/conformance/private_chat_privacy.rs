@@ -724,6 +724,7 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
             "claim_receipt",
             "realm_event",
             "founding_grant_event",
+            "creator_member_event",
             "peer_member_event",
             "main_strand_event",
             "binding_event",
@@ -762,6 +763,15 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
         validate_event_id(required_str(event, "event_id")?)?;
         if !value_array(required_field(event, "proofs")?)?.is_empty() {
             bail!("materialization draft `{field}` must be unsigned");
+        }
+    }
+    if let Some(event) = value.get("creator_member_event") {
+        if required_str(event, "kind")? != "ak.member.state" {
+            bail!("materialization draft `creator_member_event` kind drifted");
+        }
+        validate_event_id(required_str(event, "event_id")?)?;
+        if !value_array(required_field(event, "proofs")?)?.is_empty() {
+            bail!("materialization draft `creator_member_event` must be unsigned");
         }
     }
     let binding = required_field(required_field(value, "binding_event")?, "payload")?;

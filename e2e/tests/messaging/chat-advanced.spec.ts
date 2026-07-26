@@ -706,29 +706,23 @@ test.describe("chat advanced", () => {
   }, testInfo) => {
     // spec: models/content-types.md §4.9 polls
     // soland projects poll content state; inkson hydrates poll cards from sync/backfill.
+    test.setTimeout(420_000);
     const stamp = Date.now();
-    const alice = uniqueUser("s14e-alice");
-    const bob = uniqueUser("s14e-bob");
-    const carol = uniqueUser("s14e-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
+    const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "s14e-alice"),
+      openDpopUserPage(browser, request, "s14e-bob"),
+      openDpopUserPage(browser, request, "s14e-carol"),
     ]);
-    const [aliceToken, bobToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, carol),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
-    const carolPage = await openUserPage(browser, carol, {
-      sessionCredential: carolToken,
-    });
+    if (!aliceFlow || !bobFlow || !carolFlow) {
+      assertJointStackNotRequired("poll browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    const carolPage = carolFlow.page;
+    const bob = bobFlow.user;
+    const carol = carolFlow.user;
 
     const question = `Which rollout window should we use? ${stamp}`;
     const optionA = `Now ${stamp}`;

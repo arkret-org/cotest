@@ -522,7 +522,11 @@ async function uploadDirectConversationKeyPackage(
       key_package: keyPackage,
       keypackage_digest: keypackageDigest,
       cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-      capabilities: ["ak.mls.rfc9420", "ak.mls.profile.full"],
+      capabilities: [
+        "ak.content.v1",
+        "ak.mls.rfc9420",
+        "ak.mls.profile.full",
+      ],
       created_at: canonicalTimestamp(),
       expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
     },

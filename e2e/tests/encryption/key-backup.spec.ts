@@ -25,6 +25,7 @@ import {
 import {
   ensureRegistered,
   assertJointStackNotRequired,
+  completePendingPrincipalBootstrap,
   createDpopUserSessionForAccount,
   issueDevSession,
   openUserPage,
@@ -38,6 +39,7 @@ import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
 } from "../../helpers/coauth-register";
+import { serverLoginViaCoauth } from "../../helpers/real-oidc-login";
 
 test.describe.configure({ mode: "serial" });
 
@@ -326,12 +328,23 @@ test.describe("key backup + restore", () => {
     const stamp = Date.now();
     const envHandle = realOidcLoginHandle();
     const envPassword = realOidcLoginPassword();
-    const account: PasswordAccount =
+    const registeredAccount =
       envHandle && envPassword
-        ? { handle: envHandle, password: envPassword }
+        ? undefined
         : await registerCoauthPasswordAccount(request, coauth!);
-
-    const deviceA = await openUserPage(browser, uniqueUser("a3-oidc-mls-a"));
+    const account: PasswordAccount = registeredAccount ?? {
+      handle: envHandle!,
+      password: envPassword!,
+    };
+    const deviceAUser = uniqueUser("a3-oidc-mls-a");
+    if (registeredAccount) {
+      deviceAUser.did = registeredAccount.did;
+      deviceAUser.deviceId = registeredAccount.bootstrapDeviceId;
+    }
+    const deviceA = await openUserPage(browser, deviceAUser, {
+      pendingPrincipalRegistration:
+        registeredAccount?.pendingPrincipalRegistration,
+    });
     const sessionsToClose: JointUserPage[] = [deviceA];
     const protocolFailures: string[] = [];
     const deviceATrace = collectSessionGrantHolderProofTrace(deviceA.page);
@@ -341,6 +354,12 @@ test.describe("key backup + restore", () => {
     try {
       await deviceA.gotoLogin();
       await serverLoginViaCoauth(deviceA.page, account);
+      if (registeredAccount) {
+        await completePendingPrincipalBootstrap(
+          deviceA,
+          registeredAccount.recoveryKey,
+        );
+      }
       await expectGrantDpopSelfPath(deviceATrace, "device A real OIDC login");
 
       const realmId = await deviceA.createRealm({
@@ -354,6 +373,7 @@ test.describe("key backup + restore", () => {
       const recoveryKey = await createMlsRecoveryBackupFromPrompt(
         deviceA.page,
         keyBackupPuts,
+        registeredAccount?.recoveryKey,
       );
       await expectGrantDpopSelfPath(deviceATrace, "device A key backup upload");
       expect(
@@ -382,6 +402,7 @@ test.describe("key backup + restore", () => {
       await deviceB.gotoLogin();
       await serverLoginViaCoauth(deviceB.page, account);
       await expectGrantDpopSelfPath(deviceBTrace, "device B real OIDC login");
+      await pairBrowserDevice(deviceA, deviceB);
       await deviceB.gotoHome();
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
@@ -725,6 +746,39 @@ async function pairDpopDevice(
   await expectDpopDeviceActive(request, requestingSession);
 }
 
+async function pairBrowserDevice(
+  authorizingDevice: JointUserPage,
+  requestingDevice: JointUserPage,
+) {
+  await authorizingDevice.gotoHome();
+  await requestingDevice.page.goto("/settings/devices/pair", {
+    waitUntil: "domcontentloaded",
+  });
+  await requestingDevice.page.getByTestId("pair-device-start-button").click();
+  const pairingCode = requestingDevice.page.getByTestId("pair-device-code");
+  await expect(pairingCode).toBeVisible({ timeout: 30_000 });
+  const code = (await pairingCode.textContent())?.trim() ?? "";
+  expect(code).not.toBe("");
+
+  const approvalModal = authorizingDevice.page.getByTestId(
+    "device-pair-approval-modal",
+  );
+  await expect(approvalModal).toBeVisible({ timeout: 90_000 });
+  await expect(
+    authorizingDevice.page.getByTestId("device-pair-approval-code"),
+  ).toHaveText(code);
+  await authorizingDevice.page
+    .getByTestId("device-pair-approval-approve")
+    .click();
+  await expect(approvalModal).toBeHidden({ timeout: 90_000 });
+
+  await requestingDevice.page.getByTestId("pair-device-status-button").click();
+  await expect(requestingDevice.page.getByTestId("pair-device-status")).toContainText(
+    "Approved.",
+    { timeout: 30_000 },
+  );
+}
+
 type HolderProofRequest = {
   method: string;
   url: string;
@@ -872,36 +926,6 @@ async function expectSuccessfulUnlockWithHolderProof(
     (hit) =>
       hit.status === 200 && hit.hasProofBody && isRealGrantDpopSelfRequest(hit),
   )!;
-}
-
-async function serverLoginViaCoauth(
-  page: Page,
-  account: PasswordAccount,
-): Promise<void> {
-  await page.getByTestId("login-server-url").fill(solandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
-
-  const loginHandle = page.locator("#login-handle");
-  const shell = page.getByTestId("client-shell");
-  await expect(loginHandle.or(shell)).toBeVisible({ timeout: 60_000 });
-  if (await loginHandle.isVisible()) {
-    await loginHandle.fill(account.handle);
-    await page.locator("#login-password").fill(account.password);
-    await page.getByTestId("coauth-login-submit").click();
-  }
-
-  const approve = page.getByTestId("coauth-oauth-approve");
-  const consentShown = await approve
-    .waitFor({ state: "visible", timeout: 20_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (consentShown) {
-    await approve.click();
-  }
-
-  await expect(shell).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("login-panel")).toHaveCount(0);
-  expect(new URL(page.url()).pathname).not.toBe("/login");
 }
 
 function collectA1ProtocolFailures(page: Page, failures: string[]) {

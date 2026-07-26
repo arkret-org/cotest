@@ -1051,6 +1051,7 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
+        [string]$SolandBetaBaseUrl,
         [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
         [string]$MockEmailBaseUrl
@@ -1083,6 +1084,9 @@ function New-CoauthJointConfig {
     )
     if ($MockEmailBaseUrl) {
         $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
+    }
+    if ($SolandBetaBaseUrl) {
+        $patchArgs += @("--soland-beta-base-url", $SolandBetaBaseUrl)
     }
     if ((Split-Path -Leaf $python) -ieq "py.exe") {
         $patchArgs = @("-3") + $patchArgs
@@ -2342,6 +2346,7 @@ try {
             -InksonBaseUrl $InksonBaseUrl `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
+            -SolandBetaBaseUrl $solandBetaBaseUrl `
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
@@ -2563,7 +2568,15 @@ try {
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
-    $solandCorsAllowOrigin = if ($InksonBaseUrl) { $InksonBaseUrl } else { "http://127.0.0.1" }
+    $solandCorsOrigins = @(
+        $InksonBaseUrl
+        $inksonBetaBaseUrl
+    ) | Where-Object { $_ } | Select-Object -Unique
+    $solandCorsAllowOrigin = if ($solandCorsOrigins.Count -gt 0) {
+        $solandCorsOrigins -join ","
+    } else {
+        "http://127.0.0.1"
+    }
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
         $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $workspaceRoot
@@ -2615,7 +2628,7 @@ try {
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
         $solandBetaMetricsPort = Get-FreeTcpPort
-        $solandBetaCorsAllowOrigin = if ($inksonBetaBaseUrl) { $inksonBetaBaseUrl } else { $solandCorsAllowOrigin }
+        $solandBetaCorsAllowOrigin = $solandCorsAllowOrigin
         if ($SolandRuntime -eq "docker") {
             $solandBetaDockerEnv = Build-SolandDockerEnvironment `
                 -BaseUrl $solandBetaBaseUrl `

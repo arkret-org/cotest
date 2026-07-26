@@ -12,6 +12,7 @@ import {
   mockEmailBaseUrl,
   solandBaseUrl,
   solandServiceId,
+  type SolandKey,
 } from "./env";
 import {
   dpopDeviceSeedB64url,
@@ -426,7 +427,7 @@ export async function issueCanonicalHandoffSession(
 export async function registerCoauthPasswordAccount(
   request: APIRequestContext,
   coauthBase: string,
-  opts: { handle?: string; password?: string } = {},
+  opts: { handle?: string; password?: string; server?: SolandKey } = {},
 ): Promise<CoauthPasswordAccount> {
   const slug = (opts.handle ?? `e2e-oidc-${randomUUID()}`).toLowerCase();
   if (!/^[a-z0-9_-]+$/.test(slug)) {
@@ -445,7 +446,7 @@ export async function registerCoauthPasswordAccount(
   const deviceSuffix = randomUUID().replace(/-/g, "").slice(0, 12);
   const bootstrapDeviceId = `ak:device:01904100-0000-7000-8000-${deviceSuffix}`;
   const principalDescribe = await responseJsonRecord(
-    await request.get(`${solandBaseUrl()}/_arkret/describe`),
+    await request.get(`${solandBaseUrl(opts.server)}/_arkret/describe`),
     "soland describe",
   );
   const authorityDescribe = await responseJsonRecord(
@@ -453,7 +454,8 @@ export async function registerCoauthPasswordAccount(
     "coauth describe",
   );
   const trustDomain = stringValue(principalDescribe.trust_domain);
-  const audience = stringValue(principalDescribe.service_id) ?? solandServiceId();
+  const audience =
+    stringValue(principalDescribe.service_id) ?? solandServiceId(opts.server);
   const principalAuthMetadata = objectRecord(principalDescribe.auth_metadata);
   const principalAccountAuthority = objectRecord(principalAuthMetadata?.account_authority);
   const enrollmentAuthorityDid = stringValue(
@@ -487,7 +489,7 @@ export async function registerCoauthPasswordAccount(
   const fixture = cotestWire<PrincipalRegistrationFixture>(
     "principal-registration-fixture",
     {
-      principal_server_url: solandBaseUrl(),
+      principal_server_url: solandBaseUrl(opts.server),
       gate_account_base: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
       handoff_request_id: handoff.requestId,
       identity_creation_lease: lease,

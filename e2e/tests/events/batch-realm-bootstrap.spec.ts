@@ -19,7 +19,7 @@ import {
 } from "../../helpers/users";
 
 test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
-  test("authors genesis as 0 -> 1 without a pre-existing frontier", async ({
+  test("authors genesis as 0 -> 1 -> 2 without a pre-existing frontier", async ({
     request,
   }) => {
     const alice = uniqueUser("events-batch-alice");
@@ -51,12 +51,23 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const foundingGrant = events.find(
       (event) => event.kind === "ak.capability.grant",
     );
+    const plaintextVisibleServices = events.find(
+      (event) => event.kind === "ak.realm.plaintext_visible_services",
+    );
     expect(create, "accepted Realm create Event").toBeTruthy();
     expect(foundingGrant, "accepted founding grant Event").toBeTruthy();
+    expect(
+      plaintextVisibleServices,
+      "accepted plaintext-visible-services facet Event",
+    ).toBeTruthy();
     expect(create!.actor_seq).toBe(0);
     expect(create!.prev_refs).toEqual([]);
     expect(foundingGrant!.actor_seq).toBe(1);
     expect(foundingGrant!.prev_refs).toEqual([create!.event_id]);
+    expect(plaintextVisibleServices!.actor_seq).toBe(2);
+    expect(plaintextVisibleServices!.prev_refs).toEqual([
+      foundingGrant!.event_id,
+    ]);
 
     const frontierResponse = await request.get(
       `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(realmId)}`,
@@ -76,8 +87,8 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       kind: "realm_actor",
       realm_id: realmId,
       actor_id: alice.did,
-      next_actor_seq: 2,
-      frontier_event_ids: [foundingGrant!.event_id],
+      next_actor_seq: 3,
+      frontier_event_ids: [plaintextVisibleServices!.event_id],
     });
 
     const message = await sendMessageApi(
@@ -86,7 +97,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       realmId,
       "owner write after registered Realm genesis",
     );
-    expect(message.actor_seq).toBe(2);
-    expect(message.prev_refs).toEqual([foundingGrant!.event_id]);
+    expect(message.actor_seq).toBe(3);
+    expect(message.prev_refs).toEqual([plaintextVisibleServices!.event_id]);
   });
 });
