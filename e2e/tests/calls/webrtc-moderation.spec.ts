@@ -1,15 +1,15 @@
 // Call moderation (kick / ban / end_for_all) over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-moderation.md
 // Spec refs:
-//   - crypto-media/webrtc-signaling.md §3a (moderation signal + removed_participants[])
+//   - crypto-media/webrtc-signaling.md §3a (moderation signal + moderation OR-Set)
 //   - crypto-media/webrtc-signaling.md §5.1 (ephemeral relay, ak.call.signal.send gate)
 //   - crypto-media/media-service-binding.md §3 (banned actor token re-issue gate)
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` +
 // `/_soland/self/calls/.../recording/start` stack is gone. Moderation now rides
 // `ak.call.signal{moderation}` on `POST /_arkret/self/ephemeral`, and the
-// kick/ban provenance lives in the durable `ak.call.state.removed_participants[]`
-// cell. The relay is content-agnostic and gates on `ak.call.signal.send` (§162);
+// kick/ban provenance lives in the durable `ak.component.call.moderation.v1`
+// OR-Set. The relay is content-agnostic and gates on `ak.call.signal.send` (§162);
 // the `ak.call.moderate` authorization for a moderation frame is a RECEIVER /
 // reducer check (§3a: receiver and reducer MUST reject), pinned as a real
 // conformance vector (`run_moderator_kick_ban_vector`, step 1 →
@@ -195,8 +195,8 @@ test.describe("call moderation (spec wire)", () => {
   test("durable ban gate: a banned actor's media-token re-exchange is refused call_participant_removed", async ({
     request,
   }) => {
-    // §3a / media-service-binding §3 — once a ban row lands in the durable
-    // ak.call.state.removed_participants[], the media token issuer MUST refuse
+    // §3a / media-service-binding §3 — once a ban lands in the durable
+    // ak.component.call.moderation.v1 OR-Set, the media token issuer MUST refuse
     // that actor's re-exchange. This is the HTTP-observable moderation
     // enforcement (the kick/ban signal itself is ephemeral).
     const { alice, aliceToken, bob, bobToken, realmId } =
@@ -236,7 +236,7 @@ test.describe("call moderation (spec wire)", () => {
       state: "ringing",
     });
 
-    // A moderator actor-wide-bans bob: the durable removed_participants[] row
+    // A moderator actor-wide-bans bob: the durable moderation OR-Set value
     // carries a `ban` with no device_id (§3a).
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {
       state: "active",

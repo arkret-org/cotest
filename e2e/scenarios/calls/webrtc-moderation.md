@@ -14,7 +14,7 @@ live soland instance.
 
 - A moderator sends a first-class `ak.call.signal{signal_type=moderation}` frame.
   A `kick` carries `data.action=kick` with `target_actor_id` + `target_device_id`;
-  soland projects it into `ak.call.state.removed_participants[]` and the frame is
+  soland projects it into `ak.component.call.moderation.v1` and the frame is
   readable by the kicked participant in the signal log.
 - A `ban` carries `data.action=ban` with `target_actor_id` only (no
   `target_device_id`), encoding the actor-wide ban scope; a banned actor's

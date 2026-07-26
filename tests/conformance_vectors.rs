@@ -180,7 +180,7 @@ fn call_signal_receiver_vector_suite_runs_clean() {
 // transcribe_lifecycle / moderator_kick_ban / p2p_to_sfu_upgrade — the spec
 // additions for recording retention + audit lock, ready recording artifact
 // binding, the transcribe pipeline + dedicated exporter label, moderator
-// kick/ban + removed_participants[] token-reissue gating, and the P2P→SFU
+// kick/ban + moderation OR-Set token-reissue gating, and the P2P→SFU
 // upgrade + ak.call.summary terminal-state gate.
 
 #[test]

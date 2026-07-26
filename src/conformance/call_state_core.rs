@@ -154,7 +154,7 @@ fn unsigned_token_outcome(
         participant_binding: CallMediaParticipantBinding {
             scheme: PARTICIPANT_BINDING_SCHEMA.to_owned(),
             sig: String::new(),
-            issuer_kid: ISSUER_KID.to_owned(),
+            issuer_kid: arkret::DidUrl::new(ISSUER_KID).unwrap(),
             realm_id: request.realm_id.clone(),
             call_id: request.call_id.clone(),
             focus_id: request.focus_id.clone(),
@@ -166,7 +166,7 @@ fn unsigned_token_outcome(
         },
         expires_at,
         service_signature: CallMediaServiceSignature {
-            kid: ISSUER_KID.to_owned(),
+            kid: arkret::DidUrl::new(ISSUER_KID).unwrap(),
             sig: String::new(),
         },
     }
@@ -229,8 +229,8 @@ pub fn run_participant_binding_invalid_vector() -> Result<()> {
     let expires_at = now + Duration::minutes(5);
 
     let mut rogue_issuer = unsigned_token_outcome(&request, expires_at);
-    rogue_issuer.participant_binding.issuer_kid = ROGUE_KID.to_owned();
-    rogue_issuer.service_signature.kid = ROGUE_KID.to_owned();
+    rogue_issuer.participant_binding.issuer_kid = arkret::DidUrl::new(ROGUE_KID).unwrap();
+    rogue_issuer.service_signature.kid = arkret::DidUrl::new(ROGUE_KID).unwrap();
     sign_outcome(&mut rogue_issuer, &key)?;
     assert_participant_binding_invalid(
         "unanchored issuer",

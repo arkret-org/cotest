@@ -717,7 +717,7 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
         );
     }
     // The backend MUST signal only identities that match an entry in
-    // `ak.call.state.participants[]`. Unknown identities fail closed
+    // the effective `ak.component.call.roster.v1` OR-Set. Unknown identities fail closed
     // — clients MUST NOT trust them.
     let known: &[&str] = &["ak:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
     let unknown = "ak:rtc_participant:01999999-0000-7000-8000-deadbeefdead";

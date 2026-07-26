@@ -14,7 +14,7 @@
 //! reason codes (cotest mirrors the spec `error-code-registry.json`), the
 //! transcript / recording MLS-Exporter labels and their distinct Context
 //! field shapes (`exporter-label-registry.json`), the audit-lock-over-TTL
-//! deletion gate, the moderation `removed_participants[]` token-reissue gate,
+//! deletion gate, the moderation OR-Set token-reissue gate,
 //! and the oldest-membership P2P→SFU upgrade / summary terminal-state gate, so
 //! a downstream soland reducer regression hard-fails before reaching a live
 //! integration target (see the `#[ignore]` live legs under `tests/`).
@@ -29,8 +29,9 @@ use arkret_models_collaboration::events_payloads::call::{
     CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
     CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingId,
-    CallRecordingRetention, CallStatePayload, CallStatePayloadRecordingResult,
-    CallStatePayloadTranscriptResult, RecordingStartPayload,
+    CallRecordingRetention, CallRecordingState, CallRecordingTransition, CallStatePayload,
+    CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, CallTranscriptState,
+    CallTranscriptTransition, RecordingStartPayload,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -134,7 +135,7 @@ fn try_delete_recording(state: &RetentionState) -> std::result::Result<(), &'sta
     Ok(())
 }
 
-/// Entering a capturing `recording_state` requires `consent_confirmed`.
+/// Entering capture requires the recording-start result to confirm consent.
 fn capture_consent_ok(consent_confirmed: bool) -> std::result::Result<(), &'static str> {
     if consent_confirmed {
         Ok(())
@@ -175,7 +176,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
         }
     }
 
-    // Step 4 — capturing recording_state without consent_confirmed.
+    // Step 4 — capture start without consent_confirmed.
     match capture_consent_ok(false) {
         Err(code) if code == arkret_wire::ReasonCode::RECORDING_CONSENT_REQUIRED => {}
         other => bail!("capture without consent must be recording_consent_required, got {other:?}"),
@@ -277,29 +278,34 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
 fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStatePayload {
     let artifact_ref = artifact.as_ref();
     CallStatePayload {
-        call_id: call_id().to_string(),
-        state: "ended".to_owned(),
-        mode: None,
-        session_focus: None,
-        participants: None,
-        removed_participants: None,
-        participant_mute_overrides: None,
-        recording_state: Some("ready".to_owned()),
-        recording_result: Some(CallStatePayloadRecordingResult {
-            content_digest: artifact_ref.map(|artifact| artifact.content_digest.clone()),
-            duration_ms: artifact_ref.map(|artifact| artifact.duration_ms),
-            media_type: artifact_ref.map(|artifact| artifact.media_type.clone()),
-            retention_policy_id: artifact_ref
-                .and_then(|artifact| artifact.retention_policy_id.clone()),
-            retention: artifact_ref.map(|artifact| artifact.retention.clone()),
-            recording_start_event_id: artifact_ref
-                .map(|artifact| artifact.recording_start_event_id.clone()),
-            artifact,
-            failure_reason_code: None,
-            failure_message: None,
+        call_id: call_id(),
+        state_transition: None,
+        focus: None,
+        recording_transition: Some(CallRecordingTransition {
+            recording_id: CallRecordingId::new(
+                "rtc-recording-019a7360-0000-7000-8000-000000000002",
+            )
+            .unwrap(),
+            from: CallRecordingState::Stopped,
+            to: CallRecordingState::Ready,
+            result: Some(CallStatePayloadRecordingResult {
+                content_digest: artifact_ref.map(|artifact| artifact.content_digest.clone()),
+                duration_ms: artifact_ref.map(|artifact| artifact.duration_ms),
+                media_type: artifact_ref.map(|artifact| artifact.media_type.clone()),
+                retention_policy_id: artifact_ref
+                    .and_then(|artifact| artifact.retention_policy_id.clone()),
+                retention: artifact_ref.map(|artifact| artifact.retention.clone()),
+                recording_start_event_id: artifact_ref
+                    .map(|artifact| artifact.recording_start_event_id.clone()),
+                artifact,
+                failure_reason_code: None,
+                failure_message: None,
+            }),
         }),
-        transcript_state: None,
-        transcript_result: None,
+        transcript_transition: None,
+        roster_delta: None,
+        moderation_delta: None,
+        mute_override: None,
     }
 }
 
@@ -337,8 +343,9 @@ fn evaluate_recording_result_artifact_shape(
         serde_json::from_value(value).map_err(|_| arkret_wire::ErrorCode::SCHEMA_VIOLATION)?;
     payload.validate_recording_result_artifact()?;
     let artifact = payload
-        .recording_result
+        .recording_transition
         .as_ref()
+        .and_then(|transition| transition.result.as_ref())
         .and_then(|result| result.artifact.as_ref())
         .ok_or(arkret_wire::ErrorCode::SCHEMA_VIOLATION)?;
     if deletion_completed {
@@ -383,7 +390,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
 
     let mut direct_result =
         serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap();
-    direct_result["recording_result"]["recording_url"] =
+    direct_result["recording_transition"]["result"]["recording_url"] =
         json!("https://s3.amazonaws.com/bucket/recording.mp4");
     match evaluate_recording_result_artifact_shape(direct_result, false) {
         Err(code) if code == arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
@@ -392,7 +399,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
 
     let mut direct_artifact =
         serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap();
-    direct_artifact["recording_result"]["artifact"]["destination"] =
+    direct_artifact["recording_transition"]["result"]["artifact"]["destination"] =
         json!("livekit://egress/recording-1");
     match evaluate_recording_result_artifact_shape(direct_artifact, false) {
         Err(code) if code == arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
@@ -468,9 +475,19 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
         "recording_agent": "did:web:recorder.example",
         "capture_kind": "transcript",
-        "mode": "audio"
+        "mode": "audio",
+        "visible_notice": true,
+        "result": {
+            "transcript_start_event_id": start_event_id(),
+            "retention": {
+                "consent_confirmed": true
+            }
+        }
     });
-    serde_json::from_value::<RecordingStartPayload>(start_value.clone())
+    let start_payload = serde_json::from_value::<RecordingStartPayload>(start_value.clone())
+        .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
+    start_payload
+        .validate(&start_event_id())
         .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
     let mut missing_mode = start_value.clone();
     missing_mode.as_object_mut().unwrap().remove("mode");
@@ -520,32 +537,35 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         .map_err(|code| anyhow::anyhow!("control transcript key unexpectedly rejected: {code}"))?;
 
     let ready = CallStatePayload {
-        call_id: call_id().to_string(),
-        state: "ended".to_owned(),
-        mode: None,
-        session_focus: None,
-        participants: None,
-        removed_participants: None,
-        participant_mute_overrides: None,
-        recording_state: None,
-        recording_result: None,
-        transcript_state: Some("ready".to_owned()),
-        transcript_result: Some(CallStatePayloadTranscriptResult {
-            content_digest: Some(hash('c')),
-            media_type: Some("text/vtt".to_owned()),
-            language: Some("en-US".to_owned()),
-            retention_policy_id: Some(
-                PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
-            ),
-            retention: Some(CallRecordingRetention {
-                retention_expires_at: Some(ts("2026-06-20T00:00:00.000Z")),
-                deletion_trigger: Some(CallRecordingDeletionTrigger::RetentionExpiry),
-                audit_lock: Some(false),
-                consent_confirmed: Some(true),
+        call_id: call_id(),
+        state_transition: None,
+        focus: None,
+        recording_transition: None,
+        transcript_transition: Some(CallTranscriptTransition {
+            recording_id: CallRecordingId::new("transcript-019a7360-0000-7000-8000-000000000002")
+                .unwrap(),
+            from: CallTranscriptState::Stopped,
+            to: CallTranscriptState::Ready,
+            result: Some(CallStatePayloadTranscriptResult {
+                content_digest: Some(hash('c')),
+                media_type: Some("text/vtt".to_owned()),
+                language: Some("en-US".to_owned()),
+                retention_policy_id: Some(
+                    PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
+                ),
+                retention: Some(CallRecordingRetention {
+                    retention_expires_at: Some(ts("2026-06-20T00:00:00.000Z")),
+                    deletion_trigger: Some(CallRecordingDeletionTrigger::RetentionExpiry),
+                    audit_lock: Some(false),
+                    consent_confirmed: Some(true),
+                }),
+                transcript_start_event_id: Some(start_event_id()),
+                failure_reason_code: None,
             }),
-            transcript_start_event_id: Some(start_event_id()),
-            failure_reason_code: None,
         }),
+        roster_delta: None,
+        moderation_delta: None,
+        mute_override: None,
     };
     ready
         .validate_transcript_result_storage()
@@ -553,10 +573,13 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
 
     let bypass = json!({
         "call_id": call_id().to_string(),
-        "state": "ended",
-        "transcript_state": "ready",
-        "transcript_result": {
-            "transcript_artifact_url": "https://backend.example/transcript.vtt"
+        "transcript_transition": {
+            "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
+            "from": "stopped",
+            "to": "ready",
+            "result": {
+                "transcript_artifact_url": "https://backend.example/transcript.vtt"
+            }
         }
     });
     if serde_json::from_value::<CallStatePayload>(bypass).is_ok() {
@@ -565,11 +588,14 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
 
     let failed = json!({
         "call_id": call_id().to_string(),
-        "state": "ended",
-        "transcript_state": "failed",
-        "transcript_result": {
-            "transcript_start_event_id": start_event_id().to_string(),
-            "failure_reason_code": "storage_failed"
+        "transcript_transition": {
+            "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
+            "from": "transcribing",
+            "to": "failed",
+            "result": {
+                "transcript_start_event_id": start_event_id().to_string(),
+                "failure_reason_code": "storage_failed"
+            }
         }
     });
     let failed_payload: CallStatePayload = serde_json::from_value(failed.clone())
@@ -578,7 +604,8 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         .validate_transcript_result_storage()
         .map_err(|code| anyhow::anyhow!("registered transcript failure invalid: {code}"))?;
     let mut unknown_failure = failed;
-    unknown_failure["transcript_result"]["failure_reason_code"] = json!("vendor_timeout");
+    unknown_failure["transcript_transition"]["result"]["failure_reason_code"] =
+        json!("vendor_timeout");
     if serde_json::from_value::<CallStatePayload>(unknown_failure).is_ok() {
         bail!("unregistered transcript failure reason must be schema_violation");
     }
@@ -595,8 +622,8 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
 
 // ─── §12.18 — moderator_kick_ban ───────────────────────────────────────────
 
-/// A `(actor_id, device_id)` tuple in `removed_participants[]`. A `None`
-/// `device_id` encodes an actor-wide ban.
+/// An effective moderation OR-Set value. A missing `device_id` encodes an
+/// actor-wide ban.
 #[derive(Clone, Debug)]
 struct RemovedParticipant {
     actor_id: &'static str,
@@ -612,7 +639,7 @@ fn moderation_authorised(has_moderate_cap: bool) -> std::result::Result<(), &'st
     }
 }
 
-/// Token re-issue is gated on `removed_participants[]`: a kicked device
+/// Token re-issue is gated on the effective moderation OR-Set: a kicked device
 /// `(actor, device)` is refused, and a banned actor (device_id omitted) is
 /// refused for any device. A non-removed device of an un-banned actor passes.
 fn token_reissue_allowed(
