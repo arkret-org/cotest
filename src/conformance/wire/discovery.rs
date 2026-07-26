@@ -17,9 +17,9 @@ use crate::conformance::{required_str, validate_profile};
 ///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST
 ///     be advertised explicitly — a core-only SUT MUST NOT auto-imply them, and discovery clients
 ///     MUST gate extension calls on the advertised set;
-///   * `interop_bridge` surface-class entries (applet, mimi_interop) MUST be advertised only when the
-///     external protocol is supported, and bridge advertisement is INDEPENDENT of core/extension
-///     advertisement (no implication via `bridges_to`).
+///   * `interop_bridge` surface-class entries (applet, mimi_interop) MUST be advertised only when
+///     the external protocol is supported, and bridge advertisement is INDEPENDENT of
+///     core/extension advertisement (no implication via `bridges_to`).
 pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
