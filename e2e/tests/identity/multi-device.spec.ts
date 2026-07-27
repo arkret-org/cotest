@@ -1466,7 +1466,7 @@ test.describe("multi-device pairing + revocation", () => {
       kty: "OKP",
       kid: device2Id,
       alg: "EdDSA",
-      key: device2Key.multibase,
+      key: device2Key.rawPublicKey.toString("base64url"),
     };
     const clientNonce = base64url(`client-nonce:${device2Id}`);
     const stage = await request.post(
