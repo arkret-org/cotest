@@ -201,7 +201,7 @@ test.describe("multi-device pairing + revocation", () => {
       kty: "OKP",
       kid: newDeviceId,
       alg: "EdDSA",
-      key: newDeviceKey.multibase,
+      key: newDeviceKey.rawPublicKey.toString("base64url"),
     };
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     const challengeTranscript = {
@@ -1538,7 +1538,9 @@ test.describe("multi-device pairing + revocation", () => {
       expires_at: string;
     };
     expect(bootstrap.new_device_pubkey.kid).toBe(device2Id);
-    expect(bootstrap.new_device_pubkey.key).toBe(device2Key.multibase);
+    expect(bootstrap.new_device_pubkey.key).toBe(
+      device2Key.rawPublicKey.toString("base64url"),
+    );
     expect(bootstrap.new_device_pubkey.public_key).toBeUndefined();
     expect(bootstrap.pairing_code).toBe(staged.pairing_code);
     const challengeProof = pairingChallengeProof({
@@ -1822,7 +1824,7 @@ async function deliverPairingRequest(
     kty: "OKP",
     kid: requestingDeviceId,
     alg: "EdDSA",
-    key: newDeviceKey.multibase,
+    key: newDeviceKey.rawPublicKey.toString("base64url"),
   };
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
   const requestCanonicalDigest = `sha256:${createHash("sha256")

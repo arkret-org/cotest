@@ -142,13 +142,12 @@ function deviceAuthorizePossessionInput(args: {
   expiresAt?: string | null;
   scopes?: string[] | null;
   recoverySessionId?: string | null;
-  authorizationBindingKind: "cross_signing" | "bootstrap" | "enrollment_authority";
+  authorizationBindingKind:
+    "cross_signing" | "bootstrap" | "enrollment_authority";
   crossSigningGeneration?: number | null;
 }): Buffer {
   const canonicalAlgorithms = [...new Set(args.algorithms)].sort();
-  const canonicalScopes = args.scopes
-    ? [...new Set(args.scopes)].sort()
-    : null;
+  const canonicalScopes = args.scopes ? [...new Set(args.scopes)].sort() : null;
   const body = canonicalJson({
     principal_id: args.principalId,
     device_id: args.deviceId,
@@ -338,12 +337,14 @@ export function buildDevicePossessionSignature(args: {
 /// Render a freshly-generated device verify key as the multibase form soland
 /// stores under `device_public_key` and re-exposes as a `did:key`.
 export function deviceVerifyKeyMultibase(): {
+  rawPublicKey: Buffer;
   multibase: string;
   didKey: string;
   privateKey: CrossSigningKey["privateKey"];
 } {
   const key = generateCrossSigningKey();
   return {
+    rawPublicKey: key.rawPublicKey,
     multibase: key.multibase,
     didKey: key.didKey,
     privateKey: key.privateKey,
