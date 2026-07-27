@@ -69,7 +69,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 ### Phase C — 诊断向量(负向)
 
 - **C1 `durability_scheme_incompatible`**:在 `content_scheme=mls_rfc9420`(或缺省)的 Realm 上
-  `ak.realm.policy_components` 写 `durability_policy.mode != none` → `failed_precondition`
+  `ak.realm.policy_bundle` 写 `durability_policy.mode != none` → `failed_precondition`
   reason=`durability_scheme_incompatible`(§2.3.1 / §2.10.8 适用条件)。
 - **C2 `durability_recovery_recipient_unverified`**:`recovery_recipients[].verification_method`
   解析不到 active `ArkretRealmHistoryRecoveryKey` service entry(已撤销 / 未被 service entry 指定 /

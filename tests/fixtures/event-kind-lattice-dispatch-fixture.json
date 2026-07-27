@@ -77,7 +77,7 @@
       "ak.component.realm.organization.v1",
       "ak.component.realm.plaintext_visible_services.v1",
       "ak.component.realm.policy.v1",
-      "ak.component.realm.policy_components.v1",
+      "ak.component.realm.policy_bundle.v1",
       "ak.component.realm.policy_server.v1",
       "ak.component.realm.preview_policy.v1",
       "ak.component.realm.read_receipt_policy.v1",

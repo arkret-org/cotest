@@ -823,12 +823,12 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         content_scheme: CONTENT_SCHEME_RFC9420,
       });
 
-      // Writing durability_policy.mode != none via ak.realm.policy_components MUST
+      // Writing durability_policy.mode != none via ak.realm.policy_bundle MUST
       // failed_precondition with reason durability_scheme_incompatible.
       const policyEvent = signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "ak.realm.policy_components",
+        kind: "ak.realm.policy_bundle",
         payload: {
           realm_id: realmId,
           value: {

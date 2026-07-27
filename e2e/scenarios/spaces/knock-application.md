@@ -183,7 +183,7 @@
 
 ## 风险 / 前置依赖
 
-- spec 明确说当前 v1 core 的 active 机器 contract 仍以 `ak.realm.join_rule`、`ak.realm.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 active registry。也就是说 **`ak:cell:ak.component.realm.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 candidate profile 里**,soland 实现到没到这一步是开放问题。
+- spec 明确说当前 v1 core 的 active 机器 contract 仍以 `ak.realm.join_rule`、`ak.realm.policy_bundle`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 active registry。也就是说 **`ak:cell:ak.component.realm.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 candidate profile 里**,soland 实现到没到这一步是开放问题。
 - 如果 soland 没实现,这条 scenario 只能停在 spec 文档,等 soland 跟进。**写测试代码之前必须先确认 soland 这边的实现度**。
 
 ## 总耗时预估

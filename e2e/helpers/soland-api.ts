@@ -668,9 +668,9 @@ export async function addRealmMemberApi(
 
 // join-policy.md §3 — write the per-Realm `realm.join_policy` cell. soland
 // carries the candidate join policy inside the active
-// `ak.realm.policy_components` event under `components.join_policy`; the
+// `ak.realm.policy_bundle` event under `components.join_policy`; the
 // reducer projects it into
-// `ak:cell:ak.component.realm.policy_components.v1:<realm_id>` and reads the
+// `ak:cell:ak.component.realm.policy_bundle.v1:<realm_id>` and reads the
 // `join_policy` facet from there.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
@@ -687,7 +687,7 @@ export async function writeJoinPolicyApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "ak.realm.policy_components",
+      kind: "ak.realm.policy_bundle",
       payload: {
         realm_id: realmId,
         value: {

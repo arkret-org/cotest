@@ -140,7 +140,7 @@ async function allowlistVerificationService(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "ak.realm.policy_components",
+      kind: "ak.realm.policy_bundle",
       payload: {
         value: {
           third_party_invite_verification_services: [serviceId],

@@ -57,8 +57,8 @@
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
-      "name": "strand_track_policy_components_same_subject_as_history_visibility",
-      "kind": "cx.strand.track.policy_components",
+      "name": "strand_track_policy_bundle_same_subject_as_history_visibility",
+      "kind": "cx.strand.track.policy_bundle",
       "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
       "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",

@@ -4,7 +4,7 @@
 //! Spec (round 2+3 cleanup, T12):
 //!
 //! `media_service_decrypts=true` MUST be bound in three places:
-//!   1. `ak.realm.policy_components` write covering this service + `policy_root` digest covers the
+//!   1. `ak.realm.policy_bundle` write covering this service + `policy_root` digest covers the
 //!      current epoch's policy
 //!   2. SFU service DID appears in `plaintext_visible_services[]` with `purpose=media_plaintext`
 //!   3. MLS epoch governance binding records `policy_root` so receivers can verify the SFU's
@@ -24,7 +24,7 @@
 //! governance binding covers ⇒ the member MUST treat the binding as stale and
 //! refuse media negotiation. The (d) leg is exercised against the live SDK
 //! deterministic-digest helpers so cotest stays source-identical with the
-//! soland-side `realm_policy_components_check` reducer (no drift).
+//! soland-side `realm_policy_bundle_check` reducer (no drift).
 
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::Did;
@@ -99,7 +99,7 @@ fn honest_media_decrypt_policy_value() -> Result<MediaDecryptPolicyValue> {
 ///
 /// This is exercised against the live SDK helpers so the honest and the
 /// mismatched digests are produced by the exact code path soland's
-/// `realm_policy_components_check` reducer runs — keeping cotest, the SDK, and
+/// `realm_policy_bundle_check` reducer runs — keeping cotest, the SDK, and
 /// soland source-identical (no divergent hand-rolled hashing).
 pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
     // The member's own local recomputation over its transcript view.
