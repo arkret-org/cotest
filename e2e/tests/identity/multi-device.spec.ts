@@ -55,8 +55,7 @@ const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
 const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
 
 type SelfPathHeadersSource =
-  | string
-  | ((method: string, url: string) => Record<string, string>);
+  string | ((method: string, url: string) => Record<string, string>);
 
 function selfPathHeaders(
   source: SelfPathHeadersSource,
@@ -70,6 +69,76 @@ function dpopHeadersSource(
   session: DpopUserSession,
 ): (method: string, url: string) => Record<string, string> {
   return (method, url) => selfPathHeadersForDpopSession(session, method, url);
+}
+
+type PairingPublicKey = {
+  kty: "OKP";
+  kid: string;
+  alg: "EdDSA";
+  key: string;
+};
+
+function pairingChallengeProof(args: {
+  publicKey: PairingPublicKey;
+  privateKey: ReturnType<typeof deviceVerifyKeyMultibase>["privateKey"];
+  pairingCode: string;
+  gateAudience: string;
+  transcript:
+    | {
+        kind: "server";
+        clientNonce: string;
+        requestId: string;
+        serverNonce: string;
+        expiresAt: string;
+      }
+    | {
+        kind: "to_device";
+        transactionId: string;
+        requestCanonicalDigest: string;
+        expiresAt: string;
+      };
+}): Record<string, unknown> {
+  const newDevicePubkeyDigest = `sha256:${createHash("sha256")
+    .update(canonicalBytes(args.publicKey))
+    .digest("hex")}`;
+  const transcriptKind =
+    args.transcript.kind === "server"
+      ? "ak.device-pairing.challenge.v1"
+      : "ak.device-pairing.challenge.to_device.v1";
+  const body =
+    args.transcript.kind === "server"
+      ? {
+          client_nonce: args.transcript.clientNonce,
+          device_pairing_request_id: args.transcript.requestId,
+          expires_at: args.transcript.expiresAt,
+          gate_audience: args.gateAudience,
+          new_device_pubkey_digest: newDevicePubkeyDigest,
+          pairing_code: args.pairingCode,
+          server_nonce: args.transcript.serverNonce,
+        }
+      : {
+          expires_at: args.transcript.expiresAt,
+          gate_audience: args.gateAudience,
+          new_device_pubkey_digest: newDevicePubkeyDigest,
+          pairing_code: args.pairingCode,
+          request_canonical_digest: args.transcript.requestCanonicalDigest,
+          transaction_id: args.transcript.transactionId,
+        };
+  const signingBytes = Buffer.concat([
+    Buffer.from(`${transcriptKind}\n`, "utf8"),
+    canonicalBytes(body),
+  ]);
+  return {
+    transcript: transcriptKind,
+    verification_method: args.publicKey.kid,
+    alg: args.publicKey.alg,
+    transcript_digest: `sha256:${createHash("sha256")
+      .update(signingBytes)
+      .digest("hex")}`,
+    signature: nodeSign(null, signingBytes, args.privateKey).toString(
+      "base64url",
+    ),
+  };
 }
 
 test.describe("multi-device pairing + revocation", () => {
@@ -86,19 +155,29 @@ test.describe("multi-device pairing + revocation", () => {
     // Tokens MAY be identical (dev-login is idempotent) or distinct.
     // Either way, both should authenticate.
 
-    const device1 = await openUserPage(browser, alice, { sessionCredential: token1 });
-    const device2 = await openUserPage(browser, alice, { sessionCredential: token2 });
+    const device1 = await openUserPage(browser, alice, {
+      sessionCredential: token1,
+    });
+    const device2 = await openUserPage(browser, alice, {
+      sessionCredential: token2,
+    });
 
     try {
       await device1.gotoHome();
       await device2.gotoHome();
       // Both sessions independently read /account/me successfully.
-      const me1 = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
-        headers: { authorization: `Bearer ${token1}` },
-      });
-      const me2 = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
-        headers: { authorization: `Bearer ${token2}` },
-      });
+      const me1 = await request.get(
+        `${solandBaseUrl()}/_soland/self/account/me`,
+        {
+          headers: { authorization: `Bearer ${token1}` },
+        },
+      );
+      const me2 = await request.get(
+        `${solandBaseUrl()}/_soland/self/account/me`,
+        {
+          headers: { authorization: `Bearer ${token2}` },
+        },
+      );
       expect(me1.ok()).toBeTruthy();
       expect(me2.ok()).toBeTruthy();
       const me1Body = await me1.json();
@@ -117,6 +196,19 @@ test.describe("multi-device pairing + revocation", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
     const newDeviceId = typedId("device");
+    const newDeviceKey = deviceVerifyKeyMultibase();
+    const newDevicePubkey: PairingPublicKey = {
+      kty: "OKP",
+      kid: newDeviceId,
+      alg: "EdDSA",
+      key: newDeviceKey.multibase,
+    };
+    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    const challengeTranscript = {
+      transaction_id: `unverified-${newDeviceId}`,
+      request_canonical_digest: `sha256:${"a".repeat(64)}`,
+      expires_at: expiresAt,
+    };
 
     const pairResp = await request.post(
       `${solandBaseUrl()}/_arkret/gate/account/device-pair`,
@@ -124,13 +216,21 @@ test.describe("multi-device pairing + revocation", () => {
         headers: authHeaders(token),
         data: {
           pairing_code: "7H2K9M4Q",
-          new_device_pubkey: {
-            kty: "OKP",
-            kid: newDeviceId,
-            alg: "EdDSA",
-            key: base64url(`pubkey:${newDeviceId}`),
-          },
-          challenge_signature: base64url(`challenge:${newDeviceId}`),
+          new_device_pubkey: newDevicePubkey,
+          challenge_proof: pairingChallengeProof({
+            publicKey: newDevicePubkey,
+            privateKey: newDeviceKey.privateKey,
+            pairingCode: "7H2K9M4Q",
+            gateAudience: solandBaseUrl(),
+            transcript: {
+              kind: "to_device",
+              transactionId: challengeTranscript.transaction_id,
+              requestCanonicalDigest:
+                challengeTranscript.request_canonical_digest,
+              expiresAt,
+            },
+          }),
+          challenge_transcript: challengeTranscript,
           display_name: "Alice laptop",
           device_metadata: {
             platform: "browser",
@@ -511,7 +611,10 @@ test.describe("multi-device pairing + revocation", () => {
     const device2Row = (body.devices ?? []).find(
       (device) => device.device_id === device2Id,
     );
-    expect(device2Row, `device2 row in viewer: ${JSON.stringify(body)}`).toBeTruthy();
+    expect(
+      device2Row,
+      `device2 row in viewer: ${JSON.stringify(body)}`,
+    ).toBeTruthy();
     expect(device2Row!.status).toBe("revoked");
   });
 
@@ -527,7 +630,11 @@ test.describe("multi-device pairing + revocation", () => {
     const device2Id = typedId("device");
     await issueDevSession(request, alice, { deviceId: device2Id });
 
-    const identity = await publishCrossSigningForUser(request, alice, device1Token);
+    const identity = await publishCrossSigningForUser(
+      request,
+      alice,
+      device1Token,
+    );
     await authorizeDeviceWithCrossSigning(
       request,
       alice,
@@ -562,7 +669,9 @@ test.describe("multi-device pairing + revocation", () => {
     expect(revokedRecord.device_status).toBe("revoked");
     expect(revokedRecord.device_signing_key).toBeUndefined();
     expect(revokedRecord.hpke_key).toBeUndefined();
-    expect(Object.keys((revokedRecord.algorithms as object) ?? {})).toHaveLength(0);
+    expect(
+      Object.keys((revokedRecord.algorithms as object) ?? {}),
+    ).toHaveLength(0);
   });
 
   test("revoking Device 2 retires its unconsumed one-time and last-resort KeyPackages so later claims fail closed", async ({
@@ -581,7 +690,11 @@ test.describe("multi-device pairing + revocation", () => {
       deviceId: device2Id,
     });
 
-    const identity = await publishCrossSigningForUser(request, alice, device1Token);
+    const identity = await publishCrossSigningForUser(
+      request,
+      alice,
+      device1Token,
+    );
     const device2Key = await authorizeDeviceWithCrossSigning(
       request,
       alice,
@@ -642,10 +755,11 @@ test.describe("multi-device pairing + revocation", () => {
       `KeyPackage claim after device revoke returned ${claim.status()}: ${JSON.stringify(claimBody)}`,
     ).toBeTruthy();
     expect(claimBody.claims ?? []).toEqual([]);
-    expect(claimBody.failures?.[0]?.reason_code).toBe("mls_keypackage_not_found");
+    expect(claimBody.failures?.[0]?.reason_code).toBe(
+      "mls_keypackage_not_found",
+    );
     expect(claimBody.available_count).toBe(0);
   });
-
 
   test("E10.4 a device cannot revoke itself (must be revoked from a peer device)", async ({
     request,
@@ -704,12 +818,7 @@ test.describe("multi-device pairing + revocation", () => {
     const device2Token = await issueDevSession(request, alice, {
       deviceId: device2Id,
     });
-    await promoteDeviceToVerified(
-      request,
-      alice,
-      device1Token,
-      alice.deviceId,
-    );
+    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
 
     // Device 1 (verified, first device) queues a to-device message for Device 2.
     const messageId = typedId("device_message");
@@ -884,7 +993,10 @@ test.describe("multi-device pairing + revocation", () => {
     );
     const changed = structuredClone(original);
     const changedTarget = (
-      changed.messages as Record<string, Record<string, Record<string, unknown>>>
+      changed.messages as Record<
+        string,
+        Record<string, Record<string, unknown>>
+      >
     )[alice.did][device2Id];
     (changedTarget.content as Record<string, unknown>).pairing_code = "135791";
     const send = (idempotencyKey: string, body: Record<string, unknown>) =>
@@ -906,13 +1018,18 @@ test.describe("multi-device pairing + revocation", () => {
 
     const requestConflict = await send(`request-1-${messageId}`, changed);
     expect(requestConflict.status()).toBe(409);
-    expect(wireErrCode(await requestConflict.json())).toBe("duplicate_conflict");
+    expect(wireErrCode(await requestConflict.json())).toBe(
+      "duplicate_conflict",
+    );
 
     const messageReplay = await send(`request-2-${messageId}`, original);
     expect(messageReplay.status()).toBe(200);
     expect(await messageReplay.json()).toEqual(firstBody);
 
-    const messageConflict = await send(`request-conflict-${messageId}`, changed);
+    const messageConflict = await send(
+      `request-conflict-${messageId}`,
+      changed,
+    );
     expect(messageConflict.status()).toBe(409);
     const conflictBody = await messageConflict.json();
     expect(wireErrCode(conflictBody)).toBe("duplicate_conflict");
@@ -923,13 +1040,19 @@ test.describe("multi-device pairing + revocation", () => {
     const firstCursor = firstDelta?.cursor;
     expect(typeof firstCursor).toBe("string");
     expect(
-      ((firstDelta?.to_device as { messages?: Array<{ message_id?: string }> })?.messages ?? [])
-        .map((message) => message.message_id),
+      (
+        (firstDelta?.to_device as { messages?: Array<{ message_id?: string }> })
+          ?.messages ?? []
+      ).map((message) => message.message_id),
     ).toEqual([messageId]);
 
-    const cursorReplay = await accountSubscribeFramesApi(request, device2Token, {
-      after: firstCursor as string,
-    });
+    const cursorReplay = await accountSubscribeFramesApi(
+      request,
+      device2Token,
+      {
+        after: firstCursor as string,
+      },
+    );
     const replayDelta = cursorReplay.find((frame) => frame.kind === "delta");
     const replayDelivery = replayDelta?.to_device as
       | { messages?: Array<Record<string, unknown>>; ack_token?: string }
@@ -998,9 +1121,15 @@ test.describe("multi-device pairing + revocation", () => {
     const device = deviceFlow.page;
     try {
       await device.gotoHome();
-      await device.page.goto("/settings/devices", { waitUntil: "domcontentloaded" });
-      await expect(device.page.getByTestId("device-list")).toBeVisible({ timeout: 120_000 });
-      const badge = device.page.getByTestId("device-verification-badge").first();
+      await device.page.goto("/settings/devices", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(device.page.getByTestId("device-list")).toBeVisible({
+        timeout: 120_000,
+      });
+      const badge = device.page
+        .getByTestId("device-verification-badge")
+        .first();
       await expect(badge).toBeVisible({ timeout: 30_000 });
       // The shield carries a normalized state token for assertions, and the
       // current device for a freshly-enrolled dev account is one of the known
@@ -1059,12 +1188,10 @@ test.describe("multi-device pairing + revocation", () => {
       // the to-device inbox; the home shell mounts the global prompt.
       await device1.gotoHome();
 
-      const { pairingCode, requestingDeviceId, newDevicePublicKey } = await deliverPairingRequest(
-        request,
-        alice,
-        device1Headers,
-        { displayName: "Alice second browser" },
-      );
+      const { pairingCode, requestingDeviceId, newDevicePublicKey } =
+        await deliverPairingRequest(request, alice, device1Headers, {
+          displayName: "Alice second browser",
+        });
 
       // Device-1's background long-poll ingests the to-device request and the
       // global DevicePairApprovalPrompt pops. Give the cross-session sync a wide
@@ -1073,10 +1200,9 @@ test.describe("multi-device pairing + revocation", () => {
       await expect(modal).toBeVisible({
         timeout: 90_000,
       });
-      await expect(device1.page.getByTestId("device-pair-approval-code")).toHaveText(
-        pairingCode,
-        { timeout: 30_000 },
-      );
+      await expect(
+        device1.page.getByTestId("device-pair-approval-code"),
+      ).toHaveText(pairingCode, { timeout: 30_000 });
 
       await device1.page.getByTestId("device-pair-approval-approve").click();
 
@@ -1086,7 +1212,11 @@ test.describe("multi-device pairing + revocation", () => {
       await expect
         .poll(
           async () => {
-            return pollDeviceStatus(request, device1Headers, requestingDeviceId);
+            return pollDeviceStatus(
+              request,
+              device1Headers,
+              requestingDeviceId,
+            );
           },
           { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
         )
@@ -1099,7 +1229,9 @@ test.describe("multi-device pairing + revocation", () => {
         requestingDeviceId,
       );
       expect(pairedRecord.device_status).toBe("active");
-      expect(pairedRecord.device_signing_key).toBe(`did:key:${newDevicePublicKey}`);
+      expect(pairedRecord.device_signing_key).toBe(
+        `did:key:${newDevicePublicKey}`,
+      );
     } finally {
       await device1.close();
     }
@@ -1136,10 +1268,10 @@ test.describe("multi-device pairing + revocation", () => {
     // device authorization under this principal's selected cross-signing
     // model. Re-publishing a second model here would correctly fail closed.
     await expect
-      .poll(
-        () => pollDeviceStatus(request, device1Headers, alice.deviceId),
-        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
-      )
+      .poll(() => pollDeviceStatus(request, device1Headers, alice.deviceId), {
+        timeout: 30_000,
+        intervals: [500, 1_000, 2_000],
+      })
       .toBe("active");
     try {
       let ackAttempts = 0;
@@ -1160,20 +1292,19 @@ test.describe("multi-device pairing + revocation", () => {
         },
       );
       await device1.gotoHome();
-      const { messageId, pairingCode, requestingDeviceId } = await deliverPairingRequest(
-        request,
-        alice,
-        device1Headers,
-        { displayName: "Alice rejected browser" },
-      );
+      const { messageId, pairingCode, requestingDeviceId } =
+        await deliverPairingRequest(request, alice, device1Headers, {
+          displayName: "Alice rejected browser",
+        });
 
       const modal = device1.page.getByTestId("device-pair-approval-modal");
       await expect(modal).toBeVisible({ timeout: 90_000 });
-      await expect(device1.page.getByTestId("device-pair-approval-code")).toHaveText(
-        pairingCode,
-        { timeout: 30_000 },
-      );
-      await expect.poll(() => ackAttempts, { timeout: 30_000 }).toBeGreaterThan(0);
+      await expect(
+        device1.page.getByTestId("device-pair-approval-code"),
+      ).toHaveText(pairingCode, { timeout: 30_000 });
+      await expect
+        .poll(() => ackAttempts, { timeout: 30_000 })
+        .toBeGreaterThan(0);
 
       await device1.page.getByTestId("device-pair-approval-reject").click();
 
@@ -1193,9 +1324,9 @@ test.describe("multi-device pairing + revocation", () => {
       const queuedBody = (await stillQueued.json()) as {
         messages?: Array<{ message_id?: string }>;
       };
-      expect(queuedBody.messages?.map((message) => message.message_id)).toContain(
-        messageId,
-      );
+      expect(
+        queuedBody.messages?.map((message) => message.message_id),
+      ).toContain(messageId);
 
       reloading = true;
       await device1.page.reload({ waitUntil: "domcontentloaded" });
@@ -1258,12 +1389,10 @@ test.describe("multi-device pairing + revocation", () => {
     });
     try {
       await device1.gotoHome();
-      const { pairingCode, requestingDeviceId, newDevicePublicKey } = await deliverPairingRequest(
-        request,
-        alice,
-        device1Headers,
-        { displayName: "Alice card browser" },
-      );
+      const { pairingCode, requestingDeviceId, newDevicePublicKey } =
+        await deliverPairingRequest(request, alice, device1Headers, {
+          displayName: "Alice card browser",
+        });
 
       // The global prompt also mounts here. Hide it in this page only so the
       // settings-card path can approve the same pending inbox request.
@@ -1286,9 +1415,10 @@ test.describe("multi-device pairing + revocation", () => {
         .first();
       await device1.page.getByTestId("pending-pairing-refresh-button").click();
       await expect(requestRow).toBeVisible({ timeout: 90_000 });
-      await expect(
-        requestRow.getByTestId("pending-pairing-code"),
-      ).toHaveText(pairingCode, { timeout: 15_000 });
+      await expect(requestRow.getByTestId("pending-pairing-code")).toHaveText(
+        pairingCode,
+        { timeout: 15_000 },
+      );
 
       await requestRow.getByTestId("approve-pairing-request-button").click();
 
@@ -1306,7 +1436,9 @@ test.describe("multi-device pairing + revocation", () => {
         requestingDeviceId,
       );
       expect(pairedRecord.device_status).toBe("active");
-      expect(pairedRecord.device_signing_key).toBe(`did:key:${newDevicePublicKey}`);
+      expect(pairedRecord.device_signing_key).toBe(
+        `did:key:${newDevicePublicKey}`,
+      );
     } finally {
       await device1.close();
     }
@@ -1330,17 +1462,19 @@ test.describe("multi-device pairing + revocation", () => {
     // 1) New device stages its key (unauthenticated — no auth header).
     const device2Id = typedId("device");
     const device2Key = deviceVerifyKeyMultibase();
+    const device2Pubkey: PairingPublicKey = {
+      kty: "OKP",
+      kid: device2Id,
+      alg: "EdDSA",
+      key: device2Key.multibase,
+    };
+    const clientNonce = base64url(`client-nonce:${device2Id}`);
     const stage = await request.post(
       `${solandBaseUrl()}/_arkret/open/device-pairing/requests`,
       {
         data: {
-          new_device_pubkey: {
-            kty: "OKP",
-            kid: device2Id,
-            alg: "EdDSA",
-            key: device2Key.multibase,
-          },
-          challenge_signature: base64url(`challenge:${device2Id}`),
+          new_device_pubkey: device2Pubkey,
+          client_nonce: clientNonce,
           display_name: "Alice short-link browser",
           device_metadata: { platform: "browser" },
         },
@@ -1350,9 +1484,13 @@ test.describe("multi-device pairing + revocation", () => {
     const staged = (await stage.json()) as {
       device_pairing_request_id: string;
       pairing_code: string;
+      gate_audience: string;
+      server_nonce: string;
       expires_at: string;
     };
-    expect(staged.device_pairing_request_id).toMatch(/^device_pairing_request:/);
+    expect(staged.device_pairing_request_id).toMatch(
+      /^device_pairing_request:/,
+    );
     expect(staged.pairing_code).toBeTruthy();
 
     const token = Buffer.from(
@@ -1394,12 +1532,28 @@ test.describe("multi-device pairing + revocation", () => {
       device_pairing_request_id: string;
       pairing_code: string;
       new_device_pubkey: { kid: string; key: string; public_key?: string };
-      challenge_signature: string;
+      client_nonce: string;
+      gate_audience: string;
+      server_nonce: string;
+      expires_at: string;
     };
     expect(bootstrap.new_device_pubkey.kid).toBe(device2Id);
     expect(bootstrap.new_device_pubkey.key).toBe(device2Key.multibase);
     expect(bootstrap.new_device_pubkey.public_key).toBeUndefined();
     expect(bootstrap.pairing_code).toBe(staged.pairing_code);
+    const challengeProof = pairingChallengeProof({
+      publicKey: device2Pubkey,
+      privateKey: device2Key.privateKey,
+      pairingCode: bootstrap.pairing_code,
+      gateAudience: bootstrap.gate_audience,
+      transcript: {
+        kind: "server",
+        clientNonce: bootstrap.client_nonce,
+        requestId: bootstrap.device_pairing_request_id,
+        serverNonce: bootstrap.server_nonce,
+        expiresAt: bootstrap.expires_at,
+      },
+    });
 
     // 5) Status before approval is pending.
     const pending = await request.post(
@@ -1426,7 +1580,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: {
           pairing_code: wrongCode,
           new_device_pubkey: bootstrap.new_device_pubkey,
-          challenge_signature: bootstrap.challenge_signature,
+          challenge_proof: challengeProof,
           device_pairing_request_id: bootstrap.device_pairing_request_id,
         },
       },
@@ -1448,7 +1602,7 @@ test.describe("multi-device pairing + revocation", () => {
         data: {
           pairing_code: bootstrap.pairing_code,
           new_device_pubkey: bootstrap.new_device_pubkey,
-          challenge_signature: bootstrap.challenge_signature,
+          challenge_proof: challengeProof,
           display_name: "Alice short-link browser",
           device_metadata: { platform: "browser" },
           device_pairing_request_id: bootstrap.device_pairing_request_id,
@@ -1540,11 +1694,7 @@ async function promoteDeviceToVerified(
     kind: "ak.cross_signing.publish",
     payload: buildCrossSigningPublishPayload(identity),
   });
-  await alignEventToActorFrontier(
-    request,
-    headersSource,
-    publishEnvelope,
-  );
+  await alignEventToActorFrontier(request, headersSource, publishEnvelope);
   const publish = await request.post(eventsUrl, {
     headers: selfPathHeaders(headersSource, "POST", eventsUrl),
     data: publishEnvelope,
@@ -1588,11 +1738,7 @@ async function promoteDeviceToVerified(
       cross_signing_binding: binding,
     },
   });
-  await alignEventToActorFrontier(
-    request,
-    headersSource,
-    authorizeEnvelope,
-  );
+  await alignEventToActorFrontier(request, headersSource, authorizeEnvelope);
   const authorize = await request.post(eventsUrl, {
     headers: selfPathHeaders(headersSource, "POST", eventsUrl),
     data: authorizeEnvelope,
@@ -1672,13 +1818,37 @@ async function deliverPairingRequest(
   const pairingCode = "7H2K9M4Q";
   const transactionId = `ak.key.verification.request:${requestingDeviceId}`;
   const newDeviceKey = deviceVerifyKeyMultibase();
-  const newDevicePubkey = {
+  const newDevicePubkey: PairingPublicKey = {
     kty: "OKP",
     kid: requestingDeviceId,
     alg: "EdDSA",
-    public_key: newDeviceKey.multibase,
+    key: newDeviceKey.multibase,
   };
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  const requestCanonicalDigest = `sha256:${createHash("sha256")
+    .update(
+      canonicalBytes({
+        pairing_code: pairingCode,
+        new_device_pubkey: newDevicePubkey,
+        device_metadata: {
+          platform: "browser",
+          display_name: opts.displayName ?? "New device",
+        },
+      }),
+    )
+    .digest("hex")}`;
+  const challengeProof = pairingChallengeProof({
+    publicKey: newDevicePubkey,
+    privateKey: newDeviceKey.privateKey,
+    pairingCode,
+    gateAudience: solandBaseUrl(),
+    transcript: {
+      kind: "to_device",
+      transactionId,
+      requestCanonicalDigest,
+      expiresAt,
+    },
+  });
   const sendResp = await request.post(
     `${solandBaseUrl()}/_arkret/self/device_messages`,
     {
@@ -1703,7 +1873,12 @@ async function deliverPairingRequest(
                 purpose: "same_principal_device_authorization",
                 pairing_code: pairingCode,
                 new_device_pubkey: newDevicePubkey,
-                challenge_signature: base64url(`challenge:${requestingDeviceId}`),
+                challenge_proof: challengeProof,
+                challenge_transcript: {
+                  transaction_id: transactionId,
+                  request_canonical_digest: requestCanonicalDigest,
+                  expires_at: expiresAt,
+                },
                 device_metadata: {
                   platform: "browser",
                   display_name: opts.displayName ?? "New device",
@@ -1795,30 +1970,30 @@ async function authorizeDeviceWithCrossSigning(
     request,
     token,
     signedEventEnvelope({
-        actorDid: user.did,
-        realmId,
-        kind: "ak.device.authorize",
-        payload: {
-          principal_id: user.did,
-          device_id: deviceId,
-          device_public_key: deviceKey.multibase,
-          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
-          algorithms: TEST_DEVICE_ALGORITHMS,
-          device_key_algorithm: "EdDSA",
-          device_signature: deviceAuthorizeSignature({
-            identity,
-            principalId: user.did,
-            deviceId,
-            devicePublicKeyMultibase: deviceKey.multibase,
-            authorizedBy: user.deviceId,
-            notBefore: authorizeNotBefore,
-            privateKey: deviceKey.privateKey,
-          }),
-          authorized_by: user.deviceId,
-          not_before: authorizeNotBefore,
-          cross_signing_binding: binding,
-        },
-      }),
+      actorDid: user.did,
+      realmId,
+      kind: "ak.device.authorize",
+      payload: {
+        principal_id: user.did,
+        device_id: deviceId,
+        device_public_key: deviceKey.multibase,
+        hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+        algorithms: TEST_DEVICE_ALGORITHMS,
+        device_key_algorithm: "EdDSA",
+        device_signature: deviceAuthorizeSignature({
+          identity,
+          principalId: user.did,
+          deviceId,
+          devicePublicKeyMultibase: deviceKey.multibase,
+          authorizedBy: user.deviceId,
+          notBefore: authorizeNotBefore,
+          privateKey: deviceKey.privateKey,
+        }),
+        authorized_by: user.deviceId,
+        not_before: authorizeNotBefore,
+        cross_signing_binding: binding,
+      },
+    }),
     { context: `authorize device ${deviceId}` },
   );
   return deviceKey;
