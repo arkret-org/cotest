@@ -50,7 +50,7 @@ use arkret_models_identity::artifacts_device_identity::{
     CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
-use arkret_wire::{Base64UrlString, DidUrl, NonEmptyString};
+use arkret_wire::{Base64UrlString, DidUrl, NonEmptyString, OpaqueLocalId};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
@@ -100,6 +100,10 @@ fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
 
 fn did_url(value: impl Into<String>) -> Result<DidUrl> {
     DidUrl::new(value).map_err(anyhow::Error::msg)
+}
+
+fn opaque_local_id(value: impl Into<String>) -> Result<OpaqueLocalId> {
+    OpaqueLocalId::new(value).map_err(anyhow::Error::msg)
 }
 
 fn base64_url(value: impl Into<String>) -> Result<Base64UrlString> {
@@ -1271,7 +1275,7 @@ async fn pause_agent_runtime<P: PairingOutcome>(
         agent_id.clone(),
         Did::new(ALICE_DID.to_owned())?,
         realm_id.clone(),
-        pairing.controller_authorization_ref(),
+        did_url(pairing.controller_authorization_ref())?,
         Some("runtime_replacement".to_owned()),
         actor_seq,
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
@@ -1323,7 +1327,7 @@ async fn resume_agent_runtime<P: PairingOutcome>(
         agent_id.clone(),
         Did::new(ALICE_DID.to_owned())?,
         realm_id.clone(),
-        pairing.controller_authorization_ref(),
+        did_url(pairing.controller_authorization_ref())?,
         None,
         actor_seq,
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
@@ -2183,7 +2187,7 @@ fn runtime_key_request_builder<'a, P: PairingOutcome>(
             arkret_base_url: server.base_url().to_string(),
             service_id,
             agent_id: provisioned.agent_id().clone(),
-            pairing_request_id: provisioned.pairing_request_id().to_owned(),
+            pairing_request_id: opaque_local_id(provisioned.pairing_request_id())?,
             pairing_code,
             pairing_expires_at: provisioned.expires_at(),
         },
@@ -2312,8 +2316,8 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
             .map_err(|reason| anyhow!(reason.as_str()))?;
     let authorize_payload = arkret::AgentKeyAuthorizePayload {
         agent_id: agent_id.clone(),
-        key_id: verification_method.clone(),
-        verification_method: verification_method.clone(),
+        key_id: non_empty(verification_method.clone())?,
+        verification_method: did_url(verification_method.clone())?,
         public_key_digest: runtime_public_key_digest,
         signing_key_binding_digest,
         accountable_principal_id: controller_id.clone(),
@@ -2325,7 +2329,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
             kind: arkret::AgentKeyApprovalEvidenceKind::PairingRequest,
             evidence_ref: None,
             request_canonical_digest: Some(pairing_binding_digest),
-            pairing_request_id: Some(pairing_request_id.to_owned()),
+            pairing_request_id: Some(opaque_local_id(pairing_request_id)?),
             approved_by: Some(controller_id.clone()),
         },
         supersedes: bearer_sdk_client(server, token)?
@@ -2365,7 +2369,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         provisioned.principal_control_realm_id().clone(),
         agent_id.clone(),
         controller_id.clone(),
-        provisioned.controller_authorization_ref(),
+        did_url(provisioned.controller_authorization_ref())?,
         actor_seq,
         arkret::Hlc::new(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff))?,
     )?;
