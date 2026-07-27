@@ -197,9 +197,7 @@ test.describe("media token exchange", () => {
   });
 });
 
-async function setupMediaCall(
-  request: APIRequestContext,
-): Promise<{
+async function setupMediaCall(request: APIRequestContext): Promise<{
   alice: JointUser;
   aliceToken: string;
   realmId: string;
