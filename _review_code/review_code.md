@@ -509,11 +509,34 @@ selection failures.
 ## 2026-07-27 Realm founding grant rejected by live HTTP tests
 
 - Severity: P1
-- Status: open; independent of the accountability scope-set subject change.
+- Status: resolved.
 - Evidence: all four `tests/account_subscribe_long_poll.rs` cases fail during
   their Realm bootstrap setup with `invalid_realm_founding_grant`.
 - Isolation: rebuilding the sibling Soland executable does not change the
   result; the 149 Cotest library/conformance tests, including the new
   accountability vector, pass.
-- Follow-up dimension: audit the Realm bootstrap Event-to-Operation projection
-  and founding capability reducer independently of accountability addressing.
+- Root cause: the harness duplicated an obsolete three-action founding grant
+  and omitted the registry-derived Realm-create effects. It also modeled invite
+  acceptance as a raw member-state write instead of the canonical
+  `ak.invite.accept` Control Move.
+- Resolution: bootstrap now consumes the SDK founding-action constant and
+  derives Realm/invite effects through the canonical builders; invite flows
+  carry the accepted Seal basis and atomic invite/member transitions.
+- Verification: `cargo test --workspace --quiet` passed after rebasing the
+  closed-contract SDK and Soland changes.
+
+## 2026-07-27 Realm singleton media fixtures used the removed Realm-id subject
+
+- Severity: P1
+- Status: resolved in Soland and Cotest.
+- Evidence: the live media-token and moderation regressions initially failed
+  after canonical writers stored `ak.component.realm.media_service.v1:null`;
+  the consumer and server fixtures still queried
+  `ak.component.realm.media_service.v1:<realm_id>`.
+- Resolution: Realm-singleton reads now use the canonical null-subject CellRef
+  plus an independent Realm namespace key. Tests prove two Realms cannot see
+  each other's singleton value and that a legacy global null-subject value is
+  never used as a cross-Realm fallback. The browser assertion also uses the
+  canonical `backend_kind` response field.
+- Verification: Soland `devices_webrtc` passed 18/18, the complete Soland
+  workspace passed, and joint E2E media-token plus durable-ban targeting passed.
