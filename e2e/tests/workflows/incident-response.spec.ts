@@ -302,9 +302,15 @@ test.describe("workflow: incident response", () => {
       await expect(commanderPage.page.getByTestId("chat-status")).toContainText(
         /public update blocked|public_update_blocked|Message send failed/i,
       );
-      await expect(
-        commanderPage.page.getByTestId("message-list"),
-      ).not.toContainText(blocked);
+      const blockedRow = commanderPage.timelineEvent(blocked);
+      await expect(blockedRow).toBeVisible();
+      await expect(blockedRow.getByTestId("message-send-status")).toHaveAttribute(
+        "title",
+        "Message send failed",
+      );
+      await expect(blockedRow.getByTestId("chat-message-error")).toContainText(
+        "public_update_blocked",
+      );
 
       const safe = `SEV-1 public update: checkout latency is recovering ${stamp}`;
       await commanderPage.sendTimelineMessage(realmId, safe);

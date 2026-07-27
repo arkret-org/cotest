@@ -1206,7 +1206,7 @@ test.describe("MLS group encryption", () => {
       actorDid: alice.did,
       realmId,
       kind: "ak.mls.commit",
-      payload: commitPayload(`opaque-stale-commit-${stamp}`),
+      payload: commitPayload(`opaque-commit-${stamp}`),
     });
     await alignSignedEventToActorFrontierApi(
       request,
@@ -1220,12 +1220,9 @@ test.describe("MLS group encryption", () => {
         data: staleCommitEnvelope,
       },
     );
-    expect(staleCommit.status()).toBe(200);
+    expect(staleCommit.status()).toBe(412);
     const staleCommitBody = await staleCommit.json();
-    expect(staleCommitBody.accepted ?? []).not.toContain(
-      staleCommitEnvelope.event_id,
-    );
-    expect(staleCommitBody.rejected?.[0]?.reason_code).toBe("mls_epoch_skew");
+    expect(wireErrCode(staleCommitBody)).toBe("mls_epoch_skew");
   });
 
   test("joined member decrypts E2EE timeline messages; raw event payload stays ciphertext only", async ({
