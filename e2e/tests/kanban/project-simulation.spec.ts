@@ -52,7 +52,10 @@ type SpaceProjectionRow = {
   state: string;
 };
 
-async function addCardThroughColumn(column: Locator, title: string): Promise<void> {
+async function addCardThroughColumn(
+  column: Locator,
+  title: string,
+): Promise<void> {
   const titleInput = column.getByTestId("new-card-title-input").last();
   if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
     const addButton = column.getByTestId("add-card-button").last();
@@ -311,7 +314,11 @@ test.describe("project simulation", () => {
       await alicePage.gotoRealmAdmin(realmId);
       await stepShot(alicePage.page, testInfo, "A-team-joined");
     } finally {
-      await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        carolPage.close(),
+        bobPage.close(),
+        alicePage.close(),
+      ]);
     }
   });
 
@@ -340,32 +347,33 @@ test.describe("project simulation", () => {
     });
     await acceptInviteViaApi(request, bobToken, bob.did, realmId);
 
-    const { cardId } = await createBoardWithCard(request, aliceToken, alice.did, realmId, {
-      boardTitle: `S16 Board ${stamp}`,
-      listTitle: `Todo ${stamp}`,
-      cardTitle: `Implement login ${stamp}`,
-    });
+    const { cardId } = await createBoardWithCard(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      {
+        boardTitle: `S16 Board ${stamp}`,
+        listTitle: `Todo ${stamp}`,
+        cardTitle: `Implement login ${stamp}`,
+      },
+    );
 
+    const relationId = typedId("relation");
     const assignment = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
       kind: "ak.relation.create",
       payload: {
+        relation_id: relationId,
         kind: "assigned_to",
         from_ref: cardId,
         to_ref: bob.did,
       },
     });
-    const relationId = String(assignment.event_id).replace(
-      /^ak:event:/,
-      "ak:relation:",
-    );
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      assignment,
-      { context: "assign Card 1 to bob" },
-    );
+    await submitSignedEventApi(request, aliceToken, assignment, {
+      context: "assign Card 1 to bob",
+    });
 
     // bob reads the Realm's strands and finds himself on Card 1.
     const row = await readStrandRow(request, bobToken, realmId, cardId);
@@ -373,154 +381,160 @@ test.describe("project simulation", () => {
     expect(row?.assigned_actor_ids ?? []).toContain(bob.did);
     expect(
       (row?.assigned_to_relations ?? []).some(
-        (relation) => relation.actor_id === bob.did && relation.relation_id === relationId,
+        (relation) =>
+          relation.actor_id === bob.did && relation.relation_id === relationId,
       ),
       "assigned_to relation surfaces with bob's actor + relation id",
     ).toBe(true);
   });
 
-  test(
-    "status FSM: Card transitions todo → in_progress → done via ak.strand.update; invalid transition (todo → done direct) rejected by FSM cell",
-    async ({ request }) => {
-      const alice = uniqueUser("s16-fsm-alice");
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const realmId = await createRealmApi(request, aliceToken, {
-        title: `S16 FSM ${Date.now()}`,
-        ownerDid: alice.did,
-      });
-      const taskStrandId = typedId("strand");
-      const incidentStrandId = typedId("strand");
-      const taskCreatedAt = canonicalTimestamp();
+  test("status FSM: Card transitions todo → in_progress → done via ak.strand.update; invalid transition (todo → done direct) rejected by FSM cell", async ({
+    request,
+  }) => {
+    const alice = uniqueUser("s16-fsm-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S16 FSM ${Date.now()}`,
+      ownerDid: alice.did,
+    });
+    const taskStrandId = typedId("strand");
+    const incidentStrandId = typedId("strand");
+    const taskCreatedAt = canonicalTimestamp();
 
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: realmId,
-          kind: "ak.strand.create",
-          createdAt: taskCreatedAt,
-          payload: {
-            object: {
-              id: taskStrandId,
-              schema: "ak.schema.strand.v1",
-              realm_id: realmId,
-              metadata: {
-                title: "Implement login",
-                fields: { status: "todo" },
-              },
-              stage: "planned",
-              tracks: { discussion: { enabled: true, is_primary: true } },
-              created_by: alice.did,
-              created_at: taskCreatedAt,
-            },
-          },
-        }),
-        { context: "create todo card strand" },
-      );
-
-      const badDoneEvent = signedEventEnvelope({
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
         actorDid: alice.did,
-        realmId,
+        realmId: realmId,
+        kind: "ak.strand.create",
+        createdAt: taskCreatedAt,
+        payload: {
+          object: {
+            id: taskStrandId,
+            schema: "ak.schema.strand.v1",
+            realm_id: realmId,
+            metadata: {
+              title: "Implement login",
+              fields: { status: "todo" },
+            },
+            stage: "planned",
+            tracks: { discussion: { enabled: true, is_primary: true } },
+            created_by: alice.did,
+            created_at: taskCreatedAt,
+          },
+        },
+      }),
+      { context: "create todo card strand" },
+    );
+
+    const badDoneEvent = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.strand.update",
+      payload: {
+        target_ref: taskStrandId,
+        patch: { metadata: { fields: { status: "done" } } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(request, aliceToken, badDoneEvent);
+    const badDone = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
+        headers: authHeaders(aliceToken),
+        data: badDoneEvent,
+      },
+    );
+    expect(badDone.status()).toBe(412);
+    expect(wireErrCode(await badDone.json())).toBe(
+      "strand_status_transition_invalid",
+    );
+
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: realmId,
+        kind: "ak.strand.update",
+        payload: {
+          target_ref: taskStrandId,
+          patch: { metadata: { fields: { status: "in_progress" } } },
+        },
+      }),
+      { context: "advance card to in_progress" },
+    );
+
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: realmId,
         kind: "ak.strand.update",
         payload: {
           target_ref: taskStrandId,
           patch: { metadata: { fields: { status: "done" } } },
         },
-      });
-      await alignSignedEventToActorFrontierApi(
-        request,
-        aliceToken,
-        badDoneEvent,
-      );
-      const badDone = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: badDoneEvent,
-      });
-      expect(badDone.status()).toBe(412);
-      expect(wireErrCode(await badDone.json())).toBe("strand_status_transition_invalid");
+      }),
+      { context: "advance card to done" },
+    );
 
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: realmId,
-          kind: "ak.strand.update",
-          payload: {
-            target_ref: taskStrandId,
-            patch: { metadata: { fields: { status: "in_progress" } } },
-          },
-        }),
-        { context: "advance card to in_progress" },
-      );
-
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: realmId,
-          kind: "ak.strand.update",
-          payload: {
-            target_ref: taskStrandId,
-            patch: { metadata: { fields: { status: "done" } } },
-          },
-        }),
-        { context: "advance card to done" },
-      );
-
-      const incidentCreatedAt = canonicalTimestamp();
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: realmId,
-          kind: "ak.strand.create",
-          createdAt: incidentCreatedAt,
-          payload: {
-            object: {
-              id: incidentStrandId,
-              schema: "ak.schema.strand.v1",
-              realm_id: realmId,
-              metadata: {
-                title: "SEV-2 checkout outage",
-                fields: { status: "investigating" },
-              },
-              stage: "in_progress",
-              tracks: { discussion: { enabled: true, is_primary: true } },
-              created_by: alice.did,
-              created_at: incidentCreatedAt,
-            },
-          },
-        }),
-        { context: "create investigating incident strand" },
-      );
-
-      const badResolvedEvent = signedEventEnvelope({
+    const incidentCreatedAt = canonicalTimestamp();
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
         actorDid: alice.did,
-        realmId,
-        kind: "ak.strand.update",
+        realmId: realmId,
+        kind: "ak.strand.create",
+        createdAt: incidentCreatedAt,
         payload: {
-          target_ref: incidentStrandId,
-          patch: { metadata: { fields: { status: "resolved" } } },
+          object: {
+            id: incidentStrandId,
+            schema: "ak.schema.strand.v1",
+            realm_id: realmId,
+            metadata: {
+              title: "SEV-2 checkout outage",
+              fields: { status: "investigating" },
+            },
+            stage: "in_progress",
+            tracks: { discussion: { enabled: true, is_primary: true } },
+            created_by: alice.did,
+            created_at: incidentCreatedAt,
+          },
         },
-      });
-      await alignSignedEventToActorFrontierApi(
-        request,
-        aliceToken,
-        badResolvedEvent,
-      );
-      const badResolved = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      }),
+      { context: "create investigating incident strand" },
+    );
+
+    const badResolvedEvent = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.strand.update",
+      payload: {
+        target_ref: incidentStrandId,
+        patch: { metadata: { fields: { status: "resolved" } } },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      badResolvedEvent,
+    );
+    const badResolved = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
         headers: authHeaders(aliceToken),
         data: badResolvedEvent,
-      });
-      expect(badResolved.status()).toBe(412);
-      expect(wireErrCode(await badResolved.json())).toBe("strand_status_transition_invalid");
-    },
-  );
+      },
+    );
+    expect(badResolved.status()).toBe(412);
+    expect(wireErrCode(await badResolved.json())).toBe(
+      "strand_status_transition_invalid",
+    );
+  });
 
   test("due_date past today renders as overdue badge on the card UI", async ({
     browser,
@@ -532,7 +546,11 @@ test.describe("project simulation", () => {
     // renders the overdue badge; an unscheduled Card does not.
     test.setTimeout(180_000);
     const stamp = Date.now();
-    const aliceFlow = await openDpopUserPage(browser, request, "s16-overdue-alice");
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      "s16-overdue-alice",
+    );
     if (!aliceFlow) {
       assertJointStackNotRequired("kanban overdue DPoP login");
       test.skip(true, "coauth DPoP session-grant login is unavailable");
@@ -553,14 +571,20 @@ test.describe("project simulation", () => {
       // A past due_date (2020-01-01 is unambiguously before today) and a card
       // with no due_date, both placed on the same board so the kanban view
       // renders them side by side.
-      await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.goto(`/kanban/${realmId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({
+        timeout: 120_000,
+      });
       await alicePage.page.getByTestId("new-board-toggle").click();
       await alicePage.page
         .getByTestId("new-board-title-input")
         .fill(`Overdue Board ${stamp}`);
       await alicePage.page.getByTestId("create-board-space-button").click();
-      await expect(alicePage.page.getByTestId("kanban-empty-board")).toBeVisible({
+      await expect(
+        alicePage.page.getByTestId("kanban-empty-board"),
+      ).toBeVisible({
         timeout: 45_000,
       });
 
@@ -574,7 +598,9 @@ test.describe("project simulation", () => {
       await expect(column).toBeVisible({ timeout: 45_000 });
       for (const title of [overdueTitle, onTrackTitle]) {
         await addCardThroughColumn(column, title);
-        await expect(column.getByTestId("kanban-card").filter({ hasText: title })).toBeVisible({
+        await expect(
+          column.getByTestId("kanban-card").filter({ hasText: title }),
+        ).toBeVisible({
           timeout: 45_000,
         });
       }
@@ -588,7 +614,9 @@ test.describe("project simulation", () => {
       await expect(detail).toBeVisible({ timeout: 45_000 });
       await detail.getByRole("button", { name: "Add due date" }).click();
       const duePicker = detail.getByTestId("card-detail-due-picker");
-      await duePicker.getByTestId("card-detail-due-inline-input").fill("2020-01-01");
+      await duePicker
+        .getByTestId("card-detail-due-inline-input")
+        .fill("2020-01-01");
       await duePicker.getByRole("button", { name: "Save" }).click();
       await expect(duePicker).toBeHidden({ timeout: 45_000 });
       await detail.getByTestId("card-detail-close-button").click();
@@ -598,13 +626,14 @@ test.describe("project simulation", () => {
         .filter({ hasText: overdueTitle })
         .first();
       await expect(overdueCardAfterSave).toBeVisible({ timeout: 45_000 });
-      await expect(overdueCardAfterSave.getByTestId("kanban-card-overdue-badge")).toBeVisible({
+      await expect(
+        overdueCardAfterSave.getByTestId("kanban-card-overdue-badge"),
+      ).toBeVisible({
         timeout: 45_000,
       });
-      await expect(overdueCardAfterSave.getByTestId("kanban-card-due")).toHaveAttribute(
-        "data-overdue",
-        "true",
-      );
+      await expect(
+        overdueCardAfterSave.getByTestId("kanban-card-due"),
+      ).toHaveAttribute("data-overdue", "true");
       await stepShot(alicePage.page, testInfo, "A-overdue-badge");
 
       // The on-track card (no due_date) must NOT show the overdue badge.
@@ -613,7 +642,9 @@ test.describe("project simulation", () => {
         .filter({ hasText: onTrackTitle })
         .first();
       await expect(onTrackCard).toBeVisible({ timeout: 45_000 });
-      await expect(onTrackCard.getByTestId("kanban-card-overdue-badge")).toHaveCount(0);
+      await expect(
+        onTrackCard.getByTestId("kanban-card-overdue-badge"),
+      ).toHaveCount(0);
     } finally {
       await alicePage.close();
     }
@@ -639,13 +670,24 @@ test.describe("project simulation", () => {
       title: `S16 Conflict ${stamp}`,
       ownerDid: alice.did,
     });
-    await registerSingleAssigneeProfile(request, aliceToken, alice.did, realmId);
+    await registerSingleAssigneeProfile(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+    );
 
-    const { cardId } = await createBoardWithCard(request, aliceToken, alice.did, realmId, {
-      boardTitle: `Conflict Board ${stamp}`,
-      listTitle: `Todo ${stamp}`,
-      cardTitle: `Assign race ${stamp}`,
-    });
+    const { cardId } = await createBoardWithCard(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      {
+        boardTitle: `Conflict Board ${stamp}`,
+        listTitle: `Todo ${stamp}`,
+        cardTitle: `Assign race ${stamp}`,
+      },
+    );
 
     // Two concurrent assignments of the same Card to two different actors. The
     // single-assignee profile (max_to_per_from=1) forces a conflict; the
@@ -694,7 +736,9 @@ test.describe("project simulation", () => {
     });
 
     const winnerActor =
-      eventDigestOf(assignToAlice) > eventDigestOf(assignToBob) ? alice.did : bob.did;
+      eventDigestOf(assignToAlice) > eventDigestOf(assignToBob)
+        ? alice.did
+        : bob.did;
 
     const row = await readStrandRow(request, aliceToken, realmId, cardId);
     expect(row, "Card visible").toBeTruthy();
@@ -724,11 +768,17 @@ test.describe("project simulation", () => {
       title: `S16 Unassign ${stamp}`,
       ownerDid: alice.did,
     });
-    const { cardId } = await createBoardWithCard(request, aliceToken, alice.did, realmId, {
-      boardTitle: `Unassign Board ${stamp}`,
-      listTitle: `Todo ${stamp}`,
-      cardTitle: `Unassign me ${stamp}`,
-    });
+    const { cardId } = await createBoardWithCard(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      {
+        boardTitle: `Unassign Board ${stamp}`,
+        listTitle: `Todo ${stamp}`,
+        cardTitle: `Unassign me ${stamp}`,
+      },
+    );
 
     const relationId = typedId("relation");
     await submitSignedEventApi(
@@ -773,7 +823,12 @@ test.describe("project simulation", () => {
       { context: "unassign bob (ak.relation.tombstone)" },
     );
 
-    const unassigned = await readStrandRow(request, aliceToken, realmId, cardId);
+    const unassigned = await readStrandRow(
+      request,
+      aliceToken,
+      realmId,
+      cardId,
+    );
     expect(unassigned?.assigned_actor_ids ?? []).not.toContain(bob.did);
     expect(
       (unassigned?.assigned_to_relations ?? []).some(

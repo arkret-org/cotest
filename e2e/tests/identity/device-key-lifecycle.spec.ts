@@ -18,6 +18,7 @@ import {
   uniqueUser,
   type JointUserPage,
 } from "../../helpers/users";
+import { encodeEd25519PubkeyMultibase } from "../../helpers/encoding";
 
 type CapturedGrant = {
   jwt: string;
@@ -38,7 +39,10 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
     test.skip(!coauth, "coauth not started for this run");
     if (!optIn) {
       assertJointStackNotRequired("device key lifecycle real OIDC login");
-      test.skip(true, "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony");
+      test.skip(
+        true,
+        "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser login ceremony",
+      );
     }
 
     const envHandle = realOidcLoginHandle();
@@ -113,13 +117,21 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           cardTitle,
         );
         await addEncryptedDescription(page, cardTitle, cardDescription);
-        await assertCardDescription(jointPage, realmId, boardId, cardTitle, cardDescription);
+        await assertCardDescription(
+          jointPage,
+          realmId,
+          boardId,
+          cardTitle,
+          cardDescription,
+        );
         firstSignerDid = await currentSettingsSignerDid(page);
         firstSignerPublicKey = didKeyMultibase(firstSignerDid);
       });
 
       await test.step("new-device pairing advertises the device identity key, not the grant-binding key", async () => {
-        await page.goto("/settings/devices/pair", { waitUntil: "domcontentloaded" });
+        await page.goto("/settings/devices/pair", {
+          waitUntil: "domcontentloaded",
+        });
         await expect(page.getByTestId("pair-device-card")).toBeVisible({
           timeout: 120_000,
         });
@@ -128,10 +140,13 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         await expect(secret).toBeVisible({ timeout: 30_000 });
         const pairingLink = new URL(await secret.inputValue());
         expect(pairingLink.search).toBe("");
-        const pairingToken = new URLSearchParams(
-          pairingLink.hash.slice(1),
-        ).get("token");
-        expect(pairingToken, "pairing token must be carried in the URL fragment").toBeTruthy();
+        const pairingToken = new URLSearchParams(pairingLink.hash.slice(1)).get(
+          "token",
+        );
+        expect(
+          pairingToken,
+          "pairing token must be carried in the URL fragment",
+        ).toBeTruthy();
         const resolve = await request.post(
           new URL(
             "/_arkret/open/device-pairing/resolve",
@@ -141,11 +156,22 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         );
         expect(resolve.status(), await resolve.text()).toBe(200);
         const bootstrap = (await resolve.json()) as {
-          new_device_pubkey?: { key?: string; kid?: string; public_key?: string };
+          new_device_pubkey?: {
+            key?: string;
+            kid?: string;
+            public_key?: string;
+          };
         };
+        const pairingPublicKey = bootstrap.new_device_pubkey?.key;
         expect(
-          bootstrap.new_device_pubkey?.key,
+          pairingPublicKey,
           "pairing request must publish the device identity signing public key",
+        ).toBeTruthy();
+        expect(
+          encodeEd25519PubkeyMultibase(
+            Buffer.from(pairingPublicKey as string, "base64url"),
+          ),
+          "pairing request raw key must encode to the device identity signing multibase",
         ).toBe(firstSignerPublicKey);
         expect(
           bootstrap.new_device_pubkey?.key,
@@ -157,22 +183,26 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       await test.step("soft refresh preserves the grant-binding key and device signer", async () => {
         const refreshStartIndex = grants.count();
         await reloadWithSessionGrantExpiringSoon(page, activeGrant.jwt, 60);
-        await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+        await expect(page.getByTestId("client-shell")).toBeVisible({
+          timeout: 120_000,
+        });
         await expect(page.getByTestId("login-panel")).toHaveCount(0);
 
         const refreshedGrant = await refreshes.waitForLatest();
-        expect(refreshedGrant.jwt, "soft refresh must rotate the grant JWT").not.toBe(
-          activeGrant.jwt,
-        );
+        expect(
+          refreshedGrant.jwt,
+          "soft refresh must rotate the grant JWT",
+        ).not.toBe(activeGrant.jwt);
         expect(
           refreshedGrant.jkt,
           "soft refresh must keep the same grant-binding DPoP key",
         ).toBe(activeGrant.jkt);
         await grants.waitForDifferentAfter(activeGrant.jwt, refreshStartIndex);
         const signerAfterRefresh = await currentSettingsSignerDid(page);
-        expect(signerAfterRefresh, "soft refresh must not rotate the device event signer").toBe(
-          firstSignerDid,
-        );
+        expect(
+          signerAfterRefresh,
+          "soft refresh must not rotate the device event signer",
+        ).toBe(firstSignerDid);
         activeGrant = refreshedGrant;
       });
 
@@ -188,20 +218,28 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         activeGrant.jwt,
         reloginStartIndex,
       );
-      expect(secondGrant.jkt, "hard re-login must rotate the grant-bound DPoP key").not.toBe(
-        activeGrant.jkt,
-      );
+      expect(
+        secondGrant.jkt,
+        "hard re-login must rotate the grant-bound DPoP key",
+      ).not.toBe(activeGrant.jkt);
 
       await test.step("the durable device event signer survives the hard re-login", async () => {
         const secondSignerDid = await currentSettingsSignerDid(page);
-        expect(secondSignerDid, "event signer did:key should be stable across re-login").toBe(
-          firstSignerDid,
-        );
+        expect(
+          secondSignerDid,
+          "event signer did:key should be stable across re-login",
+        ).toBe(firstSignerDid);
       });
 
       await test.step("old encrypted content still decrypts and new events verify", async () => {
         await jointPage.completeRecoveryKeySetupIfPrompted(1_000);
-        await assertCardDescription(jointPage, realmId, boardId, cardTitle, cardDescription);
+        await assertCardDescription(
+          jointPage,
+          realmId,
+          boardId,
+          cardTitle,
+          cardDescription,
+        );
         await jointPage.sendTimelineMessage(realmId, postReloginMessage);
         await expect(jointPage.timelineEvent(postReloginMessage)).toBeVisible({
           timeout: 45_000,
@@ -293,7 +331,9 @@ function grantJkt(jwt: string): string | undefined {
   const parts = jwt.split(".");
   if (parts.length < 2) return undefined;
   try {
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8"),
+    );
     const jkt = payload?.cnf?.jkt;
     return typeof jkt === "string" && jkt.trim() ? jkt : undefined;
   } catch {
@@ -327,9 +367,13 @@ async function reloadWithSessionGrantExpiringSoon(
   );
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect
-    .poll(() => page.evaluate((key) => window.sessionStorage.getItem(key), resultKey), {
-      timeout: 30_000,
-    })
+    .poll(
+      () =>
+        page.evaluate((key) => window.sessionStorage.getItem(key), resultKey),
+      {
+        timeout: 30_000,
+      },
+    )
     .toBe("1");
 }
 
@@ -356,27 +400,49 @@ async function buildEncryptedBoardListCard(
 ): Promise<string> {
   const page = userPage.page;
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-  await userPage.clickWithPassivePromptRetry(page.getByTestId("new-board-toggle"));
-  await page.getByTestId("new-board-title-input").fill(boardTitle);
-  await userPage.clickWithPassivePromptRetry(page.getByTestId("create-board-space-button"));
-  await expect(page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
-    timeout: 45_000,
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+    timeout: 120_000,
   });
-  await expect.poll(() => page.url(), { timeout: 30_000 }).toContain("/board/ak:space:");
+  await userPage.clickWithPassivePromptRetry(
+    page.getByTestId("new-board-toggle"),
+  );
+  await page.getByTestId("new-board-title-input").fill(boardTitle);
+  await userPage.clickWithPassivePromptRetry(
+    page.getByTestId("create-board-space-button"),
+  );
+  await expect(page.getByTestId("kanban-empty-board")).toContainText(
+    /No lists yet/,
+    {
+      timeout: 45_000,
+    },
+  );
+  await expect
+    .poll(() => page.url(), { timeout: 30_000 })
+    .toContain("/board/ak:space:");
   const boardId = decodeURIComponent(
     new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
   );
   expect(boardId, `board id from url ${page.url()}`).toMatch(/^ak:space:/);
 
   await page.getByTestId("new-column-input").fill(listTitle);
-  await userPage.clickWithPassivePromptRetry(page.getByTestId("add-column-button"));
-  const column = page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+  await userPage.clickWithPassivePromptRetry(
+    page.getByTestId("add-column-button"),
+  );
+  const column = page
+    .getByTestId("kanban-column")
+    .filter({ hasText: listTitle })
+    .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
-  await userPage.clickWithPassivePromptRetry(column.getByTestId("add-card-button"));
+  await userPage.clickWithPassivePromptRetry(
+    column.getByTestId("add-card-button"),
+  );
   await column.getByTestId("new-card-title-input").fill(cardTitle);
-  await userPage.clickWithPassivePromptRetry(column.getByTestId("save-card-button"));
-  await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
+  await userPage.clickWithPassivePromptRetry(
+    column.getByTestId("save-card-button"),
+  );
+  await expect(
+    column.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+  ).toBeVisible({
     timeout: 45_000,
   });
   return boardId;
@@ -387,8 +453,14 @@ async function addEncryptedDescription(
   cardTitle: string,
   description: string,
 ): Promise<void> {
-  await page.getByTestId("kanban-card").filter({ hasText: cardTitle }).first().click();
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+  await page
+    .getByTestId("kanban-card")
+    .filter({ hasText: cardTitle })
+    .first()
+    .click();
+  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+    timeout: 45_000,
+  });
   await page.getByTestId("card-detail-tab-description").click();
   await page.getByTestId("card-detail-add-description-button").click();
 
@@ -398,7 +470,11 @@ async function addEncryptedDescription(
     const textarea = node as HTMLTextAreaElement;
     textarea.value = value;
     textarea.dispatchEvent(
-      new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }),
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: value,
+      }),
     );
   }, description);
 
@@ -420,9 +496,12 @@ async function addEncryptedDescription(
     (response.request().postData() ?? "").includes(description),
     "description leaked as plaintext into the encrypted realm wire",
   ).toBe(false);
-  await expect(page.getByTestId("card-description-panel")).toContainText(description, {
-    timeout: 120_000,
-  });
+  await expect(page.getByTestId("card-description-panel")).toContainText(
+    description,
+    {
+      timeout: 120_000,
+    },
+  );
   await page.getByTestId("card-detail-close-button").click();
 }
 
@@ -438,30 +517,42 @@ async function assertCardDescription(
     waitUntil: "domcontentloaded",
   });
   await dismissBlockingEncryptedPrompts(userPage);
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-  const card = page.getByTestId("kanban-card").filter({ hasText: cardTitle }).first();
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+    timeout: 120_000,
+  });
+  const card = page
+    .getByTestId("kanban-card")
+    .filter({ hasText: cardTitle })
+    .first();
   await expect(card).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByTestId("kanban-card-redacted").filter({ hasText: cardTitle })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByTestId("kanban-card-redacted").filter({ hasText: cardTitle }),
+  ).toHaveCount(0);
   // The encrypted-write backup prompt is scheduled asynchronously and can
   // appear after the page-level cleanup above. Use the bounded prompt-aware
   // click so a prompt racing this interaction is dismissed and retried.
   await userPage.clickWithPassivePromptRetry(card);
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+    timeout: 45_000,
+  });
   // The first accepted encrypted write can legitimately trigger the MLS
   // backup prompt after the earlier page-level prompt cleanup. Dismiss that
   // newly-created modal before interacting with the card detail underneath.
   await dismissBlockingEncryptedPrompts(userPage);
   await page.getByTestId("card-detail-tab-description").click();
-  await expect(page.getByTestId("card-description-panel")).toContainText(description, {
-    timeout: 120_000,
-  });
+  await expect(page.getByTestId("card-description-panel")).toContainText(
+    description,
+    {
+      timeout: 120_000,
+    },
+  );
   await expect(page.getByTestId("card-detail-body-locked")).toHaveCount(0);
   await page.getByTestId("card-detail-close-button").click();
 }
 
-async function dismissBlockingEncryptedPrompts(userPage: JointUserPage): Promise<void> {
+async function dismissBlockingEncryptedPrompts(
+  userPage: JointUserPage,
+): Promise<void> {
   await userPage.completeRecoveryKeySetupIfPrompted(500).catch(() => undefined);
   for (const testId of [
     "mls-backup-dismiss",
