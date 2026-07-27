@@ -510,7 +510,7 @@ function signedPackage(body) {
   const serviceId =
     body.service_id ?? `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
   const webhookAuth = body.webhook_auth ?? {
-    type: "http_message_signature",
+    kind: "http_message_signature",
     key_ref: `${serviceId}#applet-service-key`,
     accepted_algs: ["EdDSA"],
   };

@@ -302,6 +302,10 @@ test.describe("discovery", () => {
         alicePage.gotoTimelineRealm(presenceRealmId),
         bobPage.gotoTimelineRealm(presenceRealmId),
       ]);
+      // Alice's subscription is now established. Re-enter Bob's timeline so
+      // the browser emits a fresh heartbeat after that subscription instead of
+      // relying on a background-tab refresh timer.
+      await bobPage.gotoTimelineRealm(presenceRealmId);
 
       // A structurally valid envelope with a cryptographically invalid
       // detached signature must fail closed. Build the normal proof first,
@@ -342,14 +346,44 @@ test.describe("discovery", () => {
         error: { details: { reason_code: "proof_invalid" } },
       });
 
+      // Seed the observed online transition through the canonical endpoint
+      // after Alice's subscription is established. The browser heartbeat is
+      // deliberately fire-and-forget, so using the same registered device
+      // signer here gives this prerequisite an explicit acceptance boundary;
+      // the close/reopen assertions below still prove heartbeat expiry and the
+      // browser's first fresh heartbeat.
+      const onlineAt = new Date();
+      const onlineEnvelope = withBroadcastEphemeralProof({
+        kind: "ak.presence",
+        realm_id: presenceRealmId,
+        actor_id: bob.did,
+        device_id: bob.deviceId,
+        sent_at: onlineAt.toISOString(),
+        expires_at: new Date(onlineAt.getTime() + 30_000).toISOString(),
+        payload: {
+          realm_id: presenceRealmId,
+          actor_id: bob.did,
+          state: "online",
+          ttl_ms: 30_000,
+        },
+      });
+      const online = await request.post(ephemeralUrl, {
+        headers: selfPathHeadersForDpopSession(
+          bobSession.session,
+          "POST",
+          ephemeralUrl,
+        ),
+        data: onlineEnvelope,
+      });
+      expect(online.status(), await online.text()).toBe(200);
+
       const bobPresenceRow = alicePage.page.locator(
         `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,
       );
       await expect(bobPresenceRow).toHaveAttribute(
         "data-presence-state",
         "online",
-        // Bob's first heartbeat can precede Alice's subscription. The next
-        // canonical heartbeat is emitted at the 25-second refresh interval.
+        // The second navigation emits a canonical post-subscription heartbeat.
         { timeout: 30_000 },
       );
 

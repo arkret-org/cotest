@@ -2246,6 +2246,26 @@ try {
         exit 0
     }
 
+    # Serve an immutable, run-scoped copy of the verified Inkson bundle. A
+    # separately running `dx serve` watches the same repository and can replace
+    # target\dx\...\public in place with a dev build while a long joint-full run
+    # is active. Besides transient 404/MIME failures, that replacement drops the
+    # cotest-only session-injection feature and turns later browser failures into
+    # misleading "no session grant" cascades.
+    if ($willStartDefaultInkson) {
+        $inksonRuntimeRoot = Join-Path $jointDir "inkson-web"
+        New-Item -ItemType Directory -Path $inksonRuntimeRoot -Force | Out-Null
+        Copy-Item -Path (Join-Path $inksonStaticRoot "*") -Destination $inksonRuntimeRoot -Recurse -Force
+        $runtimeWasm = Join-Path $inksonRuntimeRoot "wasm\inkson_bg.wasm"
+        if (-not (Test-BinaryContainsAsciiMarker -Path $runtimeWasm -Marker "inkson.test.session_injection.v1")) {
+            throw "run-scoped inkson bundle lacks the wasm-localstorage-secrets-test marker: $runtimeWasm"
+        }
+        if (Test-BinaryContainsAsciiMarker -Path $runtimeWasm -Marker "/_dioxus") {
+            throw "run-scoped inkson bundle unexpectedly embeds Dioxus devtools: $runtimeWasm"
+        }
+        $inksonStaticRoot = $inksonRuntimeRoot
+    }
+
     # Start mock services first so coauth/soland configurations can reference them.
     $mocksRoot = Join-Path $repoRoot "e2e\mocks"
     if ($StartMockIdp) {

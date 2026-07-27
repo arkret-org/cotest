@@ -57,7 +57,29 @@ async function requestContact(
   if ((await dm.isChecked()) !== wantDm) await dm.click();
   if ((await inv.isChecked()) !== wantInvite) await inv.click();
   await actor.page.getByTestId("send-contact-request-button").click();
-  return actor.page.getByTestId("contact-request-status");
+  const status = actor.page.getByTestId("contact-request-status");
+  const pendingRow = actor.page.locator(
+    `[data-testid="contact-row"][data-peer="${targetDid}"]`,
+  );
+  await expect
+    .poll(
+      async () => {
+        const statusText = await status.textContent().catch(() => null);
+        if (statusText && /Request sent|请求已发送/.test(statusText)) {
+          return "submitted";
+        }
+        const state = await pendingRow.getAttribute("data-state").catch(() => null);
+        return state === "pending_outgoing" || state === "accepted"
+          ? "submitted"
+          : state ?? statusText;
+      },
+      {
+        timeout: 60_000,
+        message:
+          "contact request should either report success or appear in the refreshed contact projection",
+      },
+    )
+    .toBe("submitted");
 }
 
 async function expectContactState(

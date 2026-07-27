@@ -1370,7 +1370,9 @@ export async function completePendingPrincipalBootstrap(
   recoveryKey: string,
 ): Promise<void> {
   const pending = page.page.getByTestId("pending-principal-bootstrap");
-  const completed = page.page.getByTestId("onboarding-complete");
+  const completed = page.page
+    .getByTestId("onboarding-complete")
+    .or(page.page.getByRole("heading", { name: "You're all set" }));
   const retryableFailure = page.page
     .getByTestId("bootstrap-status")
     .filter({

@@ -60,14 +60,12 @@ export async function serverLoginViaCoauth(
       await approve.click();
     }
 
-    const authenticated = await expect(page)
-      .not.toHaveURL(/\/login(?:[?#]|$)/, { timeout: 60_000 })
+    const shell = page.getByTestId("client-shell");
+    const authenticated = await expect(shell)
+      .toBeVisible({ timeout: 60_000 })
       .then(() => true)
       .catch(() => false);
     if (authenticated) {
-      await expect(page.getByTestId("client-shell")).toBeVisible({
-        timeout: 30_000,
-      });
       await expect(page.getByTestId("login-panel")).toHaveCount(0);
       return;
     }

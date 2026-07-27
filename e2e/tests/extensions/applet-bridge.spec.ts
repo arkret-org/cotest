@@ -588,7 +588,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       namespace: `bridge.inbound.${stamp}`,
       capabilities: ["message:write"],
       webhook_auth: {
-        type: "http_message_signature",
+        kind: "http_message_signature",
         accepted_algs: ["EdDSA"],
       },
     });
@@ -815,7 +815,7 @@ async function signPackage(
       service_signing_public_jwk: servicePublicJwk,
       service_signing_private_jwk: serviceSigningKey.privateKey.export({ format: "jwk" }),
       webhook_auth: {
-        type: "http_message_signature",
+        kind: "http_message_signature",
         accepted_algs: ["EdDSA"],
         ...requestedWebhookAuth,
         key_ref: `${built.did}#applet-service-key`,
