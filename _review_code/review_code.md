@@ -540,3 +540,22 @@ selection failures.
   canonical `backend_kind` response field.
 - Verification: Soland `devices_webrtc` passed 18/18, the complete Soland
   workspace passed, and joint E2E media-token plus durable-ban targeting passed.
+
+## 2026-07-27 Device pairing mixed directory multibase with challenge-proof key bytes
+
+- Severity: P1
+- Status: resolved in Inkson, Soland, and Cotest.
+- Evidence: live short-link authorization returned
+  `failed_precondition/proof_invalid`; the staged `PublicKey.key` contained a
+  `z...` directory multibase value while the SDK challenge verifier requires
+  the raw 32-byte Ed25519 key encoded as unpadded base64url.
+- Resolution: Inkson now emits raw base64url for device-pairing wire objects
+  while retaining multibase for directory records. Soland rejects multibase at
+  the unauthenticated stage boundary, normalizes an accepted raw key to
+  multibase only when persisting the authorized device, and has regressions for
+  both boundaries. Cotest signs the server and to-device transcripts with the
+  same raw-key representation.
+- Verification: Inkson's signer encoding regression passed; Soland's stage and
+  storage-normalization regressions passed; joint E2E run `20260727-085210`
+  completed the server-mediated short-link flow; Inkson's browser pairing
+  feature test passed 1/1.
