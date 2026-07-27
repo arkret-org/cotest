@@ -13,6 +13,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
+import { acceptInviteViaApi } from "../../helpers/api";
 import {
   addRealmMemberApi,
   canonicalTimestamp,
@@ -468,7 +469,12 @@ test.describe("knock + application + cooldown", () => {
       invitees: [eve.user.did],
       ownerDid: alice.user.did,
     });
-    await addRealmMemberApi(request, alice.token, realmId, eve.user.did);
+    await acceptInviteViaApi(
+      request,
+      eve.token,
+      eve.user.did,
+      realmId,
+    );
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
     await submitKnockApi(request, bob.token, bob.user.did, realmId);

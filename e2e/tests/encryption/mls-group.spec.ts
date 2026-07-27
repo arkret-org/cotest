@@ -1220,8 +1220,12 @@ test.describe("MLS group encryption", () => {
         data: staleCommitEnvelope,
       },
     );
-    expect([409, 412, 422]).toContain(staleCommit.status());
-    expect(wireErrCode(await staleCommit.json())).toBe("mls_epoch_skew");
+    expect(staleCommit.status()).toBe(200);
+    const staleCommitBody = await staleCommit.json();
+    expect(staleCommitBody.accepted ?? []).not.toContain(
+      staleCommitEnvelope.event_id,
+    );
+    expect(staleCommitBody.rejected?.[0]?.reason_code).toBe("mls_epoch_skew");
   });
 
   test("joined member decrypts E2EE timeline messages; raw event payload stays ciphertext only", async ({

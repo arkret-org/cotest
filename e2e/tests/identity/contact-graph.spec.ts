@@ -417,12 +417,10 @@ test.describe("contact graph (same principal server)", () => {
     ).toBeFalsy();
   });
 
-  // S7: contact but holder revoked invite consent (consent revoke via
-  // tombstone, NOT block) -> peer pulls -> high-trust tier returns
-  // disclosed_outcome=blocked/quarantined (explicit feedback because the
-  // downgraded evidence is no longer high-trust, but the subject is not
-  // blocked so disclosure is not forced opaque).
-  test("S7 revoked invite consent -> high-trust pull returns explicit disclosed_outcome", async ({
+  // S7: revoked consent evidence is downgraded to explicit-address trust.
+  // Quarantine remains holder-private even when low-trust outcome disclosure
+  // is requested, so the sender receives only the deferred status.
+  test("S7 revoked invite consent is downgraded and quarantine remains opaque", async ({
     request,
   }) => {
     const alice = uniqueUser("cg-s7-alice");
@@ -473,9 +471,9 @@ test.describe("contact graph (same principal server)", () => {
       ownerDid: bob.did,
     });
 
-    // Opt alice into explicit low-trust feedback so the revoked-grant pull
-    // returns an explicit disclosed_outcome (spec §5.1 graded disclosure with
-    // low_trust=outcome).
+    // Opt alice into low-trust outcome disclosure. Quarantine remains an
+    // intentional exception: it is holder-private consent state and therefore
+    // never discloses whether the holder retained the invite.
     const policy = await getInviteReceivePolicyArkret(request, aliceToken);
     await setInviteReceivePolicyArkret(request, aliceToken, {
       ...policy,
@@ -492,9 +490,7 @@ test.describe("contact graph (same principal server)", () => {
       recipientServer: "default",
     });
     expect(delivery.status).toBe("deferred");
-    // With low_trust=outcome and explicit_address quarantine behavior, the
-    // explicit feedback is "quarantined" (or "blocked" if dropped).
-    expect(["quarantined", "blocked"]).toContain(delivery.disclosed_outcome);
+    expect(delivery.disclosed_outcome).toBeUndefined();
 
     // alice is not actually a member.
     const invites = await listAuthzInvitesArkret(request, aliceToken);

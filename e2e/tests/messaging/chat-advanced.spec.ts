@@ -820,22 +820,27 @@ test.describe("chat advanced", () => {
   }, testInfo) => {
     // spec: profiles-presence.md §3.5
     const stamp = Date.now();
-    const alice = uniqueUser("s14f-alice");
-    const bob = uniqueUser("s14f-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `s14f-alice-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, `s14f-bob-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([
+        aliceFlow?.page.close(),
+        bobFlow?.page.close(),
+      ]);
+      assertJointStackNotRequired("typing indicator DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const bob = bobFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -868,22 +873,26 @@ test.describe("chat advanced", () => {
   }, testInfo) => {
     // spec: profiles-presence.md §3.2-§3.4
     const stamp = Date.now();
-    const alice = uniqueUser("s14g-alice");
-    const bob = uniqueUser("s14g-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `s14g-alice-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
+      openDpopUserPage(browser, request, `s14g-bob-${stamp}`, {
+        prepareMlsDevice: false,
+      }),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-    });
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([
+        aliceFlow?.page.close(),
+        bobFlow?.page.close(),
+      ]);
+      assertJointStackNotRequired("presence propagation DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const bob = bobFlow.user;
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -901,11 +910,11 @@ test.describe("chat advanced", () => {
       const bobPresenceRow = alicePage.page.locator(
         `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,
       );
-      await expect(bobPresenceRow).toContainText(/online/i, { timeout: 1_000 });
+      await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "presence-online");
 
       await bobPage.close();
-      await expect(bobPresenceRow).toContainText(/offline|last seen/i, { timeout: 5_000 });
+      await expect(bobPresenceRow).toContainText(/offline|last seen/i, { timeout: 45_000 });
     } finally {
       await Promise.allSettled([alicePage.close()]);
     }

@@ -249,6 +249,7 @@ test.describe("workflow: sprint planning", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [meiFlow, bobFlow, carolFlow] = await Promise.all([
       openDpopUserPage(browser, request, "wf-sprint-kanban-mei"),

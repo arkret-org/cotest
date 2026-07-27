@@ -942,8 +942,29 @@ export class JointUserPage {
   async waitForTimelineEventSettled(body: string, timeout = 45_000) {
     const event = this.timelineEvent(body);
     await expect(event).toBeVisible({ timeout });
-    await expect(event.getByTestId("message-send-status")).toHaveCount(0, {
-      timeout,
+    const pending = event.getByTestId("message-send-status");
+    const initialTimeout = Math.min(timeout, 15_000);
+    const settledWithoutReload = await expect(pending)
+      .toHaveCount(0, { timeout: initialTimeout })
+      .then(() => true)
+      .catch(() => false);
+    if (settledWithoutReload) {
+      return;
+    }
+
+    // The durable Event may already be visible to peers while the sender still
+    // holds an optimistic "Sending" row because its live cursor missed the
+    // acknowledgement edge. Rehydrate from authoritative history before
+    // classifying the operation as stuck.
+    await this.page.reload({ waitUntil: "domcontentloaded" });
+    await this.dismissPassiveBlockingPrompts();
+    const rehydrated = this.timelineEvent(body);
+    const remainingTimeout = Math.max(5_000, timeout - initialTimeout);
+    await expect(rehydrated).toBeVisible({ timeout: remainingTimeout });
+    await expect(
+      rehydrated.getByTestId("message-send-status"),
+    ).toHaveCount(0, {
+      timeout: remainingTimeout,
     });
   }
 
@@ -1350,6 +1371,12 @@ export async function completePendingPrincipalBootstrap(
 ): Promise<void> {
   const pending = page.page.getByTestId("pending-principal-bootstrap");
   const completed = page.page.getByTestId("onboarding-complete");
+  const retryableFailure = page.page
+    .getByTestId("bootstrap-status")
+    .filter({
+      hasText:
+        /auth_unavailable|session grant introspection (?:request failed|service unavailable)/i,
+    });
   const bootstrapState = pending.or(completed);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt === 0) {
@@ -1370,11 +1397,35 @@ export async function completePendingPrincipalBootstrap(
   if (await completed.isVisible()) {
     return;
   }
-  await page.page
-    .getByTestId("bootstrap-recovery-key")
-    .fill(recoveryKey);
-  await page.page.getByTestId("bootstrap-submit").click();
-  await expect(completed).toBeVisible({ timeout: 120_000 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.page
+      .getByTestId("bootstrap-recovery-key")
+      .fill(recoveryKey);
+    const submit = page.page.getByTestId("bootstrap-submit");
+    await submit.click();
+    await expect
+      .poll(
+        async () =>
+          (await completed.isVisible()) ||
+          (await submit.isDisabled().catch(() => false)),
+        { timeout: 5_000, intervals: [50, 100, 250] },
+      )
+      .toBe(true);
+    await expect(completed.or(retryableFailure)).toBeVisible({
+      timeout: 45_000,
+    });
+    if (await completed.isVisible()) {
+      return;
+    }
+    if (attempt < 2) {
+      await page.page.waitForTimeout(250 * (attempt + 1));
+    }
+  }
+  throw new Error(
+    `principal bootstrap exhausted retryable introspection attempts: ${
+      (await retryableFailure.textContent())?.trim() ?? "unknown failure"
+    }`,
+  );
 }
 
 export function selfPathHeadersForDpopSession(

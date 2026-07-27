@@ -632,8 +632,11 @@ test.describe("notifications", () => {
       });
       await expect(
         bobDevice2Page.page.getByTestId("notifications-status"),
-      ).toContainText(/synced \d+ read cursor/i, { timeout: 30_000 });
+      ).toContainText(/syncing|synced \d+ read cursor/i, { timeout: 30_000 });
 
+      // The success toast is transient and may be cleared by the refresh that
+      // applies the new cursor. Device 1 is the authoritative cross-device
+      // convergence assertion.
       await bobDevice1.page.reload({ waitUntil: "domcontentloaded" });
       const device1ClearedRow = bobDevice1.page
         .getByTestId("notification-item")

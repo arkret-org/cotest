@@ -348,7 +348,9 @@ test.describe("discovery", () => {
       await expect(bobPresenceRow).toHaveAttribute(
         "data-presence-state",
         "online",
-        { timeout: 10_000 },
+        // Bob's first heartbeat can precede Alice's subscription. The next
+        // canonical heartbeat is emitted at the 25-second refresh interval.
+        { timeout: 30_000 },
       );
 
       // Closing the actual tab stops the heartbeat. Once the 30-second signal
@@ -504,4 +506,3 @@ test.describe("discovery", () => {
     }
   });
 });
-

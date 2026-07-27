@@ -103,6 +103,7 @@ test.describe("workflow: support escalation", () => {
       await alexPage.waitForTimelineEventSettled(summaryEdited);
       await expect(alexPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await samPage.gotoTimelineRealm(realmId);
+      await samPage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(samPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });
       await stepShot(alexPage.page, testInfo, "C-summary-patched");
 

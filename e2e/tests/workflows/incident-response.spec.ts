@@ -267,6 +267,7 @@ test.describe("workflow: incident response", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(360_000);
     // spec: push-notifications.md priority metadata + public status update hygiene.
     const stamp = Date.now();
     const commanderFlow = await openDpopUserPage(

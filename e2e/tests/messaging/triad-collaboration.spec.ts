@@ -247,6 +247,7 @@ test.describe("single-server triad collaboration", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
       openDpopUserPage(browser, request, "s1-alice"),

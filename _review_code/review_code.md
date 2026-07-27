@@ -559,3 +559,34 @@ selection failures.
   storage-normalization regressions passed; joint E2E run `20260727-085210`
   completed the server-mediated short-link flow; Inkson's browser pairing
   feature test passed 1/1.
+
+## 2026-07-27 Joint-full tail failures mixed transport exhaustion with stale harness assumptions
+
+- Severity: P1 for session-grant availability and MLS admission ordering; P2
+  for stale response/UI assumptions and scenario budgets.
+- Status: resolved in code; intentionally not re-verified after the user's
+  stop-testing instruction.
+- Evidence: joint-full run `20260727-090720` finished 328 passed / 18 failed /
+  101 skipped / 35 not run. Service logs contain 76 occurrences of the
+  `auth_unavailable` session-grant introspection failure while the managed
+  service monitor recorded zero process failures.
+- Root causes:
+  - force-fresh introspection reused an Auth Server keep-alive connection after
+    the peer had closed it and treated the first transport error as final;
+  - several tests asserted transient UI text or obsolete HTTP/error shapes
+    instead of the durable partial-accept, read-cursor, invite-disclosure, and
+    membership contracts;
+  - encrypted Kanban wrote content after invite acceptance but before the
+    recipient had observed its durable MLS Welcome;
+  - long multi-principal stories inherited the single-action 180-second budget,
+    while optimistic message rows had no authoritative-history rehydration
+    fallback after a missed acknowledgement edge.
+- Resolution: Soland now retries one read-only introspection transport failure
+  with a freshly validated/pinned client. Cotest retries only the matching
+  bootstrap/login failure, waits for durable MLS admission, uses canonical
+  invite acceptance and DPoP sessions, asserts partial rejection and opaque
+  quarantine semantics, rehydrates stuck optimistic rows, and gives the
+  explicitly long workflows bounded scenario-level budgets.
+- Verification boundary: no test, typecheck, lint, or full-run command was
+  executed after these changes. The remaining acceptance debt is recorded in
+  `arkret-work/work/active/2026-07-27-federation-seal-prerequisite-wire-closure-root-cause-report.md`.

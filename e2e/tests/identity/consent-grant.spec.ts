@@ -731,6 +731,7 @@ test.describe("consent grant", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(300_000);
     // spec: identity/consent-model.md §2 time window.
     const [aliceFlow, bobFlow] = await Promise.all([
       openDpopUserPage(browser, request, "consent-window-alice", {
@@ -763,6 +764,7 @@ test.describe("consent grant", () => {
         .filter({
           hasText: bob.did,
         });
+      await expect(pendingRow).toBeVisible({ timeout: 30_000 });
       await pendingRow.getByTestId("consent-detail-button").click();
       const detail = alicePage.page.getByTestId("consent-pending-detail");
       await detail

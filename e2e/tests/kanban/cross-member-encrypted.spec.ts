@@ -35,7 +35,12 @@
 //   4. After bob RELOADS, the card and its decrypted body must still be present —
 //      catching the "flash then live-refresh clobbers the backfill" regression.
 
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -44,6 +49,7 @@ import {
   createDpopUserSession,
   openDpopUserPageFromSession,
   openUserPage,
+  type DpopUserSession,
   type JointUserPage,
 } from "../../helpers/users";
 
@@ -57,6 +63,43 @@ type E2eeStorageEvidence = {
   encryptedSecureEntryCount: number;
   wrappingKeyExtractable: boolean | null;
 };
+
+async function waitForMlsWelcome(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  realmId: string,
+  recipientDid: string,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
+        const response = await request.get(url, {
+          headers: selfPathGrantHeaders({
+            deviceKey: session.deviceKey,
+            grantJwt: session.grantJwt,
+            method: "GET",
+            url,
+          }),
+        });
+        if (response.status() !== 200) {
+          return `status ${response.status()}`;
+        }
+        const body = await response.json();
+        return (body.events ?? []).some(
+          (event: Record<string, any>) =>
+            event.kind === "ak.mls.welcome" &&
+            event.payload?.recipient_principal_id === recipientDid,
+        );
+      },
+      {
+        timeout: 120_000,
+        intervals: [1_000, 2_000, 5_000],
+        message: `MLS Welcome for ${recipientDid} was not accepted in ${realmId}`,
+      },
+    )
+    .toBe(true);
+}
 
 // Inspect only the raw persistence representation. This deliberately does not
 // decrypt the secure entry: the acceptance boundary is that localStorage has no
@@ -531,6 +574,15 @@ test.describe("cross-member encrypted kanban", () => {
       //    history sharing is a separate, optional capability — not the core
       //    cross-member collaboration path this test exercises.)
       await bobPage.acceptInvite(realmId);
+      await bobPage.gotoTimelineRealm(realmId);
+      await waitForMlsWelcome(
+        request,
+        aliceSession,
+        realmId,
+        bob.did,
+      );
+      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+      await bobPage.completeRecoveryKeySetupIfPrompted();
 
       // 4) Alice builds the board + encrypted card AFTER bob is a member, so it is
       //    post-join shared content for bob.
@@ -704,6 +756,15 @@ test.describe("cross-member encrypted kanban", () => {
       await bobPage.completeRecoveryKeySetupIfPrompted();
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
+      await bobPage.gotoTimelineRealm(realmId);
+      await waitForMlsWelcome(
+        request,
+        aliceSession,
+        realmId,
+        bob.did,
+      );
+      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+      await bobPage.completeRecoveryKeySetupIfPrompted();
 
       // Server-side visibility gate: Bob's event feed must include the pre-join
       // board Space. If this fails, the bug is not the MLS key-share path.

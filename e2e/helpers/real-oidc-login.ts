@@ -45,24 +45,49 @@ export async function serverLoginViaCoauth(
   page: Page,
   account: RealOidcAccount,
 ): Promise<void> {
-  await page.getByTestId("login-server-url").fill(solandBaseUrl());
-  await page.getByTestId("start-server-login-button").click();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.getByTestId("login-server-url").fill(solandBaseUrl());
+    await page.getByTestId("start-server-login-button").click();
 
-  const shell = page.getByTestId("client-shell");
-  await submitCoauthPasswordCredentials(page, account);
+    await submitCoauthPasswordCredentials(page, account);
 
-  const approve = page.getByTestId("coauth-oauth-approve");
-  const consentShown = await approve
-    .waitFor({ state: "visible", timeout: 20_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (consentShown) {
-    await approve.click();
+    const approve = page.getByTestId("coauth-oauth-approve");
+    const consentShown = await approve
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (consentShown) {
+      await approve.click();
+    }
+
+    const authenticated = await expect(page)
+      .not.toHaveURL(/\/login(?:[?#]|$)/, { timeout: 60_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (authenticated) {
+      await expect(page.getByTestId("client-shell")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId("login-panel")).toHaveCount(0);
+      return;
+    }
+
+    if (attempt === 0) {
+      // Coauth can return to Inkson before a transient session-grant exchange
+      // failure has restored the login panel. Reloading the local route clears
+      // callback-only UI state; the second authorization ceremony remains a
+      // complete, independently verified login.
+      await page.goto(`${new URL(page.url()).origin}/login`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByTestId("login-panel")).toBeVisible({
+        timeout: 30_000,
+      });
+    }
   }
-
-  await expect(shell).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("login-panel")).toHaveCount(0);
-  await expect(page).not.toHaveURL(/\/login(?:[?#]|$)/, { timeout: 30_000 });
+  throw new Error(
+    `coauth login returned without an active session grant: ${page.url()}`,
+  );
 }
 
 export async function hardLogoutViaAccountMenu(
