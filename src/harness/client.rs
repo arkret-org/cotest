@@ -6,7 +6,8 @@ use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{
-    ensure_submit_event_id, event_envelope_with_chain, realm_bootstrap_event_batch,
+    ensure_submit_event_id, event_envelope_with_causal_refs, event_envelope_with_chain,
+    realm_bootstrap_event_batch,
 };
 use super::{
     member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
@@ -85,8 +86,17 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
+        // The founding capability grant id: a DataEvent that writes a cell has
+        // to name a covering grant in `auth_context.capability_refs[]`, so the
+        // caller needs it to author one.
+        let founding_grant_id = events
+            .iter()
+            .find(|event| event["kind"].as_str() == Some("ak.capability.grant"))
+            .and_then(|event| event["payload"]["grant_id"].as_str())
+            .map(ToOwned::to_owned);
         Ok(json!({
             "realm_id": realm_id,
+            "founding_grant_id": founding_grant_id,
             "event_response": event_response,
         }))
     }
@@ -122,6 +132,99 @@ impl TestActorClient {
         )
         .await?;
         ensure_submit_event_id(&mut body, &event);
+        Ok(body)
+    }
+
+    /// Authors and submits an Event carrying explicit semantic causal edges.
+    ///
+    /// RSVP convergence is defined by `causal_refs`: a response dominates
+    /// exactly the heads it names. Two responses that omit each other are
+    /// concurrent, which is the case the projection has to keep exposed.
+    /// `prev_refs` is passed into the builder before signing rather than
+    /// patched on afterwards, so the proof covers the actor chain it claims.
+    pub async fn submit_event_with_causal_refs(
+        &self,
+        realm_id: &str,
+        kind: &str,
+        payload: Value,
+        causal_refs: Vec<String>,
+        capability_refs: Vec<String>,
+    ) -> Result<Value> {
+        let frontier = expect_json(
+            self.get("/_arkret/self/events/frontier")
+                .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
+            StatusCode::OK,
+        )
+        .await?;
+        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+            serde_json::from_value(frontier)?;
+        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
+            state.frontier
+        else {
+            return Err(anyhow!(
+                "combined selector returned the wrong frontier variant"
+            ));
+        };
+        let mut event = event_envelope_with_causal_refs(
+            &self.actor,
+            realm_id,
+            kind,
+            payload,
+            Some(frontier.next_actor_seq),
+            frontier
+                .frontier_event_ids
+                .iter()
+                .map(|event_id| {
+                    arkret_identifiers::EventId::new(event_id.as_str().to_owned())
+                        .expect("frontier event id")
+                })
+                .collect(),
+            causal_refs,
+        );
+        // Any Event that carries effects has to name the Seal basis it was
+        // authored under; the reducer refuses an unanchored effect set.
+        if event["effects"]
+            .as_array()
+            .is_some_and(|effects| !effects.is_empty())
+        {
+            let seal_frontier = expect_json(
+                self.get("/_arkret/self/events/frontier")
+                    .query(&[("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await?;
+            let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                serde_json::from_value(seal_frontier)?;
+            let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
+                state.frontier
+            else {
+                return Err(anyhow!(
+                    "Realm selector returned the wrong frontier variant"
+                ));
+            };
+            // A DataEvent anchors its effects with `seal_ref`, not
+            // `seal_basis`: carrying a Seal basis is what marks an Event as a
+            // Control Move, and a Control Move may not write a data-plane cell.
+            event["seal_ref"] = serde_json::to_value(&frontier.seal_id)?;
+            // Capability coverage is per DataEvent: the reducer checks that a
+            // named grant actually covers this action on this target.
+            event["auth_context"] = json!({
+                "did": self.actor,
+                "key_id": format!("{}#cotest", self.actor),
+                "key_epoch": 0,
+                "capability_refs": capability_refs
+            });
+            refresh_event_proof(&mut event)?;
+        }
+        let mut body = expect_json(
+            self.post("/_arkret/self/events").json(&event),
+            StatusCode::OK,
+        )
+        .await?;
+        ensure_submit_event_id(&mut body, &event);
+        // The digest is what a later response names to dominate this head, so
+        // hand it back to the caller alongside the submit result.
+        body["cotest_event_digest"] = event["proof"]["event_digest"].clone();
         Ok(body)
     }
 

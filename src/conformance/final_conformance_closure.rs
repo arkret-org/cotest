@@ -508,49 +508,79 @@ fn run_calendar_rsvp_occurrence_key_case(case: &Value) -> Result<()> {
 fn evaluate_calendar_occurrence(occurrence: &Value, timezone: &str) -> Result<Value> {
     let local_start = required_str(occurrence, "local_start")?;
     let all_day = required_bool(occurrence, "all_day")?;
-    let mut fields = BTreeMap::new();
-    fields.insert("timezone".to_owned(), Value::String(timezone.to_owned()));
-    fields.insert("all_day".to_owned(), Value::Bool(all_day));
-    if all_day {
+    // The schedule lives under one `calendar` namespace; flat keys at the
+    // `metadata.fields` root are a rejected activation impostor.
+    let mut calendar = serde_json::Map::new();
+    calendar.insert("timezone".to_owned(), Value::String(timezone.to_owned()));
+    calendar.insert("tzdb_version".to_owned(), Value::String("2025a".to_owned()));
+    calendar.insert("all_day".to_owned(), Value::Bool(all_day));
+    calendar.insert("status".to_owned(), Value::String("confirmed".to_owned()));
+    // The interval is half-open, so a single all-day event ends on the
+    // following date rather than repeating its start.
+    let (start_value, end_value, probe) = if all_day {
         let date = local_start
             .get(..10)
             .ok_or_else(|| anyhow!("all-day local_start must include local date"))?;
-        fields.insert("start".to_owned(), Value::String(date.to_owned()));
-        fields.insert("end".to_owned(), Value::String(date.to_owned()));
+        let parsed = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|error| anyhow!("all-day local_start invalid: {error}"))?;
+        let next = parsed + chrono::Duration::days(1);
+        (
+            date.to_owned(),
+            next.format("%Y-%m-%d").to_string(),
+            date.to_owned(),
+        )
     } else {
         let start = chrono::NaiveDateTime::parse_from_str(local_start, "%Y-%m-%dT%H:%M:%S")
             .map_err(|error| anyhow!("non-all-day local_start invalid: {error}"))?;
         let end = start + chrono::Duration::hours(1);
-        fields.insert("start".to_owned(), Value::String(local_start.to_owned()));
-        fields.insert(
-            "end".to_owned(),
-            Value::String(end.format("%Y-%m-%dT%H:%M:%S").to_string()),
-        );
-    }
+        (
+            local_start.to_owned(),
+            end.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            format!("{local_start}[{timezone}]"),
+        )
+    };
+    calendar.insert("start".to_owned(), Value::String(start_value));
+    calendar.insert("end".to_owned(), Value::String(end_value));
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        arkret_models_collaboration::objects::productivity::CALENDAR_METADATA_FIELDS_NAMESPACE
+            .to_owned(),
+        Value::Object(calendar),
+    );
     let occurrence_key =
         arkret_models_collaboration::objects::productivity::canonical_calendar_rsvp_occurrence_key(
             &fields,
-            Some(local_start),
-        )?;
+            Some(&probe),
+        )?
+        .ok_or_else(|| anyhow!("instance occurrence must canonicalize to a key"))?;
     Ok(json!({"occurrence_key": occurrence_key}))
 }
 
 fn evaluate_duplicate_rsvp_writes(case: &Value) -> Result<Value> {
-    let mut writes_by_actor_occurrence = BTreeMap::new();
-    let mut duplicate_same_status_noop = false;
+    // The no-op condition is byte equality of the whole entry, not equality of
+    // status alone: a changed basis or comment is a different lattice value and
+    // must stay a distinct head.
+    let mut writes_by_actor_occurrence: BTreeMap<(String, String), String> = BTreeMap::new();
+    let mut duplicate_byte_equal_entry_noop = false;
     for write in required_array(case, "duplicate_rsvp_writes")? {
         let key = (
             required_str(write, "actor")?.to_owned(),
             required_str(write, "occurrence_key")?.to_owned(),
         );
-        let status = required_str(write, "status")?.to_owned();
-        match writes_by_actor_occurrence.insert(key, status.clone()) {
-            Some(previous) if previous == status => duplicate_same_status_noop = true,
-            Some(_) => duplicate_same_status_noop = false,
+        let entry = write
+            .get("entry")
+            .ok_or_else(|| anyhow!("duplicate rsvp write must carry the complete entry"))?;
+        let canonical = arkret_canonical::canonical_json_string(entry)
+            .map_err(|error| anyhow!("rsvp entry is not canonicalizable: {error}"))?;
+        match writes_by_actor_occurrence.insert(key, canonical.clone()) {
+            Some(previous) if previous == canonical => duplicate_byte_equal_entry_noop = true,
+            Some(_) => duplicate_byte_equal_entry_noop = false,
             None => {}
         }
     }
-    Ok(json!({"duplicate_same_status_noop": duplicate_same_status_noop}))
+    Ok(json!({
+        "duplicate_byte_equal_entry_noop": duplicate_byte_equal_entry_noop
+    }))
 }
 
 fn run_federation_timing_bucket_case(case: &Value) -> Result<()> {

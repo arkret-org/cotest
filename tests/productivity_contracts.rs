@@ -95,13 +95,19 @@ fn productivity_registry_entries_are_present_and_exact() {
 fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     let catalog = event_payload_validator_catalog_from_spec_artifacts(artifacts_root()).unwrap();
 
+    const BASIS: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    // The response lives inside the complete entry together with the schedule
+    // basis, so both converge as one lattice value.
     catalog
         .validate_payload(
             arkret_wire::events::EventKind::RSVP_SET,
             &json!({
                 "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
-                "status": "accepted",
-                "occurrence": null
+                "occurrence": null,
+                "entry": {
+                    "schedule_basis_refs": [BASIS],
+                    "response": {"status": "accepted"}
+                }
             }),
         )
         .unwrap();
@@ -111,12 +117,41 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
                 arkret_wire::events::EventKind::RSVP_SET,
                 &json!({
                     "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
-                    "status": "yes",
-                    "occurrence": null
+                    "occurrence": null,
+                    "entry": {
+                        "schedule_basis_refs": [BASIS],
+                        "response": {"status": "yes"}
+                    }
                 }),
             )
             .is_err(),
         "old RSVP status aliases must not validate"
+    );
+    assert!(
+        catalog
+            .validate_payload(
+                arkret_wire::events::EventKind::RSVP_SET,
+                &json!({
+                    "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
+                    "occurrence": null,
+                    "status": "accepted"
+                }),
+            )
+            .is_err(),
+        "the pre-closure flat payload must not validate"
+    );
+    assert!(
+        catalog
+            .validate_payload(
+                arkret_wire::events::EventKind::RSVP_SET,
+                &json!({
+                    "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
+                    "occurrence": null,
+                    "entry": {"schedule_basis_refs": [BASIS]}
+                }),
+            )
+            .is_err(),
+        "an entry with neither response branch must not validate"
     );
 
     let pin_scope = json!({

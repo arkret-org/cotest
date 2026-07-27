@@ -571,11 +571,36 @@ fn event_envelope_with_chain_and_signing_identity(
     actor: &str,
     realm_id: &str,
     kind: &str,
+    payload: Value,
+    actor_seq: Option<u64>,
+    prev_event_ids: Vec<EventId>,
+    signing_seed: [u8; 32],
+    verification_method: &str,
+) -> Value {
+    event_envelope_with_chain_and_signing_identity_and_causal_refs(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        actor_seq,
+        prev_event_ids,
+        signing_seed,
+        verification_method,
+        Vec::new(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
     mut payload: Value,
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &str,
+    causal_refs: Vec<String>,
 ) -> Value {
     let unique_seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let actor_seq = actor_seq.unwrap_or(unique_seq);
@@ -599,6 +624,10 @@ fn event_envelope_with_chain_and_signing_identity(
     )
     .expect("SDK Event builder accepts cotest envelope");
     event.prev_refs = prev_event_ids;
+    event.causal_refs = causal_refs
+        .into_iter()
+        .map(|value| arkret_identifiers::Hash::new(value).expect("cotest causal ref digest"))
+        .collect();
     match event.kind.as_str() {
         arkret_wire::EventKind::REALM_CREATE => {
             event.effects =
@@ -611,6 +640,15 @@ fn event_envelope_with_chain_and_signing_identity(
             event.effects = invite_effects(&event).expect("valid invite effects");
         }
         _ => {}
+    }
+    // Every other reducer-input kind whose registry row is fully projected gets
+    // its effects derived here. Fixtures that hand-build effect-less Events are
+    // simply not valid producer Events, and admission rejects them with
+    // `effects_payload_mismatch`; deriving from the registry keeps the harness
+    // on the same path a real client takes. Rows with no derivable contract
+    // fail the derivation and are left untouched.
+    if event.effects.is_empty() {
+        let _ = arkret_schema::materialize_registered_cell_writes(&mut event);
     }
     event.unsigned.insert(
         "local_operation_idempotency_alias".to_owned(),
@@ -1030,4 +1068,33 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
             "ciphertext": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         }
     })
+}
+
+/// Builds a signed envelope that additionally carries semantic causal edges.
+///
+/// RSVP needs this: the entry's schedule basis MUST be a subset of
+/// `causal_refs`, and those same edges decide which earlier heads a response
+/// dominates. Two responses that omit each other's digest are concurrent by
+/// construction, which is exactly what the convergence scenario exercises.
+pub(crate) fn event_envelope_with_causal_refs(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    actor_seq: Option<u64>,
+    prev_event_ids: Vec<EventId>,
+    causal_refs: Vec<String>,
+) -> Value {
+    let (signing_seed, verification_method) = event_signing_identity(actor);
+    event_envelope_with_chain_and_signing_identity_and_causal_refs(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        actor_seq,
+        prev_event_ids,
+        signing_seed,
+        &verification_method,
+        causal_refs,
+    )
 }

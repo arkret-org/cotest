@@ -7,6 +7,7 @@ pub mod alsoknownas_verifier_authority;
 pub mod api_contracts_auth;
 pub mod authz_policy_presence;
 pub mod bridge_contracts;
+pub mod calendar_rsvp_convergence;
 pub mod certification_report;
 pub mod chaos_inject;
 pub mod chaos_kill_midwrite;
