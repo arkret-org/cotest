@@ -590,3 +590,97 @@ selection failures.
 - Verification boundary: no test, typecheck, lint, or full-run command was
   executed after these changes. The remaining acceptance debt is recorded in
   `arkret-work/work/active/2026-07-27-federation-seal-prerequisite-wire-closure-root-cause-report.md`.
+
+## 2026-07-27 Cotest lagged two upstream contract changes and went red at HEAD
+
+- Severity: P1 (whole `agent_provision_e2e` target failed to compile, so the
+  Rust suite could not run at all); P2 for the stale RSVP evaluator.
+- Status: resolved and verified — `cargo test --test conformance_fixtures`
+  reports 88 passed / 0 failed, and `cargo test --no-run` builds every target.
+- Evidence:
+  - `error[E0308]` x7 in `tests/agent_provision_e2e.rs` after
+    `arkret-rust-sdk@d104b989` (*Centralize protocol value types*) moved
+    `controller_authorization_ref` to `DidUrl`, `pairing_request_id` to
+    `OpaqueLocalId`, and `AgentKeyAuthorizePayload.key_id` /
+    `verification_method` to `NonEmptyString` / `DidUrl`.
+  - `final_conformance_closure_fixture_suite_matches_reference_semantics`
+    failed with `missing string field status` after `arkret-spec@1e972708`
+    replaced the RSVP cell value with the whole `entry`.
+- Root causes:
+  - the local `PairingOutcome` helper trait still exposed `&str` accessors, so
+    the test kept handing raw strings to now-typed SDK constructors;
+  - `evaluate_duplicate_rsvp_writes` still keyed the value-level no-op on
+    `status` alone, which `calendar-event.md` §8.3 replaced with byte equality
+    of the whole `entry`;
+  - `assert_expected_subset` treated the fixture's prose `expected.note` as an
+    assertable key, although that key is an established fixture convention
+    (see also `arkret-private-kdf-fixture.json`).
+- Resolution: the helper trait now returns the SDK owner types, the RSVP
+  evaluator compares `arkret_canonical::canonical_json_bytes` of the whole
+  entry and reports `duplicate_byte_equal_entry_noop`, and the subset assertion
+  skips the documentation-only `note` key.
+- Prevention dimension: a protocol value-typing change in `arkret-rust-sdk`
+  must be followed by `cargo test --no-run` in every downstream repository —
+  Cotest's own test targets are consumers of the SDK's public types, and a
+  target that no longer compiles hides every assertion it contained.
+
+## 2026-07-27 Push notify outcome assertions still used the removed accepted/rejected buckets
+
+- Severity: P1 (two live scenario targets panicked on `Option::unwrap()`).
+- Status: resolved and verified — `cargo test --test delivery_media --test protocol_payloads`
+  reports 5 passed / 0 failed.
+- Evidence: `src/scenarios/delivery_media.rs` and
+  `src/scenarios/protocol_payloads/push.rs` both read `notify["rejected"]`,
+  which no longer exists after `arkret-rust-sdk@c2de1c8b` (*close push notify
+  outcome contract*) replaced `PushNotifyOutcome` with
+  `{push_target_id, outcomes[]}` and a per-device `gateway_status` +
+  `reason_code`.
+- Resolution: both scenarios now assert the per-device outcome list, including
+  the reason-code split soland actually implements — a device that was never
+  registered is `push_token_unknown`, while `push_target_unknown` is reserved
+  for a registered device whose registration does not accept the requested
+  push target.
+- Prevention dimension: an outcome DTO that drops a top-level array must be
+  greppable across Cotest before the SDK change lands; `value["field"]` reads
+  on a removed key degrade to a runtime panic, not a compile error.
+## 2026-07-28 — wrong Recovery Key assertion also accepted the success text
+
+- Surface: `e2e/tests/identity/recovery.spec.ts`, B-model all-devices-lost live flow.
+- Regression: the negative-key status matcher included `verified`, so the assertion could match
+  the success sentence `Recovery Key verified` instead of proving that a valid but unrelated
+  mnemonic was rejected.
+- Detection: full diff self-review after rebasing the live recovery work onto latest `main`.
+- Correction: match only the generic rejection/error states and, before submitting the
+  correct key, independently assert that the recovery session has not completed and the fresh
+  device is absent from the authoritative active-device projection.
+- Prevention dimension: cryptographic negative E2E assertions must verify the absence of durable
+  authorization, not only UI text whose vocabulary overlaps the success path.
+
+## 2026-07-28 — legacy account projection fixture has no PCR Seal for later Control Moves
+
+- Severity: P1 for the affected key/device scenarios; unrelated to the push
+  outcome migration in this change.
+- Status: open. The long-term repair is to replace the fixture bootstrap, not
+  weaken Control Move admission or synthesize an ungrounded `seal_basis`.
+- Evidence: after rebuilding Soland from current `main`,
+  `delivery_media::key_upload_query_and_claim_edges_are_enforced` and
+  `protocol_payloads::events_keys_device_blob_push_and_moderation_surfaces_work`
+  fail before their key assertions. The shared `register_account` helper calls
+  the account projection edge and then tries to publish
+  `ak.cross_signing.publish`; the principal control Realm has no accepted Seal,
+  while current admission correctly requires `seal_basis.leaves` on that
+  Control Move.
+- Root cause: the fixture still treats account projection plus dev login as
+  identity bootstrap. The P0 transaction protocol separates that projection
+  from durable self-PCR creation and finality, so the helper never creates the
+  two bootstrap Events or submits their current-device-signed Seal.
+- Long-term resolution: make the test principal follow the same SDK path as
+  `agent_provision_e2e`: author and submit the self-PCR bootstrap unit, build
+  and submit `build_self_principal_bootstrap_seal`, then author cross-signing
+  and device authorization against that exact Seal basis. Do not add a
+  server-side exemption, accept an empty basis, or retain the projection edge
+  as a second identity-creation protocol.
+- Verification boundary: the migrated push scenario passes its focused live
+  test, Rust workspace check and TypeScript typecheck pass. The two
+  identity-dependent scenario targets remain red until the shared fixture is
+  migrated.

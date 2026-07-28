@@ -500,13 +500,25 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .json(&json!({
                 "notification": {
                     "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
+                    "wakeup_kind": "message",
+                    "timing_profile_hint": "default",
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
                 }
             })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(notify["rejected"].as_array().unwrap().len(), 1);
+    // `push_notify_outcome` is one per-device outcome list, not accepted /
+    // rejected buckets. This device was never registered, so it comes back with
+    // a `rejected` gateway_status and the `push_token_unknown` reason code
+    // (`push_target_unknown` is reserved for a registered device whose
+    // registration does not accept the requested push target).
+    let outcomes = notify["outcomes"]
+        .as_array()
+        .expect("push notify must return per-device outcomes");
+    assert_eq!(outcomes.len(), 1);
+    assert_eq!(outcomes[0]["gateway_status"], "rejected");
+    assert_eq!(outcomes[0]["reason_code"], "push_token_unknown");
 
     expect_api_error(
         server

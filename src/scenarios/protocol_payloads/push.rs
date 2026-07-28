@@ -1,8 +1,8 @@
 //! Phase 9 — `/_arkret/edge/push/{register-device,notify}`.
 //!
 //! Registers Alice's device with the push gateway, then dispatches a blind
-//! wakeup to two devices to confirm the missing one is reported back in
-//! `rejected`.
+//! wakeup to two devices to confirm the unregistered one comes back with a
+//! `rejected` gateway_status while the registered one is accepted.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -50,12 +50,32 @@ async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Res
                 "notification": {
                     "push_target_id": push_target_id,
                     "wakeup_kind": "message",
+                    "timing_profile_hint": "default",
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ak:device:01904100-0000-7000-8000-00000000dead"}]
                 }
             })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(notify["rejected"].as_array().unwrap().len(), 1);
+    // `push_notify_outcome` reports one entry per requested device rather than
+    // accepted / rejected buckets. The registered device is accepted; the
+    // device that was never registered is rejected as `push_token_unknown`.
+    assert_eq!(notify["push_target_id"], push_target_id);
+    let outcomes = notify["outcomes"]
+        .as_array()
+        .expect("push notify must return per-device outcomes");
+    assert_eq!(outcomes.len(), 2);
+    let registered = outcomes
+        .iter()
+        .find(|outcome| outcome["device_id"] == "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .expect("registered device outcome");
+    assert_eq!(registered["gateway_status"], "accepted");
+    assert!(registered.get("reason_code").is_none());
+    let unregistered = outcomes
+        .iter()
+        .find(|outcome| outcome["device_id"] == "ak:device:01904100-0000-7000-8000-00000000dead")
+        .expect("unregistered device outcome");
+    assert_eq!(unregistered["gateway_status"], "rejected");
+    assert_eq!(unregistered["reason_code"], "push_token_unknown");
     Ok(())
 }
