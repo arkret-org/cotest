@@ -492,6 +492,11 @@ export async function createRealmApi(
     server: opts.server,
     context: `create realm ${data.title}`,
   });
+  // The founding unit is accepted before the durable coordinator publishes
+  // its first Seal. Do not let the next helper call mistake that short window
+  // for an uninitialised conformance-only Realm and inject a synthetic basis:
+  // the real genesis Seal must atomically cover the complete founding unit.
+  await waitForRealmSealBasis(request, token, realmId, opts.server);
 
   // A remote Principal Server must accept the Realm founding unit before it
   // can authenticate the creator as a member of this binding Realm or verify
@@ -2216,6 +2221,29 @@ export async function readRealmSealBasis(
     control_event_set_root: frontier.control_event_set_root,
     state_root: frontier.state_root,
   };
+}
+
+async function waitForRealmSealBasis(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  server?: SolandKey,
+  timeoutMs = 15_000,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      return await readRealmSealBasis(request, token, realmId, server);
+    } catch (error) {
+      lastError = error;
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error(
+    `Realm ${realmId} founding Seal was not materialized within ${timeoutMs}ms`,
+    { cause: lastError },
+  );
 }
 
 async function applyRegisteredCbaPlane(

@@ -23,17 +23,22 @@ import {
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
-import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
+import {
+  buildSignalEnvelope,
+  captureSignalEnvelopes,
+  postCallSignalRaw,
+  prepareSignalEnvelope,
+  signalPlaintext,
+} from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("read receipts + privacy", () => {
-  test("receipt endpoint accepts alice's read without creating a peer-visible durable marker", async ({
+  test("encrypted receipt Signal reaches bob without creating a durable marker", async ({
     request,
   }) => {
-    // Live G2.T7 smoke: the ephemeral receipt API and durable read-cursor API
-    // are separate surfaces. Durable ak.read_cursor.advance writes, UI receipt rendering,
-    // and policy toggles stay fixme.
+    // Read receipts use the live encrypted Signal rail. Read cursors remain a
+    // separate actor-private durable surface.
     const stamp = Date.now();
     const alice = uniqueUser("g2t7-receipt-alice");
     const bob = uniqueUser("g2t7-receipt-bob");
@@ -66,38 +71,43 @@ test.describe("read receipts + privacy", () => {
       { actorDid: bob.did },
     );
 
-    const sentAt = new Date();
-    const expiresAt = new Date(sentAt.getTime() + 5 * 60 * 1000);
-    const receipt = await request.post(
-      `${solandBaseUrl()}/_arkret/self/ephemeral`,
-      {
-        headers: authHeaders(aliceToken),
-        data: withBroadcastEphemeralProof({
-          kind: "ak.receipt.read",
-          realm_id: realmId,
-          actor_id: alice.did,
-          device_id: alice.deviceId,
-          sent_at: sentAt.toISOString(),
-          expires_at: expiresAt.toISOString(),
-          payload: {
-            receipt_kind: "read",
-            schema: "ak.schema.read_receipt.v1",
-            realm_id: realmId,
-            actor_id: alice.did,
-            event_id: message.event_id,
-            read_scope: {
-              kind: "realm",
-            },
-            created_at: sentAt.toISOString(),
-          },
-        }),
-      },
+    const envelope = buildReceiptSignal({
+      actor: alice,
+      realmId,
+      eventId: message.event_id,
+      payloadSequence: 1,
+    });
+    const { result: receipt, envelopes } = await captureSignalEnvelopes(
+      bobToken,
+      realmId,
+      () => postReceipt(request, aliceToken, envelope),
     );
-    expect(receipt.status()).toBe(200);
-    const receiptBody = await receipt.json();
-    expect(receiptBody.accepted).toBe(true);
-    expect(receiptBody.kind).toBe("ak.receipt.read");
-    expect(receiptBody.realm_id).toBe(realmId);
+    const receiptText = await receipt.text();
+    expect(receipt.status(), receiptText).toBe(200);
+    const receiptBody = JSON.parse(receiptText) as Record<string, unknown>;
+    expect(receiptBody).toMatchObject({
+      accepted: true,
+      realm_id: realmId,
+    });
+    expect(receiptBody).not.toHaveProperty("kind");
+    expect(receiptBody).not.toHaveProperty("event_id");
+
+    const received = decryptedReceiptPayloads(envelopes).find(
+      (payload) => payload.event_id === message.event_id,
+    );
+    expect(received).toMatchObject({
+      actor_id: alice.did,
+      event_id: message.event_id,
+      read_scope: { kind: "realm" },
+    });
+    const receivedEnvelope = envelopes.find(
+      (candidate) =>
+        candidate.sender_actor_id === alice.did &&
+        signalPlaintext(candidate).kind === "ak.receipt.read",
+    );
+    expect(receivedEnvelope).toBeTruthy();
+    expect(receivedEnvelope).not.toHaveProperty("kind");
+    expect(receivedEnvelope).not.toHaveProperty("event_id");
 
     const [aliceMarkers, bobMarkers] = await Promise.all([
       listReadMarkersViaApi(request, aliceToken, realmId),
@@ -107,16 +117,18 @@ test.describe("read receipts + privacy", () => {
     expect(bobMarkers).toHaveLength(0);
   });
 
-  test("ak.receipt.read rejects TTL above the 5 minute hard ceiling", async ({
+  test("session-class receipt Signal rejects TTL above 30 seconds", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "ttl-too-long");
-    const receipt = await postReceipt(request, fixture.aliceToken, {
-      ...receiptEnvelope(fixture, 5 * 60 * 1000 + 1),
-    });
+    const receipt = await postReceipt(
+      request,
+      fixture.aliceToken,
+      receiptEnvelope(fixture, 30_001),
+    );
     expect(receipt.status()).toBe(400);
     const body = await receipt.json();
-    expect(JSON.stringify(body)).toContain("hard TTL");
+    expect(JSON.stringify(body)).toContain("signal_ttl_out_of_range");
   });
 
   test("ak.receipt.read rejects already expired envelopes", async ({
@@ -124,9 +136,11 @@ test.describe("read receipts + privacy", () => {
   }) => {
     const fixture = await createReceiptFixture(request, "expired");
     const sentAt = new Date(Date.now() - 10_000);
-    const receipt = await postReceipt(request, fixture.aliceToken, {
-      ...receiptEnvelope(fixture, 5_000, sentAt),
-    });
+    const receipt = await postReceipt(
+      request,
+      fixture.aliceToken,
+      receiptEnvelope(fixture, 5_000, sentAt),
+    );
     expect(receipt.status()).toBe(400);
     const body = await receipt.json();
     expect(JSON.stringify(body)).toContain("already expired");
@@ -136,14 +150,20 @@ test.describe("read receipts + privacy", () => {
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "actor-mismatch");
-    const receipt = await postReceipt(request, fixture.aliceToken, {
-      ...receiptEnvelope(fixture),
-      actor_id: fixture.bob.did,
-      device_id: fixture.bob.deviceId,
+    const mismatched = buildReceiptSignal({
+      actor: fixture.bob,
+      realmId: fixture.realmId,
+      eventId: fixture.message.event_id,
+      payloadSequence: 1,
     });
+    const receipt = await postReceipt(
+      request,
+      fixture.aliceToken,
+      mismatched,
+    );
     expect(receipt.status()).toBe(403);
     const body = await receipt.json();
-    expect(JSON.stringify(body)).toContain("actor_id must match");
+    expect(JSON.stringify(body)).toContain("sender");
   });
 
   test("ak.receipt.read rejects non-members", async ({ request }) => {
@@ -151,14 +171,25 @@ test.describe("read receipts + privacy", () => {
     const outsider = uniqueUser("receipt-outsider");
     await ensureRegistered(request, outsider);
     const outsiderToken = await issueDevSession(request, outsider);
-    const receipt = await postReceipt(request, outsiderToken, {
-      ...receiptEnvelope(fixture),
-      actor_id: outsider.did,
-      device_id: outsider.deviceId,
+    const envelope = buildReceiptSignal({
+      actor: outsider,
+      realmId: fixture.realmId,
+      eventId: fixture.message.event_id,
+      payloadSequence: 1,
     });
+    // Resolve a valid current scope basis through a member; the actual send is
+    // still authorized as the outsider and must fail membership admission.
+    await prepareSignalEnvelope(request, fixture.aliceToken, envelope);
+    const receipt = await request.post(
+      `${solandBaseUrl()}/_arkret/self/signal`,
+      {
+        headers: authHeaders(outsiderToken),
+        data: envelope,
+      },
+    );
     expect(receipt.status()).toBe(403);
     const body = await receipt.json();
-    expect(JSON.stringify(body)).toContain("not a joined member");
+    expect(JSON.stringify(body)).toContain("member");
   });
 
   test("alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window", async ({
@@ -179,35 +210,53 @@ test.describe("read receipts + privacy", () => {
       `highest visible third ${Date.now()}`,
       { actorDid: fixture.bob.did },
     );
-    const receipt = receiptEnvelope(fixture);
-    receipt.payload.event_id = highest.event_id;
-    const response = await postReceipt(request, fixture.aliceToken, receipt);
-    expect(response.status()).toBe(200);
+    const receipt = buildReceiptSignal({
+      actor: fixture.alice,
+      realmId: fixture.realmId,
+      eventId: highest.event_id,
+      payloadSequence: 3,
+    });
+    const { result: response, envelopes } = await captureSignalEnvelopes(
+      fixture.bobToken,
+      fixture.realmId,
+      () => postReceipt(request, fixture.aliceToken, receipt),
+    );
+    expect(response.status(), await response.text()).toBe(200);
+    expect(decryptedReceiptPayloads(envelopes)).toEqual([
+      expect.objectContaining({ event_id: highest.event_id }),
+    ]);
     expect(
       await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
     ).toHaveLength(0);
   });
 
-  test("space disclosure=disabled rejects inbound ak.receipt.read and leaves no peer-visible marker", async ({
+  test("disclosure=disabled is enforced after receiver decryption, not by the relay", async ({
     request,
   }) => {
-    // spec: read-receipts.md §2.5 — with disclosure=disabled the client does
-    // not send, and an inbound ak.receipt.read for the space is dropped by the
-    // Sync Service. soland enforces the server-side leg by rejecting the
-    // ephemeral admission with a PolicyViolation (403) whose body names the
-    // disabled disclosure, and no peer-visible marker is created.
+    // A compliant sender suppresses this signal. If a non-compliant client
+    // sends anyway, the opaque relay cannot identify a receipt or read the
+    // policy target; the receiver decrypts and drops it.
     const fixture = await createReceiptFixture(request, "disclosure-disabled");
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "disabled",
     });
-    const receipt = await postReceipt(
-      request,
-      fixture.aliceToken,
-      receiptEnvelope(fixture),
+    const { result: receipt, envelopes } = await captureSignalEnvelopes(
+      fixture.bobToken,
+      fixture.realmId,
+      () =>
+        postReceipt(
+          request,
+          fixture.aliceToken,
+          receiptEnvelope(fixture),
+        ),
     );
-    expect(receipt.status()).toBe(403);
-    const body = await receipt.json();
-    expect(JSON.stringify(body)).toContain("disclosure=disabled");
+    expect(receipt.status(), await receipt.text()).toBe(200);
+    expect(decryptedReceiptPayloads(envelopes)).toHaveLength(1);
+    expect(
+      receiverVisibleReceiptPayloads(envelopes, {
+        disclosure: "disabled",
+      }),
+    ).toHaveLength(0);
     expect(
       await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
     ).toHaveLength(0);
@@ -227,14 +276,26 @@ test.describe("read receipts + privacy", () => {
       `disabled-window ${Date.now()}`,
       { actorDid: fixture.bob.did },
     );
-    const blocked = receiptEnvelope(fixture);
-    blocked.payload.event_id = hiddenWindowMessage.event_id;
-    const blockedResponse = await postReceipt(
-      request,
-      fixture.aliceToken,
-      blocked,
+    const blocked = buildReceiptSignal({
+      actor: fixture.alice,
+      realmId: fixture.realmId,
+      eventId: hiddenWindowMessage.event_id,
+      payloadSequence: 1,
+    });
+    const blockedCapture = await captureSignalEnvelopes(
+      fixture.bobToken,
+      fixture.realmId,
+      () => postReceipt(request, fixture.aliceToken, blocked),
     );
-    expect(blockedResponse.status()).toBe(403);
+    expect(
+      blockedCapture.result.status(),
+      await blockedCapture.result.text(),
+    ).toBe(200);
+    expect(
+      receiverVisibleReceiptPayloads(blockedCapture.envelopes, {
+        disclosure: "disabled",
+      }),
+    ).toHaveLength(0);
 
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "required",
@@ -246,54 +307,98 @@ test.describe("read receipts + privacy", () => {
       `reenabled-window ${Date.now()}`,
       { actorDid: fixture.bob.did },
     );
-    const receipt = receiptEnvelope(fixture);
-    receipt.payload.event_id = freshMessage.event_id;
-    const response = await postReceipt(request, fixture.aliceToken, receipt);
-    expect(response.status()).toBe(200);
-    const responseBody = await response.json();
+    const receipt = buildReceiptSignal({
+      actor: fixture.alice,
+      realmId: fixture.realmId,
+      eventId: freshMessage.event_id,
+      payloadSequence: 2,
+    });
+    const freshCapture = await captureSignalEnvelopes(
+      fixture.bobToken,
+      fixture.realmId,
+      () => postReceipt(request, fixture.aliceToken, receipt),
+    );
+    const responseBody = await freshCapture.result.json();
     expect(responseBody.accepted).toBe(true);
-    expect(responseBody.kind).toBe("ak.receipt.read");
+    expect(responseBody).not.toHaveProperty("kind");
+    const visible = receiverVisibleReceiptPayloads(freshCapture.envelopes, {
+      disclosure: "required",
+    });
+    expect(visible).toEqual([
+      expect.objectContaining({ event_id: freshMessage.event_id }),
+    ]);
     expect(
-      JSON.stringify(
-        await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
-      ),
+      JSON.stringify(visible),
     ).not.toContain(hiddenWindowMessage.event_id);
   });
 
-  test("space disclosure=required accepts receipts without creating peer-visible durable markers", async ({
+  test("visibility=private is filtered by the receiver without server-side target routing", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "disclosure-required");
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "required",
+      visibility: "private",
     });
     const receipt = receiptEnvelope(fixture);
-    const response = await postReceipt(request, fixture.aliceToken, receipt);
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    const capture = await captureSignalEnvelopes(
+      fixture.bobToken,
+      fixture.realmId,
+      () => postReceipt(request, fixture.aliceToken, receipt),
+    );
+    expect(capture.result.status()).toBe(200);
+    const body = await capture.result.json();
     expect(body.accepted).toBe(true);
-    expect(body.kind).toBe("ak.receipt.read");
     expect(body.realm_id).toBe(fixture.realmId);
+    expect(body).not.toHaveProperty("kind");
+    expect(
+      receiverVisibleReceiptPayloads(capture.envelopes, {
+        disclosure: "required",
+        visibility: "private",
+        receiverDid: fixture.bob.did,
+        eventAuthors: {
+          [fixture.message.event_id]: fixture.bob.did,
+        },
+      }),
+    ).toHaveLength(1);
+    expect(
+      receiverVisibleReceiptPayloads(capture.envelopes, {
+        disclosure: "required",
+        visibility: "private",
+        receiverDid: fixture.alice.did,
+        eventAuthors: {
+          [fixture.message.event_id]: fixture.bob.did,
+        },
+      }),
+    ).toHaveLength(0);
     expect(
       await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
     ).toHaveLength(0);
   });
 
-  test("space disclosure=disabled reason is reported consistently", async ({
+  test("disclosure=disabled consistently filters repeated decrypted receipts", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "disclosure-disabled-reason");
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "disabled",
     });
-    const receipt = await postReceipt(
-      request,
-      fixture.aliceToken,
-      receiptEnvelope(fixture),
+    const capture = await captureSignalEnvelopes(
+      fixture.bobToken,
+      fixture.realmId,
+      () =>
+        postReceipt(
+          request,
+          fixture.aliceToken,
+          receiptEnvelope(fixture),
+        ),
     );
-    expect(receipt.status()).toBe(403);
-    const body = await receipt.json();
-    expect(JSON.stringify(body)).toContain("disclosure=disabled");
+    expect(capture.result.status(), await capture.result.text()).toBe(200);
+    expect(
+      receiverVisibleReceiptPayloads(capture.envelopes, {
+        disclosure: "disabled",
+      }),
+    ).toHaveLength(0);
   });
 
   test("actor-private read marker (ak.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
@@ -512,28 +617,81 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
 
 function receiptEnvelope(
   fixture: ReceiptFixture,
-  ttlMs = 5 * 60 * 1000,
+  ttlMs = 25_000,
   sentAt = new Date(),
 ) {
-  return {
-    kind: "ak.receipt.read",
-    realm_id: fixture.realmId,
-    actor_id: fixture.alice.did,
-    device_id: fixture.alice.deviceId,
-    sent_at: sentAt.toISOString(),
-    expires_at: new Date(sentAt.getTime() + ttlMs).toISOString(),
-    payload: {
+  const envelope = buildReceiptSignal({
+    actor: fixture.alice,
+    realmId: fixture.realmId,
+    eventId: fixture.message.event_id,
+    payloadSequence: sentAt.getTime(),
+    lifetimeMs: ttlMs,
+    sentAt,
+  });
+  // Preserve the requested wire TTL for negative admission vectors; the
+  // shared builder normally clamps callers to the class ceiling.
+  envelope.expires_at = new Date(sentAt.getTime() + ttlMs).toISOString();
+  return envelope;
+}
+
+function buildReceiptSignal(args: {
+  actor: JointUser;
+  realmId: string;
+  eventId: string;
+  payloadSequence: number;
+  lifetimeMs?: number;
+  sentAt?: Date;
+  readScope?: Record<string, unknown>;
+}) {
+  const sentAt = args.sentAt ?? new Date();
+  return buildSignalEnvelope({
+    actorDid: args.actor.did,
+    deviceId: args.actor.deviceId,
+    realmId: args.realmId,
+    signalClass: "session",
+    sentAt,
+    lifetimeMs: args.lifetimeMs,
+    plaintext: {
+      kind: "ak.receipt.read",
+      payload_sequence: args.payloadSequence,
       receipt_kind: "read",
       schema: "ak.schema.read_receipt.v1",
-      realm_id: fixture.realmId,
-      actor_id: fixture.alice.did,
-      event_id: fixture.message.event_id,
-      read_scope: {
-        kind: "realm",
-      },
+      realm_id: args.realmId,
+      actor_id: args.actor.did,
+      event_id: args.eventId,
+      read_scope: args.readScope ?? { kind: "realm" },
       created_at: sentAt.toISOString(),
     },
-  };
+  });
+}
+
+function decryptedReceiptPayloads(
+  envelopes: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return envelopes.flatMap((envelope) => {
+    const plaintext = signalPlaintext(envelope);
+    if (plaintext.kind !== "ak.receipt.read") return [];
+    return [plaintext];
+  });
+}
+
+function receiverVisibleReceiptPayloads(
+  envelopes: Array<Record<string, unknown>>,
+  policy: {
+    disclosure: "required" | "optional" | "disabled";
+    visibility?: "public" | "members" | "private";
+    receiverDid?: string;
+    eventAuthors?: Record<string, string>;
+  },
+): Array<Record<string, unknown>> {
+  if (policy.disclosure === "disabled") return [];
+  const receipts = decryptedReceiptPayloads(envelopes);
+  if (policy.visibility !== "private") return receipts;
+  return receipts.filter(
+    (receipt) =>
+      typeof receipt.event_id === "string" &&
+      policy.eventAuthors?.[receipt.event_id] === policy.receiverDid,
+  );
 }
 
 async function setReadReceiptPolicy(
@@ -561,10 +719,7 @@ async function postReceipt(
   token: string,
   data: Record<string, unknown>,
 ) {
-  return await request.post(`${solandBaseUrl()}/_arkret/self/ephemeral`, {
-    headers: authHeaders(token),
-    data: withBroadcastEphemeralProof(data),
-  });
+  return await postCallSignalRaw(request, token, data);
 }
 
 type ReadCursorAdvanceBody = {

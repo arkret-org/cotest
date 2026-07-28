@@ -30,7 +30,12 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import { grantCircleMemberManageCapability } from "../../helpers/circle-api";
-import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
+import {
+  buildSignalEnvelope,
+  captureSignalEnvelopes,
+  postCallSignalRaw,
+  signalPlaintext,
+} from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -224,34 +229,65 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     );
     const sentAt = new Date();
     const sentAtIso = sentAt.toISOString();
-    const receipt = await request.post(
-      `${solandBaseUrl()}/_arkret/self/ephemeral`,
-      {
-        headers: authHeaders(fixture.bobToken),
-        data: withBroadcastEphemeralProof({
-          kind: "ak.receipt.read",
-          realm_id: fixture.realmId,
-          actor_id: fixture.bob.did,
-          device_id: fixture.bob.deviceId,
-          sent_at: sentAtIso,
-          expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-          payload: {
-            receipt_kind: "read",
-            schema: "ak.schema.read_receipt.v1",
-            realm_id: fixture.realmId,
-            actor_id: fixture.bob.did,
-            read_scope: {
-              kind: "strand",
-              object_ref: promoted.privateStrandId,
-              track_name: "discussion",
-            },
-            event_id: privateMessage.event_id,
-            created_at: sentAtIso,
-          },
-        }),
+    const envelope = buildSignalEnvelope({
+      actorDid: fixture.bob.did,
+      deviceId: fixture.bob.deviceId,
+      realmId: fixture.realmId,
+      scopeRef: {
+        kind: "circle",
+        realm_id: fixture.realmId,
+        circle_id: promoted.circleId,
       },
+      sentAt,
+      plaintext: {
+        kind: "ak.receipt.read",
+        payload_sequence: Date.now(),
+        receipt_kind: "read",
+        schema: "ak.schema.read_receipt.v1",
+        realm_id: fixture.realmId,
+        actor_id: fixture.bob.did,
+        read_scope: {
+          kind: "strand",
+          object_ref: promoted.privateStrandId,
+          track_name: "discussion",
+        },
+        event_id: privateMessage.event_id,
+        created_at: sentAtIso,
+      },
+    });
+    const { result: receipt, envelopes } = await captureSignalEnvelopes(
+      fixture.aliceToken,
+      fixture.realmId,
+      () => postCallSignalRaw(request, fixture.bobToken, envelope),
     );
-    expect(receipt.status()).toBe(200);
+    expect(receipt.status(), await receipt.text()).toBe(200);
+
+    const received = envelopes.find((candidate) => {
+      const plaintext = signalPlaintext(candidate);
+      return (
+        candidate.sender_actor_id === fixture.bob.did &&
+        plaintext.kind === "ak.receipt.read"
+      );
+    });
+    expect(received, "alice received Circle-scoped encrypted receipt").toBeTruthy();
+    if (!received) throw new Error("Circle receipt Signal missing");
+    expect(received).not.toHaveProperty("kind");
+    expect(received).not.toHaveProperty("read_scope");
+    expect(received.scope_ref).toEqual({
+      kind: "circle",
+      realm_id: fixture.realmId,
+      circle_id: promoted.circleId,
+    });
+    expect(signalPlaintext(received)).toMatchObject({
+      kind: "ak.receipt.read",
+      actor_id: fixture.bob.did,
+      read_scope: {
+        kind: "strand",
+        object_ref: promoted.privateStrandId,
+        track_name: "discussion",
+      },
+      event_id: privateMessage.event_id,
+    });
     expect(
       await listReadMarkersViaApi(request, fixture.aliceToken, fixture.realmId),
     ).toHaveLength(0);

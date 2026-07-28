@@ -40,6 +40,7 @@ import {
   createRealmApi,
   currentActorDidApi,
   expectJsonOk,
+  prepareSignedEventCbaApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
   wireErrCode,
@@ -102,6 +103,7 @@ async function submitGatedMessage(
     },
   });
   await alignSignedEventToActorFrontierApi(request, token, envelope);
+  await prepareSignedEventCbaApi(request, token, envelope);
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,
     { headers: authHeaders(token), data: envelope },

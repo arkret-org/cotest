@@ -11,12 +11,10 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { cssStringEscape } from "../../helpers/dom";
 import {
   acceptInviteViaApi,
-  authHeaders,
   createSharedRealmViaApi,
   listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -37,7 +35,12 @@ import {
   uniqueUser,
   type JointUserPage,
 } from "../../helpers/users";
-import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
+import {
+  buildSignalEnvelope,
+  captureSignalEnvelopes,
+  postCallSignalRaw,
+  signalPlaintext,
+} from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -382,7 +385,7 @@ test.describe("chat advanced", () => {
     });
   });
 
-  test("API typing ephemeral is visible in account subscribe and respects TTL", async ({
+  test("API typing Signal is decrypted from the live rail and keeps its target opaque", async ({
     browser,
     request,
   }) => {
@@ -413,38 +416,47 @@ test.describe("chat advanced", () => {
       await acceptInviteViaApi(request, bobToken, bob.did, realmId);
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const sentAt = new Date();
-      const typing = await request.post(
-        `${solandBaseUrl()}/_arkret/self/ephemeral`,
-        {
-          headers: authHeaders(aliceToken),
-          data: withBroadcastEphemeralProof({
-            kind: "ak.typing",
-            realm_id: realmId,
-            actor_id: aliceFlow.user.did,
-            device_id: aliceFlow.user.deviceId,
-            sent_at: sentAt.toISOString(),
-            expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-            payload: {
-              typing: true,
-              strand_id: strandId,
-            },
-          }),
+      const envelope = buildSignalEnvelope({
+        actorDid: aliceFlow.user.did,
+        deviceId: aliceFlow.user.deviceId,
+        realmId,
+        sentAt,
+        plaintext: {
+          kind: "ak.typing",
+          strand_id: strandId,
+          track_name: "discussion",
+          typing: true,
+          payload_sequence: Date.now(),
+          ttl_ms: 25_000,
         },
+      });
+      const { result: typing, envelopes } = await captureSignalEnvelopes(
+        bobToken,
+        realmId,
+        () => postCallSignalRaw(request, aliceToken, envelope),
       );
       const typingResponseText = await typing.text();
       expect(typing.status(), typingResponseText).toBe(200);
+      const submit = JSON.parse(typingResponseText) as Record<string, unknown>;
+      expect(submit).toMatchObject({ accepted: true, realm_id: realmId });
+      expect(submit).not.toHaveProperty("kind");
+      expect(submit).not.toHaveProperty("strand_id");
 
-      const frames = await accountSubscribeFramesApi(request, bobToken);
-      const frame = frames.find((candidate) => candidate.kind === "delta");
-      expect(frame, "account subscribe delta frame").toBeTruthy();
-      if (!frame) throw new Error("account subscribe delta frame missing");
-      const realms = (frame as { realms?: Record<string, unknown> }).realms ?? {};
-      const realmFrame = realms[realmId] as
-        | { ephemeral?: unknown }
-        | undefined;
-      const ephemeral = realmFrame?.ephemeral;
-      expect(JSON.stringify(ephemeral)).toContain(aliceFlow.user.did);
-      expect(JSON.stringify(ephemeral)).toContain(strandId);
+      const received = envelopes.find(
+        (candidate) =>
+          candidate.sender_actor_id === aliceFlow.user.did &&
+          signalPlaintext(candidate).kind === "ak.typing",
+      );
+      expect(received, "bob received encrypted typing Signal").toBeTruthy();
+      if (!received) throw new Error("typing Signal missing");
+      expect(received).not.toHaveProperty("kind");
+      expect(received).not.toHaveProperty("strand_id");
+      expect(signalPlaintext(received)).toMatchObject({
+        kind: "ak.typing",
+        strand_id: strandId,
+        track_name: "discussion",
+        typing: true,
+      });
     } finally {
       await aliceFlow.page.close();
     }

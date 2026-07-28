@@ -18,7 +18,11 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
+import {
+  buildSignalEnvelope,
+  postCallSignalRaw,
+  prepareSignalEnvelope,
+} from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -234,9 +238,9 @@ test.describe("discovery", () => {
     request,
   }) => {
     // profiles-presence.md §3 requires an active device-bound proof on every
-    // presence broadcast. Use Inkson's real event signer and heartbeat rather
-    // than a dev session or a synthetic proof, then close and reopen the actual
-    // browser tab so the online -> expired/offline -> online lifecycle is real.
+    // presence Signal. The browser drives the close/reopen lifecycle; the
+    // explicit API send below gives the post-subscription prerequisite a
+    // deterministic acceptance boundary.
     const stamp = Date.now();
     const aliceSession = await openDpopUserPage(
       browser,
@@ -263,6 +267,7 @@ test.describe("discovery", () => {
     const alicePage = aliceSession.page;
     const bob = bobSession.user;
     const bobPage = bobSession.page;
+    const bobToken = await issueDevSession(request, bob);
 
     try {
       // Browser bootstrap must have projected Bob's exact event-signing key as
@@ -307,36 +312,35 @@ test.describe("discovery", () => {
       // relying on a background-tab refresh timer.
       await bobPage.gotoTimelineRealm(presenceRealmId);
 
-      // A structurally valid envelope with a cryptographically invalid
-      // detached signature must fail closed. Build the normal proof first,
-      // then alter one significant signature character so the negative case
-      // cannot accidentally reuse the registered browser signer.
+      // A structurally valid encrypted Signal with a cryptographically invalid
+      // detached signature must fail closed. Exact presence kind/state remain
+      // inside ciphertext and are never available to the service.
       const sentAt = new Date();
-      const ephemeralUrl = `${solandBaseUrl()}/_arkret/self/ephemeral`;
-      const forgedEnvelope = withBroadcastEphemeralProof({
-        kind: "ak.presence",
-        realm_id: presenceRealmId,
-        actor_id: bob.did,
-        device_id: bob.deviceId,
-        sent_at: sentAt.toISOString(),
-        expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-        payload: {
-          realm_id: presenceRealmId,
+      const signalUrl = `${solandBaseUrl()}/_arkret/self/signal`;
+      const forgedEnvelope = buildSignalEnvelope({
+        actorDid: bob.did,
+        deviceId: bob.deviceId,
+        realmId: presenceRealmId,
+        sentAt,
+        plaintext: {
+          kind: "ak.presence",
           actor_id: bob.did,
           state: "dnd",
-          ttl_ms: 30_000,
+          payload_sequence: Date.now(),
+          ttl_ms: 25_000,
         },
       });
+      await prepareSignalEnvelope(request, bobToken, forgedEnvelope);
       const forgedProof = forgedEnvelope.proof as Record<string, unknown>;
       const forgedJws = forgedProof.jws as string;
       const [protectedHeader, , signature] = forgedJws.split(".");
       const forgedSignature = `${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
       forgedProof.jws = `${protectedHeader}..${forgedSignature}`;
-      const forged = await request.post(ephemeralUrl, {
+      const forged = await request.post(signalUrl, {
         headers: selfPathHeadersForDpopSession(
           bobSession.session,
           "POST",
-          ephemeralUrl,
+          signalUrl,
         ),
         data: forgedEnvelope,
       });
@@ -346,35 +350,28 @@ test.describe("discovery", () => {
         error: { details: { reason_code: "proof_invalid" } },
       });
 
-      // Seed the observed online transition through the canonical endpoint
-      // after Alice's subscription is established. The browser heartbeat is
-      // deliberately fire-and-forget, so using the same registered device
-      // signer here gives this prerequisite an explicit acceptance boundary;
-      // the close/reopen assertions below still prove heartbeat expiry and the
-      // browser's first fresh heartbeat.
+      // Seed the observed online transition through encrypted Signal after
+      // Alice's subscription is established. The receiver decrypts presence;
+      // account snapshots/deltas do not carry a server-projected ephemeral.
       const onlineAt = new Date();
-      const onlineEnvelope = withBroadcastEphemeralProof({
-        kind: "ak.presence",
-        realm_id: presenceRealmId,
-        actor_id: bob.did,
-        device_id: bob.deviceId,
-        sent_at: onlineAt.toISOString(),
-        expires_at: new Date(onlineAt.getTime() + 30_000).toISOString(),
-        payload: {
-          realm_id: presenceRealmId,
+      const onlineEnvelope = buildSignalEnvelope({
+        actorDid: bob.did,
+        deviceId: bob.deviceId,
+        realmId: presenceRealmId,
+        sentAt: onlineAt,
+        plaintext: {
+          kind: "ak.presence",
           actor_id: bob.did,
           state: "online",
-          ttl_ms: 30_000,
+          payload_sequence: Date.now() + 1,
+          ttl_ms: 25_000,
         },
       });
-      const online = await request.post(ephemeralUrl, {
-        headers: selfPathHeadersForDpopSession(
-          bobSession.session,
-          "POST",
-          ephemeralUrl,
-        ),
-        data: onlineEnvelope,
-      });
+      const online = await postCallSignalRaw(
+        request,
+        bobToken,
+        onlineEnvelope,
+      );
       expect(online.status(), await online.text()).toBe(200);
 
       const bobPresenceRow = alicePage.page.locator(

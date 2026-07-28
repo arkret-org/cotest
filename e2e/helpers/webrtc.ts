@@ -181,6 +181,7 @@ export function buildSignalEnvelope(args: {
   actorDid: string;
   deviceId: string;
   realmId: string;
+  scopeRef?: Record<string, unknown>;
   plaintext: Record<string, unknown>;
   signalClass?: "session" | "moderation" | "setup";
   sentAt?: Date;
@@ -199,7 +200,7 @@ export function buildSignalEnvelope(args: {
   );
   const envelope: Record<string, unknown> = {
     realm_id: args.realmId,
-    scope_ref: { kind: "realm", realm_id: args.realmId },
+    scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
     sender_actor_id: args.actorDid,
     sender_device_id: args.deviceId,
     seal_ref: `ak:seal:sha256:${"0".repeat(64)}`,
@@ -322,7 +323,7 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
   proof.jws = `${protectedHeader}..${signature}`;
 }
 
-export function callSignalPlaintext(
+export function signalPlaintext(
   envelope: Record<string, unknown>,
 ): Record<string, unknown> {
   const encryptedPayload = envelope.encrypted_payload as
@@ -335,6 +336,8 @@ export function callSignalPlaintext(
     Buffer.from(encryptedPayload.ciphertext, "base64url").toString("utf8"),
   ) as Record<string, unknown>;
 }
+
+export const callSignalPlaintext = signalPlaintext;
 
 // ── Capability grants (authz.rs default rules) ───────────────────────────────
 //
@@ -536,11 +539,11 @@ export function newCallId(): string {
  * Submit one encrypted Signal envelope. The Seal reference is resolved just
  * before signing so the proof and AAD bind the current accepted basis.
  */
-export async function postCallSignalRaw(
+export async function prepareSignalEnvelope(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
-): Promise<APIResponse> {
+): Promise<void> {
   const realmId = String(envelope.realm_id);
   const actorDid = String(envelope.sender_actor_id);
   const deviceId = String(envelope.sender_device_id);
@@ -571,6 +574,14 @@ export async function postCallSignalRaw(
     envelope.seal_ref = basis.seal_id;
   }
   finalizeSignalEnvelopeProof(envelope);
+}
+
+export async function postCallSignalRaw(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+): Promise<APIResponse> {
+  await prepareSignalEnvelope(request, token, envelope);
   return await request.post(`${solandBaseUrl()}/_arkret/self/signal`, {
     headers: authHeaders(token),
     data: envelope,
@@ -630,6 +641,46 @@ export async function relayedCallSignals(
         envelope.realm_id === realmId &&
         envelope.encrypted_payload !== undefined,
     );
+}
+
+/**
+ * Keep a receiver's live Signal rail open while `action` sends one or more
+ * envelopes. Product-level assertions must decrypt/filter the returned
+ * envelopes on the receiver side; the service only sees the outer class/scope.
+ */
+export async function captureSignalEnvelopes<T>(
+  token: string,
+  realmId: string,
+  action: () => Promise<T>,
+): Promise<{ result: T; envelopes: Array<Record<string, unknown>> }> {
+  const url = new URL(`${solandBaseUrl()}/_arkret/self/signal/subscribe`);
+  url.searchParams.set("max_duration_ms", "800");
+  url.searchParams.set("heartbeat_ms", "25");
+  const responsePromise = fetch(url, {
+    headers: { ...authHeaders(token), accept: "application/x-ndjson" },
+  });
+  // Let the HTTP request reach the live subscriber registry before sending.
+  await new Promise((resolve) => setTimeout(resolve, 75));
+  const result = await action();
+  const response = await responsePromise;
+  const text = await response.text();
+  expect(
+    response.status,
+    `signal subscribe returned ${response.status}: ${text}`,
+  ).toBe(200);
+  const envelopes = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((frame) => frame.kind === "signal")
+    .map((frame) => frame.envelope as Record<string, unknown>)
+    .filter(
+      (envelope) =>
+        envelope.realm_id === realmId &&
+        envelope.encrypted_payload !== undefined,
+    );
+  return { result, envelopes };
 }
 
 export async function expectCallSignalError(
