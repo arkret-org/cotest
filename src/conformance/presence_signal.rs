@@ -15,7 +15,7 @@
 
 use anyhow::{Result, bail};
 use arkret_models_discovery::{PresenceStatus, validate_last_active_at, validate_status_message};
-use arkret_wire::{DeviceId, Did, RealmId, ScopeRef, SignalClass};
+use arkret_wire::{DeviceId, Did, RealmId, ScopeRef, SealId, SignalClass};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use garth::signal::{PresenceProjection, SIGNAL_PLAINTEXT_KIND_PRESENCE, SignalPlaintext};
 use serde_json::{Value, json};
@@ -272,11 +272,12 @@ fn device_presence(
         kind: SIGNAL_PLAINTEXT_KIND_PRESENCE.to_owned(),
         actor_id: actor()?,
         payload_sequence,
-        ttl_ms: TTL_MS,
+        ttl_ms: Some(TTL_MS),
         body: body.into_iter().collect(),
         sent_at,
         expires_at: sent_at + Duration::milliseconds(TTL_MS as i64),
         scope_ref: ScopeRef::Realm { realm_id: realm()? },
+        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
         sender_device_id: DeviceId::new(format!(
             "ak:device:01904100-0000-7000-8000-{device_suffix}"
         ))?,

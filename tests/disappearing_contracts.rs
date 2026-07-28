@@ -41,7 +41,6 @@ fn payload_for(trigger: DisappearingMessageExpiryTrigger) -> Value {
         "discussion",
         ContentBlock::text("temporary body"),
     )
-    .with_message_id("ak:message:01904100-0000-7000-8000-000000000003")
     .with_expiry(expiry(trigger))
     .to_value()
     .unwrap()
