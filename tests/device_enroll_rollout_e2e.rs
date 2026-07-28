@@ -9,8 +9,10 @@ use arkret_bootstrap::{
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{Did, EventId, Hlc, RealmId, TypedTrustDomainId};
-use arkret_models_collaboration::http_bodies::EventsSubmitRequestBody;
-use arkret_signatures::{Ed25519MoveSigner, SignEventOptions, sign_event};
+use arkret_models_collaboration::http_bodies::{
+    EventsSubmitBatchRequestBody, EventsSubmitRequestBody,
+};
+use arkret_signatures::{Ed25519PayloadSigner, SignEventOptions, sign_event};
 use arkret_wire::{Event, EventRef};
 use cotest::harness::{ArkretServer, dev_login, expect_api_error, expect_json};
 use ed25519_dalek::SigningKey;
@@ -43,8 +45,11 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         enrolled_device,
         &enrolled_device_public_key,
     )?;
-    let create = bootstrap.events[0].clone();
-    let authorize = bootstrap.events[1].clone();
+    let EventsSubmitRequestBody::Batch(bootstrap_batch) = &bootstrap else {
+        anyhow::bail!("self principal bootstrap must be a two-slot batch");
+    };
+    let create = bootstrap_batch.events[0].clone();
+    let authorize = bootstrap_batch.events[1].clone();
 
     // The identity-root genesis can never be stored by itself.
     expect_api_error(
@@ -73,23 +78,24 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
 
     // Slot 1 must reference exactly the slot-0 genesis Event.
     let mut missing_predecessor = authorize.clone();
-    missing_predecessor.prev_refs.clear();
+    missing_predecessor.event.prev_refs.clear();
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
-            .json(&EventsSubmitRequestBody {
-                event: None,
-                events: vec![create.clone(), missing_predecessor],
-            }),
+            .json(&EventsSubmitRequestBody::Batch(
+                EventsSubmitBatchRequestBody {
+                    events: vec![create.clone(), missing_predecessor],
+                },
+            )),
         StatusCode::BAD_REQUEST,
         "schema_violation",
     )
     .await?;
 
     let mut extra_predecessor = authorize.clone();
-    extra_predecessor.prev_refs.push(EventId::new(
+    extra_predecessor.event.prev_refs.push(EventId::new(
         "ak:event:01904100-0000-7000-8000-00000000e199",
     )?);
     expect_api_error(
@@ -97,10 +103,11 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
-            .json(&EventsSubmitRequestBody {
-                event: None,
-                events: vec![create.clone(), extra_predecessor],
-            }),
+            .json(&EventsSubmitRequestBody::Batch(
+                EventsSubmitBatchRequestBody {
+                    events: vec![create.clone(), extra_predecessor],
+                },
+            )),
         StatusCode::BAD_REQUEST,
         "schema_violation",
     )
@@ -115,8 +122,8 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_accepted_event(&accepted, create.event_id.as_str())?;
-    assert_accepted_event(&accepted, authorize.event_id.as_str())?;
+    assert_accepted_event(&accepted, create.event.event_id.as_str())?;
+    assert_accepted_event(&accepted, authorize.event.event_id.as_str())?;
 
     // A response can be lost after commit. Byte-identical retry must resolve
     // to the already accepted closed unit rather than duplicating either slot.
@@ -129,8 +136,8 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_accepted_event(&retried, create.event_id.as_str())?;
-    assert_accepted_event(&retried, authorize.event_id.as_str())?;
+    assert_accepted_event(&retried, create.event.event_id.as_str())?;
+    assert_accepted_event(&retried, authorize.event.event_id.as_str())?;
 
     let query = expect_json(
         server
@@ -162,7 +169,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         &multibase_public_key(&SigningKey::from_bytes(&[42_u8; 32])),
         2,
         "ak:event:01904100-0000-7000-8000-00000000e102",
-        vec![authorize.event_id.clone()],
+        vec![authorize.event.event_id.clone()],
     )?;
     expect_api_error(
         server
@@ -184,7 +191,7 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         &multibase_public_key(&SigningKey::from_bytes(&[43_u8; 32])),
         2,
         "ak:event:01904100-0000-7000-8000-00000000e103",
-        vec![authorize.event_id],
+        vec![authorize.event.event_id],
     )?;
     expect_api_error(
         server
@@ -282,17 +289,20 @@ fn principal_bootstrap_request(
     let realm_id =
         RealmId::new(arkret_models_identity::did_document::principal_control_realm_id(&principal))?;
     let created_at = "2026-06-17T00:00:00.000Z".parse()?;
-    let mut create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
-        principal_id: principal.clone(),
-        realm_id,
-        trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
-        did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
-        event_id: EventId::new("ak:event:01904100-0000-7000-8000-00000000e100")?,
-        created_at,
-        hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
-    })?;
+    let mut create = build_self_principal_pcr_create(
+        SelfPrincipalPcrCreateInput {
+            principal_id: principal.clone(),
+            realm_id,
+            trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
+            did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+            event_id: EventId::new("ak:event:01904100-0000-7000-8000-00000000e100")?,
+            created_at,
+            hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
+        },
+        &cotest::publication::project_cells,
+    )?;
     let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
-    let root_signer = Ed25519MoveSigner::from_did_key_seed(
+    let root_signer = Ed25519PayloadSigner::from_did_key_seed(
         [32_u8; 32],
         root_did,
         prepared.root_verification_method.clone(),
@@ -314,7 +324,11 @@ fn principal_bootstrap_request(
         "ak:event:01904100-0000-7000-8000-00000000e101",
         vec![create.event_id.clone()],
     )?;
-    Ok(self_principal_bootstrap_submit_request(create, authorize)?)
+    Ok(self_principal_bootstrap_submit_request(
+        cotest::publication::initial_submission(create, "ak.realm.admin")?,
+        cotest::publication::initial_submission(authorize, "ak.device.authorize")?,
+        &cotest::publication::project_cells,
+    )?)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -358,7 +372,9 @@ fn service_attested_device_authorize_event(
     let created_at = "2026-06-17T00:00:00.000Z".parse()?;
     let mut event = Event::new(
         arkret_wire::events::EventKind::DEVICE_AUTHORIZE,
-        RealmId::new(realm_id)?,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: RealmId::new(realm_id)?,
+        },
         principal,
         actor_seq,
         Hlc::new(format!("01970e589d21-{actor_seq:04x}-a13f9c2e"))?,
@@ -369,7 +385,7 @@ fn service_attested_device_authorize_event(
     event.prev_refs = prev_refs;
     event.executed_by = Some(authority_did.clone());
     event.authorization_ref = Some(authorization_ref.to_owned());
-    let authority_signer = Ed25519MoveSigner::from_did_key_seed(
+    let authority_signer = Ed25519PayloadSigner::from_did_key_seed(
         authority.seed,
         authority_did,
         authority.verification_method.clone(),

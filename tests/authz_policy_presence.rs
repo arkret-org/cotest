@@ -9,13 +9,6 @@ async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
-    cotest::scenarios::authz_policy_presence::presence_push_policy_and_ice_contracts_work().await
-}
-
-#[tokio::test]
-#[serial]
-async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<()> {
-    cotest::scenarios::authz_policy_presence::ephemeral_proofs_require_active_authorized_device_keys()
-        .await
+async fn push_policy_and_ice_contracts_work() -> Result<()> {
+    cotest::scenarios::authz_policy_presence::push_policy_and_ice_contracts_work().await
 }

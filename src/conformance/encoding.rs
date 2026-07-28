@@ -319,12 +319,12 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
             "event_id": "ak:event:019f9e50-d787-74e0-8731-c9ad5eaa9190",
             "kind": "ak.identity.accountability_grant",
             "realm_id": "ak:realm:019f9e50-d787-74e0-8731-c9ad5eaa9180",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f9e50-d787-74e0-8731-c9ad5eaa9180"},
             "actor_id": issuer,
             "actor_seq": 7,
             "created_at": "2026-07-26T01:00:00.000Z",
             "hlc": "019f9e500000-0000-aabbccdd",
             "prev_refs": [],
-            "effects": [],
             "seal_basis": {
                 "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
                 "control_event_set_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -339,51 +339,48 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
             "proofs": []
         }))?)
     };
-    let materialize = |event: &mut arkret_wire::Event| -> Result<()> {
-        let scope: AccountabilityScope = serde_json::from_value(
-            event
-                .payload
-                .get("accountability_scope")
-                .cloned()
-                .ok_or_else(|| anyhow!("accountability payload scope is missing"))?,
-        )?;
-        let scope_component = scope.scope_set_component()?;
-        let cell_subject =
-            arkret_wire::composite_subject(&[issuer, subject, scope_component.as_str()])?;
-        event.effects = vec![serde_json::from_value(json!({
-            "cell": format!(
-                "ak:cell:ak.component.identity.accountability.v1:{cell_subject}"
-            ),
-            "op": {
-                "kind": "set",
-                "value": serde_json::to_value(&event.payload)?
-            }
-        }))?];
-        Ok(())
+    // The cell an accountability grant addresses is derived from `kind +
+    // payload` through the contract registry, not declared by the producer: v1
+    // deleted the Event `effects[]` array. So the vector projects each Event
+    // and compares the *derived* cell, which is a strictly stronger assertion
+    // than comparing two producer-authored cell refs — a registry that
+    // addressed the exact-set subject wrongly now fails here.
+    let projected_cell = |event: &arkret_wire::Event| -> Result<arkret_wire::CellRef> {
+        let writes = crate::publication::project_cells(event)
+            .map_err(|error| anyhow!("{VECTOR_ID} projection failed: {error}"))?;
+        let [write] = writes.as_slice() else {
+            bail!(
+                "{VECTOR_ID} expected exactly one derived cell write, got {}",
+                writes.len()
+            );
+        };
+        Ok(write.cell.clone())
     };
-    let mut active = event_for(json!(["employment", "agent_operator"]), "active")?;
-    let mut revoked = event_for(json!(["agent_operator", "employment"]), "revoked")?;
-    materialize(&mut active)?;
-    materialize(&mut revoked)?;
-    if active.effects[0].cell != revoked.effects[0].cell {
+    // The subject is the canonical exact-set component, so a reordered set
+    // addresses the same cell.
+    let active = event_for(json!(["employment", "agent_operator"]), "active")?;
+    let revoked = event_for(json!(["agent_operator", "employment"]), "revoked")?;
+    if projected_cell(&active)? != projected_cell(&revoked)? {
         bail!("{VECTOR_ID} reordered exact-set revoke addressed a different cell");
     }
     arkret_schema::validate_registered_cell_writes(&active)?;
     arkret_schema::validate_registered_cell_writes(&revoked)?;
 
-    let mut subset = event_for(json!("employment"), "revoked")?;
-    materialize(&mut subset)?;
-    if subset.effects[0].cell == active.effects[0].cell {
+    // A subset is a different exact set and therefore a different cell: a
+    // partial revoke must not collide with the superset grant.
+    let subset = event_for(json!("employment"), "revoked")?;
+    if projected_cell(&subset)? == projected_cell(&active)? {
         bail!("{VECTOR_ID} subset revoke collided with the superset cell");
     }
 
-    let mut legacy = event_for(json!("employment"), "active")?;
-    materialize(&mut legacy)?;
-    legacy.effects[0].cell = arkret_wire::CellRef::new(
+    // The pre-composite-subject addressing (the scope value used directly as
+    // the cell subject) must not be reachable: it is exactly the collision the
+    // composite subject exists to prevent.
+    let legacy_subject = arkret_wire::CellRef::new(
         "ak:cell:ak.component.identity.accountability.v1:q76kFdC2LNwLBlUed_ICSOysggmqrOXJbAtWHO49Woc",
     )?;
-    if arkret_schema::validate_registered_cell_writes(&legacy).is_ok() {
-        bail!("{VECTOR_ID} accepted the legacy direct-scalar subject");
+    if projected_cell(&event_for(json!("employment"), "active")?)? == legacy_subject {
+        bail!("{VECTOR_ID} projection still addresses the legacy direct-scalar subject");
     }
     Ok(())
 }

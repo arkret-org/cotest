@@ -1,46 +1,54 @@
-//! `ak.call.signal` receiver-side conformance vectors (webrtc-signaling.md §5.1).
+//! `ak.call.signal` receiver-side conformance vectors
+//! (`crypto-media/webrtc-signaling.md` §5).
 //!
-//! The retired soland WebRTC session stack enforced `seq` monotonicity and
-//! accepted non-spec signal types (`offer` / `ice` / `device_change`)
-//! server-side. The canonical `POST /_arkret/self/ephemeral` relay is
-//! content-agnostic — it broadcasts the verbatim signed envelope — and the
-//! *receiver* enforces both the canonical signal_kind enum and `seq`
-//! monotonicity (§5.1). These vectors drive the real SDK surfaces a receiver
-//! runs, plus a REAL ed25519 detached-JWS round-trip proving the proof the
-//! cotest e2e helper mints (`e2e/helpers/webrtc.ts buildCallSignalEnvelope`) is
-//! genuinely verifiable, not a shape stub.
+//! Call signaling rides the encrypted-only Signal rail. The outer envelope
+//! exposes nothing but `signal_class`; `call_id`, `signal_kind`, `seq`, SDP
+//! and ICE candidates all live inside `encrypted_payload`, and the service
+//! must neither see nor route on them. Every receiver check therefore happens
+//! after decryption — except the ones the outer envelope itself carries
+//! (device proof, TTL class ceiling, AAD binding), which run *before* any
+//! ringing or candidate application.
 //!
 //! Registered vector ids:
 //! - `ak.vector.call_signal.signal_kind_enum.v1`
 //! - `ak.vector.call_signal.seq_monotonic.v1`
 //! - `ak.vector.call_signal.proof_detached_jws.v1`
+//! - `ak.vector.call_signal.outer_metadata_minimal.v1`
+
+use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::events_payloads::ephemeral::{
-    CallSignalSeqKey, CallSignalState, EphemeralEnvelope, validate_call_signal_envelope,
-    validate_signal_seq,
+use arkret_identifiers::{CallId, DeviceId, Did, Hash, RealmId};
+use arkret_signatures::PublicKeyMaterial;
+use arkret_signatures::proof::verify_eddsa_signal_proof;
+use arkret_wire::signal::{SIGNAL_AEAD_PURPOSE, SIGNAL_AEAD_SCHEME};
+use arkret_wire::{
+    CALL_SIGNAL_KINDS, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
+    SignalKeyRef, SignalProof,
 };
-use arkret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
-use arkret_wire::{CALL_SIGNAL_KINDS, Proof};
-use chrono::{TimeZone, Utc};
-use ed25519_dalek::{Signer, SigningKey};
+use chrono::{DateTime, Duration, TimeZone, Utc};
+use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_SIGNAL_KIND_ENUM: &str = "ak.vector.call_signal.signal_kind_enum.v1";
 pub const VECTOR_ID_SEQ_MONOTONIC: &str = "ak.vector.call_signal.seq_monotonic.v1";
 pub const VECTOR_ID_PROOF_DETACHED_JWS: &str = "ak.vector.call_signal.proof_detached_jws.v1";
+pub const VECTOR_ID_OUTER_METADATA_MINIMAL: &str =
+    "ak.vector.call_signal.outer_metadata_minimal.v1";
 
 pub const ALL_CALL_SIGNAL_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIGNAL_KIND_ENUM,
     VECTOR_ID_SEQ_MONOTONIC,
     VECTOR_ID_PROOF_DETACHED_JWS,
+    VECTOR_ID_OUTER_METADATA_MINIMAL,
 ];
 
 // ─── VECT-CS-1 — signal_kind_enum (canonical 14-value set) ─────────────────
 
-/// The receiver MUST accept exactly the spec 14-value enum and MUST reject the
+/// The receiver MUST accept exactly the §5 14-value enum and MUST reject the
 /// retired non-spec types (`offer` / `ice` / `device_change`) the old soland
-/// stack used.
+/// stack used. `signal_kind` is a *decrypted plaintext* field: the check runs
+/// on the plaintext object, never on the outer header.
 pub fn run_signal_kind_enum_vector() -> Result<()> {
     if CALL_SIGNAL_KINDS.len() != 14 {
         bail!(
@@ -68,173 +76,95 @@ pub fn run_signal_kind_enum_vector() -> Result<()> {
             bail!("canonical signal_kind `{expected}` missing from CALL_SIGNAL_KINDS");
         }
     }
-    // The retired non-spec types MUST NOT be canonical, and an envelope carrying
-    // one MUST be rejected by the receiver-side validator.
     for retired in ["offer", "ice", "device_change"] {
         if CALL_SIGNAL_KINDS.contains(&retired) {
             bail!("retired non-spec signal_kind `{retired}` leaked into CALL_SIGNAL_KINDS");
         }
-        let env = call_signal_envelope_value(retired, 1);
-        let parsed: EphemeralEnvelope = serde_json::from_value(env)
-            .map_err(|err| anyhow!("envelope deserialise failed: {err}"))?;
-        if validate_call_signal_envelope(&parsed).is_ok() {
+        if validate_call_signal_plaintext(&call_signal_plaintext(retired, 1)).is_ok() {
             bail!("receiver accepted a retired signal_kind `{retired}` — must be rejected");
         }
     }
-    // A canonical envelope validates.
-    let ok_env = call_signal_envelope_value("invite", 1);
-    let parsed: EphemeralEnvelope = serde_json::from_value(ok_env)
-        .map_err(|err| anyhow!("canonical envelope deserialise failed: {err}"))?;
-    validate_call_signal_envelope(&parsed)
-        .map_err(|err| anyhow!("canonical invite envelope must validate: {err}"))?;
+    validate_call_signal_plaintext(&call_signal_plaintext("invite", 1))
+        .map_err(|err| anyhow!("canonical invite plaintext must validate: {err}"))?;
     Ok(())
 }
 
 // ─── VECT-CS-2 — seq_monotonic (receiver-side rollback rejection) ──────────
 
-/// `seq` is monotonic per `(realm_id, call_id, actor_id, device_id)`. The
-/// receiver MUST accept a strictly-increasing stream and MUST drop a rollback
-/// (`next <= prev`). Pins both the bare `validate_signal_seq` predicate and the
-/// stateful `CallSignalState` reducer.
+/// `seq` is strictly increasing per `(realm_id, call_id, actor_id, device_id)`
+/// (§5). The receiver MUST accept an ascending stream and MUST drop a rollback
+/// or a repeat. The frontier is not advanced by a dropped frame.
 pub fn run_seq_monotonic_vector() -> Result<()> {
-    // Bare predicate.
-    validate_signal_seq(None, 7).map_err(|e| anyhow!("first observation must accept: {e}"))?;
-    validate_signal_seq(Some(1), 2).map_err(|e| anyhow!("ascending must accept: {e}"))?;
-    if validate_signal_seq(Some(2), 2).is_ok() {
+    let mut frontier: BTreeMap<CallSignalSeqKey, u64> = BTreeMap::new();
+    let key = CallSignalSeqKey {
+        realm_id: RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000")?,
+        call_id: CallId::new("ak:call:0196441c-0000-7000-8000-000000000000")?,
+        actor_id: Did::new("did:web:alice.example.com")?,
+        device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?,
+    };
+
+    observe_seq(&mut frontier, &key, 1)
+        .map_err(|err| anyhow!("first observation must accept: {err}"))?;
+    observe_seq(&mut frontier, &key, 2).map_err(|err| anyhow!("ascending must accept: {err}"))?;
+    if observe_seq(&mut frontier, &key, 2).is_ok() {
         bail!("repeat seq (2 after 2) must be rejected as a rollback");
     }
-    if validate_signal_seq(Some(2), 1).is_ok() {
+    if observe_seq(&mut frontier, &key, 1).is_ok() {
         bail!("rollback seq (1 after 2) must be rejected");
     }
+    // The dropped frames must not have moved the frontier: a fresh 3 advances.
+    observe_seq(&mut frontier, &key, 3)
+        .map_err(|err| anyhow!("seq 3 after dropped rollbacks must accept: {err}"))?;
 
-    // Stateful reducer over the [1, 2, 1] stream the e2e relay delivers
-    // verbatim: the trailing 1 is the only rejection.
-    let key = CallSignalSeqKey::new(
-        arkret_identifiers::RealmId::new(
-            "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned(),
-        )
-        .map_err(|e| anyhow!("realm id: {e}"))?,
-        arkret_identifiers::CallId::new("ak:call:0196441c-0000-7000-8000-000000000000".to_owned())
-            .map_err(|e| anyhow!("call id: {e}"))?,
-        arkret_identifiers::Did::new("did:web:alice.example.com".to_owned())
-            .map_err(|e| anyhow!("did: {e}"))?,
-        arkret_identifiers::DeviceId::new(
-            "ak:device:01964137-0000-7000-8000-000000000000".to_owned(),
-        )
-        .map_err(|e| anyhow!("device id: {e}"))?,
-    );
-    let mut state = CallSignalState::new();
-    state
-        .observe(&key, 1)
-        .map_err(|e| anyhow!("seq 1 must accept: {e}"))?;
-    state
-        .observe(&key, 2)
-        .map_err(|e| anyhow!("seq 2 must accept: {e}"))?;
-    if state.observe(&key, 1).is_ok() {
-        bail!("rollback seq 1 after 2 must be dropped by the stateful receiver");
-    }
-    // After dropping the rollback the frontier is still 2; a fresh 3 advances.
-    state
-        .observe(&key, 3)
-        .map_err(|e| anyhow!("seq 3 after dropped rollback must accept: {e}"))?;
+    // The key is a four-tuple: the same seq on a different device is a
+    // different stream and must not be suppressed by the first device's
+    // frontier.
+    let sibling = CallSignalSeqKey {
+        device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")?,
+        ..key.clone()
+    };
+    observe_seq(&mut frontier, &sibling, 1)
+        .map_err(|err| anyhow!("a sibling device's stream must have its own frontier: {err}"))?;
     Ok(())
 }
 
 // ─── VECT-CS-3 — proof_detached_jws (REAL ed25519 round-trip) ──────────────
 
-/// Build a `ak.call.signal` envelope + proof EXACTLY as the cotest e2e helper
-/// (`buildCallSignalEnvelope`) does — canonical `event_digest` over the
-/// envelope-without-proof, JWS transcript over the §5.1 binding object — sign
-/// with a real ed25519 key, then verify with the SDK's
-/// `verify_eddsa_detached_jws_proof`. This proves the e2e helper mints a
-/// genuinely receiver-verifiable proof, not a placeholder string.
+/// Build a call-signal [`SignalEnvelope`] exactly as a sender does, sign it
+/// with a real ed25519 key under the `ak.signal-proof-v1` transcript, and
+/// verify it through the SDK receiver path.
+///
+/// The transcript commits to `envelope_digest` — the envelope with `proof`
+/// removed — and therefore to the ciphertext and `aad_digest` as well as the
+/// header, so a signature minted on the Event rail can never be replayed here
+/// and tampering with any covered field breaks verification.
 pub fn run_proof_detached_jws_vector() -> Result<()> {
-    let actor_id = "did:web:alice.example.com";
-    let verification_method = format!("{actor_id}#device");
     let signing_key = SigningKey::from_bytes(&[0x33u8; 32]);
     let public = PublicKeyMaterial::Ed25519Raw {
         bytes: signing_key.verifying_key().to_bytes().to_vec(),
     };
+    let envelope = signed_call_signal_envelope(SignalClass::Setup, 120, &signing_key)?;
 
-    // 1. Envelope without proof.
-    let created_at = Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 0).unwrap();
-    let sent_at_str = arkret_canonical::format_timestamp_canonical(created_at);
-    let mut envelope = json!({
-        "kind": "ak.call.signal",
-        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
-        "actor_id": actor_id,
-        "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
-        "sent_at": &sent_at_str,
-        "expires_at": arkret_canonical::format_timestamp_canonical(
-            Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 30).unwrap()
-        ),
-        "payload": {
-            "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
-            "signal_kind": "invite",
-            "seq": 12,
-            "data": {}
-        }
-    });
+    envelope
+        .validate_structural()
+        .map_err(|err| anyhow!("a canonical call-signal envelope must validate: {err}"))?;
+    verify_eddsa_signal_proof(&envelope, &public)
+        .map_err(|err| anyhow!("the sender-style signal proof MUST verify: {err}"))?;
 
-    // 2. event_digest = sha256: || hex(sha256(JCS(envelope_without_proof))).
-    let canonical_bytes = arkret_canonical::canonical_json_bytes(&envelope)
-        .map_err(|err| anyhow!("envelope JCS failed: {err}"))?;
-    let event_digest = arkret_canonical::sha256_digest(&canonical_bytes);
+    // Negative: tampering the ciphertext changes `envelope_digest`, so the
+    // envelope no longer validates against its own proof.
+    let mut tampered = envelope.clone();
+    tampered.encrypted_payload.ciphertext = "VGFtcGVyZWQ".to_owned();
+    if tampered.validate_structural().is_ok() {
+        bail!("a tampered ciphertext still matched the recorded envelope_digest");
+    }
 
-    // 3. JWS transcript = protected `.` base64url(SDK canonical proof binding). The SDK is the only
-    //    implementation of the binding object and its timestamp projection; cotest deliberately
-    //    does not duplicate it.
-    // SDK-canonical protected header is EXACTLY `{"alg":"EdDSA"}` — the
-    // verifier deserialises it with deny-unknown-fields, so a `kid` (or any
-    // extra member) breaks verification. The verification_method is carried in
-    // the proof object + binding, not the header.
-    let header = json!({ "alg": "EdDSA" });
-    let header_b64 = b64url(
-        &arkret_canonical::canonical_json_bytes(&header)
-            .map_err(|err| anyhow!("header JCS failed: {err}"))?,
-    );
-    let did = arkret_identifiers::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
-    let mut proof = Proof {
-        kind: "detached_jws".to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: verification_method.clone(),
-        event_digest: arkret_identifiers::Hash::new(event_digest.clone())
-            .map_err(|err| anyhow!("event digest: {err}"))?,
-        created_at,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        jws: String::new(),
-    };
-    let binding_b64 = b64url(
-        &proof
-            .canonical_binding_bytes(&did)
-            .map_err(|err| anyhow!("SDK proof binding failed: {err}"))?,
-    );
-    let signing_input = format!("{header_b64}.{binding_b64}");
-    let signature = signing_key.sign(signing_input.as_bytes());
-    proof.jws = format!("{header_b64}..{}", b64url(&signature.to_bytes()));
-    envelope["proof"] =
-        serde_json::to_value(&proof).map_err(|err| anyhow!("proof serialisation failed: {err}"))?;
-
-    // 4. Verify via the SDK receiver path. `canonical_bytes` is the envelope-without-proof (the
-    //    verifier recomputes event_digest from it).
-    verify_eddsa_detached_jws_proof(&proof, &canonical_bytes, &did, &public)
-        .map_err(|err| anyhow!("the e2e-style detached-JWS proof MUST verify: {err}"))?;
-
-    // Negative: tampering the payload (which changes the canonical bytes /
-    // event_digest) MUST break verification — proving the proof covers the
-    // envelope, not merely a shape.
-    let mut tampered_env = envelope.clone();
-    tampered_env["payload"]["seq"] = json!(99);
-    let tampered_bytes = arkret_canonical::canonical_json_bytes(&{
-        let mut v = tampered_env.clone();
-        v.as_object_mut().unwrap().remove("proof");
-        v
-    })
-    .map_err(|err| anyhow!("tampered JCS failed: {err}"))?;
-    if verify_eddsa_detached_jws_proof(&proof, &tampered_bytes, &did, &public).is_ok() {
-        bail!("proof verified against tampered envelope bytes — event_digest binding is broken");
+    // Negative: rewriting an outer header field breaks the AAD binding, which
+    // is what stops a relay from re-scoping a signal it cannot decrypt.
+    let mut rescoped = envelope.clone();
+    rescoped.signal_class = SignalClass::Session;
+    if rescoped.validate_structural().is_ok() {
+        bail!("a rewritten signal_class still matched the recorded aad_digest");
     }
 
     // Negative: a wrong key MUST NOT verify.
@@ -244,55 +174,177 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
             .to_bytes()
             .to_vec(),
     };
-    if verify_eddsa_detached_jws_proof(&proof, &canonical_bytes, &did, &wrong).is_ok() {
+    if verify_eddsa_signal_proof(&envelope, &wrong).is_ok() {
         bail!("proof verified under the wrong public key — signature is not actually checked");
+    }
+    Ok(())
+}
+
+// ─── VECT-CS-4 — outer_metadata_minimal ────────────────────────────────────
+
+/// §5 / `signal.md` §6: the outer envelope must expose no product
+/// classification beyond `signal_class`. An `invite`, which needs a wake-up,
+/// takes `setup`; ordinary frames take `session`; and the class TTL ceilings
+/// are enforced on the outer envelope alone.
+pub fn run_outer_metadata_minimal_vector() -> Result<()> {
+    let signing_key = SigningKey::from_bytes(&[0x44u8; 32]);
+    let envelope = signed_call_signal_envelope(SignalClass::Setup, 120, &signing_key)?;
+    let wire = serde_json::to_value(&envelope)?;
+    let object = wire
+        .as_object()
+        .ok_or_else(|| anyhow!("signal envelope must serialise as an object"))?;
+
+    for leaked in ["signal_kind", "call_id", "strand_id", "kind", "payload"] {
+        if object.contains_key(leaked) {
+            bail!("outer call-signal envelope leaked `{leaked}` — metadata minimisation violated");
+        }
+    }
+    if object.get("signal_class").and_then(Value::as_str) != Some("setup") {
+        bail!("an invite-bearing envelope must be classified `setup` for wake-up");
+    }
+
+    // `session` tops out at 30 seconds; the `setup` TTL above it must not be
+    // reachable by relabelling the class.
+    let over_ttl = signed_call_signal_envelope(SignalClass::Session, 120, &signing_key)?;
+    let error = over_ttl
+        .validate_structural()
+        .err()
+        .ok_or_else(|| anyhow!("a 120s `session` signal must exceed the class TTL ceiling"))?;
+    if !format!("{error}").contains("signal_ttl_out_of_range") {
+        bail!("class TTL overflow must report signal_ttl_out_of_range, got: {error}");
     }
     Ok(())
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-fn call_signal_envelope_value(signal_kind: &str, seq: u64) -> Value {
+/// Receiver-side de-duplication key for call signaling (§5).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct CallSignalSeqKey {
+    realm_id: RealmId,
+    call_id: CallId,
+    actor_id: Did,
+    device_id: DeviceId,
+}
+
+fn observe_seq(
+    frontier: &mut BTreeMap<CallSignalSeqKey, u64>,
+    key: &CallSignalSeqKey,
+    seq: u64,
+) -> Result<()> {
+    if let Some(previous) = frontier.get(key)
+        && seq <= *previous
+    {
+        bail!("call signal seq {seq} does not advance the frontier {previous}");
+    }
+    frontier.insert(key.clone(), seq);
+    Ok(())
+}
+
+/// The closed decrypted plaintext object of §5.
+fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
     json!({
         "kind": "ak.call.signal",
-        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
-        "actor_id": "did:web:alice.example.com",
-        "device_id": "ak:device:01964137-0000-7000-8000-000000000000",
-        "sent_at": "2026-04-26T00:00:00.000Z",
-        "expires_at": "2026-04-26T00:00:30.000Z",
-        "payload": {
-            "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
-            "signal_kind": signal_kind,
-            "seq": seq,
-            "data": {}
-        },
-        "proof": {
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": "did:web:alice.example.com#device",
-            "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": "2026-04-26T00:00:00.000Z",
-            "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
-        }
+        "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
+        "signal_kind": signal_kind,
+        "seq": seq,
+        "data": {}
     })
 }
 
-fn b64url(bytes: &[u8]) -> String {
-    use base64::Engine as _;
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+fn validate_call_signal_plaintext(plaintext: &Value) -> Result<()> {
+    if plaintext.get("kind").and_then(Value::as_str) != Some("ak.call.signal") {
+        bail!("call signal plaintext must declare kind=ak.call.signal");
+    }
+    let signal_kind = plaintext
+        .get("signal_kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("call signal plaintext requires signal_kind"))?;
+    if !CALL_SIGNAL_KINDS.contains(&signal_kind) {
+        bail!("call signal plaintext carries an unregistered signal_kind `{signal_kind}`");
+    }
+    CallId::new(
+        plaintext
+            .get("call_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("call signal plaintext requires call_id"))?,
+    )?;
+    plaintext
+        .get("seq")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("call signal plaintext requires seq"))?;
+    if !plaintext.get("data").is_some_and(Value::is_object) {
+        bail!("call signal plaintext requires a data object");
+    }
+    Ok(())
 }
 
-/// Suite entry point — runs all 3 call-signal receiver vectors back to back.
+fn sent_at() -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 4, 26, 0, 0, 0)
+        .single()
+        .expect("static fixture instant is unambiguous")
+}
+
+/// A fully signed call-signal envelope. The ciphertext is opaque to this
+/// vector on purpose: every assertion here is about what a receiver can decide
+/// from the outer envelope, which is exactly the boundary §5 draws.
+fn signed_call_signal_envelope(
+    signal_class: SignalClass,
+    ttl_seconds: i64,
+    signing_key: &SigningKey,
+) -> Result<SignalEnvelope> {
+    let realm_id = RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000")?;
+    let actor_id = Did::new("did:web:alice.example.com")?;
+    let device_id = DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?;
+    let mut envelope = SignalEnvelope {
+        realm_id: realm_id.clone(),
+        scope_ref: ScopeRef::Realm { realm_id },
+        sender_actor_id: actor_id.clone(),
+        sender_device_id: device_id.clone(),
+        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
+        signal_class,
+        sent_at: sent_at(),
+        expires_at: sent_at() + Duration::seconds(ttl_seconds),
+        encrypted_payload: SignalEncryptedPayload {
+            scheme: SIGNAL_AEAD_SCHEME.to_owned(),
+            key_ref: SignalKeyRef {
+                algorithm: "MLS-EXPORTER-AEAD".to_owned(),
+                group_state_ref: "ak:event:0196441c-0000-7000-8000-00000000000c".to_owned(),
+            },
+            purpose: SIGNAL_AEAD_PURPOSE.to_owned(),
+            aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519".to_owned(),
+            epoch: 7,
+            nonce: "AAAAAAAAAAAAAAAA".to_owned(),
+            ciphertext: "Q2lwaGVydGV4dFBsYWNlaG9sZGVy".to_owned(),
+            aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+        },
+        proof: SignalProof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            verification_method: format!("{actor_id}#{device_id}"),
+            alg: "EdDSA".to_owned(),
+            envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            created_at: sent_at(),
+            domain: None,
+            audience: None,
+            jws: String::new(),
+        },
+    };
+    crate::harness::attach_signal_proof(&mut envelope, signing_key);
+    Ok(envelope)
+}
+
+/// Suite entry point — runs all call-signal receiver vectors back to back.
 pub fn run_call_signal_vector_suite() -> Result<()> {
-    if ALL_CALL_SIGNAL_VECTOR_IDS.len() != 3 {
+    if ALL_CALL_SIGNAL_VECTOR_IDS.len() != 4 {
         bail!(
-            "expected 3 call_signal vector ids, got {}",
+            "expected 4 call_signal vector ids, got {}",
             ALL_CALL_SIGNAL_VECTOR_IDS.len()
         );
     }
     run_signal_kind_enum_vector()?;
     run_seq_monotonic_vector()?;
     run_proof_detached_jws_vector()?;
+    run_outer_metadata_minimal_vector()?;
     Ok(())
 }
 

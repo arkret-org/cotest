@@ -11,7 +11,7 @@ use arkret::{
     verify_call_media_token_outcome,
 };
 use arkret_canonical::base64url::base64url_encode;
-use arkret_identifiers::{CallId, CellRef, DeviceId, Did, MoveId, RealmId};
+use arkret_identifiers::{CallId, CellRef, DeviceId, Did, Hash, RealmId};
 use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaServiceSignature, CallMediaTokenExchangeOutcome,
     CallMediaTokenExchangeRequestBody,
@@ -281,17 +281,17 @@ fn cell() -> CellRef {
     .expect("fixture cell id should be valid")
 }
 
-fn move_id(suffix: &str) -> MoveId {
+fn issuer_digest(suffix: &str) -> Hash {
     let suffix = suffix.to_ascii_lowercase();
     assert!(
         suffix
             .chars()
             .all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase()),
-        "fixture move-id suffix must be lowercase hex"
+        "fixture digest suffix must be lowercase hex"
     );
     let padding = 64usize.saturating_sub(suffix.len());
     let id = format!("sha256:{suffix}{}", "0".repeat(padding));
-    MoveId::new(id).expect("fixture move id should be valid")
+    Hash::new(id).expect("fixture digest should be valid")
 }
 
 fn op_transition(from: &str, to: &str) -> LatticeOp {
@@ -337,7 +337,10 @@ fn assert_fsm_transition_value(from: &str, to: &str, suffix: &str) -> Result<()>
     let fsm = call_state_fsm(from);
     let resolved = fsm.join(
         &cell(),
-        &[SealedOp::new(move_id(suffix), op_transition(from, to))],
+        &[SealedOp::new(
+            issuer_digest(suffix),
+            op_transition(from, to),
+        )],
     );
     if resolved != CellState::Value(json!(to)) {
         bail!("expected call-state transition {from}->{to} to resolve to {to}, got {resolved:?}");
@@ -401,7 +404,7 @@ pub fn run_transition_matrix_vector() -> Result<()> {
         let resolved = call_state_fsm(from).join(
             &cell(),
             &[SealedOp::new(
-                move_id(
+                issuer_digest(
                     &format!("f{from}{to}")
                         .bytes()
                         .fold(String::new(), |mut acc, b| {
@@ -449,8 +452,8 @@ pub fn run_replay_same_state_noop_vector() -> Result<()> {
     let resolved = call_state_fsm("ringing").join(
         &cell(),
         &[
-            SealedOp::new(move_id("aa"), op_transition("ringing", "connecting")),
-            SealedOp::new(move_id("ab"), op_transition("ringing", "connecting")),
+            SealedOp::new(issuer_digest("aa"), op_transition("ringing", "connecting")),
+            SealedOp::new(issuer_digest("ab"), op_transition("ringing", "connecting")),
         ],
     );
     if resolved != CellState::Value(json!("connecting")) {
@@ -465,8 +468,8 @@ pub fn run_concurrent_sibling_bottom_vector() -> Result<()> {
     let resolved = call_state_fsm("ringing").join(
         &cell(),
         &[
-            SealedOp::new(move_id("ba"), op_transition("ringing", "active")),
-            SealedOp::new(move_id("bb"), op_transition("ringing", "missed")),
+            SealedOp::new(issuer_digest("ba"), op_transition("ringing", "active")),
+            SealedOp::new(issuer_digest("bb"), op_transition("ringing", "missed")),
         ],
     );
     match resolved {

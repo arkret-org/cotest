@@ -39,8 +39,8 @@ pub(crate) use event_builder::{
     message_revise_text_payload, parse_strand_id,
 };
 pub use proof::{
-    attach_ephemeral_proof, attach_ephemeral_proof_value, ephemeral_proof_placeholder,
-    refresh_event_proof, refresh_event_proof_with_signing_seed,
+    attach_signal_proof, attach_signal_proof_value, refresh_event_proof,
+    refresh_event_proof_with_signing_seed,
 };
 pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};

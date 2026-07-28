@@ -255,8 +255,10 @@ fn signed_federation_event(
 ) -> Result<Event> {
     let mut event = Event::new(
         kind,
-        RealmId::new(realm_id.to_owned())
-            .with_context(|| format!("invalid federation realm_id `{realm_id}`"))?,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: RealmId::new(realm_id.to_owned())
+                .with_context(|| format!("invalid federation realm_id `{realm_id}`"))?,
+        },
         Did::new(actor_id.to_owned())
             .with_context(|| format!("invalid federation actor_id `{actor_id}`"))?,
         actor_seq,
@@ -278,7 +280,7 @@ fn signed_federation_event(
 
 fn sign_federation_contract_event(event: &mut Event) -> Result<()> {
     let verification_method = format!("{}#cotest", event.actor_id);
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         arkret::signatures::development_signing_key_seed(&verification_method),
         event.actor_id.clone(),
         verification_method.clone(),
@@ -294,30 +296,24 @@ fn sign_federation_contract_event(event: &mut Event) -> Result<()> {
     .context("sign federation contract Event with the provisioned development key")
 }
 
-fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
+/// Bind the delivery-binding policy Control Move to an empty pre-state.
+///
+/// Only the CBA precondition is producer-authored. The cell write itself is
+/// derived from `kind + payload` through the contract registry, so a producer
+/// that declared it would be asserting something the v1 Event wire cannot
+/// carry (`models/event-and-patch.md` §2.4.2).
+fn attach_delivery_policy_precondition(event: &mut Event) -> Result<()> {
     let cell = arkret_identifiers::CellRef::new(format!(
         "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
         arkret_wire::NULL_SUBJECT
     ))?;
     event.preconditions = vec![arkret_wire::Precondition {
-        cell: cell.clone(),
+        cell,
         predicate: arkret_wire::Predicate {
             op: arkret_wire::PredicateOp::HeadEq,
             value: Some(Value::Null),
             values: None,
             predicate_id: None,
-        },
-    }];
-    event.effects = vec![arkret_wire::Effect {
-        cell,
-        op: arkret_wire::LatticeOp {
-            op_type: arkret_wire::LatticeOpType::Set,
-            tag: None,
-            value: Some(serde_json::to_value(&event.payload)?),
-            from: None,
-            to: None,
-            reason: None,
-            issuer_seq: None,
         },
     }];
     Ok(())
@@ -513,7 +509,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "allowed_recipient_services": [remote_service_id]
         }),
     )?;
-    attach_delivery_policy_cell_contract(&mut delivery_policy)?;
+    attach_delivery_policy_precondition(&mut delivery_policy)?;
     sign_federation_contract_event(&mut delivery_policy)?;
     let member_binding = signed_federation_event(
         member_event_id,

@@ -709,13 +709,13 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let root_public_key = ed25519_pubkey_to_did_key_multibase(root_key.verifying_key().as_bytes());
     let root_did = Did::new(format!("did:key:{root_public_key}"))?;
     let root_verification_method = prepared_inception.root_verification_method.clone();
-    let root_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let root_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [32_u8; 32],
         root_did,
         root_verification_method.clone(),
     );
     let event_verification_method = controller_verification_method();
-    let event_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let event_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [21_u8; 32],
         principal_id.clone(),
         event_verification_method.clone(),
@@ -736,6 +736,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             created_at: control_created_at,
             hlc: arkret::Hlc::new(format!("{control_timestamp_hex}-0000-a13f9c2e"))?,
         },
+        &cotest::publication::project_cells,
     )?;
     arkret::signatures::sign_event(
         &mut bootstrap_create,
@@ -775,7 +776,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let mut bootstrap_authorize = arkret::Event::new_with_id_at(
         arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a911".to_owned())?,
         arkret::events::EventKind::DEVICE_AUTHORIZE,
-        typed_control_realm_id.clone(),
+        arkret_wire::ScopeRef::Realm {
+            realm_id: typed_control_realm_id.clone(),
+        },
         principal_id.clone(),
         1,
         arkret::Hlc::new(format!("{control_timestamp_hex}-0001-a13f9c2e"))?,
@@ -785,7 +788,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     bootstrap_authorize.prev_refs = vec![bootstrap_create.event_id.clone()];
     bootstrap_authorize.executed_by = Some(principal_id.clone());
     bootstrap_authorize.authorization_ref = Some(enrollment_authorization_ref.to_string());
-    let enrollment_authority_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let enrollment_authority_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [17_u8; 32],
         principal_id.clone(),
         enrollment_authority_verification_method.clone(),
@@ -797,7 +800,13 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
     )?;
     let bootstrap_submit = bearer_sdk_client(server, token)?
-        .events_submit_batch(&[bootstrap_create.clone(), bootstrap_authorize.clone()])
+        .events_submit_batch(&[
+            cotest::publication::initial_submission(bootstrap_create.clone(), "ak.realm.admin")?,
+            cotest::publication::initial_submission(
+                bootstrap_authorize.clone(),
+                "ak.device.authorize",
+            )?,
+        ])
         .await?;
     if !bootstrap_submit
         .accepted
@@ -810,7 +819,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             "SDK principal bootstrap unit was not accepted: {bootstrap_submit:?}"
         ));
     }
-    let seal_signer = arkret_signatures::Ed25519MoveSigner::new(
+    let seal_signer = arkret_signatures::Ed25519PayloadSigner::new(
         device_key.clone(),
         principal_id.clone(),
         format!("{ALICE_DID}#{ALICE_DEVICE}"),
@@ -820,6 +829,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         &bootstrap_authorize,
         arkret::Hlc::new(format!("{control_timestamp_hex}-0002-a13f9c2e"))?,
         &seal_signer,
+        &cotest::publication::project_cells,
     )?;
     let seal_outcome = bearer_sdk_client(server, token)?
         .events_submit_seal(&controller_seal)
@@ -890,7 +900,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         managed_agent_actor_frontier(server, token, ALICE_DID, &control_realm_id).await?;
     let first_actor_seq = actor_frontier.next_actor_seq;
     let mut cross_signing_event = arkret_event_draft::build_cross_signing_publish_event_at(
-        typed_control_realm_id.clone(),
+        arkret_wire::ScopeRef::Realm {
+            realm_id: typed_control_realm_id.clone(),
+        },
         principal_id.clone(),
         first_actor_seq,
         arkret::Hlc::new(format!(
@@ -910,7 +922,10 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     )?;
     let cross_signing_event_id = cross_signing_event.event_id.clone();
     let cross_signing_submit = bearer_sdk_client(server, token)?
-        .events_submit(&cross_signing_event)
+        .events_submit(&cotest::publication::initial_submission(
+            cross_signing_event.clone(),
+            "ak.device.authorize",
+        )?)
         .await?;
     if !cross_signing_submit
         .accepted
@@ -966,7 +981,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     )?));
     let device_actor_seq = first_actor_seq + 1;
     let mut device_authorize_event = arkret_event_draft::build_device_authorize_event_at(
-        typed_control_realm_id,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: typed_control_realm_id,
+        },
         principal_id.clone(),
         device_actor_seq,
         arkret::Hlc::new(format!(
@@ -986,7 +1003,10 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     )?;
     let device_authorize_event_id = device_authorize_event.event_id.clone();
     let device_authorize_submit = bearer_sdk_client(server, token)?
-        .events_submit(&device_authorize_event)
+        .events_submit(&cotest::publication::initial_submission(
+            device_authorize_event.clone(),
+            "ak.device.authorize",
+        )?)
         .await?;
     if !device_authorize_submit
         .accepted
@@ -1153,16 +1173,15 @@ async fn submit_delegated_agent_event(
         event["actor_seq"] = json!(0);
         event["hlc"] = json!("01970e589d21-0001-a13f9c2e");
         event["prev_refs"] = json!([]);
-        let create: arkret::Event = serde_json::from_value(event.clone())?;
-        event["effects"] = serde_json::to_value(arkret_bootstrap::realm_create_effects(&create)?)?;
     }
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
     refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
     let typed_event: arkret::Event = serde_json::from_value(event.clone())?;
     if kind == arkret::events::EventKind::REALM_CREATE {
-        arkret_bootstrap::materialize_managed_agent_pcr_control(std::slice::from_ref(
-            &typed_event,
-        ))?;
+        arkret_bootstrap::materialize_managed_agent_pcr_control(
+            std::slice::from_ref(&typed_event),
+            &cotest::publication::project_cells,
+        )?;
     }
     let body = expect_json(
         server
@@ -1274,7 +1293,9 @@ async fn pause_agent_runtime<P: PairingOutcome>(
     let mut event = arkret_event_draft::build_agent_pause_event(
         agent_id.clone(),
         Did::new(ALICE_DID.to_owned())?,
-        realm_id.clone(),
+        arkret_wire::ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
         did_url(pairing.controller_authorization_ref())?,
         Some("runtime_replacement".to_owned()),
         actor_seq,
@@ -1283,7 +1304,7 @@ async fn pause_agent_runtime<P: PairingOutcome>(
     )?;
     event.prev_refs = frontier.frontier_event_ids;
     event.seal_basis = Some(managed_agent_seal_basis(server, realm_id.as_str())?);
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [21_u8; 32],
         Did::new(ALICE_DID.to_owned())?,
         controller_verification_method(),
@@ -1326,7 +1347,9 @@ async fn resume_agent_runtime<P: PairingOutcome>(
     let mut event = arkret_event_draft::build_agent_resume_event(
         agent_id.clone(),
         Did::new(ALICE_DID.to_owned())?,
-        realm_id.clone(),
+        arkret_wire::ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
         did_url(pairing.controller_authorization_ref())?,
         None,
         actor_seq,
@@ -1335,7 +1358,7 @@ async fn resume_agent_runtime<P: PairingOutcome>(
     )?;
     event.prev_refs = frontier.frontier_event_ids;
     event.seal_basis = Some(managed_agent_seal_basis(server, realm_id.as_str())?);
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [21_u8; 32],
         Did::new(ALICE_DID.to_owned())?,
         controller_verification_method(),
@@ -1535,7 +1558,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                 predecessor.id
             ));
         }
-        let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+        let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
             [24_u8; 32],
             Did::new(ALICE_DID.to_owned())?,
             format!("{ALICE_DID}#{ALICE_DEVICE}"),
@@ -1547,6 +1570,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             predecessor.as_ref(),
             hlc.generate(),
             &signer,
+            &cotest::publication::project_cells,
         )?;
         let outcome = client.events_submit_seal(&seal).await?;
         if outcome.seal_id != seal.id {
@@ -1947,7 +1971,7 @@ async fn provision_agent(
         .ok_or_else(|| anyhow!("current timestamp is outside the wire range"))?;
     let timestamp_hex = format!("{:012x}", now.timestamp_millis());
     let verification_method = controller_verification_method();
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [21_u8; 32],
         controller_id.clone(),
         verification_method.clone(),
@@ -2350,7 +2374,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         revocation_check_ref: None,
         runtime_attestation: None,
     };
-    let controller_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let controller_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         controller_signing_seed,
         controller_id.clone(),
         controller_vm,
@@ -2366,7 +2390,9 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     let mut authorize_event = arkret_event_draft::build_agent_key_authorize_event(
         &authorize_payload,
         authorize_event_id,
-        provisioned.principal_control_realm_id().clone(),
+        arkret_wire::ScopeRef::Realm {
+            realm_id: provisioned.principal_control_realm_id().clone(),
+        },
         agent_id.clone(),
         controller_id.clone(),
         did_url(provisioned.controller_authorization_ref())?,

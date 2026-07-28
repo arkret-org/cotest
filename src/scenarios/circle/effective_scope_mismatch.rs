@@ -1,6 +1,6 @@
 //! P2F.3 — envelope vs payload `scope_circle_id` mismatch is rejected.
 //!
-//! Reducers MUST reject events whose [`EffectiveScope::Circle.circle_id`]
+//! Reducers MUST reject events whose [`ScopeRef::Circle.circle_id`]
 //! disagrees with the `scope_circle_id` declared inside the payload's
 //! object (Strand / Space / Morph). This scenario builds two hand-rolled
 //! wire envelopes that exercise that contract — one in which the binding
@@ -13,7 +13,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{CircleId, RealmId};
-use arkret_wire::EffectiveScope;
+use arkret_wire::ScopeRef;
 use serde_json::{Value, json};
 
 fn realm_id() -> Result<RealmId> {
@@ -32,19 +32,16 @@ fn circle_b() -> Result<CircleId> {
 }
 
 /// Local consistency check that any reducer MUST perform: when an event
-/// envelope carries [`EffectiveScope::Circle`] AND the inner payload
+/// envelope carries [`ScopeRef::Circle`] AND the inner payload
 /// declares a `scope_circle_id`, the two MUST agree on both realm_id and
 /// circle_id. Returns `Ok(())` when consistent, `Err(reason)` when not.
-fn assert_envelope_payload_scope_agrees(
-    envelope_scope: &EffectiveScope,
-    payload: &Value,
-) -> Result<()> {
+fn assert_envelope_payload_scope_agrees(envelope_scope: &ScopeRef, payload: &Value) -> Result<()> {
     let payload_realm = payload.pointer("/object/realm_id").and_then(|v| v.as_str());
     let payload_circle = payload
         .pointer("/object/scope_circle_id")
         .and_then(|v| v.as_str());
     match envelope_scope {
-        EffectiveScope::Realm { realm_id } => {
+        ScopeRef::Realm { realm_id } => {
             if let Some(circle) = payload_circle {
                 return Err(anyhow!(
                     "reason=scope_rebind_forbidden: envelope is Realm-scoped \
@@ -61,7 +58,7 @@ fn assert_envelope_payload_scope_agrees(
                 ));
             }
         }
-        EffectiveScope::Circle {
+        ScopeRef::Circle {
             realm_id,
             circle_id,
         } => {
@@ -92,7 +89,7 @@ fn assert_envelope_payload_scope_agrees(
                 Some(_) => { /* agree */ }
             }
         }
-        // `EffectiveScope` is `#[non_exhaustive]`: an unrecognised scope
+        // `ScopeRef` is `#[non_exhaustive]`: an unrecognised scope
         // variant MUST fail closed, never fall through as in-scope.
         other => {
             return Err(anyhow!(
@@ -104,7 +101,7 @@ fn assert_envelope_payload_scope_agrees(
 }
 
 pub async fn effective_scope_mismatch_run() -> Result<()> {
-    let envelope_scope = EffectiveScope::Circle {
+    let envelope_scope = ScopeRef::Circle {
         realm_id: realm_id()?,
         circle_id: circle_a()?,
     };
@@ -163,7 +160,7 @@ pub async fn effective_scope_mismatch_run() -> Result<()> {
     }
 
     // ── Reject: envelope-Realm but payload tries to bind a circle.
-    let realm_envelope = EffectiveScope::Realm {
+    let realm_envelope = ScopeRef::Realm {
         realm_id: realm_id()?,
     };
     let illicit_circle = json!({

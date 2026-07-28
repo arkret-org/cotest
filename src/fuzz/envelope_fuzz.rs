@@ -70,6 +70,12 @@ pub struct FuzzEventInput {
     pub payload: ArbValue,
     pub include_seal_ref: bool,
     pub seal_ref: String,
+    /// A signed `scope_ref` is required on every v1 Event; a Circle scope
+    /// exercises the second variant of the enum.
+    pub scope_circle_id: Option<String>,
+    /// A Control Move is just an Event carrying a basis — there is no separate
+    /// Move wire — so the basis is fuzzed here rather than in its own target.
+    pub seal_basis: Option<ArbValue>,
 }
 
 #[derive(Debug, Arbitrary)]
@@ -85,10 +91,19 @@ impl FuzzEventInput {
             "physical_ms": self.hlc_physical_ms,
             "logical": self.hlc_logical,
         });
+        let scope_ref = match &self.scope_circle_id {
+            Some(circle_id) => json!({
+                "kind": "circle",
+                "realm_id": self.realm_id,
+                "circle_id": circle_id,
+            }),
+            None => json!({ "kind": "realm", "realm_id": self.realm_id }),
+        };
         let mut envelope = json!({
             "event_id": self.event_id,
             "kind": self.kind,
             "realm_id": self.realm_id,
+            "scope_ref": scope_ref,
             "actor_id": self.actor_id,
             "actor_seq": self.actor_seq,
             "created_at": self.created_at,
@@ -104,6 +119,9 @@ impl FuzzEventInput {
         });
         if self.include_seal_ref {
             envelope["seal_ref"] = Value::String(self.seal_ref.clone());
+        }
+        if let Some(basis) = &self.seal_basis {
+            envelope["seal_basis"] = basis.0.clone();
         }
         envelope
     }
@@ -133,22 +151,59 @@ pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
     })
 }
 
-// ── Move envelope ───────────────────────────────────────────────────────────
+// ── Signal envelope ─────────────────────────────────────────────────────────
+
+/// `arbitrary`-derived input that mirrors the encrypted-only `SignalEnvelope`
+/// wire (`zh/sync/signal.md` §1).
+///
+/// This replaced the retired standalone `Move` wire in the fuzz rotation: v1
+/// has no Move envelope (a Control Move is an Event with `seal_basis`, now
+/// covered by [`FuzzEventInput`]), while `SignalEnvelope` is a genuinely new
+/// parser reachable from untrusted network input.
+#[derive(Debug, Arbitrary)]
+pub struct FuzzSignalInput {
+    pub realm_id: String,
+    pub circle_id: Option<String>,
+    pub sender_actor_id: String,
+    pub sender_device_id: String,
+    pub seal_ref: String,
+    pub signal_class: ArbSignalClass,
+    pub sent_at: String,
+    pub expires_at: String,
+    pub scheme: String,
+    pub key_algorithm: String,
+    pub group_state_ref: String,
+    pub purpose: String,
+    pub aead_profile: String,
+    pub epoch: u64,
+    pub nonce: String,
+    pub ciphertext: String,
+    pub aad_digest: String,
+    pub proof_kind: String,
+    pub verification_method: String,
+    pub proof_alg: ArbSigAlg,
+    pub envelope_digest: String,
+    pub proof_created_at: String,
+    pub jws: String,
+}
 
 #[derive(Debug, Arbitrary)]
-pub struct FuzzMoveInput {
-    pub id: String,
-    pub issuer: String,
-    pub realm_id: String,
-    pub seal_ref: String,
-    pub hlc_physical_ms: u64,
-    pub hlc_logical: u32,
-    pub sig_alg: ArbSigAlg,
-    pub sig_value: String,
-    pub sig_key: String,
-    pub preconditions: Vec<ArbValue>,
-    pub effects: Vec<ArbValue>,
-    pub refs: Vec<ArbValue>,
+pub enum ArbSignalClass {
+    Setup,
+    Moderation,
+    Session,
+    Junk,
+}
+
+impl ArbSignalClass {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Setup => "setup",
+            Self::Moderation => "moderation",
+            Self::Session => "session",
+            Self::Junk => "presence",
+        }
+    }
 }
 
 #[derive(Debug, Arbitrary)]
@@ -172,44 +227,68 @@ impl ArbSigAlg {
     }
 }
 
-impl FuzzMoveInput {
+impl FuzzSignalInput {
     fn to_json(&self) -> Value {
+        let scope_ref = match &self.circle_id {
+            Some(circle_id) => json!({
+                "kind": "circle",
+                "realm_id": self.realm_id,
+                "circle_id": circle_id,
+            }),
+            None => json!({ "kind": "realm", "realm_id": self.realm_id }),
+        };
         json!({
-            "id": self.id,
-            "issuer": self.issuer,
             "realm_id": self.realm_id,
-            "preconditions": self.preconditions.iter().map(|v| &v.0).collect::<Vec<_>>(),
-            "effects": self.effects.iter().map(|v| &v.0).collect::<Vec<_>>(),
+            "scope_ref": scope_ref,
+            "sender_actor_id": self.sender_actor_id,
+            "sender_device_id": self.sender_device_id,
             "seal_ref": self.seal_ref,
-            "refs": self.refs.iter().map(|v| &v.0).collect::<Vec<_>>(),
-            "hlc": {
-                "physical_ms": self.hlc_physical_ms,
-                "logical": self.hlc_logical,
+            "signal_class": self.signal_class.as_str(),
+            "sent_at": self.sent_at,
+            "expires_at": self.expires_at,
+            "encrypted_payload": {
+                "scheme": self.scheme,
+                "key_ref": {
+                    "algorithm": self.key_algorithm,
+                    "group_state_ref": self.group_state_ref,
+                },
+                "purpose": self.purpose,
+                "aead_profile": self.aead_profile,
+                "epoch": self.epoch,
+                "nonce": self.nonce,
+                "ciphertext": self.ciphertext,
+                "aad_digest": self.aad_digest,
             },
-            "sig": {
-                "alg": self.sig_alg.as_str(),
-                "value": self.sig_value,
-                "key": self.sig_key,
+            "proof": {
+                "kind": self.proof_kind,
+                "verification_method": self.verification_method,
+                "alg": self.proof_alg.as_str(),
+                "envelope_digest": self.envelope_digest,
+                "created_at": self.proof_created_at,
+                "jws": self.jws,
             }
         })
     }
 }
 
-/// Fuzz the `Move` wire shape — same three-stage panic-catch pattern as
-/// `fuzz_event_envelope`. Move has no dedicated schema id in the SDK's
-/// `*_SCHEMA` constant list, so we skip the `validate_value` leg and rely
-/// on `serde_json::from_value::<Move>` to exercise the typed validator.
-pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
+/// Fuzz the `SignalEnvelope` wire shape and its structural validator.
+///
+/// `validate_structural` is the interesting leg: it recomputes the AAD digest
+/// and the envelope digest over attacker-shaped input, so a panic there would
+/// be reachable before any authentication.
+pub fn fuzz_signal_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_wire::Move>(data);
+        let _ = serde_json::from_slice::<arkret_wire::SignalEnvelope>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzMoveInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzSignalInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     let value = input.to_json();
     catch(|| {
-        let _ = serde_json::from_value::<arkret_wire::Move>(value.clone());
+        if let Ok(envelope) = serde_json::from_value::<arkret_wire::SignalEnvelope>(value.clone()) {
+            let _ = envelope.validate_structural();
+        }
     })
 }
 

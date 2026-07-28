@@ -14,6 +14,7 @@ pub mod fixtures;
 pub mod fuzz;
 pub mod harness;
 pub mod profile_validator;
+pub mod publication;
 pub mod scenarios;
 pub mod transcripts;
 

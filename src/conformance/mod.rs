@@ -39,6 +39,7 @@ mod object_addressing_vectors;
 mod operation_clause_registry;
 mod operation_registry_gate;
 mod policy_server;
+mod presence_signal;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
@@ -121,8 +122,9 @@ pub use blob_stream_aead::{
     run_stream_aead_scheme_closure_vector, run_stream_aead_truncation_rejected_vector,
 };
 pub use call_signal::{
-    ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_proof_detached_jws_vector,
-    run_seq_monotonic_vector, run_signal_kind_enum_vector,
+    ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite,
+    run_outer_metadata_minimal_vector as run_call_signal_outer_metadata_minimal_vector,
+    run_proof_detached_jws_vector, run_seq_monotonic_vector, run_signal_kind_enum_vector,
 };
 pub use call_state_core::{
     ALL_CALL_STATE_CORE_VECTOR_IDS, run_call_state_core_fixture_suite,
@@ -262,6 +264,11 @@ pub use operation_registry_gate::{
     validate_operation_registry_gate_report,
 };
 pub use policy_server::run_policy_server_fixture_suite;
+pub use presence_signal::{
+    ALL_PRESENCE_SIGNAL_VECTOR_IDS, run_last_active_at_bucket_vector,
+    run_multi_device_aggregation_vector, run_presence_signal_vector_suite,
+    run_state_closed_set_vector, run_status_message_bounds_vector,
+};
 pub use primary_handle_vectors::{
     ALL_PRIMARY_HANDLE_VECTOR_IDS, run_as_of_replay_vs_realtime_vector,
     run_audience_match_wins_vector, run_claim_digest_stable_under_hint_vector,
@@ -308,10 +315,9 @@ pub use security_negative::run_security_negative_profile_suite;
 pub use service_closure_hardening::{
     ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS, run_cursor_revoke_high_assurance_vector,
     run_device_recovery_lifecycle_vector, run_device_revocation_seal_binding_vector,
-    run_ephemeral_capability_ttl_vector, run_invite_consumed_token_resubject_rejected_vector,
-    run_projection_pagination_shape_vector, run_push_wakeup_policy_vector,
-    run_range_completeness_witness_disagreement_vector,
-    run_service_closure_hardening_fixture_suite,
+    run_invite_consumed_token_resubject_rejected_vector, run_projection_pagination_shape_vector,
+    run_push_wakeup_policy_vector, run_range_completeness_witness_disagreement_vector,
+    run_service_closure_hardening_fixture_suite, run_signal_class_ttl_vector,
 };
 pub use sidecar_vectors::{
     ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,

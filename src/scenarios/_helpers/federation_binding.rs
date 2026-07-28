@@ -31,6 +31,13 @@ use serde_json::json;
 use crate::conformance::{
     FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest as registry_reducer_profile_digest,
 };
+use crate::publication::federation_submission;
+
+/// Capability action the harness leases for a fabricated federation batch.
+/// It is a capability action, not an Event kind: the two are separate
+/// namespaces and the wire layer never equates them
+/// (`offline-publication.md` §2.1).
+const HARNESS_FEDERATION_ACTION: &str = "ak.realm.admin";
 
 /// Head Event IDs of a fabricated batch: every `event_id` that no other batch
 /// event references via `prev_refs` (entries may be plain id strings or
@@ -106,6 +113,11 @@ pub fn peer_service_binding_ref_with_delivery(
 }
 
 /// Full `POST /_arkret/peer/events` request body for a fabricated batch.
+///
+/// Each transported Event travels as an `EventFederationSubmission`: the lease
+/// that bounded its first publication plus the ingress receipts proving it
+/// arrived inside that window. A peer push carrying a bare Event is not a
+/// valid request in v1 (`offline-publication.md` §2.1).
 pub fn peer_events_submit_body(
     realm_id: &str,
     events: Vec<Event>,
@@ -114,11 +126,20 @@ pub fn peer_events_submit_body(
     let frontier = batch_frontier_event_ids(&events)?;
     Ok(EventsSubmitFederationRequestBody {
         service_binding_ref: peer_service_binding_ref(realm_id, &frontier)?,
-        events,
-        seals: Vec::new(),
+        events: receipted_submissions(events)?,
+        cba_proof_bundles: Vec::new(),
         signer_key_evidence: Vec::new(),
         agent_signer_evidence_bundle: None,
     })
+}
+
+fn receipted_submissions(
+    events: Vec<Event>,
+) -> Result<Vec<arkret_wire::EventFederationSubmission>> {
+    events
+        .into_iter()
+        .map(|event| federation_submission(event, HARNESS_FEDERATION_ACTION))
+        .collect()
 }
 
 /// Like [`peer_events_submit_body`] but asserts an explicit
@@ -139,8 +160,8 @@ pub fn peer_events_submit_body_with_delivery_frontier(
             &membership_frontier,
             delivery_binding_frontier,
         )?,
-        events,
-        seals: Vec::new(),
+        events: receipted_submissions(events)?,
+        cba_proof_bundles: Vec::new(),
         signer_key_evidence: Vec::new(),
         agent_signer_evidence_bundle: None,
     })

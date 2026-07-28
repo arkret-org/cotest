@@ -27,7 +27,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical::canonical_json_bytes;
-use arkret_identifiers::{CellRef, Did, MoveId, RealmId};
+use arkret_identifiers::{CellRef, Did, Hash, RealmId};
 use arkret_models_collaboration::governance::realm_governance::{
     REALM_LINK_ALLOWED_TRANSITIONS, REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES,
     RealmLinkKind, RealmLinkPayload, RealmLinkStatus, RealmLinkTransitionCandidate,
@@ -435,8 +435,8 @@ fn cell(family: &str, subject: &str) -> CellRef {
         .expect("test fixture cell id should be valid")
 }
 
-fn move_id(suffix: &str) -> MoveId {
-    // MoveId regex: ^sha256:[0-9a-f]{64}$ — pad the suffix to
+fn issuer_digest(suffix: &str) -> Hash {
+    // Hash regex: ^sha256:[0-9a-f]{64}$ — pad the suffix to
     // exactly 64 lowercase hex characters.
     let suffix = suffix.to_ascii_lowercase();
     assert!(
@@ -447,7 +447,7 @@ fn move_id(suffix: &str) -> MoveId {
     );
     let padding = 64usize.saturating_sub(suffix.len());
     let id = format!("sha256:{suffix}{}", "0".repeat(padding));
-    MoveId::new(id).expect("test fixture move id should be valid")
+    Hash::new(id).expect("test fixture digest should be valid")
 }
 
 fn op_add(tag: &str) -> LatticeOp {
@@ -511,7 +511,7 @@ fn op_append(value: serde_json::Value, issuer_seq: u64) -> LatticeOp {
 fn issued_op(issuer: &str, suffix: &str, op: LatticeOp) -> IssuedOp {
     IssuedOp {
         issuer: Did::new(issuer.to_owned()).expect("test fixture issuer should be a valid did"),
-        op: SealedOp::new(move_id(suffix), op),
+        op: SealedOp::new(issuer_digest(suffix), op),
     }
 }
 
@@ -535,9 +535,9 @@ fn or_set_basic_add_remove_commute() -> Result<()> {
         "ak.component.consent.v1",
         "ak.consent.01js0cc0000000000000000000",
     );
-    let m1 = move_id("aa");
-    let m2 = move_id("bb");
-    let m3 = move_id("cc");
+    let m1 = issuer_digest("aa");
+    let m2 = issuer_digest("bb");
+    let m3 = issuer_digest("cc");
 
     // Causal-order semantics of OR-Set: a remove only erases adds that
     // appear EARLIER in the deterministic order than the remove. In
@@ -582,9 +582,9 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
         "ak.consent.01js0cc0000000000000000000",
     );
     let ops = vec![
-        SealedOp::new(move_id("aa"), op_add("red")),
-        SealedOp::new(move_id("bb"), op_remove("red")),
-        SealedOp::new(move_id("cc"), op_add("red")),
+        SealedOp::new(issuer_digest("aa"), op_add("red")),
+        SealedOp::new(issuer_digest("bb"), op_remove("red")),
+        SealedOp::new(issuer_digest("cc"), op_add("red")),
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -603,8 +603,8 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     );
     // Two sealed Moves concurrently set the cell to distinct values.
     let ops = vec![
-        SealedOp::new(move_id("aa"), op_set(json!({"role": "admin"}))),
-        SealedOp::new(move_id("bb"), op_set(json!({"role": "moderator"}))),
+        SealedOp::new(issuer_digest("aa"), op_set(json!({"role": "admin"}))),
+        SealedOp::new(issuer_digest("bb"), op_set(json!({"role": "moderator"}))),
     ];
     let resolved = lattice.join(&cref, &ops);
     let bottom = match resolved {
@@ -637,7 +637,7 @@ fn cas_register_single_set_returns_value() -> Result<()> {
         "ak.realm.01js0sp0000000000000000001",
     );
     let ops = vec![SealedOp::new(
-        move_id("dd"),
+        issuer_digest("dd"),
         op_set(json!({"role": "admin"})),
     )];
     let resolved = lattice.join(&cref, &ops);
@@ -653,9 +653,9 @@ fn counter_pn_sums_increments_and_decrements() -> Result<()> {
     let lattice = Counter;
     let cref = cell("ak.component.counter.v1", "metrics.events.received");
     let ops = vec![
-        SealedOp::new(move_id("ee"), op_inc(5)),
-        SealedOp::new(move_id("ff"), op_inc(3)),
-        SealedOp::new(move_id("11"), op_dec(2)),
+        SealedOp::new(issuer_digest("ee"), op_inc(5)),
+        SealedOp::new(issuer_digest("ff"), op_inc(3)),
+        SealedOp::new(issuer_digest("11"), op_dec(2)),
     ];
     let resolved = lattice.join(&cref, &ops);
     let value = match resolved {
@@ -702,7 +702,7 @@ fn fsm_legal_transition_advances_state() -> Result<()> {
     let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     // Single legal transition: invited → joined.
     let ops = vec![SealedOp::new(
-        move_id("22"),
+        issuer_digest("22"),
         op_transition(json!("invited"), json!("join")),
     )];
     let resolved = lattice.join(&cref, &ops);
@@ -717,11 +717,11 @@ fn fsm_duplicate_transition_is_idempotent() -> Result<()> {
     let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     let ops = vec![
         SealedOp::new(
-            move_id("23"),
+            issuer_digest("23"),
             op_transition(json!("invited"), json!("join")),
         ),
         SealedOp::new(
-            move_id("24"),
+            issuer_digest("24"),
             op_transition(json!("invited"), json!("join")),
         ),
     ];
@@ -737,11 +737,11 @@ fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
     let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
     let ops = vec![
         SealedOp::new(
-            move_id("25"),
+            issuer_digest("25"),
             op_transition(json!("invited"), json!("join")),
         ),
         SealedOp::new(
-            move_id("26"),
+            issuer_digest("26"),
             op_transition(json!("invited"), json!("decline")),
         ),
     ];
@@ -764,11 +764,11 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     // pre-state can only be one value at a time.
     let ops = vec![
         SealedOp::new(
-            move_id("33"),
+            issuer_digest("33"),
             op_transition(json!("invited"), json!("join")),
         ),
         SealedOp::new(
-            move_id("44"),
+            issuer_digest("44"),
             op_transition(json!("join"), json!("invited")),
         ),
     ];
@@ -797,8 +797,8 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
     // as a Value array directly). Either form is acceptable as long as
     // BOTH input values are visible to the caller.
     let ops = vec![
-        SealedOp::new(move_id("55"), op_set(json!("Title A"))),
-        SealedOp::new(move_id("66"), op_set(json!("Title B"))),
+        SealedOp::new(issuer_digest("55"), op_set(json!("Title A"))),
+        SealedOp::new(issuer_digest("66"), op_set(json!("Title B"))),
     ];
     let resolved = lattice.join(&cref, &ops);
     let surfaces_both = match &resolved {
@@ -941,8 +941,8 @@ fn ordered_log_equivocation_resolves_to_max_event_digest() -> Result<()> {
             bail!("{label}: the losing claim must remain an auditable diagnostic: {report:?}");
         }
         let diagnostic = &report.equivocations[0];
-        if diagnostic.winner_event_digest != move_id("22").as_str()
-            || diagnostic.loser_event_digests != vec![move_id("11").as_str().to_owned()]
+        if diagnostic.winner_event_digest != issuer_digest("22").as_str()
+            || diagnostic.loser_event_digests != vec![issuer_digest("11").as_str().to_owned()]
         {
             bail!("{label}: equivocation diagnostic does not name winner/loser: {diagnostic:?}");
         }
@@ -985,8 +985,8 @@ fn ordered_log_issuer_free_join_fails_closed() -> Result<()> {
         "ak.realm.01js0sp0000000000000000000",
     );
     let ops = vec![
-        SealedOp::new(move_id("c0"), op_append(json!({"msg": "a"}), 0)),
-        SealedOp::new(move_id("c1"), op_append(json!({"msg": "b"}), 0)),
+        SealedOp::new(issuer_digest("c0"), op_append(json!({"msg": "a"}), 0)),
+        SealedOp::new(issuer_digest("c1"), op_append(json!({"msg": "b"}), 0)),
     ];
     match OrderedLog.join(&cref, &ops) {
         CellState::Bottom(_) => Ok(()),
@@ -1162,7 +1162,7 @@ fn notary_cell_single_did_profile_resolves_to_value() -> Result<()> {
         "kind": "single_did",
         "did": "did:web:hub.example",
     });
-    let ops = vec![SealedOp::new(move_id("a1"), op_set(value))];
+    let ops = vec![SealedOp::new(issuer_digest("a1"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("Notary single_did profile must resolve to Value, got {resolved:?}");
@@ -1183,7 +1183,7 @@ fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
         ],
         "forensic_attribution": "quorum_intersection",
     });
-    let ops = vec![SealedOp::new(move_id("a2"), op_set(value))];
+    let ops = vec![SealedOp::new(issuer_digest("a2"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("Notary threshold profile must resolve to Value, got {resolved:?}");
@@ -1201,7 +1201,7 @@ fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
             "did:web:peer2.example"
         ],
     });
-    let ops = vec![SealedOp::new(move_id("a3"), op_set(value))];
+    let ops = vec![SealedOp::new(issuer_digest("a3"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("Notary open_set profile must resolve to Value, got {resolved:?}");
@@ -1220,7 +1220,7 @@ fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
             "did:web:recovery2.example"
         ],
     });
-    let ops = vec![SealedOp::new(move_id("a4"), op_set(value))];
+    let ops = vec![SealedOp::new(issuer_digest("a4"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("Notary mixed profile must resolve to Value, got {resolved:?}");
@@ -1236,14 +1236,14 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     // condition, not a thing you LWW past.
     let ops = vec![
         SealedOp::new(
-            move_id("a5"),
+            issuer_digest("a5"),
             op_set(json!({
                 "kind": "single_did",
                 "did": "did:web:hub-a.example",
             })),
         ),
         SealedOp::new(
-            move_id("a6"),
+            issuer_digest("a6"),
             op_set(json!({
                 "kind": "single_did",
                 "did": "did:web:hub-b.example",
@@ -1289,7 +1289,7 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     // scope (the earlier conflict pair was rolled back / superseded by the
     // recovery Seal). Result MUST be Value.
     let ops = vec![SealedOp::new(
-        move_id("b1"),
+        issuer_digest("b1"),
         op_set(json!({
             "role": "admin",
             "repair_of": ["a1", "a2"],
@@ -1319,14 +1319,14 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     // winner just because one payload claims authority.
     let ops = vec![
         SealedOp::new(
-            move_id("b2"),
+            issuer_digest("b2"),
             op_set(json!({
                 "role": "admin",
                 "self_authorising": true,
                 "claims": "winner",
             })),
         ),
-        SealedOp::new(move_id("b3"), op_set(json!({"role": "moderator"}))),
+        SealedOp::new(issuer_digest("b3"), op_set(json!({"role": "moderator"}))),
     ];
     let resolved = lattice.join(&cref, &ops);
     if !resolved.is_bottom() {
@@ -1359,15 +1359,15 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     // or_set surfaces the union without bottom.
     let ops = vec![
         SealedOp::new(
-            move_id("c1"),
+            issuer_digest("c1"),
             op_add("ak:event:01970e58-0007-7000-8000-000000000001"),
         ),
         SealedOp::new(
-            move_id("c2"),
+            issuer_digest("c2"),
             op_add("ak:event:01970e58-0007-7000-8000-000000000002"),
         ),
         SealedOp::new(
-            move_id("c3"),
+            issuer_digest("c3"),
             op_add("ak:event:01970e58-0007-7000-8000-000000000001"),
         ), // duplicate add
     ];
@@ -1397,15 +1397,15 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     // ref MUST stay visible.
     let ops = vec![
         SealedOp::new(
-            move_id("c4"),
+            issuer_digest("c4"),
             op_add("ak:event:01970e58-0007-7000-8000-000000000003"),
         ),
         SealedOp::new(
-            move_id("c5"),
+            issuer_digest("c5"),
             op_add("ak:event:01970e58-0007-7000-8000-000000000004"),
         ),
         SealedOp::new(
-            move_id("c6"),
+            issuer_digest("c6"),
             op_remove("ak:event:01970e58-0007-7000-8000-000000000003"),
         ),
     ];

@@ -92,7 +92,7 @@ pub fn refresh_event_proof_with_signing_seed(
         .unwrap_or_else(|| typed.actor_id.clone());
     let created_at = typed.created_at;
     typed.proofs.clear();
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         signing_seed,
         signer_did,
         verification_method.clone(),
@@ -118,109 +118,48 @@ fn event_fixture_label(event: &Value) -> String {
         .to_owned()
 }
 
-/// Attach the `ephemeral-envelope.schema.json` broadcast `proof` to an
-/// ephemeral envelope: a real ed25519 detached JWS whose
-/// `verification_method` is `{actor_id}#{device_id}` and whose `event_digest`
-/// covers the canonical envelope bytes without `proof` (the shape the soland
-/// relay verifies against the active device directory key before admission).
+/// Attach the `ak.signal-proof-v1` device proof to a [`SignalEnvelope`].
 ///
-/// Fully typed on the SDK surface: the binding transcript comes from
-/// [`arkret_wire::Proof::canonical_ephemeral_binding_bytes`] and the JWS wire
-/// form from [`arkret_signatures::proof::Ed25519DetachedJwsSigner`], so this helper can never
-/// drift from the verifier's bytes.
-pub fn attach_ephemeral_proof(
-    envelope: &mut arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope,
+/// The Signal proof is not an Event proof: its transcript names the sending
+/// device and commits to `envelope_digest` — the envelope with `proof`
+/// removed — so a signature from one rail can never be replayed on the other
+/// (`zh/sync/signal.md` §1). The binding bytes come from
+/// [`arkret_wire::SignalEnvelope::proof_binding_bytes`] and the JWS wire form
+/// from the SDK signer, so this helper cannot drift from the verifier.
+///
+/// `aad_digest` is recomputed from the immutable outer header and
+/// `proof.created_at` is set to `sent_at`, both of which
+/// `SignalEnvelope::validate_structural` requires.
+pub fn attach_signal_proof(
+    envelope: &mut arkret_wire::SignalEnvelope,
     signing_key: &ed25519_dalek::SigningKey,
 ) {
-    let device_id = envelope.device_id.as_str().to_owned();
-
-    // event_digest covers the SDK-defined canonical envelope without `proof`.
-    let canonical = envelope
-        .canonical_bytes_without_proof()
-        .expect("ephemeral envelope is canonicalizable");
-    let event_digest = arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&canonical))
-        .expect("sha256 digest is a valid Hash");
-
-    let mut proof = arkret_wire::Proof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: format!("{}#{device_id}", envelope.actor_id),
-        event_digest,
-        created_at: envelope.sent_at,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        jws: String::new(),
-    };
-    let binding_bytes = proof
-        .canonical_ephemeral_binding_bytes(&envelope.actor_id)
-        .expect("proof binding is canonicalizable");
+    envelope.encrypted_payload.aad_digest = envelope
+        .expected_aad_digest()
+        .expect("signal envelope header is canonicalizable");
+    envelope.proof.created_at = envelope.sent_at;
+    envelope.proof.envelope_digest = envelope
+        .envelope_digest()
+        .expect("signal envelope is canonicalizable");
+    let binding_bytes = envelope
+        .proof_binding_bytes()
+        .expect("signal proof binding is canonicalizable");
     let signer = arkret_signatures::proof::Ed25519DetachedJwsSigner::new(
         signing_key.clone(),
-        proof.verification_method.clone(),
+        envelope.proof.verification_method.clone(),
     );
-    proof.jws = signer.sign_detached_jws(&binding_bytes);
-    envelope.proof = proof;
+    envelope.proof.jws = signer.sign_detached_jws(&binding_bytes);
 }
 
-pub fn ephemeral_proof_placeholder(
-    actor_id: &str,
-    device_id: &str,
-    created_at: chrono::DateTime<chrono::Utc>,
-) -> arkret_wire::Proof {
-    arkret_wire::Proof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: format!("{actor_id}#{device_id}"),
-        event_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
-            .expect("zero SHA-256 digest is typed"),
-        created_at,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        // `EphemeralEnvelope::new` validates the required proof shape before
-        // the caller can replace it with the real signature.
-        jws: "eyJhbGciOiJFZERTQSJ9..c2ln".to_owned(),
-    }
-}
-
-/// [`attach_ephemeral_proof`] for callers holding a raw JSON envelope: the
-/// value is round-tripped through the typed
-/// [`arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope`] (so a malformed
-/// envelope fails loudly here, not at the server) and re-serialized with the attached proof.
-pub fn attach_ephemeral_proof_value(envelope: &mut Value, signing_key: &ed25519_dalek::SigningKey) {
-    let actor_id = envelope
-        .get("actor_id")
-        .and_then(Value::as_str)
-        .expect("ephemeral envelope actor_id is a string")
-        .to_owned();
-    let device_id = envelope
-        .get("device_id")
-        .and_then(Value::as_str)
-        .expect("ephemeral envelope device_id is a string")
-        .to_owned();
-    let created_at = serde_json::from_value(
-        envelope
-            .get("sent_at")
-            .cloned()
-            .expect("ephemeral envelope carries sent_at"),
-    )
-    .expect("ephemeral envelope sent_at is a timestamp");
-    envelope
-        .as_object_mut()
-        .expect("ephemeral envelope is an object")
-        .insert(
-            "proof".to_owned(),
-            serde_json::to_value(ephemeral_proof_placeholder(
-                &actor_id, &device_id, created_at,
-            ))
-            .expect("ephemeral proof placeholder serializes"),
-        );
-    let mut typed: arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope =
-        serde_json::from_value(envelope.clone())
-            .expect("value is a well-formed ephemeral envelope");
-    attach_ephemeral_proof(&mut typed, signing_key);
-    *envelope = serde_json::to_value(&typed).expect("ephemeral envelope serializes");
+/// [`attach_signal_proof`] for callers holding a raw JSON envelope: the value
+/// is round-tripped through the typed [`arkret_wire::SignalEnvelope`] (so a
+/// malformed envelope fails loudly here, not at the server) and re-serialized
+/// with the attached proof.
+pub fn attach_signal_proof_value(envelope: &mut Value, signing_key: &ed25519_dalek::SigningKey) {
+    let mut typed: arkret_wire::SignalEnvelope =
+        serde_json::from_value(envelope.clone()).expect("value is a well-formed signal envelope");
+    attach_signal_proof(&mut typed, signing_key);
+    *envelope = serde_json::to_value(&typed).expect("signal envelope serializes");
 }
 
 #[cfg(test)]
@@ -233,6 +172,7 @@ mod tests {
             "event_id": "ak:event:019f3b1c-76c8-7000-8000-000000000001",
             "kind": "ak.message.create",
             "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001"},
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
@@ -267,46 +207,62 @@ mod tests {
         assert_eq!(digest, typed.event_digest().unwrap());
     }
 
+    /// The signal rail carries no product `signal_kind`, `call_id` or
+    /// `strand_id` on the outer header; a raw envelope is signable from its
+    /// header alone, and the resulting proof verifies under the
+    /// `ak.signal-proof-v1` transcript.
     #[test]
-    fn raw_ephemeral_envelope_can_be_signed_before_it_has_a_proof() {
+    fn raw_signal_envelope_can_be_signed_and_verifies() {
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]);
         let mut envelope = json!({
-            "kind": "ak.typing",
             "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
-            "actor_id": "did:web:alice.example",
-            "device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001"},
+            "sender_actor_id": "did:web:alice.example",
+            "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
+            "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
+            "signal_class": "session",
             "sent_at": "2026-07-07T00:00:00.000Z",
-            "expires_at": "2026-07-07T00:00:15.000Z",
-            "payload": {
-                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001",
-                "typing": true
+            "expires_at": "2026-07-07T00:00:30.000Z",
+            "encrypted_payload": {
+                "scheme": "ak.signal_exporter_aead.v1",
+                "key_ref": {
+                    "algorithm": "MLS-EXPORTER-AEAD",
+                    "group_state_ref": "ak:event:019f3b1c-76c8-7000-8000-000000000002"
+                },
+                "purpose": "ak.signal.v1",
+                "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+                "epoch": 7,
+                "nonce": "AAAAAAAAAAAAAAAA",
+                "ciphertext": "Q2lwaGVydGV4dFBsYWNlaG9sZGVy",
+                "aad_digest": format!("sha256:{}", "0".repeat(64))
+            },
+            "proof": {
+                "kind": "detached_jws",
+                "verification_method": "did:web:alice.example#ak:device:019f3b1c-76c8-7000-8000-000000000001",
+                "alg": "EdDSA",
+                "envelope_digest": format!("sha256:{}", "0".repeat(64)),
+                "created_at": "2026-07-07T00:00:00.000Z",
+                "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
             }
         });
 
-        super::attach_ephemeral_proof_value(
-            &mut envelope,
-            &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
-        );
+        super::attach_signal_proof_value(&mut envelope, &signing_key);
 
-        let typed: arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope =
-            serde_json::from_value(envelope).unwrap();
-        assert_eq!(typed.proof.kind, arkret_wire::proof_kind::DETACHED_JWS);
-        assert!(!typed.proof.jws.is_empty());
+        let typed: arkret_wire::SignalEnvelope = serde_json::from_value(envelope).unwrap();
+        typed.validate_structural().unwrap();
+        arkret_signatures::proof::verify_eddsa_signal_proof(
+            &typed,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: signing_key.verifying_key().to_bytes().to_vec(),
+            },
+        )
+        .unwrap();
 
+        // The outer header must not be reconstructible into a product kind:
+        // `signal_class` is the only classification a service sees.
         let wire = serde_json::to_value(&typed).unwrap();
-        assert_eq!(
-            wire["device_id"],
-            "ak:device:019f3b1c-76c8-7000-8000-000000000001"
-        );
-        let mut missing_device_id = wire;
-        missing_device_id
-            .as_object_mut()
-            .unwrap()
-            .remove("device_id");
-        assert!(
-            serde_json::from_value::<
-                arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope,
-            >(missing_device_id)
-            .is_err()
-        );
+        assert_eq!(wire["signal_class"], "session");
+        assert!(wire.get("kind").is_none());
+        assert!(wire.get("payload").is_none());
     }
 }

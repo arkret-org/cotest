@@ -746,7 +746,7 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.self.ephemeral.command.send",
+          "operation_id": "ak.self.signal.command.send",
           "surfaces": [
             "events_sync"
           ]
@@ -787,7 +787,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/devices_webrtc.rs",
           "markers": [
-            "/_arkret/self/ephemeral",
+            "/_arkret/self/signal",
             "rtc_media_token"
           ]
         },

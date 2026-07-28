@@ -11,7 +11,7 @@ use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
     self_principal_bootstrap_submit_request,
 };
-use arkret_identifiers::{DeviceId, Did, EventId, Hash, Hlc, MoveId, RealmId, TypedTrustDomainId};
+use arkret_identifiers::{DeviceId, Did, EventId, Hash, Hlc, RealmId, TypedTrustDomainId};
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizePayload, DeviceOrPrincipalRef, DeviceReanchorPayload,
     validate_device_reanchor_recovery_first_seal,
@@ -258,18 +258,21 @@ fn validate_bootstrap_helpers() -> Result<()> {
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let realm_id =
         RealmId::new(arkret_models_identity::did_document::principal_control_realm_id(&principal))?;
-    let create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
-        principal_id: principal.clone(),
-        realm_id: realm_id.clone(),
-        trust_domain: TypedTrustDomainId::new("ak:trust_domain:example.net")?,
-        did_inception_ref: EventRef::new(
-            "did:webvh:z6mkfixture:alice.example#entry-0",
-            DID_INCEPTION_REF_ROLE,
-        ),
-        event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000001")?,
-        created_at,
-        hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
-    })?;
+    let create = build_self_principal_pcr_create(
+        SelfPrincipalPcrCreateInput {
+            principal_id: principal.clone(),
+            realm_id: realm_id.clone(),
+            trust_domain: TypedTrustDomainId::new("ak:trust_domain:example.net")?,
+            did_inception_ref: EventRef::new(
+                "did:webvh:z6mkfixture:alice.example#entry-0",
+                DID_INCEPTION_REF_ROLE,
+            ),
+            event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000001")?,
+            created_at,
+            hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
+        },
+        &crate::publication::project_cells,
+    )?;
     let mut create = with_proof(
         create,
         "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
@@ -297,7 +300,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
     };
     let mut authorize = Event::new(
         arkret_wire::events::EventKind::DEVICE_AUTHORIZE,
-        realm_id,
+        arkret_wire::ScopeRef::Realm { realm_id },
         principal,
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
@@ -313,12 +316,33 @@ fn validate_bootstrap_helpers() -> Result<()> {
         &format!("{}#enrollment", authority.authority_did),
     )?;
 
-    let request = self_principal_bootstrap_submit_request(create.clone(), authorize)?;
-    if request.event.is_some() || request.events.len() != 2 {
+    // The lease bounds the revocation window and is not part of the signed
+    // Event, so each bootstrap slot travels as an `EventInitialSubmission`
+    // (`offline-publication.md` §2.1).
+    let create_submission =
+        crate::publication::initial_submission(create.clone(), "ak.realm.admin")?;
+    let authorize_submission =
+        crate::publication::initial_submission(authorize, "ak.device.authorize")?;
+    let request = self_principal_bootstrap_submit_request(
+        create_submission,
+        authorize_submission.clone(),
+        &crate::publication::project_cells,
+    )?;
+    let arkret_models_collaboration::http_bodies::EventsSubmitRequestBody::Batch(batch) = &request
+    else {
+        bail!("self principal bootstrap was not emitted as one closed two-event batch");
+    };
+    if batch.events.len() != 2 {
         bail!("self principal bootstrap was not emitted as one closed two-event unit");
     }
     create.refs.clear();
-    if self_principal_bootstrap_submit_request(create, request.events[1].clone()).is_ok() {
+    if self_principal_bootstrap_submit_request(
+        crate::publication::initial_submission(create, "ak.realm.admin")?,
+        authorize_submission,
+        &crate::publication::project_cells,
+    )
+    .is_ok()
+    {
         bail!("self principal bootstrap accepted a missing did_inception anchor");
     }
     Ok(())
@@ -336,9 +360,10 @@ fn validate_reanchor_helpers() -> Result<()> {
     });
     let payload: DeviceReanchorPayload = serde_json::from_value(value.clone())?;
     let reanchor_digest = Hash::new(format!("sha256:{}", "1".repeat(64)))?;
+    // A Seal `delta` entry is a bare digest: `move` is no longer an id kind.
     let delta = vec![
-        MoveId::new(reanchor_digest.as_str().to_owned())?,
-        MoveId::new(payload.replacement_authorize_digest.as_str().to_owned())?,
+        reanchor_digest.clone(),
+        payload.replacement_authorize_digest.clone(),
     ];
     validate_device_reanchor_recovery_first_seal(&payload, &[], &delta, &reanchor_digest)?;
     if validate_device_reanchor_recovery_first_seal(&payload, &[], &delta[..1], &reanchor_digest)

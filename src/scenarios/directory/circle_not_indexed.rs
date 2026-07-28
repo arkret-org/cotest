@@ -19,7 +19,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{CircleId, RealmId};
-use arkret_wire::EffectiveScope;
+use arkret_wire::ScopeRef;
 
 /// Drop reason emitted by the teabay ingest filter when an event is
 /// suppressed.
@@ -32,11 +32,11 @@ pub enum DirectoryFilterDecision {
 }
 
 /// The normative filter every teabay ingest binding MUST implement.
-pub fn ingest_filter(scope: &EffectiveScope) -> DirectoryFilterDecision {
+pub fn ingest_filter(scope: &ScopeRef) -> DirectoryFilterDecision {
     match scope {
-        EffectiveScope::Realm { .. } => DirectoryFilterDecision::Project,
-        EffectiveScope::Circle { .. } => DirectoryFilterDecision::DropCircleScoped,
-        // `EffectiveScope` is `#[non_exhaustive]`: an unrecognised scope
+        ScopeRef::Realm { .. } => DirectoryFilterDecision::Project,
+        ScopeRef::Circle { .. } => DirectoryFilterDecision::DropCircleScoped,
+        // `ScopeRef` is `#[non_exhaustive]`: an unrecognised scope
         // variant MUST fail closed and stay out of the directory index.
         _ => DirectoryFilterDecision::DropCircleScoped,
     }
@@ -53,10 +53,10 @@ fn circle_id() -> Result<CircleId> {
 }
 
 pub async fn circle_not_indexed_run() -> Result<()> {
-    let realm = EffectiveScope::Realm {
+    let realm = ScopeRef::Realm {
         realm_id: realm_id()?,
     };
-    let circle = EffectiveScope::Circle {
+    let circle = ScopeRef::Circle {
         realm_id: realm_id()?,
         circle_id: circle_id()?,
     };

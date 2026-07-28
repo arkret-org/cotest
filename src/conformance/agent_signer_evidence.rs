@@ -325,7 +325,7 @@ fn fixture_hash(byte: char) -> Hash {
 
 fn fixture_seal(state_root: Hash, hlc: &str, predecessor_refs: Vec<arkret_wire::SealId>) -> Seal {
     let notary_id = Did::new("did:webvh:z6mkservice:service.example").unwrap();
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [24; 32],
         notary_id.clone(),
         format!("{notary_id}#notary-key"),
@@ -442,7 +442,9 @@ fn run_case(
             )?;
             let mut event = Event::new(
                 arkret_wire::EventKind::MESSAGE_CREATE,
-                RealmId::new("ak:realm:01964137-0000-7000-8000-000000000009")?,
+                arkret_wire::ScopeRef::Realm {
+                    realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000009")?,
+                },
                 actor.clone(),
                 1,
                 arkret_wire::Hlc::new("01970e589d21-0004-a13f9c2e")?,

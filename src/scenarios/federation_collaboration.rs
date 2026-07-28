@@ -200,7 +200,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             "allowed_recipient_services": [server_a.service_id(), server_b.service_id()]
         }),
     )?;
-    attach_delivery_policy_cell_contract(&mut delivery_policy)?;
+    attach_delivery_policy_precondition(&mut delivery_policy)?;
     sign_federation_event(&mut delivery_policy)?;
     let alice_delivery_binding = signed_federation_event(
         ALICE_DELIVERY_BINDING_EVENT_ID,
@@ -415,7 +415,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             "allowed_recipient_services": [server_b.service_id()]
         }),
     )?;
-    attach_delivery_policy_cell_contract(&mut e2ee_delivery_policy)?;
+    attach_delivery_policy_precondition(&mut e2ee_delivery_policy)?;
     sign_federation_event(&mut e2ee_delivery_policy)?;
     let e2ee_bob_join = signed_federation_event(
         E2EE_BOB_JOIN_EVENT_ID,
@@ -1400,8 +1400,10 @@ fn signed_federation_event(
 ) -> Result<Event> {
     let mut event = Event::new(
         kind,
-        RealmId::new(realm_id.to_owned())
-            .with_context(|| format!("invalid federation realm_id `{realm_id}`"))?,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: RealmId::new(realm_id.to_owned())
+                .with_context(|| format!("invalid federation realm_id `{realm_id}`"))?,
+        },
         Did::new(actor_id.to_owned())
             .with_context(|| format!("invalid federation actor_id `{actor_id}`"))?,
         actor_seq,
@@ -1423,7 +1425,7 @@ fn signed_federation_event(
 
 fn sign_federation_event(event: &mut Event) -> Result<()> {
     let verification_method = format!("{}#cotest-principal-signing-key", event.actor_id);
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         test_principal_signing_key().to_bytes(),
         event.actor_id.clone(),
         verification_method.clone(),
@@ -1445,7 +1447,7 @@ fn sign_federation_event_with_device(
     device_signing_key: &SigningKey,
 ) -> Result<()> {
     let verification_method = format!("{}#{device_id}", event.actor_id);
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         device_signing_key.to_bytes(),
         event.actor_id.clone(),
         verification_method.clone(),
@@ -1482,19 +1484,22 @@ async fn bootstrap_test_device_authorization(
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
 
-    let mut create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
-        principal_id: principal.clone(),
-        realm_id: realm_id.clone(),
-        trust_domain: server.trust_domain().clone(),
-        did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
-        event_id: EventId::new(ALICE_PCR_CREATE_EVENT_ID.to_owned())?,
-        created_at,
-        hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
-    })?;
+    let mut create = build_self_principal_pcr_create(
+        SelfPrincipalPcrCreateInput {
+            principal_id: principal.clone(),
+            realm_id: realm_id.clone(),
+            trust_domain: server.trust_domain().clone(),
+            did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+            event_id: EventId::new(ALICE_PCR_CREATE_EVENT_ID.to_owned())?,
+            created_at,
+            hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
+        },
+        &crate::publication::project_cells,
+    )?;
     let root_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
     let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
-    let root_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let root_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         root_seed,
         root_did,
         prepared.root_verification_method.clone(),
@@ -1538,7 +1543,7 @@ async fn bootstrap_test_device_authorization(
     };
     let mut authorize = Event::new(
         arkret_wire::events::EventKind::DEVICE_AUTHORIZE,
-        realm_id,
+        arkret_wire::ScopeRef::Realm { realm_id },
         principal.clone(),
         1,
         Hlc::new("01970e589d21-0001-a13f9c2e")?,
@@ -1551,7 +1556,7 @@ async fn bootstrap_test_device_authorization(
     authorize.authorization_ref = Some(enrollment_method.clone());
     let enrollment_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
-    let enrollment_signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let enrollment_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         enrollment_seed,
         principal.clone(),
         enrollment_method.clone(),
@@ -1563,7 +1568,14 @@ async fn bootstrap_test_device_authorization(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
 
-    let request = self_principal_bootstrap_submit_request(create, authorize.clone())?;
+    // The lease is not an Event field and cannot be derived from one, so the
+    // bootstrap unit is packaged with the publication evidence each slot
+    // travels under (`offline-publication.md` §2.1).
+    let request = self_principal_bootstrap_submit_request(
+        crate::publication::initial_submission(create, "ak.realm.admin")?,
+        crate::publication::initial_submission(authorize.clone(), "ak.device.authorize")?,
+        &crate::publication::project_cells,
+    )?;
     let accepted = expect_json(
         server
             .http()
@@ -1724,30 +1736,24 @@ async fn claim_test_keypackage(
     serde_json::from_value(outcome).context("decode peer KeyPackage claim outcome")
 }
 
-fn attach_delivery_policy_cell_contract(event: &mut Event) -> Result<()> {
+/// Bind the delivery-binding policy Control Move to an empty pre-state.
+///
+/// Only the CBA precondition is producer-authored. The cell write itself is
+/// derived from `kind + payload` through the contract registry, so a producer
+/// that declared it would be asserting something the v1 Event wire cannot
+/// carry (`models/event-and-patch.md` §2.4.2).
+fn attach_delivery_policy_precondition(event: &mut Event) -> Result<()> {
     let cell = arkret_identifiers::CellRef::new(format!(
         "ak:cell:ak.component.realm.delivery_binding_policy.v1:{}",
         arkret_wire::NULL_SUBJECT
     ))?;
     event.preconditions = vec![arkret_wire::Precondition {
-        cell: cell.clone(),
+        cell,
         predicate: arkret_wire::Predicate {
             op: arkret_wire::PredicateOp::HeadEq,
             value: Some(Value::Null),
             values: None,
             predicate_id: None,
-        },
-    }];
-    event.effects = vec![arkret_wire::Effect {
-        cell,
-        op: arkret_wire::LatticeOp {
-            op_type: arkret_wire::LatticeOpType::Set,
-            tag: None,
-            value: Some(serde_json::to_value(&event.payload)?),
-            from: None,
-            to: None,
-            reason: None,
-            issuer_seq: None,
         },
     }];
     Ok(())

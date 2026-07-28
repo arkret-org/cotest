@@ -13,13 +13,14 @@ use cotest::conformance::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
     ALL_MEDIA_BINDING_VECTOR_IDS, ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS,
     ALL_MENTION_RENDERING_VECTOR_IDS, ALL_OBJECT_ADDRESSING_VECTOR_IDS,
-    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
-    run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_call_signal_vector_suite,
-    run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
-    run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
-    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite,
-    run_mention_rendering_vector_suite, run_object_addressing_vector_suite,
+    ALL_PRESENCE_SIGNAL_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
+    load_local_fixture_value, run_agent_signer_evidence_vector_suite, run_agent_vector_suite,
+    run_call_signal_vector_suite, run_call_state_media_lifecycle_vector_suite,
+    run_container_realm_control_payload_suite, run_cursor_vector_suite,
+    run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
+    run_media_binding_vector_suite, run_member_identity_vector_suite,
+    run_member_roster_vector_suite, run_mention_rendering_vector_suite,
+    run_object_addressing_vector_suite, run_presence_signal_vector_suite,
     run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 use serde_json::{Value, json};
@@ -162,16 +163,36 @@ fn media_binding_vector_suite_runs_clean() {
     assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 10);
 }
 
-// ─── webrtc-signaling.md §5.1 — ak.call.signal receiver vectors ────────────
+// ─── webrtc-signaling.md §5 — ak.call.signal receiver vectors ──────────────
 //
-// signal_kind enum (rejects retired offer/ice/device_change) + seq
-// monotonicity (receiver-side rollback drop) + a REAL ed25519 detached-JWS
-// round-trip proving the cotest e2e helper's proof is genuinely verifiable.
+// signal_kind enum on the decrypted plaintext (rejects retired
+// offer/ice/device_change) + per-(realm, call, actor, device) seq monotonicity
+// + a REAL ed25519 round-trip under the `ak.signal-proof-v1` transcript +
+// outer-header metadata minimisation and the class TTL ceiling.
 
 #[test]
 fn call_signal_receiver_vector_suite_runs_clean() {
     run_call_signal_vector_suite().expect("call-signal receiver vectors must pass");
-    assert_eq!(ALL_CALL_SIGNAL_VECTOR_IDS.len(), 3);
+    assert_eq!(ALL_CALL_SIGNAL_VECTOR_IDS.len(), 4);
+}
+
+// ─── profiles-presence.md §3 — presence receiver vectors ───────────────────
+//
+// Presence is Signal state whose plaintext the Sync Service may not read, so
+// the closed `state` set, the `last_active_at` bucket rules, the
+// `status_message` bounds and the deterministic multi-device aggregation are
+// all receiver obligations.
+
+#[test]
+fn presence_signal_receiver_vector_suite_runs_clean() {
+    run_presence_signal_vector_suite().expect("presence receiver vectors must pass");
+    assert_eq!(ALL_PRESENCE_SIGNAL_VECTOR_IDS.len(), 4);
+    for id in ALL_PRESENCE_SIGNAL_VECTOR_IDS {
+        assert!(
+            id.starts_with("ak.vector.presence."),
+            "presence vector id drifted: {id}"
+        );
+    }
 }
 
 // ─── §12.16-§12.19 — call-state media lifecycle vectors ────────────────────

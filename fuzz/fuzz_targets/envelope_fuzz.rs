@@ -7,7 +7,7 @@
 #![no_main]
 
 use cotest::fuzz::envelope_fuzz::{
-    fuzz_event_envelope, fuzz_move_envelope, fuzz_seal_envelope, fuzz_snapshot_chunk,
+    fuzz_event_envelope, fuzz_signal_envelope, fuzz_seal_envelope, fuzz_snapshot_chunk,
 };
 use libfuzzer_sys::fuzz_target;
 
@@ -21,7 +21,7 @@ fuzz_target!(|data: &[u8]| {
     // means the inner `catch_unwind` already converted a panic into Err.
     let _ = match selector % 4 {
         0 => fuzz_event_envelope(payload),
-        1 => fuzz_move_envelope(payload),
+        1 => fuzz_signal_envelope(payload),
         2 => fuzz_seal_envelope(payload),
         _ => fuzz_snapshot_chunk(payload),
     };

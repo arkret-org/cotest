@@ -18,9 +18,9 @@
 //! Seal whose canonical bytes leak `id` or `notary_signature` is rejected.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{Did, Hash, Hlc, MoveId, RealmId, SealId};
+use arkret_identifiers::{Did, Hash, Hlc, RealmId, SealId};
 use arkret_wire::{
-    MoveSignature, NotarySig, Seal, SealKind, compute_seal_id, seal_canonical_bytes,
+    NotarySig, PayloadSignature, Seal, SealKind, compute_seal_id, seal_canonical_bytes,
 };
 use chrono::TimeZone;
 
@@ -29,9 +29,10 @@ fn realm() -> Result<RealmId> {
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
-fn move_id(hex_byte: u8) -> Result<MoveId> {
+/// A `delta` entry is a bare digest: `move` is not an id kind in v1.
+fn delta_digest(hex_byte: u8) -> Result<Hash> {
     let hex = format!("{hex_byte:02x}").repeat(32);
-    MoveId::new(format!("sha256:{hex}")).map_err(|e| anyhow!("move id: {e}"))
+    Hash::new(format!("sha256:{hex}")).map_err(|e| anyhow!("delta digest: {e}"))
 }
 
 fn seal_id(hex_byte: u8) -> Result<SealId> {
@@ -44,8 +45,8 @@ fn hash(hex_byte: u8) -> Result<Hash> {
     Hash::new(format!("sha256:{hex}")).map_err(|e| anyhow!("hash: {e}"))
 }
 
-fn signature() -> MoveSignature {
-    MoveSignature {
+fn signature() -> PayloadSignature {
+    PayloadSignature {
         alg: "EdDSA".to_owned(),
         verification_method: "did:web:notary.example#k1".to_owned(),
         payload_digest: Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap(),
@@ -62,7 +63,7 @@ fn build_seal() -> Result<Seal> {
         id: seal_id(0x00)?,
         realm_id: realm()?,
         predecessor_refs: vec![seal_id(0xaa)?],
-        delta: vec![move_id(0x11)?, move_id(0x22)?],
+        delta: vec![delta_digest(0x11)?, delta_digest(0x22)?],
         control_event_set_root: hash(0x66)?,
         state_root: hash(0x77)?,
         completeness_root: hash(0x88)?,

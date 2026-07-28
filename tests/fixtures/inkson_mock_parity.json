@@ -144,12 +144,12 @@
       "auth": "alice"
     },
     {
-      "id": "ephemeral",
-      "operation_id": "ak.self.ephemeral.command.send",
+      "id": "signal",
+      "operation_id": "ak.self.signal.command.send",
       "method": "POST",
-      "path": "/_arkret/self/ephemeral",
+      "path": "/_arkret/self/signal",
       "auth": "alice",
-      "body_template": "typing_ephemeral"
+      "body_template": "typing_signal"
     }
   ]
 }

@@ -527,6 +527,7 @@ mod tests {
             "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
             "kind": "ak.member.state",
             "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -545,7 +546,7 @@ mod tests {
                 "reason": "invite_accept"
             },
             "unsigned": {"trace": "local"},
-            "effective_scope": {
+            "scope_ref": {
                 "kind": "realm",
                 "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"
             },
@@ -569,6 +570,7 @@ mod tests {
             "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
             "kind": "ak.morph.schema_migrate",
             "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -635,6 +637,7 @@ mod tests {
             "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
             "kind": "ak.member.state",
             "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
             "actor_id": actor,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -648,6 +651,7 @@ mod tests {
             },
             "payload": {
                 "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+                "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
                 "actor_id": actor,
                 "membership": "join"
             }

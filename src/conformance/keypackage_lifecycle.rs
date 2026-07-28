@@ -915,6 +915,9 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "membership_frontier": [
                 "ak:event:0196419b-0000-7000-8000-000000000001"
             ],
+            "covered_seal_refs": [
+                "ak:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            ],
             "policy_root": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             "capability_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "discussion_metadata_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",

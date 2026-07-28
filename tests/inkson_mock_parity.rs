@@ -726,29 +726,52 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
             "ak:realm:01999999-0000-7000-8000-000000000453",
             "Mock Parity Space",
         )?),
-        Some("typing_ephemeral") => {
+        Some("typing_signal") => {
             let sent_at = Utc::now();
+            // `session` is the class for an ordinary typing signal; its TTL
+            // ceiling is 30 seconds (`zh/sync/signal.md` §2).
             let expires_at = sent_at + Duration::seconds(30);
-            // ephemeral-envelope.schema.json: every broadcast ephemeral kind
-            // carries `device_id` and a detached-JWS `proof` bound to
-            // `{actor_id}#{device_id}` over the canonical envelope bytes.
+            // The outer envelope carries no product classification beyond
+            // `signal_class`: the typing payload type, its Strand target and
+            // the sender sequence live inside `encrypted_payload` and are not
+            // reconstructible from the header (§1). The ciphertext is opaque
+            // to the parity harness on purpose — this case pins the request
+            // and response *shape* both implementations must agree on.
             let mut envelope = json!({
-                "kind": "ak.typing",
                 "realm_id": ctx.realm_id,
-                "actor_id": ctx.alice_did,
-                "device_id": MOCK_PARITY_ALICE_DEVICE_ID,
+                "scope_ref": {"realm_id": ctx.realm_id},
+                "sender_actor_id": ctx.alice_did,
+                "sender_device_id": MOCK_PARITY_ALICE_DEVICE_ID,
+                "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
+                "signal_class": "session",
                 "sent_at": arkret_canonical::format_timestamp_canonical(sent_at),
                 "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
-                "payload": {
-                    "actor_id": ctx.alice_did,
-                    "realm_id": ctx.realm_id,
-                    "strand_id": "ak:strand:01999999-0000-7000-8000-000000000451",
-                    "track_name": "discussion",
-                    "typing": true,
-                    "ttl_ms": 30000
+                "encrypted_payload": {
+                    "scheme": "ak.signal_exporter_aead.v1",
+                    "key_ref": {
+                        "algorithm": "MLS-EXPORTER-AEAD",
+                        "group_state_ref": "ak:event:01999999-0000-7000-8000-000000000451"
+                    },
+                    "purpose": "ak.signal.v1",
+                    "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+                    "epoch": 1,
+                    "nonce": "AAAAAAAAAAAAAAAA",
+                    "ciphertext": "Q2lwaGVydGV4dFBsYWNlaG9sZGVy",
+                    "aad_digest": format!("sha256:{}", "0".repeat(64))
+                },
+                "proof": {
+                    "kind": "detached_jws",
+                    "verification_method": format!(
+                        "{}#{MOCK_PARITY_ALICE_DEVICE_ID}",
+                        ctx.alice_did
+                    ),
+                    "alg": "EdDSA",
+                    "envelope_digest": format!("sha256:{}", "0".repeat(64)),
+                    "created_at": arkret_canonical::format_timestamp_canonical(sent_at),
+                    "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
                 }
             });
-            cotest::harness::attach_ephemeral_proof_value(
+            cotest::harness::attach_signal_proof_value(
                 &mut envelope,
                 &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
             );
@@ -918,11 +941,10 @@ async fn call_live_soland(
     rendered_path: &str,
     body: Option<Value>,
 ) -> Result<HttpSnapshot> {
-    let body = if case.id == "ephemeral" {
-        inject_live_default_strand_id(server, ctx, body).await?
-    } else {
-        body
-    };
+    // Nothing left to rewrite per-case: a Signal's Strand target lives inside
+    // `encrypted_payload`, so there is no outer field a harness could inject
+    // it into.
+    let _ = server;
     let method = case
         .method
         .parse::<Method>()
@@ -942,34 +964,6 @@ async fn call_live_soland(
     let text = response.text().await?;
     let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
     Ok(HttpSnapshot { status, body })
-}
-
-async fn inject_live_default_strand_id(
-    server: &ArkretServer,
-    ctx: &TemplateContext,
-    body: Option<Value>,
-) -> Result<Option<Value>> {
-    let Some(mut body) = body else {
-        return Ok(None);
-    };
-    // soland does not auto-create a Strand on realm create and does not expose
-    // `default_strand_id` on the realm lifecycle view; the realm's conversation
-    // Strand id is derived from the realm id (ak:realm:<uuid> -> ak:strand:<uuid>),
-    // which is the same id the message/typing envelopes target.
-    let _ = server;
-    let strand_id = ctx.realm_id.replace("ak:realm:", "ak:strand:");
-    if let Some(payload) = body.get_mut("payload").and_then(Value::as_object_mut) {
-        payload.insert("strand_id".to_owned(), Value::String(strand_id));
-    }
-    // The strand_id injection changed the canonical envelope bytes — re-sign
-    // the broadcast proof so proof.event_digest matches what soland recomputes.
-    if body.get("proof").is_some() {
-        cotest::harness::attach_ephemeral_proof_value(
-            &mut body,
-            &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
-        );
-    }
-    Ok(Some(body))
 }
 
 fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {

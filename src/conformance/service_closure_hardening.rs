@@ -9,7 +9,7 @@ use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED: &str =
     "ak.vector.invite.consumed_token_resubject_rejected.v1";
-pub const VECTOR_ID_EPHEMERAL_CAPABILITY_TTL: &str = "ak.vector.ephemeral.capability_ttl.v1";
+pub const VECTOR_ID_SIGNAL_CLASS_TTL: &str = "ak.vector.signal.class_ttl.v1";
 pub const VECTOR_ID_PROJECTION_PAGINATION_SHAPE: &str = "ak.vector.projection.pagination_shape.v1";
 pub const VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT: &str =
     "ak.vector.range_completeness.witness_disagreement.v1";
@@ -22,7 +22,7 @@ pub const VECTOR_ID_PUSH_WAKEUP_POLICY: &str = "ak.vector.push.wakeup_policy.v1"
 
 pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED,
-    VECTOR_ID_EPHEMERAL_CAPABILITY_TTL,
+    VECTOR_ID_SIGNAL_CLASS_TTL,
     VECTOR_ID_PROJECTION_PAGINATION_SHAPE,
     VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
     VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE,
@@ -40,7 +40,7 @@ pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
         &fixture,
         VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED,
     )?)?;
-    run_ephemeral_capability_ttl_case(case(&fixture, VECTOR_ID_EPHEMERAL_CAPABILITY_TTL)?)?;
+    run_signal_class_ttl_case(case(&fixture, VECTOR_ID_SIGNAL_CLASS_TTL)?)?;
     run_projection_pagination_shape_case(case(&fixture, VECTOR_ID_PROJECTION_PAGINATION_SHAPE)?)?;
     run_range_completeness_witness_disagreement_case(case(
         &fixture,
@@ -64,9 +64,9 @@ pub fn run_invite_consumed_token_resubject_rejected_vector() -> Result<()> {
     )?)
 }
 
-pub fn run_ephemeral_capability_ttl_vector() -> Result<()> {
+pub fn run_signal_class_ttl_vector() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;
-    run_ephemeral_capability_ttl_case(case(&fixture, VECTOR_ID_EPHEMERAL_CAPABILITY_TTL)?)
+    run_signal_class_ttl_case(case(&fixture, VECTOR_ID_SIGNAL_CLASS_TTL)?)
 }
 
 pub fn run_projection_pagination_shape_vector() -> Result<()> {
@@ -230,59 +230,62 @@ fn evaluate_invite_reducer_event(state: &Value, event: &Value) -> Result<Value> 
     }
 }
 
-fn run_ephemeral_capability_ttl_case(case: &Value) -> Result<()> {
-    let advertised = required_object(case, "advertised_kinds")?;
+/// `zh/sync/signal.md` §1 / §3: the only classification a service sees is
+/// `signal_class`, and the admission gate runs on the scope's advertised
+/// classes plus the class TTL ceiling. A service that demanded or inferred a
+/// finer `signal_kind` would be reading metadata the rail exists to hide.
+fn run_signal_class_ttl_case(case: &Value) -> Result<()> {
+    let advertised = required_object(case, "advertised_classes")?;
     let mut seen = BTreeSet::new();
     for step in required_array(case, "steps")? {
         let name = required_str(step, "name")?;
         seen.insert(name.to_owned());
-        let observed = evaluate_ephemeral_step(advertised, step)?;
+        let observed = evaluate_signal_step(advertised, step)?;
         assert_expected_subset(name, expected(step)?, &observed)?;
-        record_step(VECTOR_ID_EPHEMERAL_CAPABILITY_TTL, name, step, &observed);
+        record_step(VECTOR_ID_SIGNAL_CLASS_TTL, name, step, &observed);
     }
     for required in [
-        "wrong_capability_action",
-        "ttl_above_kind_ceiling",
-        "channel_unavailable",
+        "moderation_class_not_permitted",
+        "ttl_above_session_ceiling",
+        "rail_unavailable",
     ] {
         if !seen.contains(required) {
-            bail!("ephemeral capability vector missing step {required}");
+            bail!("signal class/TTL vector missing step {required}");
         }
     }
     Ok(())
 }
 
-fn evaluate_ephemeral_step(advertised: &Map<String, Value>, step: &Value) -> Result<Value> {
-    let kind = required_str(step, "kind")?;
-    let actor_actions = string_set(step, "actor_actions")?;
-    let Some(kind_policy) = advertised.get(kind) else {
+fn evaluate_signal_step(advertised: &Map<String, Value>, step: &Value) -> Result<Value> {
+    let signal_class = required_str(step, "signal_class")?;
+    // Service Describe advertising the transport does not make every scope
+    // eligible: the scope must itself carry the class (§3).
+    let scope_classes = string_set(step, "scope_signal_classes")?;
+    let Some(class_policy) = advertised
+        .get(signal_class)
+        .filter(|_| scope_classes.contains(signal_class))
+    else {
         return Ok(json!({
             "decision": "reject",
-            "reason": "ephemeral_kind_not_permitted",
+            "reason": "signal_class_not_permitted",
             "durable_event_written": false,
         }));
     };
-    let required_action = required_str(kind_policy, "required_action")?;
-    if !actor_actions.contains(required_action) {
-        return Ok(json!({
-            "decision": "reject",
-            "reason": "ephemeral_kind_not_permitted",
-            "durable_event_written": false,
-        }));
-    }
     let ttl_ms = required_u64(step, "ttl_ms")?;
-    let max_ttl_ms = required_u64(kind_policy, "max_ttl_ms")?;
+    let max_ttl_ms = required_u64(class_policy, "max_ttl_ms")?;
     if ttl_ms > max_ttl_ms {
         return Ok(json!({
             "decision": "reject",
-            "reason": "ephemeral_ttl_out_of_range",
+            "reason": "signal_ttl_out_of_range",
             "durable_event_written": false,
         }));
     }
-    if !required_bool(step, "channel_available")? {
+    // A Signal never enters the reducer, so no rejection on this rail may
+    // advance `actor_seq` or the Realm frontier.
+    if !required_bool(step, "rail_available")? {
         return Ok(json!({
             "decision": "reject",
-            "reason": "ephemeral_channel_unavailable",
+            "reason": "signal_rail_unavailable",
             "durable_event_written": false,
             "actor_seq_advanced": false,
             "realm_frontier_advanced": false,

@@ -32,8 +32,17 @@ fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> 
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
     let hlc = Hlc::new("01970e589d21-0001-a13f9c2e".to_owned())
         .map_err(|err| anyhow!("invalid hlc: {err}"))?;
-    Event::new(kind.to_owned(), realm_id.clone(), actor_id, 1, hlc, payload)
-        .map_err(|err| anyhow!("failed to build event: {err}"))
+    Event::new(
+        kind.to_owned(),
+        arkret_wire::ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        actor_id,
+        1,
+        hlc,
+        payload,
+    )
+    .map_err(|err| anyhow!("failed to build event: {err}"))
 }
 
 /// One vector: input kind + payload, expected `EventProductClass`, and a label

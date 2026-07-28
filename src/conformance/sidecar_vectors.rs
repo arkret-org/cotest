@@ -170,6 +170,13 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         vec![EventId::new(
             "ak:event:01964137-0000-7000-8000-000000000040".to_owned(),
         )?],
+        // A Realm's Circles each run their own MLS group, so the binding cites
+        // the Seals it covers explicitly instead of being addressed by
+        // `realm_id` alone.
+        vec![arkret_wire::SealId::new(format!(
+            "ak:seal:sha256:{}",
+            "4".repeat(64)
+        ))?],
         Hash::new(format!("sha256:{}", "1".repeat(64)))?,
         Hash::new(format!("sha256:{}", "2".repeat(64)))?,
         Hash::new(format!("sha256:{}", "3".repeat(64)))?,

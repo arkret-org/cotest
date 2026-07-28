@@ -15,7 +15,7 @@ use arkret_models_collaboration::governance::membership_invite::{
     InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
 };
 use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
-use arkret_wire::{CellRef, Effect, Event, LatticeOp, LatticeOpType};
+use arkret_wire::ScopeRef;
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -614,7 +614,9 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     let mut event = arkret_wire::Event::new_with_id_at(
         EventId::new(format!("ak:event:{suffix}")).expect("cotest Event id"),
         kind,
-        RealmId::new(realm_id.to_owned()).expect("cotest Realm id"),
+        ScopeRef::Realm {
+            realm_id: RealmId::new(realm_id.to_owned()).expect("cotest Realm id"),
+        },
         actor_id.clone(),
         actor_seq,
         arkret_identifiers::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
@@ -628,33 +630,15 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
         .into_iter()
         .map(|value| arkret_identifiers::Hash::new(value).expect("cotest causal ref digest"))
         .collect();
-    match event.kind.as_str() {
-        arkret_wire::EventKind::REALM_CREATE => {
-            event.effects =
-                arkret_bootstrap::realm_create_effects(&event).expect("valid Realm create effects");
-        }
-        arkret_wire::EventKind::INVITE_ACCEPT
-        | arkret_wire::EventKind::INVITE_CANCEL
-        | arkret_wire::EventKind::INVITE_CREATE
-        | arkret_wire::EventKind::INVITE_REVOKE => {
-            event.effects = invite_effects(&event).expect("valid invite effects");
-        }
-        _ => {}
-    }
-    // Every other reducer-input kind whose registry row is fully projected gets
-    // its effects derived here. Fixtures that hand-build effect-less Events are
-    // simply not valid producer Events, and admission rejects them with
-    // `effects_payload_mismatch`; deriving from the registry keeps the harness
-    // on the same path a real client takes. Rows with no derivable contract
-    // fail the derivation and are left untouched.
-    if event.effects.is_empty() {
-        let _ = arkret_schema::materialize_registered_cell_writes(&mut event);
-    }
+    // No cell writes are stamped here. The v1 Event wire has no producer
+    // `effects[]`: reducer writes are derived from `kind + payload` through the
+    // contract registry, so a client that tried to declare them would be
+    // asserting something the wire cannot carry.
     event.unsigned.insert(
         "local_operation_idempotency_alias".to_owned(),
         json!(format!("ak:operation:{suffix}")),
     );
-    let signer = arkret_signatures::Ed25519MoveSigner::from_did_key_seed(
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         signing_seed,
         actor_id,
         verification_method.to_owned(),
@@ -667,78 +651,6 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     )
     .expect("SDK Event signer accepts cotest envelope");
     serde_json::to_value(event).expect("SDK Event serializes")
-}
-
-fn invite_effects(event: &Event) -> Result<Vec<Effect>> {
-    let invite_id = event
-        .payload
-        .get("invite")
-        .and_then(|invite| invite.get("id"))
-        .or_else(|| event.payload.get("invite_id"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("invite Event payload is missing invite_id"))?;
-    let lifecycle_to = match event.kind.as_str() {
-        arkret_wire::EventKind::INVITE_CREATE => "pending",
-        arkret_wire::EventKind::INVITE_ACCEPT => "accepted",
-        arkret_wire::EventKind::INVITE_CANCEL | arkret_wire::EventKind::INVITE_REVOKE => "revoked",
-        kind => return Err(anyhow!("unsupported invite Event kind {kind}")),
-    };
-    let lifecycle_from = Some(
-        if event.kind.as_str() == arkret_wire::EventKind::INVITE_CREATE {
-            Value::Null
-        } else {
-            json!("pending")
-        },
-    );
-    let mut effects = vec![fsm_effect(
-        "ak.component.invite.lifecycle.v1",
-        invite_id,
-        lifecycle_from,
-        json!(lifecycle_to),
-    )?];
-
-    let invitee = if event.kind.as_str() == arkret_wire::EventKind::INVITE_ACCEPT {
-        Some(event.actor_id.as_str())
-    } else {
-        event
-            .payload
-            .get("invite")
-            .and_then(|invite| invite.get("invitee"))
-            .or_else(|| event.payload.get("invitee"))
-            .and_then(Value::as_str)
-    };
-    if let Some(invitee) = invitee {
-        let (from, to) = match event.kind.as_str() {
-            arkret_wire::EventKind::INVITE_CREATE => ("leave", "invite"),
-            arkret_wire::EventKind::INVITE_ACCEPT => ("invite", "join"),
-            arkret_wire::EventKind::INVITE_CANCEL | arkret_wire::EventKind::INVITE_REVOKE => {
-                ("invite", "leave")
-            }
-            _ => unreachable!("invite Event kind checked above"),
-        };
-        effects.push(fsm_effect(
-            "ak.component.member.state.v1",
-            invitee,
-            Some(json!(from)),
-            json!(to),
-        )?);
-    }
-    Ok(effects)
-}
-
-fn fsm_effect(family: &str, subject: &str, from: Option<Value>, to: Value) -> Result<Effect> {
-    Ok(Effect {
-        cell: CellRef::new(format!("ak:cell:{family}:{subject}"))?,
-        op: LatticeOp {
-            op_type: LatticeOpType::Transition,
-            tag: None,
-            value: None,
-            from,
-            to: Some(to),
-            reason: None,
-            issuer_seq: None,
-        },
-    })
 }
 
 pub(crate) fn event_envelope_with_chain(

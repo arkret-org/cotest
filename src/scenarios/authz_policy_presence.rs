@@ -1,15 +1,13 @@
 use anyhow::Result;
-use chrono::{Duration as ChronoDuration, Timelike, Utc};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, attach_ephemeral_proof, ephemeral_proof_placeholder,
-    expect_account_subscribe_delta, expect_api_error, expect_json, expect_status, submit_event,
+    ArkretServer, TestActorClient, expect_api_error, expect_json, expect_status, submit_event,
 };
 use crate::scenarios::federation_collaboration::{
-    actor_did_for_service, authorize_additional_device_public_key, authorize_device_public_key,
+    actor_did_for_service, authorize_device_public_key,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -319,7 +317,7 @@ async fn expect_authz_check_hard_deny(
     Ok(())
 }
 
-pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
+pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let server = ArkretServer::spawn("presence-policy").await?;
     let alice_actor = actor_did_for_service(server.service_id(), "presence-alice")?;
     let alice = server
@@ -338,10 +336,12 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     )
     .await?;
 
-    // client-sync.md: the account subscribe surface is read-only —
-    // `set_presence` is not a subscribe parameter (the server ignores the
-    // stray query value). Presence intent goes through
-    // `POST /_arkret/self/ephemeral` as a proof-bound `ak.presence`.
+    // client-sync.md: the account subscribe surface is read-only — there is no
+    // `set_presence` subscribe parameter, and the stream carries no presence at
+    // all in v1. Presence rides the encrypted Signal rail
+    // (`profiles-presence.md` §3.1), whose plaintext the Sync Service may not
+    // decrypt, aggregate or project (§3.3); the receiver-side contract is
+    // covered by `conformance::presence_signal`.
     expect_status(
         server
             .http()
@@ -349,164 +349,6 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         StatusCode::UNAUTHORIZED,
     )
     .await?;
-
-    let presence_realm_id = alice.create_realm("Presence Broadcast Realm").await?;
-
-    // Closed v1 state set (profiles-presence.md §3.2): the Matrix-legacy
-    // `unavailable` fails closed as schema_violation, never remapped to a
-    // nearby state.
-    expect_api_error(
-        alice
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &alice.actor,
-                alice.device_id.as_str(),
-                &presence_realm_id,
-                &alice_device_key,
-                json!({"state": "unavailable"}),
-            )),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
-    )
-    .await?;
-
-    // Fail-closed `last_active_at` admission (§3.3): a bucket start not
-    // aligned to its duration on the Unix-epoch UTC grid is malformed.
-    expect_api_error(
-        alice
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &alice.actor,
-                alice.device_id.as_str(),
-                &presence_realm_id,
-                &alice_device_key,
-                json!({"state": "idle", "last_active_at": "2026-06-22T10:34:00.000Z/PT1H"}),
-            )),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
-    )
-    .await?;
-
-    // A bucket duration below the PT60S protocol floor is malformed too.
-    expect_api_error(
-        alice
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &alice.actor,
-                alice.device_id.as_str(),
-                &presence_realm_id,
-                &alice_device_key,
-                json!({"state": "idle", "last_active_at": "2026-06-22T10:00:00.000Z/PT30S"}),
-            )),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
-    )
-    .await?;
-
-    // A valid precise (second-level) timestamp is schema-clean but needs
-    // an explicit disclosure policy → policy_violation, not accepted.
-    expect_api_error(
-        alice
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &alice.actor,
-                alice.device_id.as_str(),
-                &presence_realm_id,
-                &alice_device_key,
-                json!({"state": "idle", "last_active_at": "2026-06-22T10:34:56.000Z"}),
-            )),
-        StatusCode::FORBIDDEN,
-        "policy_violation",
-    )
-    .await?;
-
-    // status_message over 256 Unicode code points fails closed (§3.3).
-    expect_api_error(
-        alice
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &alice.actor,
-                alice.device_id.as_str(),
-                &presence_realm_id,
-                &alice_device_key,
-                json!({"state": "dnd", "status_message": "字".repeat(257)}),
-            )),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
-    )
-    .await?;
-
-    // Legal manual-dnd broadcast with a transient status message is
-    // admitted and survives into the presence projection for an
-    // authorized observer (self sees full activity detail).
-    let presence_accepted = expect_json(
-        alice
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &alice.actor,
-                alice.device_id.as_str(),
-                &presence_realm_id,
-                &alice_device_key,
-                json!({"state": "dnd", "status_message": "In a meeting"}),
-            )),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(presence_accepted["accepted"], true);
-    assert_eq!(presence_accepted["kind"], "ak.presence");
-
-    let presence_sync = expect_account_subscribe_delta(
-        alice.get("/_arkret/self/account/subscribe?catchup=true"),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(presence_sync["cursor"].is_string());
-
-    let presence_events = presence_sync["presence"]["events"]
-        .as_array()
-        .expect("account subscribe presence events array");
-    let alice_presence = presence_events
-        .iter()
-        .find(|event| event["actor_id"] == alice.actor)
-        .expect("alice presence in account subscribe baseline");
-    assert_eq!(alice_presence["payload"]["state"], "dnd");
-    assert_eq!(
-        alice_presence["payload"]["status_message"], "In a meeting",
-        "admitted status_message must survive into the projection: {alice_presence}"
-    );
-
-    // The missing visibility policy defaults to `public`; a Realm peer is
-    // therefore inside Alice's authorized presence set and receives the same
-    // typed ephemeral payload. `contacts_only`/`nobody` gating is a separate
-    // policy-projection contract and must not be inferred from Realm membership.
-    let observer = server
-        .register_client(
-            "did:web:observer-presence.example",
-            "@observer-presence",
-            "ak:device:01904100-0000-7000-8000-0000000000e0",
-        )
-        .await?;
-    alice.add_member(&presence_realm_id, &observer).await?;
-    let observer_sync = expect_account_subscribe_delta(
-        observer.get("/_arkret/self/account/subscribe?catchup=true"),
-        StatusCode::OK,
-    )
-    .await?;
-    if let Some(observed_alice) = observer_sync["presence"]["events"]
-        .as_array()
-        .expect("observer presence events array")
-        .iter()
-        .find(|event| event["actor_id"] == alice.actor)
-    {
-        assert_eq!(
-            observed_alice["payload"]["state"], "dnd",
-            "public presence must preserve the authorized state: {observed_alice}"
-        );
-        assert_eq!(
-            observed_alice["payload"]["status_message"], "In a meeting",
-            "public presence must preserve its authorized status message: {observed_alice}"
-        );
-    }
 
     let push_registration = expect_json(
         alice
@@ -647,194 +489,4 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert!(ice["signature"].is_object());
 
     Ok(())
-}
-
-pub async fn ephemeral_proofs_require_active_authorized_device_keys() -> Result<()> {
-    const PRIMARY_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e90000000001";
-    const SIBLING_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e90000000002";
-    const UNREGISTERED_DEVICE: &str = "ak:device:01904100-0000-7000-8000-e9000000dead";
-
-    let server = ArkretServer::spawn("ephemeral-device-proof-negative").await?;
-    let actor = actor_did_for_service(server.service_id(), "ephemeral-proof")?;
-    let primary = server.demo_client(&actor, PRIMARY_DEVICE).await?;
-    let primary_key = SigningKey::from_bytes(&[0xe1; 32]);
-    authorize_device_public_key(
-        &server,
-        &primary.token,
-        &actor,
-        PRIMARY_DEVICE,
-        &primary_key,
-    )
-    .await?;
-    let realm_id = primary.create_realm("Ephemeral Device Proof Realm").await?;
-
-    let accepted = expect_json(
-        primary
-            .post("/_arkret/self/ephemeral")
-            .json(&presence_envelope(
-                &actor,
-                PRIMARY_DEVICE,
-                &realm_id,
-                &primary_key,
-                json!({"state": "online"}),
-            )),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(accepted["accepted"], true);
-
-    let wrong_key = SigningKey::from_bytes(&[0xe2; 32]);
-    expect_ephemeral_proof_invalid(primary.post("/_arkret/self/ephemeral").json(
-        &presence_envelope(
-            &actor,
-            PRIMARY_DEVICE,
-            &realm_id,
-            &wrong_key,
-            json!({"state": "dnd"}),
-        ),
-    ))
-    .await?;
-
-    let unregistered_key = SigningKey::from_bytes(&[0xe3; 32]);
-    expect_ephemeral_proof_invalid(primary.post("/_arkret/self/ephemeral").json(
-        &presence_envelope(
-            &actor,
-            UNREGISTERED_DEVICE,
-            &realm_id,
-            &unregistered_key,
-            json!({"state": "idle"}),
-        ),
-    ))
-    .await?;
-
-    let mut wrong_controller = presence_envelope(
-        &actor,
-        PRIMARY_DEVICE,
-        &realm_id,
-        &primary_key,
-        json!({"state": "online"}),
-    );
-    wrong_controller.proof.verification_method =
-        format!("did:web:other-controller.example#{PRIMARY_DEVICE}");
-    let wrong_controller_body = expect_json(
-        primary
-            .post("/_arkret/self/ephemeral")
-            .json(&wrong_controller),
-        StatusCode::BAD_REQUEST,
-    )
-    .await?;
-    assert_eq!(wrong_controller_body["error"]["code"], "invalid_param");
-
-    let mut tampered = serde_json::to_value(presence_envelope(
-        &actor,
-        PRIMARY_DEVICE,
-        &realm_id,
-        &primary_key,
-        json!({"state": "online"}),
-    ))?;
-    tampered["payload"]["state"] = json!("dnd");
-    let tampered_body = expect_json(
-        primary.post("/_arkret/self/ephemeral").json(&tampered),
-        StatusCode::BAD_REQUEST,
-    )
-    .await?;
-    assert_eq!(tampered_body["error"]["code"], "invalid_param");
-
-    let sibling = server.demo_client(&actor, SIBLING_DEVICE).await?;
-    let sibling_key = SigningKey::from_bytes(&[0xe4; 32]);
-    authorize_additional_device_public_key(
-        &server,
-        &primary.token,
-        &actor,
-        SIBLING_DEVICE,
-        &sibling_key,
-    )
-    .await?;
-    let principal = arkret_identifiers::Did::new(actor.clone())?;
-    let principal_realm =
-        arkret_models_identity::did_document::principal_control_realm_id(&principal);
-    let revoked = sibling
-        .submit_event(
-            principal_realm.as_str(),
-            "ak.device.revoke",
-            serde_json::to_value(arkret_models_collaboration::events_payloads::device_identity::DeviceRevokePayload {
-                principal_id: principal,
-                device_id: arkret_identifiers::DeviceId::new(PRIMARY_DEVICE.to_owned())?,
-                revoked_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::DeviceId(
-                    arkret_identifiers::DeviceId::new(SIBLING_DEVICE.to_owned())?,
-                ),
-                revoked_at: Utc::now(),
-                reason: arkret_models_collaboration::events_payloads::device_identity::DeviceRevocationReason::new("security_test")
-                    .map_err(anyhow::Error::msg)?,
-                proof: None,
-            })?,
-        )
-        .await?;
-    assert_eq!(revoked["status"], "accepted");
-
-    expect_ephemeral_proof_invalid(sibling.post("/_arkret/self/ephemeral").json(
-        &presence_envelope(
-            &actor,
-            PRIMARY_DEVICE,
-            &realm_id,
-            &primary_key,
-            json!({"state": "dnd"}),
-        ),
-    ))
-    .await?;
-
-    Ok(())
-}
-
-async fn expect_ephemeral_proof_invalid(request: reqwest::RequestBuilder) -> Result<Value> {
-    let body = expect_json(request, StatusCode::BAD_REQUEST).await?;
-    assert_eq!(body["error"]["code"], "invalid_param", "{body}");
-    assert_eq!(
-        body["error"]["details"]["reason_code"], "proof_invalid",
-        "{body}"
-    );
-    Ok(body)
-}
-
-/// ephemeral-envelope.schema.json: broadcast `ak.presence` with the
-/// proof-bound sending device (detached JWS over the canonical envelope
-/// without `proof`). `payload_fields` merges over the base
-/// `{realm_id, actor_id, ttl_ms}` payload so callers only spell the
-/// fields under test.
-fn presence_envelope(
-    actor_id: &str,
-    device_id: &str,
-    realm_id: &str,
-    signing_key: &SigningKey,
-    payload_fields: Value,
-) -> arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope {
-    let sent_at = Utc::now()
-        .with_nanosecond(0)
-        .expect("zeroing nanos is valid");
-    let expires_at = sent_at + ChronoDuration::seconds(30);
-    let mut payload = json!({
-        "realm_id": realm_id,
-        "actor_id": actor_id,
-        "ttl_ms": 30000
-    });
-    if let (Some(base), Some(extra)) = (payload.as_object_mut(), payload_fields.as_object()) {
-        for (key, value) in extra {
-            base.insert(key.clone(), value.clone());
-        }
-    }
-    let mut envelope =
-        arkret_models_collaboration::events_payloads::ephemeral::EphemeralEnvelope::new(
-            "ak.presence",
-            arkret_identifiers::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
-            arkret_identifiers::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
-            arkret_identifiers::DeviceId::new(device_id.to_owned())
-                .expect("test device id is typed"),
-            sent_at,
-            expires_at,
-            serde_json::from_value(payload).expect("presence payload is an object"),
-            ephemeral_proof_placeholder(actor_id, device_id, sent_at),
-        )
-        .expect("presence envelope is well-formed");
-    attach_ephemeral_proof(&mut envelope, signing_key);
-    envelope
 }
