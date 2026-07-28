@@ -6,7 +6,7 @@
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
 // assigned + enforced `seq` server-side. The canonical
-// `POST /_arkret/self/ephemeral` relay is content-agnostic: it broadcasts the
+// `POST /_arkret/self/signal` relay is content-agnostic: it broadcasts the
 // verbatim signed envelope and the *receiver* enforces seq monotonicity (§5.1
 // assigns rollback rejection to the receiver, not the relay — see
 // `arkret_sdk::validate_signal_seq` / `CallSignalState`). So the relay delivers
@@ -17,6 +17,7 @@
 import { expect, test } from "@playwright/test";
 import {
   buildCallSignalEnvelope,
+  callSignalPlaintext,
   newCallId,
   postCallSignal,
   relayedCallSignals,
@@ -83,12 +84,12 @@ test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
     const received = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     // All three frames are delivered verbatim; the receiver sees the seq
     // sequence [1, 2, 1] and its monotonicity guard rejects the trailing 1.
     const seqs = received.map(
-      (env) => (env.payload as Record<string, unknown>).seq as number,
+      (env) => callSignalPlaintext(env).seq as number,
     );
     expect(seqs).toEqual([1, 2, 1]);
     expect(applyReceiverSeqGuard(seqs)).toEqual({
@@ -125,10 +126,10 @@ test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
     const received = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     const seqs = received.map(
-      (env) => (env.payload as Record<string, unknown>).seq as number,
+      (env) => callSignalPlaintext(env).seq as number,
     );
     expect(seqs).toEqual([1, 2, 3, 4]);
     expect(applyReceiverSeqGuard(seqs)).toEqual({

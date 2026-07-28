@@ -14,6 +14,7 @@ import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
   createRealmApi,
+  prepareSignedEventCbaApi,
   queryRealmEventsApi,
   resolveDefaultStrandId,
   sendMessageApi,
@@ -124,6 +125,9 @@ test.describe("moderation and ban", () => {
         membership: "ban",
         reason: "non_moderator_attempt",
       },
+    });
+    await prepareSignedEventCbaApi(request, bobToken, unauthorizedBanEvent, {
+      force: true,
     });
     await alignSignedEventToActorFrontierApi(
       request,

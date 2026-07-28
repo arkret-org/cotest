@@ -7,7 +7,7 @@
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
 // derived `call_state` from the signal log. In the canonical model the
-// `POST /_arkret/self/ephemeral` relay is content-agnostic (it broadcasts the
+// `POST /_arkret/self/signal` relay is content-agnostic (it broadcasts the
 // verbatim signed envelope), and the call lifecycle lives in the durable
 // `ak.call.state` cell driven by `ak.call.state` events (call-state.md §4.2).
 // This spec therefore asserts (a) the signaling stream is relayed in seq order
@@ -24,6 +24,7 @@ import {
 import {
   CAP_CALL_SIGNAL_SEND,
   buildCallSignalEnvelope,
+  callSignalPlaintext,
   grantCallCapability,
   newCallId,
   postCallSignal,
@@ -115,33 +116,31 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     const bobView = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     const aliceView = (
       await relayedCallSignals(request, aliceToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     const byType = (view: Array<Record<string, unknown>>, t: string) =>
-      view.filter(
-        (e) => (e.payload as Record<string, unknown>).signal_kind === t,
-      );
+      view.filter((e) => callSignalPlaintext(e).signal_kind === t);
     expect(byType(bobView, "invite").length).toBe(1);
     expect(byType(aliceView, "answer").length).toBe(1);
     expect(byType(bobView, "candidate").length).toBe(1);
     expect(byType(bobView, "hangup").length).toBe(1);
     // Sender attribution survives the relay.
-    expect(byType(bobView, "invite")[0].actor_id).toBe(alice.did);
-    expect(byType(aliceView, "answer")[0].actor_id).toBe(bob.did);
+    expect(byType(bobView, "invite")[0].sender_actor_id).toBe(alice.did);
+    expect(byType(aliceView, "answer")[0].sender_actor_id).toBe(bob.did);
     // Alice's own frames are seq-monotonic per sender (1=invite, 2=candidate,
     // 3=hangup); bob's answer is seq 1 in his own (actor,device) lane.
     const aliceSeqs = bobView
-      .filter((e) => e.actor_id === alice.did)
-      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+      .filter((e) => e.sender_actor_id === alice.did)
+      .map((e) => callSignalPlaintext(e).seq as number);
     expect(aliceSeqs).toEqual([1, 2, 3]);
     const bobSeqs = aliceView
-      .filter((e) => e.actor_id === bob.did)
-      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+      .filter((e) => e.sender_actor_id === bob.did)
+      .map((e) => callSignalPlaintext(e).seq as number);
     expect(bobSeqs).toEqual([1]);
 
     // Durable lifecycle plane — ak.call.state advances connecting -> active ->
@@ -226,23 +225,20 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       await relayedCallSignals(request, aliceToken, realmId)
     ).filter(
       (env) =>
-        (env.payload as Record<string, unknown>)?.call_id === callId &&
-        (env.payload as Record<string, unknown>)?.signal_kind === "focus_join",
+        callSignalPlaintext(env).call_id === callId &&
+        callSignalPlaintext(env).signal_kind === "focus_join",
     );
     // Alice (sender) does not self-echo; she sees bob + carol joining the same
     // focus.
-    const joiners = aliceView.map((e) => e.actor_id);
+    const joiners = aliceView.map((e) => e.sender_actor_id);
     expect(joiners).toEqual(
       expect.arrayContaining([bob.did, carol.did]),
     );
     expect(joiners).not.toContain(alice.did);
     for (const env of aliceView) {
+      expect(callSignalPlaintext(env).signal_kind).toBe("focus_join");
       expect(
-        (env.payload as Record<string, unknown>).signal_kind,
-      ).toBe("focus_join");
-      expect(
-        ((env.payload as Record<string, unknown>).data as Record<string, unknown>)
-          .focus_id,
+        (callSignalPlaintext(env).data as Record<string, unknown>).focus_id,
       ).toBe(focusId);
     }
   });

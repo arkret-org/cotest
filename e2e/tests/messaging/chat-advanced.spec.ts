@@ -477,7 +477,7 @@ test.describe("chat advanced", () => {
       bobToken,
       {
         title: `chat-route ${Date.now()}`,
-        historyVisibility: "shared",
+        historyVisibility: "joined",
       },
     );
     const alicePage = aliceFlow.page;
@@ -944,7 +944,7 @@ test.describe("chat advanced", () => {
       bobToken,
       {
         title: `S14.2 E2EE Mention ${stamp}`,
-        historyVisibility: "shared",
+        historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
       },
     );

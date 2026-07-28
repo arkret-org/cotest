@@ -15,6 +15,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   canonicalTimestamp,
+  prepareSignedEventCbaApi,
   signedEventEnvelope,
   submitSignedEventApi,
   uuidV7,
@@ -627,6 +628,7 @@ async function postModerationEvent(
   payload: Record<string, unknown>,
 ) {
   const envelope = signedModerationEvent(actorDid, realmId, kind, payload);
+  await prepareSignedEventCbaApi(request, token, envelope, { force: true });
   await alignSignedEventToActorFrontierApi(request, token, envelope);
   return await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),

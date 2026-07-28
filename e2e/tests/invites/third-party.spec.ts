@@ -12,6 +12,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
+  prepareSignedEventCbaApi,
   registerEventSigner,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -74,6 +75,7 @@ async function submitSelfEvent(
   envelope: Record<string, unknown>,
   opts: { alignFrontier?: boolean } = {},
 ): Promise<SelfEventsOutcome> {
+  await prepareSignedEventCbaApi(request, token, envelope, { force: true });
   if (opts.alignFrontier !== false) {
     await alignSignedEventToActorFrontierApi(request, token, envelope);
   }

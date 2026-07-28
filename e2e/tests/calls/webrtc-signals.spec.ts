@@ -4,17 +4,18 @@
 //   - crypto-media/webrtc-signaling.md §5 / §5.1 (ephemeral envelope + proof,
 //     canonical 14-value signal_kind enum)
 //   - service-http-binding.md §162 (ak.call.signal.send capability on
-//     POST /_arkret/self/ephemeral)
+//     POST /_arkret/self/signal)
 //
 // Migrated off the retired `/_soland/self/webrtc/sessions` stack: every signal
 // is submitted as a real `ak.call.signal` ephemeral envelope (real ed25519
-// detached-JWS proof) to `POST /_arkret/self/ephemeral` and read back verbatim
-// from `GET /_arkret/self/account/subscribe`.
+// detached-JWS proof) to `POST /_arkret/self/signal` and read back verbatim
+// from `GET /_arkret/self/signal/subscribe`.
 
 import { expect, test } from "@playwright/test";
 import {
   CALL_SIGNAL_TYPES,
   buildCallSignalEnvelope,
+  callSignalPlaintext,
   newCallId,
   postCallSignal,
   relayedCallSignals,
@@ -71,18 +72,18 @@ test.describe("ak.call.signal canonical signal catalog", () => {
 
       const outcome = await postCallSignal(request, aliceToken, envelope);
       // The relay broadcasts to other realm members (bob), not the sender.
-      expect(outcome.dispatched_to).toBe(1);
+      expect(outcome.dispatched_recipient_count).toBe(1);
 
       // Bob receives the verbatim signed envelope (proof intact).
       const received = await relayedCallSignals(request, bobToken, realmId);
       const mine = received.filter(
-        (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+        (env) => callSignalPlaintext(env).call_id === callId,
       );
       expect(mine.length, `bob receives the ${signalType} signal`).toBe(1);
       const env = mine[0];
-      expect(env.kind).toBe("ak.call.signal");
-      expect(env.actor_id).toBe(alice.did);
-      const payload = env.payload as Record<string, unknown>;
+      expect(env.sender_actor_id).toBe(alice.did);
+      const payload = callSignalPlaintext(env);
+      expect(payload.kind).toBe("ak.call.signal");
       // Canonical signal_kind + monotonic seq survive the relay verbatim.
       expect(CALL_SIGNAL_TYPES as readonly string[]).toContain(
         payload.signal_kind,
@@ -95,8 +96,10 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       expect(proof.kind).toBe("detached_jws");
       expect(proof.alg).toBe("EdDSA");
       expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
-      expect(typeof proof.event_digest).toBe("string");
-      expect(proof.event_digest as string).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(typeof proof.envelope_digest).toBe("string");
+      expect(proof.envelope_digest as string).toMatch(
+        /^sha256:[0-9a-f]{64}$/,
+      );
       // Detached JWS = `<protected>..<signature>` (empty payload segment).
       const jws = proof.jws as string;
       const parts = jws.split(".");
@@ -109,7 +112,7 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       const aliceEcho = (
         await relayedCallSignals(request, aliceToken, realmId)
       ).filter(
-        (e) => (e.payload as Record<string, unknown>)?.call_id === callId,
+        (e) => callSignalPlaintext(e).call_id === callId,
       );
       expect(aliceEcho.length, "sender does not self-echo").toBe(0);
     });

@@ -34,6 +34,8 @@ import { withBroadcastEphemeralProof } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
+const circleScopeByStrand = new Map<string, string>();
+
 test.describe("discussion upgrade to Circle-scoped private Strand", () => {
   test("API inline discussion track preserves strand_id and track_name", async ({
     request,
@@ -531,6 +533,13 @@ async function createStrandViaApi(
       actorDid: actor.did,
       realmId,
       kind: "ak.strand.create",
+      scopeRef: opts.scopeCircleId
+        ? {
+            kind: "circle",
+            realm_id: realmId,
+            circle_id: opts.scopeCircleId,
+          }
+        : undefined,
       createdAt,
       payload: {
         object: strandObject(realmId, strandId, actor, title, createdAt, opts),
@@ -588,6 +597,7 @@ async function promoteDiscussionToPrivateStrandViaApi(
     "private discussion",
     { scopeCircleId: circleId },
   );
+  circleScopeByStrand.set(privateStrandId, circleId);
   const relationId = await createConfidentialDiscussionRelationViaApi(
     request,
     fixture.aliceToken,
@@ -764,6 +774,13 @@ async function createDiscussionMessageViaApi(
     actorDid: actor.did,
     realmId,
     kind: "ak.message.create",
+    scopeRef: circleScopeByStrand.has(strandId)
+      ? {
+          kind: "circle",
+          realm_id: realmId,
+          circle_id: circleScopeByStrand.get(strandId),
+        }
+      : undefined,
     payload: {
       strand_id: strandId,
       track_name: "discussion",

@@ -19,6 +19,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  prepareSignedEventCbaApi,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -347,6 +348,12 @@ test.describe("kanban end-to-end", () => {
         rank: "m",
       },
     });
+    await prepareSignedEventCbaApi(request, aliceToken, winnerMove, {
+      force: true,
+    });
+    await prepareSignedEventCbaApi(request, aliceToken, loserMove, {
+      force: true,
+    });
     await alignSignedEventToActorFrontierApi(request, aliceToken, winnerMove);
     await alignSignedEventToActorFrontierApi(request, aliceToken, loserMove);
     // Winner is accepted (submitSignedEventApi asserts 200/201).
@@ -428,6 +435,9 @@ test.describe("kanban end-to-end", () => {
           actorDid: alice.did,
         }),
       },
+    });
+    await prepareSignedEventCbaApi(request, aliceToken, crossRealm, {
+      force: true,
     });
     await alignSignedEventToActorFrontierApi(
       request,

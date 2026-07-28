@@ -28,6 +28,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
+  prepareSignedEventCbaApi,
   refreshEventEnvelopeProof,
   signedEventEnvelope,
   singleDidNotary,
@@ -803,6 +804,9 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
             },
           },
         },
+      });
+      await prepareSignedEventCbaApi(request, aliceToken, policyEvent, {
+        force: true,
       });
       await alignSignedEventToActorFrontierApi(request, aliceToken, policyEvent);
       const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {

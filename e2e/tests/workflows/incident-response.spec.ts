@@ -14,6 +14,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  prepareSignedEventCbaApi,
   queryRealmEventsApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -205,6 +206,9 @@ test.describe("workflow: incident response", () => {
         target_ref: incidentStrandId,
         patch: { metadata: { fields: { status: "resolved" } } },
       },
+    });
+    await prepareSignedEventCbaApi(request, token, badResolvedEvent, {
+      force: true,
     });
     await alignSignedEventToActorFrontierApi(request, token, badResolvedEvent);
     const badResolved = await request.post(

@@ -24,6 +24,7 @@ import {
   addRealmMemberApi,
   createRealmApi,
   principalControlRealmForDid,
+  prepareSignedEventCbaApi,
   queryRealmEventsApi,
   registerEventSigner,
   singleDidNotary,
@@ -1208,6 +1209,12 @@ test.describe("MLS group encryption", () => {
       kind: "ak.mls.commit",
       payload: commitPayload(`opaque-commit-${stamp}`),
     });
+    await prepareSignedEventCbaApi(
+      request,
+      aliceToken,
+      staleCommitEnvelope,
+      { force: true },
+    );
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

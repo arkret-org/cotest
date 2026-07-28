@@ -14,6 +14,7 @@
 import { expect, test } from "@playwright/test";
 import {
   buildCallSignalEnvelope,
+  callSignalPlaintext,
   fetchIceConfig,
   newCallId,
   postCallSignal,
@@ -117,12 +118,10 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     const received = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
-    expect(received.map((e) => (e.payload as Record<string, unknown>).seq)).toEqual([
-      1, 2,
-    ]);
-    const last = received[1].payload as Record<string, unknown>;
+    expect(received.map((e) => callSignalPlaintext(e).seq)).toEqual([1, 2]);
+    const last = callSignalPlaintext(received[1]);
     expect(last.signal_kind).toBe("renegotiate");
     expect((last.data as Record<string, unknown>).reason).toBe("ice_restart");
     // Proof intact on the relayed renegotiate frame.

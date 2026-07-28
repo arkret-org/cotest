@@ -537,6 +537,8 @@ function encryptedEnvelope(
   const aad = { realm_id: realmId, event_kind: "ak.message.create" };
   const payloadMetadata = {
     scheme: "mls_exporter_aead_v1",
+    purpose: "mls_exporter_aead_content",
+    aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,

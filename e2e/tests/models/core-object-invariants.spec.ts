@@ -26,6 +26,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  prepareSignedEventCbaApi,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -597,6 +598,9 @@ test.describe("core object invariants", () => {
             actorDid: alice.did,
           }),
         },
+      });
+      await prepareSignedEventCbaApi(request, aliceToken, crossRealmEnvelope, {
+        force: true,
       });
       await alignSignedEventToActorFrontierApi(
         request,

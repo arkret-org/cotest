@@ -7,7 +7,7 @@
 //
 // WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` +
 // `/_soland/self/calls/.../recording/start` stack is gone. Moderation now rides
-// `ak.call.signal{moderation}` on `POST /_arkret/self/ephemeral`, and the
+// encrypted `ak.call.signal{moderation}` on `POST /_arkret/self/signal`, and the
 // kick/ban provenance lives in the durable `ak.component.call.moderation.v1`
 // OR-Set. The relay is content-agnostic and gates on `ak.call.signal.send` (§162);
 // the `ak.call.moderate` authorization for a moderation frame is a RECEIVER /
@@ -23,6 +23,7 @@ import {
   CAP_CALL_JOIN,
   CAP_CALL_SIGNAL_SEND,
   buildCallSignalEnvelope,
+  callSignalPlaintext,
   configureMediaService,
   exchangeMediaToken,
   grantCallCapability,
@@ -75,14 +76,13 @@ test.describe("call moderation (spec wire)", () => {
     const received = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     const frame = received.find(
-      (e) =>
-        (e.payload as Record<string, unknown>).signal_kind === "moderation",
+      (e) => callSignalPlaintext(e).signal_kind === "moderation",
     );
     expect(frame, "moderation frame relayed to target member").toBeTruthy();
-    const data = (frame!.payload as Record<string, unknown>).data as Record<
+    const data = callSignalPlaintext(frame!).data as Record<
       string,
       unknown
     >;
@@ -120,14 +120,13 @@ test.describe("call moderation (spec wire)", () => {
     const received = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     const frame = received.find(
-      (e) =>
-        (e.payload as Record<string, unknown>).signal_kind === "moderation",
+      (e) => callSignalPlaintext(e).signal_kind === "moderation",
     );
     expect(frame).toBeTruthy();
-    const data = (frame!.payload as Record<string, unknown>).data as Record<
+    const data = callSignalPlaintext(frame!).data as Record<
       string,
       unknown
     >;
@@ -165,7 +164,9 @@ test.describe("call moderation (spec wire)", () => {
     });
     const denied = await postCallSignalRaw(request, bobToken, moderation);
     expect(denied.status(), await denied.text()).toBe(403);
-    expect(wireErrCode(await denied.json())).toBe("capability_denied");
+    expect(wireErrCode(await denied.json())).toBe(
+      "signal_class_not_permitted",
+    );
 
     // Control: alice (owner) CAN relay a moderation frame — proving the gate is
     // capability-scoped, not a blanket moderation block.
@@ -186,8 +187,8 @@ test.describe("call moderation (spec wire)", () => {
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
       (env) =>
-        (env.payload as Record<string, unknown>)?.call_id === callId &&
-        (env.payload as Record<string, unknown>)?.signal_kind === "moderation",
+        callSignalPlaintext(env).call_id === callId &&
+        callSignalPlaintext(env).signal_kind === "moderation",
     );
     expect(received.length).toBe(1);
   });

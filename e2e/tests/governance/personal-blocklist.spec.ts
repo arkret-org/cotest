@@ -437,6 +437,7 @@ test.describe("personal blocklist", () => {
           notification: {
             push_target_id: pushTargetId,
             wakeup_kind: "message",
+            timing_profile_hint: "default",
             devices: [{ device_id: alice.deviceId }],
           },
         },

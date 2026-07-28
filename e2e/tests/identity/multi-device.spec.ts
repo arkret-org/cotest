@@ -27,6 +27,7 @@ import {
   createRealmApi,
   currentActorDidApi,
   principalControlRealmForDid,
+  prepareSignedEventCbaApi,
   queryRealmEventsApi,
   refreshEventEnvelopeProof,
   sendMessageApi,
@@ -784,6 +785,12 @@ test.describe("multi-device pairing + revocation", () => {
         reason: "self_revoke_probe",
       },
     });
+    await prepareSignedEventCbaApi(
+      request,
+      aliceToken,
+      selfRevokeEnvelope,
+      { force: true },
+    );
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

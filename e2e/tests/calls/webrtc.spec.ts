@@ -10,7 +10,7 @@
 // `call_state`, `recording/start`, `ice-config/refresh`) is gone. The UI / live
 // recording flows that drove it were inkson-UI coverage, not protocol wire, and
 // are out of scope for the cotest wire surface — this file now exercises only
-// the canonical surfaces: `POST /_arkret/self/ephemeral` (ak.call.signal),
+// the canonical surfaces: `POST /_arkret/self/signal` (encrypted Signal),
 // `POST /_arkret/self/rtc/ice-config`. Recording lifecycle is a durable
 // `ak.call.state` projection pinned by the Rust call-state conformance vectors;
 // mid-call TURN refresh is simply a re-call of the ICE config endpoint (§4.2).
@@ -22,6 +22,7 @@ import { createRealmApi } from "../../helpers/soland-api";
 import {
   CAP_CALL_SIGNAL_SEND,
   buildCallSignalEnvelope,
+  callSignalPlaintext,
   fetchIceConfig,
   grantCallCapability,
   newCallId,
@@ -133,18 +134,16 @@ test.describe("calls — canonical wire", () => {
     const bobView = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
     const aliceView = (
       await relayedCallSignals(request, aliceToken, realmId)
     ).filter(
-      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+      (env) => callSignalPlaintext(env).call_id === callId,
     );
-    const bobTypes = bobView.map(
-      (e) => (e.payload as Record<string, unknown>).signal_kind,
-    );
+    const bobTypes = bobView.map((e) => callSignalPlaintext(e).signal_kind);
     const aliceTypes = aliceView.map(
-      (e) => (e.payload as Record<string, unknown>).signal_kind,
+      (e) => callSignalPlaintext(e).signal_kind,
     );
     expect(bobTypes).toEqual(expect.arrayContaining(["invite", "hangup"]));
     expect(bobTypes).not.toContain("answer");
@@ -154,16 +153,18 @@ test.describe("calls — canonical wire", () => {
       const proof = env.proof as Record<string, unknown>;
       expect(proof.kind).toBe("detached_jws");
       expect(proof.alg).toBe("EdDSA");
-      expect(proof.verification_method).toBe(`${env.actor_id}#${env.device_id}`);
+      expect(proof.verification_method).toBe(
+        `${env.sender_actor_id}#${env.sender_device_id}`,
+      );
     }
     // Alice's lane is seq-monotonic (invite=1, hangup=2).
     const aliceSeqs = bobView
-      .filter((e) => e.actor_id === alice.did)
-      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+      .filter((e) => e.sender_actor_id === alice.did)
+      .map((e) => callSignalPlaintext(e).seq as number);
     expect(aliceSeqs).toEqual([1, 2]);
     const bobSeqs = aliceView
-      .filter((e) => e.actor_id === bob.did)
-      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+      .filter((e) => e.sender_actor_id === bob.did)
+      .map((e) => callSignalPlaintext(e).seq as number);
     expect(bobSeqs).toEqual([1]);
   });
 

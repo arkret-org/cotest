@@ -18,6 +18,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  prepareSignedEventCbaApi,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -365,10 +366,16 @@ test.describe("project simulation", () => {
       realmId,
       kind: "ak.relation.create",
       payload: {
-        relation_id: relationId,
-        kind: "assigned_to",
-        from_ref: cardId,
-        to_ref: bob.did,
+        relation: {
+          id: relationId,
+          schema: "ak.schema.relation.v1",
+          realm_id: realmId,
+          relation_kind: "assigned_to",
+          from_ref: cardId,
+          to_ref: bob.did,
+          created_by: alice.did,
+          created_at: canonicalTimestamp(),
+        },
       },
     });
     await submitSignedEventApi(request, aliceToken, assignment, {
@@ -437,6 +444,9 @@ test.describe("project simulation", () => {
         target_ref: taskStrandId,
         patch: { metadata: { fields: { status: "done" } } },
       },
+    });
+    await prepareSignedEventCbaApi(request, aliceToken, badDoneEvent, {
+      force: true,
     });
     await alignSignedEventToActorFrontierApi(request, aliceToken, badDoneEvent);
     const badDone = await request.post(
@@ -517,6 +527,9 @@ test.describe("project simulation", () => {
         target_ref: incidentStrandId,
         patch: { metadata: { fields: { status: "resolved" } } },
       },
+    });
+    await prepareSignedEventCbaApi(request, aliceToken, badResolvedEvent, {
+      force: true,
     });
     await alignSignedEventToActorFrontierApi(
       request,

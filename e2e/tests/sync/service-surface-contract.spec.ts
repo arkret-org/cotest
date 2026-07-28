@@ -33,6 +33,7 @@ import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  prepareSignedEventCbaApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -532,6 +533,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
         },
       });
       const eventId = String(envelope.event_id);
+      await prepareSignedEventCbaApi(request, token, envelope, {
+        force: true,
+      });
       await alignSignedEventToActorFrontierApi(request, token, envelope);
 
       const first = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -566,6 +570,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body: `${body} drift` },
         },
       });
+      drift.seal_ref = envelope.seal_ref;
+      drift.auth_context = envelope.auth_context;
+      refreshEventEnvelopeProof(drift);
       const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: drift,
@@ -768,6 +775,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R1 — first request under the key executes and is cached.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
+      await prepareSignedEventCbaApi(request, token, b1, { force: true });
       await alignSignedEventToActorFrontierApi(request, token, b1);
       const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },

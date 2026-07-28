@@ -22,6 +22,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   readRealmSealBasis,
+  seedConformanceRealmBasisApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
   signWithRegisteredEventSigner,
@@ -152,6 +153,30 @@ export function deviceVerifyingKeyHex(
   return deviceSigner(actorDid, deviceId).publicKeyHex;
 }
 
+function deviceVerifyingKeyMultibase(
+  actorDid: string,
+  deviceId: string,
+): string {
+  const rawKey = Buffer.from(deviceSigner(actorDid, deviceId).publicKeyHex, "hex");
+  return `z${base58Encode(Buffer.concat([Buffer.from([0xed, 0x01]), rawKey]))}`;
+}
+
+function base58Encode(bytes: Uint8Array): string {
+  const alphabet =
+    "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let value = BigInt(`0x${Buffer.from(bytes).toString("hex")}`);
+  let encoded = "";
+  while (value > 0n) {
+    encoded = alphabet[Number(value % 58n)] + encoded;
+    value /= 58n;
+  }
+  let leadingZeroes = 0;
+  while (leadingZeroes < bytes.length && bytes[leadingZeroes] === 0) {
+    leadingZeroes += 1;
+  }
+  return "1".repeat(leadingZeroes) + (encoded || "1");
+}
+
 export function withBroadcastEphemeralProof(
   envelope: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -202,12 +227,7 @@ export function withBroadcastEphemeralProof(
   };
 }
 
-/**
- * Build a real `ak.call.signal` ephemeral envelope (webrtc-signaling.md §5)
- * with a genuine detached-JWS `proof` (§5.1). `event_digest` =
- * `sha256:` || hex(sha256(canonical_json(envelope_without_proof))); the JWS
- * transcript signs the canonical binding object.
- */
+/** Build an encrypted-only Signal envelope draft for a call plaintext. */
 export function buildCallSignalEnvelope(args: {
   actorDid: string;
   deviceId: string;
@@ -219,71 +239,126 @@ export function buildCallSignalEnvelope(args: {
   sentAt?: Date;
   lifetimeMs?: number;
 }): Record<string, unknown> {
-  const signer = deviceSigner(args.actorDid, args.deviceId);
   const sentAt = args.sentAt ?? new Date();
-  // Joint-full runs multiple workers and a complete signaling exchange can
-  // legitimately take longer than 30 seconds under compile/CI load. Keep the
-  // fixture below the protocol's five-minute hard ceiling while leaving a
-  // full minute for clock and scheduling skew.
-  const expiresAt = new Date(sentAt.getTime() + (args.lifetimeMs ?? 240_000));
+  const signalClass =
+    args.signalType === "moderation"
+      ? "moderation"
+      : args.signalType === "invite"
+        ? "setup"
+        : "session";
+  const classCeilingMs =
+    signalClass === "setup" ? 120_000 : signalClass === "moderation" ? 60_000 : 30_000;
+  const expiresAt = new Date(
+    sentAt.getTime() + Math.min(args.lifetimeMs ?? 25_000, classCeilingMs),
+  );
   const createdAt = canonicalEventTimestamp(sentAt);
-
-  const envelope: Record<string, unknown> = {
+  const plaintext = {
     kind: "ak.call.signal",
+    call_id: args.callId,
+    signal_kind: args.signalType,
+    seq: args.seq,
+    data: args.data ?? {},
+  };
+  const envelope: Record<string, unknown> = {
     realm_id: args.realmId,
-    actor_id: args.actorDid,
-    device_id: args.deviceId,
+    scope_ref: { kind: "realm", realm_id: args.realmId },
+    sender_actor_id: args.actorDid,
+    sender_device_id: args.deviceId,
+    seal_ref: `ak:seal:sha256:${"0".repeat(64)}`,
+    signal_class: signalClass,
     sent_at: canonicalTimestamp(sentAt),
     expires_at: canonicalTimestamp(expiresAt),
-    payload: {
-      call_id: args.callId,
-      signal_kind: args.signalType,
-      seq: args.seq,
-      data: args.data ?? {},
+    encrypted_payload: {
+      scheme: "ak.signal_exporter_aead.v1",
+      key_ref: {
+        algorithm: "MLS-EXPORTER-AEAD",
+        group_state_ref: `ak:event:${uuidV7()}`,
+      },
+      purpose: "ak.signal.v1",
+      aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+      epoch: 0,
+      nonce: base64url(Buffer.alloc(12)),
+      ciphertext: base64url(Buffer.from(canonicalJson(plaintext), "utf8")),
+      aad_digest: `sha256:${"0".repeat(64)}`,
+    },
+    proof: {
+      kind: "detached_jws",
+      verification_method: `${args.actorDid}#${args.deviceId}`,
+      alg: "EdDSA",
+      envelope_digest: `sha256:${"0".repeat(64)}`,
+      created_at: createdAt,
+      jws: "",
     },
   };
+  finalizeSignalEnvelopeProof(envelope);
+  return envelope;
+}
 
-  // §5.1 — event_digest over the canonical envelope with `proof` removed.
-  const eventDigest = `sha256:${createHash("sha256")
-    .update(canonicalJson(envelope), "utf8")
+function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
+  const encryptedPayload = envelope.encrypted_payload as Record<string, unknown>;
+  const proof = envelope.proof as Record<string, unknown>;
+  const aad = {
+    realm_id: envelope.realm_id,
+    scope_ref: envelope.scope_ref,
+    sender_actor_id: envelope.sender_actor_id,
+    sender_device_id: envelope.sender_device_id,
+    seal_ref: envelope.seal_ref,
+    signal_class: envelope.signal_class,
+    sent_at: envelope.sent_at,
+    expires_at: envelope.expires_at,
+    scheme: encryptedPayload.scheme,
+    key_ref: encryptedPayload.key_ref,
+    purpose: encryptedPayload.purpose,
+    aead_profile: encryptedPayload.aead_profile,
+    epoch: encryptedPayload.epoch,
+    nonce: encryptedPayload.nonce,
+  };
+  encryptedPayload.aad_digest = `sha256:${createHash("sha256")
+    .update(canonicalJson(aad), "utf8")
     .digest("hex")}`;
 
-  // §5.1 — the JWS transcript is the canonical binding object, NOT the raw
-  // envelope bytes. Field-for-field identical to the SDK proof binding so a
-  // single verifier (`verify_eddsa_detached_jws_proof`) serves call signals
-  // and persistent events alike.
+  const unsigned = { ...envelope };
+  delete unsigned.proof;
+  const envelopeDigest = `sha256:${createHash("sha256")
+    .update(canonicalJson(unsigned), "utf8")
+    .digest("hex")}`;
+  proof.envelope_digest = envelopeDigest;
   const bindingObject = {
-    event_digest: eventDigest,
-    actor_id: args.actorDid,
-    verification_method: signer.verificationMethod,
-    created_at: createdAt,
+    context: "ak.signal-proof-v1",
+    envelope_digest: envelopeDigest,
+    sender_actor_id: envelope.sender_actor_id,
+    sender_device_id: envelope.sender_device_id,
+    verification_method: proof.verification_method,
+    created_at: proof.created_at,
   };
-  // SDK-canonical detached-JWS protected header is EXACTLY `{"alg":"EdDSA"}`.
-  // The SDK verifier (`verify_eddsa_detached_jws_proof`) deserialises the header
-  // with deny-unknown-fields, so a `kid` (or any extra member) breaks real
-  // receiver verification — the verification_method rides the proof object +
-  // binding, not the header. (Pinned by the call_signal proof_detached_jws
-  // conformance vector, which round-trips this exact construction.)
   const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
-  // RFC 7797 detached-JWS signing input = `<protected>.<payload>`; the wire
-  // `jws` blanks the payload segment (`<protected>..<sig>`).
   const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const signature = nodeSign(
-    null,
-    Buffer.from(signingInput, "utf8"),
-    signer.privateKey,
+  const signature = base64url(
+    nodeSign(
+      null,
+      Buffer.from(signingInput, "utf8"),
+      deviceSigner(
+        String(envelope.sender_actor_id),
+        String(envelope.sender_device_id),
+      ).privateKey,
+    ),
   );
+  proof.jws = `${protectedHeader}..${signature}`;
+}
 
-  envelope.proof = {
-    kind: "detached_jws",
-    alg: "EdDSA",
-    verification_method: signer.verificationMethod,
-    event_digest: eventDigest,
-    created_at: createdAt,
-    jws: `${protectedHeader}..${base64url(signature)}`,
-  };
-  return envelope;
+export function callSignalPlaintext(
+  envelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const encryptedPayload = envelope.encrypted_payload as
+    | Record<string, unknown>
+    | undefined;
+  if (typeof encryptedPayload?.ciphertext !== "string") {
+    throw new Error("Signal envelope has no encrypted_payload.ciphertext");
+  }
+  return JSON.parse(
+    Buffer.from(encryptedPayload.ciphertext, "base64url").toString("utf8"),
+  ) as Record<string, unknown>;
 }
 
 // ── Capability grants (authz.rs default rules) ───────────────────────────────
@@ -480,27 +555,55 @@ export function newCallId(): string {
   return `ak:call:${uuidV7()}`;
 }
 
-// ── Ephemeral submit + subscribe read-back (canonical wire) ──────────────────
+// ── Signal submit + subscribe read-back (canonical wire) ────────────────────
 
 /**
- * Submit a `ak.call.signal` envelope to `POST /_arkret/self/ephemeral`. Returns
- * the raw response so callers can assert both success and negative (e.g.
- * `capability_denied`) paths.
+ * Submit one encrypted Signal envelope. The Seal reference is resolved just
+ * before signing so the proof and AAD bind the current accepted basis.
  */
 export async function postCallSignalRaw(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
 ): Promise<APIResponse> {
-  return await request.post(`${solandBaseUrl()}/_arkret/self/ephemeral`, {
+  const realmId = String(envelope.realm_id);
+  const actorDid = String(envelope.sender_actor_id);
+  const deviceId = String(envelope.sender_device_id);
+  const keyResponse = await request.post(
+    `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
+    {
+      data: {
+        actor_id: actorDid,
+        device_id: deviceId,
+        public_key_multibase: deviceVerifyingKeyMultibase(actorDid, deviceId),
+      },
+    },
+  );
+  expect(
+    keyResponse.status(),
+    `seed Signal device key returned ${keyResponse.status()}: ${await keyResponse.text()}`,
+  ).toBe(200);
+  try {
+    const basis = await readRealmSealBasis(request, token, realmId);
+    envelope.seal_ref = (basis.leaves as string[])[0];
+  } catch {
+    const basis = await seedConformanceRealmBasisApi(
+      request,
+      realmId,
+      actorDid,
+      ["ak.message.create"],
+    );
+    envelope.seal_ref = basis.seal_id;
+  }
+  finalizeSignalEnvelopeProof(envelope);
+  return await request.post(`${solandBaseUrl()}/_arkret/self/signal`, {
     headers: authHeaders(token),
     data: envelope,
   });
 }
 
 /**
- * Submit a `ak.call.signal` and assert it is accepted + relayed. Returns the
- * `EphemeralSubmitOutcome` body.
+ * Submit a call Signal and assert the opaque relay accepted it.
  */
 export async function postCallSignal(
   request: APIRequestContext,
@@ -512,40 +615,46 @@ export async function postCallSignal(
   expect(
     response.status(),
     `relay ak.call.signal ${String(
-      (envelope.payload as Record<string, unknown>)?.signal_kind,
+      callSignalPlaintext(envelope).signal_kind,
     )} returned ${response.status()}: ${text}`,
   ).toBe(200);
   const body = JSON.parse(text) as Record<string, unknown>;
   expect(body.accepted, "relay accepted the signal").toBe(true);
-  expect(body.kind).toBe("ak.call.signal");
+  expect(body.realm_id).toBe(envelope.realm_id);
   return body;
 }
 
 /**
- * Read the verbatim relayed `ak.call.signal` envelopes a Realm member receives
- * via `GET /_arkret/self/account/subscribe`. Returns them oldest-first across
- * all matching realms.
+ * Read verbatim encrypted Signal envelopes from the dedicated live stream.
  */
 export async function relayedCallSignals(
   request: APIRequestContext,
   token: string,
   realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const frames = await accountSubscribeFramesApi(request, token);
-  const frame = frames.find((candidate) => candidate.kind === "delta") as
-    | {
-        realms?: Record<
-          string,
-          {
-            ephemeral?: {
-              events?: Array<Record<string, unknown>>;
-            };
-          }
-        >;
-      }
-    | undefined;
-  const events = frame?.realms?.[realmId]?.ephemeral?.events ?? [];
-  return events.filter((event) => event.kind === "ak.call.signal");
+  const url = new URL(`${solandBaseUrl()}/_arkret/self/signal/subscribe`);
+  url.searchParams.set("max_duration_ms", "400");
+  url.searchParams.set("heartbeat_ms", "600000");
+  const response = await fetch(url, {
+    headers: { ...authHeaders(token), accept: "application/x-ndjson" },
+  });
+  const text = await response.text();
+  expect(
+    response.status,
+    `signal subscribe returned ${response.status}: ${text}`,
+  ).toBe(200);
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((frame) => frame.kind === "signal")
+    .map((frame) => frame.envelope as Record<string, unknown>)
+    .filter(
+      (envelope) =>
+        envelope.realm_id === realmId &&
+        envelope.encrypted_payload !== undefined,
+    );
 }
 
 export async function expectCallSignalError(

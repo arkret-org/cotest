@@ -40,6 +40,7 @@ export type SignedEventEnvelopeArgs = {
   sealBasis?: Record<string, unknown>;
   authContext?: Record<string, unknown>;
   prevRefs?: string[];
+  scopeRef?: Record<string, unknown>;
 };
 
 export type EventProofMode = "dev-proof" | "detached-jws";
@@ -1781,7 +1782,7 @@ export function signedEventEnvelope(
     event_id: args.eventId ?? typedId("event"),
     kind: args.kind,
     realm_id: args.realmId,
-    scope_ref: { kind: "realm", realm_id: args.realmId },
+    scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
     actor_id: args.actorDid,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
@@ -1971,6 +1972,18 @@ export async function submitSignedEventApi(
       return JSON.parse(text) as Record<string, unknown>;
     }
     const body = JSON.parse(text) as unknown;
+    if (
+      response.status() === 403 &&
+      wireErrCode(body) === "capability_denied" &&
+      attempt < 2
+    ) {
+      await forceConformanceCbaBasis(
+        request,
+        envelope,
+        opts.server,
+      );
+      continue;
+    }
     const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
       response.status(),
       body,
@@ -2015,6 +2028,16 @@ export async function submitSignedEventBatchApi(
       return JSON.parse(text) as Record<string, unknown>;
     }
     const body = JSON.parse(text) as unknown;
+    if (
+      response.status() === 403 &&
+      wireErrCode(body) === "capability_denied" &&
+      attempt < 2
+    ) {
+      for (const event of events) {
+        await forceConformanceCbaBasis(request, event, opts.server);
+      }
+      continue;
+    }
     const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
       response.status(),
       body,
@@ -2221,13 +2244,25 @@ async function applyRegisteredCbaPlane(
 
   let changed = false;
   if (descriptor.plane === "control") {
-    if (envelope.seal_basis === undefined) {
-      envelope.seal_basis = await readRealmSealBasis(
-        request,
-        token,
-        realmId,
-        server,
-      );
+    const sealBasis = envelope.seal_basis as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      !sealBasis ||
+      !Array.isArray(sealBasis.leaves) ||
+      sealBasis.leaves.length === 0
+    ) {
+      try {
+        envelope.seal_basis = await readRealmSealBasis(
+          request,
+          token,
+          realmId,
+          server,
+        );
+      } catch {
+        await forceConformanceCbaBasis(request, envelope, server);
+        return;
+      }
       changed = true;
     }
   } else if (descriptor.plane === "data") {
@@ -2277,6 +2312,105 @@ async function applyRegisteredCbaPlane(
       stringValue(proof?.verification_method),
     );
   }
+}
+
+async function forceConformanceCbaBasis(
+  request: APIRequestContext,
+  envelope: Record<string, unknown>,
+  server?: SolandKey,
+): Promise<void> {
+  const kind = stringValue(envelope.kind);
+  const realmId = stringValue(envelope.realm_id);
+  const actorDid = stringValue(envelope.actor_id);
+  if (!kind || !realmId || !actorDid) {
+    throw new Error("CBA fixture basis requires kind, realm_id, and actor_id");
+  }
+  const descriptor = eventKindDescriptor(kind);
+  if (!descriptor?.reducer_input) {
+    return;
+  }
+  const response = await request.post(
+    `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
+    {
+      data: {
+        realm_id: realmId,
+        subject: actorDid,
+        data_plane_actions: [fixtureCapabilityAction(kind)],
+      },
+    },
+  );
+  const basis = await expectJsonOk<{
+    seal_id: string;
+    control_event_set_root: string;
+    state_root: string;
+  }>(response, `seed conformance Realm basis for ${kind}`);
+  if (descriptor.plane === "control") {
+    envelope.seal_basis = {
+      leaves: [basis.seal_id],
+      control_event_set_root: basis.control_event_set_root,
+      state_root: basis.state_root,
+    };
+    delete envelope.seal_ref;
+    delete envelope.auth_context;
+  } else {
+    envelope.seal_ref = basis.seal_id;
+    const proof = Array.isArray(envelope.proofs)
+      ? (envelope.proofs[0] as Record<string, unknown> | undefined)
+      : undefined;
+    const verificationMethod =
+      stringValue(proof?.verification_method) ?? `${actorDid}#device`;
+    const fragmentIndex = verificationMethod.indexOf("#");
+    envelope.auth_context = {
+      did: actorDid,
+      key_id:
+        fragmentIndex >= 0
+          ? verificationMethod.slice(fragmentIndex + 1)
+          : verificationMethod,
+      key_epoch: 0,
+    };
+    delete envelope.seal_basis;
+  }
+  const proof = Array.isArray(envelope.proofs)
+    ? (envelope.proofs[0] as Record<string, unknown> | undefined)
+    : undefined;
+  refreshEventEnvelopeProof(envelope, stringValue(proof?.verification_method));
+}
+
+export async function prepareSignedEventCbaApi(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  opts: { server?: SolandKey; force?: boolean } = {},
+): Promise<void> {
+  if (opts.force) {
+    await forceConformanceCbaBasis(request, envelope, opts.server);
+  } else {
+    await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  }
+}
+
+export async function seedConformanceRealmBasisApi(
+  request: APIRequestContext,
+  realmId: string,
+  subjectDid: string,
+  dataPlaneActions: string[],
+  server?: SolandKey,
+): Promise<{
+  seal_id: string;
+  control_event_set_root: string;
+  state_root: string;
+}> {
+  const response = await request.post(
+    `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
+    {
+      data: {
+        realm_id: realmId,
+        subject: subjectDid,
+        data_plane_actions: dataPlaneActions,
+      },
+    },
+  );
+  return await expectJsonOk(response, "seed conformance Realm basis");
 }
 
 export async function alignSignedEventToActorFrontierApi(
@@ -2693,6 +2827,46 @@ function eventKindDescriptor(
     );
   }
   return eventKindRegistryCache.get(kind);
+}
+
+let fixtureCapabilityActionCache: Map<string, string> | undefined;
+
+function fixtureCapabilityAction(eventKind: string): string {
+  if (!fixtureCapabilityActionCache) {
+    const registry = JSON.parse(
+      readFileSync(
+        join(
+          SPEC_ARTIFACTS_ROOT,
+          "registry",
+          "capability-action-registry.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      actions?: Array<{
+        action?: unknown;
+        target_event_kinds?: unknown;
+      }>;
+    };
+    fixtureCapabilityActionCache = new Map();
+    for (const row of registry.actions ?? []) {
+      if (
+        typeof row.action !== "string" ||
+        !Array.isArray(row.target_event_kinds)
+      ) {
+        continue;
+      }
+      for (const target of row.target_event_kinds) {
+        if (typeof target === "string") {
+          const previous = fixtureCapabilityActionCache.get(target);
+          if (!previous || row.action === target) {
+            fixtureCapabilityActionCache.set(target, row.action);
+          }
+        }
+      }
+    }
+  }
+  return fixtureCapabilityActionCache.get(eventKind) ?? "ak.realm.admin";
 }
 
 const E2E_FIXTURES_ROOT = resolve(
