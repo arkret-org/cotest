@@ -23,8 +23,8 @@ use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::proof::verify_eddsa_signal_proof;
 use arkret_wire::signal::{SIGNAL_AEAD_PURPOSE, SIGNAL_AEAD_SCHEME};
 use arkret_wire::{
-    CALL_SIGNAL_KINDS, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
-    SignalKeyRef, SignalProof,
+    ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
+    SignalProof,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::SigningKey;
@@ -41,6 +41,23 @@ pub const ALL_CALL_SIGNAL_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SEQ_MONOTONIC,
     VECTOR_ID_PROOF_DETACHED_JWS,
     VECTOR_ID_OUTER_METADATA_MINIMAL,
+];
+
+const CALL_SIGNAL_KINDS: &[&str] = &[
+    "invite",
+    "answer",
+    "candidate",
+    "renegotiate",
+    "hangup",
+    "ack",
+    "reject",
+    "mute_state",
+    "media_state",
+    "speaking",
+    "focus_join",
+    "focus_leave",
+    "moderation",
+    "error",
 ];
 
 // ─── VECT-CS-1 — signal_kind_enum (canonical 14-value set) ─────────────────

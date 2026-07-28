@@ -40,7 +40,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
         "ak.self.account.stream.subscribe",
         "ak.find.directory.query.search_realms",
         "ak.self.authz.query.check",
-        "ak.self.ephemeral.command.send",
+        "ak.self.signal.command.send",
         "ak.edge.push.command.register_device",
         "ak.self.keys.backups.resource.replace",
         "ak.self.keys.backups.query.list",

@@ -118,11 +118,11 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 ## Implementation notes
 
-- **spec wire**:通话信令走 `POST /_arkret/self/ephemeral` +
+- **spec wire**:通话信令走 `POST /_arkret/self/signal`，密文内承载
   `ak.call.signal`;持久状态走 `ak.call.state` / `ak.call.recording.start`;
   媒体凭证走 `/_arkret/self/rtc/ice-config` 与 `/_arkret/self/rtc/token`。
   soland-private WebRTC / calls surfaces 已退役,本场景不得依赖。
-- **soland/cotest 覆盖**:服务端覆盖 ephemeral `ak.call.signal` 路由、TTL、
+- **soland/cotest 覆盖**:服务端覆盖 Signal 路由、TTL、
   capability guard、self-device filtering、ban 后 token 拒绝、LiveKit token
   claim;cotest 覆盖 `ak.call.signal` receiver vectors 与 `/_arkret/self/rtc/*`
   realtime policy guards。

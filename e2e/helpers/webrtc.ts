@@ -25,7 +25,6 @@ import {
   seedConformanceRealmBasisApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
-  signWithRegisteredEventSigner,
   submitSignedEventApi,
   typedId,
   uuidV7,
@@ -177,88 +176,27 @@ function base58Encode(bytes: Uint8Array): string {
   return "1".repeat(leadingZeroes) + (encoded || "1");
 }
 
-export function withBroadcastEphemeralProof(
-  envelope: Record<string, unknown>,
-): Record<string, unknown> {
-  const actorDid = envelope.actor_id;
-  const deviceId = envelope.device_id;
-  if (typeof actorDid !== "string" || typeof deviceId !== "string") {
-    throw new Error(
-      "broadcast ephemeral proof requires actor_id and device_id",
-    );
-  }
-  const signer = deviceSigner(actorDid, deviceId);
-  const createdAt = canonicalEventTimestamp();
-  const unsigned = { ...envelope };
-  delete unsigned.proof;
-  const eventDigest = `sha256:${createHash("sha256")
-    .update(canonicalJson(unsigned), "utf8")
-    .digest("hex")}`;
-  const bindingObject = {
-    context: "ak.ephemeral-proof-v1",
-    event_digest: eventDigest,
-    actor_id: actorDid,
-    verification_method: signer.verificationMethod,
-    created_at: createdAt,
-  };
-  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
-  const bindingPayload = base64urlJsonCanonical(bindingObject);
-  const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const registeredSignature = signWithRegisteredEventSigner(
-    actorDid,
-    signer.verificationMethod,
-    signingInput,
-  );
-  const signature =
-    registeredSignature ??
-    base64url(
-      nodeSign(null, Buffer.from(signingInput, "utf8"), signer.privateKey),
-    );
-  return {
-    ...unsigned,
-    proof: {
-      kind: "detached_jws",
-      alg: "EdDSA",
-      verification_method: signer.verificationMethod,
-      event_digest: eventDigest,
-      created_at: createdAt,
-      jws: `${protectedHeader}..${signature}`,
-    },
-  };
-}
-
-/** Build an encrypted-only Signal envelope draft for a call plaintext. */
-export function buildCallSignalEnvelope(args: {
+/** Build an encrypted-only Signal envelope for arbitrary client plaintext. */
+export function buildSignalEnvelope(args: {
   actorDid: string;
   deviceId: string;
   realmId: string;
-  callId: string;
-  signalType: CallSignalType | string;
-  seq: number;
-  data?: Record<string, unknown>;
+  plaintext: Record<string, unknown>;
+  signalClass?: "session" | "moderation" | "setup";
   sentAt?: Date;
   lifetimeMs?: number;
 }): Record<string, unknown> {
   const sentAt = args.sentAt ?? new Date();
-  const signalClass =
-    args.signalType === "moderation"
-      ? "moderation"
-      : args.signalType === "invite"
-        ? "setup"
-        : "session";
+  const signalClass = args.signalClass ?? "session";
   const classCeilingMs =
-    signalClass === "setup" ? 120_000 : signalClass === "moderation" ? 60_000 : 30_000;
+    signalClass === "setup"
+      ? 120_000
+      : signalClass === "moderation"
+        ? 60_000
+        : 30_000;
   const expiresAt = new Date(
     sentAt.getTime() + Math.min(args.lifetimeMs ?? 25_000, classCeilingMs),
   );
-  const createdAt = canonicalEventTimestamp(sentAt);
-  const plaintext = {
-    kind: "ak.call.signal",
-    call_id: args.callId,
-    signal_kind: args.signalType,
-    seq: args.seq,
-    data: args.data ?? {},
-  };
   const envelope: Record<string, unknown> = {
     realm_id: args.realmId,
     scope_ref: { kind: "realm", realm_id: args.realmId },
@@ -278,7 +216,9 @@ export function buildCallSignalEnvelope(args: {
       aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
       epoch: 0,
       nonce: base64url(Buffer.alloc(12)),
-      ciphertext: base64url(Buffer.from(canonicalJson(plaintext), "utf8")),
+      ciphertext: base64url(
+        Buffer.from(canonicalJson(args.plaintext), "utf8"),
+      ),
       aad_digest: `sha256:${"0".repeat(64)}`,
     },
     proof: {
@@ -286,12 +226,47 @@ export function buildCallSignalEnvelope(args: {
       verification_method: `${args.actorDid}#${args.deviceId}`,
       alg: "EdDSA",
       envelope_digest: `sha256:${"0".repeat(64)}`,
-      created_at: createdAt,
+      created_at: canonicalEventTimestamp(sentAt),
       jws: "",
     },
   };
   finalizeSignalEnvelopeProof(envelope);
   return envelope;
+}
+
+/** Build an encrypted-only Signal envelope draft for a call plaintext. */
+export function buildCallSignalEnvelope(args: {
+  actorDid: string;
+  deviceId: string;
+  realmId: string;
+  callId: string;
+  signalType: CallSignalType | string;
+  seq: number;
+  data?: Record<string, unknown>;
+  sentAt?: Date;
+  lifetimeMs?: number;
+}): Record<string, unknown> {
+  const signalClass =
+    args.signalType === "moderation"
+      ? "moderation"
+      : args.signalType === "invite"
+        ? "setup"
+        : "session";
+  return buildSignalEnvelope({
+    actorDid: args.actorDid,
+    deviceId: args.deviceId,
+    realmId: args.realmId,
+    signalClass,
+    sentAt: args.sentAt,
+    lifetimeMs: args.lifetimeMs,
+    plaintext: {
+      kind: "ak.call.signal",
+      call_id: args.callId,
+      signal_kind: args.signalType,
+      seq: args.seq,
+      data: args.data ?? {},
+    },
+  });
 }
 
 function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {

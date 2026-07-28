@@ -739,7 +739,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
             // and response *shape* both implementations must agree on.
             let mut envelope = json!({
                 "realm_id": ctx.realm_id,
-                "scope_ref": {"realm_id": ctx.realm_id},
+                "scope_ref": {"kind": "realm", "realm_id": ctx.realm_id},
                 "sender_actor_id": ctx.alice_did,
                 "sender_device_id": MOCK_PARITY_ALICE_DEVICE_ID,
                 "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),

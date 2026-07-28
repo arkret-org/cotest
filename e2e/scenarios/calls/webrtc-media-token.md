@@ -11,7 +11,7 @@ live soland instance.
    `e2ee_key_source = mls-exporter`).
 3. Commit the first durable `ak.call.state` for the call, including the
    selected `session_focus`, and exchange signaling through
-   `POST /_arkret/self/ephemeral` with `kind = "ak.call.signal"`; no
+   `POST /_arkret/self/signal` with encrypted `ak.call.signal` plaintext; no
    legacy soland-private WebRTC session surface is used.
 
 ## Steps & Expectations
