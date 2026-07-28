@@ -95,6 +95,75 @@ fn submitted_digest(response: &Value) -> Result<String> {
         .ok_or_else(|| anyhow!("submit response carries no event digest"))
 }
 
+async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Result<String> {
+    eventually(
+        "Realm bootstrap Seal",
+        Duration::from_secs(30),
+        Duration::from_millis(100),
+        || async {
+            let frontier = expect_json(
+                client
+                    .get("/_arkret/self/events/frontier")
+                    .query(&[("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await?;
+            let root = frontier["frontier"]["control_event_set_root"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Realm frontier has no control_event_set_root"))?;
+            if root == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+                return Err(anyhow!("Realm bootstrap Seal is still empty"));
+            }
+            frontier["frontier"]["seal_id"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))
+        },
+    )
+    .await
+}
+
+async fn wait_for_next_seal(
+    client: &TestActorClient,
+    realm_id: &str,
+    predecessor: &str,
+) -> Result<String> {
+    eventually(
+        "post-bootstrap capability Seal",
+        Duration::from_secs(30),
+        Duration::from_millis(100),
+        || async {
+            let frontier = expect_json(
+                client
+                    .get("/_arkret/self/events/frontier")
+                    .query(&[("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await?;
+            let seal_id = frontier["frontier"]["seal_id"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))?;
+            if seal_id == predecessor {
+                return Err(anyhow!("the capability grant is not sealed yet"));
+            }
+            Ok(seal_id.to_owned())
+        },
+    )
+    .await
+}
+
+async fn grant_calendar_actions(
+    client: &TestActorClient,
+    realm_id: &str,
+    bootstrap_seal: &str,
+) -> Result<Vec<String>> {
+    let (calendar_grant_id, _) = client
+        .grant_self_realm_actions(realm_id, &["ak.strand.create", "ak.rsvp.set"])
+        .await?;
+    wait_for_next_seal(client, realm_id, bootstrap_seal).await?;
+    Ok(vec![calendar_grant_id])
+}
+
 pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()> {
     let server = ArkretServer::spawn("calendar-rsvp-convergence").await?;
     let alice = server
@@ -116,44 +185,15 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .as_str()
         .ok_or_else(|| anyhow!("realm create response has no realm_id"))?
         .to_owned();
-    // A DataEvent that writes a cell names a covering grant; the founding grant
-    // is the one the Realm bootstrap issued to its creator.
-    let grant_refs = vec![
-        created["founding_grant_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("realm bootstrap exposed no founding grant"))?
-            .to_owned(),
-    ];
-
     // The product coordinator, not an operator endpoint, must publish the
     // non-empty bootstrap Seal before a client authors its first DataEvent.
-    eventually(
-        "Realm bootstrap Seal",
-        Duration::from_secs(30),
-        Duration::from_millis(100),
-        || async {
-            let frontier = expect_json(
-                alice
-                    .get("/_arkret/self/events/frontier")
-                    .query(&[("realm_id", realm_id.as_str())]),
-                StatusCode::OK,
-            )
-            .await?;
-            let root = frontier["frontier"]["control_event_set_root"]
-                .as_str()
-                .ok_or_else(|| anyhow!("Realm frontier has no control_event_set_root"))?;
-            if root == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
-                return Err(anyhow!("Realm bootstrap Seal is still empty"));
-            }
-            Ok(())
-        },
-    )
-    .await?;
+    let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
+    let calendar_grant_refs = grant_calendar_actions(&alice, &realm_id, &bootstrap_seal).await?;
 
     // Activation is one canonical pair: the schema ref plus the calendar
     // namespace. A lone ref or a lone subtree is calendar_activation_mismatch.
     alice
-        .submit_event(
+        .submit_event_with_causal_refs(
             &realm_id,
             "ak.strand.create",
             json!({
@@ -171,6 +211,8 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
+            Vec::new(),
+            calendar_grant_refs.clone(),
         )
         .await?;
 
@@ -196,7 +238,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "ak.rsvp.set",
             rsvp_payload("accepted", &frontier),
             frontier.clone(),
-            grant_refs.clone(),
+            calendar_grant_refs.clone(),
         )
         .await?;
     let first_digest = submitted_digest(&first)?;
@@ -220,7 +262,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "ak.rsvp.set",
             rsvp_payload("declined", &frontier),
             frontier.clone(),
-            grant_refs.clone(),
+            calendar_grant_refs.clone(),
         )
         .await?;
     let strand = read_strand(&alice).await?;
@@ -257,7 +299,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             // edges are what dominate the earlier RSVP heads.
             rsvp_payload("tentative", &frontier),
             resolving_basis,
-            grant_refs.clone(),
+            calendar_grant_refs,
         )
         .await?;
 
@@ -291,9 +333,22 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000c3",
         )
         .await?;
-    let realm_id = alice.create_realm("RSVP effect contract").await?;
+    let created = alice
+        .create_realm_with(json!({
+            "title": "RSVP effect contract",
+            "summary": "RSVP effect contract",
+            "public": false,
+            "plaintext_visible_services": [alice.service_id()]
+        }))
+        .await?;
+    let realm_id = created["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("realm create response has no realm_id"))?
+        .to_owned();
+    let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
+    let strand_grant_refs = grant_calendar_actions(&alice, &realm_id, &bootstrap_seal).await?;
     alice
-        .submit_event(
+        .submit_event_with_causal_refs(
             &realm_id,
             "ak.strand.create",
             json!({
@@ -311,6 +366,8 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
+            Vec::new(),
+            strand_grant_refs,
         )
         .await?;
 

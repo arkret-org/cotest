@@ -578,7 +578,7 @@ mod tests {
             "prev_refs": [],
             "refs": [{
                 "role": "authorized_by",
-                "id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7185"
+                "id": "ak:grant:019f3b1c-784d-7fc0-965f-0550baae7185"
             }],
             "requirements": {"schema": ["ak.schema.event_payload.v1"]},
             "payload": {

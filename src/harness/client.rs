@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 use arkret_http_client::Client as SdkClient;
+use ed25519_dalek::SigningKey;
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
@@ -87,8 +88,8 @@ impl TestActorClient {
         )
         .await?;
         // The founding capability grant id: a DataEvent that writes a cell has
-        // to name a covering grant in `auth_context.capability_refs[]`, so the
-        // caller needs it to author one.
+        // to name a covering grant in `refs[role=authorized_by]`, so the caller
+        // needs it to author one.
         let founding_grant_id = events
             .iter()
             .find(|event| event["kind"].as_str() == Some("ak.capability.grant"))
@@ -108,6 +109,78 @@ impl TestActorClient {
             member_join_payload(realm_id, &member.actor),
         )
         .await
+    }
+
+    pub async fn grant_self_realm_actions(
+        &self,
+        realm_id: &str,
+        actions: &[&str],
+    ) -> Result<(String, Value)> {
+        let grant_id = next_typed_id("grant");
+        let issued_at = chrono::Utc::now();
+        let verification_method = format!("{}#cotest", self.actor);
+        let mut grant =
+            arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
+                id: arkret_identifiers::GrantId::new(grant_id.clone())?,
+                schema: "ak.schema.capability.v1".to_owned(),
+                realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
+                issuer: arkret_identifiers::Did::new(self.actor.clone())?,
+                subject: arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
+                    arkret_identifiers::Did::new(self.actor.clone())?,
+                ),
+                actions: actions.iter().map(|action| (*action).to_owned()).collect(),
+                resources: vec![serde_json::from_value(json!({
+                    "kind": "realm",
+                    "realm_id": realm_id,
+                    "match_scope": "realm_wide"
+                }))?],
+                capability_action_registry_digest: Some(
+                    arkret::current_capability_action_registry_digest()?,
+                ),
+                constraints: Vec::new(),
+                parent_grant_id: None,
+                issued_at,
+                not_before: None,
+                expires_at: None,
+                updated_by: None,
+                updated_at: None,
+                revoked_by: None,
+                revoked_at: None,
+                proofs: Vec::new(),
+            };
+        let mut proof = arkret_wire::PayloadProof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: verification_method.clone(),
+            payload_digest: grant.payload_digest()?,
+            created_at: issued_at,
+            domain: None,
+            audience: None,
+            proof_purpose: Some(arkret_wire::PayloadProofPurpose::IssuerAttestation),
+            jws: String::new(),
+        };
+        proof.jws = arkret_signatures::sign_eddsa_detached_jws(
+            &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
+                &verification_method,
+            )),
+            &grant.canonical_proof_binding_bytes(&proof)?,
+        )?;
+        grant.proofs.push(proof);
+        let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
+            grant: Some(grant),
+            grant_id: arkret_identifiers::GrantId::new(grant_id.clone())?,
+            subject: None,
+            actions: None,
+            resources: None,
+        };
+        let response = self
+            .submit_event(
+                realm_id,
+                arkret_wire::events::EventKind::CAPABILITY_GRANT,
+                serde_json::to_value(payload)?,
+            )
+            .await?;
+        Ok((grant_id, response))
     }
 
     pub async fn send_message(
@@ -181,12 +254,10 @@ impl TestActorClient {
                 .collect(),
             causal_refs,
         );
-        // Any Event that carries effects has to name the Seal basis it was
-        // authored under; the reducer refuses an unanchored effect set.
-        if event["effects"]
-            .as_array()
-            .is_some_and(|effects| !effects.is_empty())
-        {
+        let is_data_event = arkret_wire::events::EventKind::from(kind)
+            .descriptor()
+            .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+        if is_data_event {
             let seal_frontier = expect_json(
                 self.get("/_arkret/self/events/frontier")
                     .query(&[("realm_id", realm_id)]),
@@ -194,7 +265,9 @@ impl TestActorClient {
             )
             .await?;
             let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
-                serde_json::from_value(seal_frontier)?;
+                serde_json::from_value(seal_frontier.clone()).map_err(|error| {
+                    anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
+                })?;
             let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
                 state.frontier
             else {
@@ -211,9 +284,20 @@ impl TestActorClient {
             event["auth_context"] = json!({
                 "did": self.actor,
                 "key_id": format!("{}#cotest", self.actor),
-                "key_epoch": 0,
-                "capability_refs": capability_refs
+                "key_epoch": 0
             });
+            event["refs"] = Value::Array(
+                capability_refs
+                    .into_iter()
+                    .map(|grant_id| {
+                        json!({
+                            "id": grant_id,
+                            "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
+                            "critical": true
+                        })
+                    })
+                    .collect(),
+            );
             refresh_event_proof(&mut event)?;
         }
         let mut body = expect_json(
@@ -224,7 +308,7 @@ impl TestActorClient {
         ensure_submit_event_id(&mut body, &event);
         // The digest is what a later response names to dominate this head, so
         // hand it back to the caller alongside the submit result.
-        body["cotest_event_digest"] = event["proof"]["event_digest"].clone();
+        body["cotest_event_digest"] = event["proofs"][0]["event_digest"].clone();
         Ok(body)
     }
 
@@ -257,14 +341,13 @@ impl TestActorClient {
             None,
         );
         event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
-        let is_control_move = arkret_wire::events::EventKind::from(kind)
-            .descriptor()
-            .is_some_and(|descriptor| descriptor.plane == Some("control"));
-        if is_control_move
-            && event["effects"]
-                .as_array()
-                .is_some_and(|effects| !effects.is_empty())
-        {
+        let descriptor = arkret_wire::events::EventKind::from(kind).descriptor();
+        let is_control_move = descriptor.is_some_and(|descriptor| {
+            descriptor.reducer_input && descriptor.plane == Some("control")
+        });
+        let is_data_event = descriptor
+            .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+        if is_control_move || is_data_event {
             let seal_frontier = expect_json(
                 self.get("/_arkret/self/events/frontier")
                     .query(&[("realm_id", realm_id)]),
@@ -272,7 +355,9 @@ impl TestActorClient {
             )
             .await?;
             let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
-                serde_json::from_value(seal_frontier)?;
+                serde_json::from_value(seal_frontier.clone()).map_err(|error| {
+                    anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
+                })?;
             let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
                 state.frontier
             else {
@@ -280,7 +365,18 @@ impl TestActorClient {
                     "Realm selector returned the wrong frontier variant"
                 ));
             };
-            event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+            if is_control_move {
+                event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+                let physical_millis = chrono::Utc::now().timestamp_millis();
+                event["hlc"] = json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
+            } else {
+                event["seal_ref"] = serde_json::to_value(&frontier.seal_id)?;
+                event["auth_context"] = json!({
+                    "did": self.actor,
+                    "key_id": format!("{}#cotest", self.actor),
+                    "key_epoch": 0
+                });
+            }
         }
         refresh_event_proof(&mut event)?;
         Ok(event)

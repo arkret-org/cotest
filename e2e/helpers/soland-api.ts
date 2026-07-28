@@ -757,13 +757,10 @@ export async function grantServiceDelegationApi(
 }
 
 // Mint a realm-scoped `ak.capability.grant` event for an arbitrary action set
-// and return BOTH the materialized grant id (`ak:grant:*`) and the carrying
-// event id (`ak:event:*`). event-and-patch.md §2.2: a high-tier write that
-// references its authorization via the envelope `refs[]` `authorized_by` role
-// MUST point at the accepted Event that produced the grant, and soland's
-// authorized_by ref resolver requires the `ak:event:` typed id (not the
-// `ak:grant:` form). Callers that need the authorized_by ref use the returned
-// `eventId`.
+// and return both the immutable grant id (`ak:grant:*`) and its carrying Event
+// id (`ak:event:*`). capabilities.md §10.3 requires `refs[authorized_by]` to
+// name the grant itself; the Event id remains useful only for Event-history
+// causality and diagnostics.
 export type CapabilityGrantEventArgs = {
   ownerDid: string;
   realmId: string;

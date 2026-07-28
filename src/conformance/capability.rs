@@ -82,10 +82,6 @@ fn str_vec(value: &Value, pointer: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn grant_id_of_event(event_id: &str) -> String {
-    event_id.replacen("ak:event:", "ak:grant:", 1)
-}
-
 fn action_implies(granted: &str, requested: &str) -> bool {
     granted == requested || granted == "ak.realm.admin"
 }
@@ -103,13 +99,14 @@ fn parent_can_delegate(parent_actions: &[String], child_actions: &[String]) -> b
 }
 
 struct Delegation {
-    event_id: String,
+    grant_id: String,
     parent_grant_id: String,
     subject: String,
     actions: Vec<String>,
     resources: Vec<Value>,
     constraints: Vec<Value>,
-    authorized_by_event: String,
+    authorized_by_grant: String,
+    parent_grant_ref: String,
 }
 
 #[derive(Clone)]
@@ -138,7 +135,7 @@ fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
         .ok_or_else(|| anyhow!("delegate_chain fixture missing delegations"))?;
     let mut out = Vec::with_capacity(raw.len());
     for delegation in raw {
-        let authorized_by_event = delegation
+        let authorized_by_grant = delegation
             .get("refs")
             .and_then(Value::as_array)
             .and_then(|refs| {
@@ -149,8 +146,23 @@ fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
             .and_then(|reference| reference.get("id").and_then(Value::as_str))
             .unwrap_or_default()
             .to_owned();
+        let parent_grant_ref = delegation
+            .get("refs")
+            .and_then(Value::as_array)
+            .and_then(|refs| {
+                refs.iter().find(|reference| {
+                    reference.get("role").and_then(Value::as_str) == Some("parent_grant")
+                })
+            })
+            .and_then(|reference| reference.get("id").and_then(Value::as_str))
+            .unwrap_or_default()
+            .to_owned();
         out.push(Delegation {
-            event_id: required_str(delegation, "event_id")?.to_owned(),
+            grant_id: delegation
+                .pointer("/payload/grant_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
             parent_grant_id: delegation
                 .pointer("/payload/parent_grant_id")
                 .and_then(Value::as_str)
@@ -172,7 +184,8 @@ fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default(),
-            authorized_by_event,
+            authorized_by_grant,
+            parent_grant_ref,
         });
     }
     Ok(out)
@@ -402,7 +415,7 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
         }
         match delegations
             .iter()
-            .find(|delegation| grant_id_of_event(&delegation.event_id) == current.parent_grant_id)
+            .find(|delegation| delegation.grant_id == current.parent_grant_id)
         {
             Some(parent) => {
                 chain.push(parent);
@@ -417,6 +430,12 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
 
     let mut prev_actions = str_vec(base, "/actions");
     for delegation in &chain {
+        if !delegation.grant_id.starts_with("ak:grant:")
+            || delegation.authorized_by_grant != delegation.parent_grant_id
+            || delegation.parent_grant_ref != delegation.parent_grant_id
+        {
+            return ChainResult::default();
+        }
         if !parent_can_delegate(&prev_actions, &delegation.actions) {
             return ChainResult::default();
         }
@@ -472,9 +491,9 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
         }
     }
 
-    let mut valid_chain = vec![chain[0].authorized_by_event.clone()];
+    let mut valid_chain = vec![chain[0].authorized_by_grant.clone()];
     for delegation in &chain {
-        valid_chain.push(delegation.event_id.clone());
+        valid_chain.push(delegation.grant_id.clone());
     }
 
     ChainResult {

@@ -218,17 +218,14 @@ fn validate_crypto_signature_event_vector(
     if canonical != expected_canonical {
         bail!("crypto vector {name} canonical event payload drifted");
     }
-    let payload_digest = sha256_prefixed(canonical.as_bytes());
-    let expected_payload_digest = required_str(vector, "payload_digest")?;
-    if payload_digest != expected_payload_digest {
-        bail!(
-            "crypto vector {name} payload hash drifted: expected {expected_payload_digest}, got {payload_digest}"
-        );
+    if vector.get("payload_digest").is_some() {
+        bail!("crypto vector {name} carries retired Event proof field payload_digest");
     }
+    let event_digest = sha256_prefixed(canonical.as_bytes());
     let expected_event_digest = required_str(vector, "event_digest")?;
-    if payload_digest != expected_event_digest {
+    if event_digest != expected_event_digest {
         bail!(
-            "crypto vector {name} event hash drifted: expected {expected_event_digest}, got {payload_digest}"
+            "crypto vector {name} event hash drifted: expected {expected_event_digest}, got {event_digest}"
         );
     }
 
@@ -590,10 +587,12 @@ fn validate_event_envelope(
         "event_id",
         "kind",
         "realm_id",
-        "effective_scope",
+        "scope_ref",
         "actor_id",
         "executed_by",
         "authorization_ref",
+        "applet_id",
+        "external_ref",
         "actor_kind",
         "actor_seq",
         "created_at",
@@ -602,14 +601,11 @@ fn validate_event_envelope(
         "refs",
         "causal_refs",
         "preconditions",
-        "effects",
         "seal_ref",
-        "conflict_keys_digest",
         "auth_context",
         "seal_basis",
-        "anchor_ref",
-        "redacts",
         "payload",
+        "redacts",
         "unsigned",
         "proofs",
         "requirements",
@@ -752,6 +748,18 @@ fn validate_event_envelope(
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "prev_refs / refs must contain typed ak: refs",
+        ));
+    }
+    if extra_refs.iter().any(|reference| {
+        reference.get("role").and_then(Value::as_str) == Some("authorized_by")
+            && reference
+                .get("id")
+                .and_then(Value::as_str)
+                .is_none_or(|id| !id.starts_with("ak:grant:"))
+    }) {
+        return Ok(EventEnvelopeDecision::reject(
+            "schema_violation",
+            "refs[role=authorized_by] must contain immutable ak:grant: ids",
         ));
     }
     if prev_refs

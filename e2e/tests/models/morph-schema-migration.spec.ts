@@ -624,10 +624,9 @@ async function submitSchemaMigrateRaw(
   // morph.md §4.1 S3 — ak.morph.schema_migrate is gated by the high-tier
   // capability action `ak.morph.schema_migrate`; the authorization is carried on
   // the envelope `refs[]` with role `authorized_by`, which MUST resolve to the
-  // accepted Event that produced the authorizing grant (event-and-patch.md §2.2;
-  // soland event_log/submit.rs rejects unresolved authorized_by refs with
-  // dependency_missing, and event_log/sdk_projection.rs projects
-  // refs[authorized_by][0] into the operation's authorization_ref). The payload
+  // immutable authorizing grant (capabilities.md §10.3). Soland rejects an
+  // unresolved grant with dependency_missing and projects
+  // refs[authorized_by][0] into the operation's authorization_ref. The payload
   // itself is closed
   // (ak.schema.event_payload.v1#/$defs/morph_schema_migrate_payload,
   // additionalProperties:false) and only declares morph_id / from_schema_refs /
@@ -636,8 +635,8 @@ async function submitSchemaMigrateRaw(
   // The Realm owner is implicitly authorized for the capability check
   // (operations/policy.rs validate_morph_schema_migrate_authz short-circuits the
   // owner), but soland still requires a resolvable authorized_by ref — so mint a
-  // real owner-issued grant for the action and reference its carrying event.
-  const { eventId: authorizationEventId } = await grantCapabilityEventApi(request, token, {
+  // real owner-issued grant for the action and reference that grant directly.
+  const { grantId: authorizationGrantId } = await grantCapabilityEventApi(request, token, {
     ownerDid: args.actorDid,
     realmId: args.realmId,
     subjectDid: args.actorDid,
@@ -648,7 +647,7 @@ async function submitSchemaMigrateRaw(
     realmId: args.realmId,
     kind: "ak.morph.schema_migrate",
     requirementsSchema,
-    refs: [{ role: "authorized_by", id: authorizationEventId }],
+    refs: [{ role: "authorized_by", id: authorizationGrantId }],
     payload: {
       morph_id: args.morphId,
       from_schema_refs: args.fromRefs,
