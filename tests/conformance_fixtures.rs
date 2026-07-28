@@ -749,3 +749,11 @@ conformance_test!(
     "key_backup_hardening_fixture",
     cotest::conformance::run_key_backup_hardening_fixture_suite,
 );
+
+conformance_test!(
+    /// Protocol-gap closure vectors assert proposal quorum evidence, durable
+    /// security-transaction replay, closed track names, and WebSocket fallback.
+    protocol_gap_closure_fixture_suite_matches_reference_semantics,
+    "protocol_gap_closure_fixture",
+    cotest::conformance::run_protocol_gap_closure_fixture_suite,
+);

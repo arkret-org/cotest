@@ -15,9 +15,10 @@
 use anyhow::{Context, Result};
 use arkret_canonical::DigestSuite;
 use arkret_wire::{
-    AuthoritySetRef, AuthorizationLease, AuthorizationLeaseId, DeviceId, Did, Event,
+    AuthoritySetRef, AuthorizationLease, AuthorizationLeaseId, ControlProposalDecisionPolicy,
+    ControlProposalReceipt, ControlProposalReceiptKind, DeviceId, Did, Event,
     EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef,
-    ProjectedCellWrite, Proof, ReceiptId, RiskTier, SealId, proof_kind,
+    PayloadProof, PayloadSignature, ProjectedCellWrite, ReceiptId, RiskTier, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 
@@ -42,18 +43,54 @@ fn issuer_proof(
     verification_method: &str,
     payload_digest: Hash,
     created_at: chrono::DateTime<Utc>,
-) -> Proof {
-    Proof {
+) -> PayloadProof {
+    PayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: verification_method.to_owned(),
-        event_digest: payload_digest,
+        payload_digest,
         created_at,
         domain: None,
         audience: None,
         proof_purpose: None,
         jws: "a..b".to_owned(),
     }
+}
+
+fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalReceipt>> {
+    if event.seal_basis.is_none() {
+        return Ok(None);
+    }
+    let received_at = event.created_at;
+    let policy = ControlProposalDecisionPolicy::default();
+    let mut receipt = ControlProposalReceipt {
+        kind: ControlProposalReceiptKind::ProposalReceipt,
+        realm_id: event.realm_id.clone(),
+        proposal_digest: Hash::new(event.event_digest().context("Event is canonicalizable")?)
+            .context("Event digest is a valid Hash")?,
+        received_at,
+        decision_due_at: received_at + policy.decision_window,
+        absolute_due_at: received_at + policy.absolute_horizon,
+        defer_count: 0,
+        authority_set_ref: harness_authority_set("ak.authority_set.realm_admission.v1"),
+        receipt_coordinator: Did::new("did:webvh:z6mkfixture:authority.example")
+            .context("static harness authority DID is typed")?,
+        signatures: Vec::new(),
+    };
+    let payload_digest = receipt
+        .receipt_digest()
+        .context("harness proposal receipt is canonicalizable")?;
+    receipt.signatures = vec![PayloadSignature {
+        alg: "EdDSA".to_owned(),
+        verification_method: "did:webvh:z6mkfixture:authority.example#key-1".to_owned(),
+        payload_digest,
+        created_at: received_at,
+        jws: "a..b".to_owned(),
+    }];
+    receipt
+        .validate_structural(policy)
+        .context("harness proposal receipt is structurally valid")?;
+    Ok(Some(receipt))
 }
 
 /// Mint the lease that authorizes `event`'s first publication.
@@ -103,10 +140,12 @@ pub fn authorization_lease_for(
 /// Package `event` as the initial publication the self submit rail accepts.
 pub fn initial_submission(event: Event, action: &str) -> Result<EventInitialSubmission> {
     let authorization_lease = authorization_lease_for(&event, action, RiskTier::Low)?;
+    let control_proposal_receipt = control_proposal_receipt_for(&event)?;
     Ok(EventInitialSubmission {
         event,
         authorization_lease,
         cba_proof_bundles: Vec::new(),
+        control_proposal_receipt,
     })
 }
 
@@ -143,9 +182,11 @@ pub fn ingress_receipt_for(event: &Event, lease: &AuthorizationLease) -> Result<
 pub fn federation_submission(event: Event, action: &str) -> Result<EventFederationSubmission> {
     let authorization_lease = authorization_lease_for(&event, action, RiskTier::Low)?;
     let receipt = ingress_receipt_for(&event, &authorization_lease)?;
+    let control_proposal_receipt = control_proposal_receipt_for(&event)?;
     Ok(EventFederationSubmission {
         event,
         authorization_lease,
         ingress_receipts: vec![receipt],
+        control_proposal_receipt,
     })
 }

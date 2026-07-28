@@ -49,6 +49,7 @@ mod privacy_security;
 mod private_chat_privacy;
 mod profile_matrix;
 mod profile_registry;
+mod protocol_gap_closure;
 mod push_rule_core;
 mod redaction;
 mod reducer_profile;
@@ -295,6 +296,7 @@ pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
 };
+pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
 pub use push_rule_core::{
     run_hardened_mention_routing_hint_vector, run_push_rule_core_fixture_suite,
 };

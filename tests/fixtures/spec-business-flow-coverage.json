@@ -8,7 +8,9 @@
       "status": "implemented",
       "surfaces": [
         "service_discovery",
-        "identity_registry"
+        "identity_registry",
+        "security_transactions",
+        "account_auth"
       ],
       "operation_spine": [
         {
@@ -48,9 +50,21 @@
           ]
         },
         {
-          "operation_id": "ak.root.identity.recovery_session.command.complete",
+          "operation_id": "ak.self.security_transaction.command.create",
           "surfaces": [
-            "identity_registry"
+            "security_transactions"
+          ]
+        },
+        {
+          "operation_id": "ak.self.security_transaction.command.continue",
+          "surfaces": [
+            "security_transactions"
+          ]
+        },
+        {
+          "operation_id": "ak.gate.account.command.authorize_recovery_device",
+          "surfaces": [
+            "account_auth"
           ]
         }
       ],
@@ -83,6 +97,21 @@
           "path": "src/scenarios/key_backup_recovery_account_state.rs",
           "markers": [
             "/_arkret/root/identity/recovery-policy"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
+          "markers": [
+            "continue_authorize_recovery_device",
+            "continue_submit_reanchor_unit"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../coauth/crates/backend/src/handlers/arkret/recovery_authority.rs",
+          "markers": [
+            "authorize_recovery_device"
           ]
         }
       ]
@@ -740,7 +769,6 @@
       "title": "Presence, push registration and notification, ICE configuration, and media token exchange",
       "status": "partially_implemented",
       "surfaces": [
-        "events_sync",
         "push",
         "realtime_media"
       ],
@@ -748,7 +776,7 @@
         {
           "operation_id": "ak.self.signal.command.send",
           "surfaces": [
-            "events_sync"
+            "realtime_media"
           ]
         },
         {
@@ -778,7 +806,7 @@
         {
           "operation_id": "ak.self.call.media.exchange.issue_token",
           "surfaces": [
-            "events_sync"
+            "realtime_media"
           ]
         }
       ],
@@ -787,7 +815,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/devices_webrtc.rs",
           "markers": [
-            "/_arkret/self/signal",
+            "post_signal(",
             "rtc_media_token"
           ]
         },
