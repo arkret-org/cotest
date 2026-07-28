@@ -430,27 +430,13 @@ export async function seedCallState(
       to: nextState,
     },
   };
-  const effects: Array<Record<string, unknown>> = [
-    {
-      cell: `ak:cell:ak.component.call.state.v1:${callId}`,
-      op: { kind: "transition", from: previousState, to: nextState },
-    },
-  ];
   if (opts.sessionFocus) {
     const focus = { mode: "sfu", session_focus: opts.sessionFocus };
     payload.focus = focus;
-    effects.push({
-      cell: `ak:cell:ak.component.call.focus.v1:${callId}`,
-      op: { kind: "set", value: focus },
-    });
   }
   const participant = opts.participants?.[0];
   if (participant) {
     payload.roster_delta = { op: "join", participant };
-    effects.push({
-      cell: `ak:cell:ak.component.call.roster.v1:${callId}`,
-      op: { kind: "add", tag: eventId, value: participant },
-    });
   }
   const removedParticipant = opts.removedParticipants?.[0];
   if (removedParticipant) {
@@ -467,14 +453,6 @@ export async function seedCallState(
       op: "remove_participant",
       removal,
     };
-    effects.push({
-      cell: `ak:cell:ak.component.call.moderation.v1:${callId}`,
-      op: {
-        kind: "add",
-        tag: eventId,
-        value: removal,
-      },
-    });
   }
   const sealBasis = await readRealmSealBasis(request, ownerToken, realmId);
   await submitSignedEventApi(
@@ -486,7 +464,6 @@ export async function seedCallState(
       realmId,
       kind: "ak.call.state",
       sealBasis,
-      effects,
       payload,
     }),
     { context: `seed ak.call.state ${callId}` },
@@ -631,7 +608,6 @@ export async function configureMediaService(
       kind: "ak.realm.media_service",
       sealBasis,
       preconditions: [{ cell, predicate: { op: "head_eq", value: null } }],
-      effects: [{ cell, op: { kind: "set", value: payload } }],
       payload,
     }),
     { context: `configure media_service for ${realmId}` },

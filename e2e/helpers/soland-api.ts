@@ -36,7 +36,6 @@ export type SignedEventEnvelopeArgs = {
   proofVerificationMethod?: string;
   refs?: Array<Record<string, unknown>>;
   preconditions?: Array<Record<string, unknown>>;
-  effects?: Array<Record<string, unknown>>;
   sealRef?: string;
   sealBasis?: Record<string, unknown>;
   authContext?: Record<string, unknown>;
@@ -324,24 +323,6 @@ export async function createRealmApi(
         predicate: { op: "head_eq", value: null },
       },
     ],
-    effects: [
-      {
-        cell: "ak:cell:ak.component.realm.metadata.v1:null",
-        op: { kind: "set", value: realmObject },
-      },
-      {
-        cell: `ak:cell:ak.component.member.state.v1:${ownerDid}`,
-        op: { kind: "transition", from: "leave", to: "join" },
-      },
-      {
-        cell: realmCreateCell,
-        op: { kind: "append", value: realmId, issuer_seq: 0 },
-      },
-      {
-        cell: "ak:cell:ak.component.notary.v1:null",
-        op: { kind: "set", value: realmObject.notary },
-      },
-    ],
     payload: {
       // Keep the declaration in the Realm object as descriptive metadata.
       // The dedicated bootstrap facet below is the authorization authority.
@@ -394,16 +375,6 @@ export async function createRealmApi(
       grant_id: foundingGrantId,
       grant: foundingGrant,
     },
-    effects: [
-      {
-        cell: `ak:cell:ak.component.capability.grant.v1:${foundingGrantId}`,
-        op: {
-          kind: "add",
-          tag: `${foundingGrantEventId}:0`,
-          value: foundingGrant,
-        },
-      },
-    ],
   });
   const bootstrapEvents = [realmCreateEvent, foundingGrantEvent];
   if (plaintextVisibleServices.length > 0) {
@@ -421,15 +392,6 @@ export async function createRealmApi(
           {
             cell: plaintextVisibleServicesCell,
             predicate: { op: "head_eq", value: null },
-          },
-        ],
-        effects: [
-          {
-            cell: plaintextVisibleServicesCell,
-            op: {
-              kind: "set",
-              value: { services: plaintextVisibleServices },
-            },
           },
         ],
         payload: { services: plaintextVisibleServices },
@@ -474,12 +436,6 @@ export async function createRealmApi(
           predicate: { op: "head_eq", value: null },
         },
       ],
-      effects: [
-        {
-          cell: policyCell,
-          op: { kind: "set", value: deliveryPolicy },
-        },
-      ],
       payload: deliveryPolicy,
     });
     const policyEventId = stringValue(policyEvent.event_id);
@@ -503,17 +459,6 @@ export async function createRealmApi(
           {
             cell: memberCell,
             predicate: { op: "head_eq", value: "join" },
-          },
-        ],
-        effects: [
-          {
-            cell: memberCell,
-            op: {
-              kind: "transition",
-              from: "join",
-              to: "join",
-              reason: "creator_delivery_binding",
-            },
           },
         ],
         payload: {
@@ -597,16 +542,6 @@ export async function createRealmApi(
       realmId,
       kind: "ak.invite.create",
       sealBasis,
-      effects: [
-        {
-          cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
-          op: { kind: "transition", from: null, to: "pending" },
-        },
-        {
-          cell: `ak:cell:ak.component.member.state.v1:${invitee}`,
-          op: { kind: "transition", from: "leave", to: "invite" },
-        },
-      ],
       payload: {
         invite_id: inviteId,
         invitee,
@@ -1353,16 +1288,6 @@ export async function submitInviteCreateApi(
     kind: "ak.invite.create",
     sealBasis,
     refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
-    effects: [
-      {
-        cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
-        op: { kind: "transition", from: null, to: "pending" },
-      },
-      {
-        cell: `ak:cell:ak.component.member.state.v1:${subjectDid}`,
-        op: { kind: "transition", from: "leave", to: "invite" },
-      },
-    ],
     // Directed invite-create payload shape per event-payload.schema.json
     // `invite_payload` (variant: invitee + invite_delivery_target +
     // introduction_evidence_digest + expires_at). The subject is carried by
@@ -1461,16 +1386,6 @@ export async function acceptInviteApi(
       kind: "ak.invite.accept",
       actorSeq: 0,
       sealBasis,
-      effects: [
-        {
-          cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
-          op: { kind: "transition", from: "pending", to: "accepted" },
-        },
-        {
-          cell: `ak:cell:ak.component.member.state.v1:${actorDid}`,
-          op: { kind: "transition", from: "invite", to: "join" },
-        },
-      ],
       payload: {
         invite_id: inviteId,
       },
@@ -1866,6 +1781,7 @@ export function signedEventEnvelope(
     event_id: args.eventId ?? typedId("event"),
     kind: args.kind,
     realm_id: args.realmId,
+    scope_ref: { kind: "realm", realm_id: args.realmId },
     actor_id: args.actorDid,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
@@ -1873,7 +1789,6 @@ export function signedEventEnvelope(
     prev_refs: args.prevRefs ?? [],
     refs: args.refs ?? [],
     preconditions: args.preconditions,
-    effects: args.effects,
     seal_ref: args.sealRef,
     seal_basis: args.sealBasis,
     auth_context: args.authContext,
@@ -2042,6 +1957,7 @@ export async function submitSignedEventApi(
   opts: { server?: SolandKey; context?: string } = {},
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
+  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
@@ -2081,6 +1997,11 @@ export async function submitSignedEventBatchApi(
     throw new Error("Event batch must contain at least one Event");
   }
   const context = opts.context ?? "submit Event batch";
+  if (events[0]?.kind !== "ak.realm.create") {
+    for (const event of events) {
+      await applyRegisteredCbaPlane(request, token, event, opts.server);
+    }
+  }
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
@@ -2277,6 +2198,87 @@ export async function readRealmSealBasis(
   };
 }
 
+async function applyRegisteredCbaPlane(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  server?: SolandKey,
+): Promise<void> {
+  const kind = stringValue(envelope.kind);
+  const realmId = stringValue(envelope.realm_id);
+  const actorDid = stringValue(envelope.actor_id);
+  if (!kind || !realmId || !actorDid) {
+    throw new Error("CBA preparation requires kind, realm_id, and actor_id");
+  }
+  const descriptor = eventKindDescriptor(kind);
+  if (
+    !descriptor?.reducer_input ||
+    kind === "ak.realm.create" ||
+    kind === "ak.device.reanchor"
+  ) {
+    return;
+  }
+
+  let changed = false;
+  if (descriptor.plane === "control") {
+    if (envelope.seal_basis === undefined) {
+      envelope.seal_basis = await readRealmSealBasis(
+        request,
+        token,
+        realmId,
+        server,
+      );
+      changed = true;
+    }
+  } else if (descriptor.plane === "data") {
+    if (
+      envelope.seal_ref === undefined ||
+      envelope.auth_context === undefined
+    ) {
+      const response = await request.post(
+        `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
+        {
+          data: {
+            realm_id: realmId,
+            subject: actorDid,
+            data_plane_actions: [kind],
+          },
+        },
+      );
+      const basis = await expectJsonOk<{ seal_id: string }>(
+        response,
+        `seed conformance Realm basis for ${kind}`,
+      );
+      envelope.seal_ref = basis.seal_id;
+      const proof = Array.isArray(envelope.proofs)
+        ? (envelope.proofs[0] as Record<string, unknown> | undefined)
+        : undefined;
+      const verificationMethod =
+        stringValue(proof?.verification_method) ?? `${actorDid}#device`;
+      const fragmentIndex = verificationMethod.indexOf("#");
+      envelope.auth_context = {
+        did: actorDid,
+        key_id:
+          fragmentIndex >= 0
+            ? verificationMethod.slice(fragmentIndex + 1)
+            : verificationMethod,
+        key_epoch: 0,
+      };
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const proof = Array.isArray(envelope.proofs)
+      ? (envelope.proofs[0] as Record<string, unknown> | undefined)
+      : undefined;
+    refreshEventEnvelopeProof(
+      envelope,
+      stringValue(proof?.verification_method),
+    );
+  }
+}
+
 export async function alignSignedEventToActorFrontierApi(
   request: APIRequestContext,
   token: string,
@@ -2418,7 +2420,6 @@ export function makeFederationEvent(args: {
   realmId: string;
   kind: string;
   payload: Record<string, unknown>;
-  effects?: Array<Record<string, unknown>>;
   sealBasis?: Record<string, unknown>;
 }) {
   return signedEventEnvelope({
@@ -2427,7 +2428,6 @@ export function makeFederationEvent(args: {
     realmId: args.realmId,
     kind: args.kind,
     schemaId: schemaIdForEventKind(args.kind),
-    effects: args.effects,
     sealBasis: args.sealBasis,
     payload: args.payload,
   });
@@ -2656,6 +2656,45 @@ const SPEC_ARTIFACTS_ROOT = resolve(
   "v1",
   "artifacts",
 );
+
+type EventKindRegistryRow = {
+  event_kind?: string;
+  reducer_input?: boolean;
+  plane?: "control" | "data";
+};
+
+let eventKindRegistryCache:
+  | Map<string, EventKindRegistryRow>
+  | undefined;
+
+function eventKindDescriptor(
+  kind: string,
+): EventKindRegistryRow | undefined {
+  if (!eventKindRegistryCache) {
+    const registry = JSON.parse(
+      readFileSync(
+        join(
+          SPEC_ARTIFACTS_ROOT,
+          "registry",
+          "event-kind-registry.json",
+        ),
+        "utf8",
+      ),
+    ) as { event_kinds?: EventKindRegistryRow[] };
+    eventKindRegistryCache = new Map(
+      (registry.event_kinds ?? [])
+        .filter(
+          (
+            row,
+          ): row is EventKindRegistryRow & { event_kind: string } =>
+            typeof row.event_kind === "string",
+        )
+        .map((row) => [row.event_kind, row]),
+    );
+  }
+  return eventKindRegistryCache.get(kind);
+}
+
 const E2E_FIXTURES_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",

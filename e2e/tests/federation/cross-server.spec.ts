@@ -423,16 +423,6 @@ test.describe("cross-server federation", () => {
       realmId,
       kind: "ak.invite.create",
       actorDid: alice.did,
-      effects: [
-        {
-          cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
-          op: { kind: "transition", from: null, to: "pending" },
-        },
-        {
-          cell: `ak:cell:ak.component.member.state.v1:${bob.did}`,
-          op: { kind: "transition", from: "leave", to: "invite" },
-        },
-      ],
       sealBasis: {
         leaves: [String(frontierBody.frontier?.seal_id)],
         control_event_set_root: String(

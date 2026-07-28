@@ -641,16 +641,6 @@ export function buildInviteCreateEvent(args: {
     realmId: args.realmId,
     kind: "ak.invite.create",
     schemaId: "ak.schema.invite.v1",
-    effects: [
-      {
-        cell: `ak:cell:ak.component.invite.lifecycle.v1:${inviteId}`,
-        op: { kind: "transition", from: null, to: "pending" },
-      },
-      {
-        cell: `ak:cell:ak.component.member.state.v1:${args.inviteeDid}`,
-        op: { kind: "transition", from: "leave", to: "invite" },
-      },
-    ],
     payload: {
       invite_id: inviteId,
       invitee: args.inviteeDid,

@@ -178,12 +178,6 @@ function realmKeyScope(
 // committer publishes after each epoch commit (§2.10.8): recipient is the
 // offline org RRK principal, ciphertext is history_secret[from..to] HPKE-sealed
 // to the RRK public key. provider-initiated (no recipient claim).
-function realmKeyDeliveryCellSubject(components: string[]): string {
-  return createHash("sha256")
-    .update(canonicalJson(components))
-    .digest("base64url");
-}
-
 function signedRealmKeyShareEnvelope(args: {
   senderDid: string;
   senderDeviceId: string;
@@ -259,41 +253,6 @@ function signedRealmKeyShareEnvelope(args: {
     kind: "ak.realm_key.share",
     payload,
   });
-  const effectiveScopeId = args.group.effectiveScope.realm_id;
-  const recipientTargetId =
-    args.target.shareKind === "realm_recovery_key"
-      ? args.target.recoveryRecipientId
-      : args.target.recipientDeviceId;
-  envelope.effects = [
-    {
-      cell: `ak:cell:ak.component.realm_key.delivery.v1:${realmKeyDeliveryCellSubject(
-        [
-          args.target.shareKind,
-          args.recipientPrincipalId,
-          recipientTargetId,
-          effectiveScopeId,
-        ],
-      )}`,
-      op: {
-        kind: "append",
-        issuer_seq: envelope.actor_seq,
-        value: {
-          delivery_outcome: "shared",
-          share_kind: args.target.shareKind,
-          recipient_principal_id: args.recipientPrincipalId,
-          recipient_target_id: recipientTargetId,
-          effective_scope_id: effectiveScopeId,
-          policy_digest: keyScope.policy_digest,
-          from_epoch: args.fromEpoch,
-          to_epoch: args.toEpoch,
-          sender_device_id: args.senderDeviceId,
-          source_authorization_ref: args.sourceAuthorizationRef,
-          payload_digest: sha256Hash(canonicalJson(payload)),
-        },
-      },
-    },
-  ];
-  refreshEventEnvelopeProof(envelope);
   return envelope;
 }
 

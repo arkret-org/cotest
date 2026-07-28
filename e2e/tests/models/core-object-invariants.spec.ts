@@ -301,12 +301,6 @@ test.describe("core object invariants", () => {
             predicate: { op: "head_eq", value: null },
           },
         ],
-        effects: [
-          {
-            cell: positionCell,
-            op: { kind: "set", value: initialPosition },
-          },
-        ],
         sealBasis: initialBasis,
         payload: {
           board_space_id: boardSpaceId,
@@ -333,12 +327,6 @@ test.describe("core object invariants", () => {
               op: "head_eq",
               value: { list_space_id: staleExpectedListId, rank: "m" },
             },
-          },
-        ],
-        effects: [
-          {
-            cell: positionCell,
-            op: { kind: "set", value: targetPosition },
           },
         ],
         sealBasis: acceptedBasis,
@@ -369,12 +357,6 @@ test.describe("core object invariants", () => {
           {
             cell: positionCell,
             predicate: { op: "head_eq", value: initialPosition },
-          },
-        ],
-        effects: [
-          {
-            cell: positionCell,
-            op: { kind: "set", value: targetPosition },
           },
         ],
         sealBasis: basisAfterReject,
