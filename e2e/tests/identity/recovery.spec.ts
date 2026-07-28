@@ -253,55 +253,6 @@ test.describe("account recovery", () => {
     }
   });
 
-  test.fixme(
-    "B-model Recovery Key restore publishes a registry entry then atomically reanchors and authorizes the replacement device",
-    async () => {
-      // The previous direct-authorize harness was removed because it bypassed
-      // the DID-generation fence. The replacement
-      // live strand must drive the accepted registry head, root-signed
-      // ak.device.reanchor + authority-signed replacement authorize unit, and
-      // assert its typed receipt before the recovered device may write.
-    },
-  );
-
-  test.fixme(
-    // @blocking-on: the B-model registry-entry + re-anchor live harness above.
-    // @user-promise: e2e/scenarios/identity/recovery.md
-    // @expected-live-by: 2026Q3
-    "after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline",
-    async () => {
-      // spec: key-management.md §7.3 step 6, encryption-and-audit.md §2.4
-      // BLOCKED: depends on the device-2 ak.device.authorize restore stage above
-      // being end-to-end wired. The MLS-history decrypt-on-fresh-device path
-      // itself is already live-covered by tests/encryption/key-backup.spec.ts
-      // A1 (historical encrypted cards visible after unlock) and A2 (kanban
-      // restored detail), so this scenario's unique promise is the
-      // device-authorize-then-history-sync chain, which the recovery-proof
-      // work above must land first.
-    },
-  );
-
-  test.fixme(
-    // @blocking-on: client-side Shamir reconstruction + a live share-holder
-    //   release service (neither exists in inkson/harness), PLUS the recovery
-    //   proof gap shared with the device-2 fixme above. soland accepts a
-    //   threshold{k,n,shares[]} recovery policy and validates share_commitment in
-    //   the proof layer, but the threshold proof kind itself is not driveable.
-    // @user-promise: e2e/scenarios/identity/recovery.md
-    // @expected-live-by: 2026Q3
-    "E8.4 threshold recovery (3-of-5 shares): client reconstructs recovery key from shares; envelope decrypted; device authorized",
-    async () => {
-      // spec: key-management.md §8 / §7.5.4
-      // BLOCKED: threshold recovery is a recovery-policy-layer factor
-      // (§7.5.4). soland accepts a `threshold{k,n,shares[]}` recovery policy
-      // and validates share_commitment in the proof layer, but the client-side
-      // Shamir share reconstruction (3-of-5 holders → reassembled recovery
-      // private key → HPKE-open) is not implemented in inkson, and the
-      // share-holder release transcript binding (§8.2) has no live holder
-      // service in the harness. Both are out of this task's module boundary.
-    },
-  );
-
   test("E8.5 trusted recovery service: recovery policy can gate backup decrypt on attestation validity", async ({
     request,
   }) => {
@@ -406,13 +357,4 @@ test.describe("account recovery", () => {
       `baseline non-mixed secret_storage envelope must be accepted: ${baselineResp.status()} ${await baselineResp.text()}`,
     ).toBeTruthy();
   });
-
-  test.fixme(
-    "E8.7 revoked old device cannot block a higher-generation B-model re-anchor",
-    async () => {
-      // The replacement live harness must prove recovery authority comes from
-      // the accepted policy and DID update chain, not any old-generation
-      // device, then assert all prior-generation writes are fenced.
-    },
-  );
 });

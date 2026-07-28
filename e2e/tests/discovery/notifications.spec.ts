@@ -346,17 +346,6 @@ test.describe("notifications", () => {
     }
   });
 
-  test.fixme(
-    "an authorized fresh device restores encrypted DND settings after Recovery Key unlock",
-    async () => {
-      // Spec: key-management.md §5.1 and §7.3. A login factor only yields a
-      // restricted fresh-device session; backup unlock is forbidden until the
-      // new device completes pairing or the B-model recovery re-anchor flow.
-      // Keep this separate from DND enforcement until that live authorization
-      // harness can bind the exact accepted actor frontier and device key.
-    },
-  );
-
   test("mark-all-read clears unread badges and marks notification rows as read", async ({
     browser,
     request,

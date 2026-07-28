@@ -14,9 +14,9 @@
 //   - models/views.md §2.2 (kind is response family), §6 / §6.3 (Board
 //     projection derived from query → contains → strand)
 //
-// Phase A and D are live. Phases B, C, and E are test.fixme: each pins a
-// registered spec contract, but still needs the corresponding reducer,
-// projection, or spec-shaped fixture before promotion.
+// Phases A and D are live. Phases B, C, and E are test.fixme: each pins a
+// registered spec contract, but still needs the corresponding sealing path,
+// reducer, or projection before promotion.
 
 import { type APIRequestContext, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -264,6 +264,9 @@ test.describe("core object invariants", () => {
   // A stale head_eq MUST reject the whole Move; a subsequent fresh Move from
   // the same accepted position proves that the rejected effect did not land.
   test.fixme(
+    // @blocking-on: soland#accepted-control-move-seal-finalization
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase B)
+    // @expected-live-by: 2026Q3
     "Phase B — stale ak.strand.move head_eq rejects atomically; the same seal basis admits a fresh position CAS",
     async ({ request }) => {
       const stamp = Date.now();
@@ -315,8 +318,16 @@ test.describe("core object invariants", () => {
         context: "establish initial Strand position",
       });
 
+      await expect
+        .poll(
+          () => fetchRealmSealBasis(request, aliceToken, realmId),
+          {
+            message: "initial Strand position Control Move becomes covered by a later Seal",
+            timeout: 30_000,
+          },
+        )
+        .not.toEqual(initialBasis);
       const acceptedBasis = await fetchRealmSealBasis(request, aliceToken, realmId);
-      const targetPosition = { list_space_id: targetListId, rank: "z" };
       const staleMoveEnvelope = signedEventEnvelope({
         actorDid: alice.did,
         realmId,
@@ -392,6 +403,9 @@ test.describe("core object invariants", () => {
   // changes that cannot be validated without breaking the existing,
   // separately-owned tombstone/archive flows.
   test.fixme(
+    // @blocking-on: soland#space-lifecycle-spec-convergence
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase C)
+    // @expected-live-by: 2026Q3
     "Phase C — ak.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
     async ({ request }) => {
       const stamp = Date.now();
@@ -627,6 +641,9 @@ test.describe("core object invariants", () => {
   // spanning the View reducer + projection materializer + SDK DTOs. Promoting
   // it is out of scope for this pass.
   test.fixme(
+    // @blocking-on: soland#view-projection-materializer
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase E)
+    // @expected-live-by: 2026Q3
     "Phase E — Board projection on a fresh Space with no registered View returns the derived default (NOT 404); unknown renderer fails closed",
     async ({ request }) => {
       const stamp = Date.now();

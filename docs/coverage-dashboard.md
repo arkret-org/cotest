@@ -4,14 +4,14 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 | Journey | Verified | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
-| UJ-A - First login and multi-device recovery | 96 | 113 | 85.0% | 17 |
+| UJ-A - First login and multi-device recovery | 98 | 98 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 34 | 34 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
-| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 27 | 32 | 84.4% | 5 |
-| UJ-E - Federation and cross-domain collaboration | 20 | 22 | 90.9% | 2 |
+| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 27 | 31 | 87.1% | 4 |
+| UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 45 | 45 | 100.0% | 0 |
 | UJ-G - Privacy rights, governance, appeal, and GDPR | 37 | 44 | 84.1% | 7 |
-| UJ-H - Calls, push, and cross-platform sync | 23 | 26 | 88.5% | 3 |
+| UJ-H - Calls, push, and cross-platform sync | 23 | 23 | 100.0% | 0 |
 
 ## UJ-A - First login and multi-device recovery
 
@@ -19,19 +19,19 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 |---|---|---:|---:|---:|
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | encryption/mls-group | domain-fallback | 11 | 11 | 0 |
-| identity/account-device-auth | domain-fallback | 2 | 6 | 4 |
+| identity/account-device-auth | domain-fallback | 2 | 2 | 0 |
 | identity/account-handoff | domain-fallback | 4 | 4 | 0 |
-| identity/account-states | domain-fallback | 7 | 8 | 1 |
+| identity/account-states | domain-fallback | 7 | 7 | 0 |
 | identity/circle-member | domain-fallback | 4 | 4 | 0 |
 | identity/consent-grant | domain-fallback | 11 | 11 | 0 |
 | identity/contact-graph | domain-fallback | 8 | 8 | 0 |
 | identity/device-key-lifecycle | domain-fallback | 1 | 1 | 0 |
-| identity/multi-device | domain-fallback | 15 | 15 | 0 |
+| identity/multi-device | domain-fallback | 16 | 16 | 0 |
 | identity/oidc-login-chain | domain-fallback | 3 | 3 | 0 |
 | identity/oidc-login-flow | domain-fallback | 3 | 3 | 0 |
 | identity/onboarding | domain-fallback | 5 | 5 | 0 |
-| identity/recovery | domain-fallback | 4 | 8 | 4 |
-| identity/root-custody-reanchor | domain-fallback | 0 | 8 | 8 |
+| identity/passkey-login-flow | domain-fallback | 1 | 1 | 0 |
+| identity/recovery | domain-fallback | 4 | 4 | 0 |
 | identity/session-grant-dpop | domain-fallback | 9 | 9 | 0 |
 | identity/tsp-bootstrap | domain-fallback | 4 | 4 | 0 |
 
@@ -67,13 +67,13 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | encryption/key-backup-restore | domain-fallback | 6 | 6 | 0 |
 | encryption/mls-group | domain-fallback | 11 | 11 | 0 |
-| encryption/realm-recovery-key | domain-fallback | 0 | 5 | 5 |
+| encryption/realm-recovery-key | domain-fallback | 0 | 4 | 4 |
 
 ## UJ-E - Federation and cross-domain collaboration
 
 | spec | mapping | verified | promised | blocking |
 |---|---|---:|---:|---:|
-| extensions/mimi-federation | domain-fallback | 2 | 4 | 2 |
+| extensions/mimi-federation | domain-fallback | 2 | 2 | 0 |
 | federation/contact-graph-federation | domain-fallback | 5 | 5 | 0 |
 | federation/cross-server | domain-fallback | 11 | 11 | 0 |
 | federation/security-hardening | domain-fallback | 2 | 2 | 0 |
@@ -117,4 +117,4 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 | calls/webrtc-seq-monotonic | domain-fallback | 2 | 2 | 0 |
 | calls/webrtc-signals | domain-fallback | 1 | 1 | 0 |
 | discovery/notifications | domain-fallback | 2 | 2 | 0 |
-| sync/transport-negotiation | domain-fallback | 3 | 6 | 3 |
+| sync/transport-negotiation | domain-fallback | 3 | 3 | 0 |

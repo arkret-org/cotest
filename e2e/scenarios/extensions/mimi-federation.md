@@ -38,7 +38,7 @@
 - alice 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
 - alice 的 browser context 通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 - soland 配置中启用了 `extensions.mimi_interop = true` (extension profile);如果未启用,整个 spec 应该跳过而非失败
-- mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供,真实 soland/inkson federation 仍由当前 `.fixme` 锚定
+- mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供。真实 soland/inkson business chain 仍是设计 backlog,不再用空 `.fixme` 冒充可执行测试
 
 ## Steps
 
@@ -116,7 +116,7 @@
 
 ## Implementation notes
 
-- MIMI Provider Facade 是 **extension profile**,v1 core 不要求实现。业务 spec 在 facade mock 缺席时应跳过或保持 fixme,而不是 fail
+- MIMI Provider Facade 是 **extension profile**,v1 core 不要求实现。未落地的业务链保留在本 scenario 文档中,不进入 Playwright test discovery
 - pairwise DID 的生成规则参见 `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §6;关键点是同一个 MIMI 身份在不同 Realm 得到不同 DID(unlinkability)
 - soland gap (当前):MIMI Provider Facade 绑定、`federation_profile = "mimi_interop"` Realm 字段、identity bridging 到 pairwise DID、outbound retry 仍未形成完整业务链路。已落地的服务端面包括 room binding、MIMI ingress 到 canonical timeline、E2EE boundary policy(未标记 E2EE 明文拒绝;transcript binding / explicit downgrade 可过)、unknown content kind quarantine。
 - `helpers/mimi-facade.ts` 提供 `createMimiFacadeClient()`;harness 自检 [`harness/mocks-selftest`](../harness/mocks-selftest.md) 负责锁住 facade mock 契约。
@@ -124,4 +124,4 @@
 
 ## 总耗时预估
 
-facade mock 已实装;E5.2/E5.3 已是 live soland API 覆盖,主业务流与 E5.1 outbound fallback 仍为 fixme。当前 live 边界测试预计 < 10s;soland/inkson 侧 federation profile 落地后,单次完整业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。
+facade mock 已实装;E5.2/E5.3 已是 live soland API 覆盖。主业务流与 E5.1 outbound fallback 等实现落地后再新增真实测试。当前 live 边界测试预计 < 10s;soland/inkson 侧 federation profile 落地后,单次完整业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。

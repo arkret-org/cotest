@@ -120,7 +120,8 @@
 - **E3.2 多个 policy_source 优先级**:在 Realm policy server 之上,再给 alice 当 owner 的 org 配置一条组织级 policy server binding(指向同一 mock 的不同 path,如 `/_arkret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)。组织级 HTTP binding 需等 operation registry 注册后再 live 化。
 - **E3.3 cache_ttl 幂等**:`cache_ttl_seconds = 5` 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ak.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
 
-(E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)
+(E3.1 与 E3.2 已各自成为独立 live `test()`。E3.3 仍是等待可验签 allow-path
+fixture 的设计契约,不以空 `test.fixme` 冒充可执行覆盖。)
 
 ## 实现状态(2026-06,与 `tests/authz/policy-server-check.spec.ts` 对齐)
 
@@ -128,9 +129,9 @@
 
 但 soland 对**真实 allow 路径**有强约束:上游必须返回 spec §3 完整 `PolicyCheckOutcome`(回签 `bound_to`、三个 frontier digest 与 soland 运行时计算值逐字段一致、`signature.kid` 在声明的 `policy_server_did` 下可由 soland 的 DID resolver 验证)。harness 的 `mock-policy-server.mjs` 返回的是简化未签 body,且其 DID 不在 soland 信任集内,因此 soland 对任何 gated 操作一律 fail-closed(deny)。据此当前 e2e 覆盖的是 spec §4 的 **fail-closed 安全属性**(可确定性断言),而非 allow→deny→obligation 生命周期。
 
-已 live(`test()`):realm policy-server 投影 + 无 grant 时仍 fail-closed(原有用例);声明 policy server 后 cap-gated 操作被 fail-closed deny,且 mock `/inspect.kinds.checks` 证明上游被调用;E3.1 上游慢响应(mock `delay_ms`)→ soland 在自身 `timeout_ms` deadline 内 fail-closed。
+已 live(`test()`):realm policy-server 投影 + 无 grant 时仍 fail-closed;声明 policy server 后 cap-gated 操作被 fail-closed deny,且 mock `/inspect.kinds.checks` 证明上游被调用;E3.1 上游慢响应(mock `delay_ms`)→ soland 在自身 `timeout_ms` deadline 内 fail-closed;E3.2 通过 `governed_by` 验证组织 fallback,并验证 Realm 直接声明优先于 fallback。
 
-仍 `test.fixme`(阻塞原因见 spec 文件内联 `@blocking-on`):allow→deny→obligation 生命周期需 mock 升级为可验签 `PolicyCheckOutcome` 并纳入 soland 信任集;E3.2 多源优先级(soland 是 realm→org 的 `governed_by` fallback 而非 override,且无 org 级 / governed_by 的 self-API,`?source=` query 被禁);E3.3 cache_ttl 幂等仅在 allow 路径可观测。
+allow→deny→obligation 生命周期和 E3.3 cache TTL 幂等仍需 mock 升级为可验签 `PolicyCheckOutcome` 并纳入 soland 信任集。二者保留为 scenario 设计契约,在存在可执行断言之前不创建 `test.fixme`。
 
 ## Implementation notes
 

@@ -36,6 +36,7 @@ test.describe("organization principal bootstrap / delegation", () => {
     //   endpoint yet, so the "human admin cannot self-issue" gate cannot be
     //   exercised live.
     // @user-promise: e2e/scenarios/governance/organization-bootstrap.md (Case A)
+    // @expected-live-by: 2026Q3
     "Case A: human admin without delegation cannot issue an organization statement",
     async ({ request }) => {
       const coauthBase = coauthBaseUrl();
@@ -69,6 +70,7 @@ test.describe("organization principal bootstrap / delegation", () => {
     //   governance_service/account_authority (or the DID controller signs
     //   directly), and soland accepts it after resolving the live delegation.
     // @user-promise: e2e/scenarios/governance/organization-bootstrap.md (Case B)
+    // @expected-live-by: 2026Q3
     "Case B: DID controller / governance service / account authority delegation issues successfully",
     async ({ request }) => {
       const coauthBase = coauthBaseUrl();
@@ -138,6 +140,7 @@ test.describe("organization principal bootstrap / delegation", () => {
     //   maps it to grant_revoked_upstream (see realm_organization_statement
     //   _negative.rs: delegated_role_not_live_delegation).
     // @user-promise: e2e/scenarios/governance/organization-bootstrap.md (Case C)
+    // @expected-live-by: 2026Q3
     "Case C: expired / revoked delegation cannot issue nor be accepted",
     async ({ request }) => {
       const coauthBase = coauthBaseUrl();

@@ -100,6 +100,7 @@ test.describe("directory verified organization badge", () => {
     //   badge from the local organizations registry, so declared-only realms can
     //   still show as verified — the regression this case must catch.
     // @user-promise: e2e/scenarios/discovery/organization-verified-badge.md (Case A)
+    // @expected-live-by: 2026Q3
     "Case A: declared-only realm does not show a verified organization badge",
     async ({ request }) => {
       const alice = uniqueUser("s30-badge-A");
@@ -127,6 +128,7 @@ test.describe("directory verified organization badge", () => {
     //   an active verified ak.realm.organization (owner|directory_certifier)
     //   relationship, read identically by inkson + teabay.
     // @user-promise: e2e/scenarios/discovery/organization-verified-badge.md (Case B)
+    // @expected-live-by: 2026Q3
     "Case B: active owner / directory_certifier relationship shows the badge",
     async ({ browser, request }) => {
       const label = `s30-badgeB-${Date.now()}`;
@@ -177,6 +179,7 @@ test.describe("directory verified organization badge", () => {
     //   is revoked / expired / stale, matching the effective-policy revocation
     //   behaviour in governance/organization-policy.spec.ts (Case C).
     // @user-promise: e2e/scenarios/discovery/organization-verified-badge.md (Case C)
+    // @expected-live-by: 2026Q3
     "Case C: revoked / expired relationship clears the badge",
     async ({ request }) => {
       const label = `s30-badgeC-${Date.now()}`;

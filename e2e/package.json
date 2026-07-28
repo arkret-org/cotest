@@ -5,7 +5,8 @@
   "scripts": {
     "test": "playwright test --config playwright.config.ts",
     "test:headed": "playwright test --config playwright.config.ts --headed",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:fixme": "node scripts/check-fixme-quality.mjs"
   },
   "devDependencies": {
     "@noble/ciphers": "^1.3.0",

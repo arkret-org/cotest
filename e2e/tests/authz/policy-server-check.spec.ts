@@ -483,22 +483,4 @@ test.describe("policy server check", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: cache_ttl idempotency is only observable on the allow path.
-    //   soland caches a policy decision only after it verifies a spec section 3
-    //   PolicyCheckOutcome (signed by the declared policy_server_did, echoing
-    //   soland's runtime frontier digests) — see policy_client.rs::check, where
-    //   cache.insert runs only on the verified-allow branch; fail-closed denies
-    //   are never cached. The harness mock returns a simplified, unsigned body
-    //   soland cannot verify, so every gated op re-hits the upstream and the
-    //   "only one upstream call within ttl" invariant can't be exercised.
-    //   Promote once the mock emits a verifiable PolicyCheckOutcome and its DID
-    //   is in soland's trust set (same prerequisite as the allow-path lifecycle).
-    // @user-promise: e2e/scenarios/authz/policy-server-check.md (E3.3)
-    "E3.3 cache_ttl idempotency: repeated identical action within ttl triggers only one upstream /policy/check",
-    async () => {
-      // Intentionally empty: blocked on a verifiable allow-path response from
-      // the mock. See @blocking-on.
-    },
-  );
 });

@@ -25,38 +25,38 @@ e2e/
 
 ## 总览
 
-- **72 条 scenarios**(19 个领域),其中
-  - **70** 条业务 scenario 与 spec 一一对应(`scenarios/<domain>/<name>.md` ↔ `tests/<domain>/<name>.spec.ts`)
+- **71 条 scenarios**(19 个领域),其中
+  - **69** 条业务 scenario 与 spec 一一对应(`scenarios/<domain>/<name>.md` ↔ `tests/<domain>/<name>.spec.ts`)
   - **2** 条 harness/probe 专属:[`harness/mocks-selftest`](harness/mocks-selftest.md)、[`spaces/admin-section-route`](spaces/admin-section-route.md)
   - `workflows/incident-response`、dual-soland federation、history visibility、MIMI facade harness 等新增 coverage 均已登记到 catalog
 - **88 个 playwright spec 文件**
-- **398 live test / 42 fixme / 148 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
+- **400 live test / 17 fixme / 167 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
 - **10 个 mock service**:OIDC IdP / Email 3PID / WebVH witness / Policy server / Push gateway / Applet registry / TSP endpoint / MIMI facade / Claim issuer / Challenge provider
 
 ## 19 个 domain
 
 | Domain | scenario doc 数 | spec 文件数 | verified | promised | fixme | skip |
 |---|---:|---:|---:|---:|---:|---:|
-| authz | 2 | 2 | 9 | 10 | 1 | 3 |
+| authz | 2 | 2 | 9 | 9 | 0 | 3 |
 | calls | 7 | 7 | 18 | 18 | 0 | 0 |
-| conformance | 4 | 6 | 36 | 36 | 0 | 3 |
+| conformance | 4 | 6 | 35 | 35 | 0 | 3 |
 | discovery | 3 | 3 | 7 | 10 | 3 | 11 |
-| encryption | 6 | 6 | 27 | 32 | 5 | 15 |
+| encryption | 6 | 6 | 27 | 31 | 4 | 15 |
 | events | 1 | 1 | 1 | 1 | 0 | 0 |
-| extensions | 2 | 3 | 12 | 15 | 3 | 2 |
-| federation | 2 | 3 | 18 | 18 | 0 | 5 |
-| governance | 5 | 5 | 23 | 30 | 7 | 3 |
+| extensions | 2 | 3 | 13 | 13 | 0 | 2 |
+| federation | 2 | 3 | 18 | 18 | 0 | 8 |
+| governance | 5 | 5 | 23 | 30 | 7 | 4 |
 | harness | 1 | 1 | 9 | 9 | 0 | 9 |
-| identity | 9 | 15 | 80 | 97 | 17 | 50 |
+| identity | 8 | 15 | 82 | 82 | 0 | 58 |
 | invites | 1 | 2 | 8 | 8 | 0 | 1 |
 | joint | 1 | 5 | 5 | 5 | 0 | 3 |
-| kanban | 3 | 3 | 19 | 19 | 0 | 7 |
-| messaging | 4 | 4 | 39 | 39 | 0 | 6 |
+| kanban | 3 | 3 | 19 | 19 | 0 | 11 |
+| messaging | 4 | 4 | 39 | 39 | 0 | 9 |
 | models | 4 | 4 | 18 | 21 | 3 | 1 |
 | spaces | 6 | 6 | 26 | 26 | 0 | 6 |
-| sync | 5 | 6 | 26 | 29 | 3 | 7 |
+| sync | 5 | 6 | 26 | 26 | 0 | 7 |
 | workflows | 6 | 6 | 17 | 17 | 0 | 16 |
-| **合计** | **72** | **88** | **398** | **440** | **42** | **148** |
+| **合计** | **71** | **88** | **400** | **417** | **17** | **167** |
 
 ## 设计原则
 

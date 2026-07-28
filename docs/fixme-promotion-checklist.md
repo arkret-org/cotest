@@ -4,6 +4,9 @@ Use this checklist before converting any Playwright `test.fixme(...)` to
 `test(...)`. Promotion is local-only: do not publish packages, create releases,
 push tags, or open remote CI-only follow-ups as evidence.
 
+Empty callback bodies are forbidden. `npm run check:fixme` must pass before
+promotion or demotion work is considered complete.
+
 ## Required Evidence
 
 | Evidence | Requirement |

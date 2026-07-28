@@ -124,6 +124,7 @@ test.describe("organization governance — verified relationship semantics", () 
     //   that lands soland still treats owning_organizations[] as the inheritance
     //   chain, which is exactly the behaviour this case is meant to fail on.
     // @user-promise: e2e/scenarios/governance/organization-policy.md (Case A)
+    // @expected-live-by: 2026Q3
     "Case A: owning_organizations[] alone does not inherit organization policy or badge",
     async ({ request }) => {
       const alice = uniqueUser("s30-caseA-alice");
@@ -157,6 +158,7 @@ test.describe("organization governance — verified relationship semantics", () 
     //   yet accepts a ak.realm.organization statement or projects the resulting
     //   organization layer / badge.
     // @user-promise: e2e/scenarios/governance/organization-policy.md (Case B)
+    // @expected-live-by: 2026Q3
     "Case B: active verified statement with covering scope inherits policy + badge",
     async ({ request }) => {
       const alice = uniqueUser("s30-caseB-alice");
@@ -240,6 +242,7 @@ test.describe("organization governance — verified relationship semantics", () 
     //   (revokes_statement_id) is accepted, and must treat expired / not-before
     //   statements identically (not effective).
     // @user-promise: e2e/scenarios/governance/organization-policy.md (Case C)
+    // @expected-live-by: 2026Q3
     "Case C: revoke (and expiry) immediately drops inheritance + badge",
     async ({ request }) => {
       const alice = uniqueUser("s30-caseC-alice");
@@ -306,6 +309,7 @@ test.describe("organization governance — verified relationship semantics", () 
     //   sponsor statement carries no inheritable moderation control and must not
     //   light the official badge.
     // @user-promise: e2e/scenarios/governance/organization-policy.md (Case D)
+    // @expected-live-by: 2026Q3
     "Case D: sponsor relationship is not owner/governance — no inheritance",
     async ({ request }) => {
       const alice = uniqueUser("s30-caseD-alice");

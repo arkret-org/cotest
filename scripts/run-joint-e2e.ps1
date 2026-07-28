@@ -7,14 +7,14 @@
 
     joint-smoke (PR gate)
       - Runs only describe blocks tagged @fully-implemented.
-      - Skips the ~248 placeholder fixme tests so the PR gate stays under
+      - Excludes retained executable fixme tests so the PR gate stays under
         ~5 min on the joint harness.
       - An explicit -Grep argument fully overrides the smoke inclusion filter.
 
     joint-full (nightly / on-demand)
       - Runs every regular joint spec discovered by Playwright. Provider-backed
         @platform-live tests remain in the protected controlled lane. The
-        placeholder fixme tests are expected; they exit as skipped via test.fixme().
+        retained, fully attributed fixme tests exit as skipped via test.fixme().
 
     Both profiles share the same service-startup, preflight, and reporting
     code paths. Only the Playwright invocation step branches on the profile.
@@ -121,7 +121,13 @@ param(
     [ValidateSet("joint-smoke", "joint-full")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
-    [string]$Grep
+    [string]$Grep,
+    # Run a non-Playwright driver while the managed stack is alive. This is
+    # used by agent-journeys so the browser agent can operate the real stack
+    # while this runner retains lifecycle ownership and deterministic cleanup.
+    [string]$ExternalDriverScript,
+    [string[]]$ExternalDriverArgument = @(),
+    [string]$RuntimeManifestPath
 )
 
 if ($StartMocks) {
@@ -158,6 +164,12 @@ $CoauthEnrollmentAuthorityDid = "did:key:z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G
 
 if ($PreflightOnly -and $SkipPreflight) {
     throw "-PreflightOnly cannot be combined with -SkipPreflight"
+}
+if ($ExternalDriverArgument.Count -gt 0 -and -not $ExternalDriverScript) {
+    throw "-ExternalDriverArgument requires -ExternalDriverScript"
+}
+if ($ExternalDriverScript -and -not (Test-Path -LiteralPath $ExternalDriverScript -PathType Leaf)) {
+    throw "External driver script not found: $ExternalDriverScript"
 }
 
 function Resolve-PlaywrightProjects {
@@ -2616,6 +2628,7 @@ try {
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
+    $alphaPeer = ""
     $solandCorsOrigins = @(
         $InksonBaseUrl
         $inksonBetaBaseUrl
@@ -2988,62 +3001,162 @@ try {
         Remove-Item Env:COTEST_MOCK_CHALLENGE_PROVIDER_DID -ErrorAction SilentlyContinue
     }
 
-    $playwrightArgs = @("test", "--config", "playwright.config.ts")
-    foreach ($project in $playwrightProjects) {
-        $playwrightArgs += @("--project", $project)
+    if (-not $RuntimeManifestPath) {
+        $RuntimeManifestPath = Join-Path $jointDir "runtime-manifest.json"
+    } else {
+        $RuntimeManifestPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RuntimeManifestPath)
     }
-    # G4.T1: joint-smoke is the PR gate. It runs only describe blocks tagged
-    # @fully-implemented. The remaining fixme placeholders are excluded
-    # so the gate stays fast (< 5 min on joint). An explicit -Grep overrides
-    # this entirely.
-    $effectiveGrep = $Grep
-    if (-not $effectiveGrep -and $RunProfile -eq "joint-smoke") {
-        $effectiveGrep = "@fully-implemented"
+    $alphaManagedServiceName = if ($DualSoland) { "soland-alpha" } else { "soland" }
+    $alphaManagedService = @($managedServices | Where-Object { $_.Name -eq $alphaManagedServiceName }) | Select-Object -First 1
+    $betaManagedService = @($managedServices | Where-Object { $_.Name -eq "soland-beta" }) | Select-Object -First 1
+    $alphaRuntimeInstance = if ($alphaManagedService -and $alphaManagedService.Kind -eq "process") {
+        "process:$($alphaManagedService.Process.Id)"
+    } elseif ($alphaManagedService -and $alphaManagedService.Kind -eq "docker") {
+        "docker:$($alphaManagedService.ContainerName)"
+    } else {
+        $null
     }
+    $betaRuntimeInstance = if ($betaManagedService -and $betaManagedService.Kind -eq "process") {
+        "process:$($betaManagedService.Process.Id)"
+    } elseif ($betaManagedService -and $betaManagedService.Kind -eq "docker") {
+        "docker:$($betaManagedService.ContainerName)"
+    } else {
+        $null
+    }
+    $alphaStateRoot = Join-Path $jointDir "soland-state"
+    $alphaObjectRoot = Join-Path $jointDir "soland-objects"
+    $betaStateRoot = Join-Path $jointDir "soland-beta-state"
+    $betaObjectRoot = Join-Path $jointDir "soland-beta-objects"
+    $runtimeManifestParent = Split-Path -Parent $RuntimeManifestPath
+    $null = New-Item -ItemType Directory -Force -Path $runtimeManifestParent
+    $runtimeManifest = [ordered]@{
+        schema_version = "v1"
+        generated_at = (Get-Date).ToUniversalTime().ToString("o")
+        topology = if ($DualSoland) { "federated" } else { "single" }
+        soland_runtime = $startedSolandRuntime
+        account_authority_mode = if ($DualSoland -and $CoauthBaseUrl) { "shared-external-authority" } elseif ($CoauthBaseUrl) { "single" } else { "none" }
+        services = [ordered]@{
+            alpha = [ordered]@{
+                soland_base_url = $SolandBaseUrl
+                soland_service_id = $SolandServiceId
+                runtime_instance = $alphaRuntimeInstance
+                inkson_base_url = $InksonBaseUrl
+                state_root = $alphaStateRoot
+                object_root = $alphaObjectRoot
+                federation_peer = $alphaPeer
+            }
+            beta = if ($DualSoland) {
+                [ordered]@{
+                    soland_base_url = $solandBetaBaseUrl
+                    soland_service_id = $SolandBetaServiceId
+                    runtime_instance = $betaRuntimeInstance
+                    inkson_base_url = $inksonBetaBaseUrl
+                    state_root = $betaStateRoot
+                    object_root = $betaObjectRoot
+                    federation_peer = $SolandBaseUrl
+                }
+            } else {
+                $null
+            }
+            coauth = if ($CoauthBaseUrl) {
+                [ordered]@{
+                    base_url = $CoauthBaseUrl
+                    service_id = $CoauthServiceId
+                }
+            } else {
+                $null
+            }
+        }
+        isolation = [ordered]@{
+            distinct_principal_server_processes = [bool]($DualSoland -and $alphaRuntimeInstance -and $betaRuntimeInstance -and $alphaRuntimeInstance -ne $betaRuntimeInstance)
+            distinct_service_identities = [bool]($DualSoland -and $SolandServiceId -and $SolandBetaServiceId -and $SolandServiceId -ne $SolandBetaServiceId)
+            distinct_state_roots = [bool]($DualSoland -and $alphaStateRoot -ne $betaStateRoot)
+            distinct_object_roots = [bool]($DualSoland -and $alphaObjectRoot -ne $betaObjectRoot)
+            distinct_browser_origins = [bool]($DualSoland -and $InksonBaseUrl -and $inksonBetaBaseUrl -and $InksonBaseUrl -ne $inksonBetaBaseUrl)
+            explicit_federation_peer_links = [bool]($DualSoland -and $alphaPeer -eq $solandBetaBaseUrl)
+        }
+        artifacts = [ordered]@{
+            root = $jointDir
+            services = $serviceLogDir
+            screenshots = $screenshotDir
+        }
+    }
+    $runtimeManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $RuntimeManifestPath -Encoding UTF8
+    $env:COTEST_RUNTIME_MANIFEST = $RuntimeManifestPath
 
-    if ($RunProfile -eq "joint-smoke") {
-        Write-Host ""
-        Write-Host "=== joint-smoke profile: PR gate ==="
-        Write-Host "- includes: @fully-implemented"
-        Write-Host "- excludes: fixme + remaining mixed specs"
-        Write-Host ("- grep: {0}" -f $effectiveGrep)
-        Write-Host ""
-    }
-
-    if ($effectiveGrep) {
-        $playwrightArgs += @("--grep", $effectiveGrep)
-    }
-    # Provider-backed live tests are a separate controlled lane: they require
-    # protected endpoints and credentials injected by controlled.yml. A normal
-    # joint run must not fail merely because those secrets are intentionally
-    # absent. An explicit grep for @platform-live remains the opt-in path and
-    # keeps the test's fail-closed precondition checks intact.
-    if (-not ($effectiveGrep -and $effectiveGrep.Contains("@platform-live"))) {
-        $playwrightArgs += @("--grep-invert", "@platform-live")
-    }
-    $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
-    $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"
-    $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $e2eRoot
-    if (-not $playwrightCli) {
-        throw "Playwright CLI is required"
-    }
-    $playwrightCommand = $playwrightCli.FilePath
-    $playwrightCommandArgs = @($playwrightCli.Arguments) + $playwrightArgs
-    Push-Location $e2eRoot
-    try {
+    if ($ExternalDriverScript) {
+        $playwrightStdout = Join-Path $jointDir "external-driver.stdout.log"
+        $playwrightStderr = Join-Path $jointDir "external-driver.stderr.log"
         $previousErrorActionPreference = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        $playwrightOutput = & $playwrightCommand @playwrightCommandArgs 2>&1
-        $exitCode = $LASTEXITCODE
-        $playwrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
-        "" | Set-Content -Path $playwrightStderr -Encoding UTF8
-        $playwrightOutput | ForEach-Object { Write-Host $_ }
-    }
-    finally {
-        if ($null -ne $previousErrorActionPreference) {
+        try {
+            $ErrorActionPreference = "Continue"
+            $driverOutput = & $ExternalDriverScript @ExternalDriverArgument 2>&1
+            $exitCode = $LASTEXITCODE
+            $driverOutput | Set-Content -LiteralPath $playwrightStdout -Encoding UTF8
+            "" | Set-Content -LiteralPath $playwrightStderr -Encoding UTF8
+            $driverOutput | ForEach-Object { Write-Host $_ }
+        }
+        finally {
             $ErrorActionPreference = $previousErrorActionPreference
         }
-        Pop-Location
+    } else {
+        $playwrightArgs = @("test", "--config", "playwright.config.ts")
+        foreach ($project in $playwrightProjects) {
+            $playwrightArgs += @("--project", $project)
+        }
+        # G4.T1: joint-smoke is the PR gate. It runs only describe blocks tagged
+        # @fully-implemented. The remaining attributed fixme tests are excluded
+        # so the gate stays fast (< 5 min on joint). An explicit -Grep overrides
+        # this entirely.
+        $effectiveGrep = $Grep
+        if (-not $effectiveGrep -and $RunProfile -eq "joint-smoke") {
+            $effectiveGrep = "@fully-implemented"
+        }
+
+        if ($RunProfile -eq "joint-smoke") {
+            Write-Host ""
+            Write-Host "=== joint-smoke profile: PR gate ==="
+            Write-Host "- includes: @fully-implemented"
+            Write-Host "- excludes: fixme + remaining mixed specs"
+            Write-Host ("- grep: {0}" -f $effectiveGrep)
+            Write-Host ""
+        }
+
+        if ($effectiveGrep) {
+            $playwrightArgs += @("--grep", $effectiveGrep)
+        }
+        # Provider-backed live tests are a separate controlled lane: they require
+        # protected endpoints and credentials injected by controlled.yml. A normal
+        # joint run must not fail merely because those secrets are intentionally
+        # absent. An explicit grep for @platform-live remains the opt-in path and
+        # keeps the test's fail-closed precondition checks intact.
+        if (-not ($effectiveGrep -and $effectiveGrep.Contains("@platform-live"))) {
+            $playwrightArgs += @("--grep-invert", "@platform-live")
+        }
+        $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
+        $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"
+        $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $e2eRoot
+        if (-not $playwrightCli) {
+            throw "Playwright CLI is required"
+        }
+        $playwrightCommand = $playwrightCli.FilePath
+        $playwrightCommandArgs = @($playwrightCli.Arguments) + $playwrightArgs
+        Push-Location $e2eRoot
+        try {
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            $playwrightOutput = & $playwrightCommand @playwrightCommandArgs 2>&1
+            $exitCode = $LASTEXITCODE
+            $playwrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
+            "" | Set-Content -Path $playwrightStderr -Encoding UTF8
+            $playwrightOutput | ForEach-Object { Write-Host $_ }
+        }
+        finally {
+            if ($null -ne $previousErrorActionPreference) {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+            Pop-Location
+        }
     }
 }
 finally {
@@ -3251,17 +3364,6 @@ function Get-StaticSpecStats {
         }
     }
     return $result
-}
-
-# Optional self-test: validates Get-FixmeTitlesForSpec against a known spec
-# (read-receipts.spec.ts has 8 fixme entries and 0 live tests as of G0.T4).
-if ($env:COTEST_SELFTEST -eq '1') {
-    $selftestSpec = Join-Path $e2eRoot "tests/messaging/read-receipts.spec.ts"
-    $selftestTitles = @(Get-FixmeTitlesForSpec -Path $selftestSpec)
-    if ($selftestTitles.Count -ne 8) {
-        throw "G0.T4 self-test failed: Get-FixmeTitlesForSpec returned $($selftestTitles.Count) titles for read-receipts.spec.ts (expected 8)"
-    }
-    Write-Host "[selftest] Get-FixmeTitlesForSpec: 8 entries for read-receipts.spec.ts (OK)"
 }
 
 # Build the static-source picture first so the drift section can be emitted

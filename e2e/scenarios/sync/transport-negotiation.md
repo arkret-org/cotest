@@ -95,7 +95,7 @@
     - 不再需要 RFC 9421 — TSP envelope 自身 cryptographic binding 取代 HTTP 层签名
 15. 断言:soland_b 通过 TSP 收到 envelope → 解封 → 入库 → bob 看到消息
 
-注:Phase C 全部步骤标 fixme — 当前 soland 无 TSP binding 实现,这里只 documentation that the negotiation slot exists。
+注:Phase C 是未发布扩展的设计记录。当前 soland 无 TSP binding 实现,且 v1 registry 没有对应 operation,因此不进入 Playwright test discovery。
 
 ### Phase D — Binding fallback (WebSocket 断连 → 回到 HTTP)
 
@@ -115,7 +115,7 @@
 - Phase B:`GET /_arkret/describe` 含 `supported_bindings[].kind=websocket_frame`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ak.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息
-- Phase C(fixme):TSP binding 出现在 `supported_bindings` 中;TSP envelope 解封成功
+- Phase C(设计 backlog):TSP binding 出现在未来扩展的 `supported_bindings` 中;TSP envelope 解封成功
 - Phase D:WebSocket 断后,server A 自动回退到 HTTP/JSON;bob 仍然在 30s 内收到下一个事件
 - 全程:任何 transport 上,`origin` / `destination` service DID 与 DID Document 一致;签名 / envelope 验证失败 → 整批 reject
 
@@ -161,8 +161,8 @@
   - 多 hop relay 用第三个 mock service(`MOCK_RELAY_BASE_URL`)或 `route.fulfill` 拦截 + 重写
   - WebSocket forceClose 用 `ws.close()` 或 `page.context().setOffline(true)` 配合 host filter
 
-- **预期结果**:整个 spec 当前应该几乎全部以 `test.fixme` 通过,只有 Phase A 的基本 POST + 签名验证可能能跑成功(取决于 soland 当下 RFC 9421 入站状态)。主流程标 fixme 是有意的 — 这个 scenario 是为 binding profile 工作做契约 pin。
+- **预期结果**:可执行 spec 只覆盖已注册的 HTTP/JSON federation 与 RFC 9421 边界。WebSocket/TSP negotiation 与 relay-inner 只保留为未来扩展设计,不得通过空 `test.fixme` 进入测试报告。
 
 ## 总耗时预估
 
-单次跑约 30-60s(主流程都是 fixme,只跑 health probe + Phase A 基本签名验证;一旦 soland 实现 WebSocket / TSP,fixme 转为实跑后约 90-120s)。
+当前单次跑约 30-60s。一旦 spec 正式发布 WebSocket/TSP 扩展并完成实现,应新增真实测试,预计约 90-120s。

@@ -409,9 +409,4 @@ test.describe("account states", () => {
     expect(transition!.payload.reason).toBe("audit_probe");
     expect(transition!.payload.timestamp).toBeTruthy();
   });
-
-  test.fixme(// @blocking-on: soland#identity-account-states-gap
-  // @user-promise: e2e/scenarios/identity/account-states.md
-  // @expected-live-by: 2026Q3
-  "E28.2 cross-server suspension: alice suspended on α; β learns of suspension via sync within reconciliation window", async () => {});
 });

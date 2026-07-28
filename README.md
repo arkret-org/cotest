@@ -159,6 +159,32 @@ Rules:
 - CI sets `COTEST_JOINT_RUN_DIR` to fixed names under `runs/` (e.g.
   `runs/integration-playwright/joint-e2e`).
 
+## Agent-driven user journeys
+
+`agent-journeys/` is a separate goal-driven acceptance layer. It reuses the
+joint runner's real service lifecycle, but an agent operates Inkson through
+isolated agent-browser sessions instead of replaying a predefined locator
+sequence. Required checkpoints retain screenshots, hard checks, action
+transcripts, and explicit product/agent/harness failure classification.
+
+The federated topology starts two isolated principal servers on one physical
+machine with distinct service identities, ports, state/object roots, and
+Inkson origins:
+
+```powershell
+$run = .\scripts\run-agent-journey.ps1 `
+  -Action Prepare `
+  -Scenario federated-team-incident `
+  -Topology federated
+
+# The agent now uses agent-journeys/scripts/invoke-agent-browser.ps1,
+# records all required checkpoints, and then releases the stack:
+.\scripts\run-agent-journey.ps1 -Action Finalize -RunDir $run.run_dir
+```
+
+Use `-SolandRuntime docker` when container isolation is preferred. See
+[`agent-journeys/README.md`](./agent-journeys/README.md).
+
 ## Recording manual flows into one-key replay (codegen → smoke)
 
 If you keep hand-driving the same browser flow (register → login → create a

@@ -69,7 +69,7 @@
    - `event_kind` — kind 字符串，标识 lifecycle 转换的来源
 5. 这一步是 spec §3 "所有 durable canonical object SHOULD 使用以下公共字段" 的最低 wire-level guard——若 soland serializer 把任何一项静默 drop，本步立刻 fail。
 
-### Phase B — 注册的 Control Move CAS fail（fixme）
+### Phase B — 注册的 Control Move CAS fail（fixme，需要 accepted Move 的后续 Seal）
 
 `ak.strand.update` 在 event-kind registry 中是 data-plane Event，不能携带
 `preconditions[]` 或 `seal_basis`。本 Phase 使用已注册的 control-plane
@@ -82,9 +82,8 @@
    `{list_space_id:L1, rank:"m"}`：
    - 顶层 `seal_basis={leaves, control_event_set_root, state_root}`；
    - 顶层 `preconditions[].head_eq=null`；
-   - 顶层 `effects[]` 写
-     `ak:cell:ak.component.strand.position.v1:<B>:<F>`；
-   - payload 为注册的 `ak.strand.move` closed shape。
+   - payload 为注册的 `ak.strand.move` closed shape；cell target/value 由 registry
+     从 `kind + payload` 推导，wire 不携带 producer-authored `effects[]`。
 8. 以新的 accepted Seal view 提交 stale Move：payload
    `expected_position={space_id:L_stale,rank:"m"}`，顶层 `head_eq` 对应
    `{list_space_id:L_stale,rank:"m"}`，effect 尝试写入
@@ -104,7 +103,7 @@
 13. **alice** 先 tombstone 掉所有 child，再 `ak.space.tombstone` 指向 `spaceId`：断言 HTTP 200 + state 翻到 `tombstoned`。
 14. 断言：tombstoned 之后再提交任何普通 write event（`ak.message.create` / `ak.strand.update`）MUST 返回 `realm_terminal_state` 或 `space_already_terminal`，且 audit log 中 tombstone event 自身仍然可读（hash chain stub 保留——spec §2.5.2）。
 
-### Phase D — Relation cardinality（fixme，需要 soland relation reducer + cardinality check）
+### Phase D — Relation cardinality（live）
 
 15. **alice** 创建两个 View `V1` / `V2`（`POST /_arkret/self/realms/${realmId}/views`），都以 `spaceId` 作为 source Space。
 16. **alice** 提交第一条 `ak.relation.create` `relation_kind="has_default_view"`，`from_ref=spaceId`，`to_ref=V1.id`：断言 HTTP 201，关系 active。
@@ -153,14 +152,18 @@
 ## Implementation notes
 
 - **soland 当前覆盖**：Phase A 的 `GET /_soland/self/spaces/{space_id}` 走 `SpaceLifecycleResponse`（`wire.rs`），实际 wire 字段是 `ok` / `space_id` / `owner` / `members` / `deleted`，**不**包含 `created_at` 与显式 `lifecycle_state`——这些字段从 events query (`/_arkret/self/events?realms=...`) 中匹配 `payload.space_id == spaceId` 的 event item 上读 `created_at` / `sender` / `event_kind` 三项，再加 `event_id`，凑齐 spec §3 公共字段语义的最低 4 项。后续若 soland 在 `SpaceLifecycleResponse` 中补 `created_at` / `state` 字段，Phase A 的 assertion 应直接迁移到 spaces endpoint，不再依赖 events query 兜底。
-- **soland gap**：Phase B 的 patch precondition 路径需要 soland 暴露通用 Move endpoint（带 `preconditions[].head_eq`）；当前只有零散的 cell 更新通道，未统一到 `ak.events` 提交路径。主流程标 `test.fixme`，并在 fixme body 中以 `request.post(...)` 形态 sketch 出预期调用。
+- **soland/harness gap**：Phase B 的首次 `ak.strand.move` 可以被接收，但 joint
+  harness 尚不能产出一个真正覆盖该 accepted Control Move 的后续 Seal。
+  conformance `realm-basis` 只建立独立 fixture basis，不会把待处理 Move 纳入
+  `control_event_set_root`。因此测试保留完整可执行断言并等待 sealing path，
+  不能把读取到的旧 Seal 或无关 fixture Seal 当作 accepted state。
 - **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
-- **soland gap**：Phase D Relation cardinality 检查需要 soland 实现 `ak.relation.create` reducer 与 `has_default_view` 基数表；当前 `routing/spaces/relation.rs` 存在但 cardinality enforcement 弱。整 phase 标 fixme。
+- **已落地**：Phase D 覆盖 `ak.relation.create` reducer、`has_default_view` many-to-one、duplicate idempotency 与 cross-Realm structural relation reject。
 - **soland gap**：Phase E `/_soland/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → strand 派生"的 path。整 phase 标 fixme。
 - **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()` 和现有 New Space 表单 helper、`ensureRegistered`、`issueDevSession`、`openUserPage`。Phase B–E 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。
 
 ## 总耗时预估
 
-主流程（仅 Phase A live）：约 10-15s（1 个 browser context + 2 个 HTTP 调用）。
+当前 live Phase A + D：约 15-25s（1 个 browser context + HTTP 调用）。
 全 phase live 后预计 30-45s（Phase B–E 都是 HTTP 直调，无 browser context）。

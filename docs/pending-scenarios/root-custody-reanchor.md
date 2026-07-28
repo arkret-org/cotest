@@ -64,4 +64,7 @@ typed bootstrap/re-anchor validators, A/B exclusivity and generation fence.
 The Rust live atomic PCR test drives the production resolver and admission path
 and is a merge gate for this work. Full browser onboarding, recovery re-anchor,
 conflict reducer and two-entry secret-handoff strands remain explicit
-`test.fixme` promises; fixture-name checks do not count as verification.
+This remains a pending scenario design, not a discovered Playwright test.
+Fixture-name checks and empty callbacks do not count as verification. Restore
+an executable spec only when the live registry and recovery unit can be driven
+with concrete assertions.
