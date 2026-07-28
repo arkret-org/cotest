@@ -30,6 +30,7 @@ mod keypackage_lifecycle;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod list_handles_for_subject_vectors;
+mod long_text_content;
 mod media_aead_nonce;
 mod media_binding;
 mod member_identity_vectors;
@@ -58,6 +59,7 @@ mod security_closure;
 mod security_negative;
 mod service_closure_hardening;
 mod sidecar_vectors;
+mod signal_federation;
 mod spec_business_flow;
 mod state_reducer_hardening;
 mod state_resolution;
@@ -209,6 +211,7 @@ pub use list_handles_for_subject_vectors::{
     run_list_handles_for_subject_vector_suite, run_primary_handle_field_aligned_with_3_2_1_vector,
     run_subject_mismatch_rejected_vector,
 };
+pub use long_text_content::run_long_text_content_fixture_suite;
 pub use media_aead_nonce::{
     ALL_MEDIA_AEAD_NONCE_VECTOR_IDS, run_aead_nonce_counter_replay_vector,
     run_aead_nonce_random_rejected_vector, run_aead_nonce_sender_domain_collision_vector,
@@ -326,6 +329,7 @@ pub use sidecar_vectors::{
     run_sidecar_mls_effective_access_vector, run_sidecar_multi_agent_publish_vector,
     run_sidecar_vector_suite,
 };
+pub use signal_federation::run_signal_federation_fixture_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{
     ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, run_state_reducer_hardening_fixture_suite,

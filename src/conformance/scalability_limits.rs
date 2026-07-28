@@ -36,6 +36,93 @@ fn run_case(case: &Value) -> Result<()> {
         "canonical_operation_envelope_bytes" => {
             decision(generator, "encoded_size_bytes", 1_048_576)?
         }
+        "accepted_event_envelope_canonical_bytes" => {
+            decision(generator, "encoded_size_bytes", 1_048_576)?
+        }
+        "event_reducer_stamp_boundary" => {
+            let producer = required_u64(generator, "producer_envelope_bytes")?;
+            let accepted = required_u64(generator, "accepted_candidate_bytes")?;
+            let actual = if producer <= 1_048_576 && accepted > 1_048_576 {
+                "reject"
+            } else {
+                "accept"
+            };
+            if case.pointer("/expected/decision").and_then(Value::as_str) != Some(actual) {
+                bail!("{name} reducer-stamped Event boundary drifted");
+            }
+            return Ok(());
+        }
+        "event_submit_envelope" => {
+            let actual = if generator["unsigned_present"].as_bool() == Some(true) {
+                "reject"
+            } else {
+                "accept"
+            };
+            if case.pointer("/expected/decision").and_then(Value::as_str) != Some(actual) {
+                bail!("{name} submit unsigned exclusion drifted");
+            }
+            return Ok(());
+        }
+        "non_streaming_json_operation_canonical_body" => {
+            validate_limit_values(generator, "encoded_size_bytes", 8_388_608)?;
+            return Ok(());
+        }
+        "non_streaming_json_http_message_content" => {
+            validate_limit_values(generator, "wire_bytes", 16_777_216)?;
+            return Ok(());
+        }
+        "json_wire_amplification" => {
+            if required_u64(generator, "wire_bytes")? <= 16_777_216
+                || case.pointer("/expected/decision").and_then(Value::as_str) != Some("reject")
+            {
+                bail!("{name} wire amplification boundary drifted");
+            }
+            return Ok(());
+        }
+        "non_streaming_json_request_headers" => {
+            if case
+                .pointer("/expected/http_status")
+                .and_then(Value::as_u64)
+                != Some(415)
+                || case
+                    .pointer("/expected/body_read_started")
+                    .and_then(Value::as_bool)
+                    != Some(false)
+            {
+                bail!("{name} Content-Encoding ordering drifted");
+            }
+            return Ok(());
+        }
+        "operation_batch_matrix" => {
+            let rows = generator
+                .get("cases")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("{name} missing operation batch cases"))?;
+            if rows.len() != 3
+                || rows[0]["count"].as_u64() != Some(1_000)
+                || rows[0]["canonical_body_bytes"].as_u64() != Some(8_388_608)
+                || rows[1]["canonical_body_bytes"].as_u64() != Some(8_388_609)
+                || rows[2]["count"].as_u64() != Some(1_001)
+            {
+                bail!("{name} batch count/byte conjunction drifted");
+            }
+            return Ok(());
+        }
+        "response_page_candidates" => {
+            if required_u64(generator, "candidate_count")? != 1_000
+                || required_u64(
+                    generator,
+                    "next_candidate_would_exceed_canonical_body_bytes",
+                )? != 8_388_608
+            {
+                bail!("{name} response page byte stop drifted");
+            }
+            return Ok(());
+        }
+        "service_added_event_read_unsigned_canonical_bytes" => {
+            validate_limit_values(generator, "encoded_size_bytes", 16_384)?;
+            return Ok(());
+        }
         "http_header" => match required_str(generator, "name")? {
             "Idempotency-Key" => decision(generator, "ascii_char_count", 128)?,
             "X-Arkret-Wait-For" => decision(generator, "encoded_size_bytes", 4_096)?,
@@ -417,6 +504,25 @@ fn validate_chunk_request_matrix(case: &Value, generator: &Value) -> Result<()> 
 
 fn decision(generator: &Value, field: &str, maximum: u64) -> Result<&'static str> {
     bounded_outcome(generator, field, maximum, "accept", "reject")
+}
+
+fn validate_limit_values(generator: &Value, field: &str, limit: u64) -> Result<()> {
+    let values = generator
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("generated limit matrix missing {field}[]"))?
+        .iter()
+        .map(|value| {
+            value
+                .as_u64()
+                .ok_or_else(|| anyhow!("generated limit matrix {field} contains non-integer"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let expected = [limit - 1, limit, limit + 1];
+    if values.as_slice() != expected {
+        bail!("generated limit matrix {field} drifted: expected {expected:?}, got {values:?}");
+    }
+    Ok(())
 }
 
 fn composition_decision(generator: &Value, fields: &[&str], maximum: u64) -> Result<&'static str> {

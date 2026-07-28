@@ -68,6 +68,18 @@ conformance_test!(
 );
 
 conformance_test!(
+    long_text_content_fixture_suite_matches_reference_semantics,
+    "long_text_content",
+    cotest::conformance::run_long_text_content_fixture_suite,
+);
+
+conformance_test!(
+    signal_federation_fixture_suite_matches_reference_semantics,
+    "signal_federation",
+    cotest::conformance::run_signal_federation_fixture_suite,
+);
+
+conformance_test!(
     /// Round 4 / A2 — security-closure-fixture runner contract.
     /// Confirms the 12 `ak.vector.*` ids are present and every step
     /// exposes the full `runner {given_state, operation, transcript,
