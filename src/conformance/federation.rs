@@ -135,6 +135,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
             "seal_prerequisite_partial_retry" => {
                 validate_seal_prerequisite_partial_retry_case(&case)?;
             }
+            "cba_dependency_resolve" => validate_cba_dependency_resolve_case(&case)?,
             // ak.vector.federation.reducer_profile_digest.v1 — positive leg:
             // the §4.1.1 computation over the registry's resolved_digest_input
             // MUST reproduce expected_digest, and the fixture source descriptor
@@ -254,10 +255,14 @@ fn validate_seal_prerequisite_closure_case(case: &super::NamedCase) -> Result<()
         "single_realm": true,
         "event_count_range": [1, 500],
         "event_phase_order": ["control", "data"],
-        "seal_count_range": [0, 4096],
-        "seal_order": ["notary_seq", "id"],
-        "seal_ids_unique": true,
-        "closure": "minimal_relative_to_receiver_accepted_seals_rooted_at_seal_ref_and_seal_basis_leaves",
+        "cba_proof_bundle_count_range": [0, 64],
+        "per_bundle_limits": {
+            "seals": 256,
+            "control_moves": 1024,
+            "inclusion_and_availability_proofs_combined": 2048,
+            "dependency_path_depth": 4096
+        },
+        "closure": "bounded_verifiable_superset_rooted_at_seal_ref_and_seal_basis_leaves",
         "body_contains_idempotency_key": false
     });
     if contract != &required_contract {
@@ -270,19 +275,19 @@ fn validate_seal_prerequisite_closure_case(case: &super::NamedCase) -> Result<()
         ),
         (
             "missing_control_seal_basis_leaf",
-            "item_rejected_federation_dependencies_pending",
+            "item_rejected_dependency_missing_with_missing_seal_refs",
         ),
         (
             "missing_target_seal",
-            "item_rejected_federation_dependencies_pending",
+            "item_rejected_dependency_missing_with_missing_seal_refs",
         ),
         (
             "missing_nonlocal_predecessor",
-            "item_rejected_federation_dependencies_pending",
+            "item_rejected_dependency_missing_with_missing_seal_refs",
         ),
         (
             "missing_seal_delta_control_event",
-            "item_rejected_federation_dependencies_pending",
+            "item_rejected_dependency_missing_with_missing_event_digests",
         ),
         ("event_seal_dependency_cycle", "permanent_schema_violation"),
         ("invalid_seal_signature", "permanent_signature_invalid"),
@@ -329,7 +334,7 @@ fn validate_seal_prerequisite_partial_retry_case(case: &super::NamedCase) -> Res
         ),
         (
             "atomic_founding_unit_pending",
-            "http_503_federation_dependencies_pending_with_zero_writes",
+            "http_409_dependency_missing_problem_with_zero_writes",
         ),
         (
             "partial_retry_after_any_success",
@@ -337,7 +342,7 @@ fn validate_seal_prerequisite_partial_retry_case(case: &super::NamedCase) -> Res
         ),
         (
             "all_pending_retry",
-            "same_body_and_idempotency_key_allowed_after_backfill",
+            "new_idempotency_key_required_after_any_response",
         ),
         (
             "retry_budget_exhausted",
@@ -351,6 +356,65 @@ fn validate_seal_prerequisite_partial_retry_case(case: &super::NamedCase) -> Res
         &json!({"cases": EXPECTED}),
         &json!({"validated_case_count": EXPECTED.len()}),
     );
+    Ok(())
+}
+
+fn validate_cba_dependency_resolve_case(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some("ak.vector.federation.cba_dependency_resolve.v1") {
+        bail!("{} has the wrong vector_id", case.name);
+    }
+    let contract = case
+        .request_contract
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} lacks request_contract", case.name))?;
+    let required_contract = json!({
+        "single_realm": true,
+        "selector_any_of": ["event_ids", "event_digests", "seal_refs"],
+        "max_response_bytes_ceiling": 8388608,
+        "read_only": true
+    });
+    if contract != &required_contract {
+        bail!("{} request_contract drifted", case.name);
+    }
+    const EXPECTED: &[(&str, &str)] = &[
+        (
+            "requested_seal_returns_bounded_verifiable_superset",
+            "one_target_bundle_and_no_frontier_advance",
+        ),
+        (
+            "requested_event_digest_resolved_inside_control_moves",
+            "digest_satisfied_without_duplicate_event_copy",
+        ),
+        (
+            "missing_and_undisclosable_selectors",
+            "typed_missing_sets_are_externally_indistinguishable",
+        ),
+        (
+            "unsorted_or_duplicate_selector_array",
+            "schema_violation_before_dependency_lookup",
+        ),
+        (
+            "success_omits_one_requested_selector",
+            "nonconformant_response_selector_conservation_failure",
+        ),
+        (
+            "response_budget_cannot_fully_account_for_all_selectors",
+            "atomic_limit_exceeded_not_partial_or_empty_success",
+        ),
+        (
+            "successful_round_does_not_strictly_shrink_missing_sets",
+            "stop_automatic_fetch_and_surface_operator_diagnostic",
+        ),
+        (
+            "ninth_consecutive_fetch_round",
+            "fetch_budget_exhausted_without_submit_side_effect",
+        ),
+        (
+            "resolve_response_completes_closure",
+            "event_still_requires_new_submit_with_fresh_idempotency_key",
+        ),
+    ];
+    validate_named_expectations(case, EXPECTED)?;
     Ok(())
 }
 
