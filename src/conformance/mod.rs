@@ -14,6 +14,7 @@ mod canonical_cross_lang;
 mod canonical_fixture;
 mod capability;
 mod coauth_lifecycle;
+mod control_proposal;
 mod cross_signing_binding_golden;
 mod cursor_vectors;
 mod did_webvh_v1;
@@ -150,6 +151,7 @@ pub use capability::{
     run_capability_fixture_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
+pub use control_proposal::run_control_proposal_bounded_decision_suite;
 pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector, run_cursor_vector_suite,

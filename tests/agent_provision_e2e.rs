@@ -1811,6 +1811,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                         .ok_or_else(|| anyhow!("controller Seal basis has no leaf"))?,
                     basis.control_event_set_root,
                     basis.state_root,
+                    arkret_models_collaboration::event_sync::ControlGovernanceHealth::healthy(),
                     None,
                 )
             }

@@ -43,7 +43,7 @@ fn build_realm(
     let trust_domain = TypedTrustDomainId::new("ak:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Realm {
-        schema: "ak.profile.realm.v1".to_owned(),
+        schema: "ak.schema.realm.v1".to_owned(),
         id,
         title: "Compliance Vault".to_owned(),
         trust_domain,
@@ -54,6 +54,7 @@ fn build_realm(
         schema_refs: vec!["ak.profile.realm.v1".to_owned()],
         policy_id: None,
         preview_policy_id: None,
+        default_strand_id: None,
         default_discoverability: Discoverability::InviteOnly,
         default_join_rule: JoinRule::Invite,
         history_visibility: HistoryVisibility::Joined,
@@ -73,12 +74,20 @@ fn build_realm(
         updated_at: None,
         relation_profiles: Vec::new(),
         notary_profile: NotaryProfile::SingleDid,
+        availability_policy: None,
+        audit_policy: None,
         notary: NotaryValue::single_did(principal.clone()),
         fields: Default::default(),
         // `max_anchor_staleness_ms` was retired by the dual-plane split
         // without a direct replacement; revocation staleness is governed by
         // `revocation_freshness_window_ms`.
         revocation_freshness_window_ms: None,
+        recovery_witness_freshness_window_ms: None,
+        receipt_sla_ms: None,
+        proposal_decision_window_ms: None,
+        proposal_absolute_deadline_ms: None,
+        max_proposal_defers: None,
+        seal_compaction_max_interval_ms: None,
         max_delegation_lifetime_ms: 86_400_000,
         bottom_escalation_after_ms: None,
         cell_lattices: Vec::new(),

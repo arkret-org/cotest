@@ -16,11 +16,13 @@
 //! tests already pin. What only a live server can show is the concurrency and
 //! domination behaviour below.
 
+use std::time::Duration;
+
 use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, TestActorClient, expect_json};
+use crate::harness::{ArkretServer, TestActorClient, eventually, expect_json};
 
 const ALICE_DID: &str = "did:web:cotest-rsvp-alice.example";
 const CALENDAR_STRAND_ID: &str = "ak:strand:01904100-0000-7000-8000-00000000ca01";
@@ -94,15 +96,7 @@ fn submitted_digest(response: &Value) -> Result<String> {
 }
 
 pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()> {
-    // A DataEvent that writes a cell has to cite a `seal_ref` whose state
-    // already projects the capability grant it names. soland only folds pending
-    // Control Moves into a Seal on an admin-triggered signing pass, so the
-    // scenario needs the admin allowlist to drive one after Realm bootstrap.
-    let server = ArkretServer::spawn_with_env(
-        "calendar-rsvp-convergence",
-        &[("SOLAND_ADMIN_PRINCIPAL_DIDS", ALICE_DID)],
-    )
-    .await?;
+    let server = ArkretServer::spawn("calendar-rsvp-convergence").await?;
     let alice = server
         .register_client(
             ALICE_DID,
@@ -131,6 +125,31 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             .to_owned(),
     ];
 
+    // The product coordinator, not an operator endpoint, must publish the
+    // non-empty bootstrap Seal before a client authors its first DataEvent.
+    eventually(
+        "Realm bootstrap Seal",
+        Duration::from_secs(30),
+        Duration::from_millis(100),
+        || async {
+            let frontier = expect_json(
+                alice
+                    .get("/_arkret/self/events/frontier")
+                    .query(&[("realm_id", realm_id.as_str())]),
+                StatusCode::OK,
+            )
+            .await?;
+            let root = frontier["frontier"]["control_event_set_root"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Realm frontier has no control_event_set_root"))?;
+            if root == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+                return Err(anyhow!("Realm bootstrap Seal is still empty"));
+            }
+            Ok(())
+        },
+    )
+    .await?;
+
     // Activation is one canonical pair: the schema ref plus the calendar
     // namespace. A lone ref or a lone subtree is calendar_activation_mismatch.
     alice
@@ -154,27 +173,6 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             }),
         )
         .await?;
-
-    // Reading the Realm seal frontier materializes the empty Genesis Seal when
-    // the Realm has none; compaction refuses to run without an existing seal.
-    expect_json(
-        alice
-            .get("/_arkret/self/events/frontier")
-            .query(&[("realm_id", realm_id.as_str())]),
-        StatusCode::OK,
-    )
-    .await?;
-
-    // Fold the founding capability grant into a Seal so the RSVP can cite it.
-    expect_json(
-        alice
-            .post(&format!(
-                "/_soland/admin/realms/{realm_id}/seal-dag/compact"
-            ))
-            .json(&json!({"realm_id": realm_id, "max_control_moves": 1024})),
-        StatusCode::OK,
-    )
-    .await?;
 
     let strand = read_strand(&alice).await?;
     let frontier: Vec<String> = strand["schedule_revision_heads"]

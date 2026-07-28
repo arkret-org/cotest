@@ -181,6 +181,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    control_proposal_bounded_decision_suite_matches_reference_semantics,
+    "control_proposal_bounded_decision",
+    cotest::conformance::run_control_proposal_bounded_decision_suite,
+);
+
+conformance_test!(
     state_reducer_hardening_fixture_suite_matches_reference_semantics,
     "state_reducer_hardening_fixture",
     cotest::conformance::run_state_reducer_hardening_fixture_suite,
