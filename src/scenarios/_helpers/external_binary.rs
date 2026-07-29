@@ -214,6 +214,9 @@ pub async fn try_spawn_with_extra_env(
     let base_url = format!("http://{bind}");
 
     let mut command = Command::new(&bin_path);
+    if spec.service == "starid" {
+        command.env_remove("DATABASE_URL");
+    }
     if !spec.bind_env.is_empty() {
         command.env(spec.bind_env, &bind);
     }
@@ -223,7 +226,11 @@ pub async fn try_spawn_with_extra_env(
     for &arg in spec.extra_args {
         command.arg(arg);
     }
-    command.stdout(Stdio::null()).stderr(Stdio::null());
+    if std::env::var_os("COTEST_EXTERNAL_BINARY_DEBUG").is_some() {
+        command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    } else {
+        command.stdout(Stdio::null()).stderr(Stdio::null());
+    }
     for &(key, value) in spec.extra_env {
         command.env(key, value);
     }
