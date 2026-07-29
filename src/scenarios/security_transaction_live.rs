@@ -1,11 +1,10 @@
 use anyhow::Result;
 use arkret_wire::{
-    AUTHORITY_SET_POLICY_SCHEMA, AuthoritySetPolicy, AuthoritySetPolicyKind,
-    AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease,
-    AuthorizationLeaseId, BackupId, BackupObjectRef, BackupRotationBinding, BackupRotationKind,
-    BackupRotationPlan, BackupSeriesId, CanonicalPublicMaterial, Did, Event, EventId,
-    EventInitialSubmission, EventsSubmitBatchRequestBody, Hash, Hlc, LeaseBasisRef, RiskTier,
-    ScopeRef, SealId, SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
+    BackupId, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
+    BackupSeriesId, CanonicalPublicMaterial, Did, Event, EventId, EventInitialSubmission,
+    EventsSubmitBatchRequestBody, Hash, Hlc, ReceiptId, RecoverySessionId,
+    RecoveryTransactionCreateRequest, RiskTier, ScopeRef, SealId,
+    SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
 };
 use chrono::Utc;
 use reqwest::StatusCode;
@@ -16,6 +15,7 @@ use crate::harness::{TestServerGroup, expect_api_error, expect_json};
 const ACTOR: &str = "did:web:security-transaction-live.example";
 const DEVICE: &str = "ak:device:01975510-0000-7000-8000-0000000000b1";
 const TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000b2";
+const RECOVERY_TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000f2";
 
 pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<()> {
     let group = TestServerGroup::single("security-transaction-live-create").await?;
@@ -71,6 +71,81 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
         "authoritative GET changed the accepted create outcome"
     );
     Ok(())
+}
+
+pub async fn recovery_transaction_rejects_unknown_session_on_live_soland() -> Result<()> {
+    let group = TestServerGroup::single("recovery-transaction-live-create").await?;
+    let server = group.server(0);
+    let client = server.demo_client(ACTOR, DEVICE).await?;
+    let request = cross_signing_recovery_create_request(server.service_id())?;
+
+    let first = expect_api_error(
+        client
+            .post("/_arkret/self/security-transactions")
+            .json(&request),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+    let exact = expect_api_error(
+        client
+            .post("/_arkret/self/security-transactions")
+            .json(&request),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+    assert_eq!(first["error"], exact["error"]);
+    assert!(
+        first["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("recovery_session_id"))
+    );
+    expect_api_error(
+        client.get(&format!(
+            "/_arkret/self/security-transactions/{RECOVERY_TRANSACTION}"
+        )),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+    Ok(())
+}
+
+fn cross_signing_recovery_create_request(
+    service_id: &str,
+) -> Result<SecurityTransactionCreateRequest> {
+    let coordinator = Did::new(service_id.to_owned())?;
+    let principal = Did::new(ACTOR.to_owned())?;
+    let authorize_event_id =
+        EventId::new("ak:event:01975510-0000-7000-8000-0000000000f3".to_owned())?;
+    let list_event_id = EventId::new("ak:event:01975510-0000-7000-8000-0000000000f4".to_owned())?;
+    let request = EventsSubmitBatchRequestBody {
+        events: vec![
+            event_submission(&principal, authorize_event_id, "ak.device.authorize", "f5")?,
+            event_submission(&principal, list_event_id, "ak.device.list_update", "f6")?,
+        ],
+    };
+    Ok(SecurityTransactionCreateRequest::Recovery(
+        RecoveryTransactionCreateRequest::from_cross_signing_prepared(
+            arkret_wire::TransactionId::new(RECOVERY_TRANSACTION.to_owned())?,
+            principal,
+            Utc::now() + chrono::Duration::hours(1),
+            RecoverySessionId::new(
+                "ak:recovery_session:01975510-0000-7000-8000-0000000000f7".to_owned(),
+            )?,
+            arkret_wire::DeviceId::new(DEVICE.to_owned())?,
+            ReceiptId::new("ak:receipt:01975510-0000-7000-8000-0000000000f8".to_owned())?,
+            hash('1')?,
+            hash('2')?,
+            1,
+            1,
+            arkret_wire::security_transaction::PreparedEventSubmissionBatch::new(
+                coordinator,
+                request,
+            )?,
+        )?,
+    ))
 }
 
 fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreateRequest> {
@@ -162,6 +237,21 @@ fn event_unit(
     event_id: EventId,
     kind: &str,
 ) -> Result<arkret_wire::PreparedEventUnit> {
+    let request = EventsSubmitBatchRequestBody {
+        events: vec![event_submission(principal, event_id, kind, "e1")?],
+    };
+    Ok(arkret_wire::PreparedEventUnit::new(
+        coordinator.clone(),
+        serde_json::to_value(request)?,
+    )?)
+}
+
+fn event_submission(
+    principal: &Did,
+    event_id: EventId,
+    kind: &str,
+    _lease_suffix: &str,
+) -> Result<EventInitialSubmission> {
     let realm_id = arkret_wire::RealmId::new(
         arkret_models_identity::did_document::principal_control_realm_id(principal),
     )?;
@@ -169,7 +259,7 @@ fn event_unit(
         realm_id: realm_id.clone(),
     };
     let now = Utc::now();
-    let event = Event::new_with_id_at(
+    let mut event = Event::new_with_id_at(
         event_id,
         kind,
         scope_ref.clone(),
@@ -179,58 +269,28 @@ fn event_unit(
         json!({"fixture": true}),
         now,
     )?;
-    let authority_set_policy = AuthoritySetPolicy {
-        schema: AUTHORITY_SET_POLICY_SCHEMA.to_owned(),
-        authority_set_id: "ak.authority_set.security_transaction_live.v1".to_owned(),
-        policy_kind: AuthoritySetPolicyKind::RealmAdmission,
-        scope_ref: scope_ref.clone(),
-        source: AuthoritySetPolicySource {
-            source_kind: AuthoritySetSourceKind::RealmControl,
-            source_ref: "ak:event:01975510-0000-7000-8000-0000000000aa".to_owned(),
-            source_digest: hash('a')?,
-            generation_ref: "1".to_owned(),
-        },
-        authorization_rules: Vec::new(),
-    };
-    let request = EventsSubmitBatchRequestBody {
-        events: vec![EventInitialSubmission {
-            event,
-            authorization_lease: AuthorizationLease {
-                authorization_lease_id: AuthorizationLeaseId::new(format!(
-                    "ak:authorization_lease:01975510-0000-7000-8000-0000000000{}",
-                    if kind == "ak.device.revoke" {
-                        "e1"
-                    } else {
-                        "e2"
-                    }
-                ))?,
-                basis_ref: LeaseBasisRef::Seal(SealId::new(format!(
-                    "ak:seal:sha256:{}",
-                    "b".repeat(64)
-                ))?),
-                actor_id: principal.clone(),
-                device_id: arkret_wire::DeviceId::new(DEVICE.to_owned())?,
-                scope_ref,
-                action: "ak.realm.admin".to_owned(),
-                authorization_rule_id: "fixture".to_owned(),
-                risk_tier: RiskTier::High,
-                issued_at: now,
-                expires_at: now + chrono::Duration::hours(1),
-                authority_set_ref: AuthoritySetRef {
-                    authority_set_id: authority_set_policy.authority_set_id.clone(),
-                    authority_set_digest: hash('c')?,
-                },
-                authority_set_policy,
-                proofs: Vec::new(),
-            },
-            cba_proof_bundles: Vec::new(),
-            control_proposal_receipt: None,
-        }],
-    };
-    Ok(arkret_wire::PreparedEventUnit::new(
-        coordinator.clone(),
-        serde_json::to_value(request)?,
-    )?)
+    event.seal_basis = Some(arkret_wire::SealBasis {
+        leaves: vec![SealId::new(format!("ak:seal:sha256:{}", "b".repeat(64)))?],
+        control_event_set_root: hash('e')?,
+        state_root: hash('f')?,
+    });
+    let event_digest = Hash::new(event.event_digest()?)?;
+    event.proofs.push(arkret_wire::Proof {
+        kind: "DataIntegrityProof".to_owned(),
+        verification_method: principal.as_str().to_owned(),
+        alg: "EdDSA".to_owned(),
+        event_digest,
+        created_at: now,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: "eyJhbGciOiJFZERTQSJ9..c2lnbmF0dXJl".to_owned(),
+    });
+    let authorization_lease =
+        crate::publication::authorization_lease_for(&event, "ak.realm.admin", RiskTier::High)?;
+    let mut submission = crate::publication::initial_submission(event, "ak.realm.admin")?;
+    submission.authorization_lease = authorization_lease;
+    Ok(submission)
 }
 
 fn hash(byte: char) -> Result<Hash> {
