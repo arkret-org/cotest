@@ -115,8 +115,26 @@ pub async fn recovery_transaction_rejects_unknown_session_on_live_soland() -> Re
 fn cross_signing_recovery_create_request(
     service_id: &str,
 ) -> Result<SecurityTransactionCreateRequest> {
+    cross_signing_recovery_create_request_for(
+        service_id,
+        ACTOR,
+        DEVICE,
+        "ak:recovery_session:01975510-0000-7000-8000-0000000000f7",
+        hash('2')?,
+        1,
+    )
+}
+
+pub fn cross_signing_recovery_create_request_for(
+    service_id: &str,
+    principal_id: &str,
+    device_id: &str,
+    recovery_session_id: &str,
+    proof_digest: Hash,
+    generation: u64,
+) -> Result<SecurityTransactionCreateRequest> {
     let coordinator = Did::new(service_id.to_owned())?;
-    let principal = Did::new(ACTOR.to_owned())?;
+    let principal = Did::new(principal_id.to_owned())?;
     let authorize_event_id =
         EventId::new("ak:event:01975510-0000-7000-8000-0000000000f3".to_owned())?;
     let list_event_id = EventId::new("ak:event:01975510-0000-7000-8000-0000000000f4".to_owned())?;
@@ -131,15 +149,13 @@ fn cross_signing_recovery_create_request(
             arkret_wire::TransactionId::new(RECOVERY_TRANSACTION.to_owned())?,
             principal,
             Utc::now() + chrono::Duration::hours(1),
-            RecoverySessionId::new(
-                "ak:recovery_session:01975510-0000-7000-8000-0000000000f7".to_owned(),
-            )?,
-            arkret_wire::DeviceId::new(DEVICE.to_owned())?,
+            RecoverySessionId::new(recovery_session_id.to_owned())?,
+            arkret_wire::DeviceId::new(device_id.to_owned())?,
             ReceiptId::new("ak:receipt:01975510-0000-7000-8000-0000000000f8".to_owned())?,
             hash('1')?,
-            hash('2')?,
-            1,
-            1,
+            proof_digest,
+            generation,
+            generation,
             arkret_wire::security_transaction::PreparedEventSubmissionBatch::new(
                 coordinator,
                 request,

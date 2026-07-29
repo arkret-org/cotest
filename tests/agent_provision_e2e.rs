@@ -45,6 +45,8 @@ use arkret_models_crypto::{
     RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse,
     RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData,
     RecoveryPolicyRef, RecoveryProofKind, RecoveryPublicationAuthorizationRule,
+    RecoverySessionCreateRequestBody, RecoverySessionProofSubmitRequestBody, RecoverySessionState,
+    SessionState,
 };
 use arkret_models_identity::artifacts_device_identity::{
     CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
@@ -88,6 +90,8 @@ const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 12] = [
 const TEST_DEVICE_ALGORITHMS: [&str; 2] = ["ak.hpke_x25519_aead_chacha20poly1305.v1", "ak.mls.v1"];
 const TEST_DEVICE_HPKE_KEY: &str = "z6LSCotestAgentDeviceHpkeKey";
 const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901";
+const RECOVERY_REPLACEMENT_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a902";
+const RECOVERY_WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
 type AgentBackupPointer = (u64, Vec<String>);
 
@@ -299,6 +303,104 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         "controller_signed_event_required",
     )?;
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<()> {
+    let server = ArkretServer::spawn("cross-signing-recovery-transaction-e2e").await?;
+    let token = register_account(&server, ALICE_DID, "@cotest-recovery-alice", ALICE_DEVICE)
+        .await
+        .context("register recovery principal")?;
+    prepare_agent_controller_recovery(&server, &token)
+        .await
+        .context("prepare A-model recovery authority")?;
+
+    let session_body = RecoverySessionCreateRequestBody {
+        principal_id: Did::new(ALICE_DID.to_owned())?,
+        requesting_device_id: DeviceId::new(RECOVERY_REPLACEMENT_DEVICE.to_owned())?,
+        trust_domain: TypedTrustDomainId::new(TRUST_DOMAIN.to_owned())?,
+        expected_recovery_policy_ref: Some(RecoveryPolicyRef {
+            policy_id: PolicyId::new(RECOVERY_POLICY_ID.to_owned())?,
+            policy_version: 1,
+        }),
+    };
+    let session_value = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/root/identity/recovery-sessions"))
+            .bearer_auth(&token)
+            .json(&session_body),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let session: RecoverySessionState = serde_json::from_value(session_value)?;
+    assert_eq!(session.state, SessionState::Pending);
+    assert_eq!(session.ssk_generation, Some(1));
+
+    let material = recovery_key_material()?;
+    let recovery_secret_ref = format!("{ALICE_DID}#recovery-proof-1");
+    let proof = arkret_crypto::identity_root::build_recovery_unlock_proof(
+        &session,
+        &recovery_secret_ref,
+        &material,
+    )?;
+    let verified = expect_json(
+        server
+            .http()
+            .post(server.url(&format!(
+                "/_arkret/root/identity/recovery-sessions/{}/proofs",
+                session.recovery_session_id
+            )))
+            .bearer_auth(&token)
+            .json(&RecoverySessionProofSubmitRequestBody { proof }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(verified["state"], "verified");
+    let proof_digest = serde_json::from_value(
+        verified
+            .pointer("/proof_summary/proof_digest")
+            .cloned()
+            .ok_or_else(|| anyhow!("verified session omitted proof digest: {verified}"))?,
+    )?;
+
+    let request =
+        cotest::scenarios::security_transaction_live::cross_signing_recovery_create_request_for(
+            server.service_id(),
+            ALICE_DID,
+            RECOVERY_REPLACEMENT_DEVICE,
+            session.recovery_session_id.as_str(),
+            proof_digest,
+            1,
+        )?;
+    let first = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/security-transactions"))
+            .bearer_auth(&token)
+            .json(&request),
+        StatusCode::OK,
+    )
+    .await?;
+    let replay = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/security-transactions"))
+            .bearer_auth(&token)
+            .json(&request),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(first, replay);
+    assert_eq!(first["kind"], "recovery");
+    assert_eq!(first["state"], "pending");
+    assert_eq!(first["next_required_step"], "submit_authorize_unit");
+    assert_eq!(
+        first["binding"]["recovery_session_id"],
+        session.recovery_session_id.as_str()
+    );
     Ok(())
 }
 
@@ -719,12 +821,6 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         root_verification_method.clone(),
     );
     let event_verification_method = controller_verification_method();
-    let event_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
-        [21_u8; 32],
-        principal_id.clone(),
-        event_verification_method.clone(),
-    );
-
     let mut bootstrap_create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal_id.clone(),
@@ -803,15 +899,15 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         &enrollment_authority_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
     )?;
-    let bootstrap_submit = bearer_sdk_client(server, token)?
-        .events_submit_batch(&[
-            cotest::publication::initial_submission(bootstrap_create.clone(), "ak.realm.admin")?,
-            cotest::publication::initial_submission(
-                bootstrap_authorize.clone(),
-                "ak.device.authorize",
-            )?,
-        ])
-        .await?;
+    let sdk = bearer_sdk_client(server, token)?;
+    let bootstrap_submissions = sdk
+        .prepare_initial_submissions(&[bootstrap_create.clone(), bootstrap_authorize.clone()])
+        .await
+        .context("issue principal bootstrap publication evidence")?;
+    let bootstrap_submit = sdk
+        .events_submit_batch(&bootstrap_submissions)
+        .await
+        .context("submit principal bootstrap unit")?;
     if !bootstrap_submit
         .accepted
         .contains(&bootstrap_create.event_id)
@@ -850,6 +946,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         .lock()
         .expect("controller Seal basis lock")
         .insert(server.url("/"), controller_seal_basis.clone());
+    let controller_frontier = managed_agent_frontier(server, token, &control_realm_id)
+        .await?
+        .context("principal bootstrap Seal frontier is available")?;
 
     let key_record = |kid: String, key: &SigningKey| PublishedKey {
         kid: NonEmptyString::new(kid).unwrap(),
@@ -918,28 +1017,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     )?;
     cross_signing_event.prev_refs = actor_frontier.frontier_event_ids;
     cross_signing_event.seal_basis = Some(controller_seal_basis.clone());
-    arkret::signatures::sign_event(
-        &mut cross_signing_event,
-        &event_signer,
-        &event_verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
-    )?;
     let cross_signing_event_id = cross_signing_event.event_id.clone();
-    let cross_signing_submit = bearer_sdk_client(server, token)?
-        .events_submit(&cotest::publication::initial_submission(
-            cross_signing_event.clone(),
-            "ak.device.authorize",
-        )?)
-        .await?;
-    if !cross_signing_submit
-        .accepted
-        .contains(&cross_signing_event_id)
-    {
-        return Err(anyhow!(
-            "SDK cross-signing Event was not accepted: {cross_signing_submit:?}"
-        ));
-    }
-
     let algorithms = TEST_DEVICE_ALGORITHMS.map(str::to_owned).to_vec();
     let cross_signing_binding = DeviceCrossSigningBinding {
         verification_method: did_url(ssk_kid.to_owned())?,
@@ -997,63 +1075,14 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         device_authorize,
         control_created_at,
     )?;
-    device_authorize_event.prev_refs = vec![cross_signing_event_id];
-    device_authorize_event.seal_basis = Some(controller_seal_basis);
-    arkret::signatures::sign_event(
-        &mut device_authorize_event,
-        &event_signer,
-        &event_verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
-    )?;
+    device_authorize_event.prev_refs = vec![cross_signing_event_id.clone()];
+    device_authorize_event.seal_basis = Some(controller_seal_basis.clone());
     let device_authorize_event_id = device_authorize_event.event_id.clone();
-    let device_authorize_submit = bearer_sdk_client(server, token)?
-        .events_submit(&cotest::publication::initial_submission(
-            device_authorize_event.clone(),
-            "ak.device.authorize",
-        )?)
-        .await?;
-    if !device_authorize_submit
-        .accepted
-        .contains(&device_authorize_event_id)
-    {
-        return Err(anyhow!(
-            "SDK device-authorize Event was not accepted: {device_authorize_submit:?}"
-        ));
-    }
-
-    eventually(
-        "controller device authorization projection",
-        Duration::from_secs(30),
-        Duration::from_millis(250),
-        || async {
-            let response = server
-                .http()
-                .get(server.url("/_arkret/self/account/viewer"))
-                .bearer_auth(token)
-                .send()
-                .await?;
-            if response.status() != StatusCode::OK {
-                return Err(anyhow!("account viewer returned {}", response.status()));
-            }
-            let body: Value = response.json().await?;
-            let active = body["devices"].as_array().is_some_and(|devices| {
-                devices.iter().any(|device| {
-                    device["device_id"] == ALICE_DEVICE && device["status"] == "active"
-                })
-            });
-            if active {
-                Ok(())
-            } else {
-                Err(anyhow!("controller device is not active yet: {body}"))
-            }
-        },
-    )
-    .await?;
-
     let issued_at = canonical_now();
     let signed_fields = RECOVERY_POLICY_SIGNED_FIELDS.map(str::to_owned).to_vec();
+    let recovery_material = recovery_key_material()?;
     let (recovery_verification_method, recovery_public_key_multibase) =
-        recovery_signing_key_material()?;
+        recovery_signing_key_material(&recovery_material)?;
     let recovery_key_agreement_ref = did_url(format!("{ALICE_DID}#backup-hpke-1"))?;
     let mut policy = RecoveryPolicy {
         schema: "ak.schema.recovery_policy.v1".to_owned(),
@@ -1088,7 +1117,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         recovery_key_agreements: Some(vec![RecoveryKeyAgreementEntry {
             key_agreement_ref: recovery_key_agreement_ref,
             alg: RecoveryKeyAgreementAlgorithm::X25519,
-            public_key_multibase: non_empty("z6LSriWhVBzW9Vz2PvqbieSz7Aa2hPLzTKJuDwXTMKFeomeW")?,
+            public_key_multibase: non_empty(
+                recovery_material.backup_hpke_public_key_multikey.clone(),
+            )?,
             hpke_suites: vec![RecoveryHpkeSuite::X25519ChaCha20Poly1305],
             usage: RecoveryKeyAgreementUse::BackupHpke,
             not_before: issued_at - TimeDelta::minutes(1),
@@ -1127,17 +1158,168 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     policy.auth_data.signature =
         sign_ed25519_b64url(&device_key, &canonical::canonical_json_bytes(&transcript)?);
 
+    let policy_created_at = canonical_now();
+    let policy_timestamp_hex = format!("{:012x}", policy_created_at.timestamp_millis());
+    let policy_payload = arkret_models_crypto::RecoveryPolicySetPayload {
+        policy_id: policy.policy_id.clone(),
+        value: policy,
+    };
+    let mut policy_event = arkret::Event::new_with_id_at(
+        arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a912".to_owned())?,
+        arkret::events::EventKind::POLICY_SET,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: arkret::RealmId::new(&control_realm_id)?,
+        },
+        Did::new(ALICE_DID.to_owned())?,
+        2,
+        arkret::Hlc::new(format!("{policy_timestamp_hex}-{:04x}-a13f9c2e", 2))?,
+        serde_json::to_value(policy_payload)?,
+        policy_created_at,
+    )?;
+    policy_event.prev_refs = vec![bootstrap_authorize.event_id.clone()];
+    policy_event.seal_basis = Some(controller_seal_basis);
+    arkret::signatures::sign_event(
+        &mut policy_event,
+        &seal_signer,
+        &format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        arkret::signatures::SignEventOptions::new().with_created_at(policy_created_at),
+    )?;
+    let policy_submission = prepare_controller_initial_submission(
+        &sdk,
+        &policy_event,
+        &psk,
+        &event_verification_method,
+    )
+    .await?;
+    let policy_submit = sdk.events_submit(&policy_submission).await?;
+    if !policy_submit.accepted.contains(&policy_event.event_id) {
+        return Err(anyhow!(
+            "SDK recovery-policy Event was not accepted: {policy_submit:?}"
+        ));
+    }
+    let mut policy_seal_hlc = arkret::HlcGenerator::new(
+        &control_realm_id,
+        ALICE_DEVICE,
+        b"cotest-controller-recovery-policy-seal",
+    );
+    let policy_seal = arkret_bootstrap::build_self_principal_first_successor_seal(
+        &bootstrap_create,
+        &bootstrap_authorize,
+        &policy_event,
+        &controller_frontier,
+        policy_seal_hlc.generate(),
+        &seal_signer,
+        &cotest::publication::project_cells,
+    )?;
+    let policy_seal_outcome = sdk.events_submit_seal(&policy_seal).await?;
+    if policy_seal_outcome.seal_id != policy_seal.id {
+        return Err(anyhow!(
+            "recovery-policy Seal id changed at admission: expected {}, got {}",
+            policy_seal.id,
+            policy_seal_outcome.seal_id
+        ));
+    }
+    let policy_request =
+        arkret_models_crypto::RecoveryPolicyPublishRequest::from(policy_submission);
     let response = server
         .http()
         .post(server.url("/_arkret/root/identity/recovery-policy"))
         .bearer_auth(token)
-        .json(&policy)
+        .json(&policy_request)
         .send()
         .await?;
     let status = response.status();
     let body = response.text().await?;
     if !matches!(status, StatusCode::OK | StatusCode::CREATED) {
         return Err(anyhow!("recovery policy publish returned {status}: {body}"));
+    }
+
+    let policy_seal_basis = policy_seal.seal_basis();
+    cross_signing_event.actor_seq = 3;
+    cross_signing_event.prev_refs = vec![policy_event.event_id.clone()];
+    cross_signing_event.seal_basis = Some(policy_seal_basis.clone());
+    cross_signing_event.hlc = Some(arkret::Hlc::new(format!(
+        "{control_timestamp_hex}-0003-a13f9c2e"
+    ))?);
+    arkret::signatures::sign_event(
+        &mut cross_signing_event,
+        &seal_signer,
+        &format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+    )?;
+    let cross_signing_submission = prepare_controller_initial_submission(
+        &sdk,
+        &cross_signing_event,
+        &psk,
+        &event_verification_method,
+    )
+    .await
+    .context("issue cross-signing publication evidence")?;
+    let cross_signing_submit = sdk
+        .events_submit(&cross_signing_submission)
+        .await
+        .context("submit cross-signing publish")?;
+    if !cross_signing_submit
+        .accepted
+        .contains(&cross_signing_event_id)
+    {
+        return Err(anyhow!(
+            "SDK cross-signing Event was not accepted: {cross_signing_submit:?}"
+        ));
+    }
+
+    device_authorize_event.actor_seq = 4;
+    device_authorize_event.prev_refs = vec![cross_signing_event_id];
+    device_authorize_event.seal_basis = Some(policy_seal_basis);
+    device_authorize_event.hlc = Some(arkret::Hlc::new(format!(
+        "{control_timestamp_hex}-0004-a13f9c2e"
+    ))?);
+    arkret::signatures::sign_event(
+        &mut device_authorize_event,
+        &seal_signer,
+        &format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+    )?;
+    let device_authorize_submission = prepare_controller_initial_submission(
+        &sdk,
+        &device_authorize_event,
+        &psk,
+        &event_verification_method,
+    )
+    .await
+    .context("issue current-device authorization publication evidence")?;
+    let device_authorize_submit = sdk
+        .events_submit(&device_authorize_submission)
+        .await
+        .context("submit current-device authorization")?;
+    if !device_authorize_submit
+        .accepted
+        .contains(&device_authorize_event_id)
+    {
+        return Err(anyhow!(
+            "SDK device-authorize Event was not accepted: {device_authorize_submit:?}"
+        ));
+    }
+    let control_events = sdk.events_query_all_pages(&control_realm_id).await?.events;
+    let mut control_seal_hlc = arkret::HlcGenerator::new(
+        &control_realm_id,
+        ALICE_DEVICE,
+        b"cotest-controller-cross-signing-seal",
+    );
+    let control_seal = arkret_bootstrap::build_self_principal_event_seal(
+        &control_events,
+        &policy_seal,
+        control_seal_hlc.generate(),
+        &seal_signer,
+        &cotest::publication::project_cells,
+    )?;
+    let control_seal_outcome = sdk.events_submit_seal(&control_seal).await?;
+    if control_seal_outcome.seal_id != control_seal.id {
+        return Err(anyhow!(
+            "cross-signing Seal id changed at admission: expected {}, got {}",
+            control_seal.id,
+            control_seal_outcome.seal_id
+        ));
     }
     Ok(())
 }
@@ -1146,12 +1328,22 @@ fn sign_ed25519_b64url(key: &SigningKey, input: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(key.sign(input).to_bytes())
 }
 
-fn recovery_signing_key_material() -> Result<(DidUrl, NonEmptyString)> {
-    let recovery_key = SigningKey::from_bytes(&[25_u8; 32]);
-    let multibase = ed25519_pubkey_to_did_key_multibase(recovery_key.verifying_key().as_bytes());
+fn recovery_key_material() -> Result<arkret_crypto::identity_root::IdentityRecoveryKeyMaterial> {
+    Ok(
+        arkret_crypto::identity_root::derive_identity_recovery_key_material_from_bip39(
+            RECOVERY_WORDS,
+            "",
+            0,
+        )?,
+    )
+}
+
+fn recovery_signing_key_material(
+    material: &arkret_crypto::identity_root::IdentityRecoveryKeyMaterial,
+) -> Result<(DidUrl, NonEmptyString)> {
     Ok((
         did_url(format!("{ALICE_DID}#recovery-proof-1"))?,
-        non_empty(multibase)?,
+        non_empty(material.recovery_proof_public_key_multikey.clone())?,
     ))
 }
 
@@ -2512,6 +2704,75 @@ async fn agent_runtime_state(
         })
         .unwrap_or_default();
     Ok(runtime_state)
+}
+
+async fn prepare_controller_initial_submission(
+    sdk: &SdkClient,
+    event: &arkret::Event,
+    signing_key: &SigningKey,
+    verification_method: &str,
+) -> Result<arkret_wire::EventInitialSubmission> {
+    let request = arkret_wire::AuthorizationLeaseIssueRequest {
+        events: vec![event.clone()],
+        intents: Vec::new(),
+    };
+    let request_key = arkret_wire::new_prefixed_uuid7("lease-");
+    let options = arkret_http_client::ClientRequestOptions::new()
+        .request_id(request_key.clone())
+        .idempotency_key(request_key);
+    let lease = sdk
+        .issue_authorization_leases(&request, &options)
+        .await?
+        .authorization_leases
+        .into_iter()
+        .next()
+        .context("authorization lease issuer returned no lease")?;
+
+    let policy = arkret_wire::ControlProposalDecisionPolicy::default();
+    let received_at = canonical_now();
+    let proposal_digest = arkret_identifiers::Hash::new(event.event_digest()?)?;
+    let notary = arkret_wire::notary::NotaryValue::single_did(event.actor_id.clone());
+    let authority_set_ref = arkret_identifiers::Hash::new(canonical::canonical_sha256(&notary)?)?;
+    let mut member_receipt = arkret_wire::ProposalMemberReceipt {
+        realm_id: event.realm_id.clone(),
+        proposal_digest: proposal_digest.clone(),
+        received_at,
+        decision_due_at: received_at + policy.decision_window,
+        absolute_due_at: received_at + policy.absolute_horizon,
+        authority_set_ref: authority_set_ref.clone(),
+        signature: arkret_wire::PayloadSignature {
+            alg: "EdDSA".to_owned(),
+            verification_method: verification_method.to_owned(),
+            payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            created_at: received_at,
+            jws: String::new(),
+        },
+    };
+    let signing_bytes = member_receipt.canonical_bytes_for_signature()?;
+    member_receipt.signature.payload_digest = member_receipt.member_receipt_digest()?;
+    member_receipt.signature.jws =
+        arkret_signatures::jws::sign_jws_ed25519(&signing_bytes, signing_key)
+            .map_err(anyhow::Error::msg)?;
+    let control_proposal_receipt = arkret_wire::ControlProposalReceipt {
+        kind: arkret_wire::ControlProposalReceiptKind::ProposalReceipt,
+        realm_id: event.realm_id.clone(),
+        proposal_digest,
+        received_at,
+        decision_due_at: received_at + policy.decision_window,
+        absolute_due_at: received_at + policy.absolute_horizon,
+        defer_count: 0,
+        authority_set_ref,
+        member_receipts: vec![member_receipt],
+    };
+    control_proposal_receipt.validate_structural(policy)?;
+    let submission = arkret_wire::EventInitialSubmission {
+        event: event.clone(),
+        authorization_lease: lease,
+        cba_proof_bundles: Vec::new(),
+        control_proposal_receipt: Some(control_proposal_receipt),
+    };
+    submission.validate_structural()?;
+    Ok(submission)
 }
 
 fn bearer_sdk_client(server: &ArkretServer, token: &str) -> Result<SdkClient> {
