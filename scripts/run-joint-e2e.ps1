@@ -1142,7 +1142,7 @@ function Invoke-CoauthMigrations {
         }
 
         $failureText = $migrateOutput -join "`n"
-        $transientConnectionFailure = $failureText -match "(?i)(connection (closed|refused|timed out)|could not connect to server|server closed the connection unexpectedly|the database system is starting up)"
+        $transientConnectionFailure = $failureText -match "(?i)(connection (closed|refused|timed out)|could not connect to server|error communicating with the server|server closed the connection unexpectedly|the database system is starting up)"
         if (-not $transientConnectionFailure -or (Get-Date) -ge $deadline) {
             $attemptLogs | Set-Content -Path $migrateLog -Encoding UTF8
             throw "coauth database migrate failed after $attempt attempt(s); see $migrateLog"

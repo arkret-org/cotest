@@ -256,6 +256,30 @@ export async function createRealmApi(
      */
     creator_service_id?: string;
     plaintext_visible_services?: string[];
+    sync_endpoints?: Array<{
+      did: string;
+      endpoint: string;
+      role:
+        | "primary"
+        | "mirror"
+        | "notary"
+        | "sync"
+        | "search_projection"
+        | "federation_peer";
+      service_kind:
+        | "principal_server"
+        | "sync_node"
+        | "notary"
+        | "search_service"
+        | "archive_node"
+        | "key_recovery_service"
+        | "recovery_service";
+      plaintext_visible: boolean;
+      visibility_scope?:
+        | "metadata_only"
+        | "encrypted_events"
+        | "plaintext_events";
+    }>;
     public?: boolean;
     federation_policy?: string;
     ownerDid?: string;
@@ -294,6 +318,7 @@ export async function createRealmApi(
     encryption_profile: data.encryption_profile ?? "none",
     ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
     plaintext_visible_services: plaintextVisibleServices,
+    ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
     ...(data.owning_organizations
       ? { owning_organizations: data.owning_organizations }
       : {}),
@@ -498,40 +523,6 @@ export async function createRealmApi(
   // for an uninitialised conformance-only Realm and inject a synthetic basis:
   // the real genesis Seal must atomically cover the complete founding unit.
   await waitForRealmSealBasis(request, token, realmId, opts.server);
-
-  // A remote Principal Server must accept the Realm founding unit before it
-  // can authenticate the creator as a member of this binding Realm or verify
-  // a later invite's Seal basis. Seed every known dual-Soland destination
-  // atomically before submitting the directed Control invite.
-  const sourceServiceId = solandServiceId(opts.server);
-  const remoteInviteServices = new Set(
-    Object.values(data.invitee_service_ids ?? {}).filter(
-      (serviceId) => serviceId !== sourceServiceId,
-    ),
-  );
-  for (const destinationServiceId of remoteInviteServices) {
-    const destinationServer = (["alpha", "beta"] as const).find(
-      (candidate) => solandServiceId(candidate) === destinationServiceId,
-    );
-    if (!destinationServer) {
-      continue;
-    }
-    const bootstrapPush = await pushFederationEvents(request, bootstrapEvents, {
-      origin: sourceServiceId,
-      destination: destinationServiceId,
-      server: destinationServer,
-      realmId,
-      idempotencyKey: `${sourceServiceId}#realm-bootstrap#${realmId}`,
-    });
-    expect(
-      bootstrapPush.rejected ?? [],
-      `federate Realm founding unit to ${destinationServiceId}`,
-    ).toEqual([]);
-    expect([
-      ...(bootstrapPush.accepted ?? []),
-      ...(bootstrapPush.duplicate ?? []),
-    ]).toHaveLength(bootstrapEvents.length);
-  }
 
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
@@ -1388,9 +1379,13 @@ export async function acceptInviteApi(
   actorDid: string,
   realmId: string,
   inviteId: string,
-  opts: { server?: SolandKey } = {},
+  opts: {
+    server?: SolandKey;
+    candidateTokens?: Partial<Record<SolandKey, string>>;
+  } = {},
 ) {
   let sealBasis: Record<string, unknown> | undefined;
+  let candidateServiceId: string | undefined;
   await expect
     .poll(
       async () => {
@@ -1403,13 +1398,16 @@ export async function acceptInviteApi(
         );
         const resolution = await expectJsonOk<{
           join_candidates?: Array<{
+            service_id?: string;
             join_methods?: string[];
             seal_basis?: Record<string, unknown>;
           }>;
         }>(resolutionResponse, `resolve invite join candidate for ${realmId}`);
-        sealBasis = resolution.join_candidates?.find((candidate) =>
+        const candidate = resolution.join_candidates?.find((candidate) =>
           candidate.join_methods?.includes("invite_accept"),
-        )?.seal_basis;
+        );
+        sealBasis = candidate?.seal_basis;
+        candidateServiceId = candidate?.service_id;
         return sealBasis;
       },
       {
@@ -1419,10 +1417,19 @@ export async function acceptInviteApi(
       },
     )
     .toBeTruthy();
+  const candidateServer = (["alpha", "beta"] as const).find(
+    (server) => solandServiceId(server) === candidateServiceId,
+  );
+  if (!candidateServer) {
+    throw new Error(
+      `invite-accept candidate ${candidateServiceId ?? "<missing>"} is not a managed Soland service`,
+    );
+  }
+  const candidateToken = opts.candidateTokens?.[candidateServer] ?? token;
 
   return await submitSignedEventApi(
     request,
-    token,
+    candidateToken,
     signedEventEnvelope({
       actorDid,
       realmId,
@@ -1433,7 +1440,7 @@ export async function acceptInviteApi(
         invite_id: inviteId,
       },
     }),
-    { server: opts.server, context: `accept invite ${inviteId}` },
+    { server: candidateServer, context: `accept invite ${inviteId}` },
   );
 }
 

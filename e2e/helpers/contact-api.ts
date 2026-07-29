@@ -693,6 +693,10 @@ export async function deliverInviteWithConsentGrant(
     args.originServer,
   );
   refreshEventEnvelopeProof(event);
+  await submitSignedEventApi(request, args.inviterToken, event, {
+    server: args.originServer,
+    context: `persist shared invite ${inviteId}`,
+  });
   const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
@@ -745,6 +749,10 @@ export async function deliverInviteExplicitAddress(
     args.originServer,
   );
   refreshEventEnvelopeProof(event);
+  await submitSignedEventApi(request, args.inviterToken, event, {
+    server: args.originServer,
+    context: `persist shared explicit-address invite ${inviteId}`,
+  });
   const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event: event,
@@ -805,6 +813,7 @@ export async function acceptInviteArkret(
     realmId: string;
     inviteId: string;
     server?: SolandKey;
+    candidateTokens?: Partial<Record<SolandKey, string>>;
   },
 ) {
   return await acceptInviteApi(
@@ -813,6 +822,6 @@ export async function acceptInviteArkret(
     args.accepterDid,
     args.realmId,
     args.inviteId,
-    { server: args.server },
+    { server: args.server, candidateTokens: args.candidateTokens },
   );
 }

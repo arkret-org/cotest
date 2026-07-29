@@ -29,7 +29,6 @@ import {
 import {
   authHeaders,
   createRealmApi,
-  queryPeerEventsApi,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -417,6 +416,11 @@ test.describe("contact graph federation (α/β)", () => {
     await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, alice, { server: "beta" });
     await ensureRegistered(request, bob, { server: "beta" });
+    // A join candidate authenticates the signing principal independently of
+    // Bob's home Principal Server. The harness obtains a candidate-scoped
+    // session on α, while Bob's account-private inbox and delivery binding
+    // remain on β.
+    await ensureRegistered(request, bob, { server: "alpha" });
     const aliceTokenAlpha = await issueDevSession(request, alice, {
       server: "alpha",
     });
@@ -424,6 +428,9 @@ test.describe("contact graph federation (α/β)", () => {
       server: "beta",
     });
     const bobTokenBeta = await issueDevSession(request, bob, { server: "beta" });
+    const bobTokenAlpha = await issueDevSession(request, bob, {
+      server: "alpha",
+    });
 
     // On β: alice requests bob (invite scope); bob accepts granting invite.
     // bob's accept mints a contact-managed grant holder=bob, peer=alice,
@@ -457,44 +464,38 @@ test.describe("contact graph federation (α/β)", () => {
     ).toMatch(/^ak:event:/);
 
     // On α: alice creates the realm she wants to pull bob into.
-    const bootstrapInvitee = uniqueUser(`cgf-s4-bootstrap-${stamp}`, "beta");
     const realmId = await createRealmApi(
       request,
       aliceTokenAlpha,
       {
         title: `S4-fed pull ${stamp}`,
         ownerDid: alice.did,
-        invitees: [bootstrapInvitee.did],
-        invitee_service_ids: {
-          [bootstrapInvitee.did]: solandServiceId("beta"),
-        },
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
         ],
+        sync_endpoints: [
+          {
+            did: solandServiceId("alpha"),
+            endpoint: solandBaseUrl("alpha"),
+            role: "primary",
+            service_kind: "principal_server",
+            plaintext_visible: true,
+            visibility_scope: "plaintext_events",
+          },
+          {
+            did: solandServiceId("beta"),
+            endpoint: solandBaseUrl("beta"),
+            role: "mirror",
+            service_kind: "principal_server",
+            plaintext_visible: true,
+            visibility_scope: "plaintext_events",
+          },
+        ],
       },
       { server: "alpha" },
     );
-    await expect
-      .poll(
-        async () => {
-          const events = await queryPeerEventsApi(request, {
-            server: "beta",
-            sourceDid: solandServiceId("alpha"),
-            realmId,
-            limit: 100,
-          });
-          return (events.events ?? []).some(
-            (event) =>
-              event.kind === "ak.realm.create" &&
-              event.realm_id === realmId,
-          );
-        },
-        { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
-      )
-      .toBeTruthy();
-
     // Cross-PS private delivery: α signs, β receives + verifies the grant
     // against ITS consent cells (subject=bob gave inviter=alice invite).
     const { outcome: delivery, inviteId } = await deliverInviteWithConsentGrant(
@@ -527,6 +528,7 @@ test.describe("contact graph federation (α/β)", () => {
       realmId,
       inviteId: invite!.id,
       server: "beta",
+      candidateTokens: { alpha: bobTokenAlpha },
     });
     await expect
       .poll(
