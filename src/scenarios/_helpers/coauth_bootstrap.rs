@@ -67,9 +67,11 @@ pub struct EphemeralPg {
 
 /// Whether the generated-config coauth bootstrap can be attempted in this
 /// environment. This mirrors [`spawn_coauth_with_db`]'s real prerequisites:
-/// a locatable coauth binary plus a Docker-backed ephemeral Postgres path.
+/// a locatable coauth binary plus either `COTEST_COAUTH_DATABASE_URL` or a
+/// Docker-backed ephemeral Postgres path.
 pub fn coauth_with_db_available() -> bool {
-    locate_external_binary(&coauth_binary_probe_spec()).is_some() && docker_available()
+    locate_external_binary(&coauth_binary_probe_spec()).is_some()
+        && (external_database_url().is_some() || docker_available())
 }
 
 impl EphemeralPg {
@@ -249,12 +251,20 @@ fn patch_principal_server_config(
     Ok(())
 }
 
-/// Try to bring up an ephemeral Postgres in docker and return a handle.
+/// Use an explicitly configured test database or bring up ephemeral Postgres.
 ///
-/// Returns `Ok(None)` if the docker CLI is missing, the daemon is unreachable,
-/// or `docker run` fails for any other reason. The caller is expected to
-/// degrade gracefully (skip the live row, keep the placeholder).
+/// `COTEST_COAUTH_DATABASE_URL` takes precedence. Otherwise this returns
+/// `Ok(None)` if Docker is unavailable. The caller is expected to degrade
+/// gracefully (skip the live row, keep the placeholder).
 pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
+    if let Some(connect_url) = external_database_url() {
+        return Ok(Some(EphemeralPg {
+            connect_url,
+            container_name: "external-postgres".to_owned(),
+            cleanup: false,
+            _port_reservation: None,
+        }));
+    }
     if !docker_available() {
         return Ok(None);
     }
@@ -309,6 +319,12 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
         return Ok(None);
     }
     Ok(Some(pg))
+}
+
+fn external_database_url() -> Option<String> {
+    std::env::var("COTEST_COAUTH_DATABASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
 }
 
 /// Output of [`bootstrap_coauth_config`] — the rendered config plus the
@@ -599,7 +615,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     };
 
     // 2. Spawn ephemeral postgres.
-    step!("starting ephemeral postgres container");
+    step!("resolving coauth postgres");
     let pg = match spawn_ephemeral_postgres()? {
         Some(pg) => {
             step!("postgres up: {}", pg.connect_url);
