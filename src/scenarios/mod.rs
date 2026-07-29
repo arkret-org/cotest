@@ -51,6 +51,7 @@ pub mod realm_wire_round_trip;
 pub mod schema_policy_realtime;
 pub mod seal_canonical_no_self_reference;
 pub mod security_closure_fixture;
+pub mod security_transaction_live;
 pub mod service_surface;
 pub mod soland_teabay_directory_sync;
 pub mod space_permissions;
