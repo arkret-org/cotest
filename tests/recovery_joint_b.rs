@@ -9,6 +9,9 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_http_client::{Auth, ClientBuilder};
+use arkret_wire::{
+    SecurityTransactionBinding, SecurityTransactionCreateRequest, SecurityTransactionState,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, bootstrap_required};
@@ -191,6 +194,65 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
             .as_deref()
             .is_some_and(|reference| reference.ends_with(bootstrap.version_id()))
     );
-    let _ = REPLACEMENT_DEVICE;
+
+    // A lost-device recovery starts from a new local holder key. The founding
+    // grant above exists only to establish the fixture and is not reused.
+    let replacement_key = SigningKey::from_bytes(&[0x43; 32]);
+    let replacement_holder_jkt = dpop_jkt(&replacement_key);
+    let replacement_grant = post_json(
+        &http,
+        format!("{coauth_base}/_coauth/account/test/debug/issue-dpop-grant"),
+        json!({
+            "actor_id": bootstrap.principal_id(),
+            "device_id": REPLACEMENT_DEVICE,
+            "dpop_jwk": dpop_public_jwk(&replacement_key),
+            "audience": description.service_id,
+        }),
+    )
+    .await?;
+    let replacement_grant_jwt = replacement_grant["grant_jwt"]
+        .as_str()
+        .context("replacement debug grant omitted JWT")?;
+    let recovery_http = ClientBuilder::new(principal_base.clone())
+        .allow_insecure_localhost()
+        .auth(Auth::Dpop(garth::session::dpop::access_token_auth(
+            replacement_grant_jwt.to_owned(),
+            replacement_key.clone(),
+        )))
+        .build()?;
+    let replacement_signer = Arc::new(inkson::event_signer::build_ed25519_device_signer(
+        replacement_key.to_bytes(),
+        bootstrap.principal_id(),
+        REPLACEMENT_DEVICE,
+    ));
+    inkson::secure_key_store::store_signing_seed_scoped(
+        inkson::secure_key_store::default_secure_key_store("inkson").as_ref(),
+        Some(bootstrap.principal_id()),
+        &replacement_key.to_bytes(),
+    )?;
+    inkson::event_signer::replace_active_signer(Some(replacement_signer));
+    let recovery_session_id;
+    let prepared =
+        inkson::fresh_device_recovery::prepare_joint_enrollment_authority_recovery_from_words(
+            recovery_http.clone(),
+            principal_base.as_str(),
+            bootstrap.principal_id(),
+            REPLACEMENT_DEVICE,
+            description.trust_domain.clone(),
+            RECOVERY_WORDS,
+            &replacement_holder_jkt,
+        )
+        .await?;
+    recovery_session_id = prepared.verified_session.recovery_session_id.clone();
+    let transaction = recovery_http
+        .create_security_transaction(&SecurityTransactionCreateRequest::Recovery(
+            prepared.create_request,
+        ))
+        .await?;
+    assert_eq!(transaction.state, SecurityTransactionState::Pending);
+    let SecurityTransactionBinding::Recovery(binding) = &transaction.binding else {
+        return Err(anyhow!("joint recovery created a rotation transaction"));
+    };
+    assert_eq!(binding.recovery_session_id(), &recovery_session_id);
     Ok(())
 }
