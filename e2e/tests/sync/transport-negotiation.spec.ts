@@ -42,14 +42,15 @@ import { expect, test } from "@playwright/test";
 import { hasDualSoland, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  createRealmApi,
   makeFederationEvent,
   rawPushFederationEvents,
+  submitSignedEventApi,
   typedId,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
-  openUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -140,12 +141,26 @@ test.describe("transport negotiation", () => {
     //   / signature_expired / unknown_keyid) in the response — the real cause
     //   is audit-log only. soland: signature.rs folds every cause into
     //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket.
+    const user = uniqueUser("e81-federation", "alpha");
+    await ensureRegistered(request, user, { server: "alpha" });
+    const token = await issueDevSession(request, user, { server: "alpha" });
     const realmId = typedId("realm");
+    await createRealmApi(
+      request,
+      token,
+      {
+        realm_id: realmId,
+        title: "E8.1 federation signature fixture",
+        ownerDid: user.did,
+        creator_service_id: solandServiceId("alpha"),
+      },
+      { server: "alpha" },
+    );
     const buildEvent = (tag: string) =>
       makeFederationEvent({
         realmId,
         kind: "ak.message.create",
-        actorDid: "did:web:alice-e81.example",
+        actorDid: user.did,
         payload: {
           strand_id: typedId("strand"),
           track_name: "discussion",
@@ -155,6 +170,16 @@ test.describe("transport negotiation", () => {
           },
         },
       });
+    const buildPublishedEvent = async (tag: string) => {
+      const event = buildEvent(tag);
+      // Federation transport carries the original first-publication evidence;
+      // manufacture neither the lease nor the ingress receipt in the fixture.
+      await submitSignedEventApi(request, token, event, {
+        server: "alpha",
+        context: `publish E8.1 ${tag} source Event`,
+      });
+      return event;
+    };
 
     const pushOpts = {
       origin: solandServiceId("alpha"),
@@ -165,8 +190,9 @@ test.describe("transport negotiation", () => {
 
     // Cause 1: the RFC 9421 signature is valid but its freshness window is in
     // the past (created beyond ±30s, expires < now) → §3.2 rejects on expiry.
+    const expiredEvent = await buildPublishedEvent("expired");
     const expired = await federationAuthFailureShape(
-      await rawPushFederationEvents(request, [buildEvent("expired")], {
+      await rawPushFederationEvents(request, [expiredEvent], {
         ...pushOpts,
         idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-expired`,
         expireSignature: true,
@@ -175,8 +201,9 @@ test.describe("transport negotiation", () => {
 
     // Cause 2: a structurally-present but cryptographically-invalid signature
     // (a different cause: bad/wrong key, not expiry).
+    const tamperedEvent = await buildPublishedEvent("tampered");
     const tampered = await federationAuthFailureShape(
-      await rawPushFederationEvents(request, [buildEvent("tampered")], {
+      await rawPushFederationEvents(request, [tamperedEvent], {
         ...pushOpts,
         idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-tampered`,
         tamperSignature: true,
@@ -208,8 +235,9 @@ test.describe("transport negotiation", () => {
     // A fresh, correctly-keyed re-sign clears the auth gate: the request is no
     // longer the uniform auth-failure envelope (post-auth admission outcome is
     // out of scope for this binding-auth test).
+    const resignedEvent = await buildPublishedEvent("resigned");
     const reSigned = await federationAuthFailureShape(
-      await rawPushFederationEvents(request, [buildEvent("resigned")], {
+      await rawPushFederationEvents(request, [resignedEvent], {
         ...pushOpts,
         idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-resigned`,
       }),

@@ -124,14 +124,13 @@ test.describe("history_visibility=joined read enforcement @fully-implemented", (
       label: "joined-event-stream",
     });
     const eventStream = eventsSubscribeBodies(
-      request,
       streamFixture.bobToken,
       streamFixture.realmId,
     );
-    // The request fixture resolves only after the NDJSON stream closes, so
-    // leave enough time for the server-side subscriber to register under the
-    // four-worker joint-suite load before publishing the probe event.
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    // fetch resolves once the streaming response headers arrive. At that point
+    // the server-side subscriber is registered, so publishing the probe cannot
+    // race a fixed sleep under full-suite load.
+    await eventStream.ready;
     const postBody = "joined-event-stream post 1";
     await createMessage(
       request,
@@ -141,7 +140,7 @@ test.describe("history_visibility=joined read enforcement @fully-implemented", (
       postBody,
       createdAt(Date.now() + 60_000),
     );
-    const eventStreamBodies = await eventStream;
+    const eventStreamBodies = await eventStream.bodies;
     expect(eventStreamBodies).toEqual([postBody]);
   });
 });
@@ -342,23 +341,40 @@ async function accountSubscribeBodies(
   return events.map(messageBody).filter(isString);
 }
 
-async function eventsSubscribeBodies(
-  request: APIRequestContext,
+function eventsSubscribeBodies(
   token: string,
   realmId: string,
-): Promise<string[]> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/events/subscribe?realms=${encodeURIComponent(
-      realmId,
-    )}&limit=100&max_duration_ms=3000&heartbeat_ms=100`,
-    { headers: authHeaders(token) },
-  );
-  const text = await response.text();
-  expect(response.status(), `events subscribe ${realmId}: ${text}`).toBe(200);
-  return parseNdjson(text)
-    .filter((frame) => frame.kind === "event")
-    .map((frame) => messageBody(frame.payload))
-    .filter(isString);
+): { ready: Promise<void>; bodies: Promise<string[]> } {
+  let markReady!: () => void;
+  let markFailed!: (reason: unknown) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    markReady = resolve;
+    markFailed = reject;
+  });
+  const bodies = (async () => {
+    try {
+      const response = await fetch(
+        `${solandBaseUrl()}/_arkret/self/events/subscribe?realms=${encodeURIComponent(
+          realmId,
+        )}&limit=100&max_duration_ms=3000&heartbeat_ms=100`,
+        { headers: authHeaders(token) },
+      );
+      markReady();
+      const text = await response.text();
+      expect(
+        response.status,
+        `events subscribe ${realmId}: ${text}`,
+      ).toBe(200);
+      return parseNdjson(text)
+        .filter((frame) => frame.kind === "event")
+        .map((frame) => messageBody(frame.payload))
+        .filter(isString);
+    } catch (error) {
+      markFailed(error);
+      throw error;
+    }
+  })();
+  return { ready, bodies };
 }
 
 function isMessageEvent(event: Record<string, unknown>): boolean {

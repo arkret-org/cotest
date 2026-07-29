@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的并发 `ak.realm.update` 不属于当前规范注册的 bottom producer,不得把它当作 `bottom_expose` 冲突来源。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的 `ak.realm.update` 已注册为 `cas_register / bottom=reject`：同一 single-chain Seal 中的互斥 sibling 必须至多接受一条，因果有序的后继更新保持单值；它不得被误报成 `bottom=expose`。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
 
 ## Spec 锚点
 
@@ -18,10 +18,10 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ## Actors
 
-| 名字 | 角色 |
-|---|---|
-| alice | 在线,持续编辑 |
-| bob | 离线编辑,后重连 |
+| 名字  | 角色            |
+| ----- | --------------- |
+| alice | 在线,持续编辑   |
+| bob   | 离线编辑,后重连 |
 
 ## Steps
 
@@ -45,10 +45,10 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 10. 断言:30s 内 `M_b_offline` 状态从 pending 变 persisted;UI 标记移除
 11. 断言:alice 和 bob 双方都看到 `M_a_online` 和 `M_b_offline`
 
-### Phase D — 并发 title update 不产生 bottom
+### Phase D — 因果有序 title update 不产生 bottom
 
-12. alice 和 bob 都在网,测试 harness 直接提交两条同 anchor basis 的 `ak.realm.update { patch.title }`
-13. soland 接受/归并 Realm metadata 更新,但不得把 title patch 投影为 `ak.component.realm.organization.v1` 的 cas-register bottom
+12. alice 在线提交 `ak.realm.update { patch.title }`，等待其 Seal finality；bob 再以该后继 basis 提交第二条更新
+13. soland 因果应用两条 Realm metadata 更新，保持 `ak.component.realm.metadata.v1` 单值，不得把它误投影成 `bottom=expose`
 14. 断言:`GET /_soland/admin/realms/<S>/bottom` 返回空数组
 
 ### Phase E — repair 区仍为只读
@@ -65,7 +65,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ## Edge cases
 
 - **E26.1 outbox 满**:bob 长期离线,outbox 满;客户端 UI 显示 "Too many pending changes, please reconnect"
-- **E26.2 冲突未决期间再写**:Phase D 后 cell 还在 bottom_expose,bob 再尝试写该 cell → reducer 拒,reason `cell_bottom_state`,UI 提示必须先 repair
+- **E26.2 冲突未决期间再写**:仅跨不可达 Seal leaf 的真实并发可把该 `bottom=reject` cell 推入 `⊥`；之后普通写 fail closed,reason `cell_in_bottom_state`,UI 提示必须先走标准 conflict recovery
 - **E26.3 repair Move 被拒**:等待标准 repair event kind 注册后恢复;测试 harness 让 bob 提交 repair 但 `state_witness` 篡改 → reducer 拒,bottom 诊断保留
 - **E26.4 重连后冲突 + 排序**:多个 cell 同时 bottom_expose;bob 必须逐个 repair
 
@@ -73,7 +73,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 - **soland 已落地**:`ak.realm.update` title patch 不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
 - **inkson 已落地**:Realm admin repair 区当前不 mint 未注册的 `ak.conflict.repair`,无 bottom 时保持只读空态。
-- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖并发 title update 的 non-bottom 语义与 read-only repair surface。
+- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖因果有序 title update 的单值语义与 read-only repair surface。同 Seal sibling 的 `cas_conflict` / defer 义务由 control-state conformance vectors 覆盖。
 - **剩余边界**:outbox capacity、标准 bottom producer、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。
 
 ## 总耗时预估

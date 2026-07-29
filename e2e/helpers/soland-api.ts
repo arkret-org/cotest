@@ -51,6 +51,7 @@ type RegisteredEventSigner = {
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
+const localProposalMemberReceipts = new Map<string, Record<string, unknown>>();
 
 /**
  * Register the real browser device signer for direct API events emitted by the
@@ -622,23 +623,59 @@ export async function writeJoinPolicyApi(
 ): Promise<string> {
   const actorDid = await currentActorDidApi(request, token, opts);
   const digest = `sha256:${sha256CanonicalJson(joinPolicy)}`;
-  await submitSignedEventApi(
+  const previousFrontier = await readRealmSealFrontier(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.realm.policy_bundle",
-      payload: {
-        realm_id: realmId,
-        value: {
-          components: { join_policy: joinPolicy },
-          join_policy: joinPolicy,
-        },
-      },
-    }),
-    { server: opts.server, context: `write join policy ${realmId}` },
+    realmId,
+    opts.server,
   );
+  const policyEvent = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.realm.policy_bundle",
+    payload: {
+      realm_id: realmId,
+      value: {
+        components: { join_policy: joinPolicy },
+        join_policy: joinPolicy,
+      },
+    },
+  });
+  await submitSignedEventApi(request, token, policyEvent, {
+    server: opts.server,
+    context: `write join policy ${realmId}`,
+  });
+  const proposalDigest = Array.isArray(policyEvent.proofs)
+    ? stringValue(
+        (policyEvent.proofs[0] as Record<string, unknown> | undefined)
+          ?.event_digest,
+      )
+    : undefined;
+  if (!proposalDigest) {
+    throw new Error(`join policy ${realmId} is missing its proposal digest`);
+  }
+  await expect
+    .poll(
+      async () => {
+        const current = await readRealmSealFrontier(
+          request,
+          token,
+          realmId,
+          opts.server,
+        );
+        return (
+          current.control_event_set_root !==
+            previousFrontier.control_event_set_root &&
+          !current.pending_proposal_digests.includes(proposalDigest)
+        );
+      },
+      {
+        message: `join policy ${realmId} proposal ${proposalDigest} reaches the control Seal frontier`,
+        timeout: 30_000,
+        intervals: [250, 500, 1_000, 2_000],
+      },
+    )
+    .toBe(true);
   joinPolicyDigestCache.set(joinWorkflowKey(opts.server, realmId), digest);
   return digest;
 }
@@ -1227,13 +1264,9 @@ export async function submitJoinWithProofsApi(
     true,
     opts.invisibleActorFrontier,
   );
-  return await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-    {
-      headers: authHeaders(token),
-      data: envelope,
-    },
-  );
+  return await rawSubmitSignedEventApi(request, token, envelope, {
+    server: opts.server,
+  });
 }
 
 // join-policy.md §3.1 `cooldown` gate — applicant leaves the Realm.
@@ -1362,23 +1395,35 @@ export async function acceptInviteApi(
   inviteId: string,
   opts: { server?: SolandKey } = {},
 ) {
-  const resolutionResponse = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`,
-    {
-      headers: authHeaders(token),
-      data: { realm_id: realmId, requester: actorDid },
-    },
-  );
-  const resolution = await expectJsonOk<{
-    join_candidates?: Array<{
-      join_methods?: string[];
-      seal_basis?: Record<string, unknown>;
-    }>;
-  }>(resolutionResponse, `resolve invite join candidate for ${realmId}`);
-  const sealBasis = resolution.join_candidates?.find((candidate) =>
-    candidate.join_methods?.includes("invite_accept"),
-  )?.seal_basis;
-  expect(sealBasis, "invite-accept join candidate Seal basis").toBeTruthy();
+  let sealBasis: Record<string, unknown> | undefined;
+  await expect
+    .poll(
+      async () => {
+        const resolutionResponse = await request.post(
+          `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`,
+          {
+            headers: authHeaders(token),
+            data: { realm_id: realmId, requester: actorDid },
+          },
+        );
+        const resolution = await expectJsonOk<{
+          join_candidates?: Array<{
+            join_methods?: string[];
+            seal_basis?: Record<string, unknown>;
+          }>;
+        }>(resolutionResponse, `resolve invite join candidate for ${realmId}`);
+        sealBasis = resolution.join_candidates?.find((candidate) =>
+          candidate.join_methods?.includes("invite_accept"),
+        )?.seal_basis;
+        return sealBasis;
+      },
+      {
+        message: "invite-accept join candidate Seal basis",
+        timeout: 30_000,
+        intervals: [250, 500, 1_000, 2_000],
+      },
+    )
+    .toBeTruthy();
 
   return await submitSignedEventApi(
     request,
@@ -1995,6 +2040,14 @@ export async function submitSignedEventApi(
       1,
       context,
     )[0];
+    const controlProposalReceipt = await issueControlProposalReceiptApi(
+      request,
+      token,
+      envelope,
+      authorizationLease,
+      opts.server,
+      context,
+    );
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
@@ -2002,17 +2055,16 @@ export async function submitSignedEventApi(
         data: {
           event: envelope,
           authorization_lease: authorizationLease,
+          ...(controlProposalReceipt
+            ? { control_proposal_receipt: controlProposalReceipt }
+            : {}),
         },
       },
     );
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence(
-        [envelope],
-        [authorizationLease],
-        outcome,
-      );
+      rememberPublicationEvidence([envelope], [authorizationLease], outcome);
       return outcome;
     }
     const body = JSON.parse(text) as unknown;
@@ -2021,11 +2073,7 @@ export async function submitSignedEventApi(
       wireErrCode(body) === "capability_denied" &&
       attempt < 2
     ) {
-      await forceConformanceCbaBasis(
-        request,
-        envelope,
-        opts.server,
-      );
+      await forceConformanceCbaBasis(request, envelope, opts.server);
       continue;
     }
     const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
@@ -2094,15 +2142,33 @@ export async function submitSignedEventBatchApi(
       events.length,
       context,
     );
+    const anchorUnit = events[0]?.kind === "ak.realm.create";
+    const submissions: Array<Record<string, unknown>> = [];
+    for (const [index, event] of events.entries()) {
+      const controlProposalReceipt = anchorUnit
+        ? undefined
+        : await issueControlProposalReceiptApi(
+            request,
+            token,
+            event,
+            authorizationLeases[index],
+            opts.server,
+            context,
+          );
+      submissions.push({
+        event,
+        authorization_lease: authorizationLeases[index],
+        ...(controlProposalReceipt
+          ? { control_proposal_receipt: controlProposalReceipt }
+          : {}),
+      });
+    }
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
         headers: authHeaders(token),
         data: {
-          events: events.map((event, index) => ({
-            event,
-            authorization_lease: authorizationLeases[index],
-          })),
+          events: submissions,
         },
       },
     );
@@ -2157,30 +2223,224 @@ export async function rawSubmitSignedEventApi(
   opts: { server?: SolandKey } = {},
 ): Promise<APIResponse> {
   await applyRegisteredCbaPlane(request, token, envelope, opts.server);
-  const leaseResponse = await issueAuthorizationLeasesApi(
-    request,
-    token,
-    [envelope],
-    opts.server,
-  );
-  if (![200, 201].includes(leaseResponse.status())) {
-    return leaseResponse;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const leaseResponse = await issueAuthorizationLeasesApi(
+      request,
+      token,
+      [envelope],
+      opts.server,
+    );
+    if (![200, 201].includes(leaseResponse.status())) {
+      const leaseText = await leaseResponse.text();
+      const leaseBody = parseJsonOrRaw(leaseText);
+      if (
+        !requiresActorFrontierRefresh(
+          leaseResponse.status(),
+          leaseBody,
+          leaseText,
+        ) ||
+        attempt === 2
+      ) {
+        return leaseResponse;
+      }
+      await advanceEnvelopeToActorFrontier(
+        request,
+        token,
+        envelope,
+        opts.server,
+      );
+      continue;
+    }
+
+    const authorizationLease = authorizationLeasesFromIssueOutcome(
+      await leaseResponse.text(),
+      1,
+      `submit ${String(envelope.kind)}`,
+    )[0];
+    const controlProposalReceipt = await issueControlProposalReceiptApi(
+      request,
+      token,
+      envelope,
+      authorizationLease,
+      opts.server,
+      `submit ${String(envelope.kind)}`,
+    );
+    const response = await request.post(
+      `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+      {
+        headers: authHeaders(token),
+        data: {
+          event: envelope,
+          authorization_lease: authorizationLease,
+          ...(controlProposalReceipt
+            ? { control_proposal_receipt: controlProposalReceipt }
+            : {}),
+        },
+      },
+    );
+    const responseText = await response.text();
+    const responseBody = parseJsonOrRaw(responseText);
+    if (
+      !requiresActorFrontierRefresh(
+        response.status(),
+        responseBody,
+        responseText,
+      ) ||
+      attempt === 2
+    ) {
+      return response;
+    }
+    await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   }
-  const authorizationLease = authorizationLeasesFromIssueOutcome(
-    await leaseResponse.text(),
-    1,
-    `submit ${String(envelope.kind)}`,
-  )[0];
-  return await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+  throw new Error(
+    `submit ${String(envelope.kind)} exhausted actor-frontier retry loop`,
+  );
+}
+
+async function issueControlProposalReceiptApi(
+  request: APIRequestContext,
+  token: string,
+  event: Record<string, unknown>,
+  authorizationLease: Record<string, unknown>,
+  server: SolandKey | undefined,
+  context: string,
+): Promise<Record<string, unknown> | undefined> {
+  // In the Standard submission context, seal_basis distinguishes an ordinary
+  // non-genesis Control Move from a DataEvent. Anchor units are filtered by
+  // their batch caller and must never enter this operation.
+  if (event.seal_basis == null) {
+    return undefined;
+  }
+  const localReceipt = localPrincipalControlProposalReceipt(event);
+  if (localReceipt) {
+    return localReceipt;
+  }
+  const response = await request.post(
+    `${solandBaseUrl(server)}/_arkret/self/control-proposal-receipts`,
     {
       headers: authHeaders(token),
       data: {
-        event: envelope,
+        event,
         authorization_lease: authorizationLease,
       },
     },
   );
+  const text = await response.text();
+  expect(
+    [200, 201],
+    `${context} proposal receipt issuance returned ${response.status()}: ${text}`,
+  ).toContain(response.status());
+  const body = parseJsonOrRaw(text) as Record<string, unknown>;
+  const member = body.member_receipt as Record<string, unknown> | undefined;
+  if (!member) {
+    throw new Error(
+      `${context} proposal receipt issuance omitted member_receipt`,
+    );
+  }
+  return {
+    kind: "proposal_receipt",
+    realm_id: member.realm_id,
+    proposal_digest: member.proposal_digest,
+    received_at: member.received_at,
+    decision_due_at: member.decision_due_at,
+    absolute_due_at: member.absolute_due_at,
+    defer_count: 0,
+    authority_set_ref: member.authority_set_ref,
+    member_receipts: [member],
+  };
+}
+
+export function localPrincipalControlProposalReceipt(
+  event: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const actorDid = stringValue(event.actor_id);
+  const realmId = stringValue(event.realm_id);
+  if (
+    !actorDid ||
+    !realmId ||
+    realmId !== principalControlRealmForDid(actorDid)
+  ) {
+    return undefined;
+  }
+  const proof = Array.isArray(event.proofs)
+    ? (event.proofs[0] as Record<string, unknown> | undefined)
+    : undefined;
+  const registeredSigner = eventSignerFor(
+    actorDid,
+    stringValue(proof?.verification_method),
+  );
+  const verificationMethod =
+    registeredSigner?.verificationMethod ??
+    stringValue(proof?.verification_method) ??
+    `${actorDid}#device`;
+  const proposalPayload = { ...event };
+  delete proposalPayload.proofs;
+  delete proposalPayload.unsigned;
+  delete proposalPayload.actor_kind;
+  const proposalDigest = `sha256:${sha256CanonicalJson(proposalPayload)}`;
+  const authoritySetRef = `sha256:${sha256CanonicalJson({
+    kind: "single_did",
+    did: actorDid,
+  })}`;
+  const cacheKey = `${proposalDigest}\0${authoritySetRef}\0${verificationMethod}`;
+  let member = localProposalMemberReceipts.get(cacheKey);
+  if (!member) {
+    const receivedAt = new Date();
+    const memberWithoutSignature = {
+      realm_id: realmId,
+      proposal_digest: proposalDigest,
+      received_at: receivedAt.toISOString(),
+      decision_due_at: new Date(receivedAt.getTime() + 30_000).toISOString(),
+      absolute_due_at: new Date(receivedAt.getTime() + 90_000).toISOString(),
+      authority_set_ref: authoritySetRef,
+    };
+    const payloadDigest = `sha256:${sha256CanonicalJson(
+      memberWithoutSignature,
+    )}`;
+    const transcript = {
+      context: "ak.control-proposal-member-receipt-proof-v1",
+      payload_digest: payloadDigest,
+      verification_method: verificationMethod,
+      created_at: memberWithoutSignature.received_at,
+    };
+    const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+    const signingInput = `${protectedHeader}.${base64urlJsonCanonical(
+      transcript,
+    )}`;
+    const signature =
+      signWithRegisteredEventSigner(
+        actorDid,
+        verificationMethod,
+        signingInput,
+      ) ??
+      sign(
+        null,
+        Buffer.from(signingInput, "utf8"),
+        developmentProtocolPrivateKey(verificationMethod),
+      ).toString("base64url");
+    member = {
+      ...memberWithoutSignature,
+      signature: {
+        alg: "EdDSA",
+        verification_method: verificationMethod,
+        payload_digest: payloadDigest,
+        created_at: memberWithoutSignature.received_at,
+        jws: `${protectedHeader}..${signature}`,
+      },
+    };
+    localProposalMemberReceipts.set(cacheKey, member);
+  }
+  return {
+    kind: "proposal_receipt",
+    realm_id: member.realm_id,
+    proposal_digest: member.proposal_digest,
+    received_at: member.received_at,
+    decision_due_at: member.decision_due_at,
+    absolute_due_at: member.absolute_due_at,
+    defer_count: 0,
+    authority_set_ref: member.authority_set_ref,
+    member_receipts: [member],
+  };
 }
 
 async function issueAuthorizationLeasesApi(
@@ -2213,8 +2473,9 @@ function authorizationLeasesFromIssueOutcome(
     body &&
     typeof body === "object" &&
     Array.isArray((body as Record<string, unknown>).authorization_leases)
-      ? ((body as Record<string, unknown>)
-          .authorization_leases as Array<Record<string, unknown>>)
+      ? ((body as Record<string, unknown>).authorization_leases as Array<
+          Record<string, unknown>
+        >)
       : undefined;
   if (!leases || leases.length !== expectedCount) {
     throw new Error(
@@ -2397,6 +2658,27 @@ export async function readRealmSealBasis(
   realmId: string,
   server?: SolandKey,
 ): Promise<Record<string, unknown>> {
+  const frontier = await readRealmSealFrontier(request, token, realmId, server);
+  return {
+    leaves: [frontier.seal_id],
+    control_event_set_root: frontier.control_event_set_root,
+    state_root: frontier.state_root,
+  };
+}
+
+type RealmSealFrontier = {
+  seal_id: string;
+  control_event_set_root: string;
+  state_root: string;
+  pending_proposal_digests: string[];
+};
+
+async function readRealmSealFrontier(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  server?: SolandKey,
+): Promise<RealmSealFrontier> {
   const response = await request.get(
     `${solandBaseUrl(server)}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
@@ -2407,6 +2689,11 @@ export async function readRealmSealBasis(
       seal_id?: unknown;
       control_event_set_root?: unknown;
       state_root?: unknown;
+      governance_health?: {
+        pending_proposals?: Array<{
+          proposal_digest?: unknown;
+        }>;
+      };
     };
   }>(response, `read Realm Seal frontier for ${realmId}`);
   const frontier = body.frontier;
@@ -2421,9 +2708,16 @@ export async function readRealmSealBasis(
     );
   }
   return {
-    leaves: [frontier.seal_id],
+    seal_id: frontier.seal_id,
     control_event_set_root: frontier.control_event_set_root,
     state_root: frontier.state_root,
+    pending_proposal_digests: (
+      frontier.governance_health?.pending_proposals ?? []
+    ).flatMap((proposal) =>
+      typeof proposal.proposal_digest === "string"
+        ? [proposal.proposal_digest]
+        : [],
+    ),
   };
 }
 
@@ -2438,14 +2732,69 @@ async function waitForRealmSealBasis(
   let lastError: unknown;
   while (Date.now() < deadline) {
     try {
-      return await readRealmSealBasis(request, token, realmId, server);
+      const frontier = await readRealmSealFrontier(
+        request,
+        token,
+        realmId,
+        server,
+      );
+      if (frontier.pending_proposal_digests.length === 0) {
+        return {
+          leaves: [frontier.seal_id],
+          control_event_set_root: frontier.control_event_set_root,
+          state_root: frontier.state_root,
+        };
+      }
     } catch (error) {
       lastError = error;
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
     }
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(
     `Realm ${realmId} founding Seal was not materialized within ${timeoutMs}ms`,
+    { cause: lastError },
+  );
+}
+
+export async function waitForRealmControlIdleApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: {
+    server?: SolandKey;
+    afterControlEventSetRoot?: string;
+    timeoutMs?: number;
+  } = {},
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 30_000);
+  let lastFrontier: RealmSealFrontier | undefined;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      lastFrontier = await readRealmSealFrontier(
+        request,
+        token,
+        realmId,
+        opts.server,
+      );
+      if (
+        lastFrontier.pending_proposal_digests.length === 0 &&
+        (!opts.afterControlEventSetRoot ||
+          lastFrontier.control_event_set_root !== opts.afterControlEventSetRoot)
+      ) {
+        return {
+          leaves: [lastFrontier.seal_id],
+          control_event_set_root: lastFrontier.control_event_set_root,
+          state_root: lastFrontier.state_root,
+        };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(
+    `Realm ${realmId} control frontier did not become idle after ${opts.afterControlEventSetRoot ?? "its current root"} within ${opts.timeoutMs ?? 30_000}ms; last frontier=${JSON.stringify(lastFrontier)}`,
     { cause: lastError },
   );
 }
@@ -2474,8 +2823,7 @@ async function applyRegisteredCbaPlane(
   let changed = false;
   if (descriptor.plane === "control") {
     const sealBasis = envelope.seal_basis as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     if (
       !sealBasis ||
       !Array.isArray(sealBasis.leaves) ||
@@ -2489,8 +2837,19 @@ async function applyRegisteredCbaPlane(
           server,
         );
       } catch {
-        await forceConformanceCbaBasis(request, envelope, server);
-        return;
+        const directoryBasis = await readDirectoryJoinCandidateSealBasis(
+          request,
+          token,
+          realmId,
+          actorDid,
+          server,
+        );
+        if (directoryBasis) {
+          envelope.seal_basis = directoryBasis;
+        } else {
+          await forceConformanceCbaBasis(request, envelope, server);
+          return;
+        }
       }
       changed = true;
     }
@@ -2541,6 +2900,41 @@ async function applyRegisteredCbaPlane(
       stringValue(proof?.verification_method),
     );
   }
+}
+
+async function readDirectoryJoinCandidateSealBasis(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  actorDid: string,
+  server?: SolandKey,
+): Promise<Record<string, unknown> | undefined> {
+  const response = await request.post(
+    `${solandBaseUrl(server)}/_arkret/find/directory/resolve-realm`,
+    {
+      headers: authHeaders(token),
+      data: { realm_id: realmId, requester: actorDid },
+    },
+  );
+  if (!response.ok()) {
+    return undefined;
+  }
+  const body = (await response.json()) as {
+    join_candidates?: Array<{
+      seal_basis?: Record<string, unknown>;
+    }>;
+  };
+  const basis = body.join_candidates?.find((candidate) => {
+    const value = candidate.seal_basis;
+    return (
+      value &&
+      Array.isArray(value.leaves) &&
+      value.leaves.length > 0 &&
+      typeof value.control_event_set_root === "string" &&
+      typeof value.state_root === "string"
+    );
+  })?.seal_basis;
+  return basis;
 }
 
 async function forceConformanceCbaBasis(
@@ -3035,30 +3429,20 @@ type EventKindRegistryRow = {
   plane?: "control" | "data";
 };
 
-let eventKindRegistryCache:
-  | Map<string, EventKindRegistryRow>
-  | undefined;
+let eventKindRegistryCache: Map<string, EventKindRegistryRow> | undefined;
 
-function eventKindDescriptor(
-  kind: string,
-): EventKindRegistryRow | undefined {
+function eventKindDescriptor(kind: string): EventKindRegistryRow | undefined {
   if (!eventKindRegistryCache) {
     const registry = JSON.parse(
       readFileSync(
-        join(
-          SPEC_ARTIFACTS_ROOT,
-          "registry",
-          "event-kind-registry.json",
-        ),
+        join(SPEC_ARTIFACTS_ROOT, "registry", "event-kind-registry.json"),
         "utf8",
       ),
     ) as { event_kinds?: EventKindRegistryRow[] };
     eventKindRegistryCache = new Map(
       (registry.event_kinds ?? [])
         .filter(
-          (
-            row,
-          ): row is EventKindRegistryRow & { event_kind: string } =>
+          (row): row is EventKindRegistryRow & { event_kind: string } =>
             typeof row.event_kind === "string",
         )
         .map((row) => [row.event_kind, row]),
