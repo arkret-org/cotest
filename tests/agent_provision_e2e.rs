@@ -498,6 +498,99 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         "duplicate_conflict",
     )
     .await?;
+    let authorized_resource: arkret_wire::SecurityTransaction = serde_json::from_value(authorized)?;
+    let replacement_signer = inkson::event_signer::build_ed25519_signer_with_verification_method(
+        [25_u8; 32],
+        ALICE_DID,
+        format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"),
+    );
+    let terminal_request = inkson::fresh_device_recovery::sign_terminal_receipt_continue(
+        &authorized_resource,
+        inkson::fresh_device_recovery::RecoveryTerminalObservation {
+            policy_id: verified_session.policy_id.clone(),
+            policy_version: verified_session.policy_version.into(),
+            trust_domain: verified_session.trust_domain.clone(),
+            proof_summary: serde_json::from_value(serde_json::to_value(
+                verified_session
+                    .proof_summary
+                    .clone()
+                    .ok_or_else(|| anyhow!("verified recovery session omitted proof summary"))?,
+            )?)?,
+            backup_classes_unlocked: Vec::new(),
+            welcome_count: 0,
+            welcome_realm_summary: None,
+            started_at: verified_session.created_at,
+            completed_at: Utc::now(),
+        },
+        &replacement_signer,
+    )?;
+    let completed = expect_json(
+        server
+            .http()
+            .post(server.url(&continue_path))
+            .bearer_auth(&replacement_token)
+            .json(&terminal_request),
+        StatusCode::OK,
+    )
+    .await?;
+    let completed_replay = expect_json(
+        server
+            .http()
+            .post(server.url(&continue_path))
+            .bearer_auth(&replacement_token)
+            .json(&terminal_request),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(completed, completed_replay);
+    assert_eq!(completed["state"], "completed");
+    assert!(completed["next_required_step"].is_null());
+    assert_eq!(
+        completed["accepted_steps"].as_array().map(Vec::len),
+        Some(2)
+    );
+    let fetched = expect_json(
+        server
+            .http()
+            .get(server.url(&format!(
+                "/_arkret/self/security-transactions/{}",
+                completed["transaction_id"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("completed transaction omitted id: {completed}"))?
+            )))
+            .bearer_auth(&replacement_token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(completed, fetched);
+    let mut conflicting_terminal = serde_json::to_value(&terminal_request)?;
+    conflicting_terminal["client_attestation"]["artifact"]["welcome_count"] = json!(1);
+    expect_api_error(
+        server
+            .http()
+            .post(server.url(&continue_path))
+            .bearer_auth(&replacement_token)
+            .json(&conflicting_terminal),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
+    let completed_session = expect_json(
+        server
+            .http()
+            .get(server.url(&format!(
+                "/_arkret/root/identity/recovery-sessions/{}",
+                verified_session.recovery_session_id
+            )))
+            .bearer_auth(&replacement_token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(completed_session["state"], "completed");
+    assert_eq!(
+        completed_session["transaction_id"],
+        completed["transaction_id"]
+    );
     Ok(())
 }
 
