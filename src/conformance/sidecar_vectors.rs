@@ -1,6 +1,6 @@
 //! Sidecar conformance vectors (§0.11 of `_before_todos.md`).
 //!
-//! 10 vectors:
+//! 18 vectors:
 //!   - `ak.vector.sidecar.mls_bootstrap_binding.v1`
 //!   - `ak.vector.sidecar.mls_effective_access.v1`
 //!   - `ak.vector.sidecar.ensure_idempotent.v1`
@@ -11,6 +11,14 @@
 //!   - `ak.vector.sidecar.exchange_binding_closed_loop.v1`
 //!   - `ak.vector.sidecar.exchange_projection_recovery.v1`
 //!   - `ak.vector.sidecar.exchange_binding_containment.v1`
+//!   - `ak.vector.sidecar.context_locator_recovery.v1`
+//!   - `ak.vector.sidecar.canonical_sibling_digest.v1`
+//!   - `ak.vector.sidecar.union_history_frontier.v1`
+//!   - `ak.vector.sidecar.non_disclosure_surface_matrix.v1`
+//!   - `ak.vector.sidecar.revoke_fail_closed.v1`
+//!   - `ak.vector.sidecar.explicit_publish.v1`
+//!   - `ak.vector.sidecar.accepted_request_identity.v1`
+//!   - `ak.vector.sidecar.hosted_ui_matrix.v1`
 //!
 //! These vectors pin the first-class Sidecar wire model. Backing scope is an
 //! internal MLS implementation detail and may not appear in public outcomes.
@@ -18,20 +26,25 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
+use arkret::events::EventKind;
 use arkret::{
-    AgentSidecarDisplayMode, AgentSidecarEventExchangeBinding, AgentSidecarExchangeBindingRole,
-    AgentSidecarExchangeCompletionPolicy, AgentSidecarExchangeControl,
-    AgentSidecarExchangeControlAction, AgentSidecarExchangeControlSchema,
-    AgentSidecarExchangeFoldedFrontier, AgentSidecarExchangeId, AgentSidecarExchangeOrigin,
-    AgentSidecarExchangeProjection, AgentSidecarExchangeProjectionSchema,
-    AgentSidecarExchangeRequestContext, AgentSidecarExchangeStatus,
-    AgentSidecarProjectionProvenance, AgentSidecarSourceTrackRef, Did, EventId, Hash, Hlc,
-    MessageMetadata, MlsGovernanceBindingPayload, NonEmptyString,
-    PendingSidecarAccessReconciliationItem, PendingSidecarAccessReconciliationStage, RealmId,
-    SidecarId, SidecarMlsBinding, StrandId, agent_sidecar_desired_access_digest,
-    agent_sidecar_exchange_event_set_digest,
+    AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef, AgentSidecarDisplayMode,
+    AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
+    AgentSidecarExchangeBindingRole, AgentSidecarExchangeCompletionPolicy,
+    AgentSidecarExchangeControl, AgentSidecarExchangeControlAction,
+    AgentSidecarExchangeControlSchema, AgentSidecarExchangeFoldedFrontier, AgentSidecarExchangeId,
+    AgentSidecarExchangeOrigin, AgentSidecarExchangeProjection,
+    AgentSidecarExchangeProjectionSchema, AgentSidecarExchangeRequestContext,
+    AgentSidecarExchangeStatus, AgentSidecarMlsContext, AgentSidecarProjectionProvenance,
+    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, CircleId,
+    Did, Event, EventId, EventRef, Hash, Hlc, MessageMetadata, MlsGovernanceBindingPayload,
+    NonEmptyString, PendingSidecarAccessReconciliationItem,
+    PendingSidecarAccessReconciliationStage, RealmId, RelationCreatePayload, ScopeRef, SidecarId,
+    SidecarMlsBinding, Strand, StrandCreatePayload, StrandId, agent_sidecar_desired_access_digest,
+    agent_sidecar_exchange_event_set_digest, recover_agent_sidecar_context_locators,
 };
 use arkret_wire::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
+use chrono::{DateTime, Utc};
 use garth::projection::{
     SidecarExchangeAgentFact, SidecarExchangeCacheDecision, SidecarExchangeControlFact,
     SidecarExchangeFoldScope, SidecarExchangeRequestFact, evaluate_sidecar_exchange_cache,
@@ -54,6 +67,19 @@ pub const VECTOR_ID_SIDECAR_EXCHANGE_PROJECTION_RECOVERY: &str =
     "ak.vector.sidecar.exchange_projection_recovery.v1";
 pub const VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CONTAINMENT: &str =
     "ak.vector.sidecar.exchange_binding_containment.v1";
+pub const VECTOR_ID_SIDECAR_CONTEXT_LOCATOR_RECOVERY: &str =
+    "ak.vector.sidecar.context_locator_recovery.v1";
+pub const VECTOR_ID_SIDECAR_CANONICAL_SIBLING_DIGEST: &str =
+    "ak.vector.sidecar.canonical_sibling_digest.v1";
+pub const VECTOR_ID_SIDECAR_UNION_HISTORY_FRONTIER: &str =
+    "ak.vector.sidecar.union_history_frontier.v1";
+pub const VECTOR_ID_SIDECAR_NON_DISCLOSURE_SURFACE_MATRIX: &str =
+    "ak.vector.sidecar.non_disclosure_surface_matrix.v1";
+pub const VECTOR_ID_SIDECAR_REVOKE_FAIL_CLOSED: &str = "ak.vector.sidecar.revoke_fail_closed.v1";
+pub const VECTOR_ID_SIDECAR_EXPLICIT_PUBLISH: &str = "ak.vector.sidecar.explicit_publish.v1";
+pub const VECTOR_ID_SIDECAR_ACCEPTED_REQUEST_IDENTITY: &str =
+    "ak.vector.sidecar.accepted_request_identity.v1";
+pub const VECTOR_ID_SIDECAR_HOSTED_UI_MATRIX: &str = "ak.vector.sidecar.hosted_ui_matrix.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING,
@@ -66,6 +92,14 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CLOSED_LOOP,
     VECTOR_ID_SIDECAR_EXCHANGE_PROJECTION_RECOVERY,
     VECTOR_ID_SIDECAR_EXCHANGE_BINDING_CONTAINMENT,
+    VECTOR_ID_SIDECAR_CONTEXT_LOCATOR_RECOVERY,
+    VECTOR_ID_SIDECAR_CANONICAL_SIBLING_DIGEST,
+    VECTOR_ID_SIDECAR_UNION_HISTORY_FRONTIER,
+    VECTOR_ID_SIDECAR_NON_DISCLOSURE_SURFACE_MATRIX,
+    VECTOR_ID_SIDECAR_REVOKE_FAIL_CLOSED,
+    VECTOR_ID_SIDECAR_EXPLICIT_PUBLISH,
+    VECTOR_ID_SIDECAR_ACCEPTED_REQUEST_IDENTITY,
+    VECTOR_ID_SIDECAR_HOSTED_UI_MATRIX,
 ];
 
 const SIDECAR_VECTORS_FIXTURE_FILE: &str = "agent-sidecar-fixture.json";
@@ -1224,12 +1258,530 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 10 Sidecar vectors.
+fn sidecar_fixture_case(vector_id: &str) -> Result<Value> {
+    let fixture = super::load_fixture_value(SIDECAR_VECTORS_FIXTURE_FILE)?;
+    fixture["cases"]
+        .as_array()
+        .and_then(|cases| {
+            cases
+                .iter()
+                .find(|case| case["vector_id"].as_str() == Some(vector_id))
+        })
+        .cloned()
+        .ok_or_else(|| anyhow!("missing Sidecar fixture case {vector_id}"))
+}
+
+// ─── VECT-SC-11 — context_locator_recovery ────────────────────────────────
+
+pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_CONTEXT_LOCATOR_RECOVERY)?;
+    let locator = &case["locator"];
+    let realm_id = RealmId::new(
+        locator["realm_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery fixture realm_id is missing"))?,
+    )?;
+    let controller_id = Did::new(
+        locator["controller_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery fixture controller_id is missing"))?,
+    )?;
+    let sidecar_id = SidecarId::new(
+        locator["sidecar_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery fixture sidecar_id is missing"))?,
+    )?;
+    let backing_circle_id = CircleId::new(
+        locator["backing_circle_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery fixture backing_circle_id is missing"))?,
+    )?;
+    let private_strand_id = StrandId::new(
+        locator["private_strand_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery fixture private_strand_id is missing"))?,
+    )?;
+    let source_strand_id = StrandId::new(
+        locator["source_context_ref"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery fixture source_context_ref is missing"))?,
+    )?;
+    let desired_access_digest = agent_sidecar_desired_access_digest(
+        sidecar_id.clone(),
+        realm_id.clone(),
+        controller_id.clone(),
+        &[],
+    )?;
+    let created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
+    let view = AgentSidecarView {
+        sidecar: AgentSidecar {
+            id: sidecar_id.clone(),
+            schema: AgentSidecarSchema::V1,
+            realm_id: realm_id.clone(),
+            controller_id: controller_id.clone(),
+            backing_circle_id: backing_circle_id.clone(),
+            encryption_profile: AgentSidecarEncryptionProfile::MlsRfc9420,
+            state: AgentSidecarState::Active,
+            state_changed_at: None,
+            created_at,
+            updated_at: None,
+        },
+        desired_agent_ids: Vec::new(),
+        effective_agent_ids: Vec::new(),
+        mls_context: AgentSidecarMlsContext {
+            desired_access_digest,
+            control_frontier: vec![
+                NonEmptyString::new("ak:event:01964137-0000-7000-8000-000000000020")
+                    .map_err(anyhow::Error::msg)?,
+            ],
+            mls_group_id: None,
+            epoch: None,
+            genesis_event_ref: None,
+            current_controller_device_ready: false,
+        },
+        access_readiness: AgentSidecarAccessReadiness::Opening,
+        pending_access_reconciliations: Vec::new(),
+    };
+    let scope = ScopeRef::Circle {
+        realm_id: realm_id.clone(),
+        circle_id: backing_circle_id.clone(),
+    };
+    let mut private_strand = Strand::new(
+        private_strand_id.clone(),
+        realm_id.clone(),
+        "Private Sidecar context",
+        controller_id.clone(),
+    );
+    private_strand.scope_circle_id = Some(backing_circle_id.clone());
+    private_strand.created_at = created_at;
+    let strand_event_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000081")?;
+    let strand_event = Event::new_with_id_at(
+        strand_event_id.clone(),
+        EventKind::STRAND_CREATE,
+        scope.clone(),
+        controller_id.clone(),
+        20,
+        exchange_hlc(0x81)?,
+        serde_json::to_value(StrandCreatePayload {
+            object: private_strand,
+            initial_relations: None,
+        })?,
+        created_at,
+    )?;
+    let relation_payload = RelationCreatePayload::new(
+        "ak:relation:01964137-0000-7000-8000-000000000082",
+        "agent_sidecar_of",
+        private_strand_id.to_string(),
+        source_strand_id.to_string(),
+    );
+    let mut relation_event = Event::new_with_id_at(
+        EventId::new("ak:event:01964137-0000-7000-8000-000000000082")?,
+        EventKind::RELATION_CREATE,
+        scope,
+        controller_id,
+        21,
+        exchange_hlc(0x82)?,
+        serde_json::to_value(relation_payload)?,
+        created_at,
+    )?;
+    relation_event
+        .refs
+        .push(EventRef::new(strand_event_id.to_string(), "after"));
+
+    let recovered = recover_agent_sidecar_context_locators(
+        std::slice::from_ref(&view),
+        &[relation_event.clone(), strand_event.clone()],
+    )?;
+    if recovered.len() != 1
+        || recovered[0].sidecar_id != sidecar_id
+        || recovered[0].backing_circle_id != backing_circle_id
+        || recovered[0].private_strand_id != private_strand_id
+        || recovered[0].source_context_ref
+            != AgentSidecarContextRef::strand(realm_id, source_strand_id)
+    {
+        bail!("complete structural history did not recover the canonical Sidecar locator");
+    }
+    relation_event.refs.clear();
+    if !recover_agent_sidecar_context_locators(
+        std::slice::from_ref(&view),
+        &[strand_event, relation_event],
+    )?
+    .is_empty()
+    {
+        bail!("a Relation without causal coverage must remain unresolved");
+    }
+    let pagination = &case["pagination"];
+    if pagination["repeated_cursor_outcome"].as_str() != Some("backfill_pending")
+        || pagination["incomplete_page_outcome"].as_str() != Some("backfill_pending")
+        || pagination["sidecar_list_cursors"]
+            .as_array()
+            .and_then(|values| values.last())
+            .is_none_or(|last| !last.is_null())
+        || pagination["event_scan_cursors"]
+            .as_array()
+            .and_then(|values| values.last())
+            .is_none_or(|last| !last.is_null())
+    {
+        bail!("Sidecar recovery pagination does not terminate only on an explicit final page");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-12 — canonical_sibling_digest ────────────────────────────────
+
+pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_CANONICAL_SIBLING_DIGEST)?;
+    let siblings = case["siblings"]
+        .as_array()
+        .ok_or_else(|| anyhow!("digest vector siblings are missing"))?;
+    if siblings.len() != 2 {
+        bail!("digest vector requires exactly two siblings");
+    }
+    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-000000000000")?;
+    let actor = exchange_controller()?;
+    let created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
+    let mut events = Vec::new();
+    for sibling in siblings {
+        events.push(Event::new_with_id_at(
+            EventId::new(
+                sibling["event_id"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("digest sibling event_id is missing"))?,
+            )?,
+            EventKind::MESSAGE_CREATE,
+            ScopeRef::Realm {
+                realm_id: realm_id.clone(),
+            },
+            actor.clone(),
+            case["actor_seq"]
+                .as_u64()
+                .ok_or_else(|| anyhow!("digest sibling actor_seq is missing"))?,
+            Hlc::new(
+                sibling["hlc"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("digest sibling HLC is missing"))?,
+            )?,
+            serde_json::json!({
+                "strand_id": "ak:strand:01964137-0000-7000-8000-000000000010",
+                "track_name": "discussion",
+                "content": {
+                    "kind": "ak.content.text",
+                    "body": sibling["content_text"]
+                }
+            }),
+            created_at,
+        )?);
+    }
+    let digest_winner = events
+        .iter()
+        .max_by(|left, right| {
+            left.event_digest()
+                .expect("digest")
+                .as_bytes()
+                .cmp(right.event_digest().expect("digest").as_bytes())
+        })
+        .expect("two siblings");
+    let event_id_winner = events
+        .iter()
+        .max_by(|left, right| left.event_id.as_str().cmp(right.event_id.as_str()))
+        .expect("two siblings");
+    let hlc_winner = events
+        .iter()
+        .max_by(|left, right| left.hlc.cmp(&right.hlc))
+        .expect("two siblings");
+    if digest_winner.event_id == event_id_winner.event_id
+        || digest_winner.event_id == hlc_winner.event_id
+    {
+        bail!(
+            "fixture must be a counterexample to both Event-id and HLC sibling selection: {:?}",
+            events
+                .iter()
+                .map(|event| (
+                    event.event_id.as_str(),
+                    event.event_digest().expect("digest")
+                ))
+                .collect::<Vec<_>>()
+        );
+    }
+    let digest_winner_id = digest_winner.event_id.clone();
+    events.reverse();
+    let reversed_winner = events
+        .iter()
+        .max_by(|left, right| {
+            left.event_digest()
+                .expect("digest")
+                .as_bytes()
+                .cmp(right.event_digest().expect("digest").as_bytes())
+        })
+        .expect("two siblings");
+    if reversed_winner.event_id != digest_winner_id
+        || case["winner_rule"].as_str() != Some("bytewise_max(Event::event_digest())")
+    {
+        bail!("canonical sibling selection changed with arrival order");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-13 — union_history_frontier ──────────────────────────────────
+
+pub fn run_sidecar_union_history_frontier_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_UNION_HISTORY_FRONTIER)?;
+    let histories = &case["device_histories"];
+    let ids = |name: &str| -> Result<Vec<EventId>> {
+        histories[name]
+            .as_array()
+            .ok_or_else(|| anyhow!("union-history fixture missing {name}"))?
+            .iter()
+            .map(|value| {
+                EventId::new(
+                    value
+                        .as_str()
+                        .ok_or_else(|| anyhow!("union-history id must be a string"))?,
+                )
+                .map_err(Into::into)
+            })
+            .collect()
+    };
+    let device_a = ids("device_a")?;
+    let device_b = ids("device_b")?;
+    let expected_union = ids("union")?;
+    let expected_heads = ids("maximal_heads")?;
+    let mut union = device_a
+        .iter()
+        .chain(&device_b)
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    union.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    if union != expected_union || device_a.last() == device_b.last() {
+        bail!("incomparable device histories did not refold their complete set union");
+    }
+    if expected_heads != vec![device_a[1].clone(), device_b[1].clone()] {
+        bail!("union-history frontier lost one incomparable maximal causal head");
+    }
+    let digest = agent_sidecar_exchange_event_set_digest(&union)?;
+    let mut reversed = union.clone();
+    reversed.reverse();
+    if digest != agent_sidecar_exchange_event_set_digest(&reversed)?
+        || case["incomplete_outcome"].as_str() != Some("keep_cache_and_mark_backfill_pending")
+    {
+        bail!("union-history digest or incomplete backfill behavior drifted");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-14 — non_disclosure_surface_matrix ───────────────────────────
+
+pub fn run_sidecar_non_disclosure_surface_matrix_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_NON_DISCLOSURE_SURFACE_MATRIX)?;
+    let unique_strings = |field: &str| -> Result<BTreeSet<String>> {
+        let values = case[field]
+            .as_array()
+            .ok_or_else(|| anyhow!("non-disclosure fixture missing {field}"))?;
+        let set = values
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow!("{field} entries must be strings"))
+            })
+            .collect::<Result<BTreeSet<_>>>()?;
+        if set.len() != values.len() {
+            bail!("non-disclosure {field} contains duplicates");
+        }
+        Ok(set)
+    };
+    let surfaces = unique_strings("surfaces")?;
+    let forbidden = unique_strings("forbidden_classes")?;
+    for required in [
+        "realm_member_list",
+        "circle_list",
+        "strand_list",
+        "relation_expansion",
+        "search",
+        "unread",
+        "watch",
+        "notification",
+        "push",
+        "public_export",
+        "url",
+        "log",
+        "telemetry",
+    ] {
+        if !surfaces.contains(required) {
+            bail!("non-disclosure matrix lost surface {required}");
+        }
+    }
+    if forbidden.len() != 7 || case["server_plaintext_access"].as_bool() != Some(false) {
+        bail!("non-disclosure matrix widened private data or server plaintext access");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-15 — revoke_fail_closed ──────────────────────────────────────
+
+pub fn run_sidecar_revoke_fail_closed_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_REVOKE_FAIL_CLOSED)?;
+    let transitions = case["lifecycle_transitions"]
+        .as_array()
+        .ok_or_else(|| anyhow!("revoke transitions are missing"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if transitions != BTreeSet::from(["revoke", "pause", "deactivate"]) {
+        bail!("revoke vector must cover revoke, pause, and deactivate independently");
+    }
+    let post = case["post_transition"]
+        .as_object()
+        .ok_or_else(|| anyhow!("post-transition outcome is missing"))?;
+    if post.len() != 5 || post.values().any(|value| value.as_bool() != Some(false)) {
+        bail!(
+            "every post-revoke addressing, delivery, execution, write, and implicit terminal gate must fail closed"
+        );
+    }
+    if case["terminal_authority"].as_str() != Some("accepted_controller_control_event") {
+        bail!("only an accepted controller control Event may terminate an exchange");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-16 — explicit_publish ────────────────────────────────────────
+
+pub fn run_sidecar_explicit_publish_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_EXPLICIT_PUBLISH)?;
+    if case["before_confirmation_shared_event_count"].as_u64() != Some(0)
+        || case["after_confirmation_shared_event_count"].as_u64() != Some(1)
+    {
+        bail!("explicit publish must produce zero Events before and one after confirmation");
+    }
+    let allowed = case["allowed_payload_fields"]
+        .as_array()
+        .ok_or_else(|| anyhow!("publish allowlist is missing"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if allowed != BTreeSet::from(["content"]) {
+        bail!("explicit publish payload allowlist widened");
+    }
+    let output = serde_json::json!({
+        "content": {
+            "kind": "ak.content.text",
+            "body": "controller-approved shared summary"
+        }
+    });
+    let wire = serde_json::to_string(&output)?;
+    for forbidden in case["forbidden_fields"]
+        .as_array()
+        .ok_or_else(|| anyhow!("publish forbidden fields are missing"))?
+        .iter()
+        .filter_map(Value::as_str)
+    {
+        if wire.contains(forbidden) {
+            bail!("explicit publish leaked forbidden field {forbidden}");
+        }
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-17 — accepted_request_identity ───────────────────────────────
+
+pub fn run_sidecar_accepted_request_identity_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_ACCEPTED_REQUEST_IDENTITY)?;
+    let accepted = EventId::new(
+        case["accepted_request_event_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("accepted request Event id is missing"))?,
+    )?;
+    let binding = AgentSidecarEventExchangeBinding::user_facing_response(
+        exchange_id_x1()?,
+        accepted.clone(),
+    )?;
+    if binding.request_event_id.as_ref() != Some(&accepted)
+        || case["response_binding_request_event_id"].as_str() != Some(accepted.as_str())
+        || case["response_after_ref"].as_str() != Some(accepted.as_str())
+    {
+        bail!("producer response binding and top-level after ref diverged from accepted identity");
+    }
+    let invalid = case["invalid_identity_kinds"]
+        .as_array()
+        .ok_or_else(|| anyhow!("invalid accepted-identity kinds are missing"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if invalid != BTreeSet::from(["message_id", "local_intent_id", "unaccepted_event_id"]) {
+        bail!("accepted request identity negatives are incomplete");
+    }
+    if EventId::new("ak:message:01964137-0000-7000-8000-000000000034").is_ok()
+        || EventId::new("local-intent-34").is_ok()
+    {
+        bail!("message and local intent identities must fail the Event-id type gate");
+    }
+    Ok(())
+}
+
+// ─── VECT-SC-18 — hosted_ui_matrix ────────────────────────────────────────
+
+pub fn run_sidecar_hosted_ui_matrix_vector() -> Result<()> {
+    let case = sidecar_fixture_case(VECTOR_ID_SIDECAR_HOSTED_UI_MATRIX)?;
+    let values = |field: &str| -> Result<Vec<String>> {
+        case[field]
+            .as_array()
+            .ok_or_else(|| anyhow!("hosted UI fixture missing {field}"))?
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow!("hosted UI {field} entries must be strings"))
+            })
+            .collect()
+    };
+    let browsers = values("browsers")?;
+    let tracks = values("tracks")?;
+    let modes = values("display_modes")?;
+    let roles = values("device_roles")?;
+    let viewports = values("viewports")?;
+    let stressors = values("stressors")?;
+    let evidence = values("required_evidence")?;
+    let matrix_size = browsers.len()
+        * tracks.len()
+        * modes.len()
+        * roles.len()
+        * viewports.len()
+        * stressors.len();
+    if browsers != ["chrome", "edge"]
+        || tracks.len() != 3
+        || modes.len() != 2
+        || roles.len() != 2
+        || viewports.len() != 2
+        || matrix_size != 192
+        || evidence
+            != [
+                "trace",
+                "screenshots",
+                "request_counts",
+                "ui_state_assertions",
+            ]
+    {
+        bail!("hosted UI browser matrix or its evidence requirements are incomplete");
+    }
+    let preserved = values("preserved_state")?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if preserved != BTreeSet::from(["scroll".to_owned(), "editor".to_owned(), "draft".to_owned()]) {
+        bail!("hosted UI matrix must preserve scroll, editor, and draft state");
+    }
+    Ok(())
+}
+
+/// Suite entry point — runs all 18 Sidecar vectors.
 pub fn run_sidecar_vector_suite() -> Result<()> {
     validate_sidecar_vectors_fixture_metadata()?;
-    if ALL_SIDECAR_VECTOR_IDS.len() != 10 {
+    if ALL_SIDECAR_VECTOR_IDS.len() != 18 {
         bail!(
-            "expected 10 sidecar vector ids, got {}",
+            "expected 18 sidecar vector ids, got {}",
             ALL_SIDECAR_VECTOR_IDS.len()
         );
     }
@@ -1243,6 +1795,14 @@ pub fn run_sidecar_vector_suite() -> Result<()> {
     run_sidecar_exchange_binding_closed_loop_vector()?;
     run_sidecar_exchange_projection_recovery_vector()?;
     run_sidecar_exchange_binding_containment_vector()?;
+    run_sidecar_context_locator_recovery_vector()?;
+    run_sidecar_canonical_sibling_digest_vector()?;
+    run_sidecar_union_history_frontier_vector()?;
+    run_sidecar_non_disclosure_surface_matrix_vector()?;
+    run_sidecar_revoke_fail_closed_vector()?;
+    run_sidecar_explicit_publish_vector()?;
+    run_sidecar_accepted_request_identity_vector()?;
+    run_sidecar_hosted_ui_matrix_vector()?;
     Ok(())
 }
 
@@ -1251,7 +1811,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_ten_sidecar_vectors_run_clean() {
+    fn all_eighteen_sidecar_vectors_run_clean() {
         run_sidecar_vector_suite().unwrap();
     }
 }

@@ -235,12 +235,12 @@ fn agent_signer_evidence_vector_suite_runs_clean() {
     assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 32);
 }
 
-// ─── P0 / VECT-SC-1..4 — sidecar vectors ───────────────────────────────────
+// ─── P0 / VECT-SC-1..18 — sidecar vectors ──────────────────────────────────
 
 #[test]
 fn sidecar_vector_suite_runs_clean() {
     run_sidecar_vector_suite().expect("sidecar vectors must pass");
-    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 10);
+    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 18);
 }
 
 // ─── P0 / VECT-CUR-1 — cursor vectors ──────────────────────────────────────

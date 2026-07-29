@@ -330,11 +330,17 @@ pub use service_closure_hardening::{
     run_service_closure_hardening_fixture_suite, run_signal_class_ttl_vector,
 };
 pub use sidecar_vectors::{
-    ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
-    run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
-    run_sidecar_hosted_projection_vector, run_sidecar_mls_bootstrap_binding_vector,
+    ALL_SIDECAR_VECTOR_IDS, run_sidecar_accepted_request_identity_vector,
+    run_sidecar_canonical_sibling_digest_vector, run_sidecar_context_locator_recovery_vector,
+    run_sidecar_eligibility_states_vector, run_sidecar_ensure_idempotent_vector,
+    run_sidecar_exchange_binding_closed_loop_vector,
+    run_sidecar_exchange_binding_containment_vector,
+    run_sidecar_exchange_projection_recovery_vector, run_sidecar_existence_privacy_vector,
+    run_sidecar_explicit_publish_vector, run_sidecar_hosted_projection_vector,
+    run_sidecar_hosted_ui_matrix_vector, run_sidecar_mls_bootstrap_binding_vector,
     run_sidecar_mls_effective_access_vector, run_sidecar_multi_agent_publish_vector,
-    run_sidecar_vector_suite,
+    run_sidecar_non_disclosure_surface_matrix_vector, run_sidecar_revoke_fail_closed_vector,
+    run_sidecar_union_history_frontier_vector, run_sidecar_vector_suite,
 };
 pub use signal_federation::run_signal_federation_fixture_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
