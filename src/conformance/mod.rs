@@ -26,6 +26,8 @@ mod handle_claim_rejection_vectors;
 mod history_crypto_closure;
 mod identity_root;
 mod inkson_client;
+mod kernel_joint_gate;
+mod kernel_reference;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
 mod lattice_mixed_kinds;
@@ -194,6 +196,7 @@ pub use identity_root::{
     run_identity_root_anchor_checkpoint_suite,
 };
 pub use inkson_client::run_inkson_client_profile_manifest_suite;
+pub use kernel_joint_gate::{KERNEL_JOINT_GATE_FIXTURE, run_kernel_joint_gate_suite};
 pub use key_backup_hardening::{
     ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, run_key_backup_hardening_fixture_suite,
     run_key_backup_kdf_floor_rejected_vector, run_key_backup_unlock_proof_vector,

@@ -73,6 +73,7 @@ arkret-push-policy.workspace = true
 arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
 arkret-wire = {workspace = true}
+soland-domain = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
 hkdf = {workspace = true}
 hmac = {workspace = true}
@@ -136,6 +137,7 @@ arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = fa
 arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["collaboration", "keypackages", "signer", "webvh"]}
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}
 arkret-wire = {path = "../arkret-rust-sdk/crates/wire"}
+soland-domain = {path = "../soland/crates/domain"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"
 hmac = "0.13.0"
