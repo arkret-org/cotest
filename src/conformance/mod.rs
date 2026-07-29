@@ -53,6 +53,7 @@ mod profile_matrix;
 mod profile_registry;
 mod protocol_gap_closure;
 mod push_rule_core;
+pub mod recovery_transaction_faults;
 mod redaction;
 mod reducer_profile;
 mod scaffold_gate;
