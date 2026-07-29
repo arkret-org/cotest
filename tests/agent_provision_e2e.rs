@@ -694,7 +694,7 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
     prepare_agent_pcr_recovery(&server, &token, &provisioned).await?;
     let outcome = controller.agent_key_pair(&body).await?;
     assert_eq!(
-        outcome.authorized_event_ref, body.authorize_event.event_id,
+        outcome.authorized_event_ref, body.authorize_event.event.event_id,
         "the retry must accept the original authorization event"
     );
     assert_eq!(
@@ -2718,6 +2718,29 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         controller_vm,
         arkret::signatures::SignEventOptions::new().with_created_at(canonical_now()),
     )?;
+    let sdk = bearer_sdk_client(server, token)?;
+    let realm_create = sdk
+        .events_query_all_pages(provisioned.principal_control_realm_id().as_str())
+        .await?
+        .events
+        .into_iter()
+        .find(|event| event.kind == arkret::events::EventKind::REALM_CREATE)
+        .ok_or_else(|| anyhow!("managed PCR Realm create Event is missing"))?;
+    let realm_create_payload = serde_json::to_value(&realm_create.payload)?;
+    let notary: arkret_wire::notary::NotaryValue = serde_json::from_value(
+        realm_create_payload
+            .pointer("/object/notary")
+            .cloned()
+            .ok_or_else(|| anyhow!("managed PCR Realm notary is missing"))?,
+    )?;
+    let authorize_submission = prepare_initial_submission_for_notary(
+        &sdk,
+        &authorize_event,
+        &SigningKey::from_bytes(&controller_signing_seed),
+        controller_vm,
+        &notary,
+    )
+    .await?;
     let disclosure_issued_at = canonical_now();
     let requested_scope = test_agent_requested_scope();
     let requested_scope_digest = arkret_signatures::agent::agent_requested_scope_digest(
@@ -2762,7 +2785,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         .build_key_pair_request(
             requested_scope_disclosure,
             signing_key_binding,
-            authorize_event,
+            authorize_submission,
         )?
         .body)
 }
