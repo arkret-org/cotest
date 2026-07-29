@@ -591,6 +591,17 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         completed_session["transaction_id"],
         completed["transaction_id"]
     );
+    assert_recovery_public_artifacts_contain_no_secret_material(
+        &[
+            serde_json::to_value(&request)?,
+            first,
+            serde_json::to_value(&terminal_request)?,
+            completed,
+            completed_session,
+        ],
+        &material,
+        server.service_log_contents()?.as_deref(),
+    )?;
     Ok(())
 }
 
@@ -1676,6 +1687,58 @@ fn recovery_key_material() -> Result<arkret_crypto::identity_root::IdentityRecov
             0,
         )?,
     )
+}
+
+fn assert_recovery_public_artifacts_contain_no_secret_material(
+    artifacts: &[Value],
+    material: &arkret_crypto::identity_root::IdentityRecoveryKeyMaterial,
+    service_log: Option<&str>,
+) -> Result<()> {
+    let rendered = artifacts
+        .iter()
+        .map(serde_json::to_string)
+        .collect::<serde_json::Result<Vec<_>>>()?
+        .join("\n");
+    let mut public_surfaces = vec![("durable HTTP artifacts", rendered.as_str())];
+    if let Some(log) = service_log {
+        public_surfaces.push(("service log", log));
+    }
+
+    let private_values = [
+        ("mnemonic", RECOVERY_WORDS.to_owned()),
+        ("PRK", URL_SAFE_NO_PAD.encode(material.prk)),
+        ("root seed", URL_SAFE_NO_PAD.encode(material.root_seed)),
+        (
+            "next root seed",
+            URL_SAFE_NO_PAD.encode(material.next_root_seed),
+        ),
+        (
+            "recovery proof seed",
+            URL_SAFE_NO_PAD.encode(material.recovery_proof_seed),
+        ),
+        (
+            "backup HPKE IKM",
+            URL_SAFE_NO_PAD.encode(material.backup_hpke_ikm),
+        ),
+        (
+            "backup HPKE private key",
+            URL_SAFE_NO_PAD.encode(material.backup_hpke_serialized_private_key),
+        ),
+        (
+            "replacement signing seed",
+            URL_SAFE_NO_PAD.encode([25_u8; 32]),
+        ),
+    ];
+    for (surface_name, surface) in public_surfaces {
+        for (secret_name, secret) in &private_values {
+            if surface.contains(secret) {
+                return Err(anyhow!(
+                    "{surface_name} leaked recovery {secret_name} material"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn recovery_signing_key_material(

@@ -395,6 +395,17 @@ impl ArkretServer {
         HttpClient::new()
     }
 
+    /// Returns the captured service log when artifact capture is enabled.
+    pub fn service_log_contents(&self) -> Result<Option<String>> {
+        self.log_path
+            .as_ref()
+            .map(|path| {
+                fs::read_to_string(path)
+                    .with_context(|| format!("read service log {}", path.display()))
+            })
+            .transpose()
+    }
+
     /// Build an authenticated request for the harness-only embedded WebVH
     /// registration gate. Keeping the credential here prevents direct fixture
     /// requests from silently bypassing the bootstrap authentication contract.
