@@ -1722,6 +1722,7 @@ export async function putAccountDataViaEventApi(
   realmId: string,
   key: string,
   body: Record<string, unknown>,
+  expectedRevision: number,
   opts: { server?: SolandKey; context?: string } = {},
 ) {
   const payloadBody = privateAccountDataKeys.has(key)
@@ -1738,6 +1739,7 @@ export async function putAccountDataViaEventApi(
         key,
         owner: actorDid,
         body: payloadBody,
+        expected_revision: expectedRevision,
         updated_at: canonicalTimestamp(),
       },
     }),

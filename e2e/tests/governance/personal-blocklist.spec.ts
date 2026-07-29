@@ -60,7 +60,7 @@ test.describe("personal blocklist", () => {
     expect(JSON.stringify(accountData)).toContain("delta");
   });
 
-  test("Complement account_data control: same account_data_key overwrites and sync returns latest entry", async ({
+  test("Complement account_data control: same account_data_key advances through CAS revisions and sync returns latest entry", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -75,27 +75,31 @@ test.describe("personal blocklist", () => {
       `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       {
         headers: authHeaders(token),
-        data: { content: first },
+        data: { expected_revision: 0, content: first },
       },
     );
     expect(firstPut.status()).toBe(201);
-    expect(
-      ((await firstPut.json()) as { content?: Record<string, unknown> })
-        .content,
-    ).toMatchObject(first);
+    const firstEntry = (await firstPut.json()) as {
+      content?: Record<string, unknown>;
+      revision?: number;
+    };
+    expect(firstEntry.content).toMatchObject(first);
+    expect(firstEntry.revision).toBe(1);
 
     const secondPut = await request.put(
       `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       {
         headers: authHeaders(token),
-        data: { content: second },
+        data: { expected_revision: firstEntry.revision, content: second },
       },
     );
     expect(secondPut.status()).toBe(200);
-    expect(
-      ((await secondPut.json()) as { content?: Record<string, unknown> })
-        .content,
-    ).toMatchObject(second);
+    const secondEntry = (await secondPut.json()) as {
+      content?: Record<string, unknown>;
+      revision?: number;
+    };
+    expect(secondEntry.content).toMatchObject(second);
+    expect(secondEntry.revision).toBe(2);
 
     const get = await request.get(
       `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
@@ -426,6 +430,7 @@ test.describe("personal blocklist", () => {
           },
         ],
       },
+      0,
       {
         context: "set ak.push_rules push mute",
       },
@@ -525,6 +530,7 @@ async function putBlocklist(
     realmId,
     BLOCKLIST_DATA_TYPE,
     { entries },
+    0,
     { context: `set ${BLOCKLIST_DATA_TYPE}` },
   );
 }

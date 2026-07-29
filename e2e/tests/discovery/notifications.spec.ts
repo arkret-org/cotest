@@ -455,6 +455,7 @@ test.describe("notifications", () => {
           },
         ],
       },
+      0,
       { context: "set ak.push_rules" },
     );
 
