@@ -2542,7 +2542,6 @@ try {
         }
         if ($FederationPeers) {
             $parts = $FederationPeers -split "\|", 2
-            $map.SOLAND_FEDERATION_POLICY = "Mesh"
             $map.SOLAND_FEDERATION_PEERS = Convert-ToContainerReachableUrl $parts[0]
         }
         if ($NotarySigningKey) {
@@ -2607,7 +2606,6 @@ try {
             $values.SOLAND_DIRECTORY_ANNOUNCE_URL = "$($TeabayBaseUrl.TrimEnd('/'))/_arkret/find/directory/announce"
         }
         if ($FederationPeers) {
-            $values.SOLAND_FEDERATION_POLICY = "Mesh"
             $values.SOLAND_FEDERATION_PEERS = $FederationPeers
         }
         if ($NotarySigningKey) {

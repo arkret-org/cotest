@@ -26,6 +26,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   currentActorDidApi,
+  localPrincipalControlProposalReceipt,
   principalControlRealmForDid,
   prepareSignedEventCbaApi,
   queryRealmEventsApi,
@@ -1696,22 +1697,18 @@ async function promoteDeviceToVerified(
 ) {
   const realmId = principalControlRealmForDid(user.did);
   const identity = generateCrossSigningIdentity({ principalId: user.did });
-  const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
   const publishEnvelope = signedEventEnvelope({
     actorDid: user.did,
     realmId,
     kind: "ak.cross_signing.publish",
     payload: buildCrossSigningPublishPayload(identity),
   });
-  await alignEventToActorFrontier(request, headersSource, publishEnvelope);
-  const publish = await request.post(eventsUrl, {
-    headers: selfPathHeaders(headersSource, "POST", eventsUrl),
-    data: publishEnvelope,
-  });
-  expect(
-    [200, 201],
-    `ak.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
-  ).toContain(publish.status());
+  await submitPrincipalControlEvent(
+    request,
+    headersSource,
+    publishEnvelope,
+    "ak.cross_signing.publish",
+  );
 
   const deviceKey = deviceVerifyKeyMultibase();
   const binding = buildDeviceCrossSigningBinding({
@@ -1747,15 +1744,12 @@ async function promoteDeviceToVerified(
       cross_signing_binding: binding,
     },
   });
-  await alignEventToActorFrontier(request, headersSource, authorizeEnvelope);
-  const authorize = await request.post(eventsUrl, {
-    headers: selfPathHeaders(headersSource, "POST", eventsUrl),
-    data: authorizeEnvelope,
-  });
-  expect(
-    [200, 201],
-    `ak.device.authorize (self-verify) returned ${authorize.status()}: ${await authorize.text()}`,
-  ).toContain(authorize.status());
+  await submitPrincipalControlEvent(
+    request,
+    headersSource,
+    authorizeEnvelope,
+    "ak.device.authorize (self-verify)",
+  );
 
   // The device surfaces as authorized (status=active) in the projection.
   await expect
@@ -1764,6 +1758,62 @@ async function promoteDeviceToVerified(
       intervals: [500, 1_000, 2_000],
     })
     .toBe("active");
+}
+
+async function submitPrincipalControlEvent(
+  request: APIRequestContext,
+  headersSource: SelfPathHeadersSource,
+  envelope: Record<string, unknown>,
+  context: string,
+) {
+  await prepareSignedEventCbaApi(request, "", envelope, { force: true });
+  await alignEventToActorFrontier(request, headersSource, envelope);
+
+  const leaseUrl = `${solandBaseUrl()}/_arkret/self/authorization-leases`;
+  const leaseResponse = await request.post(leaseUrl, {
+    headers: {
+      ...selfPathHeaders(headersSource, "POST", leaseUrl),
+      "idempotency-key": `cotest-lease-${createHash("sha256")
+        .update(canonicalBytes({ events: [envelope] }))
+        .digest("hex")}`,
+    },
+    data: { events: [envelope] },
+  });
+  const leaseText = await leaseResponse.text();
+  expect(
+    [200, 201],
+    `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
+  ).toContain(leaseResponse.status());
+  const leaseBody = JSON.parse(leaseText) as {
+    authorization_leases?: Array<Record<string, unknown>>;
+  };
+  const authorizationLease = leaseBody.authorization_leases?.[0];
+  expect(
+    authorizationLease,
+    `${context} lease issuance omitted authorization_lease`,
+  ).toBeTruthy();
+
+  const controlProposalReceipt =
+    localPrincipalControlProposalReceipt(envelope);
+  expect(
+    controlProposalReceipt,
+    `${context} omitted principal Control Proposal Receipt`,
+  ).toBeTruthy();
+
+  const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+  const response = await request.post(eventsUrl, {
+    headers: selfPathHeaders(headersSource, "POST", eventsUrl),
+    data: {
+      event: envelope,
+      authorization_lease: authorizationLease,
+      control_proposal_receipt: controlProposalReceipt,
+    },
+  });
+  const text = await response.text();
+  expect(
+    [200, 201],
+    `${context} returned ${response.status()}: ${text}`,
+  ).toContain(response.status());
 }
 
 async function alignEventToActorFrontier(

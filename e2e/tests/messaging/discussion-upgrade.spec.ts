@@ -18,6 +18,7 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   alignSignedEventToActorFrontierApi,
   canonicalTimestamp,
+  rawSubmitSignedEventApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -462,17 +463,10 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         ),
       },
     });
-    await alignSignedEventToActorFrontierApi(
+    const response = await rawSubmitSignedEventApi(
       request,
       fixture.aliceToken,
       envelope,
-    );
-    const response = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(fixture.aliceToken),
-        data: envelope,
-      },
     );
     const body = await response.text();
     expect(response.status(), body).not.toBe(200);

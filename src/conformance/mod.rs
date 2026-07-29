@@ -61,6 +61,8 @@ mod schema_validation;
 mod schema_validation_fixture;
 mod security_closure;
 mod security_negative;
+mod security_transaction_resilience;
+mod security_transaction_resilience_reference;
 mod service_closure_hardening;
 mod sidecar_vectors;
 mod signal_federation;
@@ -322,6 +324,7 @@ pub use security_closure::{
     run_security_closure_fixture_suite, validate_security_closure_fixture,
 };
 pub use security_negative::run_security_negative_profile_suite;
+pub use security_transaction_resilience::run_security_transaction_resilience_joint_gate;
 pub use service_closure_hardening::{
     ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS, run_cursor_revoke_high_assurance_vector,
     run_device_recovery_lifecycle_vector, run_device_revocation_seal_binding_vector,
