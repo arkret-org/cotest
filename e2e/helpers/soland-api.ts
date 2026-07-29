@@ -45,6 +45,14 @@ export type SignedEventEnvelopeArgs = {
 
 export type EventProofMode = "dev-proof" | "detached-jws";
 
+export const REALM_FOUNDING_GRANT_ACTIONS = [
+  "ak.realm.admin",
+  "ak.capability.grant",
+  "ak.capability.revoke",
+  "ak.realm_key.share",
+  "ak.message.create",
+] as const;
+
 type RegisteredEventSigner = {
   verificationMethod: string;
   signingSeedB64url: string;
@@ -363,12 +371,7 @@ export async function createRealmApi(
     realm_id: realmId,
     issuer: ownerDid,
     subject: ownerDid,
-    actions: [
-      "ak.realm.admin",
-      "ak.capability.grant",
-      "ak.capability.revoke",
-      "ak.realm_key.share",
-    ],
+    actions: [...REALM_FOUNDING_GRANT_ACTIONS],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
       {

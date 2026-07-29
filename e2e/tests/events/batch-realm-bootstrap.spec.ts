@@ -9,6 +9,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   queryRealmEventsApi,
+  REALM_FOUNDING_GRANT_ACTIONS,
   sendMessageApi,
   typedId,
 } from "../../helpers/soland-api";
@@ -64,6 +65,13 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     expect(create!.prev_refs).toEqual([]);
     expect(foundingGrant!.actor_seq).toBe(1);
     expect(foundingGrant!.prev_refs).toEqual([create!.event_id]);
+    expect(
+      (
+        foundingGrant!.payload as {
+          grant?: { actions?: string[] };
+        }
+      ).grant?.actions,
+    ).toEqual([...REALM_FOUNDING_GRANT_ACTIONS]);
     expect(plaintextVisibleServices!.actor_seq).toBe(2);
     expect(plaintextVisibleServices!.prev_refs).toEqual([
       foundingGrant!.event_id,
