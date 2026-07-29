@@ -4,6 +4,8 @@
 //! founding PCR bootstrap, recovery sessions, proofs, and every recovery
 //! transaction participant run through their standard HTTP operations.
 
+use std::sync::Arc;
+
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_http_client::{Auth, ClientBuilder};
@@ -165,6 +167,16 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         &principal_authed,
     )
     .await?;
+    let backup_id = inkson::fresh_device_recovery::establish_joint_recovery_policy_and_backup(
+        principal_authed.clone(),
+        bootstrap.principal_id(),
+        FOUNDING_DEVICE,
+        RECOVERY_WORDS,
+        device_key.to_bytes(),
+        Arc::new(signer),
+    )
+    .await?;
+    assert!(backup_id.starts_with("ak:backup:"));
 
     let document = principal
         .identity_document(bootstrap.principal_id(), None)
