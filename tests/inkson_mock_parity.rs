@@ -166,6 +166,8 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
 
         let rendered_path = render_str(&case.path, &ctx);
         let rendered_body = render_body(case, &ctx)?;
+        let rendered_body =
+            prepare_live_publication_body(&server, case, &ctx, rendered_body).await?;
         let mock = normalize_snapshot(
             &case.id,
             call_mock_contract(
@@ -829,10 +831,10 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
             "digest_algorithm": "sha256",
             "notary": {
                 "kind": "single_did",
-                "did": ctx.alice_did,
-                "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
-                "controller_organization": "did:web:mock-parity.cotest.local",
-                "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
+                "did": ctx.service_id,
+                "recovery_members": [ctx.service_id],
+                "controller_organization": ctx.service_id,
+                "recovery_controller_organizations": [ctx.service_id]
             },
             "created_at": "2026-05-22T10:00:00.000Z"
         }
@@ -964,6 +966,110 @@ async fn call_live_soland(
     let text = response.text().await?;
     let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
     Ok(HttpSnapshot { status, body })
+}
+
+async fn prepare_live_publication_body(
+    server: &ArkretServer,
+    case: &ParityCase,
+    ctx: &TemplateContext,
+    body: Option<Value>,
+) -> Result<Option<Value>> {
+    if case.body_template.as_deref() == Some("typing_signal") {
+        let mut envelope = body.context("Signal template omitted its request body")?;
+        let seal_ref = wait_for_realm_seal(server, ctx, &ctx.realm_id).await?;
+        envelope["seal_ref"] = Value::String(seal_ref);
+        cotest::harness::attach_signal_proof_value(
+            &mut envelope,
+            &ed25519_dalek::SigningKey::from_bytes(&MOCK_PARITY_ALICE_SIGNING_SEED),
+        );
+        return Ok(Some(envelope));
+    }
+    if !matches!(
+        case.body_template.as_deref(),
+        Some("realm_create_event" | "realm_create_event_2" | "realm_create_event_3")
+    ) {
+        return Ok(body);
+    }
+    let body = body.context("Realm bootstrap template omitted its request body")?;
+    let events = body
+        .get("events")
+        .and_then(Value::as_array)
+        .context("Realm bootstrap template omitted events")?
+        .iter()
+        .cloned()
+        .map(serde_json::from_value::<arkret_wire::Event>)
+        .collect::<Result<Vec<_>, _>>()
+        .context("decode Realm bootstrap Events")?;
+    let request = arkret_wire::AuthorizationLeaseIssueRequest {
+        events: events.clone(),
+        intents: Vec::new(),
+    };
+    let request_digest = arkret_canonical::canonical_sha256(&request)?;
+    let response = server
+        .http()
+        .post(server.url("/_arkret/self/authorization-leases"))
+        .bearer_auth(&ctx.alice_token)
+        .header("Idempotency-Key", format!("cotest-parity-{request_digest}"))
+        .json(&request)
+        .send()
+        .await?;
+    let status = response.status();
+    let text = response.text().await?;
+    if status != reqwest::StatusCode::OK {
+        bail!("Realm bootstrap lease issuance returned {status}: {text}");
+    }
+    let outcome: arkret_wire::AuthorizationLeaseIssueOutcome =
+        serde_json::from_str(&text).context("decode Realm bootstrap lease outcome")?;
+    outcome
+        .validate_against_request(&request)
+        .context("validate Realm bootstrap lease outcome")?;
+    Ok(Some(serde_json::to_value(
+        arkret_wire::EventsSubmitBatchRequestBody {
+            events: events
+                .into_iter()
+                .zip(outcome.authorization_leases)
+                .map(
+                    |(event, authorization_lease)| arkret_wire::EventInitialSubmission {
+                        event,
+                        authorization_lease,
+                        cba_proof_bundles: Vec::new(),
+                        control_proposal_receipt: None,
+                    },
+                )
+                .collect(),
+        },
+    )?))
+}
+
+async fn wait_for_realm_seal(
+    server: &ArkretServer,
+    ctx: &TemplateContext,
+    realm_id: &str,
+) -> Result<String> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let response = server
+            .http()
+            .get(server.url("/_arkret/self/events/frontier"))
+            .bearer_auth(&ctx.alice_token)
+            .query(&[("realm_id", realm_id)])
+            .send()
+            .await?;
+        if response.status() == reqwest::StatusCode::OK {
+            let body: Value = response.json().await?;
+            if let Some(seal_id) = body
+                .pointer("/frontier/seal_id")
+                .and_then(Value::as_str)
+                .filter(|seal_id| !seal_id.trim().is_empty())
+            {
+                return Ok(seal_id.to_owned());
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            bail!("Realm {realm_id} founding Seal was not materialized within 30 seconds");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use anyhow::{Context, Result};
 use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
@@ -9,16 +7,13 @@ use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{
     canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
 };
-use arkret_identifiers::{DeviceId, Did, EventId, Hlc, RealmId, TypedTrustDomainId};
+use arkret_identifiers::{DeviceId, Did, EventId, Hlc, RealmId};
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeyPackageClaimRecord, KeysUploadRequestBody,
     PeerKeyPackageClaimPurpose, PeerKeyPackageRequesterAuthorization,
     PeerKeyPackagesClaimAuthorizationDraft, PeerKeyPackagesClaimOutcome,
     PeerKeyPackagesClaimRequestBody, PeerKeyPackagesClaimTransportBinding,
     peer_keypackage_claim_authorization_signing_bytes,
-};
-use arkret_models_identity::artifacts_device_identity::{
-    CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_signatures::http_signature::{
@@ -28,7 +23,10 @@ use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
     prepare_principal_inception,
 };
-use arkret_wire::{Base64UrlString, Event, EventRef, NonEmptyString};
+use arkret_wire::{
+    AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, Base64UrlString, Event,
+    EventInitialSubmission, EventRef, NonEmptyString,
+};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer, SigningKey};
@@ -1030,157 +1028,12 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
     })
 }
 
-/// Typed model-A `ak.device.authorize` payload:
-/// built on the SDK `DeviceAuthorizePayload` so a schema drift breaks the
-/// build here instead of surfacing as a server-side `schema_violation`.
-pub(crate) fn bootstrap_device_authorize_payload(
-    principal_id: &str,
-    device_id: &str,
-    device_signing_key: &SigningKey,
-) -> Result<Value> {
-    let device_public_key =
-        ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
-    let principal = Did::new(principal_id.to_owned())
-        .with_context(|| format!("invalid principal DID `{principal_id}`"))?;
-    let device =
-        arkret_identifiers::DeviceId::new(device_id.to_owned()).context("invalid device id")?;
-    let algorithms = vec![
-        arkret_wire::NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1").unwrap(),
-        arkret_wire::NonEmptyString::new("ak.mls.v1").unwrap(),
-    ];
-    let trust_algorithms = algorithms
-        .iter()
-        .map(|algorithm| algorithm.as_str().to_owned())
-        .collect::<Vec<_>>();
-    let ssk_generation = std::num::NonZeroU64::new(1).unwrap();
-    let ssk_signature =
-        test_self_signing_key().sign(&arkret_crypto::DeviceTrustBinding::canonical_input(
-            &principal,
-            &device,
-            &device_public_key,
-            "z6LSCotestDeviceHpkeKey",
-            &trust_algorithms,
-            ssk_generation.get(),
-        )?);
-    let mut payload = arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload {
-        principal_id: principal.clone(),
-        device_id: device,
-        device_public_key: arkret_wire::NonEmptyString::new(device_public_key)
-            .map_err(anyhow::Error::msg)?,
-        hpke_key: arkret_wire::NonEmptyString::new("z6LSCotestDeviceHpkeKey")
-            .expect("static HPKE key is non-empty"),
-        algorithms,
-        device_key_algorithm: Some(arkret_wire::NonEmptyString::new("EdDSA").unwrap()),
-        authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(principal),
-        scopes: None,
-        not_before: "2026-05-02T00:00:00.000Z"
-            .parse()
-            .expect("static timestamp parses"),
-        expires_at: None,
-        device_signature: None,
-        proof: None,
-        cross_signing_binding: Some(arkret_models_collaboration::events_payloads::device_identity::DeviceCrossSigningBinding {
-            verification_method: arkret_wire::DidUrl::new(format!(
-                "{principal_id}#ak_self_signing_v1"
-            ))
-            .map_err(anyhow::Error::msg)?,
-            alg: arkret_wire::NonEmptyString::new("EdDSA").unwrap(),
-            ssk_generation,
-            signature: arkret_wire::Base64UrlString::new(
-                URL_SAFE_NO_PAD.encode(ssk_signature.to_bytes()),
-            )
-            .unwrap(),
-        }),
-        enrollment_authority_binding: None,
-        recovery_session_id: None,
-    };
-    let signature_input = payload
-        .device_possession_signature_input()
-        .context("build ak.device.authorize device possession signature input")?;
-    let signature = device_signing_key.sign(&signature_input);
-    let mut signature_material = BTreeMap::new();
-    signature_material.insert("alg".to_owned(), json!("EdDSA"));
-    signature_material.insert(
-        "kid".to_owned(),
-        json!(format!("{principal_id}#{device_id}")),
-    );
-    signature_material.insert(
-        "sig".to_owned(),
-        json!(URL_SAFE_NO_PAD.encode(signature.to_bytes())),
-    );
-    payload.device_signature = Some(
-        arkret_models_collaboration::events_payloads::SignatureMaterial::Variant1(
-            signature_material,
-        ),
-    );
-    serde_json::to_value(&payload).context("serialize device.authorize payload")
-}
-
 fn test_self_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[0x52; 32])
 }
 
 fn test_principal_signing_key() -> SigningKey {
     SigningKey::from_bytes(&TEST_PRINCIPAL_SIGNING_KEY_SEED)
-}
-
-fn test_cross_signing_publish(actor: &str) -> Result<CrossSigningPublish> {
-    let principal = Did::new(actor.to_owned()).context("invalid cross-signing principal")?;
-    let psk = test_principal_signing_key();
-    let ssk = test_self_signing_key();
-    let usk = SigningKey::from_bytes(&[0x53; 32]);
-    let psk_kid = format!("{actor}#cotest-principal-signing-key");
-    let ssk_kid = format!("{actor}#ak_self_signing_v1");
-    let usk_kid = format!("{actor}#ak_user_signing_v1");
-    let key_record = |kid: String, key: &SigningKey| PublishedKey {
-        kid: NonEmptyString::new(kid).expect("test key id is non-empty"),
-        alg: NonEmptyString::new("EdDSA".to_owned()).unwrap(),
-        public_key: NonEmptyString::new(ed25519_pubkey_to_did_key_multibase(
-            &key.verifying_key().to_bytes(),
-        ))
-        .unwrap(),
-        key_format: KeyFormat::Multibase,
-    };
-    let ssk_record = key_record(ssk_kid.clone(), &ssk);
-    let usk_record = key_record(usk_kid, &usk);
-    let pending_binding = |verification_method: String| SubordinateSignedKeyBinding {
-        verification_method: NonEmptyString::new(verification_method).unwrap(),
-        alg: NonEmptyString::new("EdDSA".to_owned()).unwrap(),
-        signature: NonEmptyString::new("pending".to_owned()).unwrap(),
-    };
-    let mut publish = CrossSigningPublish {
-        principal_id: principal,
-        trust_domain: TypedTrustDomainId::new(
-            "ak:trust_domain:0196419b-0000-7000-8000-000000000000".to_owned(),
-        )?,
-        principal_signing_key: key_record(psk_kid.clone(), &psk),
-        self_signing_key: SubordinateSignedKey {
-            kid: ssk_record.kid,
-            alg: ssk_record.alg,
-            public_key: ssk_record.public_key,
-            key_format: ssk_record.key_format,
-            binding: pending_binding(psk_kid.clone()),
-        },
-        user_signing_key: SubordinateSignedKey {
-            kid: usk_record.kid,
-            alg: usk_record.alg,
-            public_key: usk_record.public_key,
-            key_format: usk_record.key_format,
-            binding: pending_binding(psk_kid),
-        },
-        expected_previous_generation: 0,
-        generation: std::num::NonZeroU64::new(1).unwrap(),
-        issued_at: "2026-05-02T00:00:00.000Z".parse().unwrap(),
-    };
-    publish.self_signing_key.binding.signature = NonEmptyString::new(
-        URL_SAFE_NO_PAD.encode(psk.sign(&publish.self_signing_binding_input()?).to_bytes()),
-    )
-    .unwrap();
-    publish.user_signing_key.binding.signature = NonEmptyString::new(
-        URL_SAFE_NO_PAD.encode(psk.sign(&publish.user_signing_binding_input()?).to_bytes()),
-    )
-    .unwrap();
-    Ok(publish)
 }
 
 async fn install_test_principal_control_document(server: &ArkretServer, actor: &str) -> Result<()> {
@@ -1232,26 +1085,6 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
     Ok(())
 }
 
-async fn publish_test_cross_signing(server: &ArkretServer, token: &str, actor: &str) -> Result<()> {
-    install_test_principal_control_document(server, actor).await?;
-    let principal = Did::new(actor.to_owned()).context("invalid cross-signing principal")?;
-    let principal_realm = principal_control_realm_id(&principal);
-    let accepted = crate::harness::submit_event_with_signing_seed_and_verification_method(
-        server,
-        token,
-        actor,
-        principal_realm.as_str(),
-        "ak.cross_signing.publish",
-        serde_json::to_value(test_cross_signing_publish(actor)?)?,
-        StatusCode::OK,
-        TEST_PRINCIPAL_SIGNING_KEY_SEED,
-        &format!("{actor}#cotest-principal-signing-key"),
-    )
-    .await?;
-    assert_eq!(accepted["status"], "accepted");
-    Ok(())
-}
-
 pub async fn authorize_device_public_key(
     server: &ArkretServer,
     token: &str,
@@ -1259,37 +1092,9 @@ pub async fn authorize_device_public_key(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<()> {
-    publish_test_cross_signing(server, token, actor).await?;
-    authorize_additional_device_public_key(server, token, actor, device_id, device_signing_key)
-        .await
-}
-
-pub(crate) async fn authorize_additional_device_public_key(
-    server: &ArkretServer,
-    token: &str,
-    actor: &str,
-    device_id: &str,
-    device_signing_key: &SigningKey,
-) -> Result<()> {
-    let principal =
-        Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
-    let principal_realm = principal_control_realm_id(&principal);
-    let accepted = crate::harness::submit_event_with_signing_seed_and_verification_method(
-        server,
-        token,
-        actor,
-        &principal_realm,
-        "ak.device.authorize",
-        bootstrap_device_authorize_payload(actor, device_id, device_signing_key)?,
-        StatusCode::OK,
-        TEST_PRINCIPAL_SIGNING_KEY_SEED,
-        &format!("{actor}#cotest-principal-signing-key"),
-    )
-    .await?;
-    assert_eq!(
-        accepted["status"], "accepted",
-        "device authorize response: {accepted}"
-    );
+    install_test_principal_control_document(server, actor).await?;
+    bootstrap_test_device_authorization(server, token, actor, device_id, device_signing_key)
+        .await?;
     Ok(())
 }
 
@@ -1568,12 +1373,48 @@ async fn bootstrap_test_device_authorization(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
 
-    // The lease is not an Event field and cannot be derived from one, so the
-    // bootstrap unit is packaged with the publication evidence each slot
-    // travels under (`offline-publication.md` §2.1).
+    let lease_request = AuthorizationLeaseIssueRequest {
+        events: vec![create.clone(), authorize.clone()],
+        intents: Vec::new(),
+    };
+    let idempotency_key = format!(
+        "cotest-bootstrap-{}",
+        canonical_sha256(&lease_request)?
+            .strip_prefix("sha256:")
+            .unwrap_or_default()
+    );
+    let lease_value = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/authorization-leases"))
+            .bearer_auth(token)
+            .header("Idempotency-Key", idempotency_key)
+            .json(&lease_request),
+        StatusCode::OK,
+    )
+    .await?;
+    let lease_outcome: AuthorizationLeaseIssueOutcome =
+        serde_json::from_value(lease_value).context("decode founding authorization leases")?;
+    lease_outcome
+        .validate_against_request(&lease_request)
+        .context("validate founding authorization leases")?;
+    let [create_lease, authorize_lease] = lease_outcome.authorization_leases.as_slice() else {
+        anyhow::bail!("founding authorization lease issue did not preserve unit cardinality");
+    };
+
     let request = self_principal_bootstrap_submit_request(
-        crate::publication::initial_submission(create, "ak.realm.admin")?,
-        crate::publication::initial_submission(authorize.clone(), "ak.device.authorize")?,
+        EventInitialSubmission {
+            event: create,
+            authorization_lease: create_lease.clone(),
+            cba_proof_bundles: Vec::new(),
+            control_proposal_receipt: None,
+        },
+        EventInitialSubmission {
+            event: authorize.clone(),
+            authorization_lease: authorize_lease.clone(),
+            cba_proof_bundles: Vec::new(),
+            control_proposal_receipt: None,
+        },
         &crate::publication::project_cells,
     )?;
     let accepted = expect_json(
