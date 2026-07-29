@@ -35,7 +35,8 @@ use arkret_models_collaboration::event_sync::{
 };
 use arkret_models_collaboration::events_payloads::SignatureMaterial;
 use arkret_models_collaboration::events_payloads::device_identity::{
-    DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceOrPrincipalRef,
+    DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceListUpdatePayload,
+    DeviceOrPrincipalRef,
 };
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
@@ -60,8 +61,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
-    ArkretServer, create_realm_with_signing_seed, event_envelope, eventually, expect_json,
-    refresh_event_proof_with_signing_seed, register_account,
+    ArkretServer, create_realm_with_signing_seed, dev_login, event_envelope, eventually,
+    expect_api_error, expect_json, refresh_event_proof_with_signing_seed, register_account,
 };
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
@@ -401,16 +402,27 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
             .cloned()
             .ok_or_else(|| anyhow!("verified session omitted proof digest: {verified}"))?,
     )?;
+    let verified_session: RecoverySessionState = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .get(server.url(&format!(
+                    "/_arkret/root/identity/recovery-sessions/{}",
+                    session.recovery_session_id
+                )))
+                .bearer_auth(&token),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
 
-    let request =
-        cotest::scenarios::security_transaction_live::cross_signing_recovery_create_request_for(
-            server.service_id(),
-            ALICE_DID,
-            RECOVERY_REPLACEMENT_DEVICE,
-            session.recovery_session_id.as_str(),
-            proof_digest,
-            1,
-        )?;
+    let request = live_cross_signing_recovery_create_request(
+        &server,
+        &token,
+        &verified_session,
+        proof_digest,
+    )
+    .await?;
     let first = expect_json(
         server
             .http()
@@ -437,6 +449,55 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         first["binding"]["recovery_session_id"],
         session.recovery_session_id.as_str()
     );
+    let continue_request = json!({
+        "request_digest": first["request_digest"],
+        "prepared_plan_digest": first["prepared_plan_digest"],
+        "expected_next_step": "submit_authorize_unit"
+    });
+    let continue_path = format!(
+        "/_arkret/self/security-transactions/{}/continue",
+        first["transaction_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("recovery transaction omitted transaction_id: {first}"))?
+    );
+    let replacement_token = dev_login(&server, ALICE_DID, RECOVERY_REPLACEMENT_DEVICE).await?;
+    let authorized = expect_json(
+        server
+            .http()
+            .post(server.url(&continue_path))
+            .bearer_auth(&replacement_token)
+            .json(&continue_request),
+        StatusCode::OK,
+    )
+    .await?;
+    let authorized_replay = expect_json(
+        server
+            .http()
+            .post(server.url(&continue_path))
+            .bearer_auth(&replacement_token)
+            .json(&continue_request),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(authorized, authorized_replay);
+    assert_eq!(authorized["state"], "awaiting_device_attestation");
+    assert_eq!(authorized["next_required_step"], "issue_terminal_receipt");
+    assert_eq!(
+        authorized["accepted_steps"].as_array().map(Vec::len),
+        Some(1)
+    );
+    let mut conflicting_continue = continue_request;
+    conflicting_continue["request_digest"] = json!(format!("sha256:{}", "0".repeat(64)));
+    expect_api_error(
+        server
+            .http()
+            .post(server.url(&continue_path))
+            .bearer_auth(&replacement_token)
+            .json(&conflicting_continue),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
     Ok(())
 }
 
@@ -1360,6 +1421,154 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         .expect("controller Seal lock")
         .insert(server.url("/"), control_seal);
     Ok(())
+}
+
+async fn live_cross_signing_recovery_create_request(
+    server: &ArkretServer,
+    token: &str,
+    session: &RecoverySessionState,
+    proof_digest: arkret::Hash,
+) -> Result<arkret_wire::SecurityTransactionCreateRequest> {
+    let principal = Did::new(ALICE_DID.to_owned())?;
+    let replacement_device = DeviceId::new(RECOVERY_REPLACEMENT_DEVICE.to_owned())?;
+    let device_key = SigningKey::from_bytes(&[25_u8; 32]);
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
+    let ssk_key = SigningKey::from_bytes(&[22_u8; 32]);
+    let ssk_verification_method = format!("{ALICE_DID}#cotest-ssk");
+    let algorithms = TEST_DEVICE_ALGORITHMS
+        .into_iter()
+        .map(non_empty)
+        .collect::<Result<Vec<_>>>()?;
+    let binding_input = DeviceTrustBinding::canonical_input(
+        &principal,
+        &replacement_device,
+        &device_public_key,
+        TEST_DEVICE_HPKE_KEY,
+        &TEST_DEVICE_ALGORITHMS.map(str::to_owned),
+        1,
+    )?;
+    let mut authorize_payload = DeviceAuthorizePayload {
+        principal_id: principal.clone(),
+        device_id: replacement_device.clone(),
+        device_public_key: non_empty(device_public_key)?,
+        hpke_key: non_empty(TEST_DEVICE_HPKE_KEY)?,
+        algorithms,
+        device_key_algorithm: Some(non_empty("EdDSA")?),
+        authorized_by: DeviceOrPrincipalRef::Did(principal.clone()),
+        scopes: None,
+        not_before: canonical_now(),
+        expires_at: None,
+        device_signature: None,
+        proof: None,
+        cross_signing_binding: Some(DeviceCrossSigningBinding {
+            verification_method: did_url(ssk_verification_method.clone())?,
+            alg: non_empty("EdDSA")?,
+            ssk_generation: std::num::NonZeroU64::new(1).unwrap(),
+            signature: Base64UrlString::new(
+                URL_SAFE_NO_PAD.encode(ssk_key.sign(&binding_input).to_bytes()),
+            )
+            .map_err(anyhow::Error::msg)?,
+        }),
+        enrollment_authority_binding: None,
+        recovery_session_id: Some(session.recovery_session_id.clone()),
+    };
+    authorize_payload.device_signature = Some(SignatureMaterial::NonEmptyString(non_empty(
+        URL_SAFE_NO_PAD.encode(
+            device_key
+                .sign(&authorize_payload.device_possession_signature_input()?)
+                .to_bytes(),
+        ),
+    )?));
+
+    let realm_id = principal_control_realm_id(&principal);
+    let frontier = managed_agent_actor_frontier(server, token, ALICE_DID, &realm_id).await?;
+    let now = canonical_now();
+    let timestamp = format!("{:012x}", now.timestamp_millis());
+    let scope_ref = arkret_wire::ScopeRef::Realm {
+        realm_id: arkret::RealmId::new(realm_id)?,
+    };
+    let mut authorize = arkret::Event::new_at(
+        arkret::events::EventKind::DEVICE_AUTHORIZE,
+        scope_ref.clone(),
+        principal.clone(),
+        frontier.next_actor_seq,
+        arkret::Hlc::new(format!("{timestamp}-0000-a13f9c2e"))?,
+        serde_json::to_value(authorize_payload)?,
+        now,
+    )?;
+    authorize.prev_refs = frontier.frontier_event_ids;
+    let mut list_update = arkret::Event::new_at(
+        arkret::events::EventKind::DEVICE_LIST_UPDATE,
+        scope_ref,
+        principal.clone(),
+        frontier.next_actor_seq + 1,
+        arkret::Hlc::new(format!("{timestamp}-0001-a13f9c2e"))?,
+        serde_json::to_value(DeviceListUpdatePayload {
+            principal_id: principal.clone(),
+            changed: Some(vec![replacement_device]),
+            left: None,
+            device_list_digest: None,
+            stream_id: None,
+            updated_at: Some(now),
+        })?,
+        now,
+    )?;
+    list_update.prev_refs = vec![authorize.event_id.clone()];
+    let control_seal = managed_agent_frontier(server, token, authorize.realm_id.as_str())
+        .await?
+        .ok_or_else(|| anyhow!("recovery principal control Seal frontier is unavailable"))?;
+    let seal_basis = control_seal.seal_basis();
+    authorize.seal_basis = Some(seal_basis.clone());
+    list_update.seal_basis = Some(seal_basis);
+    let ssk_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        [22_u8; 32],
+        principal.clone(),
+        ssk_verification_method.clone(),
+    );
+    for event in [&mut authorize, &mut list_update] {
+        arkret::signatures::sign_event(
+            event,
+            &ssk_signer,
+            &ssk_verification_method,
+            arkret::signatures::SignEventOptions::new().with_created_at(now),
+        )?;
+    }
+    let recovery_signer = inkson::event_signer::build_ed25519_signer_with_verification_method(
+        [22_u8; 32],
+        ALICE_DID,
+        ssk_verification_method,
+    );
+    let authorize_submission =
+        inkson::fresh_device_recovery::author_recovery_publication_submission(
+            session,
+            authorize,
+            arkret_models_crypto::RecoveryPublicationAction::DeviceAuthorize,
+            &recovery_signer,
+            session.requesting_device_id.clone(),
+        )?;
+    let list_submission = inkson::fresh_device_recovery::author_recovery_publication_submission(
+        session,
+        list_update,
+        arkret_models_crypto::RecoveryPublicationAction::DeviceListUpdate,
+        &recovery_signer,
+        session.requesting_device_id.clone(),
+    )?;
+    let request = inkson::fresh_device_recovery::cross_signing_recovery_create_request(
+        session,
+        proof_digest,
+        Did::new(server.service_id().to_owned())?,
+        arkret::TransactionId::new(
+            "ak:transaction:01975510-0000-7000-8000-0000000000f2".to_owned(),
+        )?,
+        arkret::ReceiptId::new("ak:receipt:01975510-0000-7000-8000-0000000000f8".to_owned())?,
+        std::cmp::min(session.expires_at, Utc::now() + chrono::Duration::hours(1)),
+        authorize_submission,
+        list_submission,
+    )?;
+    Ok(arkret_wire::SecurityTransactionCreateRequest::Recovery(
+        request,
+    ))
 }
 
 fn sign_ed25519_b64url(key: &SigningKey, input: &[u8]) -> String {
