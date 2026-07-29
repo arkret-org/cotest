@@ -28,7 +28,8 @@ pub use event_builder::{
     add_member, add_member_with_signing_seed, create_realm, create_realm_with_signing_seed,
     dev_login, device_message_send_request, encrypted_envelope, event_envelope,
     event_envelope_at_frontier_with_signing_seed, event_envelope_with_signing_seed,
-    realm_bootstrap_event_batch, realm_bootstrap_event_batch_with_signing_seed, register_account,
+    event_envelope_with_signing_seed_and_verification_method, realm_bootstrap_event_batch,
+    realm_bootstrap_event_batch_with_signing_seed, register_account,
     register_event_signing_identity, send_message, submit_event, submit_event_with_signing_seed,
     submit_event_with_signing_seed_and_verification_method,
 };

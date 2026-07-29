@@ -463,6 +463,15 @@ impl ArkretServer {
         self.actor_client(did, &canonical_device_id(device_id), token)
     }
 
+    pub fn client_with_token(
+        &self,
+        actor: &str,
+        device_id: &str,
+        token: String,
+    ) -> Result<TestActorClient> {
+        self.actor_client(actor, &canonical_device_id(device_id), token)
+    }
+
     /// Register account-first, then publish a primary localpart through the
     /// service-authenticated account-localpart lifecycle.
     pub async fn register_client_with_localpart(

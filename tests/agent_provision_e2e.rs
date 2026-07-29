@@ -61,7 +61,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope, eventually, expect_json,
-    refresh_event_proof_with_signing_seed, register_account, submit_event_with_signing_seed,
+    refresh_event_proof_with_signing_seed, register_account,
 };
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
@@ -98,6 +98,8 @@ type AgentBackupPointer = (u64, Vec<String>);
 static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, AgentBackupPointer>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static CONTROLLER_SEAL_BASES: LazyLock<Mutex<HashMap<String, arkret::SealBasis>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static CONTROLLER_SEALS: LazyLock<Mutex<HashMap<String, arkret::Seal>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static MANAGED_AGENT_PCR_SEALS: LazyLock<Mutex<HashMap<String, arkret::Seal>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -188,29 +190,63 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         [21_u8; 32],
     )
     .await?;
-    let strand_id = realm_id.replace("ak:realm:", "ak:strand:");
-    let strand = submit_event_with_signing_seed(
-        &server,
-        &token,
-        ALICE_DID,
-        &realm_id,
-        "ak.strand.create",
-        json!({
-            "object": {
-                "id": strand_id,
-                "schema": "ak.schema.strand.v1",
-                "realm_id": realm_id,
-                "tracks": {"discussion": {"enabled": true, "is_primary": true}},
-                "created_by": ALICE_DID,
-                "created_at": "2026-05-02T00:00:00.000Z",
-                "metadata": {"title": "Sidecar context"}
+    eventually(
+        "Sidecar Realm bootstrap Seal",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || async {
+            let response = server
+                .http()
+                .get(server.url("/_arkret/self/events/frontier"))
+                .query(&[("realm_id", realm_id.as_str())])
+                .bearer_auth(&token)
+                .send()
+                .await?;
+            if !response.status().is_success() {
+                return Err(anyhow!(
+                    "Sidecar Realm frontier is not materialized yet: {}",
+                    response.text().await?
+                ));
             }
-        }),
-        StatusCode::OK,
-        [21_u8; 32],
+            let state: EventsFrontierAccountClientState = response.json().await?;
+            if !matches!(state.frontier, EventsFrontierView::RealmSeal(_)) {
+                return Err(anyhow!("Sidecar Realm returned the wrong frontier variant"));
+            }
+            Ok(())
+        },
     )
     .await?;
-    assert_eq!(strand["status"], "accepted");
+    let strand_id = realm_id.replace("ak:realm:", "ak:strand:");
+    let actor_client = server.client_with_token(ALICE_DID, ALICE_DEVICE, token.clone())?;
+    grant_controller_strand_create(&server, &token, &actor_client, &realm_id).await?;
+    let mut strand_event = actor_client
+        .author_event(
+            &realm_id,
+            "ak.strand.create",
+            json!({
+                "object": {
+                    "id": strand_id,
+                    "schema": "ak.schema.strand.v1",
+                    "realm_id": realm_id,
+                    "tracks": {"discussion": {"enabled": true, "is_primary": true}},
+                    "created_by": ALICE_DID,
+                    "created_at": "2026-05-02T00:00:00.000Z",
+                    "metadata": {"title": "Sidecar context"}
+                }
+            }),
+        )
+        .await?;
+    refresh_event_proof_with_signing_seed(&mut strand_event, [21_u8; 32])?;
+    let strand_event: arkret::Event = serde_json::from_value(strand_event)?;
+    let strand_submission = actor_client
+        .sdk()
+        .prepare_initial_submissions(std::slice::from_ref(&strand_event))
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("Sidecar Strand submission is missing"))?;
+    let strand = actor_client.sdk().events_submit(&strand_submission).await?;
+    assert!(strand.accepted.contains(&strand_event.event_id));
 
     let controller = bearer_sdk_client(&server, &token)?;
     let sidecar = controller
@@ -717,7 +753,7 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn agent_legacy_participation_command_fails_closed_e2e() -> Result<()> {
+async fn agent_participation_selection_is_persisted_without_server_authored_event() -> Result<()> {
     let service_name = "agent-live-e2e";
     let server = ArkretServer::spawn(service_name).await?;
     let token = register_account(&server, ALICE_DID, "@cotest-agent-alice", ALICE_DEVICE).await?;
@@ -741,12 +777,10 @@ async fn agent_legacy_participation_command_fails_closed_e2e() -> Result<()> {
                 },
             },
         )
-        .await;
-    expect_sdk_api_error(
-        participation,
-        StatusCode::NOT_IMPLEMENTED,
-        "controller_signed_event_required",
-    )?;
+        .await?;
+    assert!(participation.ok);
+    assert_eq!(participation.entries.len(), 1);
+    assert!(participation.entries[0].selection.reply);
     Ok(())
 }
 
@@ -1321,6 +1355,10 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             control_seal_outcome.seal_id
         ));
     }
+    CONTROLLER_SEALS
+        .lock()
+        .expect("controller Seal lock")
+        .insert(server.url("/"), control_seal);
     Ok(())
 }
 
@@ -1555,12 +1593,14 @@ async fn pause_agent_runtime<P: PairingOutcome>(
         &controller_verification_method(),
         arkret::signatures::SignEventOptions::new().with_created_at(changed_at),
     )?;
+    let lifecycle_event =
+        prepare_managed_agent_submission(server, token, realm_id.as_str(), &event).await?;
     let outcome = bearer_sdk_client(server, token)?
         .agent_pause(
             agent_id.as_str(),
             &arkret::AgentPauseRequestBody {
                 reason: Some("runtime_replacement".to_owned()),
-                lifecycle_event: event,
+                lifecycle_event,
             },
         )
         .await?;
@@ -1609,12 +1649,14 @@ async fn resume_agent_runtime<P: PairingOutcome>(
         &controller_verification_method(),
         arkret::signatures::SignEventOptions::new().with_created_at(changed_at),
     )?;
+    let lifecycle_event =
+        prepare_managed_agent_submission(server, token, realm_id.as_str(), &event).await?;
     let outcome = bearer_sdk_client(server, token)?
         .agent_resume(
             agent_id.as_str(),
             &arkret::AgentResumeRequestBody {
                 sidecar_exposure_ack: None,
-                lifecycle_event: event,
+                lifecycle_event,
             },
         )
         .await?;
@@ -1893,6 +1935,18 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     token: &str,
     provisioned: &P,
 ) -> Result<()> {
+    let existing_recovery = bearer_sdk_client(server, token)?
+        .agent_get(provisioned.agent_id().as_str())
+        .await?
+        .key_state
+        .ok_or_else(|| anyhow!("managed Agent key_state is missing"))?
+        .pcr_recovery;
+    if matches!(
+        existing_recovery,
+        arkret::AgentPcrRecoveryState::Ready { .. }
+    ) {
+        return Ok(());
+    }
     let (frontier, group_id) = ensure_agent_pcr_mls(server, token, provisioned).await?;
     let sequence = NEXT_AGENT_BACKUP.fetch_add(1, Ordering::Relaxed);
     let backup_id = BackupId::new(format!("ak:backup:019a0000-0000-7000-8000-{sequence:012x}"))?;
@@ -2104,7 +2158,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         },
         "issued_at": arkret::canonical::format_timestamp_canonical(canonical_now()),
         "auth_data": {
-            "verification_method": format!("did:key:{device_multibase}#{device_multibase}"),
+            "verification_method": format!("{ALICE_DID}#{ALICE_DEVICE}"),
             "signature_algorithm": "Ed25519",
             "signature": "pending",
             "signed_fields": [
@@ -2129,19 +2183,23 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         &device_key,
         &canonical::canonical_json_bytes(&unsigned_active_series)?,
     ));
-    let mut active_series_event = event_envelope(
-        ALICE_DID,
-        principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?).as_str(),
-        "ak.key_backup.active_series",
-        active_series,
-    );
+    let active_series_verification_method = format!("{ALICE_DID}#{ALICE_DEVICE}");
+    let mut active_series_event =
+        cotest::harness::event_envelope_with_signing_seed_and_verification_method(
+            ALICE_DID,
+            principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?).as_str(),
+            "ak.key_backup.active_series",
+            active_series,
+            [24_u8; 32],
+            &active_series_verification_method,
+        );
     move_event_after_actor_frontier(server, token, ALICE_DID, &mut active_series_event).await?;
     let controller_realm_id = principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?);
     let controller_frontier = managed_agent_frontier(server, token, &controller_realm_id)
         .await?
         .ok_or_else(|| anyhow!("controller PCR Seal frontier is missing"))?;
     active_series_event["seal_basis"] = serde_json::to_value(controller_frontier.seal_basis())?;
-    refresh_event_proof_with_signing_seed(&mut active_series_event, [21_u8; 32])?;
+    refresh_event_proof_with_signing_seed(&mut active_series_event, [24_u8; 32])?;
     let active_series_event: arkret::Event = serde_json::from_value(active_series_event)?;
     let sdk = bearer_sdk_client(server, token)?;
     let submission = prepare_controller_initial_submission(
@@ -2157,6 +2215,49 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
             "active backup series Event was not accepted: {outcome:?}"
         ));
     }
+    let previous_seal = CONTROLLER_SEALS
+        .lock()
+        .expect("controller Seal lock")
+        .get(&server.url("/"))
+        .cloned()
+        .ok_or_else(|| anyhow!("controller principal-control stream has no accepted Seal"))?;
+    let control_events = sdk
+        .events_query_all_pages(controller_realm_id.as_str())
+        .await?
+        .events;
+    let seal_signer = arkret_signatures::Ed25519PayloadSigner::new(
+        SigningKey::from_bytes(&[24_u8; 32]),
+        Did::new(ALICE_DID.to_owned())?,
+        format!("{ALICE_DID}#{ALICE_DEVICE}"),
+    );
+    let mut seal_hlc = arkret::HlcGenerator::new(
+        controller_realm_id.as_str(),
+        ALICE_DEVICE,
+        b"cotest-controller-active-series-seal",
+    );
+    let active_series_seal = arkret_bootstrap::build_self_principal_event_seal(
+        &control_events,
+        &previous_seal,
+        seal_hlc.generate(),
+        &seal_signer,
+        &cotest::publication::project_cells,
+    )?;
+    let seal_outcome = sdk.events_submit_seal(&active_series_seal).await?;
+    if seal_outcome.seal_id != active_series_seal.id {
+        return Err(anyhow!(
+            "active-series Seal id changed at admission: expected {}, got {}",
+            active_series_seal.id,
+            seal_outcome.seal_id
+        ));
+    }
+    CONTROLLER_SEAL_BASES
+        .lock()
+        .expect("controller Seal basis lock")
+        .insert(server.url("/"), active_series_seal.seal_basis());
+    CONTROLLER_SEALS
+        .lock()
+        .expect("controller Seal lock")
+        .insert(server.url("/"), active_series_seal);
     eventually(
         "managed Agent PCR recovery projection",
         Duration::from_secs(30),
@@ -2291,12 +2392,19 @@ async fn provision_agent(
         .get(&server.url("/"))
         .cloned()
         .ok_or_else(|| anyhow!("controller Realm Seal basis is missing"))?;
+    let device_verification_method = format!("{ALICE_DID}#{ALICE_DEVICE}");
+    let device_event_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        [24_u8; 32],
+        controller_id.clone(),
+        device_verification_method.clone(),
+    );
     for event in [&mut events.accountability_grant, &mut events.selector_claim] {
         event.seal_basis = Some(realm_seal_basis.clone());
+        event.proofs.clear();
         arkret::signatures::sign_event(
             event,
-            &signer,
-            &verification_method,
+            &device_event_signer,
+            &device_verification_method,
             arkret::signatures::SignEventOptions::new().with_created_at(now),
         )?;
     }
@@ -2370,7 +2478,7 @@ async fn provision_agent(
             anyhow!("replayed provision Event {event_id} failed SDK proof verification: {error}")
         })?;
         let public_key = arkret::signatures::PublicKeyMaterial::Ed25519Raw {
-            bytes: SigningKey::from_bytes(&[21_u8; 32])
+            bytes: SigningKey::from_bytes(&[24_u8; 32])
                 .verifying_key()
                 .to_bytes()
                 .to_vec(),
@@ -2837,6 +2945,146 @@ async fn prepare_controller_initial_submission(
     let notary = arkret_wire::notary::NotaryValue::single_did(event.actor_id.clone());
     prepare_initial_submission_for_notary(sdk, event, signing_key, verification_method, &notary)
         .await
+}
+
+async fn prepare_managed_agent_submission(
+    server: &ArkretServer,
+    token: &str,
+    realm_id: &str,
+    event: &arkret::Event,
+) -> Result<arkret_wire::EventInitialSubmission> {
+    let sdk = bearer_sdk_client(server, token)?;
+    let realm_create = sdk
+        .events_query_all_pages(realm_id)
+        .await?
+        .events
+        .into_iter()
+        .find(|candidate| candidate.kind == arkret::events::EventKind::REALM_CREATE)
+        .ok_or_else(|| anyhow!("managed PCR Realm create Event is missing"))?;
+    let realm_create_payload = serde_json::to_value(&realm_create.payload)?;
+    let notary: arkret_wire::notary::NotaryValue = serde_json::from_value(
+        realm_create_payload
+            .pointer("/object/notary")
+            .cloned()
+            .ok_or_else(|| anyhow!("managed PCR Realm notary is missing"))?,
+    )?;
+    prepare_initial_submission_for_notary(
+        &sdk,
+        event,
+        &SigningKey::from_bytes(&[21_u8; 32]),
+        &controller_verification_method(),
+        &notary,
+    )
+    .await
+}
+
+async fn grant_controller_strand_create(
+    server: &ArkretServer,
+    token: &str,
+    actor_client: &cotest::harness::TestActorClient,
+    realm_id: &str,
+) -> Result<()> {
+    let grant_id = arkret::GrantId::new(arkret::new_prefixed_uuid7("ak:grant:"))?;
+    let issued_at = canonical_now();
+    let mut grant = arkret::CapabilityGrant {
+        id: grant_id.clone(),
+        schema: "ak.schema.capability.v1".to_owned(),
+        realm_id: Some(arkret::RealmId::new(realm_id.to_owned())?),
+        issuer: Did::new(ALICE_DID.to_owned())?,
+        subject: arkret::CapabilitySubject::Did(Did::new(ALICE_DID.to_owned())?),
+        actions: vec!["ak.strand.create".to_owned()],
+        capability_action_registry_digest: Some(
+            arkret::current_capability_action_registry_digest()?
+        ),
+        resources: vec![serde_json::from_value(json!({
+            "kind": "realm",
+            "realm_id": realm_id,
+            "match_scope": "realm_wide"
+        }))?],
+        constraints: Vec::new(),
+        parent_grant_id: None,
+        issued_at,
+        not_before: None,
+        expires_at: None,
+        updated_by: None,
+        updated_at: None,
+        revoked_by: None,
+        revoked_at: None,
+        proofs: Vec::new(),
+    };
+    let mut proof = arkret::PayloadProof {
+        kind: "detached_jws".to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: controller_verification_method(),
+        payload_digest: grant.payload_digest()?,
+        created_at: issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
+        jws: String::new(),
+    };
+    proof.jws = arkret_signatures::sign_eddsa_detached_jws(
+        &SigningKey::from_bytes(&[21_u8; 32]),
+        &grant.canonical_proof_binding_bytes(&proof)?,
+    )?;
+    grant.proofs.push(proof);
+    let mut event_value = actor_client
+        .author_event(
+            realm_id,
+            "ak.capability.grant",
+            json!({
+                "grant_id": grant_id,
+                "grant": grant
+            }),
+        )
+        .await?;
+    refresh_event_proof_with_signing_seed(&mut event_value, [21_u8; 32])?;
+    let event: arkret::Event = serde_json::from_value(event_value)?;
+    let submission = actor_client
+        .sdk()
+        .prepare_initial_submissions(std::slice::from_ref(&event))
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("controller Strand-create capability submission is missing"))?;
+    let outcome = actor_client.sdk().events_submit(&submission).await?;
+    if !outcome.accepted.contains(&event.event_id) {
+        return Err(anyhow!(
+            "controller Strand-create capability was not accepted: {outcome:?}"
+        ));
+    }
+    let predecessor_seal = event
+        .seal_basis
+        .as_ref()
+        .and_then(|basis| basis.leaves.first())
+        .cloned()
+        .ok_or_else(|| anyhow!("capability Event has no predecessor Seal"))?;
+    eventually(
+        "controller Strand-create capability Seal",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || async {
+            let response = server
+                .http()
+                .get(server.url("/_arkret/self/events/frontier"))
+                .query(&[("realm_id", realm_id)])
+                .bearer_auth(token)
+                .send()
+                .await?;
+            if !response.status().is_success() {
+                return Err(anyhow!("capability Seal frontier is not ready"));
+            }
+            let state: EventsFrontierAccountClientState = response.json().await?;
+            let EventsFrontierView::RealmSeal(frontier) = state.frontier else {
+                return Err(anyhow!("capability Seal returned the wrong frontier"));
+            };
+            if frontier.seal_id == predecessor_seal {
+                return Err(anyhow!("capability Event is not sealed yet"));
+            }
+            Ok(())
+        },
+    )
+    .await
 }
 
 async fn prepare_initial_submission_for_notary(
