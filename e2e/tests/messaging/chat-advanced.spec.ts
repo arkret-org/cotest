@@ -37,8 +37,7 @@ import {
 } from "../../helpers/users";
 import {
   buildSignalEnvelope,
-  captureSignalEnvelopes,
-  postCallSignalRaw,
+  captureSubmittedSignalEnvelope,
   signalPlaintext,
 } from "../../helpers/webrtc";
 
@@ -430,11 +429,14 @@ test.describe("chat advanced", () => {
           ttl_ms: 25_000,
         },
       });
-      const { result: typing, envelopes } = await captureSignalEnvelopes(
-        bobToken,
-        realmId,
-        () => postCallSignalRaw(request, aliceToken, envelope),
-      );
+      const { result: typing, envelopes } =
+        await captureSubmittedSignalEnvelope(
+          request,
+          aliceToken,
+          bobToken,
+          realmId,
+          envelope,
+        );
       const typingResponseText = await typing.text();
       expect(typing.status(), typingResponseText).toBe(200);
       const submit = JSON.parse(typingResponseText) as Record<string, unknown>;

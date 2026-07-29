@@ -32,8 +32,7 @@ import {
 import { grantCircleMemberManageCapability } from "../../helpers/circle-api";
 import {
   buildSignalEnvelope,
-  captureSignalEnvelopes,
-  postCallSignalRaw,
+  captureSubmittedSignalEnvelope,
   signalPlaintext,
 } from "../../helpers/webrtc";
 
@@ -255,10 +254,12 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         created_at: sentAtIso,
       },
     });
-    const { result: receipt, envelopes } = await captureSignalEnvelopes(
+    const { result: receipt, envelopes } = await captureSubmittedSignalEnvelope(
+      request,
+      fixture.bobToken,
       fixture.aliceToken,
       fixture.realmId,
-      () => postCallSignalRaw(request, fixture.bobToken, envelope),
+      envelope,
     );
     expect(receipt.status(), await receipt.text()).toBe(200);
 

@@ -582,6 +582,14 @@ export async function postCallSignalRaw(
   envelope: Record<string, unknown>,
 ): Promise<APIResponse> {
   await prepareSignalEnvelope(request, token, envelope);
+  return await postPreparedSignalEnvelopeRaw(request, token, envelope);
+}
+
+async function postPreparedSignalEnvelopeRaw(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/signal`, {
     headers: authHeaders(token),
     data: envelope,
@@ -681,6 +689,28 @@ export async function captureSignalEnvelopes<T>(
         envelope.encrypted_payload !== undefined,
     );
   return { result, envelopes };
+}
+
+/**
+ * Prepare a Signal envelope before opening the receiver's live-only rail,
+ * then submit it while that rail is active. Preparation may resolve a Seal
+ * basis and register a device key, so doing it inside `action` can outlive the
+ * deliberately short capture window.
+ */
+export async function captureSubmittedSignalEnvelope(
+  request: APIRequestContext,
+  senderToken: string,
+  receiverToken: string,
+  realmId: string,
+  envelope: Record<string, unknown>,
+): Promise<{
+  result: APIResponse;
+  envelopes: Array<Record<string, unknown>>;
+}> {
+  await prepareSignalEnvelope(request, senderToken, envelope);
+  return await captureSignalEnvelopes(receiverToken, realmId, () =>
+    postPreparedSignalEnvelopeRaw(request, senderToken, envelope),
+  );
 }
 
 export async function expectCallSignalError(

@@ -25,7 +25,7 @@ import {
 } from "../../helpers/users";
 import {
   buildSignalEnvelope,
-  captureSignalEnvelopes,
+  captureSubmittedSignalEnvelope,
   postCallSignalRaw,
   prepareSignalEnvelope,
   signalPlaintext,
@@ -77,10 +77,12 @@ test.describe("read receipts + privacy", () => {
       eventId: message.event_id,
       payloadSequence: 1,
     });
-    const { result: receipt, envelopes } = await captureSignalEnvelopes(
+    const { result: receipt, envelopes } = await captureSubmittedSignalEnvelope(
+      request,
+      aliceToken,
       bobToken,
       realmId,
-      () => postReceipt(request, aliceToken, envelope),
+      envelope,
     );
     const receiptText = await receipt.text();
     expect(receipt.status(), receiptText).toBe(200);
@@ -216,11 +218,14 @@ test.describe("read receipts + privacy", () => {
       eventId: highest.event_id,
       payloadSequence: 3,
     });
-    const { result: response, envelopes } = await captureSignalEnvelopes(
-      fixture.bobToken,
-      fixture.realmId,
-      () => postReceipt(request, fixture.aliceToken, receipt),
-    );
+    const { result: response, envelopes } =
+      await captureSubmittedSignalEnvelope(
+        request,
+        fixture.aliceToken,
+        fixture.bobToken,
+        fixture.realmId,
+        receipt,
+      );
     expect(response.status(), await response.text()).toBe(200);
     expect(decryptedReceiptPayloads(envelopes)).toEqual([
       expect.objectContaining({ event_id: highest.event_id }),
@@ -240,16 +245,14 @@ test.describe("read receipts + privacy", () => {
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "disabled",
     });
-    const { result: receipt, envelopes } = await captureSignalEnvelopes(
-      fixture.bobToken,
-      fixture.realmId,
-      () =>
-        postReceipt(
-          request,
-          fixture.aliceToken,
-          receiptEnvelope(fixture),
-        ),
-    );
+    const { result: receipt, envelopes } =
+      await captureSubmittedSignalEnvelope(
+        request,
+        fixture.aliceToken,
+        fixture.bobToken,
+        fixture.realmId,
+        receiptEnvelope(fixture),
+      );
     expect(receipt.status(), await receipt.text()).toBe(200);
     expect(decryptedReceiptPayloads(envelopes)).toHaveLength(1);
     expect(
@@ -282,10 +285,12 @@ test.describe("read receipts + privacy", () => {
       eventId: hiddenWindowMessage.event_id,
       payloadSequence: 1,
     });
-    const blockedCapture = await captureSignalEnvelopes(
+    const blockedCapture = await captureSubmittedSignalEnvelope(
+      request,
+      fixture.aliceToken,
       fixture.bobToken,
       fixture.realmId,
-      () => postReceipt(request, fixture.aliceToken, blocked),
+      blocked,
     );
     expect(
       blockedCapture.result.status(),
@@ -313,10 +318,12 @@ test.describe("read receipts + privacy", () => {
       eventId: freshMessage.event_id,
       payloadSequence: 2,
     });
-    const freshCapture = await captureSignalEnvelopes(
+    const freshCapture = await captureSubmittedSignalEnvelope(
+      request,
+      fixture.aliceToken,
       fixture.bobToken,
       fixture.realmId,
-      () => postReceipt(request, fixture.aliceToken, receipt),
+      receipt,
     );
     const responseBody = await freshCapture.result.json();
     expect(responseBody.accepted).toBe(true);
@@ -341,10 +348,12 @@ test.describe("read receipts + privacy", () => {
       visibility: "private",
     });
     const receipt = receiptEnvelope(fixture);
-    const capture = await captureSignalEnvelopes(
+    const capture = await captureSubmittedSignalEnvelope(
+      request,
+      fixture.aliceToken,
       fixture.bobToken,
       fixture.realmId,
-      () => postReceipt(request, fixture.aliceToken, receipt),
+      receipt,
     );
     expect(capture.result.status()).toBe(200);
     const body = await capture.result.json();
@@ -383,15 +392,12 @@ test.describe("read receipts + privacy", () => {
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "disabled",
     });
-    const capture = await captureSignalEnvelopes(
+    const capture = await captureSubmittedSignalEnvelope(
+      request,
+      fixture.aliceToken,
       fixture.bobToken,
       fixture.realmId,
-      () =>
-        postReceipt(
-          request,
-          fixture.aliceToken,
-          receiptEnvelope(fixture),
-        ),
+      receiptEnvelope(fixture),
     );
     expect(capture.result.status(), await capture.result.text()).toBe(200);
     expect(
