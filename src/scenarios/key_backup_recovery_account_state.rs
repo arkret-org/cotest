@@ -6,8 +6,9 @@ use arkret_models_crypto::{
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
     KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicy,
     RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
+    RecoveryPublicationAuthorizationRule,
 };
-use arkret_wire::{Base64UrlString, DidUrl};
+use arkret_wire::{AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
@@ -132,6 +133,17 @@ fn unsigned_recovery_policy(
         supersedes: None,
         trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local".to_owned())?,
         allowed_proof_kinds: vec![RecoveryProofKind::PrincipalSigning],
+        publication_authorization_rules: vec![RecoveryPublicationAuthorizationRule {
+            rule_id: "principal_signing".to_owned(),
+            proof_kind: RecoveryProofKind::PrincipalSigning,
+            issuer_role: AuthoritySetIssuerRole::IdentityRecovery,
+            allowed_actions: vec!["ak.device.reanchor".to_owned()],
+            issuers: vec![AuthoritySetIssuer {
+                verification_method: DidUrl::new(verification_method.to_owned())
+                    .map_err(anyhow::Error::msg)?,
+            }],
+            threshold: 1,
+        }],
         threshold: None,
         device_quorum: None,
         recovery_keys: None,
@@ -153,6 +165,7 @@ fn unsigned_recovery_policy(
                 "version",
                 "trust_domain",
                 "allowed_proof_kinds",
+                "publication_authorization_rules",
                 "supersedes",
                 "issued_at",
                 "expires_at",

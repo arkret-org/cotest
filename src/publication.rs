@@ -15,9 +15,11 @@
 use anyhow::{Context, Result};
 use arkret_canonical::DigestSuite;
 use arkret_wire::{
-    AuthoritySetRef, AuthorizationLease, AuthorizationLeaseId, DeviceId, Did, Event,
-    EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef,
-    ProjectedCellWrite, Proof, ReceiptId, RiskTier, SealId, proof_kind,
+    AUTHORITY_SET_POLICY_SCHEMA, AuthoritySetAuthorizationRule, AuthoritySetIssuer,
+    AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind, AuthoritySetPolicySource,
+    AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease, AuthorizationLeaseId, DeviceId,
+    Did, DidUrl, Event, EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt,
+    LeaseBasisRef, PayloadProof, ProjectedCellWrite, ReceiptId, RiskTier, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 
@@ -42,12 +44,12 @@ fn issuer_proof(
     verification_method: &str,
     payload_digest: Hash,
     created_at: chrono::DateTime<Utc>,
-) -> Proof {
-    Proof {
+) -> PayloadProof {
+    PayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
         verification_method: verification_method.to_owned(),
-        event_digest: payload_digest,
+        payload_digest,
         created_at,
         domain: None,
         audience: None,
@@ -69,6 +71,36 @@ pub fn authorization_lease_for(
     risk_tier: RiskTier,
 ) -> Result<AuthorizationLease> {
     let issued_at = event.created_at - Duration::minutes(5);
+    let authority_set_policy = AuthoritySetPolicy {
+        schema: AUTHORITY_SET_POLICY_SCHEMA.to_owned(),
+        authority_set_id: "ak.authority_set.realm_admission.v1".to_owned(),
+        policy_kind: AuthoritySetPolicyKind::RealmAdmission,
+        scope_ref: event.scope_ref.clone(),
+        source: AuthoritySetPolicySource {
+            source_kind: AuthoritySetSourceKind::RealmControl,
+            source_ref: "ak:event:01904100-0000-7000-8000-111111111111".to_owned(),
+            source_digest: Hash::new(format!("sha256:{}", "e".repeat(64)))
+                .context("static harness authority-set source digest is valid")?,
+            generation_ref: "1".to_owned(),
+        },
+        authorization_rules: vec![AuthoritySetAuthorizationRule {
+            rule_id: "realm_admission".to_owned(),
+            issuer_role: AuthoritySetIssuerRole::RealmAdmission,
+            allowed_actions: vec![action.to_owned()],
+            issuers: vec![AuthoritySetIssuer {
+                verification_method: DidUrl::new("did:webvh:z6mkfixture:authority.example#key-1")
+                    .map_err(anyhow::Error::msg)
+                    .context("static harness authority verification method is typed")?,
+            }],
+            threshold: 1,
+        }],
+    };
+    let authority_set_ref = AuthoritySetRef {
+        authority_set_id: authority_set_policy.authority_set_id.clone(),
+        authority_set_digest: authority_set_policy
+            .digest()
+            .context("harness authority-set policy is canonicalizable")?,
+    };
     let mut lease = AuthorizationLease {
         authorization_lease_id: AuthorizationLeaseId::new(
             "ak:authorization_lease:01904100-0000-7000-8000-aaaaaaaaaaaa",
@@ -83,10 +115,12 @@ pub fn authorization_lease_for(
             .context("static harness lease device id is typed")?,
         scope_ref: event.scope_ref.clone(),
         action: action.to_owned(),
+        authorization_rule_id: "realm_admission".to_owned(),
         risk_tier,
         issued_at,
         expires_at: issued_at + risk_tier.max_lease_ttl(),
-        authority_set_ref: harness_authority_set("ak.authority_set.realm_admission.v1"),
+        authority_set_ref,
+        authority_set_policy,
         proofs: Vec::new(),
     };
     let digest = lease

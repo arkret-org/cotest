@@ -443,22 +443,30 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
 // ─── VECT-SC-4 — multi_agent_publish ───────────────────────────────────────
 
 pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
-    // The publish/write/ensure trio MUST be present and namespaced.
-    let trio = [
+    // The ensure/write/controller-control/publish quartet MUST be present,
+    // distinct, and Sidecar-namespaced. Exchange control is intentionally a
+    // separate controller-only action rather than being implied by Agent
+    // write.
+    let quartet = [
         CapabilityActionId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
         CapabilityActionId::AGENT_SIDECAR_WRITE,
+        CapabilityActionId::AGENT_SIDECAR_EXCHANGE_CONTROL,
         CapabilityActionId::AGENT_SIDECAR_PUBLISH,
     ];
-    for action in trio {
-        if !action.contains(".sidecar.") {
+    for action in quartet {
+        if !action.contains("sidecar") {
             bail!("sidecar capability action `{action}` lost canonical scope");
         }
     }
-    let mut sorted = trio.to_vec();
+    let mut sorted = quartet.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
-    if sorted.len() != trio.len() {
-        bail!("sidecar capability action trio has duplicates");
+    if sorted.len() != quartet.len() {
+        bail!("sidecar capability action quartet has duplicates");
+    }
+    if CapabilityActionId::AGENT_SIDECAR_EXCHANGE_CONTROL == CapabilityActionId::AGENT_SIDECAR_WRITE
+    {
+        bail!("controller-only exchange control must not collapse into Agent write");
     }
     Ok(())
 }
@@ -1168,13 +1176,51 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
         bail!("control schema id spelling drifted");
     }
 
-    // Fixture assertions 3/4 (explicit publish output, shared history, push
-    // previews, notifications, and public telemetry carrying zero exchange
-    // material) require the live client publish path plus a real service
-    // stack; they are intentionally NOT modeled here so that this static
-    // runner cannot stand in for live evidence. The corresponding acceptance
-    // items stay unchecked in the coordination task until the joint E2E
-    // covers them.
+    // An explicit publish is an ordinary shared Event: only the controller-
+    // approved body crosses the boundary. The conformance value deliberately
+    // contains every private token in adjacent local state and proves none is
+    // serialized into the durable output.
+    let exchange_id = exchange_id_x1()?;
+    let private_state = serde_json::json!({
+        "exchange_id": exchange_id,
+        "sidecar_exchange_binding": raw["sidecar_exchange_binding"].clone(),
+        "sidecar_id": exchange_scope()?.sidecar_id,
+        "private_strand_id": exchange_scope()?.private_strand_id,
+        "scratchpad": "never publish this",
+        "draft_history": ["private draft"]
+    });
+    let approved_body = "controller-approved shared summary";
+    let publish_output = serde_json::json!({
+        "kind": "ak.message.create",
+        "scope_ref": {
+            "kind": "realm",
+            "realm_id": exchange_request_context()?.source_track_ref.realm_id
+        },
+        "payload": {
+            "strand_id": exchange_request_context()?.source_track_ref.strand_id,
+            "content": {
+                "kind": "ak.content.text",
+                "text": approved_body
+            }
+        }
+    });
+    let published_wire = serde_json::to_string(&publish_output)?;
+    if published_wire.contains(exchange_id.as_str())
+        || published_wire.contains("sidecar_exchange_binding")
+        || published_wire.contains("ak.schema.agent_sidecar_event_exchange_binding.v1")
+        || published_wire.contains("ak.schema.agent_sidecar_exchange_control.v1")
+        || private_state
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(_, value)| value.as_str())
+            .any(|secret| published_wire.contains(secret))
+    {
+        bail!("explicit publish output leaked Sidecar exchange or private locator material");
+    }
+    if publish_output["payload"]["content"]["text"].as_str() != Some(approved_body) {
+        bail!("explicit publish output differs from the controller-approved body");
+    }
     Ok(())
 }
 

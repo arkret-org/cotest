@@ -44,13 +44,16 @@ use arkret_models_crypto::{
     KeyBackupSignatureAlgorithm, ManagedFrontierRef, ManagedPrincipalBinding, RecoveryHpkeSuite,
     RecoveryKeyAgreementAlgorithm, RecoveryKeyAgreementEntry, RecoveryKeyAgreementUse,
     RecoveryKeyEntry, RecoveryKeySignatureAlgorithm, RecoveryPolicy, RecoveryPolicyAuthData,
-    RecoveryPolicyRef, RecoveryProofKind,
+    RecoveryPolicyRef, RecoveryProofKind, RecoveryPublicationAuthorizationRule,
 };
 use arkret_models_identity::artifacts_device_identity::{
     CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
-use arkret_wire::{Base64UrlString, DidUrl, NonEmptyString, OpaqueLocalId};
+use arkret_wire::{
+    AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, NonEmptyString,
+    OpaqueLocalId,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
@@ -68,13 +71,14 @@ const ALICE_DID: &str =
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a901";
 const TRUST_DOMAIN: &str = "ak:trust_domain:soland.local";
 const RECOVERY_POLICY_SIGNATURE_TYPE: &str = "ak.identity.recovery_policy.signature.v1";
-const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 11] = [
+const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 12] = [
     "schema",
     "policy_id",
     "principal_id",
     "version",
     "trust_domain",
     "allowed_proof_kinds",
+    "publication_authorization_rules",
     "recovery_keys",
     "recovery_key_agreements",
     "supersedes",
@@ -1059,6 +1063,16 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         supersedes: None,
         trust_domain,
         allowed_proof_kinds: vec![RecoveryProofKind::RecoveryUnlock],
+        publication_authorization_rules: vec![RecoveryPublicationAuthorizationRule {
+            rule_id: "recovery_unlock".to_owned(),
+            proof_kind: RecoveryProofKind::RecoveryUnlock,
+            issuer_role: AuthoritySetIssuerRole::IdentityRecovery,
+            allowed_actions: vec!["ak.device.reanchor".to_owned()],
+            issuers: vec![AuthoritySetIssuer {
+                verification_method: recovery_verification_method.clone(),
+            }],
+            threshold: 1,
+        }],
         threshold: None,
         device_quorum: None,
         trusted_recovery_services: None,
