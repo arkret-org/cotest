@@ -199,7 +199,6 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
 
     if let Some(coauth) = &coauth {
         let base = coauth.base_url().trim_end_matches('/');
-        let enrollment_authority_did = coauth_enrollment_authority_did(base).await?;
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
             format!("{base}/_arkret/gate/account/session-grants/introspect"),
@@ -213,10 +212,6 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
             config.embedded_webvh_registration_bearer.clone(),
         ));
         soland_env.push(("SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(), base.to_owned()));
-        soland_env.push((
-            "SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID".to_owned(),
-            enrollment_authority_did,
-        ));
     }
     if let Some(starid) = &starid {
         // did:webvh is the v1 core default method; did:web is intentionally
@@ -260,32 +255,6 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         coauth,
         soland,
     })
-}
-
-async fn coauth_enrollment_authority_did(base_url: &str) -> Result<String> {
-    let response = reqwest::Client::new()
-        .get(format!("{base_url}/_arkret/describe"))
-        .send()
-        .await
-        .context("fetch coauth service description for enrollment authority")?;
-    let status = response.status();
-    let body: serde_json::Value = response
-        .json()
-        .await
-        .context("decode coauth service description")?;
-    if !status.is_success() {
-        return Err(anyhow!(
-            "coauth service description returned {status}: {body}"
-        ));
-    }
-    let authority = body
-        .pointer("/auth_metadata/account_authority/enrollment_authority_did")
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow!("coauth service description omitted enrollment authority DID"))?;
-    arkret_identifiers::Did::new(authority.to_owned())
-        .map_err(|error| anyhow!("coauth enrollment authority DID is invalid: {error}"))?;
-    Ok(authority.to_owned())
 }
 
 /// Strict wrapper around [`try_bootstrap`] that fails if any of the optional
