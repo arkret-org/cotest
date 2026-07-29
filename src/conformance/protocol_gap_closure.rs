@@ -66,6 +66,9 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
 
     for vector_id in [
         "ak.vector.cba.control_proposal_quorum_receipt.v1",
+        "ak.vector.authz.authorization_rule_selection.v1",
+        "ak.vector.authz.lease_lifecycle.v1",
+        "ak.vector.recovery.publication_rule_projection.v1",
         "ak.vector.strand.track_name_registry.v1",
         "ak.vector.binding.websocket.v1",
     ] {
