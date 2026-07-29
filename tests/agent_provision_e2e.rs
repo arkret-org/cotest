@@ -1379,6 +1379,11 @@ async fn submit_delegated_agent_event(
         event["actor_seq"] = json!(0);
         event["hlc"] = json!("01970e589d21-0001-a13f9c2e");
         event["prev_refs"] = json!([]);
+    } else {
+        let seal_frontier = managed_agent_frontier(server, token, realm_id)
+            .await?
+            .ok_or_else(|| anyhow!("delegated Control Move requires an accepted PCR Seal"))?;
+        event["seal_basis"] = serde_json::to_value(seal_frontier.seal_basis())?;
     }
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
     refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
@@ -1388,6 +1393,35 @@ async fn submit_delegated_agent_event(
             std::slice::from_ref(&typed_event),
             &cotest::publication::project_cells,
         )?;
+    } else {
+        let sdk = bearer_sdk_client(server, token)?;
+        let realm_create = sdk
+            .events_query_all_pages(realm_id)
+            .await?
+            .events
+            .into_iter()
+            .find(|event| event.kind == arkret::events::EventKind::REALM_CREATE)
+            .ok_or_else(|| anyhow!("managed PCR Realm create Event is missing"))?;
+        let realm_create_payload = serde_json::to_value(&realm_create.payload)?;
+        let notary: arkret_wire::notary::NotaryValue = serde_json::from_value(
+            realm_create_payload
+                .pointer("/object/notary")
+                .cloned()
+                .ok_or_else(|| anyhow!("managed PCR Realm notary is missing"))?,
+        )?;
+        let submission = prepare_initial_submission_for_notary(
+            &sdk,
+            &typed_event,
+            &SigningKey::from_bytes(&[21_u8; 32]),
+            &controller_verification_method(),
+            &notary,
+        )
+        .await?;
+        let outcome = sdk.events_submit(&submission).await?;
+        if !outcome.accepted.contains(&typed_event.event_id) {
+            return Err(anyhow!("delegated {kind} was not accepted: {outcome:?}"));
+        }
+        return Ok(typed_event);
     }
     let body = expect_json(
         server
@@ -1633,7 +1667,8 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             } => Some(managed_frontier_ref.seal_ref),
             _ => None,
         });
-    let frontier_before = managed_agent_frontier(server, token, realm_id).await?;
+    let mut frontier_before = managed_agent_frontier(server, token, realm_id).await?;
+    let mut mls_created = false;
     if frontier_before.is_none() {
         let existing_events = bearer_sdk_client(server, token)?
             .events_query_all_pages(realm_id)
@@ -1700,6 +1735,37 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             .await?
             .event_id,
         };
+        let seal_key = format!("{}|{realm_id}", server.base_url());
+        let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+            [24_u8; 32],
+            Did::new(ALICE_DID.to_owned())?,
+            format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        );
+        let mut hlc =
+            arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
+        let client = bearer_sdk_client(server, token)?;
+        let realm_events = client.events_query_all_pages(realm_id).await?.events;
+        let genesis_seal = arkret_bootstrap::build_managed_agent_pcr_event_seal(
+            &realm_events,
+            None,
+            hlc.generate(),
+            &signer,
+            &cotest::publication::project_cells,
+        )?;
+        let outcome = client.events_submit_seal(&genesis_seal).await?;
+        if outcome.seal_id != genesis_seal.id {
+            return Err(anyhow!(
+                "managed Agent PCR genesis Seal id changed at admission: expected {}, got {}",
+                genesis_seal.id,
+                outcome.seal_id
+            ));
+        }
+        MANAGED_AGENT_PCR_SEALS
+            .lock()
+            .expect("managed Agent PCR Seal lock")
+            .insert(seal_key, genesis_seal.clone());
+        frontier_before = managed_agent_frontier(server, token, realm_id).await?;
+
         if !existing_events
             .iter()
             .any(|event| event.kind == arkret::events::EventKind::MLS_GENESIS)
@@ -1729,6 +1795,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         "previous_epoch": 0,
                         "next_epoch": 0,
                         "membership_frontier": [realm_create_event_id],
+                        "covered_seal_refs": [genesis_seal.id],
                         "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
                         "capability_root": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
                         "discussion_metadata_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
@@ -1739,9 +1806,10 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                 }),
             )
             .await?;
+            mls_created = true;
         }
     }
-    let seal_needs_advancing = frontier_before.is_none()
+    let seal_needs_advancing = mls_created
         || stale_seal_ref.as_deref()
             == frontier_before
                 .as_ref()
@@ -2068,15 +2136,27 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         active_series,
     );
     move_event_after_actor_frontier(server, token, ALICE_DID, &mut active_series_event).await?;
-    expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(token)
-            .json(&active_series_event),
-        StatusCode::OK,
+    let controller_realm_id = principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?);
+    let controller_frontier = managed_agent_frontier(server, token, &controller_realm_id)
+        .await?
+        .ok_or_else(|| anyhow!("controller PCR Seal frontier is missing"))?;
+    active_series_event["seal_basis"] = serde_json::to_value(controller_frontier.seal_basis())?;
+    refresh_event_proof_with_signing_seed(&mut active_series_event, [21_u8; 32])?;
+    let active_series_event: arkret::Event = serde_json::from_value(active_series_event)?;
+    let sdk = bearer_sdk_client(server, token)?;
+    let submission = prepare_controller_initial_submission(
+        &sdk,
+        &active_series_event,
+        &SigningKey::from_bytes(&[21_u8; 32]),
+        &controller_verification_method(),
     )
     .await?;
+    let outcome = sdk.events_submit(&submission).await?;
+    if !outcome.accepted.contains(&active_series_event.event_id) {
+        return Err(anyhow!(
+            "active backup series Event was not accepted: {outcome:?}"
+        ));
+    }
     eventually(
         "managed Agent PCR recovery projection",
         Duration::from_secs(30),
@@ -2731,6 +2811,18 @@ async fn prepare_controller_initial_submission(
     signing_key: &SigningKey,
     verification_method: &str,
 ) -> Result<arkret_wire::EventInitialSubmission> {
+    let notary = arkret_wire::notary::NotaryValue::single_did(event.actor_id.clone());
+    prepare_initial_submission_for_notary(sdk, event, signing_key, verification_method, &notary)
+        .await
+}
+
+async fn prepare_initial_submission_for_notary(
+    sdk: &SdkClient,
+    event: &arkret::Event,
+    signing_key: &SigningKey,
+    verification_method: &str,
+    notary: &arkret_wire::notary::NotaryValue,
+) -> Result<arkret_wire::EventInitialSubmission> {
     let request = arkret_wire::AuthorizationLeaseIssueRequest {
         events: vec![event.clone()],
         intents: Vec::new(),
@@ -2750,8 +2842,7 @@ async fn prepare_controller_initial_submission(
     let policy = arkret_wire::ControlProposalDecisionPolicy::default();
     let received_at = canonical_now();
     let proposal_digest = arkret_identifiers::Hash::new(event.event_digest()?)?;
-    let notary = arkret_wire::notary::NotaryValue::single_did(event.actor_id.clone());
-    let authority_set_ref = arkret_identifiers::Hash::new(canonical::canonical_sha256(&notary)?)?;
+    let authority_set_ref = arkret_identifiers::Hash::new(canonical::canonical_sha256(notary)?)?;
     let mut member_receipt = arkret_wire::ProposalMemberReceipt {
         realm_id: event.realm_id.clone(),
         proposal_digest: proposal_digest.clone(),
