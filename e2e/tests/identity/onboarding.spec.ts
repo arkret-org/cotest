@@ -155,6 +155,11 @@ test.describe("account onboarding", () => {
     browser,
     request,
   }) => {
+    // This is the complete account-authority + email verification + recovery
+    // custody + PCR/Seal/backup journey. A cold WASM/browser run can spend
+    // over two minutes before PCR bootstrap starts, so the suite-wide
+    // three-minute budget would terminate a healthy journey mid-form.
+    test.slow();
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
     const coauthOrigin = new URL(coauth!).origin;
@@ -218,8 +223,10 @@ test.describe("account onboarding", () => {
       await page.getByRole("link", { name: /create account/i }).click();
       await page.locator('input[autocomplete="username"]').fill(handle);
       await page.locator('input[autocomplete="email"]').fill(email);
-      await page.locator("#new-password").fill(password);
-      await page.locator("#confirm-new-password").fill(password);
+      const passwordInputs = page.locator('input[autocomplete="new-password"]');
+      await expect(passwordInputs).toHaveCount(2);
+      await passwordInputs.nth(0).fill(password);
+      await passwordInputs.nth(1).fill(password);
       await page.getByRole("button", { name: /create account/i }).click();
       await expect(page.locator("#register-email-verify-code")).toBeVisible({
         timeout: 60_000,
@@ -265,7 +272,8 @@ test.describe("account onboarding", () => {
         emailVerified,
         "dev email verification code was not persisted before the retry deadline",
       ).toBe(true);
-      const displayName = page.locator('input[autocomplete="name"]');
+      const displayName = page.getByRole("textbox");
+      await expect(displayName).toHaveCount(1);
       await expect(displayName).toBeVisible({ timeout: 60_000 });
       await displayName.fill(user.displayName);
       await page.getByRole("button", { name: /continue/i }).click();

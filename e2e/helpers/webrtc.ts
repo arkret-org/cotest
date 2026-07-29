@@ -25,6 +25,7 @@ import {
   seedConformanceRealmBasisApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
+  signWithRegisteredEventSigner,
   submitSignedEventApi,
   typedId,
   uuidV7,
@@ -174,6 +175,56 @@ function base58Encode(bytes: Uint8Array): string {
     leadingZeroes += 1;
   }
   return "1".repeat(leadingZeroes) + (encoded || "1");
+}
+
+export function withBroadcastEphemeralProof(
+  envelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const actorDid = envelope.actor_id;
+  const deviceId = envelope.device_id;
+  if (typeof actorDid !== "string" || typeof deviceId !== "string") {
+    throw new Error(
+      "broadcast ephemeral proof requires actor_id and device_id",
+    );
+  }
+  const signer = deviceSigner(actorDid, deviceId);
+  const createdAt = canonicalEventTimestamp();
+  const unsigned = { ...envelope };
+  delete unsigned.proof;
+  const eventDigest = `sha256:${createHash("sha256")
+    .update(canonicalJson(unsigned), "utf8")
+    .digest("hex")}`;
+  const bindingObject = {
+    context: "ak.ephemeral-proof-v1",
+    event_digest: eventDigest,
+    actor_id: actorDid,
+    verification_method: signer.verificationMethod,
+    created_at: createdAt,
+  };
+  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const bindingPayload = base64urlJsonCanonical(bindingObject);
+  const signingInput = `${protectedHeader}.${bindingPayload}`;
+  const registeredSignature = signWithRegisteredEventSigner(
+    actorDid,
+    signer.verificationMethod,
+    signingInput,
+  );
+  const signature =
+    registeredSignature ??
+    base64url(
+      nodeSign(null, Buffer.from(signingInput, "utf8"), signer.privateKey),
+    );
+  return {
+    ...unsigned,
+    proof: {
+      kind: "detached_jws",
+      alg: "EdDSA",
+      verification_method: signer.verificationMethod,
+      event_digest: eventDigest,
+      created_at: createdAt,
+      jws: `${protectedHeader}..${signature}`,
+    },
+  };
 }
 
 /** Build an encrypted-only Signal envelope for arbitrary client plaintext. */

@@ -1962,16 +1962,58 @@ export async function submitSignedEventApi(
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
   await applyRegisteredCbaPlane(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const leaseResponse = await issueAuthorizationLeasesApi(
+      request,
+      token,
+      [envelope],
+      opts.server,
+    );
+    const leaseText = await leaseResponse.text();
+    if (![200, 201].includes(leaseResponse.status())) {
+      const leaseBody = parseJsonOrRaw(leaseText);
+      const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
+        leaseResponse.status(),
+        leaseBody,
+        leaseText,
+      );
+      if (!actorFrontierRefreshRequired || attempt === 2) {
+        expect(
+          [200, 201],
+          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
+        ).toContain(leaseResponse.status());
+      }
+      await advanceEnvelopeToActorFrontier(
+        request,
+        token,
+        envelope,
+        opts.server,
+      );
+      continue;
+    }
+    const authorizationLease = authorizationLeasesFromIssueOutcome(
+      leaseText,
+      1,
+      context,
+    )[0];
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
         headers: authHeaders(token),
-        data: envelope,
+        data: {
+          event: envelope,
+          authorization_lease: authorizationLease,
+        },
       },
     );
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
-      return JSON.parse(text) as Record<string, unknown>;
+      const outcome = JSON.parse(text) as Record<string, unknown>;
+      rememberPublicationEvidence(
+        [envelope],
+        [authorizationLease],
+        outcome,
+      );
+      return outcome;
     }
     const body = JSON.parse(text) as unknown;
     if (
@@ -2018,16 +2060,57 @@ export async function submitSignedEventBatchApi(
     }
   }
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const leaseResponse = await issueAuthorizationLeasesApi(
+      request,
+      token,
+      events,
+      opts.server,
+    );
+    const leaseText = await leaseResponse.text();
+    if (![200, 201].includes(leaseResponse.status())) {
+      const leaseBody = parseJsonOrRaw(leaseText);
+      const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
+        leaseResponse.status(),
+        leaseBody,
+        leaseText,
+      );
+      if (!actorFrontierRefreshRequired || attempt === 2) {
+        expect(
+          [200, 201],
+          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
+        ).toContain(leaseResponse.status());
+      }
+      await advanceEnvelopeToActorFrontier(
+        request,
+        token,
+        events[0],
+        opts.server,
+      );
+      refreshBatchActorChain(events);
+      continue;
+    }
+    const authorizationLeases = authorizationLeasesFromIssueOutcome(
+      leaseText,
+      events.length,
+      context,
+    );
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
         headers: authHeaders(token),
-        data: { events },
+        data: {
+          events: events.map((event, index) => ({
+            event,
+            authorization_lease: authorizationLeases[index],
+          })),
+        },
       },
     );
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
-      return JSON.parse(text) as Record<string, unknown>;
+      const outcome = JSON.parse(text) as Record<string, unknown>;
+      rememberPublicationEvidence(events, authorizationLeases, outcome);
+      return outcome;
     }
     const body = JSON.parse(text) as unknown;
     if (
@@ -2060,6 +2143,127 @@ export async function submitSignedEventBatchApi(
     refreshBatchActorChain(events);
   }
   throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
+/**
+ * Submit a signed Event through the canonical lease + publication rail while
+ * preserving the raw response for negative tests that intentionally expect a
+ * non-2xx policy verdict.
+ */
+export async function rawSubmitSignedEventApi(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  opts: { server?: SolandKey } = {},
+): Promise<APIResponse> {
+  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  const leaseResponse = await issueAuthorizationLeasesApi(
+    request,
+    token,
+    [envelope],
+    opts.server,
+  );
+  if (![200, 201].includes(leaseResponse.status())) {
+    return leaseResponse;
+  }
+  const authorizationLease = authorizationLeasesFromIssueOutcome(
+    await leaseResponse.text(),
+    1,
+    `submit ${String(envelope.kind)}`,
+  )[0];
+  return await request.post(
+    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+    {
+      headers: authHeaders(token),
+      data: {
+        event: envelope,
+        authorization_lease: authorizationLease,
+      },
+    },
+  );
+}
+
+async function issueAuthorizationLeasesApi(
+  request: APIRequestContext,
+  token: string,
+  events: Array<Record<string, unknown>>,
+  server?: SolandKey,
+): Promise<APIResponse> {
+  const requestBody = { events };
+  const requestDigest = sha256CanonicalJson(requestBody);
+  return await request.post(
+    `${solandBaseUrl(server)}/_arkret/self/authorization-leases`,
+    {
+      headers: {
+        ...authHeaders(token),
+        "idempotency-key": `cotest-lease-${requestDigest}`,
+      },
+      data: requestBody,
+    },
+  );
+}
+
+function authorizationLeasesFromIssueOutcome(
+  text: string,
+  expectedCount: number,
+  context: string,
+): Array<Record<string, unknown>> {
+  const body = parseJsonOrRaw(text);
+  const leases =
+    body &&
+    typeof body === "object" &&
+    Array.isArray((body as Record<string, unknown>).authorization_leases)
+      ? ((body as Record<string, unknown>)
+          .authorization_leases as Array<Record<string, unknown>>)
+      : undefined;
+  if (!leases || leases.length !== expectedCount) {
+    throw new Error(
+      `${context} lease issuance returned ${leases?.length ?? 0} leases for ${expectedCount} Events: ${text}`,
+    );
+  }
+  return leases;
+}
+
+function parseJsonOrRaw(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { raw: text };
+  }
+}
+
+type PublicationEvidence = {
+  event: Record<string, unknown>;
+  authorization_lease: Record<string, unknown>;
+  ingress_receipts: Array<Record<string, unknown>>;
+};
+
+const publicationEvidenceByEventId = new Map<string, PublicationEvidence>();
+
+function rememberPublicationEvidence(
+  events: Array<Record<string, unknown>>,
+  leases: Array<Record<string, unknown>>,
+  outcome: Record<string, unknown>,
+): void {
+  const receipts = Array.isArray(outcome.ingress_receipts)
+    ? (outcome.ingress_receipts as Array<Record<string, unknown>>)
+    : [];
+  if (receipts.length !== events.length) {
+    throw new Error(
+      `publication returned ${receipts.length} ingress receipts for ${events.length} Events`,
+    );
+  }
+  events.forEach((event, index) => {
+    const eventId = stringValue(event.event_id);
+    if (!eventId) {
+      throw new Error("published Event is missing event_id");
+    }
+    publicationEvidenceByEventId.set(eventId, {
+      event: stripUndefined(event) as Record<string, unknown>,
+      authorization_lease: leases[index],
+      ingress_receipts: [receipts[index]],
+    });
+  });
 }
 
 function requiresActorFrontierRefresh(
@@ -2715,7 +2919,16 @@ export async function rawSubmitPeerInviteDeliveryApi(
 function federationEventWireBody(
   event: Record<string, unknown>,
 ): Record<string, unknown> {
-  return stripUndefined(event) as Record<string, unknown>;
+  const eventId = stringValue(event.event_id);
+  const evidence = eventId
+    ? publicationEvidenceByEventId.get(eventId)
+    : undefined;
+  if (!evidence) {
+    throw new Error(
+      `federation requires stored authorization lease and ingress receipt for Event ${eventId ?? "<missing event_id>"}`,
+    );
+  }
+  return stripUndefined(evidence) as Record<string, unknown>;
 }
 
 export async function queryPeerEventsApi(

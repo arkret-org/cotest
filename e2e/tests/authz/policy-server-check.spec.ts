@@ -40,7 +40,7 @@ import {
   createRealmApi,
   currentActorDidApi,
   expectJsonOk,
-  prepareSignedEventCbaApi,
+  rawSubmitSignedEventApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
   wireErrCode,
@@ -79,11 +79,9 @@ async function declarePolicyServer(
   expect(put.status(), "declare realm policy server").toBe(200);
 }
 
-// Submit a gated ak.message.create directly against the event log (the surface
-// that runs policy_gate::enforce_operation_policy_server) and return the raw
-// status + parsed body so the caller can assert the gate's verdict. Bypasses
-// submitSignedEventApi because that helper hard-asserts a 2xx, whereas a policy
-// deny is an expected non-2xx here.
+// Submit a gated ak.message.create through the same canonical publication rail
+// as production clients and return the raw verdict. A policy deny may happen
+// during the read-only lease pre-admission pass or during final admission.
 async function submitGatedMessage(
   request: APIRequestContext,
   token: string,
@@ -103,11 +101,7 @@ async function submitGatedMessage(
     },
   });
   await alignSignedEventToActorFrontierApi(request, token, envelope);
-  await prepareSignedEventCbaApi(request, token, envelope);
-  const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/events`,
-    { headers: authHeaders(token), data: envelope },
-  );
+  const response = await rawSubmitSignedEventApi(request, token, envelope);
   const text = await response.text();
   let json: Record<string, unknown> = {};
   try {
