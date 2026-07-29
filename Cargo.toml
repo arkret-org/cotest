@@ -62,6 +62,7 @@ arkret-state = {workspace = true}
 arkret-crypto = {workspace = true,features = ["blob-aead", "secret-share"]}
 arkret-event-draft = {workspace = true}
 arkret-http-client = {workspace = true}
+inkson = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-crypto = {workspace = true}
 arkret-models-discovery = {workspace = true}
@@ -122,6 +123,7 @@ arkret-event-draft = {path = "../arkret-rust-sdk/crates/event-draft"}
 garth = {path = "../garth"}
 arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
+inkson = {path = "../inkson"}
 arkret-identifiers = {path = "../arkret-rust-sdk/crates/identifiers"}
 arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
 arkret-models-crypto = {path = "../arkret-rust-sdk/crates/models-crypto"}

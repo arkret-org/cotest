@@ -48,6 +48,10 @@ pub const SDK_CONFORMANCE_CLAIM_FIXTURE: &str = "sdk-conformance-claim-fixture.j
 
 pub const KEY_TRANSPARENCY_FIXTURE: &str = "key-transparency-fixture.json";
 
+pub const CALENDAR_RSVP_FIXTURE: &str = "calendar-rsvp-fixture.json";
+
+pub const CALENDAR_NOTIFICATION_FIXTURE: &str = "calendar-notification-fixture.json";
+
 /// Every spec fixture whose `schema_validation_cases` this runner executes:
 /// `(file_name, expected_profile, expected_suite)`. Extend this manifest when
 /// the spec ships a new schema-validation-shaped fixture instead of adding a
@@ -77,6 +81,16 @@ pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
         KEY_TRANSPARENCY_FIXTURE,
         "ak.profile.key_transparency.v1",
         "key_transparency",
+    ),
+    (
+        CALENDAR_RSVP_FIXTURE,
+        "ak.profile.calendar_event.v1",
+        "calendar_rsvp_conformance",
+    ),
+    (
+        CALENDAR_NOTIFICATION_FIXTURE,
+        "ak.profile.calendar_notification_dispatch.v1",
+        "calendar_notification_dispatch_conformance",
     ),
 ];
 

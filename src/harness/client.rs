@@ -116,6 +116,16 @@ impl TestActorClient {
         realm_id: &str,
         actions: &[&str],
     ) -> Result<(String, Value)> {
+        self.grant_realm_actions_to(realm_id, &self.actor, actions)
+            .await
+    }
+
+    pub async fn grant_realm_actions_to(
+        &self,
+        realm_id: &str,
+        subject: &str,
+        actions: &[&str],
+    ) -> Result<(String, Value)> {
         let grant_id = next_typed_id("grant");
         let issued_at = chrono::Utc::now();
         let verification_method = format!("{}#cotest", self.actor);
@@ -126,7 +136,7 @@ impl TestActorClient {
                 realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
                 issuer: arkret_identifiers::Did::new(self.actor.clone())?,
                 subject: arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
-                    arkret_identifiers::Did::new(self.actor.clone())?,
+                    arkret_identifiers::Did::new(subject.to_owned())?,
                 ),
                 actions: actions.iter().map(|action| (*action).to_owned()).collect(),
                 resources: vec![serde_json::from_value(json!({
@@ -223,6 +233,32 @@ impl TestActorClient {
         causal_refs: Vec<String>,
         capability_refs: Vec<String>,
     ) -> Result<Value> {
+        let event = self
+            .author_event_with_causal_refs(realm_id, kind, payload, causal_refs, capability_refs)
+            .await?;
+        let mut body = expect_json(
+            self.post("/_arkret/self/events").json(&event),
+            StatusCode::OK,
+        )
+        .await?;
+        ensure_submit_event_id(&mut body, &event);
+        // The digest is what a later response names to dominate this head, so
+        // hand it back to the caller alongside the submit result.
+        body["cotest_event_digest"] = event["proofs"][0]["event_digest"].clone();
+        Ok(body)
+    }
+
+    /// Authors, but does not submit, an Event carrying explicit semantic
+    /// causal edges. Keeping authoring separate lets convergence tests prepare
+    /// genuinely concurrent Events before either client sends one.
+    pub async fn author_event_with_causal_refs(
+        &self,
+        realm_id: &str,
+        kind: &str,
+        payload: Value,
+        causal_refs: Vec<String>,
+        capability_refs: Vec<String>,
+    ) -> Result<Value> {
         let frontier = expect_json(
             self.get("/_arkret/self/events/frontier")
                 .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
@@ -298,18 +334,16 @@ impl TestActorClient {
                     })
                     .collect(),
             );
+            if kind == arkret_wire::events::EventKind::STRAND_UPDATE
+                && payload_patch_touches_calendar(&event["payload"])
+            {
+                event["requirements"] = json!({
+                    "schema": ["ak.schema.calendar_event.v1"]
+                });
+            }
             refresh_event_proof(&mut event)?;
         }
-        let mut body = expect_json(
-            self.post("/_arkret/self/events").json(&event),
-            StatusCode::OK,
-        )
-        .await?;
-        ensure_submit_event_id(&mut body, &event);
-        // The digest is what a later response names to dominate this head, so
-        // hand it back to the caller alongside the submit result.
-        body["cotest_event_digest"] = event["proofs"][0]["event_digest"].clone();
-        Ok(body)
+        Ok(event)
     }
 
     pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
@@ -391,4 +425,37 @@ impl TestActorClient {
         .await?;
         account_subscribe_delta_from_text(&response.text())
     }
+}
+
+fn payload_patch_touches_calendar(payload: &Value) -> bool {
+    payload
+        .get("patch")
+        .and_then(Value::as_object)
+        .is_some_and(|patch| {
+            patch.iter().any(|(path, value)| {
+                if path == "metadata.fields.calendar"
+                    || path.starts_with("metadata.fields.calendar.")
+                {
+                    return true;
+                }
+                if path == "metadata.fields" {
+                    return value
+                        .get("value")
+                        .or_else(|| value.get("$value"))
+                        .or_else(|| value.get("fields"))
+                        .or(Some(value))
+                        .and_then(Value::as_object)
+                        .is_some_and(|fields| fields.contains_key("calendar"));
+                }
+                if path == "metadata" {
+                    return value
+                        .get("value")
+                        .or_else(|| value.get("$value"))
+                        .and_then(|metadata| metadata.get("fields"))
+                        .and_then(Value::as_object)
+                        .is_some_and(|fields| fields.contains_key("calendar"));
+                }
+                false
+            })
+        })
 }
