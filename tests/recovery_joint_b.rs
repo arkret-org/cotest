@@ -9,8 +9,11 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_http_client::{Auth, ClientBuilder};
+use arkret_models_crypto::TypedSecurityTransactionContinueRequest;
 use arkret_wire::{
-    SecurityTransactionBinding, SecurityTransactionCreateRequest, SecurityTransactionState,
+    IssueAuthorityTicketStep, RecoveryAuthorityTicketIssueRequest, RecoveryBinding,
+    SecurityTransaction, SecurityTransactionBinding, SecurityTransactionCreateRequest,
+    SecurityTransactionState, SecurityTransactionStep,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -43,6 +46,25 @@ fn dpop_jkt(signing: &SigningKey) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes()))
 }
 
+fn authority_ticket_request(
+    transaction: &SecurityTransaction,
+) -> Result<RecoveryAuthorityTicketIssueRequest> {
+    let SecurityTransactionBinding::Recovery(RecoveryBinding::EnrollmentAuthority(binding)) =
+        &transaction.binding
+    else {
+        return Err(anyhow!(
+            "authority ticket requires an enrollment-authority recovery"
+        ));
+    };
+    Ok(RecoveryAuthorityTicketIssueRequest {
+        transaction_id: transaction.transaction_id.clone(),
+        transaction_request_digest: transaction.request_digest.clone(),
+        prepared_plan_digest: transaction.prepared_plan_digest.clone(),
+        authority_ticket_id: binding.authority_ticket_id.clone(),
+        expected_next_step: IssueAuthorityTicketStep::IssueAuthorityTicket,
+    })
+}
+
 async fn post_json(http: &reqwest::Client, url: String, body: Value) -> Result<Value> {
     let response = http.post(&url).json(&body).send().await?;
     let status = response.status();
@@ -71,6 +93,20 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let principal = ClientBuilder::new(principal_base.clone())
         .allow_insecure_localhost()
         .build()?;
+    let authority_describe = reqwest::Client::new()
+        .get(format!("{coauth_base}/_arkret/describe"))
+        .send()
+        .await
+        .context("request Coauth describe directly")?;
+    let authority_status = authority_describe.status();
+    let authority_body = authority_describe
+        .text()
+        .await
+        .context("read Coauth describe response")?;
+    anyhow::ensure!(
+        authority_status.is_success(),
+        "Coauth describe returned {authority_status}: {authority_body}"
+    );
     let description = principal.describe().await?;
     let account_authority = description
         .auth_metadata
@@ -244,7 +280,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         )
         .await?;
     recovery_session_id = prepared.verified_session.recovery_session_id.clone();
-    let transaction = recovery_http
+    let mut transaction = recovery_http
         .create_security_transaction(&SecurityTransactionCreateRequest::Recovery(
             prepared.create_request,
         ))
@@ -254,5 +290,73 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         return Err(anyhow!("joint recovery created a rotation transaction"));
     };
     assert_eq!(binding.recovery_session_id(), &recovery_session_id);
+    let holder_seed = URL_SAFE_NO_PAD.encode(replacement_key.to_bytes());
+    for _ in 0..8 {
+        let Some(step) = transaction.next_required_step else {
+            break;
+        };
+        if step == SecurityTransactionStep::IssueTerminalReceipt {
+            break;
+        }
+        transaction = match step {
+            SecurityTransactionStep::IssueAuthorityTicket => {
+                recovery_http
+                    .issue_recovery_authority_ticket(&authority_ticket_request(&transaction)?)
+                    .await?;
+                recovery_http
+                    .get_security_transaction(&transaction.transaction_id)
+                    .await?
+            }
+            SecurityTransactionStep::AuthorizeRecoveryDevice => {
+                let ticket = recovery_http
+                    .issue_recovery_authority_ticket(&authority_ticket_request(&transaction)?)
+                    .await?;
+                let participant_request =
+                    inkson::fresh_device_recovery::joint_recovery_device_authorization_request(
+                        &transaction,
+                        ticket,
+                        &prepared.account_authority_endpoint,
+                        &holder_seed,
+                        &replacement_holder_jkt,
+                    )?;
+                recovery_http
+                    .continue_security_transaction(
+                        &transaction.transaction_id,
+                        &TypedSecurityTransactionContinueRequest {
+                            request_digest: transaction.request_digest.clone(),
+                            prepared_plan_digest: transaction.prepared_plan_digest.clone(),
+                            expected_next_step: step,
+                            client_attestation: None,
+                            participant_request: Some(participant_request),
+                        },
+                    )
+                    .await?
+            }
+            SecurityTransactionStep::PublishDidEntry
+            | SecurityTransactionStep::SubmitReanchorUnit => {
+                recovery_http
+                    .continue_security_transaction(
+                        &transaction.transaction_id,
+                        &TypedSecurityTransactionContinueRequest {
+                            request_digest: transaction.request_digest.clone(),
+                            prepared_plan_digest: transaction.prepared_plan_digest.clone(),
+                            expected_next_step: step,
+                            client_attestation: None,
+                            participant_request: None,
+                        },
+                    )
+                    .await?
+            }
+            unexpected => return Err(anyhow!("unexpected B recovery step {unexpected:?}")),
+        };
+    }
+    assert_eq!(
+        transaction.next_required_step,
+        Some(SecurityTransactionStep::IssueTerminalReceipt)
+    );
+    assert_eq!(
+        transaction.state,
+        SecurityTransactionState::AwaitingDeviceAttestation
+    );
     Ok(())
 }

@@ -28,7 +28,7 @@ use anyhow::{Context, Result, anyhow};
 
 use crate::harness::{ArkretServer, reserve_port};
 use crate::scenarios::_helpers::coauth_bootstrap::{
-    SpawnedCoauth, coauth_with_db_available, prepare_coauth_with_db_required,
+    JOINT_TRUST_DOMAIN, SpawnedCoauth, coauth_with_db_available, prepare_coauth_with_db_required,
 };
 use crate::scenarios::_helpers::external_binary::{
     SOLAND_SPEC, STARID_SPEC, SpawnedExternalProcess, TEABAY_SPEC, locate_external_binary,
@@ -195,6 +195,10 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
     // 4. Build the soland env from the resolved upstream URLs. Empty/absent keys are simply not
     //    exported (soland's config keeps the production-safe default when the env var is unset).
     let mut soland_env: Vec<(String, String)> = Vec::new();
+    soland_env.push((
+        "SOLAND_TRUST_DOMAIN".to_owned(),
+        JOINT_TRUST_DOMAIN.to_owned(),
+    ));
 
     if let Some(coauth) = &prepared_coauth {
         let base = coauth.base_url();

@@ -49,6 +49,8 @@ use crate::scenarios::_helpers::external_binary::{
     ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
 };
 
+pub const JOINT_TRUST_DOMAIN: &str = "ak:trust_domain:127.0.0.1";
+
 // ── Public surface ─────────────────────────────────────────────────────────
 
 /// Handle to a docker-managed throw-away Postgres. Drop = `docker rm -fv`.
@@ -234,6 +236,10 @@ fn patch_principal_server_config(
         .or_insert_with(|| serde_yaml_ng::Value::Mapping(Default::default()))
         .as_mapping_mut()
         .context("generated coauth arkret config must be a mapping")?;
+    arkret.insert(
+        serde_yaml_ng::Value::String("trust_domain".to_owned()),
+        serde_yaml_ng::Value::String(JOINT_TRUST_DOMAIN.to_owned()),
+    );
     arkret.insert(
         serde_yaml_ng::Value::String("principal_servers".to_owned()),
         serde_yaml_ng::to_value(vec![serde_json::json!({
