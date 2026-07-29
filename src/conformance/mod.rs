@@ -5,6 +5,8 @@ mod agent_vectors;
 mod arkret_private_kdf_and_durability;
 mod audit_release;
 mod auth_session_proof;
+mod authorization_lease_issuance;
+mod authorization_lease_issuance_reference;
 mod blind_payload;
 mod blob_stream_aead;
 mod call_signal;
@@ -122,6 +124,7 @@ pub use auth_session_proof::{
     run_identity_did_proof_replay_window_vector, run_session_bare_bearer_rejected_protected_vector,
     run_session_pop_presentation_vector,
 };
+pub use authorization_lease_issuance::run_authorization_lease_issuance_joint_gate;
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
