@@ -1654,6 +1654,33 @@ function Stop-ProcessTree {
     Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
 }
 
+function Open-ExclusiveRunnerLock {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $lockPath = [System.IO.Path]::GetFullPath($Path)
+    $lockParent = Split-Path -Parent $lockPath
+    $null = New-Item -ItemType Directory -Path $lockParent -Force
+    try {
+        $stream = [System.IO.File]::Open(
+            $lockPath,
+            [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+    }
+    catch [System.IO.IOException] {
+        throw "another joint-e2e runner owns the shared workspace build outputs (lock: $lockPath)"
+    }
+
+    $owner = [System.Text.Encoding]::UTF8.GetBytes(
+        "pid=$PID started_at=$([DateTimeOffset]::Now.ToString('O'))"
+    )
+    $stream.SetLength(0)
+    $stream.Write($owner, 0, $owner.Length)
+    $stream.Flush()
+    return $stream
+}
+
 function Invoke-RunnerSelfTest {
     $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
@@ -1662,8 +1689,24 @@ function Invoke-RunnerSelfTest {
     $binaryPath = Join-Path $tempRoot "fixture.exe"
     $null = New-Item -ItemType File -Path $binaryPath -Force
     $runningProcess = $null
+    $firstRunnerLock = $null
 
     try {
+        $runnerLockPath = Join-Path $tempRoot "joint-e2e-run.lock"
+        $firstRunnerLock = Open-ExclusiveRunnerLock -Path $runnerLockPath
+        $secondRunnerRejected = $false
+        try {
+            $secondRunnerLock = Open-ExclusiveRunnerLock -Path $runnerLockPath
+            $secondRunnerLock.Dispose()
+        }
+        catch {
+            $secondRunnerRejected =
+                $_.Exception.Message -like "another joint-e2e runner owns*"
+        }
+        if (-not $secondRunnerRejected) {
+            throw "runner lock self-test allowed a second workspace owner"
+        }
+
         (Get-Item -LiteralPath $binaryPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddYears(-10)
         $staleResults = New-Object System.Collections.Generic.List[object]
         Add-BinaryFreshnessPreflight `
@@ -1742,6 +1785,9 @@ function Invoke-RunnerSelfTest {
         Write-Host "Joint E2E runner self-test passed."
     }
     finally {
+        if ($firstRunnerLock) {
+            $firstRunnerLock.Dispose()
+        }
         if ($runningProcess -and -not $runningProcess.HasExited) {
             Stop-Process -Id $runningProcess.Id -Force -ErrorAction SilentlyContinue
             $runningProcess.WaitForExit()
@@ -1779,6 +1825,8 @@ if ($RunnerSelfTest) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
+$jointRunnerLock = Open-ExclusiveRunnerLock `
+    -Path (Join-Path $repoRoot "artifacts\.joint-e2e-run.lock")
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
@@ -3758,4 +3806,5 @@ if ($latestJointDir) {
     Write-Host "  latest      : $latestJointDir"
 }
 
+$jointRunnerLock.Dispose()
 exit $exitCode

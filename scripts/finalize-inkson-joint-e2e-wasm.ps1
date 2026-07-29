@@ -8,13 +8,17 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-& wasm-bindgen `
-    --target web `
-    --out-dir $OutputDirectory `
-    --out-name inkson `
-    $SourceWasm
-if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+$lockPath = Join-Path $OutputDirectory ".finalize.lock"
+try {
+    $finalizeLock = [System.IO.File]::Open(
+        $lockPath,
+        [System.IO.FileMode]::OpenOrCreate,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None
+    )
+}
+catch [System.IO.IOException] {
+    throw "another Inkson WASM finalizer owns $OutputDirectory"
 }
 
 $loader = @'
@@ -32,4 +36,28 @@ __wbg_init({module_or_path: new URL('inkson_bg.wasm', import.meta.url)}).then((w
     }
 });
 '@
-Add-Content -LiteralPath (Join-Path $OutputDirectory "inkson.js") -Value $loader -Encoding UTF8
+
+try {
+    & wasm-bindgen `
+        --target web `
+        --out-dir $OutputDirectory `
+        --out-name inkson `
+        $SourceWasm
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
+    $javascriptPath = Join-Path $OutputDirectory "inkson.js"
+    Add-Content -LiteralPath $javascriptPath -Value $loader -Encoding UTF8
+    $javascript = Get-Content -LiteralPath $javascriptPath -Raw
+    $loaderCount = [regex]::Matches(
+        $javascript,
+        [regex]::Escape("globalThis.__wasm_split_main_initSync = initSync;")
+    ).Count
+    if ($loaderCount -ne 1) {
+        throw "Inkson WASM finalizer expected exactly one startup loader, found $loaderCount"
+    }
+}
+finally {
+    $finalizeLock.Dispose()
+}
