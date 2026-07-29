@@ -26,10 +26,13 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::harness::ArkretServer;
-use crate::scenarios::_helpers::coauth_bootstrap::{SpawnedCoauth, spawn_coauth_with_db};
+use crate::harness::{ArkretServer, reserve_port};
+use crate::scenarios::_helpers::coauth_bootstrap::{
+    SpawnedCoauth, coauth_with_db_available, prepare_coauth_with_db_required,
+};
 use crate::scenarios::_helpers::external_binary::{
-    STARID_SPEC, SpawnedExternalProcess, TEABAY_SPEC, skip_reason, try_spawn,
+    SOLAND_SPEC, STARID_SPEC, SpawnedExternalProcess, TEABAY_SPEC, locate_external_binary,
+    skip_reason, try_spawn,
 };
 
 /// Per-service env wiring used when spinning up the four-service stack.
@@ -170,16 +173,12 @@ async fn probe(client: &reqwest::Client, name: &str, url: &str) -> Result<()> {
 /// spawn, the whole bootstrap returns `Err` (every other test in cotest
 /// assumes a working soland).
 pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack> {
-    // 1. coauth first — we need its base URL + introspection bearer to wire soland's env vars on
-    //    spawn. We MUST resolve those before `ArkretServer::spawn_with_env` is called, otherwise
-    //    the principal server boots without the auth wiring and any test that uses `dev_login`
-    //    outside of `SOLAND_DEVELOPMENT_MODE=1` would 401.
-    //
-    //    `spawn_coauth_with_db` is fail-soft and returns Ok(None) when
-    //    docker / postgres / the coauth binary are missing. We treat that as
-    //    a soft skip: the soland stack still comes up, the test is expected
-    //    to handle a missing `coauth` field.
-    let coauth = spawn_coauth_with_db().await?;
+    let prepared_coauth =
+        if coauth_with_db_available() && locate_external_binary(&SOLAND_SPEC).is_some() {
+            Some(prepare_coauth_with_db_required()?)
+        } else {
+            None
+        };
 
     // 2. starid — env-driven, no external deps. Soft-skip if the binary can't be located.
     let starid = match skip_reason(&STARID_SPEC) {
@@ -197,8 +196,9 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
     //    exported (soland's config keeps the production-safe default when the env var is unset).
     let mut soland_env: Vec<(String, String)> = Vec::new();
 
-    if let Some(coauth) = &coauth {
-        let base = coauth.base_url().trim_end_matches('/');
+    if let Some(coauth) = &prepared_coauth {
+        let base = coauth.base_url();
+        let base = base.trim_end_matches('/');
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
             format!("{base}/_arkret/gate/account/session-grants/introspect"),
@@ -245,9 +245,38 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let soland = ArkretServer::spawn_with_env(&config.name, &env_borrowed)
+    let soland = if let (Some(_), Some(soland_bin)) = (
+        prepared_coauth.as_ref(),
+        locate_external_binary(&SOLAND_SPEC),
+    ) {
+        let port = reserve_port().context("reserve four-service soland port")?;
+        let metrics_port = reserve_port().context("reserve four-service soland metrics port")?;
+        ArkretServer::spawn_external_binary_with_ports_and_env(
+            &config.name,
+            &soland_bin,
+            port,
+            metrics_port,
+            &env_borrowed,
+        )
         .await
-        .context("four-service bootstrap: failed to spawn soland with wired env")?;
+    } else {
+        ArkretServer::spawn_with_env(&config.name, &env_borrowed).await
+    }
+    .context("four-service bootstrap: failed to spawn soland with wired env")?;
+
+    let coauth = match prepared_coauth {
+        Some(prepared) => Some(
+            prepared
+                .spawn_for_principal_server(
+                    soland.base_url().as_str(),
+                    &config.session_grant_introspection_bearer,
+                    &config.embedded_webvh_registration_bearer,
+                )
+                .await
+                .context("four-service bootstrap: failed to spawn prepared coauth")?,
+        ),
+        None => None,
+    };
 
     Ok(FourServiceStack {
         teabay,

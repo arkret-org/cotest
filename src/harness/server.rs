@@ -121,7 +121,7 @@ impl ArkretServer {
     /// multi-node federation path compute every node's `did:webvh` + base URL up
     /// front so each node can be started with the others wired in via
     /// `SOLAND_FEDERATION_PEERS`.
-    async fn spawn_external_binary_with_ports_and_env(
+    pub(crate) async fn spawn_external_binary_with_ports_and_env(
         name: &str,
         bin_path: &Path,
         mut port: ReservedPort,
