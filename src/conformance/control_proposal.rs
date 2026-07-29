@@ -1,4 +1,11 @@
-use anyhow::{Result, anyhow, bail};
+use std::collections::BTreeMap;
+
+use anyhow::{Context, Result, anyhow, bail, ensure};
+use arkret_wire::notary::{ForensicAttribution, NotaryValue};
+use arkret_wire::{
+    ControlProposalDecision, ControlProposalDecisionPolicy, ControlProposalReceipt,
+    ControlProposalRejectReason, Hash, PayloadSignature, ProposalMemberReceipt, RealmId,
+};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -59,6 +66,265 @@ pub fn run_control_proposal_bounded_decision_suite() -> Result<()> {
         );
     }
     Ok(())
+}
+
+pub fn run_control_proposal_receipt_suite() -> Result<()> {
+    let fixture = load_fixture_value("control-proposal-receipt-fixture.json")?;
+    ensure!(
+        fixture.get("suite").and_then(Value::as_str) == Some("control_proposal_receipt")
+            && fixture
+                .pointer("/runner/entrypoint")
+                .and_then(Value::as_str)
+                == Some("ak.suite.cba.control_proposal_receipt.v1"),
+        "control proposal receipt fixture metadata changed"
+    );
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("control proposal receipt fixture has no cases[]"))?;
+    ensure!(cases.len() == 7, "receipt fixture must contain seven cases");
+    let case = |name: &str| {
+        cases
+            .iter()
+            .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
+            .ok_or_else(|| anyhow!("control proposal receipt fixture is missing {name}"))
+    };
+
+    let threshold_case = case("threshold_receipt_set_uses_distinct_current_members")?;
+    let receipt_members = threshold_case["member_receipts"]
+        .as_array()
+        .ok_or_else(|| anyhow!("threshold member_receipts must be an array"))?;
+    let authority_ref = hash('a');
+    let members = receipt_members
+        .iter()
+        .map(|member| member_from_fixture(member, authority_ref.clone()))
+        .collect::<Result<Vec<_>>>()?;
+    let authority_members = members
+        .iter()
+        .map(|member| {
+            let controller = member
+                .signature
+                .verification_method
+                .rsplit_once('#')
+                .map(|(controller, _)| controller)
+                .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
+            arkret_wire::Did::new(controller).map_err(anyhow::Error::msg)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let notary = NotaryValue::Threshold {
+        threshold: threshold_case["threshold"]
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| anyhow!("threshold is invalid"))?,
+        members: authority_members,
+        forensic_attribution: ForensicAttribution::QuorumIntersection,
+    };
+    let policy = ControlProposalDecisionPolicy {
+        receipt_sla: chrono::Duration::seconds(60),
+        decision_window: chrono::Duration::seconds(30),
+        absolute_horizon: chrono::Duration::seconds(90),
+        max_defers: 2,
+    };
+    let receipt =
+        ControlProposalReceipt::from_member_receipts_for_notary(members, policy, &notary)?;
+    ensure!(
+        receipt.received_at == timestamp(&threshold_case["expected"], "received_at")?
+            && receipt.decision_due_at
+                == timestamp(&threshold_case["expected"], "decision_due_at")?
+            && receipt.absolute_due_at
+                == timestamp(&threshold_case["expected"], "absolute_due_at")?,
+        "threshold receipt aggregate window diverged"
+    );
+    let actual_order = receipt
+        .member_receipts
+        .iter()
+        .map(|member| member.signature.verification_method.as_str())
+        .collect::<Vec<_>>();
+    let expected_order = threshold_case["expected"]["member_order"]
+        .as_array()
+        .ok_or_else(|| anyhow!("expected member order must be an array"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    ensure!(
+        actual_order == expected_order,
+        "member order is not canonical"
+    );
+
+    let duplicate = case("duplicate_member_does_not_count_twice")?;
+    let duplicate_methods = duplicate["member_verification_methods"]
+        .as_array()
+        .ok_or_else(|| anyhow!("duplicate methods must be an array"))?;
+    let duplicate_members = duplicate_methods
+        .iter()
+        .map(|method| {
+            member(
+                method
+                    .as_str()
+                    .ok_or_else(|| anyhow!("duplicate method must be text"))?,
+                "2026-07-29T00:00:00.000Z",
+                "2026-07-29T00:00:30.000Z",
+                "2026-07-29T00:01:30.000Z",
+                authority_ref.clone(),
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        ControlProposalReceipt::from_member_receipts_for_notary(
+            duplicate_members,
+            policy,
+            &notary,
+        )
+        .is_err(),
+        "duplicate member counted twice"
+    );
+
+    let mixed = case("mixed_authority_set_and_out_of_window_rejected")?;
+    let refs = mixed["member_authority_set_refs"]
+        .as_array()
+        .ok_or_else(|| anyhow!("mixed authority refs must be an array"))?;
+    let mixed_members = vec![
+        member(
+            "did:webvh:z6mkfixture:authority-a.example#notary",
+            "2026-07-29T00:00:00.000Z",
+            "2026-07-29T00:00:30.000Z",
+            "2026-07-29T00:01:30.000Z",
+            Hash::new(refs[0].as_str().unwrap())?,
+        )?,
+        member(
+            "did:webvh:z6mkfixture:authority-b.example#notary",
+            "2026-07-29T00:01:00.001Z",
+            "2026-07-29T00:01:30.001Z",
+            "2026-07-29T00:02:30.001Z",
+            Hash::new(refs[1].as_str().unwrap())?,
+        )?,
+    ];
+    ensure!(
+        ControlProposalReceipt::from_member_receipts(mixed_members, policy).is_err(),
+        "mixed authority receipt set was accepted"
+    );
+
+    ensure!(
+        ControlProposalDecisionPolicy {
+            receipt_sla: chrono::Duration::hours(24),
+            ..policy
+        }
+        .validate()
+        .is_ok(),
+        "inclusive receipt SLA maximum was rejected"
+    );
+    ensure!(
+        ControlProposalDecisionPolicy {
+            receipt_sla: chrono::Duration::milliseconds(86_400_001),
+            ..policy
+        }
+        .validate()
+        .is_err(),
+        "receipt SLA above the wire maximum was accepted"
+    );
+
+    let replay = case("exact_member_retry_is_byte_identical_and_conflict_cannot_extend")?;
+    let original = serde_json::to_vec(&receipt.member_receipts[0])?;
+    let request = b"canonical-request".to_vec();
+    let mut ledger = BTreeMap::from([("receipt-key", (request.clone(), original.clone()))]);
+    let exact = ledger
+        .get("receipt-key")
+        .filter(|(stored_request, _)| stored_request == &request)
+        .map(|(_, outcome)| outcome.clone())
+        .context("exact retry missed its original member receipt")?;
+    let conflict = ledger
+        .get_mut("receipt-key")
+        .is_some_and(|(stored_request, _)| stored_request != b"different-request");
+    ensure!(
+        exact == original
+            && conflict
+            && replay["expected"]["deadline_extended"].as_bool() == Some(false),
+        "member receipt replay semantics diverged"
+    );
+
+    let decision_case = case("decision_proofs_cannot_cross_receipt_sets")?;
+    let wrong_receipt_digest = Hash::new(
+        decision_case["decision_proof_receipt_digests"][1]
+            .as_str()
+            .unwrap(),
+    )?;
+    let mut decision = ControlProposalDecision::SignedReject {
+        realm_id: receipt.realm_id.clone(),
+        proposal_digest: receipt.proposal_digest.clone(),
+        receipt_digest: wrong_receipt_digest,
+        decided_at: receipt.received_at,
+        decision_due_at: receipt.decision_due_at,
+        absolute_due_at: receipt.absolute_due_at,
+        defer_count: 0,
+        reason_code: ControlProposalRejectReason::PolicyDenied,
+        authority_set_ref: receipt.authority_set_ref.clone(),
+        proofs: vec![PayloadSignature {
+            alg: "EdDSA".to_owned(),
+            verification_method: "did:webvh:z6mkfixture:authority-a.example#notary".to_owned(),
+            payload_digest: hash('0'),
+            created_at: receipt.received_at,
+            jws: "a..b".to_owned(),
+        }],
+    };
+    let digest = decision.decision_digest()?;
+    let ControlProposalDecision::SignedReject { proofs, .. } = &mut decision else {
+        unreachable!()
+    };
+    proofs[0].payload_digest = digest;
+    ensure!(
+        decision.validate_chain(&receipt, &[], policy).is_err(),
+        "decision proof crossed receipt sets"
+    );
+    Ok(())
+}
+
+fn hash(byte: char) -> Hash {
+    Hash::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
+}
+
+fn member_from_fixture(value: &Value, authority_set_ref: Hash) -> Result<ProposalMemberReceipt> {
+    member(
+        value["verification_method"]
+            .as_str()
+            .ok_or_else(|| anyhow!("verification_method is missing"))?,
+        value["received_at"]
+            .as_str()
+            .ok_or_else(|| anyhow!("received_at is missing"))?,
+        value["decision_due_at"]
+            .as_str()
+            .ok_or_else(|| anyhow!("decision_due_at is missing"))?,
+        value["absolute_due_at"]
+            .as_str()
+            .ok_or_else(|| anyhow!("absolute_due_at is missing"))?,
+        authority_set_ref,
+    )
+}
+
+fn member(
+    verification_method: &str,
+    received_at: &str,
+    decision_due_at: &str,
+    absolute_due_at: &str,
+    authority_set_ref: Hash,
+) -> Result<ProposalMemberReceipt> {
+    let received_at = received_at.parse()?;
+    let mut member = ProposalMemberReceipt {
+        realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-65c7feb295d7")?,
+        proposal_digest: hash('c'),
+        received_at,
+        decision_due_at: decision_due_at.parse()?,
+        absolute_due_at: absolute_due_at.parse()?,
+        authority_set_ref,
+        signature: PayloadSignature {
+            alg: "EdDSA".to_owned(),
+            verification_method: verification_method.to_owned(),
+            payload_digest: hash('0'),
+            created_at: received_at,
+            jws: "a..b".to_owned(),
+        },
+    };
+    member.signature.payload_digest = member.member_receipt_digest()?;
+    Ok(member)
 }
 
 fn timestamp(value: &Value, field: &str) -> Result<DateTime<Utc>> {

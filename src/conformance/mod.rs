@@ -161,7 +161,9 @@ pub use capability::{
     run_capability_fixture_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
-pub use control_proposal::run_control_proposal_bounded_decision_suite;
+pub use control_proposal::{
+    run_control_proposal_bounded_decision_suite, run_control_proposal_receipt_suite,
+};
 pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector, run_cursor_vector_suite,
