@@ -17,9 +17,11 @@ use arkret_canonical::DigestSuite;
 use arkret_wire::{
     AUTHORITY_SET_POLICY_SCHEMA, AuthoritySetAuthorizationRule, AuthoritySetIssuer,
     AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind, AuthoritySetPolicySource,
-    AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease, AuthorizationLeaseId, DeviceId,
+    AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease, AuthorizationLeaseId,
+    ControlProposalDecisionPolicy, ControlProposalReceipt, ControlProposalReceiptKind, DeviceId,
     Did, DidUrl, Event, EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt,
-    LeaseBasisRef, PayloadProof, ProjectedCellWrite, ReceiptId, RiskTier, SealId, proof_kind,
+    LeaseBasisRef, PayloadProof, PayloadSignature, ProjectedCellWrite, ProposalMemberReceipt,
+    ReceiptId, RiskTier, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 
@@ -58,6 +60,52 @@ fn issuer_proof(
     }
 }
 
+fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalReceipt>> {
+    if event.seal_basis.is_none() {
+        return Ok(None);
+    }
+    let received_at = event.created_at;
+    let policy = ControlProposalDecisionPolicy::default();
+    let proposal_digest = Hash::new(event.event_digest().context("Event is canonicalizable")?)
+        .context("Event digest is a valid Hash")?;
+    let authority_set_ref =
+        harness_authority_set("ak.authority_set.realm_admission.v1").authority_set_digest;
+    let mut member_receipt = ProposalMemberReceipt {
+        realm_id: event.realm_id.clone(),
+        proposal_digest: proposal_digest.clone(),
+        received_at,
+        decision_due_at: received_at + policy.decision_window,
+        absolute_due_at: received_at + policy.absolute_horizon,
+        authority_set_ref: authority_set_ref.clone(),
+        signature: PayloadSignature {
+            alg: "EdDSA".to_owned(),
+            verification_method: "did:webvh:z6mkfixture:authority.example#key-1".to_owned(),
+            payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
+                .context("static placeholder member receipt digest is valid")?,
+            created_at: received_at,
+            jws: "a..b".to_owned(),
+        },
+    };
+    member_receipt.signature.payload_digest = member_receipt
+        .member_receipt_digest()
+        .context("harness proposal member receipt is canonicalizable")?;
+    let receipt = ControlProposalReceipt {
+        kind: ControlProposalReceiptKind::ProposalReceipt,
+        realm_id: event.realm_id.clone(),
+        proposal_digest,
+        received_at,
+        decision_due_at: received_at + policy.decision_window,
+        absolute_due_at: received_at + policy.absolute_horizon,
+        defer_count: 0,
+        authority_set_ref,
+        member_receipts: vec![member_receipt],
+    };
+    receipt
+        .validate_structural(policy)
+        .context("harness proposal receipt is structurally valid")?;
+    Ok(Some(receipt))
+}
+
 /// Mint the lease that authorizes `event`'s first publication.
 ///
 /// Bound to the Event's own `actor_id` and signed `scope_ref`, which is what
@@ -71,6 +119,7 @@ pub fn authorization_lease_for(
     risk_tier: RiskTier,
 ) -> Result<AuthorizationLease> {
     let issued_at = event.created_at - Duration::minutes(5);
+    let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {
         schema: AUTHORITY_SET_POLICY_SCHEMA.to_owned(),
         authority_set_id: "ak.authority_set.realm_admission.v1".to_owned(),
@@ -78,19 +127,18 @@ pub fn authorization_lease_for(
         scope_ref: event.scope_ref.clone(),
         source: AuthoritySetPolicySource {
             source_kind: AuthoritySetSourceKind::RealmControl,
-            source_ref: "ak:event:01904100-0000-7000-8000-111111111111".to_owned(),
+            source_ref: format!("{}#harness-authority", event.realm_id),
             source_digest: Hash::new(format!("sha256:{}", "e".repeat(64)))
-                .context("static harness authority-set source digest is valid")?,
+                .context("static harness source digest is a valid Hash")?,
             generation_ref: "1".to_owned(),
         },
         authorization_rules: vec![AuthoritySetAuthorizationRule {
-            rule_id: "realm_admission".to_owned(),
+            rule_id: authorization_rule_id.to_owned(),
             issuer_role: AuthoritySetIssuerRole::RealmAdmission,
             allowed_actions: vec![action.to_owned()],
             issuers: vec![AuthoritySetIssuer {
                 verification_method: DidUrl::new("did:webvh:z6mkfixture:authority.example#key-1")
-                    .map_err(anyhow::Error::msg)
-                    .context("static harness authority verification method is typed")?,
+                    .map_err(anyhow::Error::msg)?,
             }],
             threshold: 1,
         }],
@@ -115,7 +163,7 @@ pub fn authorization_lease_for(
             .context("static harness lease device id is typed")?,
         scope_ref: event.scope_ref.clone(),
         action: action.to_owned(),
-        authorization_rule_id: "realm_admission".to_owned(),
+        authorization_rule_id: authorization_rule_id.to_owned(),
         risk_tier,
         issued_at,
         expires_at: issued_at + risk_tier.max_lease_ttl(),
@@ -137,10 +185,12 @@ pub fn authorization_lease_for(
 /// Package `event` as the initial publication the self submit rail accepts.
 pub fn initial_submission(event: Event, action: &str) -> Result<EventInitialSubmission> {
     let authorization_lease = authorization_lease_for(&event, action, RiskTier::Low)?;
+    let control_proposal_receipt = control_proposal_receipt_for(&event)?;
     Ok(EventInitialSubmission {
         event,
         authorization_lease,
         cba_proof_bundles: Vec::new(),
+        control_proposal_receipt,
     })
 }
 
@@ -177,9 +227,11 @@ pub fn ingress_receipt_for(event: &Event, lease: &AuthorizationLease) -> Result<
 pub fn federation_submission(event: Event, action: &str) -> Result<EventFederationSubmission> {
     let authorization_lease = authorization_lease_for(&event, action, RiskTier::Low)?;
     let receipt = ingress_receipt_for(&event, &authorization_lease)?;
+    let control_proposal_receipt = control_proposal_receipt_for(&event)?;
     Ok(EventFederationSubmission {
         event,
         authorization_lease,
         ingress_receipts: vec![receipt],
+        control_proposal_receipt,
     })
 }
