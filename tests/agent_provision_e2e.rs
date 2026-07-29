@@ -2224,6 +2224,22 @@ async fn provision_agent(
         events.accountability_grant.event_id.clone(),
         events.selector_claim.event_id.clone(),
     ];
+    let accountability_grant = prepare_controller_initial_submission(
+        &client,
+        &events.accountability_grant,
+        &SigningKey::from_bytes(&[21_u8; 32]),
+        &verification_method,
+    )
+    .await
+    .context("prepare accountability publication evidence")?;
+    let selector_claim = prepare_controller_initial_submission(
+        &client,
+        &events.selector_claim,
+        &SigningKey::from_bytes(&[21_u8; 32]),
+        &verification_method,
+    )
+    .await
+    .context("prepare selector publication evidence")?;
     let commit = arkret::AgentProvisionRequestBody::Commit {
         agent_id,
         principal_control_realm_id,
@@ -2231,7 +2247,10 @@ async fn provision_agent(
         slug: slug.to_owned(),
         avatar_blob_ref: None,
         requested_scope,
-        provision_events: Box::new(events),
+        provision_events: Box::new(arkret::AgentProvisionEvents {
+            accountability_grant,
+            selector_claim,
+        }),
         pairing_ttl_ms,
     };
     let committed = client
