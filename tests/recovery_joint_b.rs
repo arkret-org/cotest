@@ -377,6 +377,36 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                         &holder_seed,
                         &replacement_holder_jkt,
                     )?;
+                let authority_endpoint = format!(
+                    "{coauth_base}/_arkret/gate/account/recovery-device-authorizations"
+                );
+                let mut tampered_candidate = participant_request.clone();
+                tampered_candidate.authorization_preimage.did_entry_digest =
+                    arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?;
+                let tampered_candidate_response = http
+                    .post(&authority_endpoint)
+                    .json(&tampered_candidate)
+                    .send()
+                    .await?;
+                assert!(
+                    !tampered_candidate_response.status().is_success(),
+                    "Coauth must reject a candidate DID entry digest changed after preparation"
+                );
+                let mut rotated_authority = participant_request.clone();
+                let unexpected_authority =
+                    arkret_wire::Did::new("did:web:rotated-authority.invalid".to_owned())?;
+                rotated_authority.ticket.account_authority_id = unexpected_authority.clone();
+                rotated_authority.authorization_preimage.account_authority_id =
+                    unexpected_authority;
+                let rotated_authority_response = http
+                    .post(&authority_endpoint)
+                    .json(&rotated_authority)
+                    .send()
+                    .await?;
+                assert!(
+                    !rotated_authority_response.status().is_success(),
+                    "Coauth must reject an authority identity changed after ticket issuance"
+                );
                 let request = TypedSecurityTransactionContinueRequest {
                     request_digest: transaction.request_digest.clone(),
                     prepared_plan_digest: transaction.prepared_plan_digest.clone(),
