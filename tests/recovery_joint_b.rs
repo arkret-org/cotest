@@ -65,6 +65,20 @@ fn authority_ticket_request(
     })
 }
 
+fn recovery_client(
+    principal_base: &url::Url,
+    grant_jwt: &str,
+    signing_key: &SigningKey,
+) -> Result<arkret_http_client::Client> {
+    Ok(ClientBuilder::new(principal_base.clone())
+        .allow_insecure_localhost()
+        .auth(Auth::Dpop(garth::session::dpop::access_token_auth(
+            grant_jwt.to_owned(),
+            signing_key.clone(),
+        )))
+        .build()?)
+}
+
 async fn post_json(http: &reqwest::Client, url: String, body: Value) -> Result<Value> {
     let response = http.post(&url).json(&body).send().await?;
     let status = response.status();
@@ -249,13 +263,8 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let replacement_grant_jwt = replacement_grant["grant_jwt"]
         .as_str()
         .context("replacement debug grant omitted JWT")?;
-    let recovery_http = ClientBuilder::new(principal_base.clone())
-        .allow_insecure_localhost()
-        .auth(Auth::Dpop(garth::session::dpop::access_token_auth(
-            replacement_grant_jwt.to_owned(),
-            replacement_key.clone(),
-        )))
-        .build()?;
+    let mut recovery_http =
+        recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
     let replacement_signer = Arc::new(inkson::event_signer::build_ed25519_device_signer(
         replacement_key.to_bytes(),
         bootstrap.principal_id(),
@@ -316,6 +325,9 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         return Err(anyhow!("joint recovery created a rotation transaction"));
     };
     assert_eq!(binding.recovery_session_id(), &recovery_session_id);
+    let fixed_transaction_id = transaction.transaction_id.clone();
+    let fixed_request_digest = transaction.request_digest.clone();
+    let fixed_plan_digest = transaction.prepared_plan_digest.clone();
     let holder_seed = URL_SAFE_NO_PAD.encode(replacement_key.to_bytes());
     for _ in 0..8 {
         let Some(step) = transaction.next_required_step else {
@@ -324,11 +336,26 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         if step == SecurityTransactionStep::IssueTerminalReceipt {
             break;
         }
+        let accepted_before = transaction.accepted_steps.len();
         transaction = match step {
             SecurityTransactionStep::IssueAuthorityTicket => {
+                let request = authority_ticket_request(&transaction)?;
                 recovery_http
-                    .issue_recovery_authority_ticket(&authority_ticket_request(&transaction)?)
+                    .issue_recovery_authority_ticket(&request)
                     .await?;
+                recovery_http =
+                    recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
+                let replayed = recovery_http
+                    .issue_recovery_authority_ticket(&request)
+                    .await?;
+                let replayed_again = recovery_http
+                    .issue_recovery_authority_ticket(&request)
+                    .await?;
+                assert_eq!(
+                    serde_json::to_value(&replayed)?,
+                    serde_json::to_value(&replayed_again)?,
+                    "authority-ticket response loss must replay the first durable ticket"
+                );
                 recovery_http
                     .get_security_transaction(&transaction.transaction_id)
                     .await?
@@ -345,36 +372,58 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                         &holder_seed,
                         &replacement_holder_jkt,
                     )?;
+                let request = TypedSecurityTransactionContinueRequest {
+                    request_digest: transaction.request_digest.clone(),
+                    prepared_plan_digest: transaction.prepared_plan_digest.clone(),
+                    expected_next_step: step,
+                    client_attestation: None,
+                    participant_request: Some(participant_request),
+                };
                 recovery_http
-                    .continue_security_transaction(
-                        &transaction.transaction_id,
-                        &TypedSecurityTransactionContinueRequest {
-                            request_digest: transaction.request_digest.clone(),
-                            prepared_plan_digest: transaction.prepared_plan_digest.clone(),
-                            expected_next_step: step,
-                            client_attestation: None,
-                            participant_request: Some(participant_request),
-                        },
-                    )
+                    .continue_security_transaction(&transaction.transaction_id, &request)
+                    .await?;
+                recovery_http =
+                    recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
+                recovery_http
+                    .continue_security_transaction(&transaction.transaction_id, &request)
                     .await?
             }
             SecurityTransactionStep::PublishDidEntry
             | SecurityTransactionStep::SubmitReanchorUnit => {
+                let request = TypedSecurityTransactionContinueRequest {
+                    request_digest: transaction.request_digest.clone(),
+                    prepared_plan_digest: transaction.prepared_plan_digest.clone(),
+                    expected_next_step: step,
+                    client_attestation: None,
+                    participant_request: None,
+                };
                 recovery_http
-                    .continue_security_transaction(
-                        &transaction.transaction_id,
-                        &TypedSecurityTransactionContinueRequest {
-                            request_digest: transaction.request_digest.clone(),
-                            prepared_plan_digest: transaction.prepared_plan_digest.clone(),
-                            expected_next_step: step,
-                            client_attestation: None,
-                            participant_request: None,
-                        },
-                    )
+                    .continue_security_transaction(&transaction.transaction_id, &request)
+                    .await?;
+                recovery_http =
+                    recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
+                recovery_http
+                    .continue_security_transaction(&transaction.transaction_id, &request)
                     .await?
             }
             unexpected => return Err(anyhow!("unexpected B recovery step {unexpected:?}")),
         };
+        let fetched = recovery_http
+            .get_security_transaction(&fixed_transaction_id)
+            .await?;
+        assert_eq!(
+            serde_json::to_value(&transaction)?,
+            serde_json::to_value(&fetched)?,
+            "{step:?} replay after client restart must equal the durable resource"
+        );
+        assert_eq!(
+            transaction.accepted_steps.len(),
+            accepted_before + 1,
+            "{step:?} response loss must append exactly one accepted step"
+        );
+        assert_eq!(transaction.transaction_id, fixed_transaction_id);
+        assert_eq!(transaction.request_digest, fixed_request_digest);
+        assert_eq!(transaction.prepared_plan_digest, fixed_plan_digest);
     }
     assert_eq!(
         transaction.next_required_step,
@@ -434,6 +483,10 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         },
         replacement_signer.as_ref(),
     )?;
+    recovery_http
+        .continue_security_transaction(&transaction.transaction_id, &terminal)
+        .await?;
+    recovery_http = recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
     transaction = recovery_http
         .continue_security_transaction(&transaction.transaction_id, &terminal)
         .await?;
