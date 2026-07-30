@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import type { InviteDeliveryRequestBodyBodyBody } from "../../helpers/soland-api";
 import {
   canonicalTimestamp,
   authHeaders,
@@ -44,7 +45,7 @@ test.describe("invite addressing", () => {
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
     const recipientServiceId = solandServiceId();
     const invitee = "did:web:cotest-invitee.example";
-    const introductionEvidence = { kind: "explicit_address" };
+    const introductionEvidence = { kind: "explicit_address" } as const;
     const inviteDeliveryTarget = {
       recipient_service_id: recipientServiceId,
       recipient_service_kind: "principal_server" as const,
@@ -66,7 +67,10 @@ test.describe("invite addressing", () => {
       request,
       {
         schema: "ak.schema.invite_delivery_request.v1",
-        invite_event: inviteEvent,
+        // `signedEventEnvelope` still returns an untyped record — wiring the
+        // Event envelope itself to the generated type is the remaining B3 item.
+        invite_event:
+          inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
         invite_address: {
           subject_id: invitee,
           ...inviteDeliveryTarget,

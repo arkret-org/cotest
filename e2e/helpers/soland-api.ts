@@ -17,7 +17,13 @@ import {
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import { base64url } from "./encoding";
-import type { RealmObject } from "./generated/spec-wire-objects";
+import type {
+  CapabilityGrantObject,
+  EventFederationSubmission,
+  InviteDeliveryRequestBody,
+  RealmObject,
+  RealmSealFrontierView,
+} from "./generated/spec-wire-objects";
 
 export type SignedEventEnvelopeArgs = {
   actorDid: string;
@@ -662,7 +668,10 @@ export async function grantRealmReviewCapabilityApi(
 ): Promise<string> {
   const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
-  const unsignedGrant: Record<string, unknown> = {
+  // `capability-grant.schema.json` is a closed object; annotating the literal
+  // makes an unregistered member or a misspelled resource kind a `tsc` error
+  // instead of a reducer rejection. `proofs` is attached after signing.
+  const unsignedGrant: Omit<CapabilityGrantObject, "proofs"> = {
     id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
@@ -724,7 +733,10 @@ export async function grantServiceDelegationApi(
   // peers; the service-DID subject and Realm resource make this a service
   // delegation, independently of which registered action is delegated.
   const action = args.action ?? "ak.message.create";
-  const unsignedGrant: Record<string, unknown> = {
+  // `capability-grant.schema.json` is a closed object; annotating the literal
+  // makes an unregistered member or a misspelled resource kind a `tsc` error
+  // instead of a reducer rejection. `proofs` is attached after signing.
+  const unsignedGrant: Omit<CapabilityGrantObject, "proofs"> = {
     id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
@@ -799,7 +811,10 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   const grantId = typedId("grant");
   const eventId = typedId("event");
   const issuedAt = canonicalTimestamp();
-  const unsignedGrant: Record<string, unknown> = {
+  // `capability-grant.schema.json` is a closed object; annotating the literal
+  // makes an unregistered member or a misspelled resource kind a `tsc` error
+  // instead of a reducer rejection. `proofs` is attached after signing.
+  const unsignedGrant: Omit<CapabilityGrantObject, "proofs"> = {
     id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
@@ -2473,11 +2488,11 @@ function parseJsonOrRaw(text: string): unknown {
   }
 }
 
-type PublicationEvidence = {
-  event: Record<string, unknown>;
-  authorization_lease: Record<string, unknown>;
-  ingress_receipts: Array<Record<string, unknown>>;
-};
+// `service-operation-dtos.schema.json#/$defs/EventFederationSubmission` — the
+// exact body `federationEventWireBody` pushes to `/_arkret/peer/events`, so it
+// is generated rather than restated. It was three opaque
+// `Record<string, unknown>` members before.
+type PublicationEvidence = EventFederationSubmission;
 
 const publicationEvidenceByEventId = new Map<string, PublicationEvidence>();
 
@@ -2500,9 +2515,13 @@ function rememberPublicationEvidence(
       throw new Error("published Event is missing event_id");
     }
     publicationEvidenceByEventId.set(eventId, {
-      event: stripUndefined(event) as Record<string, unknown>,
-      authorization_lease: leases[index],
-      ingress_receipts: [receipts[index]],
+      event: stripUndefined(event) as PublicationEvidence["event"],
+      authorization_lease: leases[
+        index
+      ] as PublicationEvidence["authorization_lease"],
+      ingress_receipts: [
+        receipts[index],
+      ] as PublicationEvidence["ingress_receipts"],
     });
   });
 }
@@ -2646,10 +2665,14 @@ export async function readRealmSealBasis(
   };
 }
 
-type RealmSealFrontier = {
-  seal_id: string;
-  control_event_set_root: string;
-  state_root: string;
+// Local projection of the wire view: the callers only need the seal head plus
+// a flat digest list. The members are typed off
+// `service-operation-dtos.schema.json#/$defs/RealmSealFrontierView` so a
+// renamed or retyped wire member is a `tsc` error here.
+type RealmSealFrontier = Pick<
+  RealmSealFrontierView,
+  "seal_id" | "control_event_set_root" | "state_root"
+> & {
   pending_proposal_digests: string[];
 };
 
@@ -2663,18 +2686,11 @@ async function readRealmSealFrontier(
     `${solandBaseUrl(server)}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
+  // The endpoint answers 200 with an absent frontier before the genesis Seal
+  // lands, so every member is treated as possibly missing and re-checked at
+  // runtime below.
   const body = await expectJsonOk<{
-    frontier?: {
-      kind?: unknown;
-      seal_id?: unknown;
-      control_event_set_root?: unknown;
-      state_root?: unknown;
-      governance_health?: {
-        pending_proposals?: Array<{
-          proposal_digest?: unknown;
-        }>;
-      };
-    };
+    frontier?: Partial<RealmSealFrontierView>;
   }>(response, `read Realm Seal frontier for ${realmId}`);
   const frontier = body.frontier;
   if (
@@ -3242,17 +3258,11 @@ export async function rawPushFederationEvents(
   });
 }
 
-export type InviteDeliveryRequestBodyBodyBody = {
-  schema: "ak.schema.invite_delivery_request.v1";
-  invite_event: Record<string, unknown>;
-  invite_address: {
-    subject_id: string;
-    recipient_service_id: string;
-    recipient_service_kind?: "principal_server";
-  };
-  introduction_evidence: Record<string, unknown>;
-  idempotency_key: string;
-};
+// `invite-delivery-request.schema.json` is a closed object, so the body is
+// generated. The hand-written version modelled `invite_event` and
+// `introduction_evidence` as opaque records and omitted the address members
+// the schema actually requires.
+export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
 
 export async function submitPeerInviteDeliveryApi(
   request: APIRequestContext,

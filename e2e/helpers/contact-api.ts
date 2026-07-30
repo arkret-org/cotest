@@ -699,7 +699,9 @@ export async function deliverInviteWithConsentGrant(
   });
   const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
-    invite_event: event,
+    // `signedEventEnvelope` still returns an untyped record — wiring the Event
+    // envelope itself to the generated type is the remaining B3 item.
+    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
     invite_address: {
       subject_id: args.inviteeDid,
       recipient_service_id: recipientServiceId,
@@ -755,7 +757,9 @@ export async function deliverInviteExplicitAddress(
   });
   const body: InviteDeliveryRequestBodyBodyBody = {
     schema: "ak.schema.invite_delivery_request.v1",
-    invite_event: event,
+    // `signedEventEnvelope` still returns an untyped record — wiring the Event
+    // envelope itself to the generated type is the remaining B3 item.
+    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
     invite_address: {
       subject_id: args.inviteeDid,
       recipient_service_id: recipientServiceId,

@@ -40,10 +40,32 @@ export const OUTPUT_PATH = resolve(
   "spec-wire-objects.ts",
 );
 
-/** Schema file → exported TS type name. */
+/**
+ * Schema file (optionally one `$defs` entry inside it) → exported TS type name.
+ *
+ * A target belongs here only when the spec node is a *closed* object: that is
+ * what makes an unregistered member a `tsc` error. Hand-written types that
+ * mirror something cotest owns rather than something the spec defines (the
+ * CLI-command DTOs, the local signer bookkeeping) stay hand-written.
+ */
 const TARGETS = [
   { file: "realm.schema.json", typeName: "RealmObject" },
   { file: "space.schema.json", typeName: "SpaceObject" },
+  { file: "capability-grant.schema.json", typeName: "CapabilityGrantObject" },
+  {
+    file: "invite-delivery-request.schema.json",
+    typeName: "InviteDeliveryRequestBody",
+  },
+  {
+    file: "service-operation-dtos.schema.json",
+    pointer: "#/$defs/RealmSealFrontierView",
+    typeName: "RealmSealFrontierView",
+  },
+  {
+    file: "service-operation-dtos.schema.json",
+    pointer: "#/$defs/EventFederationSubmission",
+    typeName: "EventFederationSubmission",
+  },
 ];
 
 const schemaCache = new Map();
@@ -80,8 +102,69 @@ function deref(ref, file) {
 
 const INDENT = "  ";
 
+/**
+ * The bound only exists to stop a self-referential `$ref` chain, so keep it
+ * well above the deepest real one. It was 12, which is *below* the real depth
+ * of `EventFederationSubmission` → proposal receipt → proof → digest; the
+ * effect was not an error but a silent `unknown`, i.e. a generated type that
+ * constrains nothing. Raise this rather than accept a bare `unknown`.
+ */
+const MAX_DEPTH = 32;
+
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Fold the object-shaped branches of an `allOf` into one node.
+ *
+ * Branches that only constrain (`not`, `if`/`then`, bare `type: object`)
+ * contribute nothing to the member set and are skipped. Returns `undefined`
+ * when no branch carries `properties`, so the caller can fall through.
+ *
+ * The merged node is rendered against a single file, because a local `#/$defs/…`
+ * inside a merged property only resolves there. When two property-carrying
+ * branches come from different files that assumption breaks, so this bails out
+ * rather than resolve pointers against the wrong document.
+ */
+function mergeAllOf(branches, file, depth) {
+  const properties = {};
+  const required = new Set();
+  let closed = false;
+  let sourceFile;
+  let sawProperties = false;
+  for (const rawBranch of branches) {
+    let branch = rawBranch;
+    let branchFile = file;
+    let hops = 0;
+    while (isPlainObject(branch) && typeof branch.$ref === "string" && hops < 8) {
+      const resolved = deref(branch.$ref, branchFile);
+      if (resolved.node === undefined) break;
+      branch = resolved.node;
+      branchFile = resolved.file;
+      hops += 1;
+    }
+    if (!isPlainObject(branch) || !isPlainObject(branch.properties)) continue;
+    if (sourceFile !== undefined && sourceFile !== branchFile) return undefined;
+    sourceFile = branchFile;
+    sawProperties = true;
+    Object.assign(properties, branch.properties);
+    for (const name of branch.required ?? []) required.add(name);
+    if (branch.additionalProperties === false ||
+      branch.unevaluatedProperties === false) {
+      closed = true;
+    }
+  }
+  if (!sawProperties || depth > MAX_DEPTH) return undefined;
+  return {
+    node: {
+      type: "object",
+      properties,
+      required: [...required],
+      ...(closed ? { additionalProperties: false } : {}),
+    },
+    file: sourceFile,
+  };
 }
 
 /**
@@ -89,12 +172,24 @@ function isPlainObject(value) {
  * `depth` guards against a self-referential `$ref` chain.
  */
 function renderType(node, file, indent, depth = 0) {
-  if (!isPlainObject(node) || depth > 12) return "unknown";
+  if (!isPlainObject(node) || depth > MAX_DEPTH) return "unknown";
 
   if (typeof node.$ref === "string") {
     const resolved = deref(node.$ref, file);
     if (resolved.node === undefined) return "unknown";
     return renderType(resolved.node, resolved.file, indent, depth + 1);
+  }
+
+  // A node that is *only* a composition (`allOf` with no own shape) still has
+  // one member set; merge it so the target does not silently degrade to
+  // `unknown`. A node that carries its own `properties` is left alone — its
+  // `allOf` is the conditional-refinement dispatch this generator skips.
+  if (
+    Array.isArray(node.allOf) && !node.properties && !node.oneOf &&
+    !node.anyOf && node.type !== "array"
+  ) {
+    const merged = mergeAllOf(node.allOf, file, depth);
+    if (merged) return renderObject(merged.node, merged.file, indent, depth);
   }
 
   for (const key of ["oneOf", "anyOf"]) {
@@ -181,10 +276,15 @@ const HEADER = `// GENERATED FILE — DO NOT EDIT BY HAND.
 `;
 
 export function renderModule() {
-  const blocks = TARGETS.map(({ file, typeName }) => {
-    const schema = loadSchema(file);
-    const body = renderType(schema, file, "");
-    return `/** \`${file}\` — closed object schema. */\nexport type ${typeName} = ${body};\n`;
+  const blocks = TARGETS.map(({ file, pointer, typeName }) => {
+    const root = loadSchema(file);
+    const node = pointer ? resolvePointer(root, pointer.replace(/^#/, "")) : root;
+    if (node === undefined) {
+      throw new Error(`${file}${pointer ?? ""} does not resolve`);
+    }
+    const source = pointer ? `${file}${pointer}` : file;
+    const body = renderType(node, file, "");
+    return `/** \`${source}\` — closed object schema. */\nexport type ${typeName} = ${body};\n`;
   });
   return `${HEADER}\n${blocks.join("\n")}`;
 }
