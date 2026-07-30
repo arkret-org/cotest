@@ -8,12 +8,13 @@ use arkret_models_collaboration::sync_frames::account_subscribe::{
 use arkret_models_collaboration::sync_frames::stream_trace::{
     StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
 };
+use arkret_state::snapshot::{EventSetCommitmentAlgorithm, EventSetLeaf, event_set_root};
 use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
 
 use super::{
-    canonical_json, load_fixture_value, looks_like_sha256_digest, required_field, sha256_prefixed,
-    validate_profile, value_array, value_field_str, value_field_u64,
+    load_fixture_value, looks_like_sha256_digest, required_field, validate_profile, value_array,
+    value_field_str, value_field_u64,
 };
 use crate::transcripts::record_vector_event;
 
@@ -554,6 +555,31 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
     if value_field_u64(commitment, "covered_event_count")? as usize != entries.len() {
         bail!("snapshot inclusion challenge covered_event_count drifted");
     }
+    let actor_ranges = value_array(
+        required_field(commitment, "actor_seq_ranges")?,
+        "event_set_commitment.actor_seq_ranges",
+    )?;
+    for range in actor_ranges {
+        let actor_id = value_field_str(range, "actor_id")?;
+        let from_seq = value_field_u64(range, "from_seq")?;
+        let to_seq = value_field_u64(range, "to_seq")?;
+        let actor_entries = entries
+            .iter()
+            .filter(|entry| {
+                entry.get("actor_id").and_then(Value::as_str) == Some(actor_id)
+                    && entry
+                        .get("actor_seq")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|seq| (from_seq..=to_seq).contains(&seq))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if actor_entries.is_empty()
+            || merkle_event_set_root(&actor_entries)? != value_field_str(range, "root")?
+        {
+            bail!("actor range {actor_id}:{from_seq}:{to_seq} Merkle root does not match entries");
+        }
+    }
 
     let base_challenge = required_field(vector, "base_challenge")?;
     let base_response = required_field(vector, "base_response")?;
@@ -565,10 +591,9 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
     for case in cases {
         let name = value_field_str(case, "name")?;
         seen.insert(name.to_owned());
-        let mutation = value_field_str(case, "mutation")?;
         let mut challenge = base_challenge.clone();
         let mut response = base_response.clone();
-        apply_snapshot_inclusion_mutation(mutation, &mut challenge, &mut response)?;
+        apply_snapshot_inclusion_mutation(case, &mut challenge, &mut response)?;
         let observed = evaluate_snapshot_inclusion_case(manifest, entries, &challenge, &response)?;
         assert_expected_subset(name, required_field(case, "expected")?, &observed)?;
         record_vector_event(
@@ -583,6 +608,7 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         "valid_high_assurance_challenge",
         "insufficient_event_id_samples",
         "commitment_root_mismatch",
+        "legacy_unprefixed_commitment_root",
         "silent_actor_seq_gap",
     ] {
         if !seen.contains(required) {
@@ -694,10 +720,11 @@ fn evaluate_snapshot_inclusion_case(
 }
 
 fn apply_snapshot_inclusion_mutation(
-    mutation: &str,
+    case: &Value,
     challenge: &mut Value,
     response: &mut Value,
 ) -> Result<()> {
+    let mutation = value_field_str(case, "mutation")?;
     match mutation {
         "none" => {}
         "drop_one_event_id_sample" => {
@@ -715,6 +742,13 @@ fn apply_snapshot_inclusion_mutation(
         }
         "commitment_root_mismatch" => {
             response["commitment_root"] = Value::String(format!("sha256:{}", "0".repeat(64)));
+        }
+        "replace_commitment_root" => {
+            response["commitment_root"] = Value::String(
+                value_field_str(case, "replacement_root")
+                    .map_err(|_| anyhow!("replace_commitment_root case lacks replacement_root"))?
+                    .to_owned(),
+            );
         }
         "drop_gap_attribution" => {
             let proofs = response
@@ -735,57 +769,13 @@ fn apply_snapshot_inclusion_mutation(
 }
 
 fn merkle_event_set_root(entries: &[Value]) -> Result<String> {
-    if entries.is_empty() {
-        return Ok(sha256_prefixed(&[]));
-    }
-    let mut sorted = Vec::with_capacity(entries.len());
-    for entry in entries {
-        sorted.push((
-            value_field_str(entry, "actor_id")?.to_owned(),
-            value_field_u64(entry, "actor_seq")?,
-            value_field_str(entry, "event_id")?.to_owned(),
-            entry,
-        ));
-    }
-    sorted.sort_by(|left, right| (&left.0, left.1, &left.2).cmp(&(&right.0, right.1, &right.2)));
-
-    let mut level = sorted
-        .into_iter()
-        .map(|(_, _, _, entry)| {
-            let canonical = canonical_json(entry)?;
-            Ok(sha256_prefixed(canonical.as_bytes()))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    while level.len() > 1 {
-        let mut next = Vec::with_capacity(level.len().div_ceil(2));
-        let mut chunks = level.chunks_exact(2);
-        for pair in &mut chunks {
-            let mut bytes = digest_bytes(&pair[0])?;
-            bytes.extend_from_slice(&digest_bytes(&pair[1])?);
-            next.push(sha256_prefixed(&bytes));
-        }
-        if let Some(tail) = chunks.remainder().first() {
-            next.push(tail.clone());
-        }
-        level = next;
-    }
-    Ok(level.remove(0))
-}
-
-fn digest_bytes(value: &str) -> Result<Vec<u8>> {
-    let hex = value
-        .strip_prefix("sha256:")
-        .ok_or_else(|| anyhow!("digest must use sha256 prefix"))?;
-    if hex.len() != 64 {
-        bail!("sha256 digest must have 64 hex chars");
-    }
-    (0..hex.len())
-        .step_by(2)
-        .map(|index| {
-            u8::from_str_radix(&hex[index..index + 2], 16)
-                .map_err(|error| anyhow!("invalid sha256 digest hex: {error}"))
-        })
-        .collect()
+    let entries = entries
+        .iter()
+        .cloned()
+        .map(serde_json::from_value::<EventSetLeaf>)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|error| anyhow!("invalid event-set leaf: {error}"))?;
+    Ok(event_set_root(&EventSetCommitmentAlgorithm::MerkleEventSetV1, &entries)?.into_string())
 }
 
 fn range_key(value: &Value) -> Result<String> {

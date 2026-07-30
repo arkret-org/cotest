@@ -3,6 +3,8 @@
 //! Covers single-use claim limits, last-resort KeyPackage semantics, and MLS
 //! Welcome digest binding against the spec artifact fixture.
 
+use std::collections::BTreeSet;
+
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
@@ -276,6 +278,7 @@ enum MiniKeypackageState {
     Claimed,
     Consumed,
     Revoked,
+    Retired,
 }
 
 impl MiniKeypackageState {
@@ -285,6 +288,7 @@ impl MiniKeypackageState {
             Self::Claimed => "claimed",
             Self::Consumed => "consumed",
             Self::Revoked => "revoked",
+            Self::Retired => "retired",
         }
     }
 }
@@ -406,12 +410,15 @@ impl MiniKeypackage {
                 &self.keypackage_ref,
                 arkret_wire::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED,
             )),
-            (_, MiniKeypackageState::Revoked | MiniKeypackageState::Consumed) => {
-                Ok(consume_failure_outcome_value(
-                    &self.keypackage_ref,
-                    arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
-                ))
-            }
+            (
+                _,
+                MiniKeypackageState::Revoked
+                | MiniKeypackageState::Retired
+                | MiniKeypackageState::Consumed,
+            ) => Ok(consume_failure_outcome_value(
+                &self.keypackage_ref,
+                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
+            )),
             (false, MiniKeypackageState::Published) => Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
                 arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
@@ -571,6 +578,50 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         || consume_failure_reason(&consume)? != expected_str(vector, "expired_external_reason")?
     {
         bail!("expired keypackage consume did not reject with expected reason");
+    }
+    validate_wire_state_cases(vector)?;
+    Ok(())
+}
+
+fn validate_wire_state_cases(vector: &Value) -> Result<()> {
+    let cases = vector
+        .get("wire_state_cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("keypackage vector missing wire_state_cases[]"))?;
+    let mut seen = BTreeSet::new();
+    for case in cases {
+        let from = required_str(case, "from")?;
+        let to = required_str(case, "to")?;
+        if !seen.insert((from, to)) {
+            bail!("duplicate keypackage wire transition {from}->{to}");
+        }
+        if from != "published" {
+            bail!("wire-state fixture currently requires a published source state");
+        }
+        if to == "retired" && MiniKeypackageState::Retired.as_str() != to {
+            bail!("mini lifecycle model does not expose the retired wire state");
+        }
+        let mut payload = keypackage_payload_value(
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        );
+        payload["state"] = json!(to);
+        let accepted = schema_valid(MLS_KEYPACKAGE_PAYLOAD_SCHEMA, &payload).is_ok()
+            && serde_json::from_value::<MlsKeypackagePayload>(payload).is_ok();
+        let expected = required_str(case, "expected")?;
+        if accepted != (expected == "accepted") {
+            bail!(
+                "keypackage wire transition {from}->{to} produced {}, expected {expected}",
+                if accepted {
+                    "accepted"
+                } else {
+                    "schema_violation"
+                }
+            );
+        }
+    }
+    if !seen.contains(&("published", "retired")) || !seen.contains(&("published", "expired")) {
+        bail!("keypackage wire-state cases must cover retired acceptance and expired rejection");
     }
     Ok(())
 }
@@ -1162,12 +1213,6 @@ fn parse_welcome_with_early_binding_rejection(
 
 pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
     validate_keypackage_lifecycle_fixture_metadata(&keypackage_fixture()?)?;
-    if ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS.len() != 5 {
-        bail!(
-            "expected 5 keypackage lifecycle vector ids, got {}",
-            ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS.len()
-        );
-    }
 
     run_keypackage_exhaustion_claim_limits_vector()?;
     run_keypackage_last_resort_claim_and_reuse_vector()?;

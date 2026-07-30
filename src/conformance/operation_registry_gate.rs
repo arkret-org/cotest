@@ -20,6 +20,7 @@ const OPERATION_REGISTRY_REF: &str = "registry/operation-registry.json";
 const OPENAPI_REF: &str = "openapi/arkret-service-api.openapi.yaml";
 const OPERATION_COMPLETENESS_REF: &str = "reports/operation-completeness-report.json";
 const OPERATION_SCHEMA_INDEX_REF: &str = "reports/operation-schema-index.json";
+const EVENT_KIND_REGISTRY_REF: &str = "registry/event-kind-registry.json";
 const PRODUCT_PRIVATE_REF: &str = "operation-product-private-paths.json";
 
 const HTTP_METHODS: &[&str] = &["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
@@ -107,6 +108,7 @@ struct RegisteredOperation {
     success_shape_kind: Option<String>,
     request_schema_ref: Option<String>,
     response_schema_ref: Option<String>,
+    durable_effect: Option<Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -129,6 +131,7 @@ struct RegistryOperation {
     success_shape_kind: Option<String>,
     request_schema_ref: Option<String>,
     response_schema_ref: Option<String>,
+    durable_effect: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -247,6 +250,7 @@ pub fn build_operation_registry_gate_report_from_paths(
     let openapi_path = paths.artifacts_root.join(OPENAPI_REF);
     let completeness_path = paths.artifacts_root.join(OPERATION_COMPLETENESS_REF);
     let schema_index_path = paths.artifacts_root.join(OPERATION_SCHEMA_INDEX_REF);
+    let event_kind_registry_path = paths.artifacts_root.join(EVENT_KIND_REGISTRY_REF);
 
     let registry = load_operation_registry(&registry_path)?;
     let registry_by_key = registry
@@ -276,6 +280,10 @@ pub fn build_operation_registry_gate_report_from_paths(
         &registry_by_id,
         &schema_index,
     ));
+    artifact_failures.extend(validate_durable_effects(
+        &registry_by_id,
+        &event_kind_registry_path,
+    )?);
     artifact_failures.extend(validate_product_private_index(&product_private));
 
     let observed = discover_observed_operations(&paths.source_roots)?;
@@ -361,9 +369,174 @@ fn load_operation_registry(path: &Path) -> Result<Vec<RegisteredOperation>> {
             success_shape_kind: row.success_shape_kind,
             request_schema_ref: row.request_schema_ref,
             response_schema_ref: row.response_schema_ref,
+            durable_effect: row.durable_effect,
         });
     }
     Ok(operations)
+}
+
+fn validate_durable_effects(
+    registry_by_id: &BTreeMap<String, RegisteredOperation>,
+    event_kind_registry_path: &Path,
+) -> Result<Vec<String>> {
+    let raw = fs::read_to_string(event_kind_registry_path).map_err(|error| {
+        anyhow!(
+            "failed to read event-kind registry {}: {error}",
+            event_kind_registry_path.display()
+        )
+    })?;
+    let registry: Value = serde_json::from_str(&raw).map_err(|error| {
+        anyhow!(
+            "failed to parse event-kind registry {}: {error}",
+            event_kind_registry_path.display()
+        )
+    })?;
+    let active = registry
+        .get("event_kinds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event-kind registry missing event_kinds[]"))?
+        .iter()
+        .filter(|row| row.get("status").and_then(Value::as_str) == Some("active"))
+        .filter_map(|row| row.get("event_kind").and_then(Value::as_str))
+        .collect::<BTreeSet<_>>();
+    let private_writes = registry
+        .pointer("/actor_private_contracts/event_writes")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            anyhow!("event-kind registry missing actor_private_contracts.event_writes")
+        })?;
+
+    let mut failures = Vec::new();
+    for operation in registry_by_id.values() {
+        let write_operation = matches!(operation.key.method.as_str(), "PUT" | "PATCH" | "DELETE")
+            || (operation.key.method == "POST" && !operation.operation_id.contains(".query."));
+        let Some(effect) = operation.durable_effect.as_ref() else {
+            if write_operation {
+                failures.push(format!(
+                    "write operation {} is missing durable_effect",
+                    operation.operation_id
+                ));
+            }
+            continue;
+        };
+        let Some(effect) = effect.as_object() else {
+            failures.push(format!(
+                "{} durable_effect must be an object",
+                operation.operation_id
+            ));
+            continue;
+        };
+        let kind = effect.get("kind").and_then(Value::as_str).unwrap_or("");
+        let allowed_keys: &[&str] = match kind {
+            "none" => &["kind", "rationale"],
+            "event_log" => &["kind", "event_kinds", "event_kind_source"],
+            "actor_private_event" => &["kind", "event_kind"],
+            _ => {
+                failures.push(format!(
+                    "{} durable_effect.kind is not in the closed union: {kind:?}",
+                    operation.operation_id
+                ));
+                continue;
+            }
+        };
+        for key in effect.keys() {
+            if !allowed_keys.contains(&key.as_str()) {
+                failures.push(format!(
+                    "{} durable_effect contains unknown field {key}",
+                    operation.operation_id
+                ));
+            }
+        }
+        match kind {
+            "none" => {
+                if effect
+                    .get("rationale")
+                    .and_then(Value::as_str)
+                    .is_none_or(|value| value.trim().is_empty())
+                {
+                    failures.push(format!(
+                        "{} durable_effect=none requires a non-empty rationale",
+                        operation.operation_id
+                    ));
+                }
+            }
+            "event_log" => {
+                let static_kinds = effect.get("event_kinds").and_then(Value::as_array);
+                let dynamic_source = effect.get("event_kind_source").and_then(Value::as_str);
+                if static_kinds.is_some() == dynamic_source.is_some() {
+                    failures.push(format!(
+                        "{} event_log durable_effect must declare exactly one of event_kinds or event_kind_source",
+                        operation.operation_id
+                    ));
+                }
+                if let Some(kinds) = static_kinds {
+                    if kinds.is_empty() {
+                        failures.push(format!(
+                            "{} event_log durable_effect has empty event_kinds",
+                            operation.operation_id
+                        ));
+                    }
+                    for event_kind in kinds {
+                        match event_kind.as_str() {
+                            Some(event_kind) if active.contains(event_kind) => {}
+                            Some(event_kind) => failures.push(format!(
+                                "{} references inactive or unknown event kind {event_kind}",
+                                operation.operation_id
+                            )),
+                            None => failures.push(format!(
+                                "{} event_kinds contains a non-string value",
+                                operation.operation_id
+                            )),
+                        }
+                    }
+                }
+                if let Some(source) = dynamic_source
+                    && (!source.starts_with("$request.")
+                        || !source.ends_with(".event.kind")
+                        || source.contains(char::is_whitespace))
+                {
+                    failures.push(format!(
+                        "{} has an unresolvable event_kind_source {source}",
+                        operation.operation_id
+                    ));
+                }
+            }
+            "actor_private_event" => {
+                let Some(event_kind) = effect.get("event_kind").and_then(Value::as_str) else {
+                    failures.push(format!(
+                        "{} actor_private_event is missing event_kind",
+                        operation.operation_id
+                    ));
+                    continue;
+                };
+                if !active.contains(event_kind) {
+                    failures.push(format!(
+                        "{} references inactive or unknown actor-private event {event_kind}",
+                        operation.operation_id
+                    ));
+                }
+                let Some(contract) = private_writes.get(event_kind) else {
+                    failures.push(format!(
+                        "{} event {event_kind} is not registered as actor-private",
+                        operation.operation_id
+                    ));
+                    continue;
+                };
+                if contract
+                    .get("cell_family")
+                    .and_then(Value::as_str)
+                    .is_none_or(|family| !family.starts_with("ak.private."))
+                {
+                    failures.push(format!(
+                        "{} actor-private event {event_kind} does not target an ak.private.* family",
+                        operation.operation_id
+                    ));
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+    Ok(failures)
 }
 
 fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>> {

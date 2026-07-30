@@ -397,6 +397,7 @@ dependencies = [
  "arkret-state",
  "arkret-wire",
  "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1864,6 +1865,7 @@ dependencies = [
  "arkret-hlc",
  "arkret-http-client",
  "arkret-identifiers",
+ "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-discovery",

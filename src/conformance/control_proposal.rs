@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_wire::notary::{ForensicAttribution, NotaryValue};
@@ -82,7 +82,32 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("control proposal receipt fixture has no cases[]"))?;
-    ensure!(cases.len() == 7, "receipt fixture must contain seven cases");
+    const REQUIRED_CASES: [&str; 10] = [
+        "threshold_receipt_set_uses_distinct_current_members",
+        "duplicate_member_does_not_count_twice",
+        "mixed_authority_set_and_out_of_window_rejected",
+        "receipt_sla_wire_maximum_is_inclusive",
+        "receipt_sla_above_wire_maximum_is_rejected",
+        "exact_member_retry_is_byte_identical_and_conflict_cannot_extend",
+        "decision_proofs_cannot_cross_receipt_sets",
+        "proposal_decision_window_after_absolute_deadline_rejected",
+        "equal_proposal_windows_without_defers_accepted",
+        "equal_proposal_windows_with_defers_rejected",
+    ];
+    let mut names = BTreeSet::new();
+    for value in cases {
+        let name = value
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("control proposal receipt case has no name"))?;
+        ensure!(names.insert(name), "duplicate receipt fixture case {name}");
+    }
+    for required in REQUIRED_CASES {
+        ensure!(
+            names.contains(required),
+            "control proposal receipt fixture is missing {required}"
+        );
+    }
     let case = |name: &str| {
         cases
             .iter()
@@ -222,6 +247,51 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         .is_err(),
         "receipt SLA above the wire maximum was accepted"
     );
+
+    for name in [
+        "proposal_decision_window_after_absolute_deadline_rejected",
+        "equal_proposal_windows_without_defers_accepted",
+        "equal_proposal_windows_with_defers_rejected",
+    ] {
+        let value = case(name)?;
+        let configuration = value
+            .get("realm_configuration")
+            .ok_or_else(|| anyhow!("{name} is missing realm_configuration"))?;
+        let milliseconds = |field: &str| -> Result<i64> {
+            configuration
+                .get(field)
+                .and_then(Value::as_i64)
+                .ok_or_else(|| anyhow!("{name}.{field} must be an integer"))
+        };
+        let max_defers = configuration
+            .get("max_proposal_defers")
+            .and_then(Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| anyhow!("{name}.max_proposal_defers must fit u8"))?;
+        let candidate = ControlProposalDecisionPolicy {
+            receipt_sla: policy.receipt_sla,
+            decision_window: chrono::Duration::milliseconds(milliseconds(
+                "proposal_decision_window_ms",
+            )?),
+            absolute_horizon: chrono::Duration::milliseconds(milliseconds(
+                "proposal_absolute_deadline_ms",
+            )?),
+            max_defers,
+        };
+        let accepted = candidate.validate().is_ok();
+        let expected_accepted =
+            value.pointer("/expected/decision").and_then(Value::as_str) == Some("accept");
+        ensure!(
+            accepted == expected_accepted,
+            "{name} policy validation produced {}, expected {}",
+            if accepted { "accept" } else { "reject" },
+            if expected_accepted {
+                "accept"
+            } else {
+                "reject"
+            }
+        );
+    }
 
     let replay = case("exact_member_retry_is_byte_identical_and_conflict_cannot_extend")?;
     let original = serde_json::to_vec(&receipt.member_receipts[0])?;

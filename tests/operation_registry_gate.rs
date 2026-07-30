@@ -265,6 +265,19 @@ fn write_minimal_artifacts(
             "operations": registry_rows
         }),
     )?;
+    write_json(
+        &artifacts_root
+            .join("registry")
+            .join("event-kind-registry.json"),
+        &json!({
+            "version": "test",
+            "event_kinds": [],
+            "actor_private_contracts": {
+                "cell_families": {},
+                "event_writes": {}
+            }
+        }),
+    )?;
 
     let mut paths = serde_json::Map::new();
     for (method, path, operation_id) in openapi_operations {

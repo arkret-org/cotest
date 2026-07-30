@@ -10,6 +10,13 @@
       "reason": "Test-only conformance harness namespace; mounted only when ak.profile.conformance_harness.v1 is active and not advertised as a protocol operation."
     },
     {
+      "source": "cotest",
+      "method": "*",
+      "path": "/_arkret/_conformance/{**rest}",
+      "classification": "product-private",
+      "reason": "Cotest-only calls into the conformance harness namespace; these helpers are test infrastructure, not registered protocol operations."
+    },
+    {
       "source": "soland",
       "method": "*",
       "path": "/_arkret/self/blob/resumable",

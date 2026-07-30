@@ -873,10 +873,133 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             super::privacy_security::MINIMAL_METADATA_AUTHOR_CREDENTIAL_CASE => {
                 super::privacy_security::run_minimal_metadata_author_credential_vector()?;
             }
+            "actor_profile_accountability_grant_is_deterministic" => {
+                validate_actor_accountability_grant_required(&case)?;
+            }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }
     }
 
+    Ok(())
+}
+
+fn validate_actor_accountability_grant_required(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some("ak.vector.actor.accountability_grant_required.v1") {
+        bail!("{} has an unexpected vector_id", case.name);
+    }
+    let cases = case
+        .cases
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} is missing cases[]", case.name))?;
+    let mut seen = BTreeSet::new();
+    for subcase in cases {
+        let name = subcase
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{} contains an unnamed case", case.name))?;
+        if !seen.insert(name) {
+            bail!("{} contains duplicate case {name}", case.name);
+        }
+
+        if let Some(accountable) = subcase
+            .get("accountable_principal_ids")
+            .and_then(Value::as_array)
+        {
+            let accountable = accountable
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .ok_or_else(|| anyhow!("{name} accountable principal must be text"))
+                })
+                .collect::<Result<BTreeSet<_>>>()?;
+            let active = subcase
+                .get("matching_active_grants")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("{name} is missing matching_active_grants[]"))?
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .ok_or_else(|| anyhow!("{name} matching grant must be text"))
+                })
+                .collect::<Result<BTreeSet<_>>>()?;
+            let accepted = accountable.is_subset(&active);
+            let expected = subcase
+                .pointer("/expected/decision")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("{name} is missing expected.decision"))?;
+            if accepted != (expected == "accept") {
+                bail!(
+                    "{name} produced {}, expected {expected}",
+                    if accepted {
+                        "accept"
+                    } else {
+                        "failed_precondition"
+                    }
+                );
+            }
+            if !accepted {
+                if subcase
+                    .pointer("/expected/reason_code")
+                    .and_then(Value::as_str)
+                    != Some("accountability_grant_missing")
+                    || subcase
+                        .pointer("/expected/profile_cell_unchanged")
+                        .and_then(Value::as_bool)
+                        != Some(true)
+                {
+                    bail!("{name} does not pin atomic accountability rejection");
+                }
+            } else if subcase
+                .pointer("/expected/stored_accountable_principal_ids_equal_signed_payload")
+                .and_then(Value::as_bool)
+                != Some(true)
+            {
+                bail!("{name} does not preserve the exact signed profile value");
+            }
+        } else {
+            if subcase
+                .get("profile_write_was_valid_when_accepted")
+                .and_then(Value::as_bool)
+                != Some(true)
+                || subcase
+                    .get("grant_status_after_acceptance")
+                    .and_then(Value::as_str)
+                    != Some("revoked")
+                || subcase
+                    .pointer("/expected/profile_event_remains_in_log")
+                    .and_then(Value::as_bool)
+                    != Some(true)
+                || subcase
+                    .pointer("/expected/projection_trust_state")
+                    .and_then(Value::as_str)
+                    != Some("unverified")
+                || subcase
+                    .pointer("/expected/next_profile_update_with_revoked_entry")
+                    .and_then(Value::as_str)
+                    != Some("accountability_grant_missing")
+            {
+                bail!("{name} does not pin post-accept revocation presentation semantics");
+            }
+        }
+    }
+    for required in [
+        "create_missing_grant_rejects_whole_event",
+        "update_missing_one_of_multiple_grants_rejects_whole_event",
+        "all_grants_active_accepts_exact_signed_value",
+        "later_revoke_marks_existing_projection_unverified",
+    ] {
+        if !seen.contains(required) {
+            bail!("{} is missing required case {required}", case.name);
+        }
+    }
+    record_vector_event(
+        "privacy.actor_profile_accountability_grant_is_deterministic",
+        &json!({"case_names": seen}),
+        &json!({"all_accountability_checks_executed": true}),
+        &json!({"all_accountability_checks_executed": true}),
+    );
     Ok(())
 }
 

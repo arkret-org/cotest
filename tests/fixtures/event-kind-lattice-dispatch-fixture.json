@@ -54,7 +54,6 @@
       "ak.component.call.mute_override.v1",
       "ak.component.call.recording_result.v1",
       "ak.component.call.transcript_result.v1",
-      "ak.component.circle.member.v1",
       "ak.component.circle.tombstone.v1",
       "ak.component.cross_signing.publish.v1",
       "ak.component.key_backup.active_series.v1",
@@ -94,6 +93,7 @@
     "fsm_families": [
       "ak.component.call.recording.v1",
       "ak.component.call.transcript.v1",
+      "ak.component.circle.member.v1",
       "ak.component.circle.lifecycle.v1",
       "ak.component.invite.lifecycle.v1",
       "ak.component.mls.keypackage.v1",

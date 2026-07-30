@@ -352,6 +352,19 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
             .filter(|row| row.get("cell_family").is_some())
             .chain(writes)
         {
+            if write.get("cell_family").is_none() {
+                if entry.get("event_kind").and_then(Value::as_str)
+                    != Some("ak.state.conflict_recovery")
+                    || write.pointer("/cell_ref/kind").and_then(Value::as_str) != Some("cell_ref")
+                    || write
+                        .pointer("/effect_projection/kind")
+                        .and_then(Value::as_str)
+                        != Some("reset")
+                {
+                    bail!("dynamic cell write is not the closed conflict-recovery reset");
+                }
+                continue;
+            }
             let family = required_str(write, "cell_family")?;
             if !family.starts_with("ak.component.") {
                 bail!(
@@ -442,6 +455,8 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
             );
         }
     }
+    validate_canonical_fsm_contracts(&family_to_lattice)?;
+    validate_actor_private_contracts(&registry, &all_live_families)?;
 
     // Vectors — structural sanity (each scope is recognised, each outcome
     // matches the validator semantics already enforced above). Vectors are
@@ -589,6 +604,165 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+fn validate_actor_private_contracts(
+    raw_registry: &Value,
+    shared_families: &std::collections::BTreeSet<String>,
+) -> Result<()> {
+    use std::collections::BTreeSet;
+
+    use arkret_lattice_registry::{
+        ActorPrivateCandidate, ActorPrivateMergeOutcome, build_actor_private_registry,
+    };
+
+    let private = build_actor_private_registry()
+        .map_err(|error| anyhow!("actor-private contract resolution failed: {error}"))?;
+    let expected_families = raw_registry
+        .pointer("/actor_private_contracts/cell_families")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("registry omits actor-private cell_families"))?
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let expected_events = raw_registry
+        .pointer("/actor_private_contracts/event_writes")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("registry omits actor-private event_writes"))?
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let actual_families = private
+        .families()
+        .map(|contract| contract.cell_family.as_str())
+        .collect::<BTreeSet<_>>();
+    let actual_events = private
+        .event_writes()
+        .map(|write| write.event_kind.as_str())
+        .collect::<BTreeSet<_>>();
+    if actual_families != expected_families || actual_events != expected_events {
+        bail!("actor-private resolver is not an exact closure of the canonical registry");
+    }
+    if actual_families
+        .iter()
+        .any(|family| !family.starts_with("ak.private.") || shared_families.contains(*family))
+    {
+        bail!("shared and actor-private cell registries overlap");
+    }
+    for event_kind in &actual_events {
+        let event = json!({"kind": event_kind, "actor_id": "did:web:fixture", "payload": {}});
+        private
+            .validate_private_event_shape(&event)
+            .map_err(|error| anyhow!("{event_kind} private shape rejected: {error}"))?;
+        let mut shared = event;
+        shared["effects"] = json!([]);
+        if private.validate_private_event_shape(&shared).is_ok() {
+            bail!("{event_kind} accepted shared CBA effects in an actor-private envelope");
+        }
+    }
+
+    let current = ActorPrivateCandidate {
+        value: json!({"route": "one"}),
+        revision: Some(1),
+        expected_revision: Some(0),
+        causal_order: None,
+        hlc: None,
+        device_id: None,
+    };
+    let concurrent = ActorPrivateCandidate {
+        value: json!({"route": "two"}),
+        revision: Some(1),
+        expected_revision: Some(0),
+        causal_order: None,
+        hlc: None,
+        device_id: None,
+    };
+    if !matches!(
+        private.apply(
+            "ak.private.device.push_route.v1",
+            Some(&current),
+            concurrent
+        )?,
+        ActorPrivateMergeOutcome::Conflict
+    ) {
+        bail!("concurrent distinct actor-private push routes did not fail closed");
+    }
+    Ok(())
+}
+
+fn validate_canonical_fsm_contracts(
+    family_to_lattice: &std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+) -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let contracts = arkret_lattice_registry::canonical_fsm_contracts()
+        .map_err(|error| anyhow!("canonical FSM contract resolution failed: {error}"))?;
+    if contracts.is_empty() {
+        bail!("canonical FSM contract resolver returned no contracts");
+    }
+    let mut families = BTreeSet::new();
+    for contract in contracts {
+        if !families.insert(contract.cell_family.clone()) {
+            bail!("duplicate resolved FSM contract {}", contract.cell_family);
+        }
+        if family_to_lattice
+            .get(&contract.cell_family)
+            .is_none_or(|lattices| lattices.len() != 1 || !lattices.contains("fsm"))
+        {
+            bail!(
+                "resolved FSM contract {} does not map to exactly one FSM lattice",
+                contract.cell_family
+            );
+        }
+        let states = contract.states.iter().collect::<BTreeSet<_>>();
+        if states.len() != contract.states.len()
+            || contract
+                .initial_states
+                .iter()
+                .chain(contract.terminal_states.iter())
+                .any(|state| !states.contains(state))
+            || contract
+                .allowed_transitions
+                .iter()
+                .any(|(from, to)| !states.contains(from) || !states.contains(to))
+        {
+            bail!(
+                "resolved FSM contract {} is not an exact closed state machine",
+                contract.cell_family
+            );
+        }
+        for transition in &contract.allowed_transitions {
+            let runtime = (
+                Value::String(transition.0.clone()),
+                Value::String(transition.1.clone()),
+            );
+            if !contract.runtime_transitions.contains(&runtime) {
+                bail!(
+                    "resolved FSM contract {} omitted runtime transition {:?}",
+                    contract.cell_family,
+                    transition
+                );
+            }
+        }
+        if contract
+            .runtime_initial_state
+            .as_ref()
+            .is_some_and(Value::is_null)
+        {
+            for initial in &contract.initial_states {
+                if !contract
+                    .runtime_transitions
+                    .contains(&(Value::Null, Value::String(initial.clone())))
+                {
+                    bail!(
+                        "resolved FSM contract {} omitted null->{initial}",
+                        contract.cell_family
+                    );
+                }
+            }
+        }
+    }
     Ok(())
 }
 /// A1 Round 23 — event-kind payload coverage.
