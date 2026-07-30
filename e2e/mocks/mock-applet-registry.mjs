@@ -114,7 +114,7 @@ function registrationEpochHash(packageBase, evidence) {
       protocols: [...packageBase.protocols].sort(),
       namespaces: sortedNamespaces,
       receive_events: packageBase.receive_events,
-      receive_ephemeral: packageBase.receive_ephemeral,
+      receive_signals: packageBase.receive_signals,
       rate_limited: packageBase.rate_limited,
       requested_scopes: [...packageBase.requested_scopes].sort(),
       created_at: packageBase.created_at,
@@ -585,7 +585,7 @@ function signedPackage(body) {
     },
     webhook_auth: webhookAuth,
     receive_events: body.receive_events ?? true,
-    receive_ephemeral: body.receive_ephemeral ?? false,
+    receive_signals: body.receive_signals ?? false,
     rate_limited: body.rate_limited ?? true,
     limits: body.limits ?? {
       max_transaction_events: 100,

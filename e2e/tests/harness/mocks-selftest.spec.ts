@@ -340,6 +340,8 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(body.applet_package.requested_scopes).toContain("ak.message.create");
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
     expect(body.applet_package.endpoint_set).toBeUndefined();
+    expect(body.applet_package.receive_signals).toBe(false);
+    expect(body.applet_package.receive_ephemeral).toBeUndefined();
     expect(body.applet_package.webhook_auth.accepted_algs).toContain("EdDSA");
     expect(body.applet_package.ghost_policy.enabled).toBe(true);
     expect(body.applet_package.delegation_policy.enabled).toBe(false);
