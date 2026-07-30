@@ -57,7 +57,11 @@ export default defineConfig({
     // Opt-in for live Caddy `tls internal` stacks (self-signed). Applies to the
     // `request` fixture's API calls; the browser context mirrors it in openUser.
     ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
-    trace: "retain-on-failure",
+    // Playwright traces persist UI fills, authorization headers, and network
+    // bodies before the artifact scanner can redact them. Joint tests exercise
+    // recovery and authenticated APIs, so trace persistence stays disabled
+    // until Playwright provides a pre-write structured-redaction boundary.
+    trace: "off",
     video: "retain-on-failure",
     screenshot: "only-on-failure",
   },

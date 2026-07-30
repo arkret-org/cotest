@@ -3,17 +3,28 @@
 // Spec: extensions/applet-integration.md §3-§5, extensions/applet-schema.md
 
 import { createHash, createPrivateKey, sign, type KeyObject } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+} from "@playwright/test";
 import { mockAppletRegistryBaseUrl, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   addRealmMemberApi,
+  advanceEnvelopeToActorFrontier,
   authHeaders,
+  buildCapabilityGrantProof,
   canonicalEventTimestamp,
   canonicalTimestamp,
   canonicalJson,
   createRealmApi,
+  currentActorDidApi,
   queryRealmEventsApi,
+  readRealmSealBasis,
   resolveDefaultStrandId,
+  sdkCapabilityActionRegistryDigest,
+  signedEventEnvelope,
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -42,6 +53,7 @@ type SignedPackage = {
       handles?: Array<{ pattern: string }>;
     };
     requested_scopes: string[];
+    registration_epoch: string;
   };
   package_digest: string;
   signing_did: string;
@@ -56,20 +68,21 @@ type AppletRegistration = {
   portal_realm_id: string;
   namespace: string;
   status: string;
-  capability_grant_refs: string[];
+  capability_grants: Array<{
+    grant_ref: string;
+    actions: string[];
+  }>;
 };
 
 function capabilityGrantRefForAction(
   registration: AppletRegistration,
-  approvedActions: string[],
   action: string,
 ): string {
-  const actions = Array.from(new Set(approvedActions)).sort();
-  const index = actions.indexOf(action);
-  expect(index, `approved Applet action ${action}`).toBeGreaterThanOrEqual(0);
-  const grantRef = registration.capability_grant_refs[index];
+  const grantRef = registration.capability_grants.find((grant) =>
+    grant.actions.includes(action),
+  )?.grant_ref;
   expect(grantRef, `capability grant for ${action}`).toMatch(/^ak:grant:/);
-  return grantRef;
+  return grantRef!;
 }
 
 test.describe("applet bridge", () => {
@@ -95,7 +108,7 @@ test.describe("applet bridge", () => {
         package_id: `package:bridge:demo-${stamp}`,
         namespace: `bridge.demo.${stamp}`,
         display_name: "Demo Bridge Applet",
-        capabilities: ["realm:portal", "message:write", "actor:provision-ghost"],
+        capabilities: ["ak.message.create", "ak.applet.ghost.provision"],
       });
       const realmId = await createRealmApi(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
@@ -119,12 +132,10 @@ test.describe("applet bridge", () => {
       expect(registration.portal_realm_id).toBe(realmId);
       const messageGrantRef = capabilityGrantRefForAction(
         registration,
-        signed.applet_package.requested_scopes,
         "ak.message.create",
       );
       const provisionGrantRef = capabilityGrantRefForAction(
         registration,
-        signed.applet_package.requested_scopes,
         "ak.applet.ghost.provision",
       );
       const appletService = {
@@ -276,7 +287,7 @@ test.describe("applet bridge", () => {
       package_id: `package:bridge:conflict-b-${stamp}`,
       namespace,
     });
-    const denied = await rawInstallApplet(
+    const { response: denied } = await rawInstallApplet(
       request,
       aliceToken,
       second,
@@ -361,34 +372,48 @@ test.describe("applet bridge", () => {
       namespace: `bridge.idem.${stamp}`,
     });
 
-    const firstResponse = await rawInstallApplet(
+    const firstResult = await rawInstallApplet(
       request,
       aliceToken,
       signed,
       realmId,
       `idem-${stamp}`,
     );
+    const firstResponse = firstResult.response;
     expect(firstResponse.status()).toBe(201);
-    const first = installRegistrationFromResponse(signed, realmId, await firstResponse.json());
+    const first = installRegistrationFromResponse(
+      signed,
+      realmId,
+      await firstResponse.json(),
+      firstResult.grantActionsById,
+    );
 
-    const secondResponse = await rawInstallApplet(
+    const secondResult = await rawInstallApplet(
       request,
       aliceToken,
       signed,
       realmId,
       `idem-${stamp}`,
+      firstResult.prepared,
     );
+    const secondResponse = secondResult.response;
     expect(secondResponse.status()).toBe(200);
-    const second = installRegistrationFromResponse(signed, realmId, await secondResponse.json());
+    const second = installRegistrationFromResponse(
+      signed,
+      realmId,
+      await secondResponse.json(),
+      secondResult.grantActionsById,
+    );
     expect(second.applet_id).toBe(first.applet_id);
     expect(second.bot_actor_id).toBe(first.bot_actor_id);
 
-    const conflict = await rawInstallApplet(
+    const { response: conflict } = await rawInstallApplet(
       request,
       aliceToken,
       signed,
       realmId,
       `idem-other-${stamp}`,
+      firstResult.prepared,
     );
     expect(conflict.status()).toBe(409);
     expect(wireErrCode(await conflict.json())).toBe("applet_already_registered");
@@ -432,7 +457,7 @@ test.describe("applet bridge", () => {
       pkg.requested_scopes = [...pkg.requested_scopes, "ak.applet.smuggled.scope"];
     });
 
-    const denied = await rawInstallApplet(
+    const { response: denied } = await rawInstallApplet(
       request,
       aliceToken,
       tampered,
@@ -473,7 +498,7 @@ test.describe("applet bridge", () => {
       proof.event_digest = `sha256:${"0".repeat(64)}`;
     });
 
-    const denied = await rawInstallApplet(
+    const { response: denied } = await rawInstallApplet(
       request,
       aliceToken,
       tampered,
@@ -589,7 +614,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,
-      capabilities: ["message:write"],
+      capabilities: ["ak.message.create"],
       webhook_auth: {
         kind: "http_message_signature",
         accepted_algs: ["EdDSA"],
@@ -606,7 +631,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
       realmId,
       actorDid: registration.bot_actor_id,
       appletId: registration.applet_id,
-      authorizationRef: registration.capability_grant_refs[0],
+      authorizationRef: capabilityGrantRefForAction(
+        registration,
+        "ak.message.create",
+      ),
       strandId: await resolveDefaultStrandId(request, token, realmId),
       signingKey: signed.service_signing_private_key,
     });
@@ -855,11 +883,28 @@ async function installApplet(
   realmId: string,
   idempotencyKey: string,
 ): Promise<AppletRegistration> {
-  const response = await rawInstallApplet(request, token, signed, realmId, idempotencyKey);
+  const result = await rawInstallApplet(request, token, signed, realmId, idempotencyKey);
+  const response = result.response;
   const responseText = await response.text();
   expect(response.status(), responseText).toBe(201);
-  return installRegistrationFromResponse(signed, realmId, JSON.parse(responseText));
+  return installRegistrationFromResponse(
+    signed,
+    realmId,
+    JSON.parse(responseText),
+    result.grantActionsById,
+  );
 }
+
+type PreparedAppletInstall = {
+  commitBody: Record<string, unknown>;
+  grantActionsById: Map<string, string[]>;
+};
+
+type RawAppletInstallResult = {
+  response: APIResponse;
+  prepared?: PreparedAppletInstall;
+  grantActionsById: Map<string, string[]>;
+};
 
 async function rawInstallApplet(
   request: APIRequestContext,
@@ -867,48 +912,183 @@ async function rawInstallApplet(
   signed: SignedPackage,
   realmId: string,
   idempotencyKey: string,
-) {
+  prepared?: PreparedAppletInstall,
+): Promise<RawAppletInstallResult> {
   await publishAppletServiceIdDocument(request, signed);
-  const effectiveScope = { kind: "realm", realm_id: realmId };
-  const preview = await request.post(
-    `${solandBaseUrl()}/_arkret/self/applets/install/preview`,
-    {
-      headers: authHeaders(token),
-      data: {
-        applet_package: signed.applet_package,
-        effective_scope: effectiveScope,
-        approval_request: {
-          approve_actions: signed.applet_package.requested_scopes,
-          ghost_actors_allowed: true,
-          delegated_native_actors_allowed: false,
-          e2ee_join_allowed: false,
-          widget_allowed: false,
+  let resolved = prepared;
+  if (!resolved) {
+    const effectiveScope = { kind: "realm", realm_id: realmId };
+    const preview = await request.post(
+      `${solandBaseUrl()}/_arkret/self/applets/install/preview`,
+      {
+        headers: authHeaders(token),
+        data: {
+          applet_package: signed.applet_package,
+          effective_scope: effectiveScope,
+          approval_request: {
+            approve_actions: signed.applet_package.requested_scopes,
+            ghost_actors_allowed: true,
+            delegated_native_actors_allowed: false,
+            e2ee_join_allowed: false,
+            widget_allowed: false,
+          },
         },
       },
-    },
-  );
-  if (!preview.ok()) {
-    return preview;
+    );
+    if (!preview.ok()) {
+      return {
+        response: preview,
+        grantActionsById: new Map(),
+      };
+    }
+    const plan = (await preview.json()) as Record<string, unknown>;
+    resolved = await prepareFormalAppletInstall(
+      request,
+      token,
+      signed,
+      realmId,
+      effectiveScope,
+      plan,
+    );
   }
-  const plan = await preview.json();
-  return await request.post(`${solandBaseUrl()}/_arkret/self/applets/install`, {
+  const response = await request.post(`${solandBaseUrl()}/_arkret/self/applets/install`, {
     headers: {
       ...authHeaders(token),
       "Idempotency-Key": idempotencyKey,
     },
-    data: {
-      plan_digest: plan.plan_digest,
-      applet_package: signed.applet_package,
-      effective_scope: effectiveScope,
-      approved_scopes: plan.approved_scopes,
-      actor_policy: {
-        bot_membership: "join",
-        ghost_actor_mode: "policy_declared",
-      },
-      e2ee_policy: { mls_join_allowed: false },
-      widget_policy: { widget_allowed: false },
-    },
+    data: resolved.commitBody,
   });
+  return {
+    response,
+    prepared: resolved,
+    grantActionsById: resolved.grantActionsById,
+  };
+}
+
+async function prepareFormalAppletInstall(
+  request: APIRequestContext,
+  token: string,
+  signed: SignedPackage,
+  realmId: string,
+  effectiveScope: Record<string, unknown>,
+  plan: Record<string, unknown>,
+): Promise<PreparedAppletInstall> {
+  const actorDid = await currentActorDidApi(request, token);
+  const sealBasis = await readRealmSealBasis(request, token, realmId);
+  const eventsToSubmit = Array.isArray(plan.events_to_submit)
+    ? (plan.events_to_submit as Array<Record<string, unknown>>)
+    : [];
+  const registrationPayload = eventsToSubmit[0]?.payload;
+  if (!registrationPayload || typeof registrationPayload !== "object") {
+    throw new Error("Applet install plan is missing its registration Event payload");
+  }
+  const approvedActions = Array.from(
+    new Set(
+      (Array.isArray(plan.approved_scopes) ? plan.approved_scopes : []).flatMap((scope) => {
+        if (!scope || typeof scope !== "object") {
+          return [];
+        }
+        const actions = (scope as Record<string, unknown>).actions;
+        return Array.isArray(actions) ? actions.filter((action): action is string => typeof action === "string") : [];
+      }),
+    ),
+  );
+  if (approvedActions.length === 0) {
+    throw new Error("Applet install plan approved no capability actions");
+  }
+
+  const createdAt = canonicalTimestamp();
+  const registrationEvent = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.applet.registration",
+    createdAt,
+    scopeRef: effectiveScope,
+    sealBasis,
+    payload: registrationPayload as Record<string, unknown>,
+  });
+  await advanceEnvelopeToActorFrontier(request, token, registrationEvent);
+  const registrationActorSeq = registrationEvent.actor_seq;
+  const registrationEventId = registrationEvent.event_id;
+  if (
+    typeof registrationActorSeq !== "number" ||
+    !Number.isSafeInteger(registrationActorSeq) ||
+    typeof registrationEventId !== "string"
+  ) {
+    throw new Error("Prepared Applet registration Event has an invalid actor frontier");
+  }
+
+  let previousEventId = registrationEventId;
+  const capabilityGrantEvents: Array<Record<string, unknown>> = [];
+  const grantActionsById = new Map<string, string[]>();
+  for (const [offset, action] of approvedActions.entries()) {
+    const grantId = typedId("grant");
+    const unsignedGrant: Record<string, unknown> = {
+      id: grantId,
+      schema: "ak.schema.capability.v1",
+      realm_id: realmId,
+      issuer: actorDid,
+      subject: signed.applet_package.service_id,
+      actions: [action],
+      resources: [effectiveScope],
+      capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
+      constraints: [
+        {
+          constraint_kind: "delegation_control",
+          constraint_subkind: "applet_delegation",
+          effect: "allow",
+          evaluation_class: "grant_local",
+          applet_id: signed.applet_package.applet_id,
+          executed_by: signed.applet_package.service_id,
+          registration_epoch: signed.applet_package.registration_epoch,
+        },
+      ],
+      issued_at: createdAt,
+    };
+    const grant = {
+      ...unsignedGrant,
+      proofs: [
+        buildCapabilityGrantProof({
+          issuerDid: actorDid,
+          payload: unsignedGrant,
+          createdAt,
+        }),
+      ],
+    };
+    const event = signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ak.capability.grant",
+      actorSeq: registrationActorSeq + offset + 1,
+      createdAt,
+      prevRefs: [previousEventId],
+      scopeRef: effectiveScope,
+      sealBasis,
+      payload: {
+        grant_id: grantId,
+        grant,
+      },
+    });
+    previousEventId = String(event.event_id);
+    capabilityGrantEvents.push(event);
+    grantActionsById.set(grantId, [action]);
+  }
+
+  const commitBody: Record<string, unknown> = {
+    plan_digest: plan.plan_digest,
+    applet_package: signed.applet_package,
+    effective_scope: effectiveScope,
+    registration_event: registrationEvent,
+    capability_grant_events: capabilityGrantEvents,
+    actor_policy: {
+      bot_membership: "join",
+      ghost_actor_mode: "policy_declared",
+    },
+    e2ee_policy: { mls_join_allowed: false },
+    widget_policy: { widget_allowed: false },
+  };
+  expect(commitBody).not.toHaveProperty("approved_scopes");
+  return { commitBody, grantActionsById };
 }
 
 async function publishAppletServiceIdDocument(
@@ -925,7 +1105,12 @@ function installRegistrationFromResponse(
   signed: SignedPackage,
   realmId: string,
   response: Record<string, unknown>,
+  grantActionsById: Map<string, string[]>,
 ): AppletRegistration {
+  const capabilityGrantRefs = Array.isArray(response.capability_grant_refs)
+    ? response.capability_grant_refs.map(String)
+    : [];
+  expect(new Set(capabilityGrantRefs)).toEqual(new Set(grantActionsById.keys()));
   return {
     applet_id: String(response.applet_id),
     bot_actor_id: String(response.bot_actor_id),
@@ -934,9 +1119,10 @@ function installRegistrationFromResponse(
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??
       signed.applet_package.applet_id,
     status: String(response.effective_status),
-    capability_grant_refs: Array.isArray(response.capability_grant_refs)
-      ? response.capability_grant_refs.map(String)
-      : [],
+    capability_grants: capabilityGrantRefs.map((grantRef) => ({
+      grant_ref: grantRef,
+      actions: grantActionsById.get(grantRef) ?? [],
+    })),
   };
 }
 

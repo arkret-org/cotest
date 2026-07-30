@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期:applet registry 提交 controller-signed `ak.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ak.applet.registration`、颁发 `bot_actor_id` 与 capability grant → applet service 提交自己签名的 accountability grant + ghost profile aggregate，再用 ghost actor 签名写 portal 消息 → Realm 成员看到 ghost 消息且能追溯 install/accountability 链 → admin 撤销 applet install 后,后续 ingress 被拒。
+验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期:applet registry 提交 controller-signed `ak.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划 → admin caller 按 plan 签署完整 `ak.applet.registration` 与 `ak.capability.grant` Events 并通过 `self/applets/install` commit → soland 校验并幂等提交这些 formal Events → applet service 提交自己签名的 accountability grant + ghost profile aggregate，再用 ghost actor 签名写 portal 消息 → Realm 成员看到 ghost 消息且能追溯 install/accountability 链 → admin 撤销 applet install 后,后续 ingress 被拒。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
@@ -25,7 +25,7 @@
 |---|---|---|---|
 | alice | `did:webvh:z6mkfixture:alice-s-applet-<uuid>.example` | principal user / Realm 创建者 / 可对 applet 行使 revoke 的 admin | 测试开始前 |
 | applet_service | `did:webvh:z6mkfixture:applet-registry-<uuid>.example` | mock-applet-registry 暴露的开发者身份;签 manifest、为外部用户生成 ghost actor | 测试开始前(由 mock 启动注入) |
-| bot_actor | `did:web:bot-<applet_namespace>-<uuid>.example` | applet 注册成功后 soland 颁发的 bot DID;以 member 身份加入 Realm | Phase A 末由 soland 颁发 |
+| bot_actor | `did:web:bot-<applet_namespace>-<uuid>.example` | controller-signed package 声明、formal registration 接受后生效的 bot DID;以 member 身份加入 Realm | Phase A package 签署时声明 |
 | ghost_actor | `did:web:ghost-<external_user_x>-<uuid>.example` | 外部用户 X 在 portal realm 内的代理身份;由 applet_service 在 Phase C 现场生成 | Phase C 现场颁发(每次外部事件可能复用同一 ghost) |
 
 > 命名约定:`bot_actor_id` 是稳定的(每个 applet 实例一个);`ghost_actor_id` 与外部用户一一对应,跨事件复用,但其 DID Document 始终把 `accountability` 指向同一个 `bot_actor` + `applet_service`。
@@ -49,7 +49,8 @@
    - `requested_scopes = ["ak.message.create", "ak.applet.ghost.provision"]`
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
-3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`,再用返回的 `plan_digest` 调 `POST /_arkret/self/applets/install`
+3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`，读取返回的 canonical registration payload 与 approved actions；随后以 alice 的 Event signer、当前 actor frontier 和 accepted Seal basis 构造同一 actor chain 上的完整 `registration_event` 与 `capability_grant_events[]`（grant 同时带 issuer payload proof 和标准 `delegation_control.applet_delegation` 绑定），连同 `plan_digest` 调 `POST /_arkret/self/applets/install`
+   - commit 不发送已删除的 `approved_scopes` 旧字段；soland 只验证、记录和提交 caller-signed Events，不代签或重建 Event
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
    - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`
 4. **断言**:`bot_actor_id` 形如 `did:web:bot-bridge-demo-...`;projection events 中出现 `ak.applet.registration`
