@@ -329,6 +329,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let fixed_request_digest = transaction.request_digest.clone();
     let fixed_plan_digest = transaction.prepared_plan_digest.clone();
     let holder_seed = URL_SAFE_NO_PAD.encode(replacement_key.to_bytes());
+    let mut consumed_holder_jti = None;
     for _ in 0..8 {
         let Some(step) = transaction.next_required_step else {
             break;
@@ -377,6 +378,20 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                         &holder_seed,
                         &replacement_holder_jkt,
                     )?;
+                let proof_payload = participant_request
+                    .holder_proof
+                    .proof_jwt
+                    .split('.')
+                    .nth(1)
+                    .context("holder proof JWT omitted payload")?;
+                let proof_claims: serde_json::Value =
+                    serde_json::from_slice(&URL_SAFE_NO_PAD.decode(proof_payload)?)?;
+                consumed_holder_jti = Some(
+                    proof_claims["jti"]
+                        .as_str()
+                        .context("holder proof JWT omitted jti")?
+                        .to_owned(),
+                );
                 let authority_endpoint = format!(
                     "{coauth_base}/_arkret/gate/account/recovery-device-authorizations"
                 );
@@ -566,6 +581,60 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         terminal_conflict.to_string().contains("duplicate_conflict")
             || terminal_conflict.to_string().contains("terminal"),
         "unexpected terminal conflict: {terminal_conflict}"
+    );
+
+    let second_prepared =
+        inkson::fresh_device_recovery::prepare_joint_enrollment_authority_recovery_from_words(
+            recovery_http.clone(),
+            principal_base.as_str(),
+            bootstrap.principal_id(),
+            REPLACEMENT_DEVICE,
+            description.trust_domain,
+            RECOVERY_WORDS,
+            &replacement_holder_jkt,
+        )
+        .await?;
+    let second_create = SecurityTransactionCreateRequest::Recovery(second_prepared.create_request);
+    let second_transaction = recovery_http
+        .create_security_transaction(&second_create)
+        .await?;
+    let second_ticket = recovery_http
+        .issue_recovery_authority_ticket(&authority_ticket_request(&second_transaction)?)
+        .await?;
+    let mut replayed_jti_request =
+        inkson::fresh_device_recovery::joint_recovery_device_authorization_request(
+            &second_transaction,
+            second_ticket,
+            &second_prepared.account_authority_endpoint,
+            &holder_seed,
+            &replacement_holder_jkt,
+        )?;
+    let replayed_jti_proof = arkret_signatures::DpopProofRequest::new(
+        "POST",
+        &second_prepared.account_authority_endpoint,
+    )
+    .nonce(replayed_jti_request.canonical_request_digest.as_str())
+    .jti(
+        consumed_holder_jti
+            .as_deref()
+            .context("first authority request did not record its holder JTI")?,
+    );
+    replayed_jti_request.holder_proof.proof_jwt =
+        arkret_signatures::build_dpop_proof(&replayed_jti_proof, &replacement_key)?.header_value;
+    let replayed_jti_response = http
+        .post(format!(
+            "{coauth_base}/_arkret/gate/account/recovery-device-authorizations"
+        ))
+        .json(&replayed_jti_request)
+        .send()
+        .await?;
+    let replayed_jti_status = replayed_jti_response.status();
+    let replayed_jti_body = replayed_jti_response.text().await?;
+    assert!(
+        !replayed_jti_status.is_success()
+            && replayed_jti_body.contains("already consumed"),
+        "Coauth must reject a consumed holder JTI on a different transaction; \
+         status={replayed_jti_status}, body={replayed_jti_body}"
     );
     Ok(())
 }
