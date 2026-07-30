@@ -1,6 +1,6 @@
 // Pluggable policy decision service (realm-level external policy_server)
 // Contract: e2e/scenarios/authz/policy-server-check.md
-// Spec: authz/policy-server.md §2 (ak.realm.policy_server Move),
+// Spec: authz/policy-server.md §2 (ak.realm.policy_server declaration/tombstone),
 //        §3 (POST /_arkret/self/policy/check request/response contract),
 //        §4 (obligations + fail-closed default).
 //
@@ -127,21 +127,6 @@ async function policyCheckCount(
 
 test.describe.configure({ mode: "serial" });
 
-function mockPolicyServerBaseUrl(): string {
-  const configured = configuredMockPolicyServerBaseUrl();
-  if (configured) {
-    return configured;
-  }
-  const port = process.env.MOCK_POLICY_SERVER_PORT;
-  if (port) {
-    return `http://127.0.0.1:${port}`;
-  }
-  // The PUT/GET projection smoke does not call the upstream service; using
-  // loopback keeps the contract runnable in single-server profiles where the
-  // mock policy service is not provisioned.
-  return "http://127.0.0.1:9";
-}
-
 test.describe("policy server check", () => {
   test("policy server config API projects ak.realm.policy_server and authz stays fail-closed without a grant", async ({
     request,
@@ -191,8 +176,8 @@ test.describe("policy server check", () => {
       history_visibility: "shared",
       public: true,
     });
-    const policyServerDid = mockPolicyServerDid() ?? "did:web:policy.example.com";
-    const policyServerUrl = `${mockPolicyServerBaseUrl()}/_arkret/self/policy/check`;
+    const policyServerDid = "did:web:policy.example.com";
+    const policyServerUrl = "https://policy.example.com/_arkret/self/policy/check";
 
     const put = await request.put(
       `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
@@ -255,6 +240,10 @@ test.describe("policy server check", () => {
   }) => {
     const baseUrl = configuredMockPolicyServerBaseUrl();
     test.skip(!baseUrl, "mock-policy-server not started for this run");
+    test.skip(
+      !baseUrl?.startsWith("https://"),
+      "policy-server declarations require an HTTPS mock endpoint",
+    );
 
     const stamp = Date.now();
     const alice = uniqueUser(`s30-policy-alice-${stamp}`);
@@ -331,6 +320,10 @@ test.describe("policy server check", () => {
   }) => {
     const baseUrl = configuredMockPolicyServerBaseUrl();
     test.skip(!baseUrl, "mock-policy-server not started for this run");
+    test.skip(
+      !baseUrl?.startsWith("https://"),
+      "policy-server declarations require an HTTPS mock endpoint",
+    );
 
     const stamp = Date.now();
     const alice = uniqueUser(`s30-timeout-alice-${stamp}`);
@@ -406,7 +399,7 @@ test.describe("policy server check", () => {
       });
 
       const orgDid = "did:web:policy-org.example.com";
-      const orgBaseUrl = "http://127.0.0.1:9";
+      const orgBaseUrl = "https://policy-org.example.com";
       const orgUrl = `${orgBaseUrl}/_arkret/self/policy/check`;
       await declarePolicyServer(request, aliceToken, orgRealmId, orgBaseUrl, orgDid, {
         cacheTtlSeconds: 17,
@@ -454,8 +447,17 @@ test.describe("policy server check", () => {
       expect(fallbackBody.timeout_ms).toBe(1200);
       expect(fallbackBody.from_org_fallback).toBe(true);
 
+      const inheritedOnlyDelete = await request.delete(
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(
+        inheritedOnlyDelete.status(),
+        "inherited policy server is not a direct declaration to tombstone",
+      ).toBe(404);
+
       const childDid = "did:web:policy-child.example.com";
-      const childBaseUrl = "http://127.0.0.1:10";
+      const childBaseUrl = "https://policy-child.example.com";
       const childUrl = `${childBaseUrl}/_arkret/self/policy/check`;
       await declarePolicyServer(request, aliceToken, childRealmId, childBaseUrl, childDid, {
         cacheTtlSeconds: 3,
@@ -476,6 +478,30 @@ test.describe("policy server check", () => {
       expect(directBody.cache_ttl_seconds).toBe(3);
       expect(directBody.timeout_ms).toBe(900);
       expect(directBody.from_org_fallback).toBe(false);
+
+      const deleted = await request.delete(
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(deleted.status(), "tombstone direct child policy server").toBe(200);
+
+      const restoredFallback = await request.get(
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      const restoredFallbackBody = await expectJsonOk<Record<string, unknown>>(
+        restoredFallback,
+        "read organization policy_server after child tombstone",
+      );
+      expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
+      expect(restoredFallbackBody.policy_server_did).toBe(orgDid);
+      expect(restoredFallbackBody.from_org_fallback).toBe(true);
+
+      const repeatedDelete = await request.delete(
+        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(repeatedDelete.status(), "repeat policy server tombstone").toBe(200);
     },
   );
 
