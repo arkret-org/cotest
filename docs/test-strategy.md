@@ -283,6 +283,25 @@ before cleanup. An early exit forces the run to fail and is reported once in
 service name, exit code, and log paths. This distinguishes an infrastructure
 crash from the downstream Playwright `ECONNREFUSED` failures it may cause.
 
+The run also writes `failures.json` and `failures.md`: one structured
+fingerprint per *final* failure, built from the endpoint, the wire code, the
+first assertion site and the managed-service correlation id. The first three
+form a stable dedupe key, so `distinct_root_causes` is the number of things
+actually broken rather than the number of red tests — per-run identity (uuids,
+DIDs, correlation ids) is normalised out.
+
+The same report reconciles `playwright-output/` against the junit outcomes.
+Playwright keeps the artifact directory of every failed *attempt*, so a test
+that failed twice and then passed leaves two directories and zero failures;
+those are reported as `retry_artifact_of_passing_test` instead of being counted.
+Reading the directory listing as a failure count is what previously made a
+47-final-failure run look far worse than it was.
+
+Classification is reporting only. `junit.xml` remains the verdict; the
+fingerprint explains it. The report carries structural fields only — never the
+raw failure text, because a failing object assertion serialises the whole
+received value (see the secret scan section in the README).
+
 `joint-smoke` defaults to `--grep @fully-implemented` so fixme-tagged
 placeholders pending server-side feature work do not block the smoke
 profile. An explicit `-Grep ...` overrides the auto-filter. Use the tag

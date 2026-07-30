@@ -163,6 +163,7 @@ Set-StrictMode -Version Latest
 
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
 . (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
+. (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 
 $StaridServiceId = $null
 $SolandServiceId = $null
@@ -3582,6 +3583,7 @@ $totals = [pscustomobject]@{
     fixme   = 0
 }
 $junitParseError = $null
+$finalFailures = New-Object System.Collections.Generic.List[object]
 if (Test-Path $junitPath) {
     try {
         [xml]$junit = Get-Content -Path $junitPath -Raw
@@ -3680,6 +3682,21 @@ if (Test-Path $junitPath) {
                     status = $status
                     time   = $time
                 }) | Out-Null
+                # Keep the failure text of FINAL failures only. junit.xml already
+                # reflects the last attempt, so a test that failed twice and then
+                # passed contributes nothing here - which is the whole point of
+                # the reconciliation below.
+                if ($hasFailure) {
+                    $detailNode = if ($null -ne $failureNode) { $failureNode } else { $errorNode }
+                    $systemOutNode = $case.SelectSingleNode("system-out")
+                    $finalFailures.Add([pscustomobject]@{
+                        scenario = $scenarioKey
+                        name     = $normalizedCaseName
+                        message  = $detailNode.GetAttribute("message")
+                        detail   = $detailNode.InnerText
+                        system_out = if ($null -ne $systemOutNode) { $systemOutNode.InnerText } else { "" }
+                    }) | Out-Null
+                }
             }
         }
     } catch {
@@ -3774,6 +3791,86 @@ if (-not (Test-Path $junitPath)) {
 }
 
 $scenarioLines | Set-Content -Path $scenariosReport -Encoding UTF8
+
+# Failure report: one structured fingerprint per FINAL failure, plus the
+# reconciliation that stops `playwright-output/` from being read as a failure
+# count. Classification is reporting only -- junit.xml remains the verdict.
+$failuresJson = Join-Path $jointDir "failures.json"
+$failuresMd = Join-Path $jointDir "failures.md"
+$failureFingerprintSelfTest = Join-Path $PSScriptRoot "tests\failure-fingerprint.tests.ps1"
+& (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -File $failureFingerprintSelfTest | Out-Null
+$failureFingerprintSelfTestStatus = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
+
+$fingerprintedFailures = @($finalFailures | ForEach-Object {
+        Get-FailureFingerprint `
+            -Scenario $_.scenario `
+            -TestName $_.name `
+            -Message ([string]$_.message) `
+            -Detail ([string]$_.detail) `
+            -SystemOut ([string]$_.system_out)
+    })
+$distinctFingerprints = @($fingerprintedFailures | Group-Object -Property fingerprint | Sort-Object -Property Count -Descending)
+$retryReconciliation = Get-RetryArtifactReconciliation `
+    -PlaywrightOutputDir (Join-Path $jointDir "playwright-output") `
+    -FinalFailures $finalFailures
+
+$failureReport = [pscustomobject]@{
+    generated_at        = (Get-Date).ToString("o")
+    self_test           = $failureFingerprintSelfTestStatus
+    final_failures      = $fingerprintedFailures.Count
+    distinct_root_causes = $distinctFingerprints.Count
+    failures            = $fingerprintedFailures
+    retry_reconciliation = $retryReconciliation
+}
+$failureReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $failuresJson -Encoding UTF8
+
+$failureLines = @(
+    "# joint e2e failures",
+    "",
+    "- self_test: $failureFingerprintSelfTestStatus",
+    "- final_failures: $($failureReport.final_failures)",
+    "- distinct_root_causes: $($failureReport.distinct_root_causes)",
+    "- artifact_directories: $($retryReconciliation.artifact_directories)",
+    "- final_failure_artifacts: $($retryReconciliation.final_failure_artifacts)",
+    "- retry_only_artifacts: $($retryReconciliation.retry_only_artifacts)",
+    "",
+    "`final_failures` counts junit outcomes. `retry_only_artifacts` are directories",
+    "left behind by tests that failed an attempt and then passed - they are NOT",
+    "failures, and counting directories instead of outcomes overstates the damage.",
+    ""
+)
+if ($fingerprintedFailures.Count -eq 0) {
+    $failureLines += "No final failures."
+} else {
+    $failureLines += "## distinct root causes"
+    $failureLines += ""
+    $failureLines += "| Fingerprint | Count | Scenario | Endpoint | Wire code | Assertion site |"
+    $failureLines += "| --- | --- | --- | --- | --- | --- |"
+    foreach ($group in $distinctFingerprints) {
+        $sample = $group.Group[0]
+        $failureLines += "| $($sample.fingerprint) | $($group.Count) | $($sample.scenario) | $($sample.endpoint) | $($sample.wire_code) | $($sample.assertion_site) |"
+    }
+    $failureLines += ""
+    $failureLines += "## final failures"
+    $failureLines += ""
+    $failureLines += "| Fingerprint | Test | HTTP | Correlation id |"
+    $failureLines += "| --- | --- | --- | --- |"
+    foreach ($failure in $fingerprintedFailures) {
+        $failureLines += "| $($failure.fingerprint) | $($failure.test) | $($failure.http_status) | $($failure.correlation_id) |"
+    }
+}
+if ($retryReconciliation.retry_only_artifacts -gt 0) {
+    $failureLines += ""
+    $failureLines += "## retry debris (not failures)"
+    $failureLines += ""
+    foreach ($entry in @($retryReconciliation.entries | Where-Object { $_.classification -eq "retry_artifact_of_passing_test" })) {
+        $failureLines += "- $($entry.directory)"
+    }
+}
+$failureLines | Set-Content -LiteralPath $failuresMd -Encoding UTF8
+if ($failureFingerprintSelfTestStatus -ne "passed") {
+    $exitCode = 1
+}
 
 $secretScanRoots = New-Object System.Collections.Generic.List[string]
 if (Test-Path -LiteralPath $serviceLogDir) {
