@@ -549,21 +549,6 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
     unreachable!("integration target gated on live cotest media-service provisioning");
 }
 
-// ─── P0 / TEST-3 — `accountable_principals.strict_reject` profile toggle ───
-
-/// Gating: R3.1 — soland strict_reject reducer branch not yet implemented.
-/// Tier: live
-#[test]
-#[ignore = "R3.1: soland strict_reject reducer branch not yet implemented"]
-fn test_3_accountable_principals_strict_reject_profile_toggle() {
-    // Live integration:
-    //   1. With `ak.profile.accountable_principals.strict_reject.v1` NOT advertised: actor-profile
-    //      create with unverified `accountable_principal_ids[]` → 200, server strips + audit logs.
-    //   2. With the profile advertised: same envelope → 412 failed_precondition
-    //      reason=accountability_grant_missing.
-    unreachable!("integration target gated on soland P2-impl profile branch");
-}
-
 // ─── P0 / TEST-4 — Cursor opaque round-trip + stateless-under-core reject ──
 
 #[test]

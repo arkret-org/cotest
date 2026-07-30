@@ -568,7 +568,7 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         let mutation = value_field_str(case, "mutation")?;
         let mut challenge = base_challenge.clone();
         let mut response = base_response.clone();
-        apply_snapshot_inclusion_mutation(mutation, &mut challenge, &mut response)?;
+        apply_snapshot_inclusion_mutation(case, mutation, &mut challenge, &mut response)?;
         let observed = evaluate_snapshot_inclusion_case(manifest, entries, &challenge, &response)?;
         assert_expected_subset(name, required_field(case, "expected")?, &observed)?;
         record_vector_event(
@@ -583,6 +583,7 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         "valid_high_assurance_challenge",
         "insufficient_event_id_samples",
         "commitment_root_mismatch",
+        "legacy_unprefixed_commitment_root",
         "silent_actor_seq_gap",
     ] {
         if !seen.contains(required) {
@@ -694,6 +695,7 @@ fn evaluate_snapshot_inclusion_case(
 }
 
 fn apply_snapshot_inclusion_mutation(
+    case: &Value,
     mutation: &str,
     challenge: &mut Value,
     response: &mut Value,
@@ -715,6 +717,10 @@ fn apply_snapshot_inclusion_mutation(
         }
         "commitment_root_mismatch" => {
             response["commitment_root"] = Value::String(format!("sha256:{}", "0".repeat(64)));
+        }
+        "replace_commitment_root" => {
+            response["commitment_root"] =
+                Value::String(value_field_str(case, "replacement_root")?.to_owned());
         }
         "drop_gap_attribution" => {
             let proofs = response
@@ -753,39 +759,34 @@ fn merkle_event_set_root(entries: &[Value]) -> Result<String> {
         .into_iter()
         .map(|(_, _, _, entry)| {
             let canonical = canonical_json(entry)?;
-            Ok(sha256_prefixed(canonical.as_bytes()))
+            let digest = sha256_prefixed(canonical.as_bytes());
+            let leaf_data = arkret_state::parse_sha256(
+                &arkret_wire::Hash::new(digest).map_err(anyhow::Error::msg)?,
+            )
+            .ok_or_else(|| anyhow!("canonical event-set leaf digest is not sha256"))?;
+            Ok(arkret_state::format_hash(&arkret_state::hash_leaf(
+                &leaf_data,
+            )))
         })
         .collect::<Result<Vec<_>>>()?;
     while level.len() > 1 {
         let mut next = Vec::with_capacity(level.len().div_ceil(2));
         let mut chunks = level.chunks_exact(2);
         for pair in &mut chunks {
-            let mut bytes = digest_bytes(&pair[0])?;
-            bytes.extend_from_slice(&digest_bytes(&pair[1])?);
-            next.push(sha256_prefixed(&bytes));
+            let left = arkret_state::parse_sha256(&pair[0])
+                .ok_or_else(|| anyhow!("left Merkle node is not sha256"))?;
+            let right = arkret_state::parse_sha256(&pair[1])
+                .ok_or_else(|| anyhow!("right Merkle node is not sha256"))?;
+            next.push(arkret_state::format_hash(&arkret_state::hash_node(
+                &left, &right,
+            )));
         }
         if let Some(tail) = chunks.remainder().first() {
             next.push(tail.clone());
         }
         level = next;
     }
-    Ok(level.remove(0))
-}
-
-fn digest_bytes(value: &str) -> Result<Vec<u8>> {
-    let hex = value
-        .strip_prefix("sha256:")
-        .ok_or_else(|| anyhow!("digest must use sha256 prefix"))?;
-    if hex.len() != 64 {
-        bail!("sha256 digest must have 64 hex chars");
-    }
-    (0..hex.len())
-        .step_by(2)
-        .map(|index| {
-            u8::from_str_radix(&hex[index..index + 2], 16)
-                .map_err(|error| anyhow!("invalid sha256 digest hex: {error}"))
-        })
-        .collect()
+    Ok(level.remove(0).to_string())
 }
 
 fn range_key(value: &Value) -> Result<String> {

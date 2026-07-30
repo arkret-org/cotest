@@ -36,6 +36,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    applet_install_authoring_matches_canonical_binding,
+    "applet_install_authoring",
+    cotest::conformance::run_applet_install_authoring_suite,
+);
+
+conformance_test!(
     arkret_private_kdf_and_durability_executes_registered_vectors,
     "arkret_private_kdf_and_durability",
     cotest::conformance::run_arkret_private_kdf_and_durability_suite,
