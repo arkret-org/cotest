@@ -266,7 +266,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         Some(bootstrap.principal_id()),
         &replacement_key.to_bytes(),
     )?;
-    inkson::event_signer::replace_active_signer(Some(replacement_signer));
+    inkson::event_signer::replace_active_signer(Some(Arc::clone(&replacement_signer)));
     let recovery_session_id;
     let prepared =
         inkson::fresh_device_recovery::prepare_joint_enrollment_authority_recovery_from_words(
@@ -280,6 +280,16 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         )
         .await?;
     recovery_session_id = prepared.verified_session.recovery_session_id.clone();
+    let backup_classes_unlocked = inkson::mls::account_recovery::unlock_joint_recovery_backups(
+        recovery_http.clone(),
+        &prepared.verified_session,
+        RECOVERY_WORDS,
+    )
+    .await?;
+    assert!(
+        !backup_classes_unlocked.is_empty(),
+        "real recovery restore must unlock at least one active backup"
+    );
     let mut transaction = recovery_http
         .create_security_transaction(&SecurityTransactionCreateRequest::Recovery(
             prepared.create_request,
@@ -357,6 +367,39 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     assert_eq!(
         transaction.state,
         SecurityTransactionState::AwaitingDeviceAttestation
+    );
+    let terminal = inkson::fresh_device_recovery::sign_terminal_receipt_continue(
+        &transaction,
+        inkson::fresh_device_recovery::RecoveryTerminalObservation {
+            policy_id: prepared.verified_session.policy_id.clone(),
+            policy_version: prepared.verified_session.policy_version,
+            trust_domain: prepared.verified_session.trust_domain.clone(),
+            proof_summary: arkret_models_crypto::RecoveryProofSummary {
+                kind: prepared.proof_summary.kind,
+                proof_digest: prepared.proof_summary.proof_digest.clone(),
+                quorum_participant_count: None,
+                share_ids: None,
+            },
+            backup_classes_unlocked,
+            welcome_count: 0,
+            welcome_realm_summary: None,
+            started_at: prepared.verified_session.created_at,
+            completed_at: chrono::Utc::now(),
+        },
+        replacement_signer.as_ref(),
+    )?;
+    transaction = recovery_http
+        .continue_security_transaction(&transaction.transaction_id, &terminal)
+        .await?;
+    assert_eq!(transaction.state, SecurityTransactionState::Completed);
+    assert!(transaction.next_required_step.is_none());
+    assert!(
+        transaction
+            .terminal_result
+            .as_ref()
+            .and_then(|result| result.completion_attestation.as_ref())
+            .is_some(),
+        "completed recovery must carry a durable completion attestation"
     );
     Ok(())
 }
