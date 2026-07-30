@@ -246,10 +246,41 @@ function detachedJws(binding, signingKey) {
   return `${protectedHeader}..${signature}`;
 }
 
+async function readRealmFrontier(solandBase, authorization, realmId) {
+  const response = await fetch(
+    `${String(solandBase).replace(/\/$/, "")}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(
+      realmId,
+    )}`,
+    { headers: { authorization } },
+  );
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error(`Realm frontier returned ${response.status}: ${responseText}`);
+  }
+  const body = JSON.parse(responseText);
+  const frontier = body?.frontier;
+  if (
+    typeof frontier?.seal_id !== "string" ||
+    typeof frontier?.control_event_set_root !== "string" ||
+    typeof frontier?.state_root !== "string"
+  ) {
+    throw new Error("Realm frontier response is missing the accepted Seal basis");
+  }
+  return {
+    sealRef: frontier.seal_id,
+    sealBasis: {
+      leaves: [frontier.seal_id],
+      control_event_set_root: frontier.control_event_set_root,
+      state_root: frontier.state_root,
+    },
+  };
+}
+
 function signedGhostProvisionEvents({
   packageInfo,
   authorizationRef,
   realmId,
+  sealBasis,
   ghostActorId,
   externalId,
   displayName,
@@ -297,6 +328,7 @@ function signedGhostProvisionEvents({
     event_id: typedId("event"),
     kind: "ak.identity.accountability_grant",
     realm_id: realmId,
+    scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: packageInfo.serviceId,
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
@@ -305,6 +337,7 @@ function signedGhostProvisionEvents({
     hlc: currentHlc(),
     prev_refs: [],
     refs: [],
+    seal_basis: sealBasis,
     payload: grantPayload,
   };
   accountabilityEvent.proofs = [
@@ -320,6 +353,7 @@ function signedGhostProvisionEvents({
     event_id: typedId("event"),
     kind: "ak.profile.create",
     realm_id: realmId,
+    scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: ghostActorId,
     executed_by: packageInfo.serviceId,
     authorization_ref: authorizationRef,
@@ -329,6 +363,7 @@ function signedGhostProvisionEvents({
     hlc: currentHlc(),
     prev_refs: [],
     refs: [{ id: accountabilityEvent.event_id, role: "accountability", critical: true }],
+    seal_basis: sealBasis,
     payload: {
       object: {
         id: typedId("actor_profile"),
@@ -369,18 +404,21 @@ function signedGhostMessageEvent({
   provision,
   authorizationRef,
   realmId,
+  strandId,
+  sealRef,
   externalId,
   displayName,
   text,
 }) {
   const createdAt = rfc3339Now();
   const eventId = typedId("event");
-  const messageId = typedId("message");
-  const strandId = realmId.replace(/^ak:realm:/, "ak:strand:");
+  const messageId = eventId.replace(/^ak:event:/, "ak:message:");
+  const keyFragment = packageInfo.verificationMethod.split("#", 2)[1];
   const event = {
     event_id: eventId,
     kind: "ak.message.create",
     realm_id: realmId,
+    scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: provision.ghost_actor_id,
     actor_seq: nextActorSequence(provision.ghost_actor_id),
     created_at: createdAt,
@@ -390,13 +428,18 @@ function signedGhostMessageEvent({
     executed_by: packageInfo.serviceId,
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
+    seal_ref: sealRef,
+    auth_context: {
+      did: packageInfo.serviceId,
+      key_id: keyFragment ?? packageInfo.verificationMethod,
+      key_epoch: 0,
+    },
     external_ref: {
       protocol: "bridge",
       instance_id: "joint-e2e",
       external_id: externalId,
     },
     payload: {
-      message_id: messageId,
       strand_id: strandId,
       track_name: "discussion",
       content: {
@@ -762,10 +805,19 @@ const server = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "missing_provision_authorization_ref" }));
         return;
       }
+      let sealBasis;
+      try {
+        ({ sealBasis } = await readRealmFrontier(solandBase, authorization, body.realm_id));
+      } catch (err) {
+        res.statusCode = 502;
+        res.end(JSON.stringify({ error: "realm_frontier_unavailable", detail: String(err) }));
+        return;
+      }
       const signedProvision = signedGhostProvisionEvents({
         packageInfo,
         authorizationRef: provisionAuthorizationRef,
         realmId: body.realm_id,
+        sealBasis,
         ghostActorId,
         externalId,
         displayName,
@@ -831,11 +883,26 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_destination_service_id" }));
       return;
     }
+    if (typeof body.strand_id !== "string" || !body.strand_id) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "missing_strand_id" }));
+      return;
+    }
+    let sealRef;
+    try {
+      ({ sealRef } = await readRealmFrontier(solandBase, authorization, body.realm_id));
+    } catch (err) {
+      res.statusCode = 502;
+      res.end(JSON.stringify({ error: "realm_frontier_unavailable", detail: String(err) }));
+      return;
+    }
     const signed = signedGhostMessageEvent({
       packageInfo,
       provision,
       authorizationRef: body.authorization_ref ?? provision.authorization_ref,
       realmId: body.realm_id,
+      strandId: body.strand_id,
+      sealRef,
       externalId,
       displayName,
       text: body.payload.text,

@@ -162,6 +162,7 @@ test.describe("applet bridge", () => {
       const ghostActorDid = String(provisionBody.ghost_actor_id);
       expect(ghostActorDid).toMatch(/^did:web:ghost-/);
       await addRealmMemberApi(request, aliceToken, realmId, ghostActorDid);
+      const portalStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
 
       const text = `hi from outside ${stamp}`;
       const external = await request.post(`${registryBase}/external-event`, {
@@ -171,6 +172,7 @@ test.describe("applet bridge", () => {
           destination_service_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
+          strand_id: portalStrandId,
           authorization_ref: messageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           service_authorization: `Bearer ${appletServiceToken}`,
@@ -225,6 +227,7 @@ test.describe("applet bridge", () => {
           destination_service_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
+          strand_id: portalStrandId,
           authorization_ref: messageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           service_authorization: `Bearer ${appletServiceToken}`,
