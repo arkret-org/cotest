@@ -25,9 +25,11 @@ use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account, register_account_with_localpart};
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
+const DURABLE_TEST_KEYSTORE_MASTER_KEY: &str = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=";
 
 pub struct ArkretServer {
     handle: SutHandle,
+    external_restart: Option<ExternalRestartConfig>,
     base_url: Url,
     service_id: String,
     trust_domain: TypedTrustDomainId,
@@ -35,6 +37,15 @@ pub struct ArkretServer {
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
     _port_reservations: Vec<ReservedPort>,
+}
+
+struct ExternalRestartConfig {
+    bin_path: PathBuf,
+    bind: String,
+    metrics_bind: String,
+    notary_signing_key: String,
+    name: String,
+    extra_env: Vec<(String, String)>,
 }
 
 pub struct TestServerGroup {
@@ -158,6 +169,15 @@ impl ArkretServer {
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
+        if extra_env.iter().any(|(key, _)| *key == "DATABASE_URL") {
+            command
+                .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
+                .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
+                .env(
+                    "SOLAND_KEYSTORE_MASTER_KEY",
+                    DURABLE_TEST_KEYSTORE_MASTER_KEY,
+                );
+        }
         for &(key, value) in extra_env {
             command.env(key, value);
         }
@@ -182,6 +202,17 @@ impl ArkretServer {
 
         Ok(Self {
             handle: SutHandle::Local(child),
+            external_restart: Some(ExternalRestartConfig {
+                bin_path: bin_path.to_owned(),
+                bind,
+                metrics_bind,
+                notary_signing_key,
+                name: name.to_owned(),
+                extra_env: extra_env
+                    .iter()
+                    .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                    .collect(),
+            }),
             base_url,
             service_id,
             trust_domain,
@@ -264,6 +295,7 @@ impl ArkretServer {
 
         Ok(Self {
             handle: SutHandle::Local(child),
+            external_restart: None,
             base_url,
             service_id,
             trust_domain,
@@ -365,6 +397,7 @@ impl ArkretServer {
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
+            external_restart: None,
             base_url,
             service_id,
             trust_domain,
@@ -413,6 +446,92 @@ impl ArkretServer {
         self.http()
             .post(self.url("/_arkret/gate/account/register"))
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
+    }
+
+    /// Kill and restart an externally spawned Soland process without changing
+    /// its ports, durable database, service identity inputs, blob root, or
+    /// upstream participant wiring.
+    pub async fn restart_external_process(&mut self) -> Result<()> {
+        let Some(config) = self.external_restart.as_ref() else {
+            return Err(anyhow!(
+                "Soland restart requires the pre-built external-binary harness"
+            ));
+        };
+        let handle = mem::replace(&mut self.handle, SutHandle::Terminated);
+        let SutHandle::Local(mut child) = handle else {
+            self.handle = handle;
+            return Err(anyhow!("Soland restart is only supported in process mode"));
+        };
+        let _ = child.kill();
+        child.wait().context("wait for stopped Soland child")?;
+        append_service_log(
+            self.log_path.as_deref(),
+            &format!("[cotest] restarting service={}", config.name),
+        )?;
+
+        let (stdout, stderr) = service_log_stdio(self.log_path.as_deref())?;
+        let blob_root = self
+            .blob_root
+            .as_ref()
+            .context("external Soland restart lost its blob root")?;
+        let mut command = Command::new(&config.bin_path);
+        command
+            .arg("--bind")
+            .arg(&config.bind)
+            .env_remove("DATABASE_URL")
+            .env("SOLAND_PUBLIC_BASE_URL", self.base_url.as_str())
+            .env("SOLAND_NOTARY_SIGNING_KEY", &config.notary_signing_key)
+            .env("SOLAND_METRICS_BIND", &config.metrics_bind)
+            .env("SOLAND_DEVELOPMENT_MODE", "1")
+            .env("SOLAND_FIRST_PROVISIONING", "1")
+            .env("SOLAND_SEED_DEMO_DATA", "1")
+            .env("SOLAND_TRUST_DOMAIN", self.trust_domain.as_str())
+            .env(
+                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                EMBEDDED_WEBVH_REGISTRATION_BEARER,
+            )
+            .env("SOLAND_BLOB_ROOT", blob_root)
+            .stdout(stdout)
+            .stderr(stderr);
+        if config
+            .extra_env
+            .iter()
+            .any(|(key, _)| key == "DATABASE_URL")
+        {
+            command
+                .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
+                .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
+                .env(
+                    "SOLAND_KEYSTORE_MASTER_KEY",
+                    DURABLE_TEST_KEYSTORE_MASTER_KEY,
+                );
+        }
+        for (key, value) in &config.extra_env {
+            command.env(key, value);
+        }
+        let mut restarted = command.spawn().with_context(|| {
+            format!(
+                "failed to restart external Soland binary at {}",
+                config.bin_path.display()
+            )
+        })?;
+        if let Err(error) = wait_until_healthy(self.base_url.clone()).await {
+            let _ = restarted.kill();
+            let _ = restarted.wait();
+            return Err(error);
+        }
+        let (service_id, trust_domain) = fetch_service_identity(&self.base_url).await?;
+        if service_id != self.service_id || trust_domain != self.trust_domain {
+            let _ = restarted.kill();
+            let _ = restarted.wait();
+            return Err(anyhow!(
+                "restarted Soland changed durable identity: {} / {}",
+                service_id,
+                trust_domain
+            ));
+        }
+        self.handle = SutHandle::Local(restarted);
+        Ok(())
     }
 
     pub fn sdk(&self) -> Result<SdkClient> {

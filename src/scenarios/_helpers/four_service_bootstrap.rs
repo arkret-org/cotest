@@ -54,6 +54,10 @@ pub struct FourServiceConfig {
     /// to teabay via `TEABAY_SOLAND_ANNOUNCE_URL` — teabay's optional
     /// announce-ingest worker reads this when it boots.
     pub wire_directory_ingest: bool,
+    /// Optional durable Soland PostgreSQL store. Recovery restart tests set
+    /// this so the coordinator process can be replaced without losing its
+    /// transaction/session/receipt ledger.
+    pub soland_database_url: Option<String>,
 }
 
 impl FourServiceConfig {
@@ -63,6 +67,7 @@ impl FourServiceConfig {
             session_grant_introspection_bearer: "cotest-session-grant-introspection".to_owned(),
             embedded_webvh_registration_bearer: "cotest-webvh-registration".to_owned(),
             wire_directory_ingest: true,
+            soland_database_url: std::env::var("COTEST_SOLAND_DATABASE_URL").ok(),
         }
     }
 }
@@ -199,6 +204,9 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         "SOLAND_TRUST_DOMAIN".to_owned(),
         JOINT_TRUST_DOMAIN.to_owned(),
     ));
+    if let Some(database_url) = &config.soland_database_url {
+        soland_env.push(("DATABASE_URL".to_owned(), database_url.clone()));
+    }
 
     if let Some(coauth) = &prepared_coauth {
         let base = coauth.base_url();

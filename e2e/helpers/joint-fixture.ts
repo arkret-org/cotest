@@ -41,10 +41,21 @@ async function createJointTwoUserRealm(
   request: APIRequestContext,
 ): Promise<JointRealmFixture> {
   const stamp = Date.now();
-  const [aliceSession, bobSession] = await Promise.all([
-    createDpopUserSession(request, "joint-alice", { skipDeviceEnrollment: true }),
-    createDpopUserSession(request, "joint-bob", { skipDeviceEnrollment: true }),
-  ]);
+  // Principal inception is lease-fenced by the local Coauth/Soland pair.
+  // Starting two independent DID inception/handoff chains concurrently can
+  // make each wait on the other's global identity-binding lease until the
+  // caller timeout. Keep user creation sequential; browser bootstrap below is
+  // still parallel once both durable principals exist.
+  const aliceSession = await createDpopUserSession(
+    request,
+    "joint-alice",
+    { skipDeviceEnrollment: true },
+  );
+  const bobSession = await createDpopUserSession(
+    request,
+    "joint-bob",
+    { skipDeviceEnrollment: true },
+  );
   if (!aliceSession || !bobSession) {
     throw new Error("joint fixture requires coauth DPoP session-grant login");
   }

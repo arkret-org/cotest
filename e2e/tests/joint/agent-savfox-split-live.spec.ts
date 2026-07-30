@@ -1,6 +1,24 @@
-import { expect, type APIRequestContext, type Page, type Route } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
-import { test as jointTest } from "../../helpers/joint-fixture";
+import {
+  expect,
+  type APIRequestContext,
+  type Browser,
+  type BrowserContext,
+  type Page,
+  type Route,
+} from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import {
+  test as jointTest,
+  type JointRealmFixture,
+} from "../../helpers/joint-fixture";
+import {
+  createDpopUserSessionForAccount,
+  type DpopUserSession,
+  type JointUserPage,
+  openUserPage,
+  selfPathHeadersForDpopSession,
+} from "../../helpers/users";
 
 // Mirrors inkson `APPROVAL_FALLBACK_POLL_INTERVAL`
 // (src/components/agent_runtime_approval_prompt.rs). The prompt has exactly two
@@ -50,21 +68,30 @@ type DirectConversationBinding = {
 // with a crash in the middle, and finally a real user message answered by the
 // live runtime. Every later phase consumes state produced by the earlier ones.
 jointTest.describe.configure({ mode: "serial" });
+jointTest.setTimeout(1_200_000);
 
 jointTest.describe("Agent Savfox split live @fully-implemented", () => {
   jointTest(
     "pairs, replaces the runtime key, resumes a crashed direct conversation, and answers a real message",
-    async ({ browser, jointRealm, request }) => {
+    async ({ browser, jointRealm, request }, testInfo) => {
       jointTest.setTimeout(1_200_000);
 
-      // The joint harness does not provision the out-of-tree savfox gateway,
-      // so this live pairing scenario only runs when both endpoints are
-      // supplied externally. Follow the repo convention (README test tiers:
+      // The scenario can also be selected without the runner's `-StartSavfox`
+      // switch, so only run when both endpoints are supplied by the managed
+      // runner or an external gateway. Follow the repo convention (README test tiers:
       // "a missing prerequisite must be an explicit test.skip with a
       // machine-readable reason") and skip instead of hard-throwing, which
       // otherwise reds the smoke/full gate on every run.
       const savfoxBaseUrlRaw = process.env.COTEST_SAVFOX_BASE_URL?.trim();
       const savfoxTokenRaw = process.env.COTEST_SAVFOX_TOKEN?.trim();
+      if (
+        process.env.COTEST_REQUIRE_SAVFOX === "1" &&
+        (!savfoxBaseUrlRaw || !savfoxTokenRaw)
+      ) {
+        throw new Error(
+          "COTEST_REQUIRE_SAVFOX=1 but the Savfox base URL or token is missing",
+        );
+      }
       jointTest.skip(
         !savfoxBaseUrlRaw || !savfoxTokenRaw,
         "PRECONDITION_SAVFOX_UNAVAILABLE: COTEST_SAVFOX_BASE_URL / COTEST_SAVFOX_TOKEN unset (harness does not provision the savfox gateway)",
@@ -74,6 +101,15 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const inkson = jointRealm.alicePage.page;
       const approvalModal = inkson.getByTestId("agent-runtime-approval-modal");
       const agentSlug = `savfox-live-${Date.now().toString(36)}`;
+
+      // Bob is a real ordinary member of the source Realm. He is deliberately
+      // neither a controller nor an Agent and later proves the non-disclosure
+      // boundary against a known Sidecar id.
+      await jointRealm.alicePage.inviteFromAdmin(
+        jointRealm.realmId,
+        jointRealm.bob.did,
+      );
+      await jointRealm.bobPage.acceptInvite(jointRealm.realmId);
 
       // ── Phase 1: provision the Agent and capture its first pairing handle ──
       await jointRealm.alicePage.gotoSettings();
@@ -128,6 +164,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
       const savfoxContext = await browser.newContext();
       const savfox = await savfoxContext.newPage();
+      let secondController: JointUserPage | undefined;
+      let unaddressedRuntimeContext: BrowserContext | undefined;
       try {
         await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
 
@@ -408,7 +446,489 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(
           pongMessage.getByTestId("crypto-status-needs-verification"),
         ).toHaveCount(0);
+
+        // A distinct second device for the same controller is paired before
+        // Sidecar creation. It remains on the account home surface while
+        // Device 1 authors the request and observes the reply, so the two
+        // devices begin recovery with deliberately different local histories.
+        const secondControllerFlow = await openAndPairSecondController(
+          browser,
+          request,
+          jointRealm,
+        );
+        secondController = secondControllerFlow.page;
+        expect(secondControllerFlow.session.user.did).toBe(
+          jointRealm.alice.did,
+        );
+        expect(secondControllerFlow.session.user.deviceId).not.toBe(
+          jointRealm.alice.deviceId,
+        );
+        await expect(
+          secondController.page.getByTestId("sidecar-context-strip"),
+        ).toHaveCount(0);
+
+        // ── Phase 9: route a source-card prompt through the private Sidecar ──
+        // Direct Conversation above proves the runtime can speak Arkret. This
+        // phase proves the actual Sidecar contract: the controller adds the
+        // paired runtime to a shared Realm, enables scoped participation, then
+        // routes a source-card mention into the private backing scope. Savfox
+        // consumes that accepted request and its reply is refolded by Inkson
+        // back into the same hosted source card.
+        await addAgentToRealm(
+          inkson,
+          jointRealm.realmId,
+          firstPairing.agentId,
+        );
+        const sourceCard = await createSidecarSourceCard(
+          inkson,
+          jointRealm.realmId,
+          `Sidecar source ${Date.now().toString(36)}`,
+        );
+        await sourceCard.getByTestId("card-detail-sidebar-tab-members").click();
+        const sourceAgent = sourceCard
+          .locator(
+            `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+          )
+          .or(
+            sourceCard
+              .getByTestId("card-detail-agent-row")
+              .filter({ hasText: agentSlug }),
+          )
+          .first();
+        await expect(sourceAgent).toBeVisible({ timeout: 120_000 });
+        await sourceAgent
+          .getByTestId("card-detail-member-mention-button")
+          .click();
+        const sidecarPrompt = "请在私有 Sidecar 中只回复 pong";
+        const composer = sourceCard.getByTestId("chat-input");
+        await composer.fill(`@me/${agentSlug} ${sidecarPrompt}`);
+        const ensureResponsePromise = inkson.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname ===
+              "/_arkret/self/agent-sidecars:ensure",
+          { timeout: 120_000 },
+        );
+        await sourceCard.getByTestId("send-chat-button").click();
+        const ensureResponse = await ensureResponsePromise;
+        const ensureText = await ensureResponse.text();
+        expect(ensureResponse.status(), ensureText).toBe(200);
+        const ensured = JSON.parse(ensureText) as {
+          sidecar_id: string;
+          access_readiness: string;
+          effective_agent_ids?: string[];
+        };
+        expect(ensured.sidecar_id).toMatch(/^ak:sidecar:/);
+        await assertSidecarNonDisclosure(
+          request,
+          jointRealm,
+          ensured.sidecar_id,
+        );
+        await expect(inkson.getByTestId("sidecar-context-strip")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+          "E2EE",
+          { timeout: 180_000 },
+        );
+        await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
+          timeout: 30_000,
+        });
+        await sourceCard.getByTestId("send-chat-button").click();
+
+        const requestMessage = sourceCard
+          .getByTestId("chat-message")
+          .filter({ hasText: sidecarPrompt })
+          .last();
+        await expect(requestMessage).toBeVisible({ timeout: 30_000 });
+        await expect(
+          requestMessage.getByTestId("message-private-sidecar-badge"),
+        ).toBeVisible();
+        const sidecarPongBody = sourceCard
+          .getByTestId("content-block-text")
+          .filter({ hasText: /^pong(?:\r?\n|$)/ })
+          .last();
+        const sidecarPongMessage = sourceCard
+          .getByTestId("chat-message")
+          .filter({ has: sidecarPongBody })
+          .last();
+        await expect(sidecarPongMessage).toBeVisible({ timeout: 180_000 });
+        await expect(
+          sidecarPongMessage.getByTestId("message-private-sidecar-badge"),
+        ).toBeVisible();
+        await expect(
+          sidecarPongMessage.getByTestId("member-badge-agent"),
+        ).toBeVisible();
+
+        const evidence = {
+          schema: "cotest.sidecar_savfox_joint_evidence.v1",
+          controller_id: jointRealm.alice.did,
+          agent_id: firstPairing.agentId,
+          source_realm_id: jointRealm.realmId,
+          sidecar_id: ensured.sidecar_id,
+          effective_agent_ids: ensured.effective_agent_ids ?? [],
+          request_event_id: await eventIdFromMessage(requestMessage),
+          response_event_id: await eventIdFromMessage(sidecarPongMessage),
+          response_text: (await sidecarPongBody.innerText()).trim(),
+          runtime_authorization_ref:
+            replacementBinding.authorized_event_ref ?? null,
+        };
+        expect(evidence.request_event_id).toMatch(/^ak:event:/);
+        expect(evidence.response_event_id).toMatch(/^ak:event:/);
+        expect(evidence.response_event_id).not.toBe(evidence.request_event_id);
+        await testInfo.attach("sidecar-savfox-joint-evidence", {
+          body: Buffer.from(JSON.stringify(evidence, null, 2)),
+          contentType: "application/json",
+        });
+
+        // Device 2 now opens the same source card for the first time. Force the
+        // real accepted-Event query down to one item per page, so locator
+        // discovery and exchange refold can only succeed by following every
+        // opaque cursor and folding the union. Device 1 had an optimistic
+        // request fact plus live response; Device 2 has neither.
+        const sourceCardUrl = inkson.url();
+        const paginatedBackfill = await forcePaginatedRealmBackfill(
+          secondController.page,
+          jointRealm.realmId,
+        );
+        await secondController.page.goto(sourceCardUrl, {
+          waitUntil: "domcontentloaded",
+        });
+        const secondCard = secondController.page.getByTestId(
+          "card-detail-modal",
+        );
+        await expect(secondCard).toBeVisible({ timeout: 120_000 });
+        await expect(
+          secondController.page.getByTestId("sidecar-context-strip"),
+        ).toBeVisible({ timeout: 180_000 });
+        await expect(
+          secondController.page.getByTestId("sidecar-security-state"),
+        ).toHaveText("E2EE", { timeout: 180_000 });
+        const secondRequest = secondCard
+          .getByTestId("chat-message")
+          .filter({ hasText: sidecarPrompt })
+          .last();
+        const secondPong = secondCard
+          .getByTestId("chat-message")
+          .filter({
+            has: secondCard
+              .getByTestId("content-block-text")
+              .filter({ hasText: /^pong(?:\r?\n|$)/ }),
+          })
+          .last();
+        await expect(secondRequest).toBeVisible({ timeout: 180_000 });
+        await expect(secondPong).toBeVisible({ timeout: 180_000 });
+        await expect
+          .poll(() => paginatedBackfill.requestCount(), {
+            timeout: 120_000,
+            intervals: [500, 1_000, 2_000],
+          })
+          .toBeGreaterThan(1);
+
+        const device1Projection = await sidecarEchoProjection(
+          sourceCard,
+          evidence.request_event_id,
+          evidence.response_event_id,
+        );
+        const device2Projection = await sidecarEchoProjection(
+          secondCard,
+          evidence.request_event_id,
+          evidence.response_event_id,
+        );
+        expect(device2Projection.serializedBytes).toBe(
+          device1Projection.serializedBytes,
+        );
+        expect(device1Projection.requestOccurrences).toBe(1);
+        expect(device1Projection.responseOccurrences).toBe(1);
+        expect(device2Projection.requestOccurrences).toBe(1);
+        expect(device2Projection.responseOccurrences).toBe(1);
+        const device1Fold = await sidecarFoldProjection(
+          inkson,
+          evidence.request_event_id,
+        );
+        const device2Fold = await sidecarFoldProjection(
+          secondController.page,
+          evidence.request_event_id,
+        );
+        expect(JSON.stringify(device2Fold)).toBe(JSON.stringify(device1Fold));
+        expect(device2Fold.folded_frontier).toEqual(
+          device1Fold.folded_frontier,
+        );
+        expect(device1Fold.folded_frontier.event_ids.length).toBeGreaterThan(0);
+        expect(device1Fold.folded_frontier.event_set_digest).toMatch(
+          /^sha256:[0-9a-f]{64}$/,
+        );
+        await testInfo.attach("sidecar-two-device-convergence", {
+          body: Buffer.from(
+            JSON.stringify(
+              {
+                schema: "cotest.sidecar_two_device_convergence.v1",
+                controller_id: jointRealm.alice.did,
+                device_ids: [
+                  jointRealm.alice.deviceId,
+                  secondControllerFlow.session.user.deviceId,
+                ],
+                forced_page_size: 1,
+                backfill_request_count: paginatedBackfill.requestCount(),
+                fold_projection: device1Fold,
+                hosted_echo_projection: device1Projection,
+              },
+              null,
+              2,
+            ),
+          ),
+          contentType: "application/json",
+        });
+        await paginatedBackfill.restore();
+
+        // ── Phase 10: a live but unaddressed eligible runtime is non-executing ──
+        // Bring up a second independently paired Savfox Agent. Both runtimes
+        // remain active and effective in the Realm/Sidecar, but the request
+        // binding addresses only Agent 1. Agent 2 must consume no model input.
+        const unaddressedBaseUrl =
+          process.env.COTEST_SAVFOX_UNADDRESSED_BASE_URL?.trim() ?? "";
+        const unaddressedToken =
+          process.env.COTEST_SAVFOX_UNADDRESSED_TOKEN?.trim() ?? "";
+        const unaddressedReceiptPath =
+          process.env.COTEST_SAVFOX_UNADDRESSED_MODEL_RECEIPTS?.trim() ?? "";
+        expect(unaddressedBaseUrl, "second managed Savfox gateway").not.toBe("");
+        expect(unaddressedToken, "second managed Savfox token").not.toBe("");
+        expect(
+          unaddressedReceiptPath,
+          "second managed Savfox receipt path",
+        ).not.toBe("");
+        unaddressedRuntimeContext = await browser.newContext();
+        const unaddressedSavfox =
+          await unaddressedRuntimeContext.newPage();
+        await openSavfoxArkretChannel(
+          unaddressedSavfox,
+          unaddressedBaseUrl,
+          unaddressedToken,
+        );
+        const unaddressedSlug = `savfox-unaddressed-${Date.now().toString(36)}`;
+        const unaddressedAgent = await provisionAgent(
+          inkson,
+          unaddressedSlug,
+        );
+        await pairManagedSavfoxAgent(
+          inkson,
+          unaddressedSavfox,
+          unaddressedAgent,
+        );
+        await addAgentToRealm(
+          inkson,
+          jointRealm.realmId,
+          unaddressedAgent.agentId,
+        );
+
+        const addressedReceiptPath =
+          process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim() ?? "";
+        expect(addressedReceiptPath, "managed Savfox model receipt path").not.toBe(
+          "",
+        );
+        const addressedReceiptsBefore = await receiptCount(
+          addressedReceiptPath,
+        );
+        const unaddressedReceiptsBefore = await receiptCount(
+          unaddressedReceiptPath,
+        );
+        await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
+        const privacyCard = inkson.getByTestId("card-detail-modal");
+        await expect(privacyCard).toBeVisible({ timeout: 120_000 });
+        await privacyCard
+          .getByTestId("card-detail-sidebar-tab-members")
+          .click();
+        const addressedAgentRow = privacyCard
+          .locator(
+            `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+          )
+          .or(
+            privacyCard
+              .getByTestId("card-detail-agent-row")
+              .filter({ hasText: agentSlug }),
+          )
+          .first();
+        await expect(addressedAgentRow).toBeVisible({ timeout: 120_000 });
+        await addressedAgentRow
+          .getByTestId("card-detail-member-mention-button")
+          .click();
+        const privacyPrompt = `only addressed runtime may execute ${Date.now()}`;
+        await privacyCard
+          .getByTestId("chat-input")
+          .fill(`@me/${agentSlug} ${privacyPrompt}`);
+        const privacyEnsurePromise = inkson.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname ===
+              "/_arkret/self/agent-sidecars:ensure",
+          { timeout: 120_000 },
+        );
+        await privacyCard.getByTestId("send-chat-button").click();
+        const privacyEnsure = await privacyEnsurePromise;
+        const privacyEnsureText = await privacyEnsure.text();
+        expect(privacyEnsure.status(), privacyEnsureText).toBe(200);
+        expect(
+          (privacyEnsure.request().postDataJSON() as {
+            addressed_agent_ids?: string[];
+          }).addressed_agent_ids,
+        ).toEqual([firstPairing.agentId]);
+        const privacyEnsureBody = JSON.parse(privacyEnsureText) as {
+          effective_agent_ids?: string[];
+        };
+        expect(privacyEnsureBody.effective_agent_ids ?? []).toEqual(
+          expect.arrayContaining([
+            firstPairing.agentId,
+            unaddressedAgent.agentId,
+          ]),
+        );
+        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+          "E2EE",
+          { timeout: 180_000 },
+        );
+        await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
+          timeout: 30_000,
+        });
+        await privacyCard.getByTestId("send-chat-button").click();
+        await expect(
+          privacyCard
+            .getByTestId("chat-message")
+            .filter({ hasText: privacyPrompt })
+            .last(),
+        ).toBeVisible({ timeout: 30_000 });
+        await expect
+          .poll(() => receiptCount(addressedReceiptPath), {
+            timeout: 180_000,
+            intervals: [1_000, 2_000, 5_000],
+          })
+          .toBe(addressedReceiptsBefore + 1);
+        await expect
+          .poll(() => receiptCount(unaddressedReceiptPath), {
+            timeout: 15_000,
+            intervals: [1_000, 2_000, 3_000],
+          })
+          .toBe(unaddressedReceiptsBefore);
+        const privacyPong = privacyCard
+          .getByTestId("content-block-text")
+          .filter({ hasText: /^pong(?:\r?\n|$)/ })
+          .last();
+        await expect(privacyPong).toBeVisible({ timeout: 180_000 });
+        await testInfo.attach("sidecar-unaddressed-runtime-gate", {
+          body: Buffer.from(
+            JSON.stringify(
+              {
+                schema: "cotest.sidecar_unaddressed_runtime_gate.v1",
+                addressed_agent_id: firstPairing.agentId,
+                unaddressed_eligible_agent_id: unaddressedAgent.agentId,
+                effective_agent_ids:
+                  privacyEnsureBody.effective_agent_ids ?? [],
+                addressed_model_calls_delta: 1,
+                unaddressed_model_calls_delta: 0,
+              },
+              null,
+              2,
+            ),
+          ),
+          contentType: "application/json",
+        });
+
+        // ── Phase 11: pause fails closed, then explicit publish is allowlisted ──
+        // Retain the hosted Sidecar after pause and prove a new private request
+        // cannot reach the runtime/model or become implicitly complete.
+        const receiptPath = addressedReceiptPath;
+        const receiptsBeforePause = await receiptCount(receiptPath);
+        await inkson.goto("/settings/agents", {
+          waitUntil: "domcontentloaded",
+        });
+        const adminRow = inkson
+          .getByTestId("agent-admin-row")
+          .filter({ hasText: agentSlug })
+          .first();
+        await expect(adminRow).toBeVisible({ timeout: 120_000 });
+        await adminRow.click();
+        const enabledSwitch = inkson.getByTestId("agent-admin-enabled-switch");
+        await expect(enabledSwitch).toBeVisible({ timeout: 30_000 });
+        await enabledSwitch.click();
+        await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+          "Paused",
+          { timeout: 180_000 },
+        );
+
+        await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
+        const resumedCard = inkson.getByTestId("card-detail-modal");
+        await expect(resumedCard).toBeVisible({ timeout: 120_000 });
+        await expect(inkson.getByTestId("sidecar-context-strip")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+          "E2EE",
+          { timeout: 180_000 },
+        );
+        const postPauseSubmissions: SubmittedEvent[] = [];
+        const capturePostPauseSubmissions = (outgoing: {
+          method(): string;
+          url(): string;
+          postData(): string | null;
+        }) => {
+          if (
+            outgoing.method() === "POST" &&
+            new URL(outgoing.url()).pathname === EVENTS_SUBMIT_PATH
+          ) {
+            postPauseSubmissions.push(...eventSubmissions(outgoing.postData()));
+          }
+        };
+        inkson.on("request", capturePostPauseSubmissions);
+        const blockedPrompt = `paused runtime must not execute ${Date.now()}`;
+        await resumedCard.getByTestId("chat-input").fill(blockedPrompt);
+        await resumedCard.getByTestId("send-chat-button").click();
+        const blockedMessage = resumedCard
+          .getByTestId("chat-message")
+          .filter({ hasText: blockedPrompt })
+          .last();
+        await expect(blockedMessage).toBeVisible({ timeout: 30_000 });
+        const blockedEventId = await eventIdFromMessage(blockedMessage);
+        expect(blockedEventId).toMatch(/^ak:event:/);
+        await expect
+          .poll(() => receiptCount(receiptPath), {
+            timeout: 15_000,
+            intervals: [1_000, 2_000, 3_000],
+          })
+          .toBe(receiptsBeforePause);
+        await inkson.waitForTimeout(5_000);
+        inkson.off("request", capturePostPauseSubmissions);
+        expect(
+          postPauseSubmissions.filter(
+            (event) =>
+              event.kind === "ak.agent.sidecar.exchange.control" &&
+              JSON.stringify(event).includes(blockedEventId),
+          ),
+          "pause must not implicitly close the blocked exchange",
+        ).toEqual([]);
+
+        // Publishing remains an explicit controller action after the runtime
+        // has been paused. It emits one ordinary shared message and nothing
+        // from the private Sidecar coordinate set.
+        const publishOpen = resumedCard.getByTestId("sidecar-publish-open");
+        await expect(publishOpen).toBeVisible();
+        await publishOpen.click();
+        const publishModal = inkson.getByTestId("sidecar-publish-modal");
+        await expect(publishModal).toBeVisible();
+        const publishRequestPromise = inkson.waitForRequest(
+          (outgoing) =>
+            outgoing.method() === "POST" &&
+            new URL(outgoing.url()).pathname === EVENTS_SUBMIT_PATH,
+          { timeout: 120_000 },
+        );
+        await publishModal.getByTestId("sidecar-publish-confirm").click();
+        const publishSubmission = eventSubmissions(
+          (await publishRequestPromise).postData(),
+        ).find((event) => event.kind === "ak.message.create");
+        expect(publishSubmission, "explicit shared publish Event").toBeTruthy();
+        expect(JSON.stringify(publishSubmission)).not.toMatch(
+          /sidecar_id|backing_circle|private_relation|exchange_id|private_history|context_locator/,
+        );
       } finally {
+        await unaddressedRuntimeContext?.close();
+        await secondController?.close();
         await savfoxContext.close();
       }
     },
@@ -435,18 +955,29 @@ async function startSavfoxPairing(
   savfox: Page,
   pairingLink: string,
 ): Promise<void> {
-  await savfox
-    .getByPlaceholder(
-      "https://arkret.example.org/_arkret/open/agent-pairing/resolve#token=...",
-      { exact: true },
-    )
-    .fill(pairingLink);
+  const pairingInput = savfox.getByPlaceholder(
+    "https://arkret.example.org/_arkret/open/agent-pairing/resolve#token=...",
+    { exact: true },
+  );
+  if ((await pairingInput.count()) === 0) {
+    await savfox
+      .getByRole("button", { name: "Disconnect agent…", exact: true })
+      .click({ timeout: 30_000 });
+    await expect(
+      savfox.getByText("Disconnect this agent?", { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await savfox
+      .getByRole("button", { name: "Disconnect agent", exact: true })
+      .click({ timeout: 30_000 });
+  }
+  await expect(pairingInput).toBeVisible({ timeout: 120_000 });
+  await pairingInput.fill(pairingLink, { timeout: 30_000 });
   const startPairing = savfox.getByRole("button", {
     name: "Start pairing",
     exact: true,
   });
-  await expect(startPairing).toBeEnabled();
-  await startPairing.click();
+  await expect(startPairing).toBeEnabled({ timeout: 30_000 });
+  await startPairing.click({ timeout: 30_000 });
 }
 
 async function saveSavfoxChannel(savfox: Page): Promise<void> {
@@ -456,6 +987,83 @@ async function saveSavfoxChannel(savfox: Page): Promise<void> {
   await expect(
     savfox.getByRole("heading", { name: "Configure Arkret" }),
   ).toHaveCount(0, { timeout: 120_000 });
+}
+
+async function provisionAgent(
+  inkson: Page,
+  agentSlug: string,
+): Promise<PairingHandle & { pairingLink: string }> {
+  await inkson.goto("/settings/agents", { waitUntil: "domcontentloaded" });
+  await expect(inkson.getByTestId("personal-agent-admin")).toBeVisible({
+    timeout: 120_000,
+  });
+  await inkson.getByTestId("agent-admin-create-open-button").click();
+  await inkson
+    .getByTestId("agent-admin-provision-agent-slug")
+    .fill(agentSlug);
+  const commitResponsePromise = inkson.waitForResponse((response) => {
+    const outgoing = response.request();
+    return (
+      outgoing.method() === "POST" &&
+      new URL(outgoing.url()).pathname === AGENT_LIST_PATH &&
+      (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
+    );
+  });
+  await inkson.getByTestId("agent-admin-provision-button").click();
+  const response = await commitResponsePromise;
+  const text = await response.text();
+  expect(response.status(), text).toBe(201);
+  const body = JSON.parse(text) as {
+    agent_id: string;
+    pairing_request_id: string;
+    pairing_code: string;
+  };
+  await expect(inkson.getByTestId("agent-admin-pairing-card")).toBeVisible({
+    timeout: 180_000,
+  });
+  return {
+    agentId: body.agent_id,
+    pairingRequestId: body.pairing_request_id,
+    pairingCode: body.pairing_code,
+    pairingLink: await inkson
+      .getByTestId("agent-admin-pairing-url")
+      .inputValue(),
+  };
+}
+
+async function pairManagedSavfoxAgent(
+  inkson: Page,
+  savfox: Page,
+  pairing: PairingHandle & { pairingLink: string },
+): Promise<void> {
+  const approvalModal = inkson.getByTestId("agent-runtime-approval-modal");
+  await startSavfoxPairing(savfox, pairing.pairingLink);
+  await expect(approvalModal).toBeVisible({ timeout: 120_000 });
+  await expect(inkson.getByTestId("agent-runtime-approval-code")).toHaveText(
+    pairing.pairingCode,
+  );
+  await inkson.getByTestId("agent-runtime-approval-approve").click();
+  await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
+  await expect(
+    savfox.getByText("Agent paired and channel saved.", { exact: true }),
+  ).toBeVisible({ timeout: 180_000 });
+  await saveSavfoxChannel(savfox);
+  const arkretCard = savfox
+    .locator(".channels-card")
+    .filter({ hasText: "Arkret" });
+  await expect
+    .poll(
+      async () => {
+        await savfox.reload();
+        return (await arkretCard.textContent()) ?? "";
+      },
+      {
+        timeout: 120_000,
+        intervals: [1_000, 2_000, 5_000],
+        message: "second Savfox runtime should enter Listening",
+      },
+    )
+    .toContain("Listening");
 }
 
 async function openOwnAgentDirectChat(
@@ -472,6 +1080,372 @@ async function openOwnAgentDirectChat(
     .filter({ hasText: agentSlug });
   await expect(ownAgentRow).toBeVisible({ timeout: 120_000 });
   await ownAgentRow.click();
+}
+
+async function openAndPairSecondController(
+  browser: Browser,
+  request: APIRequestContext,
+  jointRealm: JointRealmFixture,
+): Promise<{ page: JointUserPage; session: DpopUserSession }> {
+  const coauth = coauthBaseUrl();
+  expect(coauth, "joint stack must expose Coauth for Device 2").toBeTruthy();
+  const session = await createDpopUserSessionForAccount(
+    request,
+    `sidecar-controller-device-2-${Date.now()}`,
+    jointRealm.aliceSession.account,
+    {
+      coauthBase: coauth!,
+      skipDeviceEnrollment: true,
+    },
+  );
+  expect(session, "same-principal Device 2 session").toBeTruthy();
+  const device = await openUserPage(browser, session!.user, {
+    grantJwt: session!.grantJwt,
+    dpopSeedB64url: session!.dpopSeedB64url,
+    eventSigningSeedB64url: session!.eventSigningSeedB64url,
+    grantId: session!.grantId,
+    grantAudience: session!.grantAudience,
+  });
+  try {
+    await jointRealm.alicePage.gotoHome();
+    await device.page.goto("/settings/devices/pair", {
+      waitUntil: "domcontentloaded",
+    });
+    await device.page.getByTestId("pair-device-start-button").click();
+    const pairingCode = device.page.getByTestId("pair-device-code");
+    await expect(pairingCode).toBeVisible({ timeout: 30_000 });
+    const code = (await pairingCode.textContent())?.trim() ?? "";
+    expect(code).not.toBe("");
+
+    const approvalModal = jointRealm.alicePage.page.getByTestId(
+      "device-pair-approval-modal",
+    );
+    await expect(approvalModal).toBeVisible({ timeout: 90_000 });
+    await expect(
+      jointRealm.alicePage.page.getByTestId("device-pair-approval-code"),
+    ).toHaveText(code);
+    await jointRealm.alicePage.page
+      .getByTestId("device-pair-approval-approve")
+      .click();
+    await expect(approvalModal).toBeHidden({ timeout: 90_000 });
+
+    await device.page.getByTestId("pair-device-status-button").click();
+    await expect(device.page.getByTestId("pair-device-status")).toContainText(
+      "Approved.",
+      { timeout: 30_000 },
+    );
+    const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(viewerUrl, {
+            headers: selfPathHeadersForDpopSession(
+              session!,
+              "GET",
+              viewerUrl,
+            ),
+          });
+          if (!response.ok()) return `http-${response.status()}`;
+          const body = (await response.json()) as {
+            devices?: Array<{ device_id?: string; status?: string }>;
+          };
+          return (
+            body.devices?.find(
+              (candidate) =>
+                candidate.device_id === session!.user.deviceId,
+            )?.status ?? "missing"
+          );
+        },
+        { timeout: 90_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toBe("active");
+    await device.gotoHome();
+    await device.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
+    return { page: device, session: session! };
+  } catch (error) {
+    await device.close();
+    throw error;
+  }
+}
+
+async function forcePaginatedRealmBackfill(
+  page: Page,
+  realmId: string,
+): Promise<{ requestCount: () => number; restore: () => Promise<void> }> {
+  let requests = 0;
+  const handler = async (route: Route) => {
+    const outgoing = route.request();
+    const url = new URL(outgoing.url());
+    if (
+      outgoing.method() === "GET" &&
+      url.pathname === "/_arkret/self/events" &&
+      url.searchParams.get("realm_id") === realmId
+    ) {
+      requests += 1;
+      url.searchParams.set("limit", "1");
+      await route.continue({ url: url.toString() });
+      return;
+    }
+    await route.fallback();
+  };
+  await page.route("**/*", handler);
+  return {
+    requestCount: () => requests,
+    restore: () => page.unroute("**/*", handler),
+  };
+}
+
+async function sidecarEchoProjection(
+  card: ReturnType<Page["getByTestId"]>,
+  requestEventId: string,
+  responseEventId: string,
+): Promise<{
+  serializedBytes: string;
+  echoEventIds: string[];
+  requestOccurrences: number;
+  responseOccurrences: number;
+  echoes: Array<{
+    eventId: string;
+    body: string;
+    actorClass: "agent" | "controller";
+    placement: "hosted_source_card";
+  }>;
+}> {
+  const messages = card.getByTestId("chat-message");
+  const echoes: Array<{
+    eventId: string;
+    body: string;
+    actorClass: "agent" | "controller";
+    placement: "hosted_source_card";
+  }> = [];
+  for (let index = 0; index < (await messages.count()); index += 1) {
+    const message = messages.nth(index);
+    const eventId = await eventIdFromMessage(message);
+    if (eventId !== requestEventId && eventId !== responseEventId) continue;
+    await expect(
+      message.getByTestId("message-private-sidecar-badge"),
+    ).toBeVisible();
+    const body = (
+      await message.getByTestId("content-block-text").allInnerTexts()
+    )
+      .join("\n")
+      .trim();
+    echoes.push({
+      eventId,
+      body,
+      actorClass:
+        (await message.getByTestId("member-badge-agent").count()) > 0
+          ? "agent"
+          : "controller",
+      placement: "hosted_source_card",
+    });
+  }
+  echoes.sort((left, right) =>
+    Buffer.from(left.eventId).compare(Buffer.from(right.eventId)),
+  );
+  const echoEventIds = [...new Set(echoes.map((echo) => echo.eventId))].sort(
+    (left, right) => Buffer.from(left).compare(Buffer.from(right)),
+  );
+  const canonicalProjection = {
+    schema: "cotest.sidecar_echo_projection.v1",
+    echo_event_ids: echoEventIds,
+    echoes,
+  };
+  return {
+    serializedBytes: JSON.stringify(canonicalProjection),
+    echoEventIds,
+    requestOccurrences: echoes.filter(
+      (echo) => echo.eventId === requestEventId,
+    ).length,
+    responseOccurrences: echoes.filter(
+      (echo) => echo.eventId === responseEventId,
+    ).length,
+    echoes,
+  };
+}
+
+type SidecarFoldProjectionEvidence = {
+  private_request_event_id: string;
+  user_facing_response_event_ids: string[];
+  folded_frontier: {
+    event_ids: string[];
+    event_set_digest: string;
+    max_hlc: string;
+  };
+};
+
+async function sidecarFoldProjection(
+  page: Page,
+  requestEventId: string,
+): Promise<SidecarFoldProjectionEvidence> {
+  const strip = page.getByTestId("sidecar-context-strip");
+  await expect
+    .poll(
+      async () =>
+        (await strip.getAttribute("data-cotest-fold-evidence"))?.includes(
+          requestEventId,
+        ) ?? false,
+      { timeout: 180_000, intervals: [500, 1_000, 2_000] },
+    )
+    .toBe(true);
+  const raw = await strip.getAttribute("data-cotest-fold-evidence");
+  const projections = JSON.parse(raw ?? "[]") as SidecarFoldProjectionEvidence[];
+  const projection = projections.find(
+    (candidate) => candidate.private_request_event_id === requestEventId,
+  );
+  expect(projection, `fold projection for ${requestEventId}`).toBeTruthy();
+  return projection!;
+}
+
+async function addAgentToRealm(
+  page: Page,
+  realmId: string,
+  agentId: string,
+): Promise<void> {
+  await page.goto(`/realms/${realmId}/members`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(page.getByTestId("realm-members-panel")).toBeVisible({
+    timeout: 120_000,
+  });
+  const existing = page.locator(
+    `[data-testid="member-self-agent-row"][data-agent-did="${agentId}"]`,
+  );
+  if ((await existing.count()) === 0) {
+    await page.getByTestId("open-add-realm-agent-modal-button").click();
+    const available = page.locator(
+      `[data-testid="available-realm-agent-row"][data-agent-did="${agentId}"]`,
+    );
+    await expect(available).toBeVisible({ timeout: 120_000 });
+    await available.getByTestId("confirm-add-agent-to-realm").click();
+    await expect(page.getByTestId("realm-members-status")).toContainText(
+      "added agent",
+      { timeout: 180_000 },
+    );
+  }
+  const agentRow = page.locator(
+    `[data-testid="member-self-agent-row"][data-agent-did="${agentId}"]`,
+  );
+  await expect(agentRow).toBeVisible({ timeout: 120_000 });
+  const reply = agentRow.getByTestId("member-agent-reply-toggle");
+  const mention = agentRow.getByTestId("member-agent-mention-toggle");
+  if ((await reply.getAttribute("aria-checked")) !== "true") {
+    await reply.click();
+  }
+  if ((await mention.getAttribute("aria-checked")) !== "true") {
+    await mention.click();
+  }
+  await expect
+    .poll(
+      async () => [
+        await reply.getAttribute("aria-checked"),
+        await mention.getAttribute("aria-checked"),
+      ],
+      { timeout: 120_000 },
+    )
+    .toEqual(["true", "true"]);
+}
+
+async function createSidecarSourceCard(
+  page: Page,
+  realmId: string,
+  title: string,
+) {
+  await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+    timeout: 120_000,
+  });
+  await page.getByTestId("new-board-toggle").click();
+  await page.getByTestId("new-board-title-input").fill(title);
+  await page.getByTestId("create-board-space-button").click();
+  await expect(page.getByTestId("add-column-button")).toBeVisible({
+    timeout: 120_000,
+  });
+  await page.getByTestId("new-column-input").fill("Work");
+  await page.getByTestId("add-column-button").click();
+  const column = page.getByTestId("kanban-column").filter({ hasText: "Work" });
+  await expect(column).toBeVisible({ timeout: 120_000 });
+  await column.getByTestId("add-card-button").click();
+  await column.getByTestId("new-card-title-input").fill(title);
+  await column.getByTestId("save-card-button").click();
+  const card = page.getByTestId("kanban-card").filter({ hasText: title });
+  await expect(card).toBeVisible({ timeout: 120_000 });
+  await card.click();
+  const detail = page.getByTestId("card-detail-modal");
+  await expect(detail).toBeVisible({ timeout: 30_000 });
+  return detail;
+}
+
+async function assertSidecarNonDisclosure(
+  request: APIRequestContext,
+  jointRealm: JointRealmFixture,
+  sidecarId: string,
+): Promise<void> {
+  const base = solandBaseUrl().replace(/\/$/, "");
+  const detailUrl = `${base}/_arkret/self/agent-sidecars/${encodeURIComponent(sidecarId)}`;
+  const controllerView = await request.get(detailUrl, {
+    headers: selfPathHeadersForDpopSession(
+      jointRealm.aliceSession,
+      "GET",
+      detailUrl,
+    ),
+  });
+  expect(controllerView.status(), await controllerView.text()).toBe(200);
+
+  const ordinaryMemberView = await request.get(detailUrl, {
+    headers: selfPathHeadersForDpopSession(
+      jointRealm.bobSession,
+      "GET",
+      detailUrl,
+    ),
+  });
+  const ordinaryMemberText = await ordinaryMemberView.text();
+  expect(ordinaryMemberView.status(), ordinaryMemberText).toBe(404);
+  expect(ordinaryMemberText).not.toContain(sidecarId);
+
+  const listUrl = `${base}/_arkret/self/agent-sidecars?realm_id=${encodeURIComponent(jointRealm.realmId)}`;
+  const ordinaryMemberList = await request.get(listUrl, {
+    headers: selfPathHeadersForDpopSession(
+      jointRealm.bobSession,
+      "GET",
+      listUrl,
+    ),
+  });
+  const ordinaryMemberListText = await ordinaryMemberList.text();
+  expect(ordinaryMemberList.status(), ordinaryMemberListText).toBe(200);
+  expect(ordinaryMemberListText).not.toContain(sidecarId);
+  expect(ordinaryMemberListText).not.toMatch(
+    /backing_circle|private_strand|agent_sidecar_of|exchange_id/,
+  );
+
+  const circleListUrl = `${base}/_arkret/self/circles?realm_id=${encodeURIComponent(jointRealm.realmId)}`;
+  const ordinaryCircleList = await request.get(circleListUrl, {
+    headers: selfPathHeadersForDpopSession(
+      jointRealm.bobSession,
+      "GET",
+      circleListUrl,
+    ),
+  });
+  const ordinaryCircleListText = await ordinaryCircleList.text();
+  expect(ordinaryCircleList.status(), ordinaryCircleListText).toBe(200);
+  expect(ordinaryCircleListText).not.toContain(sidecarId);
+  expect(ordinaryCircleListText).not.toContain("agent_sidecar_of");
+
+  const anonymousView = await request.get(detailUrl);
+  const anonymousText = await anonymousView.text();
+  expect([401, 404]).toContain(anonymousView.status());
+  expect(anonymousText).not.toContain(sidecarId);
+}
+
+async function eventIdFromMessage(message: ReturnType<Page["getByTestId"]>) {
+  return message.evaluate((element) => {
+    const candidates = [
+      element.getAttribute("data-event-id"),
+      element.id.replace(/^chat-msg-/, ""),
+      element.querySelector("[data-event-id]")?.getAttribute("data-event-id"),
+    ];
+    return candidates.find((value) => value?.startsWith("ak:event:")) ?? "";
+  });
 }
 
 async function runtimeKeyRequestStatus(
@@ -543,35 +1517,48 @@ async function dropAccountSubscribeStream(page: Page): Promise<{
 }
 
 type MlsTransactionEvent = { kind: string; eventId: string };
+type SubmittedEvent = {
+  event_id?: string;
+  kind?: string;
+  actor_id?: string;
+  payload?: unknown;
+};
 
-/// Event ingress carries `EventInitialSubmission` values, so inspect the
-/// nested signed Events rather than the deleted bare-Event request shape.
-function mlsTransactionEvents(postData: string | null): MlsTransactionEvent[] {
-  if (!postData) {
-    return [];
-  }
+function eventSubmissions(postData: string | null): SubmittedEvent[] {
+  if (!postData) return [];
   let body: unknown;
   try {
     body = JSON.parse(postData);
   } catch {
     return [];
   }
-  type InitialSubmission = {
-    event?: { event_id?: string; kind?: string };
-  };
+  type InitialSubmission = { event?: SubmittedEvent };
   const container = body as { events?: InitialSubmission[] };
   const submissions = Array.isArray(container.events)
     ? container.events
     : [body as InitialSubmission];
   return submissions
     .map((submission) => submission.event)
-    .filter(
-      (event): event is NonNullable<InitialSubmission["event"]> =>
-        event !== undefined,
-    )
+    .filter((event): event is SubmittedEvent => event !== undefined);
+}
+
+/// Event ingress carries `EventInitialSubmission` values, so inspect the
+/// nested signed Events rather than the deleted bare-Event request shape.
+function mlsTransactionEvents(postData: string | null): MlsTransactionEvent[] {
+  return eventSubmissions(postData)
     .filter((event) => MLS_TRANSACTION_KINDS.includes(event.kind ?? ""))
     .filter((event) => (event.event_id ?? "") !== "")
     .map((event) => ({ kind: event.kind!, eventId: event.event_id! }));
+}
+
+async function receiptCount(path: string): Promise<number> {
+  try {
+    return (await readFile(path, "utf8"))
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== "").length;
+  } catch {
+    return 0;
+  }
 }
 
 /// Record every MLS Commit / Welcome the client submits, so a resumed

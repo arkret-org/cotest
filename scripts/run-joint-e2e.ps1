@@ -73,6 +73,11 @@ param(
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
     [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
+    [switch]$StartSavfox,
+    [string]$SavfoxRoot,
+    [string]$SavfoxBin,
+    [string]$SavfoxBaseUrl,
+    [string]$SavfoxToken = "cotest-savfox-joint-e2e-token-0000000000000001",
     [string]$SolandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
     [string]$SolandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
@@ -1823,6 +1828,10 @@ if (-not $InksonRoot) {
     $InksonRoot = Join-Path $workspaceRoot "inkson"
 }
 $InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
+if (-not $SavfoxRoot) {
+    $SavfoxRoot = Join-Path (Split-Path -Parent $workspaceRoot) "savfox-ai\savfox"
+}
+$SavfoxRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SavfoxRoot)
 
 # Canonical artifacts layout (see cotest/README.md "Artifacts layout"):
 #   <OutputRoot>/runs/joint-e2e/<timestamp>-<profile>/ — authoritative outputs
@@ -1973,6 +1982,36 @@ if ($StartTeabay) {
         $teabayPort = Get-FreeTcpPort
         $TeabayBaseUrl = "http://127.0.0.1:$teabayPort"
     }
+}
+
+$savfoxPort = $null
+$savfoxModelPort = $null
+$savfoxModelBaseUrl = $null
+$savfoxUnaddressedPort = $null
+$savfoxUnaddressedBaseUrl = $null
+$savfoxUnaddressedModelPort = $null
+$savfoxUnaddressedModelBaseUrl = $null
+$savfoxUnaddressedToken = $null
+if ($StartSavfox) {
+    if (-not (Test-Path -LiteralPath $SavfoxRoot -PathType Container)) {
+        throw "-StartSavfox requires a Savfox checkout; not found: $SavfoxRoot"
+    }
+    if ($SavfoxToken.Length -lt 32) {
+        throw "-SavfoxToken must contain at least 32 characters"
+    }
+    if (-not $SavfoxBaseUrl) {
+        $savfoxPort = Get-FreeTcpPort
+        $SavfoxBaseUrl = "http://127.0.0.1:$savfoxPort"
+    } else {
+        $savfoxPort = ([System.Uri]$SavfoxBaseUrl).Port
+    }
+    $savfoxModelPort = Get-FreeTcpPort
+    $savfoxModelBaseUrl = "http://127.0.0.1:$savfoxModelPort"
+    $savfoxUnaddressedPort = Get-FreeTcpPort
+    $savfoxUnaddressedBaseUrl = "http://127.0.0.1:$savfoxUnaddressedPort"
+    $savfoxUnaddressedModelPort = Get-FreeTcpPort
+    $savfoxUnaddressedModelBaseUrl = "http://127.0.0.1:$savfoxUnaddressedModelPort"
+    $savfoxUnaddressedToken = "$SavfoxToken-unaddressed"
 }
 
 $mockIdpPort = $null
@@ -2174,6 +2213,34 @@ try {
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "starid"; status = "cache-hit"; duration_seconds = 0; detail = $staridFreshness.Detail })
         }
+    }
+
+    if (-not $SkipBuild -and $StartSavfox -and -not $SavfoxBin -and -not $env:SAVFOX_BIN) {
+        $defaultSavfoxBinary = Join-Path $SavfoxRoot "target\debug\savfox.exe"
+        $savfoxFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $defaultSavfoxBinary `
+            -RepositoryRoots @(
+                $SavfoxRoot,
+                (Join-Path $workspaceRoot "arkret-rust-sdk")
+            )
+        Write-Host "Preparing savfox web bundle and binary: $($savfoxFreshness.Detail)"
+        $started = Get-Date
+        $savfoxManifest = Join-Path $SavfoxRoot "Cargo.toml"
+        $savfoxWebBuild = Join-Path $SavfoxRoot "scripts\build-web.ps1"
+        $savfoxPowerShell = Find-CommandPath @("pwsh.exe", "pwsh")
+        if (-not $savfoxPowerShell) {
+            throw "Preparing the Savfox web bundle requires PowerShell 7 (pwsh)"
+        }
+        $buildCommand = "& {0} -NoProfile -File {1}; if (`$LASTEXITCODE -ne 0) {{ exit `$LASTEXITCODE }}; cargo build --manifest-path {2} --bin savfox --features savfox-gateway-server/arkret" -f `
+            (Quote-PsLiteral $savfoxPowerShell),
+            (Quote-PsLiteral $savfoxWebBuild),
+            (Quote-PsLiteral $savfoxManifest)
+        $service = Start-ManagedCommand `
+            -Name "prepare-savfox" `
+            -Command $buildCommand `
+            -WorkingDirectory $SavfoxRoot `
+            -LogDirectory $serviceLogDir
+        $preparationTasks.Add([pscustomobject]@{ Name = "savfox"; Service = $service; Started = $started; Artifact = $defaultSavfoxBinary; AllowUnchangedArtifact = $true })
     }
 
     if (-not $SkipBuild -and $willStartDefaultInkson) {
@@ -2395,6 +2462,47 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "mock-challenge-provider" -Command $mockChallengeProviderCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockChallengeProviderBaseUrl/health" -TimeoutSeconds 30
     }
+    if ($StartSavfox) {
+        $savfoxHome = Join-Path $jointDir "savfox-home"
+        $savfoxUnaddressedHome = Join-Path $jointDir "savfox-unaddressed-home"
+        New-Item -ItemType Directory -Path $savfoxHome -Force | Out-Null
+        New-Item -ItemType Directory -Path $savfoxUnaddressedHome -Force | Out-Null
+        $savfoxModelReceipts = Join-Path $jointDir "savfox-model-receipts.jsonl"
+        $savfoxUnaddressedModelReceipts = Join-Path $jointDir "savfox-unaddressed-model-receipts.jsonl"
+        $savfoxConfig = @"
+approval_policy = "never"
+sandbox_mode = "read-only"
+model_provider = "joint_mock"
+
+[model]
+slug = "joint-pong"
+provider = "joint_mock"
+
+[features]
+remote_models = false
+
+[model_providers.joint_mock]
+name = "Cotest deterministic Savfox model"
+base_url = "$savfoxModelBaseUrl/v1"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+requires_openai_auth = false
+"@
+        $savfoxConfig | Set-Content -LiteralPath (Join-Path $savfoxHome "config.toml") -Encoding UTF8
+        $savfoxConfig.Replace($savfoxModelBaseUrl, $savfoxUnaddressedModelBaseUrl) |
+            Set-Content -LiteralPath (Join-Path $savfoxUnaddressedHome "config.toml") -Encoding UTF8
+        $savfoxModelCommand = (
+            "`$env:MOCK_SAVFOX_MODEL_PORT='{0}'; `$env:MOCK_SAVFOX_MODEL_RECEIPT_PATH={1}; node {2}"
+        ) -f $savfoxModelPort, (Quote-PsLiteral $savfoxModelReceipts), (Quote-PsLiteral (Join-Path $mocksRoot "mock-savfox-model.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-savfox-model" -Command $savfoxModelCommand -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$savfoxModelBaseUrl/health" -TimeoutSeconds 30
+        $savfoxUnaddressedModelCommand = (
+            "`$env:MOCK_SAVFOX_MODEL_PORT='{0}'; `$env:MOCK_SAVFOX_MODEL_RECEIPT_PATH={1}; node {2}"
+        ) -f $savfoxUnaddressedModelPort, (Quote-PsLiteral $savfoxUnaddressedModelReceipts), (Quote-PsLiteral (Join-Path $mocksRoot "mock-savfox-model.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-savfox-unaddressed-model" -Command $savfoxUnaddressedModelCommand -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$savfoxUnaddressedModelBaseUrl/health" -TimeoutSeconds 30
+    }
 
     if ($StartCoauth) {
         if (-not $coauthPort) {
@@ -2513,6 +2621,29 @@ try {
             $teabayPort
         $managedServices.Add((Start-ManagedCommand -Name "teabay" -Command $teabayCmd -WorkingDirectory (Split-Path -Parent $teabayBinary) -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($TeabayBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+
+    if ($StartSavfox) {
+        $savfoxBinary = if ($SavfoxBin) {
+            $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SavfoxBin)
+        } elseif ($env:SAVFOX_BIN) {
+            $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:SAVFOX_BIN)
+        } else {
+            Join-Path $SavfoxRoot "target\debug\savfox.exe"
+        }
+        if (-not (Test-Path -LiteralPath $savfoxBinary -PathType Leaf)) {
+            throw "Savfox binary not found: $savfoxBinary"
+        }
+        $savfoxCommand = (
+            "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
+        ) -f (Quote-PsLiteral $savfoxHome), (Quote-PsLiteral $savfoxBinary), $savfoxPort, (Quote-PsLiteral $SavfoxToken)
+        $managedServices.Add((Start-ManagedCommand -Name "savfox" -Command $savfoxCommand -WorkingDirectory $SavfoxRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$($SavfoxBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        $savfoxUnaddressedCommand = (
+            "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
+        ) -f (Quote-PsLiteral $savfoxUnaddressedHome), (Quote-PsLiteral $savfoxBinary), $savfoxUnaddressedPort, (Quote-PsLiteral $savfoxUnaddressedToken)
+        $managedServices.Add((Start-ManagedCommand -Name "savfox-unaddressed" -Command $savfoxUnaddressedCommand -WorkingDirectory $SavfoxRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$($savfoxUnaddressedBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
     function Build-SolandDockerEnvironment {
@@ -2949,6 +3080,23 @@ try {
         Remove-Item Env:COTEST_TEABAY_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_TEABAY_SERVICE_ID -ErrorAction SilentlyContinue
     }
+    if ($StartSavfox) {
+        $env:COTEST_SAVFOX_BASE_URL = $SavfoxBaseUrl.TrimEnd("/")
+        $env:COTEST_SAVFOX_TOKEN = $SavfoxToken
+        $env:COTEST_SAVFOX_MODEL_RECEIPTS = $savfoxModelReceipts
+        $env:COTEST_SAVFOX_UNADDRESSED_BASE_URL = $savfoxUnaddressedBaseUrl.TrimEnd("/")
+        $env:COTEST_SAVFOX_UNADDRESSED_TOKEN = $savfoxUnaddressedToken
+        $env:COTEST_SAVFOX_UNADDRESSED_MODEL_RECEIPTS = $savfoxUnaddressedModelReceipts
+        $env:COTEST_REQUIRE_SAVFOX = "1"
+    } else {
+        Remove-Item Env:COTEST_SAVFOX_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SAVFOX_TOKEN -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SAVFOX_MODEL_RECEIPTS -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SAVFOX_UNADDRESSED_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SAVFOX_UNADDRESSED_TOKEN -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SAVFOX_UNADDRESSED_MODEL_RECEIPTS -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_REQUIRE_SAVFOX -ErrorAction SilentlyContinue
+    }
     if ($mockIdpBaseUrl) {
         $env:COTEST_MOCK_IDP_BASE_URL = $mockIdpBaseUrl
     } else {
@@ -3092,6 +3240,22 @@ try {
                 [ordered]@{
                     base_url = $CoauthBaseUrl
                     service_id = $CoauthServiceId
+                }
+            } else {
+                $null
+            }
+            savfox = if ($StartSavfox) {
+                $savfoxManagedService = @($managedServices | Where-Object { $_.Name -eq "savfox" }) | Select-Object -First 1
+                $savfoxUnaddressedManagedService = @($managedServices | Where-Object { $_.Name -eq "savfox-unaddressed" }) | Select-Object -First 1
+                [ordered]@{
+                    base_url = $SavfoxBaseUrl
+                    runtime_instance = if ($savfoxManagedService) { "process:$($savfoxManagedService.Process.Id)" } else { $null }
+                    model_receipts = $savfoxModelReceipts
+                    unaddressed_probe = [ordered]@{
+                        base_url = $savfoxUnaddressedBaseUrl
+                        runtime_instance = if ($savfoxUnaddressedManagedService) { "process:$($savfoxUnaddressedManagedService.Process.Id)" } else { $null }
+                        model_receipts = $savfoxUnaddressedModelReceipts
+                    }
                 }
             } else {
                 $null

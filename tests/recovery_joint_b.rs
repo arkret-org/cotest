@@ -93,7 +93,7 @@ async fn post_json(http: &reqwest::Client, url: String, body: Value) -> Result<V
 #[serial]
 #[ignore = "requires current coauth/starid/teabay/soland binaries and PostgreSQL"]
 async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()> {
-    let stack = bootstrap_required(FourServiceConfig::new(
+    let mut stack = bootstrap_required(FourServiceConfig::new(
         "joint-enrollment-authority-recovery",
     ))
     .await?;
@@ -329,6 +329,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let fixed_request_digest = transaction.request_digest.clone();
     let fixed_plan_digest = transaction.prepared_plan_digest.clone();
     let holder_seed = URL_SAFE_NO_PAD.encode(replacement_key.to_bytes());
+    let mut consumed_holder_jti = None;
     for _ in 0..8 {
         let Some(step) = transaction.next_required_step else {
             break;
@@ -343,6 +344,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 recovery_http
                     .issue_recovery_authority_ticket(&request)
                     .await?;
+                stack
+                    .soland
+                    .restart_external_process()
+                    .await
+                    .context("restart coordinator after durable authority ticket")?;
                 recovery_http =
                     recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
                 let replayed = recovery_http
@@ -372,6 +378,50 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                         &holder_seed,
                         &replacement_holder_jkt,
                     )?;
+                let proof_payload = participant_request
+                    .holder_proof
+                    .proof_jwt
+                    .split('.')
+                    .nth(1)
+                    .context("holder proof JWT omitted payload")?;
+                let proof_claims: serde_json::Value =
+                    serde_json::from_slice(&URL_SAFE_NO_PAD.decode(proof_payload)?)?;
+                consumed_holder_jti = Some(
+                    proof_claims["jti"]
+                        .as_str()
+                        .context("holder proof JWT omitted jti")?
+                        .to_owned(),
+                );
+                let authority_endpoint = format!(
+                    "{coauth_base}/_arkret/gate/account/recovery-device-authorizations"
+                );
+                let mut tampered_candidate = participant_request.clone();
+                tampered_candidate.authorization_preimage.did_entry_digest =
+                    arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?;
+                let tampered_candidate_response = http
+                    .post(&authority_endpoint)
+                    .json(&tampered_candidate)
+                    .send()
+                    .await?;
+                assert!(
+                    !tampered_candidate_response.status().is_success(),
+                    "Coauth must reject a candidate DID entry digest changed after preparation"
+                );
+                let mut rotated_authority = participant_request.clone();
+                let unexpected_authority =
+                    arkret_wire::Did::new("did:web:rotated-authority.invalid".to_owned())?;
+                rotated_authority.ticket.account_authority_id = unexpected_authority.clone();
+                rotated_authority.authorization_preimage.account_authority_id =
+                    unexpected_authority;
+                let rotated_authority_response = http
+                    .post(&authority_endpoint)
+                    .json(&rotated_authority)
+                    .send()
+                    .await?;
+                assert!(
+                    !rotated_authority_response.status().is_success(),
+                    "Coauth must reject an authority identity changed after ticket issuance"
+                );
                 let request = TypedSecurityTransactionContinueRequest {
                     request_digest: transaction.request_digest.clone(),
                     prepared_plan_digest: transaction.prepared_plan_digest.clone(),
@@ -382,6 +432,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 recovery_http
                     .continue_security_transaction(&transaction.transaction_id, &request)
                     .await?;
+                stack
+                    .soland
+                    .restart_external_process()
+                    .await
+                    .context("restart coordinator after durable authority outcome")?;
                 recovery_http =
                     recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
                 recovery_http
@@ -400,6 +455,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 recovery_http
                     .continue_security_transaction(&transaction.transaction_id, &request)
                     .await?;
+                stack
+                    .soland
+                    .restart_external_process()
+                    .await
+                    .with_context(|| format!("restart coordinator after durable {step:?}"))?;
                 recovery_http =
                     recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
                 recovery_http
@@ -486,6 +546,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     recovery_http
         .continue_security_transaction(&transaction.transaction_id, &terminal)
         .await?;
+    stack
+        .soland
+        .restart_external_process()
+        .await
+        .context("restart coordinator after durable terminal receipt")?;
     recovery_http = recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
     transaction = recovery_http
         .continue_security_transaction(&transaction.transaction_id, &terminal)
@@ -516,6 +581,60 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         terminal_conflict.to_string().contains("duplicate_conflict")
             || terminal_conflict.to_string().contains("terminal"),
         "unexpected terminal conflict: {terminal_conflict}"
+    );
+
+    let second_prepared =
+        inkson::fresh_device_recovery::prepare_joint_enrollment_authority_recovery_from_words(
+            recovery_http.clone(),
+            principal_base.as_str(),
+            bootstrap.principal_id(),
+            REPLACEMENT_DEVICE,
+            description.trust_domain,
+            RECOVERY_WORDS,
+            &replacement_holder_jkt,
+        )
+        .await?;
+    let second_create = SecurityTransactionCreateRequest::Recovery(second_prepared.create_request);
+    let second_transaction = recovery_http
+        .create_security_transaction(&second_create)
+        .await?;
+    let second_ticket = recovery_http
+        .issue_recovery_authority_ticket(&authority_ticket_request(&second_transaction)?)
+        .await?;
+    let mut replayed_jti_request =
+        inkson::fresh_device_recovery::joint_recovery_device_authorization_request(
+            &second_transaction,
+            second_ticket,
+            &second_prepared.account_authority_endpoint,
+            &holder_seed,
+            &replacement_holder_jkt,
+        )?;
+    let replayed_jti_proof = arkret_signatures::DpopProofRequest::new(
+        "POST",
+        &second_prepared.account_authority_endpoint,
+    )
+    .nonce(replayed_jti_request.canonical_request_digest.as_str())
+    .jti(
+        consumed_holder_jti
+            .as_deref()
+            .context("first authority request did not record its holder JTI")?,
+    );
+    replayed_jti_request.holder_proof.proof_jwt =
+        arkret_signatures::build_dpop_proof(&replayed_jti_proof, &replacement_key)?.header_value;
+    let replayed_jti_response = http
+        .post(format!(
+            "{coauth_base}/_arkret/gate/account/recovery-device-authorizations"
+        ))
+        .json(&replayed_jti_request)
+        .send()
+        .await?;
+    let replayed_jti_status = replayed_jti_response.status();
+    let replayed_jti_body = replayed_jti_response.text().await?;
+    assert!(
+        !replayed_jti_status.is_success()
+            && replayed_jti_body.contains("already consumed"),
+        "Coauth must reject a consumed holder JTI on a different transaction; \
+         status={replayed_jti_status}, body={replayed_jti_body}"
     );
     Ok(())
 }
