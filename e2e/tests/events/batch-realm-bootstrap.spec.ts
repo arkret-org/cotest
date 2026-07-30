@@ -63,6 +63,9 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     ).toBeTruthy();
     expect(create!.actor_seq).toBe(0);
     expect(create!.prev_refs).toEqual([]);
+    expect(
+      (create!.payload as { object?: Record<string, unknown> }).object,
+    ).not.toHaveProperty("plaintext_visible_services");
     expect(foundingGrant!.actor_seq).toBe(1);
     expect(foundingGrant!.prev_refs).toEqual([create!.event_id]);
     expect(

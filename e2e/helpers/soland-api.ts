@@ -325,7 +325,6 @@ export async function createRealmApi(
     history_visibility: data.history_visibility ?? "shared",
     encryption_profile: data.encryption_profile ?? "none",
     ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
-    plaintext_visible_services: plaintextVisibleServices,
     ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
     ...(data.owning_organizations
       ? { owning_organizations: data.owning_organizations }
@@ -359,8 +358,6 @@ export async function createRealmApi(
       },
     ],
     payload: {
-      // Keep the declaration in the Realm object as descriptive metadata.
-      // The dedicated bootstrap facet below is the authorization authority.
       object: realmObject,
     },
   });

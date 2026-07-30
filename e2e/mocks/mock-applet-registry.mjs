@@ -594,7 +594,10 @@ function signedPackage(body) {
     controller_id: body.controller_id ?? registryDid,
     base_url: body.base_url ?? serverBaseUrl(),
     bot_actor_id: body.bot_actor_id ?? `did:web:bot-${safe}.joint-e2e.local`,
-    claimed_profiles: ["ak.profile.applet_service.v1"],
+    claimed_profiles: [
+      "ak.profile.applet_bridge.v1",
+      "ak.profile.applet_service.v1",
+    ],
     protocols: body.protocols ?? ["bridge"],
     namespaces: body.namespaces ?? {
       actors: [{ exclusive: true, pattern: `did:web:ghost-${safe}:*` }],
