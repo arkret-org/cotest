@@ -873,8 +873,9 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             super::privacy_security::MINIMAL_METADATA_AUTHOR_CREDENTIAL_CASE => {
                 super::privacy_security::run_minimal_metadata_author_credential_vector()?;
             }
-            "actor_profile_accountability_grant_is_deterministic" => {
+            super::privacy_security::ACTOR_ACCOUNTABILITY_GRANT_REQUIRED_CASE => {
                 validate_actor_accountability_grant_required(&case)?;
+                super::privacy_security::run_actor_accountability_grant_required_vector()?;
             }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }

@@ -2,6 +2,7 @@ mod agent_mls_keypackage_authorization;
 mod agent_participation;
 mod agent_signer_evidence;
 mod agent_vectors;
+mod applet_install;
 mod arkret_private_kdf_and_durability;
 mod audit_release;
 mod auth_session_proof;
@@ -112,6 +113,7 @@ pub use agent_vectors::{
     run_agent_runtime_key_binding_vector, run_agent_session_grant_replay_vector,
     run_agent_vector_suite, validate_agent_human_approval_http_response,
 };
+pub use applet_install::run_applet_install_authoring_suite;
 pub use arkret_private_kdf_and_durability::run_arkret_private_kdf_and_durability_suite;
 pub use audit_release::{
     ALL_AUDIT_RELEASE_VECTOR_IDS, run_audit_release_vector_suite,

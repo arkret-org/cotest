@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_wire::notary::{ForensicAttribution, NotaryValue};
@@ -94,24 +94,27 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         "equal_proposal_windows_without_defers_accepted",
         "equal_proposal_windows_with_defers_rejected",
     ];
-    let mut names = BTreeSet::new();
+    let mut cases_by_name = BTreeMap::new();
     for value in cases {
         let name = value
             .get("name")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("control proposal receipt case has no name"))?;
-        ensure!(names.insert(name), "duplicate receipt fixture case {name}");
+            .ok_or_else(|| anyhow!("control proposal receipt case is missing name"))?;
+        ensure!(
+            cases_by_name.insert(name, value).is_none(),
+            "control proposal receipt fixture contains duplicate case {name}"
+        );
     }
     for required in REQUIRED_CASES {
         ensure!(
-            names.contains(required),
+            cases_by_name.contains_key(required),
             "control proposal receipt fixture is missing {required}"
         );
     }
     let case = |name: &str| {
-        cases
-            .iter()
-            .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
+        cases_by_name
+            .get(name)
+            .copied()
             .ok_or_else(|| anyhow!("control proposal receipt fixture is missing {name}"))
     };
 
@@ -345,6 +348,45 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         decision.validate_chain(&receipt, &[], policy).is_err(),
         "decision proof crossed receipt sets"
     );
+
+    for name in [
+        "proposal_decision_window_after_absolute_deadline_rejected",
+        "equal_proposal_windows_without_defers_accepted",
+        "equal_proposal_windows_with_defers_rejected",
+    ] {
+        let vector = case(name)?;
+        let configuration = &vector["realm_configuration"];
+        let policy = ControlProposalDecisionPolicy {
+            receipt_sla: chrono::Duration::hours(24),
+            decision_window: chrono::Duration::milliseconds(
+                configuration["proposal_decision_window_ms"]
+                    .as_i64()
+                    .ok_or_else(|| anyhow!("{name} decision window is missing"))?,
+            ),
+            absolute_horizon: chrono::Duration::milliseconds(
+                configuration["proposal_absolute_deadline_ms"]
+                    .as_i64()
+                    .ok_or_else(|| anyhow!("{name} absolute deadline is missing"))?,
+            ),
+            max_defers: configuration["max_proposal_defers"]
+                .as_u64()
+                .and_then(|value| u8::try_from(value).ok())
+                .ok_or_else(|| anyhow!("{name} max defers is invalid"))?,
+        };
+        let accepted = policy.validate().is_ok();
+        let expected_accept = vector["expected"]["decision"].as_str() == Some("accept");
+        ensure!(
+            accepted == expected_accept,
+            "{name} SDK policy verdict diverged from fixture"
+        );
+        if !expected_accept {
+            ensure!(
+                vector["expected"]["reason"].as_str() == Some("schema_violation")
+                    && vector["expected"]["must_not_write_realm_state"].as_bool() == Some(true),
+                "{name} no longer requires atomic schema rejection"
+            );
+        }
+    }
     Ok(())
 }
 
