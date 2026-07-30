@@ -351,7 +351,7 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         ArkretServer::spawn_with_database_url(
             "cross-signing-recovery-transaction-e2e",
             database_url,
-            &[],
+            &[("SOLAND_TEST_ROTATION_ERASE_FAIL_AFTER", "1")],
         )
         .await?
     } else {
@@ -615,6 +615,10 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         completed_session["transaction_id"],
         completed["transaction_id"]
     );
+    if restart_database_url.is_some() {
+        run_security_rotation_restart_matrix(&mut server, &replacement_token, &replacement_signer)
+            .await?;
+    }
     assert_recovery_public_artifacts_contain_no_secret_material(
         &[
             serde_json::to_value(&request)?,
@@ -627,6 +631,632 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         server.service_log_contents()?.as_deref(),
     )?;
     Ok(())
+}
+
+async fn run_security_rotation_restart_matrix(
+    server: &mut ArkretServer,
+    token: &str,
+    signer: &inkson::event_signer::InksonEventSigner,
+) -> Result<()> {
+    use arkret_models_crypto::{
+        BackupSeriesEraseRequestBody, BackupSeriesEraseStatus, ClientStepAttestationArtifact,
+        SECURITY_ROTATION_LOCAL_COMMIT_SCHEMA, SecurityRotationLocalCommit,
+        TypedClientStepAttestation, TypedSecurityTransactionContinueRequest,
+    };
+    use arkret_wire::{
+        AuthorizationLeaseIssueIntent, AuthorizationLeaseIssueOutcome,
+        AuthorizationLeaseIssueRequest, BackupRotationKind, CLIENT_STEP_ATTESTATION_SIGNED_FIELDS,
+        ClientStepAttestationAuthData, LeaseBasisRef, RiskTier, SecurityTransactionBinding,
+        SecurityTransactionCreateRequest, SecurityTransactionState, SecurityTransactionStep,
+    };
+
+    let principal = Did::new(ALICE_DID.to_owned())?;
+    let current_device = DeviceId::new(RECOVERY_REPLACEMENT_DEVICE.to_owned())?;
+    let control_realm = principal_control_realm_id(&principal);
+    let mut sdk = bearer_sdk_client(server, token)?;
+    let frontier = match sdk
+        .events_frontier(
+            &arkret_models_collaboration::event_sync::EventsFrontierSelector::RealmSeal {
+                realm_id: arkret::RealmId::new(control_realm.clone())?,
+            },
+        )
+        .await?
+        .frontier
+    {
+        arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) => {
+            frontier
+        }
+        _ => {
+            return Err(anyhow!(
+                "principal-control frontier was not a Realm Seal view"
+            ));
+        }
+    };
+    let mut actor_events = sdk
+        .events_query_all_pages(&control_realm)
+        .await?
+        .events
+        .into_iter()
+        .filter(|event| event.actor_id == principal)
+        .collect::<Vec<_>>();
+    actor_events.sort_by_key(|event| event.actor_seq);
+    let previous = actor_events
+        .last()
+        .map(|event| vec![event.event_id.clone()])
+        .unwrap_or_default();
+    let first_seq = actor_events.last().map_or(1, |event| event.actor_seq + 1);
+
+    let old_secret = build_rotation_backup(
+        signer,
+        BackupKind::SecretStorage,
+        "ak:backup:019fb200-0000-7000-8000-000000000001",
+        "ak:backup_series:019fb200-0000-7000-8000-000000000011",
+        b"old encrypted secret-storage material",
+    )?;
+    let old_mls = build_rotation_backup(
+        signer,
+        BackupKind::MlsHistory,
+        "ak:backup:019fb200-0000-7000-8000-000000000002",
+        "ak:backup_series:019fb200-0000-7000-8000-000000000012",
+        b"old encrypted MLS material",
+    )?;
+    for backup in [&old_secret, &old_mls] {
+        expect_json(
+            server
+                .http()
+                .put(server.url(&format!("/_arkret/self/keys/backups/{}", backup.backup_id)))
+                .bearer_auth(token)
+                .json(backup),
+            StatusCode::OK,
+        )
+        .await?;
+    }
+    let new_secret = build_rotation_backup(
+        signer,
+        BackupKind::SecretStorage,
+        "ak:backup:019fb200-0000-7000-8000-000000000003",
+        "ak:backup_series:019fb200-0000-7000-8000-000000000013",
+        b"new encrypted secret-storage material",
+    )?;
+    let new_mls = build_rotation_backup(
+        signer,
+        BackupKind::MlsHistory,
+        "ak:backup:019fb200-0000-7000-8000-000000000004",
+        "ak:backup_series:019fb200-0000-7000-8000-000000000014",
+        b"new encrypted MLS material",
+    )?;
+
+    let mut revoke = arkret::Event::new(
+        arkret::events::EventKind::DEVICE_REVOKE,
+        arkret::ScopeRef::Realm {
+            realm_id: arkret::RealmId::new(control_realm.clone())?,
+        },
+        principal.clone(),
+        first_seq,
+        arkret::Hlc::new(format!(
+            "{:012x}-0001-a13f9c2e",
+            canonical_now().timestamp_millis()
+        ))?,
+        serde_json::to_value(
+            arkret_models_collaboration::events_payloads::device_identity::DeviceRevokePayload {
+                principal_id: principal.clone(),
+                device_id: DeviceId::new(ALICE_DEVICE.to_owned())?,
+                revoked_by: DeviceOrPrincipalRef::DeviceId(current_device.clone()),
+                revoked_at: canonical_now(),
+                reason: arkret_models_collaboration::events_payloads::device_identity::DeviceRevocationReason::new(
+                    "device_lost".to_owned(),
+                )
+                .map_err(anyhow::Error::msg)?,
+                proof: None,
+            },
+        )?,
+    )?;
+    revoke.prev_refs = previous;
+    revoke.seal_basis = Some(frontier.seal_basis());
+    sign_rotation_event(&mut revoke, signer)?;
+
+    let secret_pointer = build_rotation_pointer_event(
+        signer,
+        &frontier,
+        BackupRotationKind::SecretStorage,
+        &old_secret,
+        &new_secret,
+        first_seq + 1,
+        vec![revoke.event_id.clone()],
+    )?;
+    let mls_pointer = build_rotation_pointer_event(
+        signer,
+        &frontier,
+        BackupRotationKind::MlsHistory,
+        &old_mls,
+        &new_mls,
+        first_seq + 2,
+        vec![secret_pointer.event_id.clone()],
+    )?;
+    let proposal_key = SigningKey::from_bytes(&[25_u8; 32]);
+    let proposal_verification_method = format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}");
+    let proposal_notary = arkret_wire::notary::NotaryValue::single_did(principal.clone());
+    let revoke_submission = prepare_initial_submission_for_notary(
+        &sdk,
+        &revoke,
+        &proposal_key,
+        &proposal_verification_method,
+        &proposal_notary,
+    )
+    .await
+    .context("prepare rotation revoke publication evidence")?;
+    let secret_submission = prepare_initial_submission_for_notary(
+        &sdk,
+        &secret_pointer,
+        &proposal_key,
+        &proposal_verification_method,
+        &proposal_notary,
+    )
+    .await
+    .context("prepare secret-storage pointer publication evidence")?;
+    let mls_submission = prepare_initial_submission_for_notary(
+        &sdk,
+        &mls_pointer,
+        &proposal_key,
+        &proposal_verification_method,
+        &proposal_notary,
+    )
+    .await
+    .context("prepare MLS pointer publication evidence")?;
+    let transaction_id =
+        arkret::TransactionId::new("ak:transaction:019fb200-0000-7000-8000-000000000021")?;
+    let create = inkson::fresh_device_recovery::SecurityRotationDraft {
+        transaction_id: transaction_id.clone(),
+        principal_id: principal.clone(),
+        expires_at: Utc::now() + chrono::Duration::hours(1),
+        revoke_submission: arkret::EventsSubmitBatchRequestBody {
+            events: vec![revoke_submission],
+        },
+        new_secret_commitment: arkret::Hash::new(canonical::sha256_digest(
+            b"rotation-new-secret-commitment",
+        ))?,
+        backup_rotations: vec![
+            inkson::fresh_device_recovery::SecurityRotationBackupDraft {
+                backup_kind: BackupRotationKind::SecretStorage,
+                previous_series_id: old_secret.series_id.clone(),
+                new_series_id: new_secret.series_id.clone(),
+                new_backup_bodies: vec![serde_json::to_value(&new_secret)?],
+                active_series_submission: arkret::EventsSubmitBatchRequestBody {
+                    events: vec![secret_submission],
+                },
+                old_backups: vec![backup_ref(&old_secret)?],
+            },
+            inkson::fresh_device_recovery::SecurityRotationBackupDraft {
+                backup_kind: BackupRotationKind::MlsHistory,
+                previous_series_id: old_mls.series_id.clone(),
+                new_series_id: new_mls.series_id.clone(),
+                new_backup_bodies: vec![serde_json::to_value(&new_mls)?],
+                active_series_submission: arkret::EventsSubmitBatchRequestBody {
+                    events: vec![mls_submission],
+                },
+                old_backups: vec![backup_ref(&old_mls)?],
+            },
+        ],
+    }
+    .into_create_request(Did::new(server.service_id().to_owned())?)?;
+    let mut transaction = sdk
+        .create_security_transaction(&SecurityTransactionCreateRequest::SecurityRotation(create))
+        .await
+        .context("create security rotation transaction")?;
+    let fixed_request_digest = transaction.request_digest.clone();
+    let fixed_plan_digest = transaction.prepared_plan_digest.clone();
+
+    for step in [
+        SecurityTransactionStep::Revoke,
+        SecurityTransactionStep::UploadNewMaterial,
+        SecurityTransactionStep::SwitchAuthoritativePointer,
+    ] {
+        assert_eq!(transaction.next_required_step, Some(step));
+        let request = TypedSecurityTransactionContinueRequest {
+            request_digest: fixed_request_digest.clone(),
+            prepared_plan_digest: fixed_plan_digest.clone(),
+            expected_next_step: step,
+            client_attestation: None,
+            participant_request: None,
+        };
+        let first = sdk
+            .continue_security_transaction(&transaction_id, &request)
+            .await
+            .with_context(|| format!("continue rotation {step:?} before restart"))?;
+        server.restart_external_process().await?;
+        sdk = bearer_sdk_client(server, token)?;
+        let replay = sdk
+            .continue_security_transaction(&transaction_id, &request)
+            .await
+            .with_context(|| format!("replay rotation {step:?} after restart"))?;
+        assert_eq!(
+            serde_json::to_value(&first)?,
+            serde_json::to_value(&replay)?,
+            "{step:?} response-loss replay changed the first durable outcome"
+        );
+        transaction = replay;
+    }
+    assert_eq!(
+        transaction.next_required_step,
+        Some(SecurityTransactionStep::EraseOldMaterial)
+    );
+    let backups_before_erase = sdk.list_all_key_backups().await?;
+    for backup in [&old_secret, &old_mls] {
+        assert!(
+            backups_before_erase
+                .iter()
+                .any(|candidate| candidate.backup_id == backup.backup_id),
+            "old backup {} was deleted before the erase step",
+            backup.backup_id
+        );
+    }
+
+    let SecurityTransactionBinding::SecurityRotation(binding) = transaction.binding.clone() else {
+        return Err(anyhow!("rotation transaction returned a recovery binding"));
+    };
+    let erase_frontier = match sdk
+        .events_frontier(
+            &arkret_models_collaboration::event_sync::EventsFrontierSelector::RealmSeal {
+                realm_id: arkret::RealmId::new(control_realm.clone())?,
+            },
+        )
+        .await?
+        .frontier
+    {
+        arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) => {
+            frontier
+        }
+        _ => {
+            return Err(anyhow!(
+                "principal-control frontier was not a Realm Seal view"
+            ));
+        }
+    };
+    let lease_request = AuthorizationLeaseIssueRequest {
+        events: Vec::new(),
+        intents: vec![AuthorizationLeaseIssueIntent {
+            scope_ref: arkret::ScopeRef::Realm {
+                realm_id: arkret::RealmId::new(control_realm.clone())?,
+            },
+            action: "ak.keys.backup_series.erase".to_owned(),
+            authorization_rule_id: "realm_admission".to_owned(),
+            risk_tier: RiskTier::High,
+            basis_ref: LeaseBasisRef::Seal(erase_frontier.seal_id),
+        }],
+    };
+    let lease_value = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/authorization-leases"))
+            .bearer_auth(token)
+            .header("Idempotency-Key", "rotation-erase-lease")
+            .json(&lease_request),
+        StatusCode::OK,
+    )
+    .await
+    .context("issue old-backup erase authorization lease")?;
+    let lease_outcome: AuthorizationLeaseIssueOutcome = serde_json::from_value(lease_value)?;
+    lease_outcome.validate_against_request(&lease_request)?;
+    let erase_request = BackupSeriesEraseRequestBody {
+        transaction_id: transaction_id.clone(),
+        transaction_request_digest: fixed_request_digest.clone(),
+        prepared_plan_digest: fixed_plan_digest.clone(),
+        erase_confirmation_digest: binding.erase_confirmation_digest.clone(),
+        series: binding.backup_rotations.clone(),
+        authorization_lease: lease_outcome.authorization_leases[0].clone(),
+        cba_proof_bundles: Vec::new(),
+    };
+    let partial = sdk
+        .erase_backup_series(&erase_request)
+        .await
+        .context("erase old backup series with injected partial failure")?;
+    assert_eq!(partial.status, BackupSeriesEraseStatus::Partial);
+    assert_eq!(
+        partial
+            .series_results
+            .iter()
+            .flat_map(|result| &result.erased_backups)
+            .count(),
+        1
+    );
+    server.restart_external_process().await?;
+    sdk = bearer_sdk_client(server, token)?;
+    let erased = sdk.erase_backup_series(&erase_request).await?;
+    assert_eq!(erased.status, BackupSeriesEraseStatus::Complete);
+    let erased_replay = sdk.erase_backup_series(&erase_request).await?;
+    assert_eq!(erased, erased_replay);
+    transaction = sdk.get_security_transaction(&transaction_id).await?;
+    assert_eq!(
+        transaction.next_required_step,
+        Some(SecurityTransactionStep::LocalCommit)
+    );
+
+    let commit = SecurityRotationLocalCommit {
+        schema: SECURITY_ROTATION_LOCAL_COMMIT_SCHEMA.to_owned(),
+        transaction_id: transaction_id.clone(),
+        transaction_request_digest: fixed_request_digest.clone(),
+        prepared_plan_digest: fixed_plan_digest.clone(),
+        local_commit_digest: binding.local_commit_digest.clone(),
+        erase_confirmation_digest: binding.erase_confirmation_digest.clone(),
+        device_id: current_device,
+        committed_at: Utc::now(),
+    };
+    let artifact = ClientStepAttestationArtifact::SecurityRotationLocalCommit(commit);
+    let mut attestation = TypedClientStepAttestation {
+        step: SecurityTransactionStep::LocalCommit,
+        output_ref: binding.local_commit_digest.as_str().to_owned(),
+        transaction_id: transaction_id.clone(),
+        transaction_request_digest: fixed_request_digest.clone(),
+        prepared_plan_digest: fixed_plan_digest.clone(),
+        attestation_digest: arkret::Hash::new(canonical::canonical_sha256(&artifact)?)?,
+        artifact,
+        auth_data: ClientStepAttestationAuthData {
+            verification_method: format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"),
+            alg: "EdDSA".to_owned(),
+            signature: String::new(),
+            signed_fields: CLIENT_STEP_ATTESTATION_SIGNED_FIELDS
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        },
+    };
+    attestation.auth_data.signature =
+        URL_SAFE_NO_PAD.encode(signer.sign_raw(&attestation.signing_bytes()?)?);
+    let commit_request = TypedSecurityTransactionContinueRequest {
+        request_digest: fixed_request_digest,
+        prepared_plan_digest: fixed_plan_digest,
+        expected_next_step: SecurityTransactionStep::LocalCommit,
+        client_attestation: Some(attestation),
+        participant_request: None,
+    };
+    let first_complete = sdk
+        .continue_security_transaction(&transaction_id, &commit_request)
+        .await?;
+    server.restart_external_process().await?;
+    sdk = bearer_sdk_client(server, token)?;
+    let complete_replay = sdk
+        .continue_security_transaction(&transaction_id, &commit_request)
+        .await?;
+    assert_eq!(
+        serde_json::to_value(&first_complete)?,
+        serde_json::to_value(&complete_replay)?
+    );
+    assert_eq!(complete_replay.state, SecurityTransactionState::Completed);
+    assert_eq!(complete_replay.accepted_steps.len(), 5);
+    let backups_after_commit = sdk.list_all_key_backups().await?;
+    for backup in [&old_secret, &old_mls] {
+        assert!(
+            backups_after_commit
+                .iter()
+                .all(|candidate| candidate.backup_id != backup.backup_id),
+            "old backup {} survived completed rotation",
+            backup.backup_id
+        );
+    }
+    for backup in [&new_secret, &new_mls] {
+        assert!(
+            backups_after_commit
+                .iter()
+                .any(|candidate| candidate.backup_id == backup.backup_id),
+            "new backup {} disappeared during rotation",
+            backup.backup_id
+        );
+    }
+    Ok(())
+}
+
+fn backup_ref(backup: &KeyBackup) -> Result<arkret_wire::BackupObjectRef> {
+    Ok(arkret_wire::BackupObjectRef {
+        backup_id: backup.backup_id.clone(),
+        ciphertext_digest: arkret::Hash::new(backup.ciphertext_digest.clone())?,
+    })
+}
+
+fn build_rotation_backup(
+    signer: &inkson::event_signer::InksonEventSigner,
+    kind: BackupKind,
+    backup_id: &str,
+    series_id: &str,
+    ciphertext: &[u8],
+) -> Result<KeyBackup> {
+    let created_at = canonical_now();
+    let item_kind = match kind {
+        BackupKind::SecretStorage => "recovery_secret",
+        BackupKind::MlsHistory => "mls_group_state",
+        BackupKind::DidRecovery => return Err(anyhow!("rotation excludes did_recovery")),
+    };
+    let mut backup = KeyBackup {
+        backup_id: BackupId::new(backup_id.to_owned())?,
+        actor_id: Did::new(ALICE_DID.to_owned())?,
+        device_id: Some(DeviceId::new(RECOVERY_REPLACEMENT_DEVICE.to_owned())?),
+        backup_kind: kind,
+        mixed_secret_storage: false,
+        backup_version: "kb_rotation_1".to_owned(),
+        created_at,
+        updated_at: None,
+        expires_at: None,
+        encryption: KeyBackupEncryption {
+            recipient_method: KeyBackupRecipientMethod::SecretStorageKey,
+            recipient_key_ref: Some("rotation-test-ssk".to_owned()),
+            kdf: None,
+            aead: KeyBackupAead {
+                name: KeyBackupAeadName::Xchacha20Poly1305,
+                aead_profile: Some("ak.aead.xchacha20_poly1305.v1".to_owned()),
+                nonce_salt: None,
+                nonce: Some(base64_url("cm90YXRpb24tdGVzdC1ub25jZQ")?),
+                enc: None,
+                extra: Default::default(),
+            },
+            key_commitment: None,
+            hpke_suite: None,
+            extra: Default::default(),
+        },
+        domain_separation: KeyBackupDomainSeparation {
+            hkdf_info: format!(
+                "arkret-key-backup/{}/rotation/v1",
+                match kind {
+                    BackupKind::SecretStorage => "secret_storage",
+                    BackupKind::MlsHistory => "mls_history",
+                    BackupKind::DidRecovery => unreachable!(),
+                }
+            ),
+            subdomain: "rotation".to_owned(),
+            aead_aad: KeyBackupDomainSeparationAad {
+                schema: "ak.schema.key_backup.v1".to_owned(),
+                actor_id: Did::new(ALICE_DID.to_owned())?,
+                device_id: Some(RECOVERY_REPLACEMENT_DEVICE.to_owned()),
+                backup_kind: kind,
+                backup_version: "kb_rotation_1".to_owned(),
+                created_at,
+                item_kinds: vec![item_kind.to_owned()],
+                managed_principal_bindings: Vec::new(),
+                recipient_method: Some(KeyBackupRecipientMethod::SecretStorageKey),
+                recipient_key_ref: Some("rotation-test-ssk".to_owned()),
+                extra: Default::default(),
+            },
+            extra: Default::default(),
+        },
+        contents: vec![KeyBackupContentItem {
+            item_kind: item_kind.to_owned(),
+            realm_id: None,
+            managed_principal_binding: None,
+            mls_group_id: (kind == BackupKind::MlsHistory).then(|| "rotation-group".to_owned()),
+            epoch: (kind == BackupKind::MlsHistory).then_some(1),
+            first_event_id: None,
+            last_event_id: None,
+            secret_id: (kind == BackupKind::SecretStorage).then(|| "rotation-secret".to_owned()),
+            secret_version: (kind == BackupKind::SecretStorage).then_some(1),
+            extra: Default::default(),
+        }],
+        ciphertext: URL_SAFE_NO_PAD.encode(ciphertext),
+        ciphertext_digest: canonical::sha256_digest(ciphertext),
+        plaintext_commitment: None,
+        auth_data: Some(KeyBackupAuthData {
+            device_id: DeviceId::new(RECOVERY_REPLACEMENT_DEVICE.to_owned())?,
+            verification_method: DidUrl::new(format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"))
+                .map_err(anyhow::Error::msg)?,
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: base64_url("cGVuZGluZw")?,
+            ssk_generation: std::num::NonZeroU64::new(1),
+            device_authorize_event_id: None,
+            signed_fields: [
+                "backup_id",
+                "actor_id",
+                "backup_kind",
+                "backup_version",
+                "series_id",
+                "series_seq",
+                "supersedes",
+                "encryption",
+                "domain_separation",
+                "contents",
+                "ciphertext_digest",
+            ]
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+            extra: Default::default(),
+        }),
+        retention: None,
+        series_id: BackupSeriesId::new(series_id.to_owned())?,
+        series_seq: 0,
+        supersedes: None,
+        supersedes_digest: None,
+        frontier_ref: None,
+        recovery_policy_ref: None,
+        extra: Default::default(),
+    };
+    let mut unsigned = serde_json::to_value(&backup)?;
+    unsigned["auth_data"]
+        .as_object_mut()
+        .context("rotation backup auth_data is not an object")?
+        .remove("signature");
+    backup.auth_data.as_mut().unwrap().signature = base64_url(
+        URL_SAFE_NO_PAD.encode(signer.sign_raw(&canonical::canonical_json_bytes(&unsigned)?)?),
+    )?;
+    Ok(backup)
+}
+
+fn sign_rotation_event(
+    event: &mut arkret::Event,
+    signer: &inkson::event_signer::InksonEventSigner,
+) -> Result<()> {
+    signer.sign_envelope(event)?;
+    Ok(())
+}
+
+fn build_rotation_pointer_event(
+    signer: &inkson::event_signer::InksonEventSigner,
+    frontier: &arkret::RealmSealFrontierView,
+    kind: arkret_wire::BackupRotationKind,
+    old_backup: &KeyBackup,
+    new_backup: &KeyBackup,
+    actor_seq: u64,
+    prev_refs: Vec<arkret::EventId>,
+) -> Result<arkret::Event> {
+    let wire_kind = match kind {
+        arkret_wire::BackupRotationKind::SecretStorage => "secret_storage",
+        arkret_wire::BackupRotationKind::MlsHistory => "mls_history",
+    };
+    let signed_fields = [
+        "schema",
+        "actor_id",
+        "backup_kind",
+        "active_series_id",
+        "series_pointer_version",
+        "previous_series_ids",
+        "frontier_ref",
+        "issued_at",
+    ];
+    let mut payload = json!({
+        "schema": "ak.schema.key_backup_active_series.v1",
+        "actor_id": ALICE_DID,
+        "backup_kind": wire_kind,
+        "active_series_id": new_backup.series_id,
+        "series_pointer_version": 1,
+        "previous_series_ids": [old_backup.series_id],
+        "frontier_ref": {
+            "frontier_digest": frontier.control_event_set_root,
+            "seal_ref": frontier.seal_id,
+            "ssk_generation": 1
+        },
+        "issued_at": canonical::format_timestamp_canonical(canonical_now()),
+        "auth_data": {
+            "verification_method": format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"),
+            "signature_algorithm": "Ed25519",
+            "signature": "pending",
+            "signed_fields": signed_fields,
+            "ssk_generation": 1
+        }
+    });
+    let mut unsigned = payload.clone();
+    unsigned["auth_data"]
+        .as_object_mut()
+        .context("rotation pointer auth_data is not an object")?
+        .remove("signature");
+    payload["auth_data"]["signature"] = json!(
+        URL_SAFE_NO_PAD.encode(signer.sign_raw(&canonical::canonical_json_bytes(&unsigned)?)?)
+    );
+    let mut event = arkret::Event::new(
+        arkret::events::EventKind::KEY_BACKUP_ACTIVE_SERIES,
+        arkret::ScopeRef::Realm {
+            realm_id: arkret::RealmId::new(principal_control_realm_id(&Did::new(
+                ALICE_DID.to_owned(),
+            )?))?,
+        },
+        Did::new(ALICE_DID.to_owned())?,
+        actor_seq,
+        arkret::Hlc::new(format!(
+            "{:012x}-{:04x}-a13f9c2e",
+            canonical_now().timestamp_millis(),
+            actor_seq
+        ))?,
+        payload,
+    )?;
+    event.prev_refs = prev_refs;
+    event.seal_basis = Some(frontier.seal_basis());
+    sign_rotation_event(&mut event, signer)?;
+    Ok(event)
 }
 
 /// `ak.self.agent.command.renew_pairing` (decision 0007): an expired pairing
