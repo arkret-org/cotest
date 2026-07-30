@@ -13,8 +13,8 @@
 # JSON redaction also covers every field the did_in_token_field detector can
 # match (token | push_key | credential).
 
-$script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential"
-$script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential"
+$script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 # Candidate shape only: a quoted string containing a run of 12+ short words.
 # Surrounding prose and punctuation are allowed because logs commonly embed a
 # mnemonic after text such as "recovery phrase:". Detection additionally
@@ -93,6 +93,34 @@ function Get-SecretLeakPatterns {
     )
 }
 
+function Add-SecretLeaksFromReader {
+    param(
+        [Parameter(Mandatory = $true)]$Reader,
+        [Parameter(Mandatory = $true)][string]$DisplayPath,
+        [Parameter(Mandatory = $true)]$Patterns,
+        [Parameter(Mandatory = $true)]$Leaks
+    )
+
+    $lineNo = 0
+    while (-not $Reader.EndOfStream) {
+        $line = $Reader.ReadLine()
+        $lineNo += 1
+        foreach ($pattern in $Patterns) {
+            if ($line -match $pattern.pattern) {
+                if ($pattern.validate -and -not (& $pattern.validate $line)) {
+                    continue
+                }
+                $Leaks.Add([pscustomobject]@{
+                        path    = $DisplayPath
+                        line    = $lineNo
+                        pattern = $pattern.name
+                        preview = ConvertTo-SecretPreview -Line $line
+                    })
+            }
+        }
+    }
+}
+
 function Find-SecretLeaks {
     param([Parameter(Mandatory = $true)][string[]]$ScanRoots)
 
@@ -108,22 +136,58 @@ function Find-SecretLeaks {
             @(Get-Item $root)
         }
         foreach ($file in $files) {
-            $lineNo = 0
-            foreach ($line in Get-Content -Path $file.FullName -ErrorAction SilentlyContinue) {
-                $lineNo += 1
-                foreach ($pattern in $patterns) {
-                    if ($line -match $pattern.pattern) {
-                        if ($pattern.validate -and -not (& $pattern.validate $line)) {
-                            continue
+            if ($file.Extension -ieq ".zip") {
+                try {
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    $archive = [System.IO.Compression.ZipFile]::OpenRead($file.FullName)
+                    try {
+                        foreach ($entry in $archive.Entries) {
+                            if ($entry.Length -eq 0 -or $entry.Length -gt 64MB) {
+                                continue
+                            }
+                            $stream = $entry.Open()
+                            $reader = New-Object System.IO.StreamReader($stream, $true)
+                            try {
+                                Add-SecretLeaksFromReader `
+                                    -Reader $reader `
+                                    -DisplayPath "$($file.FullName)!$($entry.FullName)" `
+                                    -Patterns $patterns `
+                                    -Leaks $leaks
+                            }
+                            finally {
+                                $reader.Dispose()
+                                $stream.Dispose()
+                            }
                         }
-                        $leaks.Add([pscustomobject]@{
-                                path    = $file.FullName
-                                line    = $lineNo
-                                pattern = $pattern.name
-                                preview = ConvertTo-SecretPreview -Line $line
-                            })
+                    }
+                    finally {
+                        $archive.Dispose()
                     }
                 }
+                catch {
+                    # A corrupt archive is covered by ordinary artifact
+                    # integrity checks; keep scanning every other artifact.
+                }
+                continue
+            }
+            try {
+                $stream = [System.IO.File]::OpenRead($file.FullName)
+                $reader = New-Object System.IO.StreamReader($stream, $true)
+                try {
+                    Add-SecretLeaksFromReader `
+                        -Reader $reader `
+                        -DisplayPath $file.FullName `
+                        -Patterns $patterns `
+                        -Leaks $leaks
+                }
+                finally {
+                    $reader.Dispose()
+                    $stream.Dispose()
+                }
+            }
+            catch {
+                # Unreadable artifacts are covered by ordinary artifact
+                # integrity checks; keep scanning every other artifact.
             }
         }
     }

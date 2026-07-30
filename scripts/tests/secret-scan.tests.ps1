@@ -42,6 +42,9 @@ try {
         [pscustomobject]@{ name = "json-recovery-key.log"; line = "{`"recovery_key`":`"$mnemonic`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-hkdf-prk.log"; line = "{`"hkdf_prk`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-secret-b64u.log"; line = "{`"secret_b64u`":`"$hexSecret`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "json-plaintext-keybag.log"; line = "{`"plaintext_keybag`":`"$hexSecret`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "json-mls-epoch-secret.log"; line = "{`"epoch_secret`":`"$hexSecret`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "json-mls-private-state.log"; line = "{`"private_state`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "query-root-seed.log"; line = "GET /callback?root_seed=$hexSecret&state=x"; pattern = "query_secret_field" },
         [pscustomobject]@{ name = "bare-mnemonic-string.log"; line = "wrote backup payload `"$mnemonic`" to store"; pattern = "bip39_mnemonic_sequence" },
         [pscustomobject]@{ name = "embedded-mnemonic-string.log"; line = "note `"wrote backup payload $mnemonic`" persisted"; pattern = "bip39_mnemonic_sequence" },
@@ -54,6 +57,16 @@ try {
     foreach ($vector in $planted) {
         Set-Content -Path (Join-Path $scanRoot $vector.name) -Value $vector.line -Encoding utf8
     }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $traceSource = Join-Path $scanRoot "trace-source"
+    New-Item -ItemType Directory -Path $traceSource | Out-Null
+    Set-Content `
+        -Path (Join-Path $traceSource "network.json") `
+        -Value "{`"mls_secret`":`"$hexSecret`"}" `
+        -Encoding utf8
+    $traceZip = Join-Path $scanRoot "trace.zip"
+    [System.IO.Compression.ZipFile]::CreateFromDirectory($traceSource, $traceZip)
+    Remove-Item -LiteralPath $traceSource -Recurse -Force
 
     # Clean lines that must NOT trigger any pattern. The last two match the
     # BIP-39 candidate regex (12+ quoted lowercase 3-8 letter words) but are
@@ -72,6 +85,11 @@ try {
         $hit = @($leaks | Where-Object { (Split-Path -Leaf $_.path) -eq $vector.name -and $_.pattern -eq $vector.pattern })
         Assert-True ($hit.Count -ge 1) "expected $($vector.name) to be detected as $($vector.pattern); got patterns: $(@($leaks | Where-Object { (Split-Path -Leaf $_.path) -eq $vector.name } | ForEach-Object { $_.pattern }) -join ', ')"
     }
+    $traceHit = @($leaks | Where-Object {
+            $_.path -like "*trace.zip!network.json" -and
+            $_.pattern -eq "json_secret_field"
+        })
+    Assert-True ($traceHit.Count -eq 1) "expected the secret inside trace.zip to be detected exactly once"
 
     $cleanHits = @($leaks | Where-Object { (Split-Path -Leaf $_.path) -eq "clean.log" })
     Assert-True ($cleanHits.Count -eq 0) "clean.log must not trigger the scanner; got: $(@($cleanHits | ForEach-Object { $_.pattern }) -join ', ')"

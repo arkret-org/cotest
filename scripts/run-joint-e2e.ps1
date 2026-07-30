@@ -157,6 +157,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
+. (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 
 $StaridServiceId = $null
 $SolandServiceId = $null
@@ -3610,6 +3611,72 @@ if (-not (Test-Path $junitPath)) {
 
 $scenarioLines | Set-Content -Path $scenariosReport -Encoding UTF8
 
+$secretScanRoots = New-Object System.Collections.Generic.List[string]
+if (Test-Path -LiteralPath $serviceLogDir) {
+    $secretScanRoots.Add($serviceLogDir)
+}
+foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue) {
+    if ($directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
+        $secretScanRoots.Add($directory.FullName)
+    }
+}
+foreach ($file in Get-ChildItem -LiteralPath $jointDir -File -ErrorAction SilentlyContinue) {
+    if ($file.Name -match '(?i)(\.log$|\.ndjson$|crash|checkpoint|telemetry)') {
+        $secretScanRoots.Add($file.FullName)
+    }
+}
+$secretScanSelfTest = Join-Path $PSScriptRoot "tests\secret-scan.tests.ps1"
+$psHostExe = (Get-Process -Id $PID).Path
+& $psHostExe -NoProfile -ExecutionPolicy Bypass -File $secretScanSelfTest | Out-Null
+$secretScanSelfTestStatus = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
+$secretLeaks = @(Find-SecretLeaks -ScanRoots $secretScanRoots.ToArray())
+$secretScanFileCount = 0
+foreach ($root in $secretScanRoots) {
+    if ((Get-Item -LiteralPath $root).PSIsContainer) {
+        $secretScanFileCount += @(Get-ChildItem -LiteralPath $root -Recurse -File).Count
+    } else {
+        $secretScanFileCount += 1
+    }
+}
+$secretScan = [pscustomobject]@{
+    generated_at = (Get-Date).ToString("o")
+    status = if ($secretScanSelfTestStatus -eq "passed" -and $secretLeaks.Count -eq 0) {
+        "passed"
+    } else {
+        "failed"
+    }
+    self_test = $secretScanSelfTestStatus
+    scanned_roots = $secretScanRoots.ToArray()
+    scanned_files = $secretScanFileCount
+    leaks = $secretLeaks
+}
+if ($secretScan.status -ne "passed") {
+    $exitCode = 1
+}
+$secretScanJson = Join-Path $jointDir "secret-scan.json"
+$secretScanMd = Join-Path $jointDir "secret-scan.md"
+$secretScan | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $secretScanJson -Encoding UTF8
+$secretScanLines = @(
+    "# joint e2e secret scan",
+    "",
+    "- status: $($secretScan.status)",
+    "- self_test: $($secretScan.self_test)",
+    "- scanned_files: $($secretScan.scanned_files)",
+    "- leaks: $($secretScan.leaks.Count)",
+    ""
+)
+if ($secretScan.leaks.Count -eq 0) {
+    $secretScanLines += "No unredacted secret-shaped material was found in runtime stores, logs, telemetry, checkpoints, crash artifacts, or nested trace archives."
+} else {
+    $secretScanLines += "| File | Line | Pattern | Preview |"
+    $secretScanLines += "| --- | --- | --- | --- |"
+    foreach ($leak in $secretScan.leaks) {
+        $preview = $leak.preview -replace '\|', '\|'
+        $secretScanLines += "| $($leak.path) | $($leak.line) | $($leak.pattern) | ``$preview`` |"
+    }
+}
+$secretScanLines | Set-Content -LiteralPath $secretScanMd -Encoding UTF8
+
 $summary = [pscustomobject]@{
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
     run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
@@ -3666,6 +3733,9 @@ $summary = [pscustomobject]@{
     managed_service_failure_count = $managedServiceFailures.Count
     managed_service_failures_json = $managedServiceFailuresJson
     managed_service_failures_report = $managedServiceFailuresMd
+    secret_scan_status = $secretScan.status
+    secret_scan_json = $secretScanJson
+    secret_scan_report = $secretScanMd
     gap_todos = $gapTodosPath
     fixme_promotion_checklist = $fixmeChecklistPath
     services = $serviceLogDir
@@ -3727,6 +3797,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - managed_service_failure_count: $($summary.managed_service_failure_count)
 - managed_service_failures_json: $($summary.managed_service_failures_json)
 - managed_service_failures_report: $($summary.managed_service_failures_report)
+- secret_scan_status: $($summary.secret_scan_status)
+- secret_scan_json: $($summary.secret_scan_json)
+- secret_scan_report: $($summary.secret_scan_report)
 - gap_todos: $($summary.gap_todos)
 - fixme_promotion_checklist: $($summary.fixme_promotion_checklist)
 - services: $($summary.services)
@@ -3793,6 +3866,7 @@ if ($TeabayBaseUrl) {
 Write-Host "  screenshots : $screenshotDir"
 Write-Host "  visual base : $visualBaselineDir"
 Write-Host "  report      : $summaryMd"
+Write-Host "  secret scan : $($summary.secret_scan_status) ($secretScanMd)"
 if ($isStandaloneJointSuite) {
     Write-Host "  latest      : $(Join-Path $OutputRoot 'latest\joint-e2e')"
 }
