@@ -20,14 +20,14 @@
             "realm_metadata",
             "creator_membership",
             "founding_authority",
-            "founding_grant",
+            "authority_root",
             "base_policy"
           ],
           "covered_cells": [
             "realm_metadata",
             "creator_membership",
             "founding_authority",
-            "founding_grant",
+            "authority_root",
             "base_policy"
           ],
           "seal": {

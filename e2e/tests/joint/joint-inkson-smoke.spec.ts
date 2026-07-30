@@ -96,7 +96,15 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       expect(bootstrap, "Inkson Realm bootstrap POST batch").toBeTruthy();
       expect(bootstrap![0].actor_seq).toBe(0);
       expect(bootstrap![0].prev_refs).toEqual([]);
-      expect(bootstrap![1].kind).toBe("ak.capability.grant");
+      // realm-and-space.md section 2.5: create is followed only by the closed
+      // bootstrap facet whitelist. v1 has no founding `ak.capability.grant`;
+      // the creator's root authority is the authority-root cell the create
+      // Event's registered reducer contract writes.
+      expect(
+        bootstrap!.some((event) => event.kind === "ak.capability.grant"),
+        "genesis batch carries no capability grant",
+      ).toBe(false);
+      expect(bootstrap![1].kind).toBe("ak.realm.join_rule");
       expect(bootstrap![1].actor_seq).toBe(1);
       expect(bootstrap![1].prev_refs).toEqual([bootstrap![0].event_id]);
 

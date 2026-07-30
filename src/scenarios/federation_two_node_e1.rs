@@ -150,9 +150,11 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     );
     let mut bootstrap_events =
         realm_bootstrap_event_batch(&actor_a.actor, &realm_id, realm_payload)?;
-    let founding_grant_id = bootstrap_events[1]["event_id"]
+    // The genesis unit is `ak.realm.create` plus the closed follow-up facets, so
+    // the create Event is this actor's causal predecessor for the rest of the batch.
+    let realm_create_id = bootstrap_events[0]["event_id"]
         .as_str()
-        .context("founding grant lacks event_id")?
+        .context("Realm create lacks event_id")?
         .to_owned();
     let mut delivery_policy = event_envelope_with_chain(
         &actor_a.actor,
@@ -163,8 +165,8 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
             "allowed_binding_sources": ["explicit"],
             "allowed_recipient_services": [server_b.service_id()]
         }),
-        2,
-        Some(&founding_grant_id),
+        1,
+        Some(&realm_create_id),
     );
     attach_delivery_policy_cell_contract(&mut delivery_policy)?;
     refresh_event_proof(&mut delivery_policy)?;
@@ -189,7 +191,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
                 "resolved_at": "2026-05-02T00:00:00.000Z"
             }),
         )?,
-        3,
+        2,
         Some(&delivery_policy_id),
     );
     let binding_event_id = binding["event_id"]

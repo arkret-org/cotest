@@ -367,6 +367,9 @@ fn federation_realm_payload(
                 "controller_organization": creator,
                 "recovery_controller_organizations": ["did:web:recovery-org-federation-contract.cotest.local"]
             },
+            "capability_action_registry_digest":
+                arkret::current_capability_action_registry_digest()
+                    .expect("embedded capability-action registry"),
             "created_at": "2026-05-02T00:00:00.000Z"
         }
     })
@@ -490,7 +493,6 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     .map(serde_json::from_value::<Event>)
     .collect::<Result<Vec<_>, _>>()?;
     let realm_create = bootstrap_events.remove(0);
-    let founding_grant = bootstrap_events.remove(0);
     let realm_create_event_id = realm_create.event_id.clone();
     // The originating service is itself the Realm's delivery-bound member (its
     // events are homed on remote.example), so a peer read by that same service
@@ -501,8 +503,8 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.realm.delivery_binding_policy",
         realm_id,
         remote_service_id,
-        2,
-        Some(&founding_grant.event_id),
+        1,
+        Some(&realm_create_event_id),
         json!({
             "realm_id": realm_id,
             "allowed_binding_sources": ["explicit"],
@@ -516,7 +518,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.member.state",
         realm_id,
         remote_service_id,
-        3,
+        2,
         Some(&delivery_policy.event_id),
         member_join_payload_with_delivery_binding(
             realm_id,
@@ -537,7 +539,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ak.message.create",
         realm_id,
         remote_service_id,
-        4,
+        3,
         Some(&member_binding.event_id),
         message_create_text_payload(realm_id, "from federation")?,
     )?;
@@ -547,7 +549,6 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         realm_id,
         vec![
             realm_create.clone(),
-            founding_grant.clone(),
             delivery_policy.clone(),
             member_binding.clone(),
         ],

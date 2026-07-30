@@ -836,6 +836,9 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
                 "controller_organization": ctx.service_id,
                 "recovery_controller_organizations": [ctx.service_id]
             },
+            "capability_action_registry_digest":
+                arkret::current_capability_action_registry_digest()
+                    .expect("embedded capability-action registry"),
             "created_at": "2026-05-22T10:00:00.000Z"
         }
     });

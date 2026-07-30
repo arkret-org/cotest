@@ -9,7 +9,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   queryRealmEventsApi,
-  REALM_FOUNDING_GRANT_ACTIONS,
+  sdkCapabilityActionRegistryDigest,
   sendMessageApi,
   typedId,
 } from "../../helpers/soland-api";
@@ -20,7 +20,7 @@ import {
 } from "../../helpers/users";
 
 test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
-  test("authors genesis as 0 -> 1 -> 2 without a pre-existing frontier", async ({
+  test("authors genesis as 0 -> 1 without a pre-existing frontier", async ({
     request,
   }) => {
     const alice = uniqueUser("events-batch-alice");
@@ -49,36 +49,36 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const timeline = await queryRealmEventsApi(request, aliceToken, realmId);
     const events = (timeline.events ?? []) as Array<Record<string, unknown>>;
     const create = events.find((event) => event.kind === "ak.realm.create");
-    const foundingGrant = events.find(
-      (event) => event.kind === "ak.capability.grant",
-    );
     const plaintextVisibleServices = events.find(
       (event) => event.kind === "ak.realm.plaintext_visible_services",
     );
     expect(create, "accepted Realm create Event").toBeTruthy();
-    expect(foundingGrant, "accepted founding grant Event").toBeTruthy();
     expect(
       plaintextVisibleServices,
       "accepted plaintext-visible-services facet Event",
     ).toBeTruthy();
+    // realm-and-space.md section 2.5: v1 deleted the founding
+    // `ak.capability.grant` slot. Genesis authority is the authority-root cell
+    // the create Event's registered reducer contract writes, so an ordinary
+    // Realm genesis batch MUST carry no capability grant at all.
+    expect(
+      events.some((event) => event.kind === "ak.capability.grant"),
+      "genesis carries no founding capability grant",
+    ).toBe(false);
     expect(create!.actor_seq).toBe(0);
     expect(create!.prev_refs).toEqual([]);
     expect(
       (create!.payload as { object?: Record<string, unknown> }).object,
     ).not.toHaveProperty("plaintext_visible_services");
-    expect(foundingGrant!.actor_seq).toBe(1);
-    expect(foundingGrant!.prev_refs).toEqual([create!.event_id]);
+    // The create-locked registry basis the reducer copies into the
+    // authority-root cell.
     expect(
-      (
-        foundingGrant!.payload as {
-          grant?: { actions?: string[] };
-        }
-      ).grant?.actions,
-    ).toEqual([...REALM_FOUNDING_GRANT_ACTIONS]);
-    expect(plaintextVisibleServices!.actor_seq).toBe(2);
-    expect(plaintextVisibleServices!.prev_refs).toEqual([
-      foundingGrant!.event_id,
-    ]);
+      (create!.payload as { object?: Record<string, unknown> }).object,
+    ).toMatchObject({
+      capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
+    });
+    expect(plaintextVisibleServices!.actor_seq).toBe(1);
+    expect(plaintextVisibleServices!.prev_refs).toEqual([create!.event_id]);
 
     const frontierResponse = await request.get(
       `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(realmId)}`,
@@ -98,7 +98,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       kind: "realm_actor",
       realm_id: realmId,
       actor_id: alice.did,
-      next_actor_seq: 3,
+      next_actor_seq: 2,
       frontier_event_ids: [plaintextVisibleServices!.event_id],
     });
 
@@ -108,7 +108,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       realmId,
       "owner write after registered Realm genesis",
     );
-    expect(message.actor_seq).toBe(3);
+    expect(message.actor_seq).toBe(2);
     expect(message.prev_refs).toEqual([plaintextVisibleServices!.event_id]);
   });
 });

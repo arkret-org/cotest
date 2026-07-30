@@ -183,15 +183,14 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     .map(serde_json::from_value::<Event>)
     .collect::<Result<Vec<_>, _>>()?;
     let realm_create = bootstrap_events.remove(0);
-    let founding_grant = bootstrap_events.remove(0);
     let realm_create_event_id = realm_create.event_id.clone();
     let mut delivery_policy = signed_federation_event(
         DELIVERY_POLICY_EVENT_ID,
         "ak.realm.delivery_binding_policy",
         &realm_id,
         &alice_did,
-        2,
-        Some(&founding_grant.event_id),
+        1,
+        Some(&realm_create_event_id),
         json!({
             "realm_id": realm_id,
             "allowed_binding_sources": ["explicit"],
@@ -205,7 +204,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.member.state",
         &realm_id,
         &alice_did,
-        3,
+        2,
         Some(&delivery_policy.event_id),
         member_delivery_binding_payload(&realm_id, &alice_did, server_a.service_id()),
     )?;
@@ -214,7 +213,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.member.state",
         &realm_id,
         &alice_did,
-        4,
+        3,
         Some(&alice_delivery_binding.event_id),
         member_delivery_binding_payload(&realm_id, &bob_did, server_b.service_id()),
     )?;
@@ -222,7 +221,6 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &realm_id,
         vec![
             realm_create,
-            founding_grant,
             delivery_policy,
             alice_delivery_binding,
             bob_join,
@@ -259,7 +257,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.message.create",
         &realm_id,
         &alice_did,
-        5,
+        4,
         Some(&EventId::new(BOB_JOIN_EVENT_ID.to_owned())?),
         message_create_text_payload(&realm_id, "hello bob from server a")?,
     )?;
@@ -398,15 +396,14 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     .map(serde_json::from_value::<Event>)
     .collect::<Result<Vec<_>, _>>()?;
     let e2ee_realm_create = e2ee_bootstrap.remove(0);
-    let e2ee_founding_grant = e2ee_bootstrap.remove(0);
     let e2ee_realm_create_event_id = e2ee_realm_create.event_id.clone();
     let mut e2ee_delivery_policy = signed_federation_event(
         E2EE_DELIVERY_POLICY_EVENT_ID,
         "ak.realm.delivery_binding_policy",
         E2EE_REALM_ID,
         &alice_did,
-        2,
-        Some(&e2ee_founding_grant.event_id),
+        1,
+        Some(&e2ee_realm_create_event_id),
         json!({
             "realm_id": E2EE_REALM_ID,
             "allowed_binding_sources": ["explicit"],
@@ -420,19 +417,14 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.member.state",
         E2EE_REALM_ID,
         &alice_did,
-        3,
+        2,
         Some(&e2ee_delivery_policy.event_id),
         member_delivery_binding_payload(E2EE_REALM_ID, &bob_did, server_b.service_id()),
     )?;
     let e2ee_delivery_frontier = vec![e2ee_bob_join.event_id.clone()];
     let e2ee_bootstrap_body = peer_events_submit_body(
         E2EE_REALM_ID,
-        vec![
-            e2ee_realm_create,
-            e2ee_founding_grant,
-            e2ee_delivery_policy,
-            e2ee_bob_join,
-        ],
+        vec![e2ee_realm_create, e2ee_delivery_policy, e2ee_bob_join],
         Some("a-to-b-e2ee-bootstrap-01"),
     )?;
     let e2ee_url = server_b.url("/_arkret/peer/events");
@@ -477,7 +469,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.mls.genesis",
         E2EE_REALM_ID,
         &alice_did,
-        4,
+        3,
         Some(&e2ee_delivery_frontier[0]),
         mls_genesis_payload(E2EE_REALM_ID, &alice_did),
     )?;
@@ -486,7 +478,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.mls.welcome",
         E2EE_REALM_ID,
         &alice_did,
-        5,
+        4,
         Some(&e2ee_genesis.event_id),
         mls_welcome_payload(
             E2EE_REALM_ID,
@@ -504,7 +496,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.mls.commit",
         E2EE_REALM_ID,
         &alice_did,
-        6,
+        5,
         Some(&e2ee_welcome.event_id),
         mls_commit_payload(E2EE_REALM_ID),
     )?;
@@ -514,7 +506,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ak.message.create",
         E2EE_REALM_ID,
         &alice_did,
-        7,
+        6,
         Some(&e2ee_commit.event_id),
         encrypted_message_payload(E2EE_REALM_ID),
     )?;
@@ -761,6 +753,13 @@ async fn create_federated_realm(
     Ok(realm_id)
 }
 
+/// Create-locked genesis registry basis (realm-and-space.md section 2.5): the
+/// reducer copies it verbatim into the Realm authority-root cell.
+fn registry_digest() -> arkret_identifiers::Hash {
+    arkret::current_capability_action_registry_digest()
+        .expect("embedded capability-action registry")
+}
+
 fn federated_realm_payload(realm_id: &str, alice_did: &str, visible_services: &[String]) -> Value {
     // soland gates plaintext (`encryption_profile: "none"`) message delivery on
     // each receiving service holding the `message_content` plaintext data class
@@ -805,6 +804,7 @@ fn federated_realm_payload(realm_id: &str, alice_did: &str, visible_services: &[
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
+            "capability_action_registry_digest": registry_digest(),
             "created_at": "2026-05-02T00:00:00.000Z"
         }
     })
@@ -856,6 +856,7 @@ fn federated_e2ee_realm_payload(realm_id: &str, alice_did: &str) -> Value {
                 "controller_organization": "did:web:federation-collaboration.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
+            "capability_action_registry_digest": registry_digest(),
             "created_at": "2026-05-02T00:00:00.000Z"
         }
     })
@@ -1295,6 +1296,7 @@ async fn bootstrap_test_device_authorization(
             realm_id: realm_id.clone(),
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+            capability_action_registry_digest: registry_digest(),
             event_id: EventId::new(ALICE_PCR_CREATE_EVENT_ID.to_owned())?,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,

@@ -81,7 +81,7 @@ async fn create_adapter_realm(
     )
     .await?;
     assert_eq!(submit["status"], "accepted");
-    assert_eq!(submit["accepted"].as_array().map(Vec::len), Some(2));
+    assert_eq!(submit["accepted"].as_array().map(Vec::len), Some(1));
 
     Ok(ADAPTER_REALM_ID.to_owned())
 }
@@ -111,6 +111,9 @@ fn adapter_realm_payload(realm_id: &str, actor_id: &str, title: &str) -> Value {
                 "controller_organization": "did:web:protocol-payloads.cotest.local",
                 "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
+            "capability_action_registry_digest":
+                arkret::current_capability_action_registry_digest()
+                    .expect("embedded capability-action registry"),
             "created_at": "2026-05-02T00:00:00.000Z"
         }
     })

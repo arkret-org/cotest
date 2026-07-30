@@ -10,8 +10,9 @@ coauth processes, including cross-principal chat projections.
 1. Register Alice and Bob through soland.
 2. Open two isolated inkson browser contexts with dev sessions.
 3. Alice creates a public, invite-governed, plaintext realm from the inkson UI;
-   the submitted genesis batch starts at `actor_seq=0`, links its founding grant
-   at sequence 1, and performs no combined frontier preflight for that new Realm.
+   the submitted genesis batch starts at `actor_seq=0`, links its closed
+   bootstrap follow-up facets from sequence 1 onward, and performs no combined
+   frontier preflight for that new Realm.
 4. Alice sends a plaintext message through real soland.
 5. Alice sees the message in the inkson timeline UI.
 6. Register a third DPoP principal, add it to Alice's Realm, and project it as

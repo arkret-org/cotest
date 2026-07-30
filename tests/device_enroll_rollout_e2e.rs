@@ -295,6 +295,7 @@ fn principal_bootstrap_request(
             realm_id,
             trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+            capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
             event_id: EventId::new("ak:event:01904100-0000-7000-8000-00000000e100")?,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,

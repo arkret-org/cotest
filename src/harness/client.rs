@@ -87,17 +87,13 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
-        // The founding capability grant id: a DataEvent that writes a cell has
-        // to name a covering grant in `refs[role=authorized_by]`, so the caller
-        // needs it to author one.
-        let founding_grant_id = events
-            .iter()
-            .find(|event| event["kind"].as_str() == Some("ak.capability.grant"))
-            .and_then(|event| event["payload"]["grant_id"].as_str())
-            .map(ToOwned::to_owned);
+        // A DataEvent that writes a cell has to name a covering authority in
+        // `refs[role=authorized_by]` / `authorization_ref`. For the creator that
+        // authority is the Realm authority-root cell the create contract wrote,
+        // not a grant id: v1 genesis issues no capability grant at all.
         Ok(json!({
             "realm_id": realm_id,
-            "founding_grant_id": founding_grant_id,
+            "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
             "event_response": event_response,
         }))
     }

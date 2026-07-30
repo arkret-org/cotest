@@ -52,14 +52,6 @@ export type SignedEventEnvelopeArgs = {
 
 export type EventProofMode = "dev-proof" | "detached-jws";
 
-export const REALM_FOUNDING_GRANT_ACTIONS = [
-  "ak.realm.admin",
-  "ak.capability.grant",
-  "ak.capability.revoke",
-  "ak.realm_key.share",
-  "ak.message.create",
-] as const;
-
 type RegisteredEventSigner = {
   verificationMethod: string;
   signingSeedB64url: string;
@@ -325,8 +317,12 @@ export async function createRealmApi(
     digest_algorithm: "sha256",
     // This helper creates Principal-Server-hosted collaboration Realms. The
     // service owns the notary key and materializes Event Seals; the principal
-    // remains the Realm creator and founding capability holder.
+    // remains the Realm creator and root authority-cell controller.
     notary: singleDidNotary(solandServiceId(opts.server)),
+    // Create-locked (realm-and-space.md section 2.5): the reducer copies this
+    // into the Realm authority-root cell, which is what gives the creator
+    // effective `ak.realm.owner`. v1 issues no genesis self-grant.
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     created_at: createdAt,
   };
   const realmCreateCell = "ak:cell:ak.component.realm.create.v1:null";
@@ -348,49 +344,7 @@ export async function createRealmApi(
       object: realmObject,
     },
   });
-  const foundingGrantId = typedId("grant");
-  const unsignedFoundingGrant: Record<string, unknown> = {
-    id: foundingGrantId,
-    schema: "ak.schema.capability.v1",
-    realm_id: realmId,
-    issuer: ownerDid,
-    subject: ownerDid,
-    actions: [...REALM_FOUNDING_GRANT_ACTIONS],
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
-    resources: [
-      {
-        kind: "realm",
-        realm_id: realmId,
-        match_scope: "realm_wide",
-      },
-    ],
-    issued_at: createdAt,
-  };
-  const foundingGrant = {
-    ...unsignedFoundingGrant,
-    proofs: [
-      buildCapabilityGrantProof({
-        issuerDid: ownerDid,
-        payload: unsignedFoundingGrant,
-        createdAt,
-      }),
-    ],
-  };
-  const foundingGrantEventId = typedId("event");
-  const foundingGrantEvent = signedEventEnvelope({
-    eventId: foundingGrantEventId,
-    actorDid: ownerDid,
-    realmId,
-    kind: "ak.capability.grant",
-    actorSeq: 1,
-    createdAt,
-    prevRefs: [realmCreateEventId],
-    payload: {
-      grant_id: foundingGrantId,
-      grant: foundingGrant,
-    },
-  });
-  const bootstrapEvents = [realmCreateEvent, foundingGrantEvent];
+  const bootstrapEvents = [realmCreateEvent];
   if (plaintextVisibleServices.length > 0) {
     const plaintextVisibleServicesCell =
       "ak:cell:ak.component.realm.plaintext_visible_services.v1:null";
@@ -399,9 +353,9 @@ export async function createRealmApi(
         actorDid: ownerDid,
         realmId,
         kind: "ak.realm.plaintext_visible_services",
-        actorSeq: 2,
+        actorSeq: 1,
         createdAt,
-        prevRefs: [foundingGrantEventId],
+        prevRefs: [realmCreateEventId],
         preconditions: [
           {
             cell: plaintextVisibleServicesCell,

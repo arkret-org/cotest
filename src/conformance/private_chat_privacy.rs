@@ -723,7 +723,6 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
             "claimed_keypackage",
             "claim_receipt",
             "realm_event",
-            "founding_grant_event",
             "creator_member_event",
             "peer_member_event",
             "main_strand_event",
@@ -751,7 +750,6 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
     required_field(value, "claimed_keypackage")?;
     for (field, kind) in [
         ("realm_event", "ak.realm.create"),
-        ("founding_grant_event", "ak.capability.grant"),
         ("peer_member_event", "ak.member.state"),
         ("main_strand_event", "ak.strand.create"),
         ("binding_event", "ak.direct_conversation.bound"),

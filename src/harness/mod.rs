@@ -243,6 +243,11 @@ pub(crate) fn realm_create_payload(
                 "did:webvh:z6mkfixture:organization.recovery.soland.local"
             ],
         },
+        // Create-locked (realm-and-space.md section 2.5): the reducer copies this
+        // verbatim into the Realm authority-root cell, so it MUST be the digest
+        // the harness itself resolves rather than a literal.
+        "capability_action_registry_digest": arkret::current_capability_action_registry_digest()
+            .expect("embedded capability-action registry is available to the cotest harness"),
         "created_at": "2026-05-02T00:00:00.000Z",
     });
     // Realm-level `sync_endpoints` (ak.schema.realm.v1#/properties/sync_endpoints):

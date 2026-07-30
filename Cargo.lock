@@ -8417,6 +8417,7 @@ dependencies = [
 name = "soland-domain"
 version = "0.3.0"
 dependencies = [
+ "arkret-bootstrap",
  "arkret-canonical",
  "arkret-event-draft",
  "arkret-hlc",

@@ -30,6 +30,7 @@ import {
   createRealmApi,
   prepareSignedEventCbaApi,
   refreshEventEnvelopeProof,
+  sdkCapabilityActionRegistryDigest,
   signedEventEnvelope,
   singleDidNotary,
   submitSignedEventApi,
@@ -121,6 +122,9 @@ function realmCreateEnvelope(args: {
     notary_profile: "single_did",
     digest_algorithm: "sha256",
     notary: singleDidNotary(args.ownerDid),
+    // Create-locked genesis basis for the Realm authority-root cell
+    // (realm-and-space.md section 2.5).
+    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     created_at: createdAt,
   };
   if (args.contentScheme) {

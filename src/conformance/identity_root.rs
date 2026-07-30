@@ -267,6 +267,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
                 "did:webvh:z6mkfixture:alice.example#entry-0",
                 DID_INCEPTION_REF_ROLE,
             ),
+            capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
             event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000001")?,
             created_at,
             hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,

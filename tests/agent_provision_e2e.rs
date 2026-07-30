@@ -1689,6 +1689,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
                 prepared_inception.version_id.clone(),
                 arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
+            capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
             event_id: arkret::EventId::new(
                 "ak:event:01904100-0000-7000-8000-00000000a910".to_owned(),
             )?,
@@ -2792,6 +2793,9 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                             "controller_organization": ALICE_DID,
                             "recovery_controller_organizations": [ALICE_DID]
                         },
+                        "capability_action_registry_digest":
+                            arkret::current_capability_action_registry_digest()
+                                .expect("embedded capability-action registry"),
                         "created_at": "2026-05-02T00:00:00.000Z"
                     }
                 }),

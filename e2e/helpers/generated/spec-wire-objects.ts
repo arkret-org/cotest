@@ -101,6 +101,7 @@ export type RealmObject = {
     "recovery_controller_organizations"?: string[];
     "kind": "single_did" | "threshold" | "open_set" | "mixed";
   };
+  "capability_action_registry_digest": string;
   "revocation_freshness_window_ms"?: number;
   "recovery_witness_freshness_window_ms"?: number;
   "receipt_sla_ms"?: number;
@@ -348,7 +349,7 @@ export type InviteDeliveryRequestBody = {
     };
     "actor_id": string;
     "executed_by"?: string;
-    "authorization_ref"?: string;
+    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -689,7 +690,7 @@ export type EventFederationSubmission = {
     };
     "actor_id": string;
     "executed_by"?: string;
-    "authorization_ref"?: string;
+    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;

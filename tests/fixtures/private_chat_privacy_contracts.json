@@ -166,11 +166,6 @@
           "kind": "ak.realm.create",
           "proofs": []
         },
-        "founding_grant_event": {
-          "event_id": "ak:event:0196b39d-0000-7000-8000-000000000508",
-          "kind": "ak.capability.grant",
-          "proofs": []
-        },
         "peer_member_event": {
           "event_id": "ak:event:0196b39d-0000-7000-8000-000000000505",
           "kind": "ak.member.state",

@@ -246,6 +246,12 @@ pub fn realm_bootstrap_event_batch(
     )
 }
 
+/// The ordinary Realm genesis unit (`models/realm-and-space.md` section 2.5).
+///
+/// v1 has no genesis `ak.capability.grant` slot: the creator's root authority is
+/// the `ak.component.realm.authority_root.v1` cell that the `ak.realm.create`
+/// reducer contract writes. Callers that need to name that authority on a later
+/// Event use [`REALM_AUTHORITY_ROOT_CELL`], not a grant id.
 pub fn realm_bootstrap_event_batch_with_signing_seed(
     actor: &str,
     realm_id: &str,
@@ -253,7 +259,6 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     signing_seed: [u8; 32],
     verification_method: &str,
 ) -> Result<Vec<Value>> {
-    let grant_id = next_typed_id("grant");
     let realm_event = event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
@@ -264,64 +269,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         signing_seed,
         verification_method,
     );
-    let registry_digest = arkret::current_capability_action_registry_digest()?;
-    let mut grant = json!({
-        "id": grant_id,
-        "schema": "ak.schema.capability.v1",
-        "realm_id": realm_id,
-        "issuer": actor,
-        "subject": actor,
-        "actions": arkret_policy::realm_bootstrap::REALM_FOUNDING_GRANT_ACTIONS,
-        "capability_action_registry_digest": registry_digest,
-        "resources": [{
-            "kind": "realm",
-            "realm_id": realm_id,
-            "match_scope": "realm_wide"
-        }],
-        "issued_at": "2026-05-02T00:00:00.000Z",
-        "proofs": []
-    });
-    let mut typed_grant: arkret::CapabilityGrant = serde_json::from_value(grant.clone())?;
-    let mut grant_proof = arkret::PayloadProof {
-        kind: arkret::proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: verification_method.to_owned(),
-        payload_digest: typed_grant.payload_digest()?,
-        created_at: DateTime::parse_from_rfc3339("2026-05-02T00:00:00.001Z")?.with_timezone(&Utc),
-        domain: None,
-        audience: None,
-        proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
-        jws: String::new(),
-    };
-    let binding = typed_grant.canonical_proof_binding_bytes(&grant_proof)?;
-    grant_proof.jws = arkret_signatures::sign_eddsa_detached_jws(
-        &ed25519_dalek::SigningKey::from_bytes(&signing_seed),
-        &binding,
-    )?;
-    typed_grant.proofs.push(grant_proof);
-    grant = serde_json::to_value(typed_grant)?;
-    let founding_event = event_envelope_with_chain_and_signing_identity(
-        actor,
-        realm_id,
-        "ak.capability.grant",
-        json!({
-            "grant_id": grant_id,
-            "grant": grant
-        }),
-        Some(1),
-        vec![
-            EventId::new(
-                realm_event["event_id"]
-                    .as_str()
-                    .expect("Realm bootstrap Event id")
-                    .to_owned(),
-            )
-            .expect("Realm bootstrap Event id is canonical"),
-        ],
-        signing_seed,
-        verification_method,
-    );
-    Ok(vec![realm_event, founding_event])
+    Ok(vec![realm_event])
 }
 
 pub async fn add_member(

@@ -172,6 +172,9 @@ fn chaos_realm_event() -> Value {
                     "controller_organization": "did:web:chaos-midwrite.cotest.local",
                     "recovery_controller_organizations": ["did:web:recovery-chaos-org.cotest.local"]
                 },
+                "capability_action_registry_digest":
+                    arkret::current_capability_action_registry_digest()
+                        .expect("embedded capability-action registry"),
                 "created_at": "2026-05-02T00:00:00.000Z"
             }
         }),
