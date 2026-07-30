@@ -228,6 +228,7 @@ $env:COTEST_PW_WORKERS = "1"
 cotest\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full `
   -StartupTimeoutSeconds 600 -Grep "joined member decrypts"
 ```
-失败截图/`error-context.md` 在 `cotest/artifacts/runs/<ts>/joint-e2e/playwright-output/`。
+失败截图/`error-context.md` 在
+`cotest/artifacts/runs/joint-e2e/<ts>-<profile>/playwright-output/`。
 `diagnostics/<session>/console.jsonl` 有 `connect.rs:458` 的 "device enrollment failed"
 WARN;临时在 `events.rs` proof 门加 `tracing::warn!` 可复现 verdict/reason。

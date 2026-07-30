@@ -221,13 +221,13 @@ export function mockMimiFacadeDid(): string | undefined {
 }
 
 // The joint run directory for this process. playwright.config.ts always sets
-// COTEST_JOINT_RUN_DIR (orchestrator value or a fresh runs/<ts>-adhoc dir)
+// COTEST_JOINT_RUN_DIR (orchestrator value or a fresh joint-e2e-adhoc run)
 // before workers spawn, so the fallback here only covers non-Playwright
 // callers of these helpers.
 export function jointRunDir(): string {
   return (
     optionalEnv("COTEST_JOINT_RUN_DIR") ??
-    path.resolve(process.cwd(), "..", "artifacts", "runs", "adhoc", "joint-e2e")
+    path.resolve(process.cwd(), "..", "artifacts", "runs", "joint-e2e-adhoc", "fallback")
   );
 }
 

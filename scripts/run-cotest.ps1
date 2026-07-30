@@ -32,6 +32,8 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot "lib\artifacts.ps1")
+
 function Repair-ProcessPathEnvironment {
     $pathValue = [Environment]::GetEnvironmentVariable("Path", "Process")
     if (-not $pathValue) {
@@ -100,9 +102,8 @@ function Invoke-JointSmokeGate {
     )
 
     $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
-    # Joint outputs land directly inside this run's directory
-    # (runs/<ts>/<OutputName>/); -JointDir keeps the child from nesting its
-    # own runs/<ts>/latest tree in there.
+    # Joint outputs land directly inside this cotest run's directory;
+    # -JointDir keeps the child from nesting its own runs/latest tree there.
     $jointOutputRoot = Join-Path $RunDir $OutputName
     $psExe = (Get-Process -Id $PID).Path
     $args = @(
@@ -1898,21 +1899,17 @@ if (-not $delegatedProfile) {
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$runDir = Join-Path $OutputRoot "runs\$timestamp"
-$latestDir = Join-Path $OutputRoot "latest"
-$serviceLogDir = Join-Path $runDir "services"
-if ($KeepRuns -gt 0) {
-    $runsRoot = Join-Path $OutputRoot "runs"
-    $staleRuns = @(Get-ChildItem -Path $runsRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '^\d{8}-\d{6}(-adhoc)?$' } |
-        Sort-Object Name -Descending |
-        Select-Object -Skip ($KeepRuns - 1))
-    foreach ($dir in $staleRuns) {
-        Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
-    }
+$cotestRunLabel = $Profile
+if ($CargoTestTarget -or $CargoTestFilter) {
+    $cotestRunLabel += "-selection"
 }
-$null = New-Item -ItemType Directory -Force -Path $runDir
-$null = New-Item -ItemType Directory -Force -Path $latestDir
+$runDir = New-ArtifactRunDirectory `
+    -OutputRoot $OutputRoot `
+    -Family "cotest" `
+    -Label $cotestRunLabel `
+    -Timestamp $timestamp
+$serviceLogDir = Join-Path $runDir "services"
+Remove-StaleArtifactRuns -OutputRoot $OutputRoot -Family "cotest" -KeepRuns $KeepRuns
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 
 $rawLog = Join-Path $runDir "raw.log"
@@ -1977,7 +1974,10 @@ if ($Profile -eq "joint") {
         "- output_root: $($summary.output_root)",
         "- raw_log: $($summary.raw_log)"
     ) | Set-Content -Path $summaryMd -Encoding UTF8
-
+    Publish-ArtifactMirror `
+        -SourceDirectory $jointRun.output_root `
+        -OutputRoot $OutputRoot `
+        -Channel "joint-e2e"
     Write-Host ""
     Write-Host "Cotest joint profile complete:"
     Write-Host "  status   : $($summary.status)"
@@ -2027,7 +2027,6 @@ if ($Profile -eq "dual-soland") {
         "- output_root: $($summary.output_root)",
         "- raw_log: $($summary.raw_log)"
     ) | Set-Content -Path $summaryMd -Encoding UTF8
-
     Write-Host ""
     Write-Host "Cotest dual-soland profile complete:"
     Write-Host "  status   : $($summary.status)"
@@ -2123,7 +2122,7 @@ $e2eCoverage = [pscustomobject]@{
 }
 $resolvedCoverageBaseline = $CoverageBaselinePath
 if (-not $resolvedCoverageBaseline) {
-    $candidateBaseline = Join-Path $repoRoot "artifacts\latest\coverage-matrix.json"
+    $candidateBaseline = Join-Path $OutputRoot "latest\full\coverage-matrix.json"
     if (Test-Path $candidateBaseline) {
         $resolvedCoverageBaseline = $candidateBaseline
     }
@@ -2329,42 +2328,13 @@ $ciProfileMarkdown | Set-Content -Path $ciProfileMd -Encoding UTF8
 $secretScanMarkdown = New-SecretScanMarkdown -SecretScan $secretScan
 $secretScanMarkdown | Set-Content -Path $secretScanMd -Encoding UTF8
 
-$artifactFiles = @(
-    $rawLog,
-    $transcriptNdjson,
-    $summaryJson,
-    $summaryMd,
-    $summaryHtml,
-    $junitXml,
-    $metadataJson,
-    $coverageJson,
-    $coverageMd,
-    $coverageGateJson,
-    $coverageGateMd,
-    $jointSmokeGateJson,
-    $jointSmokeGateMd,
-    $releaseGateJson,
-    $releaseGateMd,
-    $gapsJson,
-    $gapsMd,
-    (Join-Path $runDir "registry-gaps.json"),
-    $ciProfileJson,
-    $ciProfileMd,
-    $secretScanJson,
-    $secretScanMd,
-    $specSyncGateJson,
-    $specSyncGateMd
-)
-
-foreach ($file in $artifactFiles) {
-    Copy-Item -Path $file -Destination (Join-Path $latestDir ([System.IO.Path]::GetFileName($file))) -Force
-}
-if (Test-Path $serviceLogDir) {
-    $latestServiceDir = Join-Path $latestDir "services"
-    if (Test-Path $latestServiceDir) {
-        Remove-Item -Recurse -Force $latestServiceDir
-    }
-    Copy-Item -Path $serviceLogDir -Destination $latestServiceDir -Recurse -Force
+$isFullCotestRun = Test-IsCompleteCotestRun `
+    -ProfileIncludesAllTests ([bool]$ciProfile.include_all_tests) `
+    -CargoTestTarget $CargoTestTarget `
+    -CargoTestFilter $CargoTestFilter
+if ($isFullCotestRun) {
+    Publish-ArtifactMirror -SourceDirectory $runDir -OutputRoot $OutputRoot -Channel "full"
+    Remove-LegacyLatestCotestMirror -OutputRoot $OutputRoot
 }
 
 Write-Host ""

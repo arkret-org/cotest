@@ -65,19 +65,10 @@ optionally pretty-prints `go test -json` output with `gotestfmt`.
 - one script entrypoint for execution:
   [scripts/run-cotest.ps1](../scripts/run-cotest.ps1)
 - persisted result artifacts:
-  `artifacts/runs/<timestamp>/raw.log`,
-  `artifacts/runs/<timestamp>/transcript.ndjson`,
-  `artifacts/runs/<timestamp>/summary.json`,
-  `artifacts/runs/<timestamp>/summary.md`,
-  `artifacts/runs/<timestamp>/summary.html`,
-  `artifacts/runs/<timestamp>/junit.xml`,
-  `artifacts/runs/<timestamp>/coverage-matrix.json`,
-  `artifacts/runs/<timestamp>/coverage-gate.json`,
-  `artifacts/runs/<timestamp>/unresolved-gaps.json`,
-  `artifacts/runs/<timestamp>/ci-profile.json`,
-  `artifacts/runs/<timestamp>/secret-scan.json`,
-  `artifacts/runs/<timestamp>/services/`,
-  and `artifacts/latest/`
+  `artifacts/runs/cotest/<timestamp>-<profile>/` for authoritative logs,
+  transcripts, summaries, JUnit, coverage/gate/gap reports, CI-profile and
+  secret-scan reports, and service logs; stable mirrors live at
+  `artifacts/latest/full/` and `artifacts/latest/joint-e2e/`
 
 The Markdown summary is the primary human-readable report. That gives `cotest`
 an explicit result surface comparable to Complement's formatter pipeline,

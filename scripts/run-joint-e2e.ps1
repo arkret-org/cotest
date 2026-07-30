@@ -24,7 +24,7 @@ param(
     [string]$OutputRoot,
     # Exact directory that receives this run's joint outputs (junit.xml,
     # summary.json, playwright-report/, services/, ...). When set, the script
-    # writes there directly and skips both the `runs/<timestamp>/joint-e2e`
+    # writes there directly and skips both the standalone `runs/joint-e2e/`
     # layout and the `latest/joint-e2e` mirror — used by run-cotest.ps1 to
     # embed joint results inside its own run directory without nesting a
     # second runs/latest tree.
@@ -155,6 +155,8 @@ if ($MockWitnessExtraDids.Count -gt 0) {
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+. (Join-Path $PSScriptRoot "lib\artifacts.ps1")
 
 $StaridServiceId = $null
 $SolandServiceId = $null
@@ -1799,25 +1801,6 @@ function Invoke-RunnerSelfTest {
     }
 }
 
-function Copy-ToLatest {
-    param(
-        [Parameter(Mandatory = $true)][string]$RunJointDir,
-        [Parameter(Mandatory = $true)][string]$LatestJointDir
-    )
-
-    $resolvedRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-    $targetParent = Split-Path -Parent $LatestJointDir
-    $null = New-Item -ItemType Directory -Force -Path $targetParent
-    if (Test-Path $LatestJointDir) {
-        $resolvedTarget = (Resolve-Path $LatestJointDir).Path
-        if (-not $resolvedTarget.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Refusing to remove latest dir outside repo: $resolvedTarget"
-        }
-        Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
-    }
-    Copy-Item -Path $RunJointDir -Destination $LatestJointDir -Recurse -Force
-}
-
 if ($RunnerSelfTest) {
     Invoke-RunnerSelfTest
     exit 0
@@ -1841,27 +1824,27 @@ if (-not $InksonRoot) {
 $InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
 
 # Canonical artifacts layout (see cotest/README.md "Artifacts layout"):
-#   <OutputRoot>/runs/<timestamp>/joint-e2e/  — authoritative per-run outputs
-#   <OutputRoot>/latest/joint-e2e/            — mirror of the most recent run
+#   <OutputRoot>/runs/joint-e2e/<timestamp>-<profile>/ — authoritative outputs
+#   <OutputRoot>/latest/joint-e2e/                     — latest non-targeted suite
 # With -JointDir the caller owns the run directory and both are skipped.
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if ($JointDir) {
     $jointDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($JointDir)
-    $latestJointDir = $null
 } else {
-    $runDir = Join-Path $OutputRoot "runs\$timestamp"
-    $jointDir = Join-Path $runDir "joint-e2e"
-    $latestJointDir = Join-Path $OutputRoot "latest\joint-e2e"
-    if ($KeepRuns -gt 0) {
-        $runsRoot = Join-Path $OutputRoot "runs"
-        $stale = @(Get-ChildItem -Path $runsRoot -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match '^\d{8}-\d{6}(-adhoc)?$' } |
-            Sort-Object Name -Descending |
-            Select-Object -Skip ($KeepRuns - 1))
-        foreach ($dir in $stale) {
-            Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
-        }
+    $jointRunLabel = if ($RunProfile) { $RunProfile } else { "custom" }
+    if ($Grep) {
+        $jointRunLabel += "-selection"
+    } elseif ($ExternalDriverScript) {
+        $jointRunLabel += "-external-driver"
+    } elseif ($PreflightOnly) {
+        $jointRunLabel += "-preflight"
     }
+    $jointDir = New-ArtifactRunDirectory `
+        -OutputRoot $OutputRoot `
+        -Family "joint-e2e" `
+        -Label $jointRunLabel `
+        -Timestamp $timestamp
+    Remove-StaleArtifactRuns -OutputRoot $OutputRoot -Family "joint-e2e" -KeepRuns $KeepRuns
 }
 $serviceLogDir = Join-Path $jointDir "services"
 $screenshotDir = Join-Path $jointDir "screenshots"
@@ -3749,8 +3732,16 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - services: $($summary.services)
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
-if ($latestJointDir) {
-    Copy-ToLatest -RunJointDir $jointDir -LatestJointDir $latestJointDir
+$isStandaloneJointSuite = Test-IsStandaloneJointSuite `
+    -IsStandalone (-not [bool]$JointDir) `
+    -Grep $Grep `
+    -ExternalDriverScript $ExternalDriverScript `
+    -PreflightOnly ([bool]$PreflightOnly)
+if ($isStandaloneJointSuite) {
+    Publish-ArtifactMirror `
+        -SourceDirectory $jointDir `
+        -OutputRoot $OutputRoot `
+        -Channel "joint-e2e"
 }
 
 Write-Host ""
@@ -3802,8 +3793,8 @@ if ($TeabayBaseUrl) {
 Write-Host "  screenshots : $screenshotDir"
 Write-Host "  visual base : $visualBaselineDir"
 Write-Host "  report      : $summaryMd"
-if ($latestJointDir) {
-    Write-Host "  latest      : $latestJointDir"
+if ($isStandaloneJointSuite) {
+    Write-Host "  latest      : $(Join-Path $OutputRoot 'latest\joint-e2e')"
 }
 
 $jointRunnerLock.Dispose()

@@ -4,7 +4,7 @@
 #
 # Invariant: every pattern Find-SecretLeaks can match MUST have a matching
 # redaction in ConvertTo-SecretPreview, so a real hit never lands verbatim in
-# secret-scan.json/md (which are copied into artifacts/latest). The invariant
+# secret-scan.json/md (which are copied into a stable latest channel). The invariant
 # is enforced by the synthetic-secret regression test, which run-cotest.ps1
 # executes before every scan.
 #

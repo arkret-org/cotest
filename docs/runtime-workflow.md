@@ -245,8 +245,9 @@ mode.
 ```
 
 When `-CoverageBaselinePath` is omitted, the runner compares against the
-previous `artifacts/latest/coverage-matrix.json` if it exists. The comparison is
-limited to the selected profile's `required_coverage_profiles`, unless
+previous `artifacts/latest/full/coverage-matrix.json` if it exists. Targeted
+runs therefore cannot silently become the next complete-suite baseline. The
+comparison is limited to the selected profile's `required_coverage_profiles`, unless
 `-RequiredCoverageProfiles` is supplied.
 
 ## Startup and shutdown model
@@ -276,27 +277,16 @@ limited to the selected profile's `required_coverage_profiles`, unless
 2. saves the full raw log
 3. writes machine-readable and human-readable summaries
 
-Artifacts are written to:
+Artifacts are written to
+`artifacts/runs/cotest/<timestamp>-<profile>/`, including `raw.log`,
+`transcript.ndjson`, summaries, JUnit, metadata, coverage/gate/gap reports,
+CI-profile reports, secret-scan reports, and `services/<service>.log`.
 
-- `artifacts/runs/<timestamp>/raw.log`
-- `artifacts/runs/<timestamp>/transcript.ndjson`
-- `artifacts/runs/<timestamp>/summary.json`
-- `artifacts/runs/<timestamp>/summary.md`
-- `artifacts/runs/<timestamp>/summary.html`
-- `artifacts/runs/<timestamp>/junit.xml`
-- `artifacts/runs/<timestamp>/metadata.json`
-- `artifacts/runs/<timestamp>/coverage-matrix.json`
-- `artifacts/runs/<timestamp>/coverage-matrix.md`
-- `artifacts/runs/<timestamp>/coverage-gate.json`
-- `artifacts/runs/<timestamp>/coverage-gate.md`
-- `artifacts/runs/<timestamp>/unresolved-gaps.json`
-- `artifacts/runs/<timestamp>/unresolved-gaps.md`
-- `artifacts/runs/<timestamp>/ci-profile.json`
-- `artifacts/runs/<timestamp>/ci-profile.md`
-- `artifacts/runs/<timestamp>/secret-scan.json`
-- `artifacts/runs/<timestamp>/secret-scan.md`
-- `artifacts/runs/<timestamp>/services/<service>.log`
-- `artifacts/latest/` as a copy of the most recent run
+Stable mirrors are:
+
+- `artifacts/latest/full/` for the most recent unfiltered complete run
+- `artifacts/latest/joint-e2e/` for the most recent non-targeted joint-e2e
+  suite, including the dedicated `run-cotest.ps1 -Profile joint` entrypoint
 
 The Markdown summary is the primary “show me the result” artifact. It includes:
 
@@ -335,8 +325,8 @@ The runner now also emits:
 - Use `run-joint-e2e.ps1 -SolandRuntime docker` for release-quality browser/API
   verification, especially when checking that the built image still exposes the
   expected `/_arkret/*` service surface.
-- Use `artifacts/latest/summary.md` as the first place to inspect a run instead
-  of relying on terminal scrollback.
+- Use `artifacts/latest/full/summary.md` for the latest complete result.
+  Targeted/profile runs remain in their timestamped authoritative directories.
 - `process` mode is the authoritative path for validating the current local
   `soland` checkout.
 - `docker` mode should be preceded by

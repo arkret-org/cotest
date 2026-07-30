@@ -123,7 +123,7 @@ e2e/
 
 ## 产物
 
-`artifacts/runs/<ts>/joint-e2e/`:
+`artifacts/runs/joint-e2e/<ts>-<profile>/`:
 - `summary.md` / `scenarios.md` — 整体 + scenario 维度
 - `junit.xml` — CI 友好结构化结果
 - `playwright-report/` — HTML(含 trace/video/failure screenshot)

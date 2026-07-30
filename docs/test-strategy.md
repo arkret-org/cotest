@@ -101,11 +101,12 @@ Recommended scripted entrypoints:
 ```
 
 The runner stores raw logs, a redacted request/response transcript, and
-Markdown/JSON summaries under `artifacts/`. `artifacts/latest/summary.md` is
-the primary result view for a completed run.
-`artifacts/latest/coverage-matrix.json` and
-`artifacts/latest/unresolved-gaps.json` are the machine-readable release-gate
-artifacts.
+Markdown/JSON summaries under `artifacts/`.
+`artifacts/latest/full/summary.md` is the primary complete-suite result view.
+Targeted runs remain only in their timestamped authoritative directories.
+`artifacts/latest/full/coverage-matrix.json` and
+`artifacts/latest/full/unresolved-gaps.json` are the stable machine-readable
+complete-run artifacts.
 
 CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
 small local feedback set, `release-gate` is the local milestone gate, and
@@ -168,8 +169,10 @@ The joint E2E runner currently targets the first live-product slice:
 - run Playwright tests with multiple isolated browser contexts
 - save step screenshots, traces, videos, HAR, console/network JSONL, JUnit,
   HTML report, and service logs under
-  `artifacts/runs/<timestamp>/joint-e2e/`
-- copy the latest run to `artifacts/latest/joint-e2e/`
+  `artifacts/runs/joint-e2e/<timestamp>-<profile>/`
+- copy the latest non-targeted suite to `artifacts/latest/joint-e2e/`;
+  `run-cotest.ps1 -Profile joint` updates the same channel, while `-Grep`
+  selections remain only in their timestamped authoritative directory
 
 The smoke spec covers environment health, invalid server URL UI handling,
 coauth discovery/topology, coauth metadata failure UI handling, live invalid
@@ -218,7 +221,7 @@ The visual baseline spec is tagged `@visual` and runs only under the
 `visual-chrome` project. It captures controlled baseline images for the login
 panel, timeline message state, permission-denied Space lifecycle state, and
 Space Admin. The runner writes these files under
-`artifacts/runs/<timestamp>/joint-e2e/visual-baselines/` with
+`artifacts/runs/joint-e2e/<timestamp>-<profile>/visual-baselines/` with
 `visual-baselines.md` and a hash manifest.
 
 The coauth/soland test mapping is fixed by the runner:
@@ -475,7 +478,8 @@ entry points can call it unconditionally without leaking handlers.
 When the harness is not configured with a transcript path the hook is a
 no-op — the install still succeeds but no timeline is rendered, since there
 is nothing on disk to read. Scripts that already set
-`COTEST_ARTIFACT_DIR=artifacts/runs/<timestamp>` (e.g. `run-cotest.ps1`) pick
+`COTEST_ARTIFACT_DIR=artifacts/runs/cotest/<timestamp>-<profile>` (e.g.
+`run-cotest.ps1`) pick
 up the timeline automatically.
 
 ## R3 spec-coverage matrix

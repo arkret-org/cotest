@@ -1,10 +1,10 @@
 import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-// Canonical artifacts layout: every run writes under
-// `cotest/artifacts/runs/<timestamp>/`. Orchestrated runs (run-joint-e2e.ps1 /
-// run-cotest.ps1 / CI) pass COTEST_JOINT_RUN_DIR; ad-hoc `npx playwright test`
-// invocations get a fresh `runs/<timestamp>-adhoc/joint-e2e` directory. The
+// Canonical artifacts layout: orchestrated runs write under
+// `cotest/artifacts/runs/joint-e2e/`. Runners and CI pass COTEST_JOINT_RUN_DIR;
+// ad-hoc `npx playwright test` invocations get a fresh
+// `runs/joint-e2e-adhoc/<timestamp>` directory. The
 // resolved dir is written back into the env so worker processes and the
 // helpers in helpers/env.ts (screenshots, diagnostics, visual baselines) all
 // agree on one directory.
@@ -14,7 +14,7 @@ function adhocRunDir(): string {
   const stamp =
     `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
     `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return path.resolve(process.cwd(), "..", "artifacts", "runs", `${stamp}-adhoc`, "joint-e2e");
+  return path.resolve(process.cwd(), "..", "artifacts", "runs", "joint-e2e-adhoc", stamp);
 }
 const runDir = process.env.COTEST_JOINT_RUN_DIR ?? adhocRunDir();
 process.env.COTEST_JOINT_RUN_DIR = runDir;

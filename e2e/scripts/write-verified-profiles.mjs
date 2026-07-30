@@ -97,7 +97,7 @@ function printUsage() {
       '',
       'ARGS:',
       '  <artifacts_dir>   Directory holding a Playwright junit.xml (typically',
-      '                    cotest/artifacts/runs/<ts>/joint-e2e/). The output',
+      '                    cotest/artifacts/runs/joint-e2e/<ts>-<profile>/). The output',
       '                    verified-profiles.json is written into the same dir.',
       '',
       'OUTPUT SCHEMA (verified-profiles.json):',
