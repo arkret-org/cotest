@@ -6,6 +6,8 @@
     "test": "playwright test --config playwright.config.ts",
     "test:headed": "playwright test --config playwright.config.ts --headed",
     "typecheck": "tsc --noEmit",
+    "gen:wire-types": "node scripts/generate-wire-types.mjs",
+    "check:wire-types": "node scripts/generate-wire-types.mjs --check",
     "check:fixme": "node scripts/check-fixme-quality.mjs"
   },
   "devDependencies": {

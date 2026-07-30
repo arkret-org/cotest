@@ -92,6 +92,13 @@ jobs:
       - name: typecheck
         working-directory: e2e
         run: npm run typecheck
+      - name: spec wire-type drift
+        working-directory: e2e
+        # Regenerates the committed mirrors of the closed arkret-spec object
+        # schemas and fails when they are stale. Reports SKIP when the sibling
+        # arkret-spec checkout is absent (this job checks out cotest only), so
+        # the hard gate lives in `scripts/run-hygiene.ps1` and the joint runner.
+        run: npm run check:wire-types
 
   typos:
     name: typos

@@ -8,6 +8,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
+import type { RealmObject } from "./generated/spec-wire-objects";
 import type { JointUser } from "./users";
 
 export { authHeaders };
@@ -15,9 +16,10 @@ export { authHeaders };
 export type ApiRealmOpts = {
   title: string;
   summary?: string;
-  discoverability?: string;
-  historyVisibility?: string;
-  encryptionProfile?: string;
+  // Closed `realm.schema.json` enums, mirrored from the spec artifacts.
+  discoverability?: RealmObject["default_discoverability"];
+  historyVisibility?: RealmObject["history_visibility"];
+  encryptionProfile?: RealmObject["encryption_profile"];
   plaintextVisibleServices?: string[];
   invitees?: string[];
   ownerDid?: string;

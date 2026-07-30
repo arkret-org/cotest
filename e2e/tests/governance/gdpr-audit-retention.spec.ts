@@ -217,8 +217,19 @@ test.describe("GDPR / audit / retention", () => {
       discoverability: "listed",
       history_visibility: "shared",
       ownerDid: alice.did,
-      retention_policy: { ttl: "30d" },
     });
+    // `realm.schema.json` is closed and declares only `retention_policy_id`
+    // (a reference to a policy object) — never an inline `retention_policy`.
+    // The deployment-local TTL is configured through the same admin surface the
+    // sweep below uses, which is where soland actually stores it.
+    const configured = await request.post(
+      `${solandBaseUrl()}/_soland/admin/retention/policy`,
+      {
+        headers: authHeaders(aliceToken),
+        data: { realm_id: realmId, ttl: "30d" },
+      },
+    );
+    expect(configured.status()).toBe(200);
     const oldBody = `retention ttl should expire ${stamp}`;
     const oldCreatedAt = canonicalTimestamp(
       new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),

@@ -17,6 +17,7 @@ import {
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import { base64url } from "./encoding";
+import type { RealmObject } from "./generated/spec-wire-objects";
 
 export type SignedEventEnvelopeArgs = {
   actorDid: string;
@@ -189,7 +190,7 @@ export function wireErrReason(body: unknown): string | undefined {
   );
 }
 
-export function singleDidNotary(did: string): Record<string, unknown> {
+export function singleDidNotary(did: string): RealmObject["notary"] {
   return {
     kind: "single_did",
     did,
@@ -244,10 +245,12 @@ export async function createRealmApi(
   data: {
     title: string;
     summary?: string;
-    discoverability?: string;
-    history_visibility?: string;
-    encryption_profile?: string;
-    content_scheme?: string;
+    // The policy axes are the closed `realm.schema.json` enums, not free
+    // strings: a typo used to travel all the way to the server.
+    discoverability?: RealmObject["default_discoverability"];
+    history_visibility?: RealmObject["history_visibility"];
+    encryption_profile?: RealmObject["encryption_profile"];
+    content_scheme?: RealmObject["content_scheme"];
     invitees?: string[];
     /**
      * Optional home Principal Server DID for directed invite-create events.
@@ -264,36 +267,14 @@ export async function createRealmApi(
      */
     creator_service_id?: string;
     plaintext_visible_services?: string[];
-    sync_endpoints?: Array<{
-      did: string;
-      endpoint: string;
-      role:
-        | "primary"
-        | "mirror"
-        | "notary"
-        | "sync"
-        | "search_projection"
-        | "federation_peer";
-      service_kind:
-        | "principal_server"
-        | "sync_node"
-        | "notary"
-        | "search_service"
-        | "archive_node"
-        | "key_recovery_service"
-        | "recovery_service";
-      plaintext_visible: boolean;
-      visibility_scope?:
-        | "metadata_only"
-        | "encrypted_events"
-        | "plaintext_events";
-    }>;
+    // Hand-written mirror replaced by the generated one: the role /
+    // service_kind / visibility_scope enums live in `realm.schema.json`.
+    sync_endpoints?: RealmObject["sync_endpoints"];
     public?: boolean;
-    federation_policy?: string;
+    federation_policy?: RealmObject["federation_policy"];
     ownerDid?: string;
     owning_organizations?: string[];
-    retention_policy?: Record<string, unknown>;
-    default_join_rule?: string;
+    default_join_rule?: RealmObject["default_join_rule"];
     realm_id?: string;
     created_at?: string;
   },
@@ -311,7 +292,10 @@ export async function createRealmApi(
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
-  const realmObject = {
+  // Annotated with the generated mirror of the closed `realm.schema.json`, so
+  // an unregistered member is a `tsc --noEmit` error instead of a live
+  // `Realm candidate object violates ak.schema.realm.v1` rejection.
+  const realmObject: RealmObject = {
     id: realmId,
     schema: "ak.schema.realm.v1",
     title: data.title,
@@ -328,9 +312,6 @@ export async function createRealmApi(
     ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
     ...(data.owning_organizations
       ? { owning_organizations: data.owning_organizations }
-      : {}),
-    ...(data.retention_policy
-      ? { retention_policy: data.retention_policy }
       : {}),
     security_class: "standard",
     federation_policy: data.federation_policy ?? "restricted",

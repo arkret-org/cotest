@@ -4,7 +4,8 @@ param(
     [switch]$SkipCargoDeny,
     [switch]$SkipTypos,
     [switch]$SkipCargoAudit,
-    [switch]$SkipE2eTypecheck
+    [switch]$SkipE2eTypecheck,
+    [switch]$SkipE2eWireTypes
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,6 +130,23 @@ if (-not $SkipE2eTypecheck) {
         Add-Content -Path $rawLog -Value ""
         Add-Content -Path $rawLog -Value "=== e2e-typecheck (skipped) ==="
         Add-Content -Path $rawLog -Value "tsconfig or local tsc not found; run 'npm install' in e2e/ first"
+    }
+}
+if (-not $SkipE2eWireTypes) {
+    # Drift gate for the generated mirrors of the closed arkret-spec object
+    # schemas (e2e/helpers/generated/spec-wire-objects.ts). `tsc --noEmit`
+    # checks the hand-built wire literals against those mirrors; this check
+    # makes sure the mirrors themselves still match the spec artifacts. It
+    # reports "SKIP" (exit 0) when the sibling arkret-spec checkout is absent.
+    $e2eDir = Join-Path $repoRoot "e2e"
+    $generator = Join-Path $e2eDir "scripts\generate-wire-types.mjs"
+    if (Test-Path $generator) {
+        $nodePath = Resolve-CommandPath "node"
+        $results.Add((Invoke-HygieneCommand -Label "e2e-wire-types" -FilePath $nodePath -Arguments @($generator, "--check") -RunDir $runDir -RawLog $rawLog))
+    } else {
+        Add-Content -Path $rawLog -Value ""
+        Add-Content -Path $rawLog -Value "=== e2e-wire-types (skipped) ==="
+        Add-Content -Path $rawLog -Value "generator not found at $generator"
     }
 }
 if ($results.Count -eq 0) {
