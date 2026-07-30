@@ -131,6 +131,13 @@ try {
     Assert-True ($wordSet.Count -eq 2048) "BIP-39 wordlist must contain 2048 words, found $($wordSet.Count)"
     Assert-True ($wordSet.Contains("abandon") -and $wordSet.Contains("zoo")) "BIP-39 wordlist must span abandon..zoo"
     Assert-True (-not $wordSet.Contains("the")) "BIP-39 wordlist must not contain non-list filler words"
+
+    # Playwright trace archives capture request headers, bodies, and UI fills
+    # before this scanner runs. They therefore cannot be retained safely by
+    # default on the joint runner.
+    $playwrightConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\..\e2e\playwright.config.ts") -Raw
+    Assert-True ($playwrightConfig -match 'trace:\s*"off"') "Playwright trace persistence must remain disabled"
+    Assert-True ($playwrightConfig -notmatch 'trace:\s*"retain-on-failure"') "retain-on-failure traces persist joint test secrets"
 } finally {
     Remove-Item -Recurse -Force $scanRoot -ErrorAction SilentlyContinue
 }

@@ -526,12 +526,7 @@ function requestedScopesFromBody(body) {
     body.requested_scopes ??
     body.requested_capabilities ??
     body.capabilities ?? ["ak.message.create", "ak.applet.ghost.provision"];
-  const mapped = input.map((scope) => {
-    if (scope === "message:write") return "ak.message.create";
-    if (scope === "actor:provision-ghost") return "ak.applet.ghost.provision";
-    return String(scope);
-  });
-  return Array.from(new Set(mapped));
+  return Array.from(new Set(input.map(String)));
 }
 
 function serverBaseUrl() {
