@@ -45,6 +45,7 @@ try {
         [pscustomobject]@{ name = "json-plaintext-keybag.log"; line = "{`"plaintext_keybag`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-mls-epoch-secret.log"; line = "{`"epoch_secret`":`"$hexSecret`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "json-mls-private-state.log"; line = "{`"private_state`":`"$hexSecret`"}"; pattern = "json_secret_field" },
+        [pscustomobject]@{ name = "sql-seed-assignment.sql"; line = "UPDATE recovery_state SET seed = '$hexSecret' WHERE id = 1;"; pattern = "recovery_private_material_assignment" },
         [pscustomobject]@{ name = "query-root-seed.log"; line = "GET /callback?root_seed=$hexSecret&state=x"; pattern = "query_secret_field" },
         [pscustomobject]@{ name = "bare-mnemonic-string.log"; line = "wrote backup payload `"$mnemonic`" to store"; pattern = "bip39_mnemonic_sequence" },
         [pscustomobject]@{ name = "embedded-mnemonic-string.log"; line = "note `"wrote backup payload $mnemonic`" persisted"; pattern = "bip39_mnemonic_sequence" },

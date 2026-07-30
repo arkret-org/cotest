@@ -15,6 +15,7 @@
 
 $script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 $script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+$script:RecoveryPrivateMaterialFieldNames = "private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 # Candidate shape only: a quoted string containing a run of 12+ short words.
 # Surrounding prose and punctuation are allowed because logs commonly embed a
 # mnemonic after text such as "recovery phrase:". Detection additionally
@@ -71,6 +72,7 @@ function ConvertTo-SecretPreview {
     $preview = $preview -replace '(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
     $preview = $preview -replace "(?i)(`"($script:JsonSecretFieldNames)`"\s*:\s*`")(?!\[redacted\])([^`"]+)(`")", '$1[redacted]$4'
     $preview = $preview -replace "(?i)((?:^|[?&\s])($script:QuerySecretFieldNames)=)(?!\[redacted\]|%5[Bb]redacted%5[Dd])([^&\s]+)", '$1[redacted]'
+    $preview = $preview -replace "(?i)(\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*)(?!\[redacted\])(?:'[^']*'|`"[^`"]*`"|\S+)", '$1[redacted]'
     # Over-redacts non-mnemonic candidates on purpose: a preview may lose
     # harmless words but must never keep a real mnemonic.
     $preview = $preview -replace $script:Bip39SequencePattern, '"[redacted-mnemonic]"'
@@ -85,6 +87,8 @@ function ConvertTo-SecretPreview {
 function Get-SecretLeakPatterns {
     @(
         [pscustomobject]@{ name = "authorization_header"; pattern = '(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!\[redacted\])\S+'; validate = $null },
+        [pscustomobject]@{ name = "recovery_private_material_field"; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!\[redacted\])[^`"]+`""; validate = $null },
+        [pscustomobject]@{ name = "recovery_private_material_assignment"; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!\[redacted\])(?:'[^']+'|`"[^`"]+`"|\S+)"; validate = $null },
         [pscustomobject]@{ name = "json_secret_field"; pattern = "(?i)`"($script:JsonSecretFieldNames)`"\s*:\s*`"(?!\[redacted\])[^`"]+`""; validate = $null },
         [pscustomobject]@{ name = "query_secret_field"; pattern = "(?i)(?:^|[?&\s])($script:QuerySecretFieldNames)=(?!\[redacted\]|%5[Bb]redacted%5[Dd])[^&\s]+"; validate = $null },
         [pscustomobject]@{ name = "bip39_mnemonic_sequence"; pattern = $script:Bip39SequencePattern; validate = { param($line) Test-Bip39MnemonicCandidate -Line $line } },
