@@ -110,6 +110,10 @@ test.describe("applet bridge", () => {
         display_name: "Demo Bridge Applet",
         capabilities: ["ak.message.create", "ak.applet.ghost.provision"],
       });
+      expect(signed.applet_package.claimed_profiles).toEqual([
+        "ak.profile.applet_bridge.v1",
+        "ak.profile.applet_service.v1",
+      ]);
       const realmId = await createRealmApi(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
