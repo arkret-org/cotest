@@ -102,6 +102,9 @@ export type OpenUserOpts = {
 
 export type DpopUserSession = {
   user: JointUser;
+  /// Test-harness account handle retained so a scenario can open and pair a
+  /// genuinely distinct second device for the same principal.
+  account: CoauthPasswordAccount;
   grantJwt: string;
   grantId: string;
   grantAudience: string;
@@ -849,6 +852,41 @@ export class JointUserPage {
 
   // Accept a pending Realm invite through the visible inkson notification UI.
   async acceptInviteFromNotifications(realmId: string) {
+    // Inkson imports `/_arkret/self/authz/invites` only during the initial
+    // notification bootstrap. If navigation wins the race with invite
+    // projection, repeatedly clicking the UI refresh cannot recover that
+    // missing bootstrap fact. Wait for the authoritative projection first,
+    // then open the surface that imports it.
+    const invitesUrl = new URL(
+      "/_arkret/self/authz/invites",
+      `${this.serverUrl.replace(/\/$/, "")}/`,
+    );
+    invitesUrl.searchParams.set("subject", this.user.did);
+    invitesUrl.searchParams.set("realm_id", realmId);
+    await expect
+      .poll(
+        async () => {
+          const response = await this.session.context.request.get(
+            invitesUrl.toString(),
+            {
+              headers: this.selfPathHeaders("GET", invitesUrl.toString()),
+            },
+          );
+          if (response.status() !== 200) return false;
+          const body = (await response.json()) as {
+            invites?: Array<{ realm_id?: string; state?: string }>;
+          };
+          return (
+            body.invites?.some(
+              (invite) =>
+                invite.realm_id === realmId && invite.state === "pending",
+            ) ?? false
+          );
+        },
+        { timeout: 45_000, intervals: [250, 500, 1_000, 2_000] },
+      )
+      .toBe(true);
+
     await this.gotoNotifications();
     const refresh = this.page.getByTestId("refresh-notifications");
     const inviteItem = this.page
@@ -1270,6 +1308,7 @@ export async function createDpopUserSessionForAccount(
   }
   const session = {
     user,
+    account,
     grantJwt: grant.grantJwt,
     grantId: grant.grantId,
     grantAudience: grant.audience,

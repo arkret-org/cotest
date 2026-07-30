@@ -684,3 +684,33 @@ selection failures.
   test, Rust workspace check and TypeScript typecheck pass. The two
   identity-dependent scenario targets remain red until the shared fixture is
   migrated.
+
+## 2026-07-30 — Sidecar joint gate could silently skip or inspect the wrong wire shape
+
+- Severity: P1 acceptance-gap risk.
+- Status: resolved; the focused real onboarding gate passes and the managed
+  joint runner now provisions two independent Savfox gateways.
+- Evidence:
+  - the live Savfox scenario used `test.skip` whenever external gateway
+    variables were absent, while the repository runner had no way to provision
+    that prerequisite;
+  - the two-user fixture started concurrent principal inception chains even
+    though the current local Coauth/Soland identity-binding lease is global,
+    producing timeouts unrelated to Sidecar semantics;
+  - invite acceptance could navigate to Notifications before the authoritative
+    pending-invite projection existed; because Inkson imports that endpoint at
+    initial bootstrap, later UI refreshes could not repair the missed fact;
+  - the Realm bootstrap listener treated `events[]` entries as bare Events,
+    although ingress now carries `EventInitialSubmission` wrappers;
+  - an early two-device assertion labeled DOM Event ids as a fold frontier
+    instead of reading Inkson's serialized fold projection.
+- Resolution: `-StartSavfox` now owns two gateways and deterministic model
+  endpoints, required-mode missing prerequisites fail instead of skip,
+  principal inception is sequenced, ingress assertions unwrap
+  `submission.event`, invite acceptance waits for the authoritative pending
+  projection before opening Notifications, and the convergence gate compares
+  the real serialized projection and canonical folded frontier from Inkson's
+  test-only evidence surface.
+- Prevention dimension: a required joint gate must own every external process
+  it names, assert canonical wire envelopes rather than historical DTO shapes,
+  and distinguish UI echo evidence from protocol fold evidence.
