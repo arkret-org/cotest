@@ -1715,39 +1715,34 @@ function parseNdjsonFrames(text: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
-export async function putAccountDataViaEventApi(
+export async function replaceAccountDataApi(
   request: APIRequestContext,
   token: string,
   actorDid: string,
-  realmId: string,
   key: string,
   body: Record<string, unknown>,
   expectedRevision: number,
   opts: { server?: SolandKey; context?: string } = {},
 ) {
-  const payloadBody = privateAccountDataKeys.has(key)
+  const content = privateAccountDataKeys.has(key)
     ? encryptedAccountDataValue(actorDid, key, body)
     : body;
-  return await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.account_data.set",
-      payload: {
-        key,
-        owner: actorDid,
-        body: payloadBody,
-        expected_revision: expectedRevision,
-        updated_at: canonicalTimestamp(),
-      },
-    }),
+  const response = await request.put(
+    `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
     {
-      server: opts.server,
-      context: opts.context ?? `set account_data ${key}`,
+      headers: authHeaders(token),
+      data: {
+        expected_revision: expectedRevision,
+        content,
+      },
     },
   );
+  const text = await response.text();
+  expect(
+    [200, 201],
+    `${opts.context ?? `replace account_data ${key}`} returned ${response.status()}: ${text}`,
+  ).toContain(response.status());
+  return parseJsonOrRaw(text) as Record<string, unknown>;
 }
 
 const privateAccountDataKeys = new Set([
@@ -2885,15 +2880,7 @@ async function applyRegisteredCbaPlane(
         : undefined;
       const verificationMethod =
         stringValue(proof?.verification_method) ?? `${actorDid}#device`;
-      const fragmentIndex = verificationMethod.indexOf("#");
-      envelope.auth_context = {
-        did: actorDid,
-        key_id:
-          fragmentIndex >= 0
-            ? verificationMethod.slice(fragmentIndex + 1)
-            : verificationMethod,
-        key_epoch: 0,
-      };
+      envelope.auth_context = eventAuthContext(actorDid, verificationMethod);
       changed = true;
     }
   }
@@ -2989,21 +2976,28 @@ async function forceConformanceCbaBasis(
       : undefined;
     const verificationMethod =
       stringValue(proof?.verification_method) ?? `${actorDid}#device`;
-    const fragmentIndex = verificationMethod.indexOf("#");
-    envelope.auth_context = {
-      did: actorDid,
-      key_id:
-        fragmentIndex >= 0
-          ? verificationMethod.slice(fragmentIndex + 1)
-          : verificationMethod,
-      key_epoch: 0,
-    };
+    envelope.auth_context = eventAuthContext(actorDid, verificationMethod);
     delete envelope.seal_basis;
   }
   const proof = Array.isArray(envelope.proofs)
     ? (envelope.proofs[0] as Record<string, unknown> | undefined)
     : undefined;
   refreshEventEnvelopeProof(envelope, stringValue(proof?.verification_method));
+}
+
+function eventAuthContext(
+  actorDid: string,
+  verificationMethod: string,
+): Record<string, unknown> {
+  const fragmentIndex = verificationMethod.indexOf("#");
+  return {
+    did: actorDid,
+    key_id:
+      fragmentIndex >= 0
+        ? verificationMethod.slice(fragmentIndex + 1)
+        : verificationMethod,
+    key_epoch: 0,
+  };
 }
 
 export async function prepareSignedEventCbaApi(

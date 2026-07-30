@@ -11,7 +11,7 @@ import {
   accountSubscribeFramesApi,
   authHeaders,
   createRealmApi,
-  putAccountDataViaEventApi,
+  replaceAccountDataApi,
   queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
@@ -320,7 +320,7 @@ test.describe("personal blocklist", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await addRealmMemberApi(request, aliceToken, realmId, carol.did);
-    await putBlocklist(request, aliceToken, alice.did, realmId, [
+    await putBlocklist(request, aliceToken, alice.did, [
       canonicalActorBlockEntry(bob.did),
     ]);
     expect(await blocklistStoredOpaque(request, aliceToken, bob.did)).toBe(
@@ -414,11 +414,10 @@ test.describe("personal blocklist", () => {
     const pushTargetId = registeredDevice.registration_id;
     expect(pushTargetId).toBeTruthy();
 
-    await putAccountDataViaEventApi(
+    await replaceAccountDataApi(
       request,
       aliceToken,
       alice.did,
-      realmId,
       "ak.push_rules",
       {
         rules: [
@@ -452,7 +451,7 @@ test.describe("personal blocklist", () => {
     const notifyBody = await notify.json();
     expect(JSON.stringify(notifyBody)).not.toContain(`mute-${stamp}`);
 
-    await putBlocklist(request, aliceToken, alice.did, realmId, [
+    await putBlocklist(request, aliceToken, alice.did, [
       canonicalActorBlockEntry(bob.did),
     ]);
     const blockedHidden = `S31 E11.2 blocked-hidden ${stamp}`;
@@ -482,7 +481,7 @@ test.describe("personal blocklist", () => {
       history_visibility: "shared",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-    await putBlocklist(request, aliceToken, alice.did, realmId, [
+    await putBlocklist(request, aliceToken, alice.did, [
       canonicalActorBlockEntry(bob.did),
     ]);
 
@@ -520,14 +519,12 @@ async function putBlocklist(
   request: APIRequestContext,
   token: string,
   actorDid: string,
-  realmId: string,
   entries: BlocklistEntry[],
 ) {
-  await putAccountDataViaEventApi(
+  await replaceAccountDataApi(
     request,
     token,
     actorDid,
-    realmId,
     BLOCKLIST_DATA_TYPE,
     { entries },
     0,

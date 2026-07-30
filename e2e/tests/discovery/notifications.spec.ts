@@ -14,7 +14,7 @@ import {
   resolveDefaultStrandId,
   sendMessageApi,
   setStrandWatchLevelApi,
-  putAccountDataViaEventApi,
+  replaceAccountDataApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -437,11 +437,10 @@ test.describe("notifications", () => {
       content_scheme: "mls_exporter_aead_v1",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-    await putAccountDataViaEventApi(
+    await replaceAccountDataApi(
       request,
       bobToken,
       bob.did,
-      realmId,
       "ak.push_rules",
       {
         rules: [
