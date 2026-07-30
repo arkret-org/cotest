@@ -663,7 +663,7 @@ conformance_test!(
 conformance_test!(
     /// CT-2 — mixed lattice cell types (cas-register + or-set + mv-register)
     /// updating concurrently in the same Move batch / Anchor frontier. Spec:
-    /// models/realm-and-space.md (lattice cell registry / co_write_policy) +
+    /// models/realm-and-space.md (lattice cell registry / cowrite_policy) +
     /// authz/event-auth-state-resolution.md §3 / §5.3.
     lattice_mixed_kinds_suite_matches_reference_semantics,
     "lattice_mixed_kinds",

@@ -121,7 +121,7 @@ export type RealmObject = {
     "initial_value"?: unknown;
     "sentinel_writers"?: string[];
   }>;
-  "co_write_policy"?: string[][];
+  "cowrite_policy"?: string[][];
   "retention_policy_id"?: string;
   "avatar_blob_ref"?: string;
   "created_by": string;

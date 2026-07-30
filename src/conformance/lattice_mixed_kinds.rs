@@ -7,7 +7,7 @@
 //!
 //! Spec authority:
 //!   * `arkret-spec/spec/v1/zh/models/realm-and-space.md` (lattice cell registry /
-//!     `co_write_policy`)
+//!     `cowrite_policy`)
 //!   * `arkret-spec/spec/v1/zh/authz/event-auth-state-resolution.md` §3 (lattice_op kinds) and §5.3
 //!     (per-lattice reference impl)
 //!
