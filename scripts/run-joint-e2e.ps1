@@ -2170,6 +2170,38 @@ try {
         }
     }
 
+    # `cotest-wire` is the cross-language canonical oracle: the SDK's Rust
+    # implementation stays the single source of truth for canonical JSON, ids
+    # and digests, and TypeScript never reimplements them. But the helper used
+    # to shell out to `cargo run --bin cotest-wire` on EVERY assertion and
+    # fixture. Even with the binary already built, each call pays Cargo
+    # discovery and, with two Playwright workers, contends on the package-cache
+    # and build-directory locks -- a per-assertion cost across a 3357-second
+    # full run. Build it once here and let the helper exec the binary directly
+    # (`COTEST_WIRE_BIN`), which is what CI already does.
+    if (-not $SkipBuild -and -not $env:COTEST_WIRE_BIN) {
+        $cotestWireBinary = Join-Path $repoRoot "target\debug\cotest-wire.exe"
+        $wireFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $cotestWireBinary `
+            -RepositoryRoots @(
+                $repoRoot,
+                (Join-Path $workspaceRoot "arkret-rust-sdk")
+            )
+        if (-not $wireFreshness.Fresh) {
+            Write-Host "Preparing cotest-wire binary: $($wireFreshness.Detail)"
+            $started = Get-Date
+            $cotestManifest = Join-Path $repoRoot "Cargo.toml"
+            $service = Start-ManagedCommand `
+                -Name "prepare-cotest-wire" `
+                -Command ("cargo build --manifest-path {0} --bin cotest-wire" -f (Quote-PsLiteral $cotestManifest)) `
+                -WorkingDirectory $repoRoot `
+                -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "cotest-wire"; status = "cache-hit"; duration_seconds = 0; detail = $wireFreshness.Detail })
+        }
+    }
+
     if (-not $SkipBuild -and $StartCoauth -and -not $CoauthBin) {
         $defaultCoauthBinary = Join-Path $workspaceRoot "coauth\target\debug\coauth.exe"
         $coauthFreshness = Get-ArtifactFreshness `
@@ -2984,6 +3016,15 @@ requires_openai_auth = false
         $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
     }
 
+    # Point the wire helper at the prebuilt binary so no test pays `cargo run`.
+    # Only when it actually exists: falling back to `cargo run` is slow but
+    # correct, whereas exec'ing a missing path fails every canonical assertion.
+    if (-not $env:COTEST_WIRE_BIN) {
+        $preparedWireBinary = Join-Path $repoRoot "target\debug\cotest-wire.exe"
+        if (Test-Path -LiteralPath $preparedWireBinary) {
+            $env:COTEST_WIRE_BIN = $preparedWireBinary
+        }
+    }
     $env:COTEST_JOINT_RUN_DIR = $jointDir
     $env:COTEST_UI_SCREENSHOT_DIR = $screenshotDir
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
