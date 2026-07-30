@@ -392,9 +392,8 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                         .context("holder proof JWT omitted jti")?
                         .to_owned(),
                 );
-                let authority_endpoint = format!(
-                    "{coauth_base}/_arkret/gate/account/recovery-device-authorizations"
-                );
+                let authority_endpoint =
+                    format!("{coauth_base}/_arkret/gate/account/recovery-device-authorizations");
                 let mut tampered_candidate = participant_request.clone();
                 tampered_candidate.authorization_preimage.did_entry_digest =
                     arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?;
@@ -411,8 +410,9 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 let unexpected_authority =
                     arkret_wire::Did::new("did:web:rotated-authority.invalid".to_owned())?;
                 rotated_authority.ticket.account_authority_id = unexpected_authority.clone();
-                rotated_authority.authorization_preimage.account_authority_id =
-                    unexpected_authority;
+                rotated_authority
+                    .authorization_preimage
+                    .account_authority_id = unexpected_authority;
                 let rotated_authority_response = http
                     .post(&authority_endpoint)
                     .json(&rotated_authority)
@@ -631,8 +631,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let replayed_jti_status = replayed_jti_response.status();
     let replayed_jti_body = replayed_jti_response.text().await?;
     assert!(
-        !replayed_jti_status.is_success()
-            && replayed_jti_body.contains("already consumed"),
+        !replayed_jti_status.is_success() && replayed_jti_body.contains("already consumed"),
         "Coauth must reject a consumed holder JTI on a different transaction; \
          status={replayed_jti_status}, body={replayed_jti_body}"
     );
