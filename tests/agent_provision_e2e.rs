@@ -351,7 +351,13 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         ArkretServer::spawn_with_database_url(
             "cross-signing-recovery-transaction-e2e",
             database_url,
-            &[("SOLAND_TEST_ROTATION_ERASE_FAIL_AFTER", "1")],
+            // Typed failpoint: let the first old backup delete commit, then
+            // fail the rest of this attempt so the retry has to resume from
+            // durable progress. See soland `crates/http/src/failpoints.rs`.
+            &[(
+                "SOLAND_FAILPOINTS",
+                "backup_series_erase_durable_step=fail_after_durable_steps:1",
+            )],
         )
         .await?
     } else {
