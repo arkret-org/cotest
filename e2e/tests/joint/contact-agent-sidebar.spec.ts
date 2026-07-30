@@ -157,6 +157,15 @@ type AgentProvisionEvent = {
   proofs?: unknown[];
 };
 
+// `provision_events.*` are `EventInitialSubmission`s on the wire
+// (`arkret-rust-sdk/crates/wire/src/event_submission.rs`), not bare Events:
+// the signed envelope travels under `event`, alongside the authorization lease
+// that bounds its revocation window.
+type AgentProvisionSubmission = {
+  event: AgentProvisionEvent;
+  authorization_lease: Record<string, unknown>;
+};
+
 type AgentProvisionCommit = {
   phase: "commit";
   agent_id: string;
@@ -164,8 +173,8 @@ type AgentProvisionCommit = {
   slug: string;
   requested_scope: Record<string, unknown>;
   provision_events: {
-    accountability_grant: AgentProvisionEvent;
-    selector_claim: AgentProvisionEvent;
+    accountability_grant: AgentProvisionSubmission;
+    selector_claim: AgentProvisionSubmission;
   };
 };
 
@@ -242,8 +251,8 @@ async function provisionPendingAgent(
       preparation.principal_control_realm_id,
     );
     expect(commit.slug).toBe(agentSlug);
-    const accountability = commit.provision_events.accountability_grant;
-    const selector = commit.provision_events.selector_claim;
+    const accountability = commit.provision_events.accountability_grant.event;
+    const selector = commit.provision_events.selector_claim.event;
     expect(accountability.kind).toBe("ak.identity.accountability_grant");
     expect(selector.kind).toBe("ak.agent.selector_claim");
     for (const event of [accountability, selector]) {
