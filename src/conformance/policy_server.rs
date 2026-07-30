@@ -90,12 +90,9 @@ fn evaluate_binding_tombstone(case: &Value) -> Result<()> {
             bail!("binding tombstone expectation {pointer} drifted");
         }
     }
-    record_vector_event(
-        "policy_server.binding_tombstone",
-        &case["delete"],
-        &case["expected"],
-        &case["expected"],
-    );
+    // No transcript record here: this suite only pins fixture shapes. The
+    // live observations for this vector are recorded by
+    // `scenarios::policy_server_live` against a running Soland.
     Ok(())
 }
 
@@ -162,12 +159,9 @@ fn evaluate_tombstone_federation_replay(case: &Value) -> Result<()> {
     {
         bail!("restart replay incorrectly revives a tombstoned direct binding");
     }
-    record_vector_event(
-        "policy_server.tombstone_federation_replay",
-        &case["event"],
-        &case["expected"],
-        &case["expected"],
-    );
+    // No transcript record here: this suite only pins fixture shapes. The
+    // live restart/replay observations for this vector are recorded by
+    // `scenarios::policy_server_live` against a running Soland.
     Ok(())
 }
 

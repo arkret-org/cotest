@@ -207,6 +207,22 @@
         {
           "target": "inkson_mock_parity",
           "filter": "inkson_mock_contract_matches_live_soland_baseline"
+        },
+        {
+          "target": "policy_server_live",
+          "filter": "policy_server_binding_contract_is_live"
+        },
+        {
+          "target": "invite_frozen_prestate_live",
+          "filter": "invite_frozen_prestate_is_enforced_before_acceptance"
+        },
+        {
+          "target": "invite_frozen_prestate_live",
+          "filter": "third_party_invite_cancel_requires_revoke"
+        },
+        {
+          "target": "durable_effect_live_spotcheck",
+          "filter": "declared_durable_effects_match_live_producers"
         }
       ],
       "excluded_quarantine_labels": [],
