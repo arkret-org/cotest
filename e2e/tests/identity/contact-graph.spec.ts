@@ -24,6 +24,7 @@ import {
 import {
   acceptInviteArkret,
   contactRow,
+  countInvitesFor,
   deliverInviteExplicitAddress,
   deliverInviteWithConsentGrant,
   getInviteReceivePolicyArkret,
@@ -350,8 +351,9 @@ test.describe("contact graph (same principal server)", () => {
     // Victim has no pending invite (quarantined, not notified).
     const invites = await listAuthzInvitesArkret(request, victimToken);
     expect(
-      invites.find((i) => i.realm_id === realmId && i.invitee === victim.did),
-    ).toBeFalsy();
+      countInvitesFor(invites, realmId, victim.did),
+      "quarantined explicit_address invite must not surface to the invitee",
+    ).toBe(0);
   });
 
   // S6: block (tombstone block_peer=true) -> peer pulls via any evidence ->
@@ -413,8 +415,9 @@ test.describe("contact graph (same principal server)", () => {
 
     const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
-      invites.find((i) => i.realm_id === realmId && i.invitee === alice.did),
-    ).toBeFalsy();
+      countInvitesFor(invites, realmId, alice.did),
+      "denied_subjects invite must be dropped, not delivered to the invitee",
+    ).toBe(0);
   });
 
   // S7: revoked consent evidence is downgraded to explicit-address trust.
@@ -495,8 +498,9 @@ test.describe("contact graph (same principal server)", () => {
     // alice is not actually a member.
     const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
-      invites.find((i) => i.realm_id === realmId && i.invitee === alice.did),
-    ).toBeFalsy();
+      countInvitesFor(invites, realmId, alice.did),
+      "revoked-consent invite must stay quarantined and holder-private",
+    ).toBe(0);
   });
 
   // S8: realm member pulled into a Circle without consent. Now implemented and

@@ -253,7 +253,15 @@ test.describe("conformance profile gates @fully-implemented", () => {
       actorDid: alice.did,
       realmId: "ak:realm:01904100-0000-7000-8000-000000000999",
       kind: "ak.edge.applet.command.transaction",
-      payload: { transaction_id: "ak:txn:profile-gate", params: {} },
+      // `ak:transaction:` is the canonical typed ID prefix. The abbreviated
+      // `ak:txn:` is a `hard_reject` entry in
+      // artifacts/registry/forbidden-wire-fields.json, so using it here made
+      // the payload independently invalid and let this gate pass on the wrong
+      // rejection reason.
+      payload: {
+        transaction_id: "ak:transaction:01904100-0000-7000-8000-00000000f001",
+        params: {},
+      },
     });
 
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -262,10 +270,13 @@ test.describe("conformance profile gates @fully-implemented", () => {
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
     const body = await resp.json();
+    // With a canonical payload the only admissible reasons are about the event
+    // kind itself, not payload shape. `schema_violation` is deliberately NOT
+    // accepted any more: it would mean the fixture, not the profile gate,
+    // caused the rejection.
     expect([
       "unsupported_event_kind",
       "unsupported_feature",
-      "schema_violation",
       "unknown_event_kind",
     ]).toContain(wireErrCode(body));
     expect(JSON.stringify(body)).not.toContain('"accepted"');

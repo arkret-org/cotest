@@ -804,6 +804,26 @@ export async function listAuthzInvitesArkret(
   return body.invites ?? [];
 }
 
+// Count invites matching (realm, invitee) WITHOUT handing the invite objects to
+// a matcher.
+//
+// R95: `expect(invites.find(...)).toBeFalsy()` makes Playwright serialize the
+// whole received object into the failure diff, which lands in
+// `error-context.md` and `playwright.stdout.log`. Invite rows carry locator
+// secrets, so a failing non-disclosure assertion was itself leaking the secret
+// it asserts about. Assert on this count instead: the matcher only ever sees a
+// number, and the label carries the diagnosis. Use `expectInviteFields` when a
+// test genuinely needs to inspect an invite.
+export function countInvitesFor(
+  invites: AuthzInvite[],
+  realmId: string,
+  inviteeDid: string,
+): number {
+  return invites.filter(
+    (invite) => invite.realm_id === realmId && invite.invitee === inviteeDid,
+  ).length;
+}
+
 // Submit `ak.invite.accept` as the invitee to join the realm.
 export async function acceptInviteArkret(
   request: APIRequestContext,
