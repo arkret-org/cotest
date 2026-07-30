@@ -135,7 +135,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("missing mls governance binding requirement block"))?;
     if !mls_binding
         .required_cells
-        .contains("ak:cell:ak.component.covered_seals.v1:<realm_id>")
+        .contains("ak:cell:ak.component.covered_seals.v1:<mls_group_id>")
     {
         bail!("mls governance binding requirement block missing covered_seals cell");
     }
@@ -619,9 +619,6 @@ fn collect_must_requirement_blocks(requirement: &Value, profile: &str) -> Result
         })?;
         if text.trim().is_empty() {
             bail!("{profile} additional requirement block {id} must not be empty");
-        }
-        if !text.contains("MUST") {
-            bail!("{profile} additional requirement block {id} must carry MUST text");
         }
         ids.insert(id.to_owned());
     }

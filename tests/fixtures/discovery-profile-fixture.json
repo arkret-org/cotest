@@ -13,6 +13,7 @@
     "core": [
       "service_discovery",
       "identity_registry",
+      "security_transactions",
       "events_sync"
     ],
     "extension": [

@@ -367,8 +367,9 @@ fn run_strand_tracks_update_atomic_case(case: &Value) -> Result<()> {
 
     for required in [
         "primary_switch_atomic",
-        "add_disable_primary_transfer_atomic",
+        "disable_and_profile_update_atomic",
         "primary_conflict_rejected_all_or_nothing",
+        "unregistered_track_name_rejected",
         "selector_segment_rejected",
     ] {
         if !seen.contains(required) {
@@ -563,7 +564,9 @@ fn apply_single_track_patch(
         return Err(arkret_wire::ErrorCode::SCHEMA_VIOLATION);
     }
 
-    let track = tracks.entry(track_key.to_owned()).or_default();
+    let track = tracks
+        .get_mut(track_key)
+        .ok_or(arkret_wire::ErrorCode::SCHEMA_VIOLATION)?;
     match field {
         "enabled" => {
             track.enabled = patch

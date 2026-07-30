@@ -29,7 +29,7 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     let cases = fixture["cases"]
         .as_array()
         .ok_or_else(|| anyhow!("arkret private KDF fixture missing cases[]"))?;
-    run_content_kdf(case(cases, "content_key_derivation_sha256_aes256gcm")?)?;
+    run_content_kdf(case(cases, "content_key_derivation_sha256_aes128gcm")?)?;
     run_content_negatives(case(cases, "content_key_derivation_fail_closed_negatives")?)?;
     run_reaction_hmac(case(cases, "reaction_routing_hmac_nfc")?)?;
     run_rrk_missing_seals(case(cases, "rrk_eager_seal_before_gc")?)?;
@@ -73,7 +73,17 @@ fn run_content_kdf(case: &Value) -> Result<()> {
 fn run_content_negatives(case: &Value) -> Result<()> {
     let fixture: Value = serde_json::from_slice(&fs::read(fixture_path(FIXTURE))?)?;
     let cases = fixture["cases"].as_array().unwrap();
-    let base = case_by_name(cases, required_str(&case["input"], "base_case")?)?;
+    let declared_base = required_str(&case["input"], "base_case")?;
+    let base = match case_by_name(cases, declared_base) {
+        Ok(base) => base,
+        Err(_) if declared_base == "content_key_derivation_sha256_aes256gcm" => {
+            // The active SHA-256 fixture now uses the mandatory AES-128-GCM
+            // ciphersuite but the negative-vector backlink retained its former
+            // case name. Keep this compatibility closed to that one rename.
+            case_by_name(cases, "content_key_derivation_sha256_aes128gcm")?
+        }
+        Err(error) => return Err(error),
+    };
     let input = &base["input"];
     let secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
     let realm = required_str(input, "realm_id_utf8")?.as_bytes();

@@ -1,10 +1,10 @@
 //! CBA dual-plane lattice fixture suite.
 //!
 //! Validates the `cba-lattice-fixture.json` profile's normative vectors. Data
-//! events use `effects + seal_ref + auth_context` and stay data-plane local or
-//! observed until control-plane seals cover the relevant state. Control moves
-//! use `effects + seal_basis`, may carry preconditions, and only become sealed
-//! after valid seal coverage.
+//! events use registry-derived projected writes plus `seal_ref + auth_context` and stay data-plane
+//! local or observed until control-plane seals cover the relevant state. Control moves
+//! use registry-derived projected writes plus `seal_basis`, may carry preconditions, and only
+//! become sealed after valid seal coverage.
 
 use std::collections::BTreeSet;
 
@@ -51,7 +51,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_actor_chain_realm_scope = false;
     let mut seen_conflict_recovery = false;
     let mut seen_same_seal_bottom_serialization = false;
-    let mut seen_realm_create_effects_closure = false;
+    let mut seen_realm_create_projection_closure = false;
     let mut seen_null_cell_subject_wire_form = false;
 
     for vector in vectors {
@@ -59,7 +59,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         match name {
             "data_event_accepts_without_seal_finality" => {
                 require_str_eq(vector, "/event/plane", "data", name)?;
-                require_non_empty_array(vector, "/event/effects", name)?;
+                require_non_empty_array(vector, "/event/projected_writes", name)?;
                 require_field(required_object(vector, "/event", name)?, "seal_ref", name)?;
                 require_field(
                     required_object(vector, "/event", name)?,
@@ -128,7 +128,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 require_field(required_object(vector, "/basis", name)?, "state_root", name)?;
                 require_str_eq(vector, "/control_move/plane", "control", name)?;
                 require_non_empty_array(vector, "/control_move/preconditions", name)?;
-                require_non_empty_array(vector, "/control_move/effects", name)?;
+                require_non_empty_array(vector, "/control_move/projected_writes", name)?;
                 require_str_eq(
                     vector,
                     "/expected_before_seal/event_state",
@@ -497,18 +497,18 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            "realm_create_effects_closure" => {
-                validate_realm_create_effects_closure(vector, name)?;
-                seen_realm_create_effects_closure = true;
+            "realm_create_projection_closure" => {
+                validate_realm_create_projection_closure(vector, name)?;
+                seen_realm_create_projection_closure = true;
                 record_vector_event(
-                    "state_resolution.cba.realm_create_effects_closure",
+                    "state_resolution.cba.realm_create_projection_closure",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "required_effect_count": 4,
+                        "required_projection_count": 4,
                         "genesis_state_root": "byte_identical_across_independent_implementations",
                     }),
                     &json!({
-                        "required_effect_count": required_array(vector, "/required_effects", name)?.len(),
+                        "required_projection_count": required_array(vector, "/required_projected_writes", name)?.len(),
                         "genesis_state_root": pointer_str(vector, "/expected/genesis_state_root"),
                     }),
                 );
@@ -551,7 +551,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_actor_chain_realm_scope
         && seen_conflict_recovery
         && seen_same_seal_bottom_serialization
-        && seen_realm_create_effects_closure
+        && seen_realm_create_projection_closure
         && seen_null_cell_subject_wire_form)
     {
         bail!(
@@ -560,7 +560,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / \
               threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
-              conflict_recovery / same_seal_bottom_serialization / realm_create_effects_closure / \
+              conflict_recovery / same_seal_bottom_serialization / realm_create_projection_closure / \
               null_cell_subject_wire_form)"
         );
     }
@@ -614,18 +614,18 @@ fn validate_null_cell_subject_wire_form(vector: &Value, vector_name: &str) -> Re
     Ok(())
 }
 
-fn validate_realm_create_effects_closure(vector: &Value, vector_name: &str) -> Result<()> {
-    let effects = required_array(vector, "/required_effects", vector_name)?;
-    if effects.len() != 4 {
-        bail!("vector {vector_name} must define exactly four realm-create effects");
+fn validate_realm_create_projection_closure(vector: &Value, vector_name: &str) -> Result<()> {
+    let projected_writes = required_array(vector, "/required_projected_writes", vector_name)?;
+    if projected_writes.len() != 4 {
+        bail!("vector {vector_name} must define exactly four realm-create projected writes");
     }
 
     let mut effect_kinds = std::collections::BTreeMap::new();
-    for effect in effects {
-        let cell = required_str(effect, "cell")?;
-        let op_kind = required_str(effect, "op_kind")?;
+    for write in projected_writes {
+        let cell = required_str(write, "cell")?;
+        let op_kind = required_str(write, "op_kind")?;
         if effect_kinds.insert(cell, op_kind).is_some() {
-            bail!("vector {vector_name} repeats realm-create effect cell {cell}");
+            bail!("vector {vector_name} repeats realm-create projected cell {cell}");
         }
     }
     for (cell, op_kind) in [
@@ -641,7 +641,7 @@ fn validate_realm_create_effects_closure(vector: &Value, vector_name: &str) -> R
             bail!("vector {vector_name} must bind realm-create cell {cell} to op_kind={op_kind}");
         }
     }
-    let member_effect = effects
+    let member_effect = projected_writes
         .iter()
         .find(|effect| {
             effect.get("cell").and_then(Value::as_str)
@@ -650,7 +650,7 @@ fn validate_realm_create_effects_closure(vector: &Value, vector_name: &str) -> R
         .expect("member effect checked above");
     require_str_eq(member_effect, "/from", "leave", vector_name)?;
     require_str_eq(member_effect, "/to", "join", vector_name)?;
-    let create_effect = effects
+    let create_effect = projected_writes
         .iter()
         .find(|effect| {
             effect.get("cell").and_then(Value::as_str)
@@ -695,10 +695,10 @@ fn validate_realm_create_effects_closure(vector: &Value, vector_name: &str) -> R
         .map(|case| required_str(case, "name"))
         .collect::<Result<_>>()?;
     let expected_negative_names = BTreeSet::from([
-        "missing_member_state_effect",
+        "missing_member_state_projection",
         "creator_non_membership_proof",
         "metadata_cell_only_after_first_update",
-        "extra_unregistered_effect",
+        "extra_unregistered_projection",
     ]);
     if negative_names != expected_negative_names {
         bail!("vector {vector_name} realm-create negative coverage drifted");
@@ -1015,17 +1015,27 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
         match case_name {
             "blind_write_without_basis" => {
                 require_str_eq(case, "/event/plane", "data", vector_name)?;
-                require_str_eq(case, "/event/effects/0/cell", cell, vector_name)?;
+                require_str_eq(case, "/event/projected_writes/0/cell", cell, vector_name)?;
                 if !case.pointer("/event/basis").is_some_and(Value::is_null) {
                     bail!("vector {vector_name} blind write must carry a null basis");
                 }
-                require_str_eq(case, "/event/effects/0/op/kind", "set", vector_name)?;
-                require_str_eq(case, "/event/effects/0/op/value", "v2", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/event/projected_writes/0/op/kind",
+                    "set",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/event/projected_writes/0/op/value",
+                    "v2",
+                    vector_name,
+                )?;
                 require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
                 require_str_eq(case, "/expected/cell_value", "v1", vector_name)?;
                 require_bool_eq(
                     case,
-                    "/expected/atomic_rejects_all_effects",
+                    "/expected/atomic_rejects_all_projected_writes",
                     true,
                     vector_name,
                 )?;
@@ -1056,9 +1066,24 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
                     "v1",
                     vector_name,
                 )?;
-                require_str_eq(case, "/control_move/effects/0/cell", cell, vector_name)?;
-                require_str_eq(case, "/control_move/effects/0/op/kind", "set", vector_name)?;
-                require_str_eq(case, "/control_move/effects/0/op/value", "v2", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/control_move/projected_writes/0/cell",
+                    cell,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/control_move/projected_writes/0/op/kind",
+                    "set",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/control_move/projected_writes/0/op/value",
+                    "v2",
+                    vector_name,
+                )?;
                 require_str_eq(
                     case,
                     "/expected/result",
@@ -1109,6 +1134,21 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
                 require_str_eq(case, "/expected/result", "accept_temporarily", vector_name)?;
                 require_str_eq(case, "/expected/query_grade", "stale", vector_name)?;
             }
+            "rejecting_revoked_key_within_freshness_window_is_nonconformant" => {
+                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
+                if distance > window {
+                    bail!("vector {vector_name} nonconformance control exceeds freshness window");
+                }
+                require_str_eq(case, "/implementation_result", "reject", vector_name)?;
+                require_str_eq(case, "/expected/conformance", "fail", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/required_result",
+                    "accept_temporarily",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/required_query_grade", "stale", vector_name)?;
+            }
             "epoch_not_valid_at_seal_ref" => {
                 require_bool_eq(
                     case,
@@ -1133,6 +1173,7 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
         &[
             "revoked_key_old_seal_ref_outside_window",
             "revoked_key_within_freshness_window",
+            "rejecting_revoked_key_within_freshness_window_is_nonconformant",
             "epoch_not_valid_at_seal_ref",
         ],
     )
@@ -1581,7 +1622,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                 )?;
                 require_bool_eq(
                     accepted,
-                    "/expected/data_cell_x_contains_event_effect",
+                    "/expected/data_cell_x_contains_event_projection",
                     true,
                     vector_name,
                 )?;
@@ -1593,7 +1634,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                 )?;
                 require_bool_eq(
                     accepted,
-                    "/expected/data_cell_y_contains_dependent_effect",
+                    "/expected/data_cell_y_contains_dependent_projection",
                     true,
                     vector_name,
                 )?;
@@ -1614,7 +1655,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                 require_str_eq(revoked, "/expected/reason", "stale_seal_ref", vector_name)?;
                 require_bool_eq(
                     revoked,
-                    "/expected/data_cell_x_effect_retroactively_removed",
+                    "/expected/data_cell_x_projection_retroactively_removed",
                     true,
                     vector_name,
                 )?;
@@ -1631,7 +1672,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     vector_name,
                 )?;
                 for path in [
-                    "/expected/dependent_event_effect_retroactively_removed",
+                    "/expected/dependent_event_projection_retroactively_removed",
                     "/expected/recursive_dependency_closure_revalidated",
                     "/expected/projection_recomputed",
                     "/expected/converges_with_from_start_joiner",
@@ -1665,8 +1706,8 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     vector_name,
                 )?;
                 for path in [
-                    "/expected/data_cell_x_effect_retroactively_removed",
-                    "/expected/data_cell_y_dependent_effect_retroactively_removed",
+                    "/expected/data_cell_x_projection_retroactively_removed",
+                    "/expected/data_cell_y_dependent_projection_retroactively_removed",
                     "/expected/accepted_set_is_authorized_dependency_closed",
                     "/expected/order_independent",
                 ] {
@@ -1776,6 +1817,24 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                 require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
                 require_str_eq(case, "/expected/query_result", "failed_bottom", vector_name)?;
             }
+            "reset_on_a_cell_not_in_bottom" => {
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "recovery_target_not_in_bottom",
+                    vector_name,
+                )?;
+            }
+            "target_cell_mismatch" => {
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "recovery_witness_invalid",
+                    vector_name,
+                )?;
+            }
             other => bail!("vector {vector_name} unknown conflict recovery case {other}"),
         }
     }
@@ -1789,6 +1848,8 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
             "recovery_capability_not_sealed",
             "witness_revoke_lagging",
             "unsealed_recovery_move",
+            "reset_on_a_cell_not_in_bottom",
+            "target_cell_mismatch",
         ],
     )
 }

@@ -1446,7 +1446,7 @@ fn executed_lattice_assertion(vector_id: &str, assertion: &str) -> bool {
     const ORDERED_LOG_JOIN: &[&str] = &[
         "per_issuer_sequence_order",
         "issuer_prefix_starts_at_seq_zero",
-        "byte_identical_effect_op_is_idempotent",
+        "byte_identical_projected_op_is_idempotent",
         "same_issuer_seq_equivocation_uses_max_event_digest",
         "equivocation_winner_is_independent_of_causal_edges",
         "equivocation_loser_remains_in_canonical_log",
