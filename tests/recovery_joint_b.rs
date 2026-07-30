@@ -290,11 +290,27 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         !backup_classes_unlocked.is_empty(),
         "real recovery restore must unlock at least one active backup"
     );
-    let mut transaction = recovery_http
-        .create_security_transaction(&SecurityTransactionCreateRequest::Recovery(
-            prepared.create_request,
-        ))
-        .await?;
+    let create = SecurityTransactionCreateRequest::Recovery(prepared.create_request);
+    let mut transaction = recovery_http.create_security_transaction(&create).await?;
+    let exact_create = recovery_http.create_security_transaction(&create).await?;
+    assert_eq!(
+        serde_json::to_value(&transaction)?,
+        serde_json::to_value(&exact_create)?,
+        "byte-identical create replay must return the first durable outcome"
+    );
+    let mut conflicting_create = create.clone();
+    let SecurityTransactionCreateRequest::Recovery(conflicting) = &mut conflicting_create else {
+        unreachable!("recovery create")
+    };
+    conflicting.expires_at += chrono::Duration::milliseconds(1);
+    let create_conflict = recovery_http
+        .create_security_transaction(&conflicting_create)
+        .await
+        .expect_err("same transaction id with different bytes must conflict");
+    assert!(
+        create_conflict.to_string().contains("duplicate_conflict"),
+        "unexpected create conflict: {create_conflict}"
+    );
     assert_eq!(transaction.state, SecurityTransactionState::Pending);
     let SecurityTransactionBinding::Recovery(binding) = &transaction.binding else {
         return Err(anyhow!("joint recovery created a rotation transaction"));
@@ -368,6 +384,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         transaction.state,
         SecurityTransactionState::AwaitingDeviceAttestation
     );
+    let completed_at = chrono::Utc::now();
     let terminal = inkson::fresh_device_recovery::sign_terminal_receipt_continue(
         &transaction,
         inkson::fresh_device_recovery::RecoveryTerminalObservation {
@@ -384,7 +401,36 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
             welcome_count: 0,
             welcome_realm_summary: None,
             started_at: prepared.verified_session.created_at,
-            completed_at: chrono::Utc::now(),
+            completed_at,
+        },
+        replacement_signer.as_ref(),
+    )?;
+    let different_terminal = inkson::fresh_device_recovery::sign_terminal_receipt_continue(
+        &transaction,
+        inkson::fresh_device_recovery::RecoveryTerminalObservation {
+            policy_id: prepared.verified_session.policy_id.clone(),
+            policy_version: prepared.verified_session.policy_version,
+            trust_domain: prepared.verified_session.trust_domain.clone(),
+            proof_summary: arkret_models_crypto::RecoveryProofSummary {
+                kind: prepared.proof_summary.kind,
+                proof_digest: prepared.proof_summary.proof_digest.clone(),
+                quorum_participant_count: None,
+                share_ids: None,
+            },
+            backup_classes_unlocked: terminal
+                .client_attestation
+                .as_ref()
+                .and_then(|attestation| match &attestation.artifact {
+                    arkret_models_crypto::ClientStepAttestationArtifact::RecoveryReceipt(
+                        receipt,
+                    ) => Some(receipt.backup_classes_unlocked.clone()),
+                    _ => None,
+                })
+                .context("terminal receipt omitted backup classes")?,
+            welcome_count: 0,
+            welcome_realm_summary: None,
+            started_at: prepared.verified_session.created_at,
+            completed_at: completed_at + chrono::Duration::milliseconds(1),
         },
         replacement_signer.as_ref(),
     )?;
@@ -400,6 +446,23 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
             .and_then(|result| result.completion_attestation.as_ref())
             .is_some(),
         "completed recovery must carry a durable completion attestation"
+    );
+    let exact_terminal = recovery_http
+        .continue_security_transaction(&transaction.transaction_id, &terminal)
+        .await?;
+    assert_eq!(
+        serde_json::to_value(&transaction)?,
+        serde_json::to_value(&exact_terminal)?,
+        "byte-identical terminal replay must return the first completion"
+    );
+    let terminal_conflict = recovery_http
+        .continue_security_transaction(&transaction.transaction_id, &different_terminal)
+        .await
+        .expect_err("different terminal bytes must conflict");
+    assert!(
+        terminal_conflict.to_string().contains("duplicate_conflict")
+            || terminal_conflict.to_string().contains("terminal"),
+        "unexpected terminal conflict: {terminal_conflict}"
     );
     Ok(())
 }
