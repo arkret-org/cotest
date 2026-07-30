@@ -346,7 +346,17 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<()> {
-    let server = ArkretServer::spawn("cross-signing-recovery-transaction-e2e").await?;
+    let restart_database_url = std::env::var("COTEST_A_SOLAND_DATABASE_URL").ok();
+    let mut server = if let Some(database_url) = restart_database_url.as_deref() {
+        ArkretServer::spawn_with_database_url(
+            "cross-signing-recovery-transaction-e2e",
+            database_url,
+            &[],
+        )
+        .await?
+    } else {
+        ArkretServer::spawn("cross-signing-recovery-transaction-e2e").await?
+    };
     let token = register_account(&server, ALICE_DID, "@cotest-recovery-alice", ALICE_DEVICE)
         .await
         .context("register recovery principal")?;
@@ -461,7 +471,7 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
             .ok_or_else(|| anyhow!("recovery transaction omitted transaction_id: {first}"))?
     );
     let replacement_token = dev_login(&server, ALICE_DID, RECOVERY_REPLACEMENT_DEVICE).await?;
-    let authorized = expect_json(
+    let first_authorized = expect_json(
         server
             .http()
             .post(server.url(&continue_path))
@@ -470,6 +480,12 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         StatusCode::OK,
     )
     .await?;
+    if restart_database_url.is_some() {
+        server
+            .restart_external_process()
+            .await
+            .context("restart A-model coordinator after authorize acceptance")?;
+    }
     let authorized_replay = expect_json(
         server
             .http()
@@ -479,7 +495,8 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(authorized, authorized_replay);
+    assert_eq!(first_authorized, authorized_replay);
+    let authorized = authorized_replay;
     assert_eq!(authorized["state"], "awaiting_device_attestation");
     assert_eq!(authorized["next_required_step"], "issue_terminal_receipt");
     assert_eq!(
@@ -524,7 +541,7 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         },
         &replacement_signer,
     )?;
-    let completed = expect_json(
+    let first_completed = expect_json(
         server
             .http()
             .post(server.url(&continue_path))
@@ -533,6 +550,12 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         StatusCode::OK,
     )
     .await?;
+    if restart_database_url.is_some() {
+        server
+            .restart_external_process()
+            .await
+            .context("restart A-model coordinator after terminal acceptance")?;
+    }
     let completed_replay = expect_json(
         server
             .http()
@@ -542,7 +565,8 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(completed, completed_replay);
+    assert_eq!(first_completed, completed_replay);
+    let completed = completed_replay;
     assert_eq!(completed["state"], "completed");
     assert!(completed["next_required_step"].is_null());
     assert_eq!(
