@@ -203,6 +203,7 @@ pub use history_crypto_closure::{
     run_e2ee_late_key_recovery_t0_deterministic_visibility_vector,
     run_history_crypto_closure_fixture_suite,
     run_history_sharing_e2ee_prejoin_key_share_policy_vector,
+    run_history_sharing_principal_control_profile_baseline_vector,
     run_preview_token_scoped_stripped_state_vector,
 };
 pub use identity_root::{

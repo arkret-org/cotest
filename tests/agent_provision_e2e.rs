@@ -2763,21 +2763,18 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         "default_discoverability": "invite_only",
                         "default_join_rule": "invite",
                         "history_visibility": "restricted",
-                        "history_sharing_policy": {
-                            "version": 1,
-                            "default_key_share": "deny",
-                            "pre_join_history": "deny",
-                            "allowed_key_sources": ["key_backup"],
-                            "allowed_receiver_states": ["active_member"],
-                            "audit": {
-                                "share_audit_event_required": true,
-                                "access_audit_required": true
-                            }
-                        },
+                        // `realm.schema.json` is closed and declares neither
+                        // `history_sharing_policy` nor
+                        // `plaintext_visible_services`. A managed Agent PCR
+                        // satisfies `restricted` through the profile-fixed
+                        // baseline in `ak.profile.principal_control_realm.v1`
+                        // (realm-and-space.md §2.8.1), which is why its
+                        // single-Event genesis needs no policy Event — and could
+                        // not emit one, since the kind is absent from the PCR
+                        // event-kind allowlist.
                         "encryption_profile": "mls_rfc9420",
                         "content_encryption_floor": "e2ee_required",
                         "metadata_encryption_floor": "e2ee_required",
-                        "plaintext_visible_services": [],
                         "security_class": "high_assurance",
                         "federation_policy": "restricted",
                         "notary_profile": "single_did",

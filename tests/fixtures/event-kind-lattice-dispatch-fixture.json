@@ -60,6 +60,7 @@
       "ak.component.morph.stage.v1",
       "ak.component.mls.epoch.v1",
       "ak.component.mls.key_schedule.v1",
+      "ak.component.realm.alias.v1",
       "ak.component.realm.archive.v1",
       "ak.component.realm.asset_privacy_policy.v1",
       "ak.component.realm.delivery_binding_policy.v1",

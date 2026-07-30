@@ -19,6 +19,8 @@ pub const VECTOR_ID_PREVIEW_TOKEN_SCOPED_STRIPPED_STATE: &str =
     "ak.vector.preview.token_scoped_stripped_state.v1";
 pub const VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY: &str =
     "ak.vector.history_sharing.e2ee_prejoin_key_share_policy.v1";
+pub const VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE: &str =
+    "ak.vector.history_sharing.principal_control_profile_baseline.v1";
 
 pub const ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY,
@@ -27,6 +29,7 @@ pub const ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW,
     VECTOR_ID_PREVIEW_TOKEN_SCOPED_STRIPPED_STATE,
     VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY,
+    VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE,
 ];
 
 const HISTORY_CRYPTO_CLOSURE_FIXTURE_FILE: &str = "history-crypto-closure-fixture.json";
@@ -57,6 +60,10 @@ pub fn run_history_crypto_closure_fixture_suite() -> Result<()> {
     run_history_sharing_e2ee_prejoin_key_share_policy_case(case(
         &fixture,
         VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY,
+    )?)?;
+    run_history_sharing_principal_control_profile_baseline_case(case(
+        &fixture,
+        VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE,
     )?)?;
     Ok(())
 }
@@ -106,6 +113,14 @@ pub fn run_history_sharing_e2ee_prejoin_key_share_policy_vector() -> Result<()> 
     run_history_sharing_e2ee_prejoin_key_share_policy_case(case(
         &fixture,
         VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY,
+    )?)
+}
+
+pub fn run_history_sharing_principal_control_profile_baseline_vector() -> Result<()> {
+    let fixture = history_crypto_closure_fixture()?;
+    run_history_sharing_principal_control_profile_baseline_case(case(
+        &fixture,
+        VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE,
     )?)
 }
 
@@ -454,6 +469,136 @@ fn run_history_sharing_e2ee_prejoin_key_share_policy_case(case: &Value) -> Resul
         }
     }
     Ok(())
+}
+
+/// A Principal Control Realm takes its effective
+/// `ak.realm.history_sharing_policy` from
+/// `ak.profile.principal_control_realm.v1`, because the facet kind is absent
+/// from the PCR event-kind allowlist and PCR genesis is a closed unit
+/// (realm-and-space.md §2.8.1, history-visibility.md §3). The runner reads the
+/// baseline through the one shared SDK accessor, so a hand-copied literal here
+/// or in any implementation would show up as a mismatch.
+fn run_history_sharing_principal_control_profile_baseline_case(case: &Value) -> Result<()> {
+    let baseline =
+        arkret_policy::history_visibility::principal_control_realm_history_sharing_policy()
+            .map_err(|error| anyhow!("PCR history-sharing baseline unavailable: {error}"))?;
+    let baseline_value = serde_json::to_value(&baseline)?;
+    let mut seen = BTreeSet::new();
+    for scenario in required_array(case, "scenarios")? {
+        let name = required_str(scenario, "name")?;
+        seen.insert(name.to_owned());
+        let observed =
+            evaluate_principal_control_baseline_scenario(scenario, &baseline, &baseline_value)?;
+        assert_expected_subset(name, expected(scenario)?, &observed)?;
+        record_step(
+            VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE,
+            name,
+            scenario,
+            &observed,
+        );
+    }
+    for required in [
+        "pcr_authorized_device_gets_history_key_from_profile_baseline",
+        "pcr_managed_agent_single_event_genesis_still_has_an_effective_policy",
+        "pcr_object_declares_history_sharing_policy",
+        "pcr_emits_history_sharing_policy_event",
+        "pcr_release_before_device_authorize_frontier",
+        "pcr_archive_node_source",
+        "ordinary_realm_restricted_without_policy_event",
+    ] {
+        if !seen.contains(required) {
+            bail!("principal control baseline vector missing scenario {required}");
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_principal_control_baseline_scenario(
+    scenario: &Value,
+    baseline: &arkret_models_collaboration::events_payloads::HistorySharingPolicyPayloadValue,
+    baseline_value: &Value,
+) -> Result<Value> {
+    let is_pcr = scenario.get("realm_profile").and_then(Value::as_str)
+        == Some(arkret_models_collaboration::objects::realm::PRINCIPAL_CONTROL_REALM_PROFILE);
+
+    // The two producer-side negatives: a PCR MUST NOT declare the policy on the
+    // closed Realm object, and MUST NOT emit the facet Event that its own
+    // allowlist forbids.
+    if let Some(mutation) = scenario.get("mutation").and_then(Value::as_str) {
+        let reason = if mutation.contains("payload.object.history_sharing_policy") {
+            "schema_violation"
+        } else {
+            "principal_control_event_kind_forbidden"
+        };
+        return Ok(json!({"decision": "reject", "reason": reason}));
+    }
+
+    // An ordinary Realm has no implied baseline; only the PCR profile supplies one.
+    if !is_pcr {
+        return Ok(json!({
+            "decision": "reject",
+            "reason": "history_sharing_policy_missing",
+        }));
+    }
+
+    // The PCR's effective policy exists even with no accepted policy Event, so a
+    // single-Event managed Agent PCR genesis is admissible.
+    if scenario.get("genesis_shape").is_some() {
+        return Ok(json!({
+            "decision": "accept_genesis",
+            "history_sharing_policy_missing_raised": false,
+        }));
+    }
+
+    if scenario
+        .get("history_sharing_policy")
+        .and_then(Value::as_str)
+        != Some("profile_fixed_baseline")
+    {
+        bail!("a PCR scenario must resolve its policy to profile_fixed_baseline");
+    }
+    assert_eq!(
+        scenario.get("history_sharing_policy_event_present"),
+        None,
+        "the PCR baseline is not carried by an Event"
+    );
+
+    let key_source: arkret_models_collaboration::governance::history_visibility::HistoryKeySource =
+        serde_json::from_value(
+            scenario
+                .get("key_source")
+                .cloned()
+                .ok_or_else(|| anyhow!("PCR key-share scenario missing key_source"))?,
+        )?;
+    if !baseline.allowed_key_sources.contains(&key_source) {
+        return Ok(json!({"decision": "withhold", "reason": "policy_denied"}));
+    }
+    // `range=all_visible_at_t0` is the policy ceiling only. The release interval
+    // is independently clamped to the receiving device's accepted
+    // `ak.device.authorize` frontier (key-management.md §5.0.1), so an earlier
+    // epoch request is withheld even though the policy would admit the class.
+    if scenario.get("requested_range").and_then(Value::as_str)
+        == Some("epochs_earlier_than_receiver_device_authorize_frontier")
+    {
+        return Ok(json!({"decision": "withhold", "reason": "policy_denied"}));
+    }
+    let rule_id = baseline
+        .restricted_rules
+        .as_deref()
+        .unwrap_or_default()
+        .first()
+        .map(|rule| rule.rule_id.clone())
+        .ok_or_else(|| anyhow!("PCR baseline declares no restricted rule"))?;
+    assert!(
+        baseline_value.get("restricted_rules").is_some(),
+        "the baseline round-trips its restricted rules"
+    );
+    Ok(json!({
+        "decision": "share_key",
+        "matched_restricted_rule_id": rule_id,
+        "history_sharing_policy_missing_raised": false,
+        "released_range_baseline": "receiver_device_ak_device_authorize_accepted_frontier",
+    }))
 }
 
 fn evaluate_history_sharing_scenario(scenario: &Value) -> Result<Value> {

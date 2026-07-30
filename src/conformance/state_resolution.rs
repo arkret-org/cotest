@@ -53,6 +53,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_same_seal_bottom_serialization = false;
     let mut seen_realm_create_projection_closure = false;
     let mut seen_null_cell_subject_wire_form = false;
+    let mut seen_realm_alias_single_carrier = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -529,6 +530,25 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "realm_alias_single_carrier" => {
+                validate_realm_alias_single_carrier(vector, name)?;
+                seen_realm_alias_single_carrier = true;
+                record_vector_event(
+                    "state_resolution.cba.realm_alias_single_carrier",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "carrier_cell": "ak:cell:ak.component.realm.alias.v1:null",
+                        "authorized_by": ["ak.realm.alias", "ak.realm.admin"],
+                    }),
+                    &json!({
+                        "carrier_cell": pointer_str(vector, "/required_projected_writes/0/cell"),
+                        "authorized_by": vector
+                            .pointer("/expected/authorized_by")
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    }),
+                );
+            }
             _ => bail!("unknown cba lattice vector: {name}"),
         }
     }
@@ -552,16 +572,17 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_conflict_recovery
         && seen_same_seal_bottom_serialization
         && seen_realm_create_projection_closure
-        && seen_null_cell_subject_wire_form)
+        && seen_null_cell_subject_wire_form
+        && seen_realm_alias_single_carrier)
     {
         bail!(
-            "cba lattice fixture must cover all 20 normative vectors \
+            "cba lattice fixture must cover all 21 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / \
               threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
               conflict_recovery / same_seal_bottom_serialization / realm_create_projection_closure / \
-              null_cell_subject_wire_form)"
+              null_cell_subject_wire_form / realm_alias_single_carrier)"
         );
     }
 
@@ -611,6 +632,75 @@ fn validate_null_cell_subject_wire_form(vector: &Value, vector_name: &str) -> Re
         bail!("vector {vector_name} null-subject negative coverage drifted");
     }
 
+    Ok(())
+}
+
+/// A Realm alias has exactly one wire carrier: `ak.realm.alias` setting the
+/// `cas_register` cell `ak.component.realm.alias.v1:null`
+/// (object-addressing.md §3.3). The closed Realm object, the create/update
+/// payloads and every other input shape MUST be rejected, and concurrent
+/// distinct declarations MUST reach `⊥` rather than picking a winner.
+fn validate_realm_alias_single_carrier(vector: &Value, vector_name: &str) -> Result<()> {
+    let projected_writes = required_array(vector, "/required_projected_writes", vector_name)?;
+    if projected_writes.len() != 1 {
+        bail!("vector {vector_name} must define exactly one realm-alias projected write");
+    }
+    let write = &projected_writes[0];
+    if required_str(write, "cell")? != "ak:cell:ak.component.realm.alias.v1:null" {
+        bail!("vector {vector_name} must project the null-subject realm alias cell");
+    }
+    if required_str(write, "op_kind")? != "set" {
+        bail!("vector {vector_name} realm alias projection must be a cas_register set");
+    }
+    require_str_eq(
+        vector,
+        "/expected/declaration_payload/alias",
+        "general:acme.example",
+        vector_name,
+    )?;
+    let authorized_by = vector
+        .pointer("/expected/authorized_by")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("vector {vector_name} must declare expected.authorized_by[]"))?;
+    for action in ["ak.realm.alias", "ak.realm.admin"] {
+        if !authorized_by
+            .iter()
+            .any(|value| value.as_str() == Some(action))
+        {
+            bail!("vector {vector_name} must authorize the alias write through {action}");
+        }
+    }
+
+    let negatives = required_array(vector, "/negative_cases", vector_name)?;
+    let mut by_name = std::collections::BTreeMap::new();
+    for negative in negatives {
+        by_name.insert(required_str(negative, "name")?, negative);
+    }
+    // Every forbidden alias input shape and every namespace / concurrency rule
+    // MUST stay covered; dropping one is how a second carrier creeps back in.
+    for (name, expected_fragment) in [
+        ("alias_on_realm_object", "schema_violation"),
+        ("alias_in_realm_patch", "schema_violation"),
+        ("alias_at_payload_top_level", "schema_violation"),
+        ("foreign_authority_domain", "realm_alias_authority_mismatch"),
+        ("alias_held_by_another_realm", "realm_alias_taken"),
+        ("same_string_occupied_in_handle_namespace", "accepted"),
+        ("concurrent_distinct_alias_declarations", "bottom_conflict"),
+        (
+            "alias_in_principal_control_realm",
+            "principal_control_event_kind_forbidden",
+        ),
+    ] {
+        let negative = by_name
+            .get(name)
+            .ok_or_else(|| anyhow!("vector {vector_name} missing negative case {name}"))?;
+        let expected = required_str(negative, "expected")?;
+        if !expected.contains(expected_fragment) {
+            bail!(
+                "vector {vector_name} negative case {name} must expect {expected_fragment}, got {expected}"
+            );
+        }
+    }
     Ok(())
 }
 
