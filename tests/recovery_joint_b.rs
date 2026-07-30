@@ -93,7 +93,7 @@ async fn post_json(http: &reqwest::Client, url: String, body: Value) -> Result<V
 #[serial]
 #[ignore = "requires current coauth/starid/teabay/soland binaries and PostgreSQL"]
 async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()> {
-    let stack = bootstrap_required(FourServiceConfig::new(
+    let mut stack = bootstrap_required(FourServiceConfig::new(
         "joint-enrollment-authority-recovery",
     ))
     .await?;
@@ -343,6 +343,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 recovery_http
                     .issue_recovery_authority_ticket(&request)
                     .await?;
+                stack
+                    .soland
+                    .restart_external_process()
+                    .await
+                    .context("restart coordinator after durable authority ticket")?;
                 recovery_http =
                     recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
                 let replayed = recovery_http
@@ -382,6 +387,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 recovery_http
                     .continue_security_transaction(&transaction.transaction_id, &request)
                     .await?;
+                stack
+                    .soland
+                    .restart_external_process()
+                    .await
+                    .context("restart coordinator after durable authority outcome")?;
                 recovery_http =
                     recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
                 recovery_http
@@ -400,6 +410,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
                 recovery_http
                     .continue_security_transaction(&transaction.transaction_id, &request)
                     .await?;
+                stack
+                    .soland
+                    .restart_external_process()
+                    .await
+                    .with_context(|| format!("restart coordinator after durable {step:?}"))?;
                 recovery_http =
                     recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
                 recovery_http
@@ -486,6 +501,11 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     recovery_http
         .continue_security_transaction(&transaction.transaction_id, &terminal)
         .await?;
+    stack
+        .soland
+        .restart_external_process()
+        .await
+        .context("restart coordinator after durable terminal receipt")?;
     recovery_http = recovery_client(&principal_base, replacement_grant_jwt, &replacement_key)?;
     transaction = recovery_http
         .continue_security_transaction(&transaction.transaction_id, &terminal)
