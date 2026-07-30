@@ -3793,7 +3793,22 @@ $secretScanSelfTest = Join-Path $PSScriptRoot "tests\secret-scan.tests.ps1"
 $psHostExe = (Get-Process -Id $PID).Path
 & $psHostExe -NoProfile -ExecutionPolicy Bypass -File $secretScanSelfTest | Out-Null
 $secretScanSelfTestStatus = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
-$secretLeaks = @(Find-SecretLeaks -ScanRoots $secretScanRoots.ToArray())
+# Everything the joint runner collects here is log / telemetry / crash
+# material, where a credential is as much a leak as a seed. Nothing in this set
+# is a durable protocol store, so all roots take the strict class.
+$secretScanRootDescriptors = @(
+    $secretScanRoots.ToArray() | ForEach-Object {
+        [pscustomobject]@{ path = $_; artifact_class = "log_or_telemetry" }
+    }
+)
+$secretLeaks = @(Find-SecretLeaks -ScanRoots $secretScanRootDescriptors)
+$secretScanCounts = Get-SecretScanSummary -Leaks $secretLeaks
+# Playwright writes the full received object into stdout and error-context.md
+# whenever an object assertion fails, so a secret-bearing response reaches these
+# artifacts without any test asking for it. Scan first so the report keeps the
+# file, line, pattern and category, then redact the artifacts themselves so the
+# retained copies carry no plaintext.
+$secretRedaction = Protect-SecretBearingArtifacts -Leaks $secretLeaks
 $secretScanFileCount = 0
 foreach ($root in $secretScanRoots) {
     if ((Get-Item -LiteralPath $root).PSIsContainer) {
@@ -3804,14 +3819,16 @@ foreach ($root in $secretScanRoots) {
 }
 $secretScan = [pscustomobject]@{
     generated_at = (Get-Date).ToString("o")
-    status = if ($secretScanSelfTestStatus -eq "passed" -and $secretLeaks.Count -eq 0) {
+    status = if ($secretScanSelfTestStatus -eq "passed" -and $secretScanCounts.failing -eq 0) {
         "passed"
     } else {
         "failed"
     }
     self_test = $secretScanSelfTestStatus
-    scanned_roots = $secretScanRoots.ToArray()
+    scanned_roots = $secretScanRootDescriptors
     scanned_files = $secretScanFileCount
+    counts = $secretScanCounts
+    redaction = $secretRedaction
     leaks = $secretLeaks
 }
 if ($secretScan.status -ne "passed") {
@@ -3826,17 +3843,26 @@ $secretScanLines = @(
     "- status: $($secretScan.status)",
     "- self_test: $($secretScan.self_test)",
     "- scanned_files: $($secretScan.scanned_files)",
-    "- leaks: $($secretScan.leaks.Count)",
+    "- findings: $($secretScan.counts.findings)",
+    "- failing: $($secretScan.counts.failing)",
+    "- allowed_by_artifact_class: $($secretScan.counts.allowed_by_artifact_class)",
+    "- recovery_private_material: $($secretScan.counts.recovery_private_material)",
+    "- credential_exposure: $($secretScan.counts.credential_exposure)",
+    "- redacted_files: $(@($secretScan.redaction.redacted_files).Count)",
     ""
 )
-if ($secretScan.leaks.Count -eq 0) {
+if (@($secretScan.redaction.not_redacted).Count -gt 0) {
+    $secretScanLines += "NOT redacted (archive members - drop the archive): $(@($secretScan.redaction.not_redacted) -join ', ')"
+    $secretScanLines += ""
+}
+if ($secretScan.counts.findings -eq 0) {
     $secretScanLines += "No unredacted secret-shaped material was found in runtime stores, logs, telemetry, checkpoints, crash artifacts, or nested trace archives."
 } else {
-    $secretScanLines += "| File | Line | Pattern | Preview |"
-    $secretScanLines += "| --- | --- | --- | --- |"
+    $secretScanLines += "| File | Line | Pattern | Category | Artifact class | Verdict | Preview |"
+    $secretScanLines += "| --- | --- | --- | --- | --- | --- | --- |"
     foreach ($leak in $secretScan.leaks) {
         $preview = $leak.preview -replace '\|', '\|'
-        $secretScanLines += "| $($leak.path) | $($leak.line) | $($leak.pattern) | ``$preview`` |"
+        $secretScanLines += "| $($leak.path) | $($leak.line) | $($leak.pattern) | $($leak.category) | $($leak.artifact_class) | $($leak.verdict) | ``$preview`` |"
     }
 }
 $secretScanLines | Set-Content -LiteralPath $secretScanMd -Encoding UTF8

@@ -467,13 +467,57 @@ only; it never bypasses a failed scanner self-test.
 
 ### Secret scan patterns (P5.1)
 
-`scripts/lib/secret-scan.ps1` (dot-sourced by `scripts/run-cotest.ps1`)
-defines `Find-SecretLeaks`, which flags unredacted secret-shaped content when
-scanning `raw.log`, `transcript.ndjson`, and `services/*.log`. Field patterns
-are matched case-insensitively. Before every scan, `run-cotest.ps1` executes
-the synthetic-secret regression `scripts/tests/secret-scan.tests.ps1`; a
-self-test failure fails the secret gate even when the logs themselves are
-clean.
+`scripts/lib/secret-scan.ps1` (dot-sourced by `scripts/run-cotest.ps1` and
+`scripts/run-joint-e2e.ps1`) defines `Find-SecretLeaks`, which flags unredacted
+secret-shaped content when scanning `raw.log`, `transcript.ndjson`, and
+`services/*.log`. Field patterns are matched case-insensitively. Before every
+scan, the runner executes the synthetic-secret regression
+`scripts/tests/secret-scan.tests.ps1`; a self-test failure fails the secret gate
+even when the logs themselves are clean.
+
+#### Categories and artifact classes
+
+A finding is not automatically a leak — it depends on what the artifact is.
+Every finding carries a `category`, every scan root declares an
+`artifact_class`, and the pair decides the `verdict`. Only `fail` rows gate the
+run.
+
+| category | `log_or_telemetry` | `durable_protocol_store` |
+|---|---|---|
+| `recovery_private_material` | fail | fail |
+| `credential_exposure` | fail | `allowed_by_artifact_class` |
+
+`recovery_private_material` — mnemonics, seeds, PRKs, private JWK members,
+plaintext keybags, MLS private state — is never legitimate anywhere.
+`credential_exposure` — bearer tokens, JWS, signed links — is a leak in a log,
+but in a durable protocol store it is frequently the signed evidence the spec
+requires the server to persist. A PostgreSQL dump legitimately contains dozens
+of JWS and authorization fields; failing on those would train everyone to
+ignore the gate, or push someone to allowlist the whole scan, which would also
+hide a real recovery-material leak.
+
+A bare path passed as a scan root takes the strict `log_or_telemetry` class, so
+a root added without thought fails closed. An unrecognised class is a startup
+error, not a silent default.
+
+#### Post-scan artifact redaction
+
+Playwright writes the full received value into stdout and `error-context.md`
+whenever a matcher fails, so a secret-bearing response reaches the retained
+artifacts without any test asking for it. The runner therefore scans first and
+redacts afterwards: `secret-scan.json` keeps the file, line, pattern and
+category of every finding as evidence, while `Protect-SecretBearingArtifacts`
+rewrites the offending artifacts so the retained copies carry no plaintext.
+
+Redaction follows the verdict, not the finding count — an
+`allowed_by_artifact_class` store is left byte-identical, because blanking the
+JWS fields in a dump destroys the record the store exists to hold. Archive
+members are reported under `not_redacted` rather than silently skipped; a
+secret inside a retained archive needs the archive dropped.
+
+Tests should not rely on the redactor. `e2e/helpers/secret-safe.ts` provides
+`expectStructurallyIdentical`, `publicProjection` and `secretPresence` so a
+business assertion never receives a secret-bearing object in the first place.
 
 **Positive examples (these MUST be flagged):**
 
@@ -486,6 +530,13 @@ Authorization: Bearer eyJhbGciOiJI...                       # authorization_head
 ?access_token=4f0e1a8b-09e4-4f10-...                        # query_secret_field
 ?signed_link=https%3A%2F%2F...%26sig%3Dabc                  # query_secret_field
 ?root_seed=deadbeef...                                      # query_secret_field
+{"kty":"OKP","crv":"Ed25519","d":"c3ludGhldGlj..."}         # jwk_private_member
+                                                            # (a JWK's `d` member is the
+                                                            # private scalar; bound to a
+                                                            # `kty` member on the same
+                                                            # line so it does not match
+                                                            # every unrelated `d` field)
+{"keybag":{"entries":1,"k":"c3ludGhldGlj..."}}              # plaintext_keybag_object
 "abandon ability able about ... actual"                     # bip39_mnemonic_sequence
                                                             # (12+ consecutive words
                                                             # from the BIP-39 English
@@ -524,23 +575,38 @@ Authorization: Bearer [redacted]                            # post-redaction pla
 | JSON `"<allowed>":"<value>"`                         | `"<allowed>":"[redacted]"` |
 | Query `<allowed>=<value>`                            | `<allowed>=[redacted]`  |
 | Quoted string containing 12+ short-word run         | `"[redacted-mnemonic]"` |
+| JSON `"d"`/`"k"` member of 16+ key-shaped chars      | `"d":"[redacted]"` |
 | PEM `-----BEGIN [RSA\|EC\|OPENSSH\|ENCRYPTED ]PRIVATE KEY-----` | `[redacted-private-key]` |
 
 The closed allowlist of secret-shaped field names is: `authorization`,
 `access_token`, `token`, `push_key`, `invite_token`, `signed_link`, `jws`,
 `sig`, `password`, `secret`, `secret_b64u`, `private_key`, `seed`,
 `mnemonic`, `recovery_key`, `recovery_phrase`, `recovery_secret`,
-`root_seed`, `root_private_key`, `hkdf_prk`, `prk`, `credential`. The
-BIP-39 detector validates candidates against the standard 2048-word English
+`root_seed`, `root_private_key`, `hkdf_prk`, `prk`, `credential`,
+`plaintext_keybag`, `keybag_secret`, `mls_secret`, `epoch_secret`,
+`application_secret`, `confirmation_key`, `membership_key`, `init_secret`,
+`joiner_secret`, `welcome_secret`, `private_state`. Everything from
+`private_key` onward is also in the `recovery_private_material` list, which is
+what makes those findings fail in every artifact class.
+
+The `"d"`/`"k"` redaction is deliberately broader than its detector: detection
+requires the JWK or keybag envelope, redaction blanks any member of that shape.
+A preview that loses an unrelated `d` field costs a diagnostic; one that keeps a
+private JWK scalar costs a key.
+
+The BIP-39 detector validates candidates against the standard 2048-word English
 wordlist (`scripts/lib/bip39-english.txt`); a quoted run only counts when it
 contains 12 consecutive wordlist entries. Adding a new secret-shaped field
 anywhere in the harness or in a service log MUST be accompanied by:
 
 1. Adding the field name to the shared field-name variables in
    `scripts/lib/secret-scan.ps1` (detection and redaction consume the same
-   variables, so one edit keeps them consistent).
+   variables, so one edit keeps them consistent). Private key material also goes
+   into `RecoveryPrivateMaterialFieldNames`, or it will be tolerated inside a
+   durable protocol store.
 2. Adding a planted vector to `scripts/tests/secret-scan.tests.ps1` plus a
-   positive and negative example to the table above.
+   positive and negative example to the table above. The self-test asserts each
+   detector's category, so a new pattern without a category assertion fails.
 3. Re-running `.\scripts\run-cotest.ps1` and confirming `secret-scan.md`
    reports `status: passed`, `self_test: passed`, with the redacted preview
    rendered as `[redacted]`.
@@ -556,16 +622,23 @@ similar to:
 - status: failed
 - self_test: passed
 - scanned_files: 142
-- leaks: 1
+- findings: 2
+- failing: 1
+- allowed_by_artifact_class: 1
+- recovery_private_material: 0
+- credential_exposure: 2
+- redacted_files: 1
 
-| path | line | pattern | preview |
-|---|---|---|---|
-| artifacts/runs/.../raw.log | 8821 | json_secret_field | `"access_token":"[redacted]"` |
+| File | Line | Pattern | Category | Artifact class | Verdict | Preview |
+|---|---|---|---|---|---|---|
+| artifacts/runs/.../raw.log | 8821 | json_secret_field | credential_exposure | log_or_telemetry | fail | `"access_token":"[redacted]"` |
+| artifacts/runs/.../dump.sql | 12 | json_secret_field | credential_exposure | durable_protocol_store | allowed_by_artifact_class | `"jws":"[redacted]"` |
 ```
 
 The preview is always rendered post-redaction so the report itself never
-re-leaks the offending value; the original line+file pointer is what the
-on-call engineer chases.
+re-leaks the offending value; the file+line pointer is what the on-call engineer
+chases. Note that the second row does not gate the run and its artifact is left
+byte-identical — the store is supposed to hold that evidence.
 
 For the runtime model comparison against Complement, including image creation,
 Docker networking, host-side execution, and result formatting, see

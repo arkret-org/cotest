@@ -12,6 +12,7 @@
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { expectStructurallyIdentical } from "../../helpers/secret-safe";
 import {
   ensureRegistered,
   issueDevSession,
@@ -219,7 +220,15 @@ test.describe("contact graph (same principal server)", () => {
       bob.did,
       { create: true },
     );
-    expect(retry.materialization_draft).toEqual(resolved.materialization_draft);
+    // The draft carries MLS group state and the unsigned founding Events, so
+    // handing it to `toEqual` would publish the whole object into stdout and
+    // error-context.md on any drift. The determinism claim only needs the two
+    // drafts to be the same structure.
+    expectStructurallyIdentical(
+      retry.materialization_draft,
+      resolved.materialization_draft,
+      "direct-conversation materialization draft must be deterministic across retries",
+    );
   });
 
   // S4 (core closed loop): already friends (invite scope) -> use

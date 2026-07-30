@@ -1,10 +1,16 @@
 # Synthetic-secret regression test for scripts/lib/secret-scan.ps1.
 #
-# Verifies the two-sided invariant of the artifact secret gate:
+# Verifies the invariants of the artifact secret gate:
 #   1. every planted synthetic secret is DETECTED by Find-SecretLeaks,
 #   2. no leak preview (the only value persisted into secret-scan.json/md)
-#      contains the original secret bytes, and
-#   3. benign long sentences do NOT trip the BIP-39 detector.
+#      contains the original secret bytes,
+#   3. benign long sentences do NOT trip the BIP-39 detector,
+#   4. each finding carries the category and the artifact-class verdict the
+#      gate reads, and a durable protocol store tolerates credential evidence
+#      without ever tolerating recovery private material, and
+#   5. the canary round trip holds: the scanner finds the plaintext, the
+#      redactor clears it from the artifact, a re-scan of the redacted artifact
+#      is clean, and the report still carries file / line / pattern evidence.
 #
 # run-cotest.ps1 executes this script before every secret scan and fails the
 # gate when it fails; it can also be run directly:
@@ -33,7 +39,10 @@ try {
     $bearer = "synthetic-bearer-token-AAAABBBBCCCC"
     $hexSecret = "deadbeefdeadbeefdeadbeefdeadbeef"
     $didValue = "did:webvh:QmSynthetic:host.example:webvh:alice"
-    $plantedSecrets = @($mnemonic, $bearer, $hexSecret, $didValue)
+    # b64url of a synthetic 32-byte seed: the exact shape a private OKP JWK's
+    # `d` member and a plaintext keybag entry carry.
+    $jwkPrivateScalar = "c3ludGhldGljLXNlZWQtdmFsdWUtZm9yLXNjYW5uZXItdGVzdHM"
+    $plantedSecrets = @($mnemonic, $bearer, $hexSecret, $didValue, $jwkPrivateScalar)
 
     # One planted secret per line; the file name documents the vector.
     $planted = @(
@@ -53,7 +62,12 @@ try {
         [pscustomobject]@{ name = "did-in-credential-field.log"; line = "{`"credential`":`"$didValue`"}"; pattern = "did_in_token_field" },
         [pscustomobject]@{ name = "authorization-bearer.log"; line = "authorization: bearer $bearer"; pattern = "authorization_header" },
         [pscustomobject]@{ name = "pem-private-key.log"; line = "-----BEGIN PRIVATE KEY-----$hexSecret-----END PRIVATE KEY-----"; pattern = "private_key_block" },
-        [pscustomobject]@{ name = "pem-encrypted-private-key-header.log"; line = "-----BEGIN ENCRYPTED PRIVATE KEY-----"; pattern = "private_key_block" }
+        [pscustomobject]@{ name = "pem-encrypted-private-key-header.log"; line = "-----BEGIN ENCRYPTED PRIVATE KEY-----"; pattern = "private_key_block" },
+        # Structural vectors: private material travelling under a short generic
+        # member name that no field-name list could carry on its own.
+        [pscustomobject]@{ name = "jwk-private-member.log"; line = "{`"kty`":`"OKP`",`"crv`":`"Ed25519`",`"d`":`"$jwkPrivateScalar`"}"; pattern = "jwk_private_member" },
+        [pscustomobject]@{ name = "jwk-private-member-reordered.log"; line = "{`"d`":`"$jwkPrivateScalar`",`"crv`":`"Ed25519`",`"kty`":`"OKP`"}"; pattern = "jwk_private_member" },
+        [pscustomobject]@{ name = "plaintext-keybag-object.log"; line = "{`"keybag`":{`"entries`":1,`"k`":`"$jwkPrivateScalar`"}}"; pattern = "plaintext_keybag_object" }
     )
     foreach ($vector in $planted) {
         Set-Content -Path (Join-Path $scanRoot $vector.name) -Value $vector.line -Encoding utf8
@@ -125,6 +139,107 @@ try {
     Assert-True ($pemPreview -eq "[redacted-private-key]") "single-line PEM must redact wholesale: $pemPreview"
     $pemHeaderPreview = ConvertTo-SecretPreview -Line "-----BEGIN ENCRYPTED PRIVATE KEY-----"
     Assert-True ($pemHeaderPreview -eq "[redacted-private-key]") "multi-line PEM header must redact: $pemHeaderPreview"
+
+    # Every finding carries a closed category and the verdict the gate reads.
+    foreach ($leak in $leaks) {
+        Assert-True ($leak.category -in @("recovery_private_material", "credential_exposure")) "leak for $(Split-Path -Leaf $leak.path) ($($leak.pattern)) has an unknown category '$($leak.category)'"
+        Assert-True ($leak.verdict -in @("fail", "allowed_by_artifact_class")) "leak for $(Split-Path -Leaf $leak.path) ($($leak.pattern)) has an unknown verdict '$($leak.verdict)'"
+        Assert-True ($leak.artifact_class -eq "log_or_telemetry") "a bare scan root must default to the strict artifact class, got '$($leak.artifact_class)'"
+        Assert-True ($leak.verdict -eq "fail") "every finding in a log artifact must fail, got '$($leak.verdict)' for $($leak.pattern)"
+    }
+    foreach ($privatePattern in @("recovery_private_material_field", "recovery_private_material_assignment", "bip39_mnemonic_sequence", "private_key_block", "jwk_private_member", "plaintext_keybag_object")) {
+        $categorised = @($leaks | Where-Object { $_.pattern -eq $privatePattern })
+        Assert-True ($categorised.Count -ge 1) "expected at least one $privatePattern finding to categorise"
+        foreach ($leak in $categorised) {
+            Assert-True ($leak.category -eq "recovery_private_material") "$privatePattern must be recovery_private_material, got '$($leak.category)'"
+        }
+    }
+    foreach ($credentialPattern in @("authorization_header", "json_secret_field", "query_secret_field", "did_in_token_field")) {
+        $categorised = @($leaks | Where-Object { $_.pattern -eq $credentialPattern })
+        Assert-True ($categorised.Count -ge 1) "expected at least one $credentialPattern finding to categorise"
+        foreach ($leak in $categorised) {
+            Assert-True ($leak.category -eq "credential_exposure") "$credentialPattern must be credential_exposure, got '$($leak.category)'"
+        }
+    }
+
+    # A durable protocol store legitimately holds the signed authorization
+    # evidence the spec requires the server to persist, so credential findings
+    # there are tolerated. Recovery private material is never tolerated
+    # anywhere -- including in a field the credential list also names, because
+    # the private-material detectors fire independently.
+    $storeRoot = Join-Path $scanRoot "durable-store"
+    New-Item -ItemType Directory -Path $storeRoot | Out-Null
+    Set-Content -Path (Join-Path $storeRoot "dump.sql") -Value @(
+        "INSERT INTO events VALUES ('{`"jws`":`"$bearer`"}');",
+        "INSERT INTO recovery VALUES ('{`"mnemonic`":`"$mnemonic`"}');"
+    ) -Encoding utf8
+    $storeLeaks = @(Find-SecretLeaks -ScanRoots @([pscustomobject]@{ path = $storeRoot; artifact_class = "durable_protocol_store" }))
+    $storeCredential = @($storeLeaks | Where-Object { $_.category -eq "credential_exposure" })
+    $storePrivate = @($storeLeaks | Where-Object { $_.category -eq "recovery_private_material" })
+    Assert-True ($storeCredential.Count -ge 1) "the durable store fixture must produce a credential finding"
+    foreach ($leak in $storeCredential) {
+        Assert-True ($leak.verdict -eq "allowed_by_artifact_class") "credential evidence in a durable protocol store must be allowed, got '$($leak.verdict)'"
+    }
+    Assert-True ($storePrivate.Count -ge 1) "the durable store fixture must still produce a private-material finding"
+    foreach ($leak in $storePrivate) {
+        Assert-True ($leak.verdict -eq "fail") "recovery private material must fail in every artifact class, got '$($leak.verdict)'"
+    }
+    $storeCounts = Get-SecretScanSummary -Leaks $storeLeaks
+    Assert-True ($storeCounts.failing -eq $storePrivate.Count) "only the private-material findings may gate a durable store scan"
+    Assert-True ($storeCounts.allowed_by_artifact_class -eq $storeCredential.Count) "credential findings must be counted as allowed, not dropped"
+
+    # Redaction follows the verdict, not the finding count: a store holding only
+    # the signed evidence the spec requires it to persist must be left intact,
+    # or the dump stops being usable for replay and forensics.
+    $evidenceOnlyRoot = Join-Path $scanRoot "durable-store-evidence-only"
+    New-Item -ItemType Directory -Path $evidenceOnlyRoot | Out-Null
+    $evidenceFile = Join-Path $evidenceOnlyRoot "dump.sql"
+    $evidenceLine = "INSERT INTO events VALUES ('{`"jws`":`"$bearer`"}');"
+    Set-Content -Path $evidenceFile -Value $evidenceLine -Encoding utf8
+    $evidenceLeaks = @(Find-SecretLeaks -ScanRoots @([pscustomobject]@{ path = $evidenceOnlyRoot; artifact_class = "durable_protocol_store" }))
+    Assert-True ($evidenceLeaks.Count -ge 1) "the evidence-only fixture must still be reported"
+    $evidenceRedaction = Protect-SecretBearingArtifacts -Leaks $evidenceLeaks
+    Assert-True ($evidenceRedaction.redacted_files.Count -eq 0) "allowed evidence in a durable store must not be rewritten"
+    Assert-True ((Get-Content -LiteralPath $evidenceFile -Raw).Trim() -eq $evidenceLine) "the durable store artifact must be left byte-identical"
+
+    # An unknown artifact class is a configuration error, not a silent default.
+    $unknownClassRejected = $false
+    try {
+        Find-SecretLeaks -ScanRoots @([pscustomobject]@{ path = $storeRoot; artifact_class = "whatever" }) | Out-Null
+    } catch {
+        $unknownClassRejected = $true
+    }
+    Assert-True $unknownClassRejected "an unknown artifact class must be rejected rather than defaulted"
+
+    # Canary round trip: detect, redact the artifact itself, re-scan clean, and
+    # keep the file/line/pattern evidence in the report. This is what stops a
+    # failing Playwright object assertion from leaving the received secret in
+    # stdout and error-context.md after the run is collected.
+    $canaryRoot = Join-Path $scanRoot "canary"
+    New-Item -ItemType Directory -Path $canaryRoot | Out-Null
+    $canaryFile = Join-Path $canaryRoot "error-context.md"
+    Set-Content -Path $canaryFile -Value @(
+        "Expected substring: not present",
+        "Received: {`"invite_token`":`"$bearer`",`"mnemonic`":`"$mnemonic`"}",
+        "at contact-graph.spec.ts:222"
+    ) -Encoding utf8
+
+    $canaryBefore = @(Find-SecretLeaks -ScanRoots @($canaryRoot))
+    Assert-True ($canaryBefore.Count -ge 1) "the canary must be detected before redaction"
+    $canaryEvidence = @($canaryBefore | Where-Object { $_.line -eq 2 })
+    Assert-True ($canaryEvidence.Count -ge 1) "the canary report must record the offending line number"
+    Assert-True (@($canaryEvidence | ForEach-Object { $_.pattern }) -contains "json_secret_field") "the canary report must record the matching pattern"
+
+    $canaryRedaction = Protect-SecretBearingArtifacts -Leaks $canaryBefore
+    $canaryRedactedCount = @($canaryRedaction.redacted_files).Count
+    Assert-True ($canaryRedactedCount -eq 1) "the canary artifact must be redacted in place, redacted $canaryRedactedCount file(s)"
+    $canaryText = Get-Content -LiteralPath $canaryFile -Raw
+    Assert-True (-not $canaryText.Contains($bearer)) "the redacted artifact must not retain the invite token"
+    Assert-True (-not $canaryText.Contains($mnemonic)) "the redacted artifact must not retain the mnemonic"
+    Assert-True ($canaryText.Contains("contact-graph.spec.ts:222")) "redaction must preserve the surrounding diagnostic"
+
+    $canaryAfter = @(Find-SecretLeaks -ScanRoots @($canaryRoot))
+    Assert-True ($canaryAfter.Count -eq 0) "a re-scan of the redacted artifact must be clean; got: $(@($canaryAfter | ForEach-Object { $_.pattern }) -join ', ')"
 
     # Wordlist sanity: exactly the standard 2048-entry BIP-39 English list.
     $wordSet = Get-Bip39WordSet

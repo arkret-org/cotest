@@ -1362,17 +1362,28 @@ function New-SecretScanMarkdown {
     $lines.Add("- status: $($SecretScan.status)")
     $lines.Add("- self_test: $($SecretScan.self_test)")
     $lines.Add("- scanned_files: $($SecretScan.scanned_files)")
-    $lines.Add("- leaks: $($SecretScan.leaks.Count)")
+    $lines.Add("- findings: $($SecretScan.counts.findings)")
+    $lines.Add("- failing: $($SecretScan.counts.failing)")
+    $lines.Add("- allowed_by_artifact_class: $($SecretScan.counts.allowed_by_artifact_class)")
+    $lines.Add("- recovery_private_material: $($SecretScan.counts.recovery_private_material)")
+    $lines.Add("- credential_exposure: $($SecretScan.counts.credential_exposure)")
+    $lines.Add("- redacted_files: $(@($SecretScan.redaction.redacted_files).Count)")
+    if (@($SecretScan.redaction.not_redacted).Count -gt 0) {
+        $lines.Add("- NOT redacted (archive members, drop the archive): $(@($SecretScan.redaction.not_redacted) -join ', ')")
+    }
     $lines.Add("")
-    if ($SecretScan.leaks.Count -eq 0) {
+    if ($SecretScan.counts.findings -eq 0) {
         $lines.Add("No unredacted secret-shaped fields were found in logs or transcripts.")
         return ($lines -join [Environment]::NewLine)
     }
-    $lines.Add("| File | Line | Pattern | Preview |")
-    $lines.Add("| --- | --- | --- | --- |")
+    $lines.Add("Findings are listed with the verdict that follows from the category and the")
+    $lines.Add("class of the artifact they came from; only ``fail`` rows gate the run.")
+    $lines.Add("")
+    $lines.Add("| File | Line | Pattern | Category | Artifact class | Verdict | Preview |")
+    $lines.Add("| --- | --- | --- | --- | --- | --- | --- |")
     foreach ($leak in $SecretScan.leaks) {
         $preview = ($leak.preview -replace '\|', '\|')
-        $lines.Add("| $($leak.path) | $($leak.line) | $($leak.pattern) | `$preview` |")
+        $lines.Add("| $($leak.path) | $($leak.line) | $($leak.pattern) | $($leak.category) | $($leak.artifact_class) | $($leak.verdict) | `$preview` |")
     }
     return ($lines -join [Environment]::NewLine)
 }
@@ -2198,7 +2209,18 @@ if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
         $exitCode = 1
     }
 }
-$scanRoots = @($rawLog, $transcriptNdjson, $serviceLogDir)
+# Every root declares what kind of artifact it is. These three are all
+# log/telemetry, where a credential is as much a leak as a seed. A durable
+# protocol store (a PostgreSQL dump, a typed export) would be declared
+# `durable_protocol_store` so the signed authorization evidence the spec
+# requires the server to persist does not drown the real findings; private
+# material still fails there.
+$scanRootDescriptors = @(
+    [pscustomobject]@{ path = $rawLog; artifact_class = "log_or_telemetry" },
+    [pscustomobject]@{ path = $transcriptNdjson; artifact_class = "log_or_telemetry" },
+    [pscustomobject]@{ path = $serviceLogDir; artifact_class = "log_or_telemetry" }
+)
+$scanRoots = @($scanRootDescriptors | ForEach-Object { $_.path })
 $scanFiles = 0
 foreach ($root in $scanRoots) {
     if (-not $root -or -not (Test-Path $root)) {
@@ -2216,16 +2238,23 @@ $secretScanSelfTest = Join-Path $PSScriptRoot "tests\secret-scan.tests.ps1"
 $psHostExe = (Get-Process -Id $PID).Path
 & $psHostExe -NoProfile -ExecutionPolicy Bypass -File $secretScanSelfTest | Out-Null
 $secretScanSelfTestStatus = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
-$secretLeaks = @(Find-SecretLeaks -ScanRoots $scanRoots)
+$secretLeaks = @(Find-SecretLeaks -ScanRoots $scanRootDescriptors)
+$secretScanCounts = Get-SecretScanSummary -Leaks $secretLeaks
+# Redact AFTER scanning. secret-scan.json keeps the path, line, pattern and
+# category of every finding as evidence; the artifact that gets copied into the
+# stable latest channel no longer carries the plaintext.
+$secretRedaction = Protect-SecretBearingArtifacts -Leaks $secretLeaks
 $secretScan = [pscustomobject]@{
     generated_at  = $finishedAt.ToString("o")
-    status        = if ($secretScanSelfTestStatus -eq "passed" -and $secretLeaks.Count -eq 0) { "passed" } else { "failed" }
+    status        = if ($secretScanSelfTestStatus -eq "passed" -and $secretScanCounts.failing -eq 0) { "passed" } else { "failed" }
     self_test     = $secretScanSelfTestStatus
-    scanned_roots = $scanRoots
+    scanned_roots = $scanRootDescriptors
     scanned_files = $scanFiles
+    counts        = $secretScanCounts
+    redaction     = $secretRedaction
     leaks         = $secretLeaks
 }
-if ($secretScanSelfTestStatus -ne "passed" -or (-not $AllowSecretLeaks -and $secretLeaks.Count -gt 0)) {
+if ($secretScanSelfTestStatus -ne "passed" -or (-not $AllowSecretLeaks -and $secretScanCounts.failing -gt 0)) {
     $exitCode = 1
 }
 $releaseGate = New-ReleaseGate `
