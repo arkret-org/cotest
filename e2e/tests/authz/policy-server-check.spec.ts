@@ -125,6 +125,34 @@ async function policyCheckCount(
   return body.kinds?.checks?.length ?? 0;
 }
 
+type PolicyServerEvent = {
+  event_id?: string;
+  kind?: string;
+  actor_id?: string;
+  executed_by?: string;
+  payload?: Record<string, unknown>;
+  seal_basis?: { leaves?: unknown[] };
+  proofs?: unknown[];
+};
+
+async function policyServerEvents(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<PolicyServerEvent[]> {
+  const url =
+    `${solandBaseUrl()}/_arkret/self/events?realms=` +
+    `${encodeURIComponent(realmId)}&limit=200`;
+  const response = await request.get(url, { headers: authHeaders(token) });
+  const body = await expectJsonOk<{ events?: PolicyServerEvent[] }>(
+    response,
+    "query canonical policy-server events",
+  );
+  return (body.events ?? []).filter(
+    (event) => event.kind === "ak.realm.policy_server",
+  );
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("policy server check", () => {
@@ -200,6 +228,36 @@ test.describe("policy server check", () => {
     expect(projected.policy_server_did).toBe(policyServerDid);
     expect(projected.policy_server_url).toBe(policyServerUrl);
     expect(projected.from_org_fallback).toBe(false);
+
+    const canonicalEvents = await policyServerEvents(
+      request,
+      aliceToken,
+      realmId,
+    );
+    const declaration = canonicalEvents.find(
+      (event) =>
+        event.payload?.policy_server_url === policyServerUrl ||
+        (
+          event.payload?.policy_server as Record<string, unknown> | undefined
+        )?.url === policyServerUrl,
+    );
+    expect(declaration, "PUT must append a canonical policy-server Event").toBeTruthy();
+    expect(declaration?.event_id).toMatch(/^ak:event:/);
+    expect(declaration?.actor_id).toBe(alice.did);
+    expect(declaration?.executed_by).toMatch(/^did:/);
+    expect(declaration?.executed_by).not.toBe(alice.did);
+    expect(declaration?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
+    expect(declaration?.proofs?.length ?? 0).toBeGreaterThan(0);
+
+    const frontier = await request.get(
+      `${solandBaseUrl()}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const frontierBody = await expectJsonOk<{
+      frontier?: { kind?: string; seal_id?: string };
+    }>(frontier, "read policy-server Seal frontier");
+    expect(frontierBody.frontier?.kind).toBe("realm_seal");
+    expect(frontierBody.frontier?.seal_id).toMatch(/^ak:seal:/);
 
     const get = await request.get(
       `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
@@ -496,6 +554,24 @@ test.describe("policy server check", () => {
       expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
       expect(restoredFallbackBody.policy_server_did).toBe(orgDid);
       expect(restoredFallbackBody.from_org_fallback).toBe(true);
+
+      const childPolicyEvents = await policyServerEvents(
+        request,
+        aliceToken,
+        childRealmId,
+      );
+      expect(childPolicyEvents.length).toBeGreaterThanOrEqual(2);
+      const tombstone = childPolicyEvents.find(
+        (event) => event.payload?.tombstone === true,
+      );
+      expect(
+        tombstone,
+        "DELETE must append a canonical policy-server tombstone Event",
+      ).toBeTruthy();
+      expect(tombstone?.actor_id).toBe(alice.did);
+      expect(tombstone?.executed_by).toMatch(/^did:/);
+      expect(tombstone?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
+      expect(tombstone?.proofs?.length ?? 0).toBeGreaterThan(0);
 
       const repeatedDelete = await request.delete(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
