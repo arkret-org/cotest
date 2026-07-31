@@ -92,6 +92,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      # Runs before the ~40 minutes of builds and live tests below: a retired
+      # protocol literal is a fixture bug the compiler cannot see, and finding
+      # it after the bringup wastes the whole job. The scanner proves itself
+      # against planted vectors first, so a scanner that silently stopped
+      # matching cannot report "clean".
+      - name: stale protocol literal scan
+        working-directory: cotest
+        run: |
+          set -euo pipefail
+          sh scripts/tests/stale-literal-scan.tests.sh
+          sh scripts/stale-literal-scan.sh
       - name: build upstream services
         # P5.1 — upstream checkouts now hard-fail (see above) so the missing-svc
         # warning branch is removed; the build step also no longer swallows
