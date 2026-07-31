@@ -246,6 +246,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "title": "RSVP convergence",
             "summary": "RSVP convergence",
             "public": false,
+            "schema_refs": ["ak.schema.realm.v1", "ak.profile.calendar_event.v1"],
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
@@ -534,6 +535,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "title": "RSVP restart",
             "summary": "RSVP restart",
             "public": false,
+            "schema_refs": ["ak.schema.realm.v1", "ak.profile.calendar_event.v1"],
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
@@ -669,6 +671,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
             "title": "RSVP effect contract",
             "summary": "RSVP effect contract",
             "public": false,
+            "schema_refs": ["ak.schema.realm.v1", "ak.profile.calendar_event.v1"],
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;

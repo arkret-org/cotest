@@ -325,7 +325,8 @@ impl TestActorClient {
     ) -> Result<(String, Value)> {
         let grant_id = next_typed_id("grant");
         let issued_at = chrono::Utc::now();
-        let verification_method = format!("{}#cotest", self.actor);
+        let verification_method = arkret_wire::DidUrl::new(format!("{}#cotest", self.actor))
+            .map_err(anyhow::Error::msg)?;
         let mut grant =
             arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
                 id: arkret_identifiers::GrantId::new(grant_id.clone())?,
@@ -626,16 +627,12 @@ impl TestActorClient {
 
 /// Whether `action` is registered as covering `kind`.
 ///
-/// Both directions count. `target_event_kinds` is the action's own coverage
-/// set; `admission_capabilities` is what a receiver checks for a
-/// capability-gated kind, and the two do not always agree — `ak.member.state`
-/// names `ak.realm.admin`, which does not list it back.
+/// Single direction of truth: the authorizing actions for a kind are exactly
+/// the ones whose `target_event_kinds` list it. The per-event
+/// `admission_capabilities` list is retired from the registry.
 fn action_covers_kind(action: &str, kind: &str) -> bool {
     arkret_schema::capability_action(action)
         .is_some_and(|descriptor| descriptor.target_event_kinds.contains(&kind))
-        || admission_capabilities(kind)
-            .iter()
-            .any(|entry| entry == action)
 }
 
 /// Whether the Realm owner aggregate authorizes authoring `kind` directly.
@@ -649,88 +646,21 @@ fn owner_may_author_kind(kind: &str) -> bool {
 }
 
 /// The action this harness self-grants so the Realm controller can author
-/// `kind`.
+/// `kind`, when `ak.realm.owner` does not cover it directly.
 ///
-/// The event-kind registry's `admission_capabilities` is the authority: it is
-/// what a receiver checks for a capability-gated kind, and it does not always
-/// agree with the action's own `target_event_kinds` (`ak.member.state` names
-/// `ak.realm.admin`, which does not list it back). Fall back to a
-/// coverage-set search, smallest first, so a self-grant never quietly hands the
+/// Smallest coverage set first, so a self-grant never quietly hands the
 /// creator an aggregate admin action when a narrow one would do.
 fn self_grant_action_for_kind(kind: &str) -> Option<&'static str> {
     let basis = arkret::current_capability_action_registry_digest().ok()?;
-    let grantable = |action: &str| {
-        arkret_policy::authz::owner_may_grant(action, Some(&basis), &[]).unwrap_or(false)
-    };
-    if let Some(action) = admission_capabilities(kind)
-        .iter()
-        .find(|action| grantable(action))
-        .and_then(|action| registered_action_name(action))
-    {
-        return Some(action);
-    }
     arkret_schema::REGISTERED_CAPABILITY_ACTIONS
         .iter()
         .filter(|descriptor| descriptor.target_event_kinds.contains(&kind))
-        .filter(|descriptor| grantable(descriptor.action.as_str()))
+        .filter(|descriptor| {
+            arkret_policy::authz::owner_may_grant(descriptor.action.as_str(), Some(&basis), &[])
+                .unwrap_or(false)
+        })
         .min_by_key(|descriptor| descriptor.target_event_kinds.len())
         .map(|descriptor| descriptor.action.as_str())
-}
-
-fn registered_action_name(action: &str) -> Option<&'static str> {
-    arkret_schema::capability_action(action).map(|descriptor| descriptor.action.as_str())
-}
-
-/// `admission_capabilities` per event kind, read from the registry itself.
-static ADMISSION_CAPABILITIES: std::sync::LazyLock<
-    std::collections::BTreeMap<String, Vec<String>>,
-> = std::sync::LazyLock::new(|| {
-    let Ok(registry) = crate::conformance::load_artifact_json("registry/event-kind-registry.json")
-    else {
-        return std::collections::BTreeMap::new();
-    };
-    let mut out = std::collections::BTreeMap::new();
-    collect_admission_capabilities(&registry, &mut out);
-    out
-});
-
-fn collect_admission_capabilities(
-    value: &Value,
-    out: &mut std::collections::BTreeMap<String, Vec<String>>,
-) {
-    match value {
-        Value::Object(object) => {
-            if let (Some(Value::String(kind)), Some(Value::Array(capabilities))) = (
-                object.get("event_kind"),
-                object.get("admission_capabilities"),
-            ) {
-                out.insert(
-                    kind.clone(),
-                    capabilities
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(ToOwned::to_owned)
-                        .collect(),
-                );
-            }
-            for nested in object.values() {
-                collect_admission_capabilities(nested, out);
-            }
-        }
-        Value::Array(items) => {
-            for nested in items {
-                collect_admission_capabilities(nested, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn admission_capabilities(kind: &str) -> Vec<String> {
-    ADMISSION_CAPABILITIES
-        .get(kind)
-        .cloned()
-        .unwrap_or_default()
 }
 
 fn payload_patch_touches_calendar(payload: &Value) -> bool {

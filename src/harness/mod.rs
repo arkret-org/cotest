@@ -200,6 +200,15 @@ pub(crate) fn realm_create_payload(
     // fail closed with `capability_denied` (403). Normalise each entry to the
     // spec-typed `plaintext_visible_services_payload` item shape; pre-typed
     // objects (e.g. the media-plaintext scenarios) pass through unchanged.
+    // A Realm declares the conformance profiles it participates in through
+    // `schema_refs` (`capabilities.md` section 3.2): a profile-gated action is
+    // owner-grantable exactly when its profile is declared here. Callers that
+    // exercise profile actions pass the profile id alongside the base schema.
+    let schema_refs = input
+        .get("schema_refs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_else(|| vec![json!("ak.schema.realm.v1")]);
     let plaintext_visible_services = input
         .get("plaintext_visible_services")
         .cloned()
@@ -224,7 +233,7 @@ pub(crate) fn realm_create_payload(
         "summary": summary,
         "created_by": actor,
         "trust_domain": "ak:trust_domain:soland.local",
-        "schema_refs": ["ak.schema.realm.v1"],
+        "schema_refs": schema_refs,
         "default_discoverability": discoverability,
         "default_join_rule": join_rule,
         "history_visibility": history_visibility,
