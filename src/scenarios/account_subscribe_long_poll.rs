@@ -663,7 +663,7 @@ async fn submit_event_now(
             } else {
                 event["refs"] = Value::Array(
                     actor
-                        .held_grants_for(realm_id)
+                        .covering_grants_for(realm_id, kind)
                         .into_iter()
                         .map(|grant_id| {
                             serde_json::json!({

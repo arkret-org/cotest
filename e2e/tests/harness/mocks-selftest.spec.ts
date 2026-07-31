@@ -21,6 +21,7 @@ import {
   mockWitnessQuorumBaseUrls,
   mockWitnessQuorumDids,
 } from "../../helpers/env";
+import { createDidHostClient } from "../../helpers/did-host";
 import { createMimiFacadeClient } from "../../helpers/mimi-facade";
 
 function b64url(buf: Buffer): string {
@@ -199,6 +200,61 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       expect(body.witness_did).toBe(dids[index]);
       expect(body.health).toBe("healthy");
     }
+  });
+
+  test("mock-did-host: per-DID fetch counting, reset, rotation", async ({ request }) => {
+    const didHost = createDidHostClient(request);
+    test.skip(!didHost, "mock-did-host not started for this run");
+    if (!didHost) throw new Error("mock-did-host client unavailable");
+
+    await didHost.resetDocuments();
+    const dids = await didHost.listDids();
+    expect(dids.length).toBeGreaterThan(0);
+    const subject = dids.find((entry) => entry.method === "did:webvh");
+    expect(subject, "a did:webvh subject must be preseeded").toBeTruthy();
+    if (!subject) throw new Error("no did:webvh subject");
+
+    // Two fetches of the same document count as two authority calls.
+    await didHost.resetCounts();
+    expect(await didHost.getAuthorityNetworkCallCount()).toBe(0);
+    const documentUrl = didHost.documentUrl(subject.did);
+    expect((await request.get(documentUrl)).status()).toBe(200);
+    expect((await request.get(documentUrl)).status()).toBe(200);
+    const counts = await didHost.getCounts();
+    expect(counts.counts[subject.did]?.document).toBe(2);
+    expect(counts.total).toBe(2);
+
+    // Reset zeroes them again.
+    await didHost.resetCounts();
+    expect(await didHost.getAuthorityNetworkCallCount()).toBe(0);
+
+    // The DID-P1-C02 workhorse: a body that touches nothing passes.
+    await didHost.expectNoAdditionalAuthorityCalls(async () => {}, {
+      label: "no-op",
+    });
+
+    // …and a body that fetches is caught.
+    let caught: unknown;
+    try {
+      await didHost.expectNoAdditionalAuthorityCalls(
+        async () => {
+          await request.get(documentUrl);
+        },
+        { label: "fetching body" },
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught, "a body that fetches the authority must fail the assertion").toBeTruthy();
+
+    // Rotation swaps the served version without re-registering the DID.
+    const rotated = await didHost.rotate(subject.did);
+    expect(rotated.version_id).not.toBe(subject.version_id);
+    expect(rotated.version_index).toBe(subject.version_index + 1);
+    const rotatedBody = await (await request.get(documentUrl)).text();
+    expect(rotatedBody).toContain("#key-2");
+
+    await didHost.resetDocuments();
   });
 
   test("mock-policy-server: rule injection, deny + obligation, signed transcript", async ({

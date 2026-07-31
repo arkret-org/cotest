@@ -34,8 +34,9 @@ pub struct TestActorClient {
     /// Grants issued to this actor, keyed by Realm. Membership derives read
     /// access only (`capabilities.md` line 700); every write action still needs
     /// a covering grant, which a DataEvent names in `refs[role=authorized_by]`.
-    pub(super) held_grants:
-        std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, Vec<String>>>>,
+    pub(super) held_grants: std::sync::Arc<
+        std::sync::Mutex<std::collections::BTreeMap<String, Vec<(String, Vec<String>)>>>,
+    >,
 }
 
 impl TestActorClient {
@@ -72,24 +73,40 @@ impl TestActorClient {
         }
     }
 
-    /// Whether this actor controls `realm_id`'s authority root, i.e. created it.
-    /// Record a grant this actor now holds in `realm_id`, so its later
-    /// DataEvents name it as their covering authority.
-    pub fn remember_grant(&self, realm_id: &str, grant_id: &str) {
+    /// Record a grant this actor now holds in `realm_id`, so its later Events
+    /// name it as their covering authority.
+    pub fn remember_grant(&self, realm_id: &str, grant_id: &str, actions: &[&str]) {
         self.held_grants
             .lock()
             .expect("cotest held-grant map is not poisoned")
             .entry(realm_id.to_owned())
             .or_default()
-            .push(grant_id.to_owned());
+            .push((
+                grant_id.to_owned(),
+                actions.iter().map(|action| (*action).to_owned()).collect(),
+            ));
     }
 
-    pub fn held_grants_for(&self, realm_id: &str) -> Vec<String> {
+    /// The grant ids this actor holds in `realm_id` whose actions cover `kind`.
+    ///
+    /// Coverage is the registry's own `target_event_kinds`, so the harness
+    /// never has to spell an action-to-kind table of its own.
+    pub fn covering_grants_for(&self, realm_id: &str, kind: &str) -> Vec<String> {
         self.held_grants
             .lock()
             .expect("cotest held-grant map is not poisoned")
             .get(realm_id)
-            .cloned()
+            .map(|grants| {
+                grants
+                    .iter()
+                    .filter(|(_, actions)| {
+                        actions
+                            .iter()
+                            .any(|action| action_covers_kind(action, kind))
+                    })
+                    .map(|(grant_id, _)| grant_id.clone())
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -103,8 +120,60 @@ impl TestActorClient {
         let (grant_id, _) = self
             .grant_realm_actions_to(realm_id, &subject.actor, actions)
             .await?;
-        subject.remember_grant(realm_id, &grant_id);
+        self.await_projected_grant(realm_id, &subject.actor, &grant_id)
+            .await?;
+        subject.remember_grant(realm_id, &grant_id, actions);
         Ok(grant_id)
+    }
+
+    /// Wait until `grant_id` is projected, i.e. until the Seal that covers the
+    /// grant Control Move exists.
+    ///
+    /// A DataEvent resolves its authority at `seal_ref`, so naming a grant the
+    /// current Seal does not yet cover is rejected with "not projected at
+    /// seal_ref". Sealing is the durable coordinator's job and asynchronous, so
+    /// the issuer waits for it rather than racing it.
+    async fn await_projected_grant(
+        &self,
+        realm_id: &str,
+        subject: &str,
+        grant_id: &str,
+    ) -> Result<()> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            // Ask at the Seal a DataEvent would actually name, not at the
+            // accepted head: a grant can be accepted and still be outside the
+            // authorization pre-state every DataEvent resolves against.
+            let seal_id = self
+                .realm_seal_frontier(realm_id)
+                .await
+                .ok()
+                .and_then(|frontier| {
+                    frontier["frontier"]["seal_id"]
+                        .as_str()
+                        .map(ToOwned::to_owned)
+                });
+            if let Some(seal_id) = seal_id {
+                let grants = self
+                    .sdk()
+                    .authz_effective_grants(realm_id, subject, Some(&seal_id))
+                    .await;
+                if grants.is_ok_and(|grants| {
+                    grants
+                        .grants
+                        .iter()
+                        .any(|grant| grant.id.as_str() == grant_id)
+                }) {
+                    return Ok(());
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "grant {grant_id} for {subject} was never projected in {realm_id}"
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
 
     pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
@@ -192,6 +261,68 @@ impl TestActorClient {
             member_join_payload(realm_id, &member.actor),
         )
         .await
+    }
+
+    /// Name the authority this Event is authored under.
+    ///
+    /// A grant this actor holds wins when one covers the kind; the Realm
+    /// controller otherwise names the authority-root cell. Naming both would be
+    /// wrong: the root path deliberately skips the per-cell grant search, so an
+    /// Event carrying it is judged only by whether `ak.realm.owner` covers the
+    /// kind at all.
+    fn stamp_authority(&self, event: &mut Value, realm_id: &str, kind: &str, is_data_event: bool) {
+        let covering = self.covering_grants_for(realm_id, kind);
+        if !covering.is_empty() {
+            if is_data_event {
+                event["refs"] = Value::Array(
+                    covering
+                        .into_iter()
+                        .map(|grant_id| {
+                            json!({
+                                "id": grant_id,
+                                "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
+                                "critical": true
+                            })
+                        })
+                        .collect(),
+                );
+            }
+            return;
+        }
+        if self.controls_realm_authority_root(realm_id) {
+            event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+        }
+    }
+
+    /// Make sure this actor can author `kind` in `realm_id`.
+    ///
+    /// `ak.realm.owner` is not a superset of every action. The closed genesis
+    /// unit lets the controller write the facet cells, but outside genesis
+    /// `ak.member.state` is governed by `ak.realm.admin` — which nothing issues
+    /// on its own, because v1 genesis issues no grant at all. The controller
+    /// therefore grants itself the narrowest registered action that covers the
+    /// kind, which is exactly what the authority-root ref exists to authorize.
+    fn ensure_authority_for_kind<'a>(
+        &'a self,
+        realm_id: &'a str,
+        kind: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            if !self.controls_realm_authority_root(realm_id)
+                || !self.covering_grants_for(realm_id, kind).is_empty()
+                || owner_may_author_kind(kind)
+            {
+                return Ok(());
+            }
+            let Some(action) = self_grant_action_for_kind(kind) else {
+                return Ok(());
+            };
+            let (grant_id, _) = self
+                .grant_realm_actions_to(realm_id, &self.actor, &[action])
+                .await?;
+            self.remember_grant(realm_id, &grant_id, &[action]);
+            Ok(())
+        })
     }
 
     pub async fn grant_self_realm_actions(
@@ -405,8 +536,8 @@ impl TestActorClient {
                 "key_id": format!("{}#cotest", self.actor),
                 "key_epoch": 0
             });
-            if self.controls_realm_authority_root(realm_id) {
-                event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+            if capability_refs.is_empty() {
+                self.stamp_authority(&mut event, realm_id, kind, true);
             }
             event["refs"] = Value::Array(
                 capability_refs
@@ -433,6 +564,7 @@ impl TestActorClient {
     }
 
     pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
+        self.ensure_authority_for_kind(realm_id, kind).await?;
         let frontier = expect_json(
             self.get("/_arkret/self/events/frontier")
                 .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
@@ -492,25 +624,7 @@ impl TestActorClient {
                     "key_epoch": 0
                 });
             }
-            // The Realm creator holds no grant, so it names the authority-root
-            // cell instead. Actors that only hold grants leave this unset and
-            // carry `refs[role=authorized_by]`.
-            if self.controls_realm_authority_root(realm_id) {
-                event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
-            } else if is_data_event {
-                event["refs"] = Value::Array(
-                    self.held_grants_for(realm_id)
-                        .into_iter()
-                        .map(|grant_id| {
-                            json!({
-                                "id": grant_id,
-                                "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
-                                "critical": true
-                            })
-                        })
-                        .collect(),
-                );
-            }
+            self.stamp_authority(&mut event, realm_id, kind, is_data_event);
         }
         refresh_event_proof(&mut event)?;
         Ok(event)
@@ -525,6 +639,115 @@ impl TestActorClient {
         .await?;
         account_subscribe_delta_from_text(&response.text())
     }
+}
+
+/// Whether `action` is registered as covering `kind`.
+///
+/// Both directions count. `target_event_kinds` is the action's own coverage
+/// set; `admission_capabilities` is what a receiver checks for a
+/// capability-gated kind, and the two do not always agree — `ak.member.state`
+/// names `ak.realm.admin`, which does not list it back.
+fn action_covers_kind(action: &str, kind: &str) -> bool {
+    arkret_schema::capability_action(action)
+        .is_some_and(|descriptor| descriptor.target_event_kinds.contains(&kind))
+        || admission_capabilities(kind)
+            .iter()
+            .any(|entry| entry == action)
+}
+
+/// Whether the Realm owner aggregate authorizes authoring `kind` directly.
+fn owner_may_author_kind(kind: &str) -> bool {
+    arkret::current_capability_action_registry_digest()
+        .ok()
+        .and_then(|basis| {
+            arkret_policy::authz::owner_may_author_event_kind(kind, Some(&basis)).ok()
+        })
+        .unwrap_or(false)
+}
+
+/// The action this harness self-grants so the Realm controller can author
+/// `kind`.
+///
+/// The event-kind registry's `admission_capabilities` is the authority: it is
+/// what a receiver checks for a capability-gated kind, and it does not always
+/// agree with the action's own `target_event_kinds` (`ak.member.state` names
+/// `ak.realm.admin`, which does not list it back). Fall back to a
+/// coverage-set search, smallest first, so a self-grant never quietly hands the
+/// creator an aggregate admin action when a narrow one would do.
+fn self_grant_action_for_kind(kind: &str) -> Option<&'static str> {
+    let basis = arkret::current_capability_action_registry_digest().ok()?;
+    let grantable = |action: &str| {
+        arkret_policy::authz::owner_may_grant(action, Some(&basis), &[]).unwrap_or(false)
+    };
+    if let Some(action) = admission_capabilities(kind)
+        .iter()
+        .find(|action| grantable(action))
+        .and_then(|action| registered_action_name(action))
+    {
+        return Some(action);
+    }
+    arkret_schema::REGISTERED_CAPABILITY_ACTIONS
+        .iter()
+        .filter(|descriptor| descriptor.target_event_kinds.contains(&kind))
+        .filter(|descriptor| grantable(descriptor.action.as_str()))
+        .min_by_key(|descriptor| descriptor.target_event_kinds.len())
+        .map(|descriptor| descriptor.action.as_str())
+}
+
+fn registered_action_name(action: &str) -> Option<&'static str> {
+    arkret_schema::capability_action(action).map(|descriptor| descriptor.action.as_str())
+}
+
+/// `admission_capabilities` per event kind, read from the registry itself.
+static ADMISSION_CAPABILITIES: std::sync::LazyLock<
+    std::collections::BTreeMap<String, Vec<String>>,
+> = std::sync::LazyLock::new(|| {
+    let Ok(registry) = crate::conformance::load_artifact_json("registry/event-kind-registry.json")
+    else {
+        return std::collections::BTreeMap::new();
+    };
+    let mut out = std::collections::BTreeMap::new();
+    collect_admission_capabilities(&registry, &mut out);
+    out
+});
+
+fn collect_admission_capabilities(
+    value: &Value,
+    out: &mut std::collections::BTreeMap<String, Vec<String>>,
+) {
+    match value {
+        Value::Object(object) => {
+            if let (Some(Value::String(kind)), Some(Value::Array(capabilities))) = (
+                object.get("event_kind"),
+                object.get("admission_capabilities"),
+            ) {
+                out.insert(
+                    kind.clone(),
+                    capabilities
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect(),
+                );
+            }
+            for nested in object.values() {
+                collect_admission_capabilities(nested, out);
+            }
+        }
+        Value::Array(items) => {
+            for nested in items {
+                collect_admission_capabilities(nested, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn admission_capabilities(kind: &str) -> Vec<String> {
+    ADMISSION_CAPABILITIES
+        .get(kind)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn payload_patch_touches_calendar(payload: &Value) -> bool {

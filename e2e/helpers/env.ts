@@ -220,6 +220,23 @@ export function mockMimiFacadeDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_MIMI_FACADE_DID");
 }
 
+// mock-did-host.mjs — the counting DID document authority (DID-P1-C01).
+// See e2e/helpers/did-host.ts for the counting/assertion API.
+export function mockDidHostBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_DID_HOST_BASE_URL")?.replace(/\/$/, "");
+}
+
+// The authority (host) the mock's generated did:webvh DIDs live under.
+export function mockDidHostAuthority(): string | undefined {
+  return optionalEnv("COTEST_MOCK_DID_HOST_AUTHORITY");
+}
+
+// The did:webvh SCID the mock mints its DIDs with (mirrors
+// src/harness/mod.rs FIXTURE_WEBVH_SCID).
+export function mockDidHostScid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_DID_HOST_SCID");
+}
+
 // The joint run directory for this process. playwright.config.ts always sets
 // COTEST_JOINT_RUN_DIR (orchestrator value or a fresh joint-e2e-adhoc run)
 // before workers spawn, so the fallback here only covers non-Playwright

@@ -120,6 +120,10 @@ param(
     [string]$MockClaimIssuerDid = "did:webvh:z6mkfixture:vc-issuer.joint-e2e.local",
     [switch]$StartMockChallengeProvider,
     [string]$MockChallengeProviderDid = "did:webvh:z6mkfixture:captcha.joint-e2e.local",
+    [switch]$StartMockDidHost,
+    [string]$MockDidHostAuthority = "did-host.joint-e2e.local",
+    [string]$MockDidHostScid = "z6mkfixture",
+    [string[]]$MockDidHostExtraDids = @(),
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:webvh:z6mkfixture:witness.joint-e2e.local",
     [string[]]$MockWitnessExtraDids = @(),
@@ -146,6 +150,17 @@ if ($StartMocks) {
     $StartMockMimiFacade = $true
     $StartMockClaimIssuer = $true
     $StartMockChallengeProvider = $true
+    $StartMockDidHost = $true
+}
+
+$MockDidHostExtraDids = @(
+    $MockDidHostExtraDids |
+        ForEach-Object { $_ -split "," } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ }
+)
+if ($MockDidHostExtraDids.Count -gt 0) {
+    $StartMockDidHost = $true
 }
 
 $MockWitnessExtraDids = @(
@@ -2088,6 +2103,14 @@ if ($StartMockWitness) {
         $mockWitnessQuorumDids += $extraDid
     }
 }
+# DID-P1-C01 — counting DID document authority. Started after the witness so
+# it can be handed the witness base URL for POST /control/attest.
+$mockDidHostPort = $null
+$mockDidHostBaseUrl = $null
+if ($StartMockDidHost) {
+    $mockDidHostPort = Get-FreeTcpPort
+    $mockDidHostBaseUrl = "http://127.0.0.1:$mockDidHostPort"
+}
 $mockPolicyServerPort = $null
 $mockPolicyServerBaseUrl = $null
 if ($StartMockPolicyServer) {
@@ -2477,6 +2500,22 @@ try {
             Wait-HttpReady -Url "$($witness.base_url)/mock/witness/policy" -TimeoutSeconds 30
             $witnessIndex++
         }
+    }
+    if ($StartMockDidHost) {
+        $envExpr = (
+            "`$env:MOCK_DID_HOST_PORT='{0}'; `$env:MOCK_DID_HOST_AUTHORITY={1}; `$env:MOCK_DID_HOST_SCID={2}"
+        ) -f $mockDidHostPort, (Quote-PsLiteral $MockDidHostAuthority), (Quote-PsLiteral $MockDidHostScid)
+        if ($MockDidHostExtraDids.Count -gt 0) {
+            $envExpr = "$envExpr; `$env:MOCK_DID_HOST_EXTRA_DIDS=" + (Quote-PsLiteral ($MockDidHostExtraDids -join ","))
+        }
+        if ($mockWitnessBaseUrl) {
+            # Witness signing stays in mock-witness.mjs; the DID host only
+            # relays through it for POST /control/attest.
+            $envExpr = "$envExpr; `$env:MOCK_DID_HOST_WITNESS_URL=" + (Quote-PsLiteral $mockWitnessBaseUrl)
+        }
+        $mockDidHostCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-did-host.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-did-host" -Command $mockDidHostCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockDidHostBaseUrl/health" -TimeoutSeconds 30
     }
     if ($StartMockPolicyServer) {
         $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
@@ -3259,6 +3298,21 @@ requires_openai_auth = false
     } else {
         Remove-Item Env:COTEST_MOCK_CHALLENGE_PROVIDER_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_CHALLENGE_PROVIDER_DID -ErrorAction SilentlyContinue
+    }
+    # DID-P1-C01. NOTE: these are consumed by cotest's own harness
+    # (e2e/helpers/did-host.ts, src/scenarios/_helpers/did_host.rs) only. The
+    # services under test cannot currently be pointed at this host — soland /
+    # teabay / the SDK derive the DID-document URL from the DID string itself
+    # (hardcoded https + an SSRF guard that rejects loopback), with no
+    # resolver-base-URL or host-override env. See the DID-P1-C01 report.
+    if ($mockDidHostBaseUrl) {
+        $env:COTEST_MOCK_DID_HOST_BASE_URL = $mockDidHostBaseUrl
+        $env:COTEST_MOCK_DID_HOST_AUTHORITY = $MockDidHostAuthority
+        $env:COTEST_MOCK_DID_HOST_SCID = $MockDidHostScid
+    } else {
+        Remove-Item Env:COTEST_MOCK_DID_HOST_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_DID_HOST_AUTHORITY -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_DID_HOST_SCID -ErrorAction SilentlyContinue
     }
 
     if (-not $RuntimeManifestPath) {
@@ -4098,6 +4152,9 @@ $summary = [pscustomobject]@{
     mock_witness_did = if ($mockWitnessBaseUrl) { $MockWitnessDid } else { $null }
     mock_witness_quorum_base_urls = if ($mockWitnessBaseUrl) { $mockWitnessQuorumBaseUrls } else { @() }
     mock_witness_quorum_dids = if ($mockWitnessBaseUrl) { $mockWitnessQuorumDids } else { @() }
+    mock_did_host_base_url = $mockDidHostBaseUrl
+    mock_did_host_authority = if ($mockDidHostBaseUrl) { $MockDidHostAuthority } else { $null }
+    mock_did_host_scid = if ($mockDidHostBaseUrl) { $MockDidHostScid } else { $null }
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     inkson_base_url = $InksonBaseUrl
@@ -4239,6 +4296,9 @@ if ($mockWitnessBaseUrl) {
     if ($mockWitnessQuorumBaseUrls.Count -gt 1) {
         Write-Host "  mock-witness-quorum: $($mockWitnessQuorumBaseUrls -join ', ')"
     }
+}
+if ($mockDidHostBaseUrl) {
+    Write-Host "  mock-did-host: $mockDidHostBaseUrl ($MockDidHostAuthority, scid=$MockDidHostScid)"
 }
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"

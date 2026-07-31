@@ -166,6 +166,10 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         "bob sync did not include alice message {sent}; sync: {bob_sync}"
     );
 
+    // Membership derives read access only; Bob needs a covering grant to author.
+    alice
+        .grant_realm_actions_to_client(&realm_id, &bob, &["ak.message.create"])
+        .await?;
     let bob_reply = bob
         .send_message(
             &realm_id,

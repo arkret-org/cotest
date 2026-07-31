@@ -5,6 +5,7 @@
 
 pub mod bridge;
 pub mod coauth_bootstrap;
+pub mod did_host;
 pub mod external_binary;
 pub mod federation_binding;
 pub mod floria_bootstrap;

@@ -458,6 +458,19 @@ specs.
 `scripts/run-joint-e2e.ps1 -StartMockMimiFacade` starts the local MIMI facade
 mock and exports `COTEST_MOCK_MIMI_FACADE_BASE_URL` /
 `COTEST_MOCK_MIMI_FACADE_DID`; `-StartMocks` includes it with the other mocks.
+`scripts/run-joint-e2e.ps1 -StartMockDidHost` starts the counting DID document
+authority (`e2e/mocks/mock-did-host.mjs`) and exports
+`COTEST_MOCK_DID_HOST_BASE_URL` / `_AUTHORITY` / `_SCID`. It hosts
+`did.json` / `did.jsonl` / `did-witness.json` for preseeded DIDs and counts
+every fetch per DID and purpose, so a scenario can assert
+`authority_network_call_count` deltas — see `e2e/helpers/did-host.ts`
+(`expectNoAdditionalAuthorityCalls`) and
+`src/scenarios/_helpers/did_host.rs`. Witness *signing* stays in
+`mock-witness.mjs`; the DID host only relays to it via `POST /control/attest`.
+Note that the services under test cannot currently be pointed at this host by
+environment alone — soland/teabay/the SDK derive the DID-document URL from the
+DID string itself (hardcoded `https://` plus an SSRF guard that rejects
+loopback), with no resolver-base-URL override.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous
 `artifacts/latest/full/coverage-matrix.json`.
