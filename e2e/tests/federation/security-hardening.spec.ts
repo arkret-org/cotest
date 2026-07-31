@@ -1,12 +1,15 @@
 // Federation security hardening
 // Contract: e2e/scenarios/federation/security-hardening.md
 //
-// These checks are intentionally gated by explicit harness flags because they
+// These checks are intentionally gated by an explicit harness flag because they
 // require soland processes to be started with hardened deployment env:
-// - COTEST_EXPECT_FEDERATION_DENYLIST=1 means beta deny-lists alpha and alpha
-//   deny-lists beta via SOLAND_FEDERATION_DENYLIST / SOLAND_FEDERATION_PEER_DENYLIST.
-// - COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED=1 means the soland under test was
-//   started with SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=0 even in dev mode.
+// COTEST_EXPECT_FEDERATION_DENYLIST=1 means beta deny-lists alpha via
+// SOLAND_FEDERATION_DENYLIST and alpha deny-lists beta via
+// SOLAND_FEDERATION_PEER_DENYLIST.
+//
+// The topology must otherwise be fully reachable — see the CI wiring note in
+// e2e/scenarios/federation/security-hardening.md. If the two nodes cannot talk
+// at all, both assertions hold no matter what the denylist does.
 
 import { expect, test } from "@playwright/test";
 import {

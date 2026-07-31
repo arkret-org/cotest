@@ -190,39 +190,71 @@ jobs:
           npx playwright test --config playwright.config.ts --project=chromium tests/spaces/knock-application.spec.ts
       - name: run federation security hardening Playwright
         working-directory: cotest/e2e
+        # Each node gets its own hostname (mapped to loopback below) instead of
+        # a bare `127.0.0.1:<port>`. The denylist matcher compares *hosts*, not
+        # host:port, so two nodes sharing `127.0.0.1` can only be deny-listed
+        # together — the assertions would then hold for any implementation.
+        # Distinct hostnames also give distinct service DIDs and trust domains,
+        # because soland derives both from `SOLAND_PUBLIC_BASE_URL`, so no
+        # identity has to be injected into boot config (decisions/0012).
+        #
+        # Private-network egress stays *allowed* here on purpose. With it off,
+        # neither node can reach the other at all, both assertions pass without
+        # the denylist ever running, and the job reports a false green. The
+        # egress guard itself is covered by soland's own unit tests.
         env:
-          COTEST_SOLAND_ALPHA_BASE_URL: http://127.0.0.1:8011
-          COTEST_SOLAND_ALPHA_SERVICE_ID: did:webvh:z6mkfixture:soland-alpha.security-ci.local
-          COTEST_SOLAND_BETA_BASE_URL: http://127.0.0.1:8012
-          COTEST_SOLAND_BETA_SERVICE_ID: did:webvh:z6mkfixture:soland-beta.security-ci.local
+          COTEST_SOLAND_BASE_URL: http://soland-alpha.security-ci.local:8011
+          COTEST_SOLAND_ALPHA_BASE_URL: http://soland-alpha.security-ci.local:8011
+          COTEST_SOLAND_BETA_BASE_URL: http://soland-beta.security-ci.local:8012
+          # FIXTURE ONLY, same seeds the joint-e2e runner uses: handed to soland
+          # as `SOLAND_NOTARY_SIGNING_KEY` and to the spec as the peer signing
+          # key, so the inbound push carries a cryptographically *valid*
+          # signature. Without them the push dies at signature verification and
+          # never reaches the denylist branch.
+          COTEST_SOLAND_SERVICE_SIGNING_KEY: OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=
+          COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY: ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=
+          # Outbound-fanout coverage registers a real user on alpha, and the
+          # embedded did:webvh registration endpoint answers 503 until this is
+          # configured on both sides.
+          COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
           COTEST_EXPECT_FEDERATION_DENYLIST: "1"
-          COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED: "1"
+          COTEST_REQUIRE_DUAL_SOLAND: "1"
           COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e
+          RUST_LOG: info
         run: |
           set -euo pipefail
 
+          echo "127.0.0.1 soland-alpha.security-ci.local soland-beta.security-ci.local" \
+            | sudo tee -a /etc/hosts > /dev/null
+
+          # Only the deny-listing side of each pair is set, so both env names
+          # carry real coverage: beta rejects alpha inbound, alpha drops beta
+          # from outbound fanout.
           start_soland() {
             local name="$1"
             local bind="$2"
             local metrics_bind="$3"
             local base_url="$4"
-            local service_id="$5"
-            local peer_url="$6"
-            local peer_did="$7"
+            local trust_domain="$5"
+            local notary_seed="$6"
+            local peer_url="$7"
+            local denylist_name="$8"
+            local denylist_host="$9"
             local objects_root="$RUNNER_TEMP/${name}-objects"
             mkdir -p "$objects_root"
-            SOLAND_DEVELOPMENT_MODE=1 \
-            SOLAND_PUBLIC_BASE_URL="$base_url" \
-            SOLAND_SERVICE_ID="$service_id" \
-            SOLAND_METRICS_BIND="$metrics_bind" \
-            SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
-            SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
-            SOLAND_FEDERATION_POLICY="Mesh" \
-            SOLAND_FEDERATION_PEERS="${peer_url}|${peer_did}" \
-            SOLAND_FEDERATION_DENYLIST="${peer_did}" \
-            SOLAND_FEDERATION_PEER_DENYLIST="${peer_did}" \
-            SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=0 \
-            "$SOLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
+            env \
+              SOLAND_DEVELOPMENT_MODE=1 \
+              SOLAND_PUBLIC_BASE_URL="$base_url" \
+              SOLAND_TRUST_DOMAIN="$trust_domain" \
+              SOLAND_NOTARY_SIGNING_KEY="$notary_seed" \
+              SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
+              SOLAND_METRICS_BIND="$metrics_bind" \
+              SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+              SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
+              SOLAND_FEDERATION_PEERS="$peer_url" \
+              SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=1 \
+              "${denylist_name}=${denylist_host}" \
+              "$SOLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
             echo "$!"
           }
 
@@ -231,17 +263,21 @@ jobs:
             "127.0.0.1:8011" \
             "127.0.0.1:9011" \
             "$COTEST_SOLAND_ALPHA_BASE_URL" \
-            "$COTEST_SOLAND_ALPHA_SERVICE_ID" \
+            "ak:trust_domain:soland-alpha.security-ci.local" \
+            "$COTEST_SOLAND_SERVICE_SIGNING_KEY" \
             "$COTEST_SOLAND_BETA_BASE_URL" \
-            "$COTEST_SOLAND_BETA_SERVICE_ID")
+            "SOLAND_FEDERATION_PEER_DENYLIST" \
+            "soland-beta.security-ci.local")
           beta_pid=$(start_soland \
             "soland-beta-security" \
             "127.0.0.1:8012" \
             "127.0.0.1:9012" \
             "$COTEST_SOLAND_BETA_BASE_URL" \
-            "$COTEST_SOLAND_BETA_SERVICE_ID" \
+            "ak:trust_domain:soland-beta.security-ci.local" \
+            "$COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY" \
             "$COTEST_SOLAND_ALPHA_BASE_URL" \
-            "$COTEST_SOLAND_ALPHA_SERVICE_ID")
+            "SOLAND_FEDERATION_DENYLIST" \
+            "soland-alpha.security-ci.local")
           cleanup() {
             set +e
             kill "$alpha_pid" "$beta_pid" 2>/dev/null
@@ -257,6 +293,40 @@ jobs:
               sleep 1
             done
             curl -fsS "$url" >/dev/null
+          done
+
+          # Both processes must still be alive: a node that died after answering
+          # /health once would leave the topology half-built.
+          kill -0 "$alpha_pid"
+          kill -0 "$beta_pid"
+
+          # Service identity comes from the running process, never from config.
+          export COTEST_SOLAND_ALPHA_SERVICE_ID
+          export COTEST_SOLAND_BETA_SERVICE_ID
+          export COTEST_SOLAND_SERVICE_ID
+          COTEST_SOLAND_ALPHA_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_ALPHA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+          COTEST_SOLAND_BETA_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_BETA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+          COTEST_SOLAND_SERVICE_ID="$COTEST_SOLAND_ALPHA_SERVICE_ID"
+          if [ "$COTEST_SOLAND_ALPHA_SERVICE_ID" = "$COTEST_SOLAND_BETA_SERVICE_ID" ]; then
+            echo "::error::alpha and beta minted the same service DID; the denylist cannot distinguish them" >&2
+            exit 1
+          fi
+
+          # Peer discovery installs the other node's assertion key. Until it has
+          # run, an inbound push is rejected for an unresolvable key rather than
+          # by the denylist, which is exactly the vacuous pass this job exists
+          # to prevent.
+          for log in "$RUNNER_TEMP/soland-alpha-security.log" "$RUNNER_TEMP/soland-beta-security.log"; do
+            for _ in {1..60}; do
+              if grep -q "resolved federation peer service identity and assertion key" "$log"; then
+                break
+              fi
+              sleep 1
+            done
+            if ! grep -q "resolved federation peer service identity and assertion key" "$log"; then
+              echo "::error::$log never resolved its federation peer" >&2
+              exit 1
+            fi
           done
 
           npx playwright test --config playwright.config.ts --project=chromium tests/federation/security-hardening.spec.ts
