@@ -60,7 +60,6 @@ use serde_json::{Value, json};
 /// as `cotest::scenarios::security_closure_fixture::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE`,
 /// repeated here so a grep on `federation_idempotency_historical_only`
 /// finds the binding directly.
-pub const VECTOR_ID: &str = "ak.vector.federation.idempotency_after_key_revoke.v1";
 
 /// Canonical `reason_code` carried on a cache-replay-after-key-revoke
 /// response. The SDK constant is the authoritative source — this pin

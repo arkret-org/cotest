@@ -20,7 +20,10 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
     if required_str(&fixture, "suite")? != SUITE {
         bail!("{FIXTURE} suite must be {SUITE}");
     }
-    validate_profile(&fixture, "ak.vector_group.privacy_security.v1")?;
+    validate_profile(
+        &fixture,
+        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+    )?;
 
     let cases = fixture
         .get("cases")

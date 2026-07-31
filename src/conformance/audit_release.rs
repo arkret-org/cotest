@@ -1,6 +1,7 @@
 //! Audited E2EE release control-plane conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
+use arkret_wire::ProfileId;
 use serde_json::Value;
 
 pub const VECTOR_ID_BINDING_FSM: &str = "ak.vector.audit.binding_fsm.v1";
@@ -24,18 +25,19 @@ pub const ALL_AUDIT_RELEASE_VECTOR_IDS: &[&str] = &[
 ];
 
 const FIXTURE_FILE: &str = "audit-release-fixture.json";
-const ATTESTED_PROFILE: &str = "ak.profile.attested_audit.e2ee.v1";
-const DISCLOSED_PROFILE: &str = "ak.profile.disclosed_audit.e2ee.v1";
 
 fn validate_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ATTESTED_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::ATTESTED_AUDIT_E2EE_V1)?;
 
     let profiles = fixture
         .get("applies_to_profiles")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("audit release fixture missing applies_to_profiles[]"))?;
-    for profile in [ATTESTED_PROFILE, DISCLOSED_PROFILE] {
+    for profile in [
+        ProfileId::ATTESTED_AUDIT_E2EE_V1,
+        ProfileId::DISCLOSED_AUDIT_E2EE_V1,
+    ] {
         if !profiles.iter().any(|entry| entry.as_str() == Some(profile)) {
             bail!("audit release fixture missing profile {profile}");
         }

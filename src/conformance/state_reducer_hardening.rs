@@ -6,6 +6,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::CellRef;
 use arkret_state::lattice::CellState;
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
+use arkret_wire::EventKind;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -21,7 +22,6 @@ pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
 
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
 const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
-const EVENT_KIND_STRAND_TRACKS_UPDATE: &str = "ak.strand.tracks.update";
 const STRAND_TRACKS_CELL_FAMILY: &str = "ak.component.strand.tracks.v1";
 
 pub fn run_state_reducer_hardening_fixture_suite() -> Result<()> {
@@ -388,22 +388,39 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
         .and_then(|events| {
             events.iter().find(|event| {
                 event.get("event_kind").and_then(Value::as_str)
-                    == Some(EVENT_KIND_STRAND_TRACKS_UPDATE)
+                    == Some(EventKind::STRAND_TRACKS_UPDATE)
             })
         })
-        .ok_or_else(|| anyhow!("event-kind registry missing {EVENT_KIND_STRAND_TRACKS_UPDATE}"))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "event-kind registry missing {eventkind_strand_tracks_update}",
+                eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+            )
+        })?;
 
     if event.get("cell_family").and_then(Value::as_str) != Some(STRAND_TRACKS_CELL_FAMILY) {
-        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} cell family drifted");
+        bail!(
+            "{eventkind_strand_tracks_update} cell family drifted",
+            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+        );
     }
     if event.get("lattice").and_then(Value::as_str) != Some("mv_register") {
-        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} lattice must remain mv_register");
+        bail!(
+            "{eventkind_strand_tracks_update} lattice must remain mv_register",
+            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+        );
     }
     if event.get("bottom").and_then(Value::as_str) != Some("expose") {
-        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} bottom policy must remain expose");
+        bail!(
+            "{eventkind_strand_tracks_update} bottom policy must remain expose",
+            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+        );
     }
     if event.get("reducer_input").and_then(Value::as_bool) != Some(true) {
-        bail!("{EVENT_KIND_STRAND_TRACKS_UPDATE} must remain reducer_input");
+        bail!(
+            "{eventkind_strand_tracks_update} must remain reducer_input",
+            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+        );
     }
 
     Ok(())

@@ -12,6 +12,7 @@ use arkret_signatures::http_signature::{
     SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,
     verify_signed_http_message,
 };
+use arkret_wire::ProfileId;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
 
@@ -35,7 +36,6 @@ pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
 ];
 
 const AUTH_SESSION_PROOF_FIXTURE_FILE: &str = "auth-session-proof-fixture.json";
-const AUTH_SESSION_PROOF_PROFILE: &str = "ak.profile.auth_server.v1";
 const SESSION_GRANT_REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody";
 const SESSION_GRANT_OUTCOME_SCHEMA: &str =
@@ -45,7 +45,7 @@ const HTTP_SIGNATURE_SKEW_SECONDS: i64 = 30;
 
 fn auth_session_proof_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(AUTH_SESSION_PROOF_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, AUTH_SESSION_PROOF_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::AUTH_SERVER_V1)?;
     validate_auth_session_proof_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
@@ -247,7 +247,7 @@ fn issue_session_grant(
 fn development_mode_verified_profiles(attempted: &[String]) -> Vec<String> {
     attempted
         .iter()
-        .filter(|profile| profile.as_str() != AUTH_SESSION_PROOF_PROFILE)
+        .filter(|profile| profile.as_str() != ProfileId::AUTH_SERVER_V1)
         .cloned()
         .collect()
 }

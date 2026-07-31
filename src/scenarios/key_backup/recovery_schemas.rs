@@ -7,17 +7,19 @@
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::RecoverySessionId;
-use arkret_wire::{RECOVERY_POLICY_SCHEMA, RECOVERY_RECEIPT_SCHEMA};
+use arkret_wire::SchemaId;
 
 pub async fn recovery_schemas_run() -> Result<()> {
-    if RECOVERY_POLICY_SCHEMA != "ak.schema.recovery_policy.v1" {
+    if SchemaId::RECOVERY_POLICY_V1 != "ak.schema.recovery_policy.v1" {
         return Err(anyhow!(
-            "RECOVERY_POLICY_SCHEMA spelling drifted: {RECOVERY_POLICY_SCHEMA}"
+            "SchemaId::RECOVERY_POLICY_V1 spelling drifted: {schemaid_recovery_policy_v1}",
+            schemaid_recovery_policy_v1 = SchemaId::RECOVERY_POLICY_V1
         ));
     }
-    if RECOVERY_RECEIPT_SCHEMA != "ak.schema.recovery_receipt.v1" {
+    if SchemaId::RECOVERY_RECEIPT_V1 != "ak.schema.recovery_receipt.v1" {
         return Err(anyhow!(
-            "RECOVERY_RECEIPT_SCHEMA spelling drifted: {RECOVERY_RECEIPT_SCHEMA}"
+            "SchemaId::RECOVERY_RECEIPT_V1 spelling drifted: {schemaid_recovery_receipt_v1}",
+            schemaid_recovery_receipt_v1 = SchemaId::RECOVERY_RECEIPT_V1
         ));
     }
     // UUIDv7 literal: lowercase hex, version nibble = 7, variant nibble ∈

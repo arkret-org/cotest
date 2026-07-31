@@ -37,7 +37,6 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
 ];
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
-const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_arkret_inbound";
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -143,7 +142,10 @@ pub fn run_sync_range_completeness_client_query_vector() -> Result<()> {
 
 fn final_conformance_closure_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, FINAL_CONFORMANCE_CLOSURE_PROFILE)?;
+    super::validate_profile(
+        &fixture,
+        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+    )?;
     validate_final_conformance_closure_fixture_metadata(&fixture)?;
     Ok(fixture)
 }

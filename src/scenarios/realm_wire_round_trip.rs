@@ -61,19 +61,19 @@ fn positive_vectors() -> Vec<WireVector> {
     vec![
         WireVector {
             label: "ak.realm.create",
-            kind: arkret_wire::events::EventKind::REALM_CREATE,
+            kind: arkret_wire::EventKind::REALM_CREATE,
             payload: json!({"action": "create", "title": "Engineering Realm"}),
             expected_class: EventProductClass::Realm,
         },
         WireVector {
             label: "ak.space.create (container)",
-            kind: arkret_wire::events::EventKind::SPACE_CREATE,
+            kind: arkret_wire::EventKind::SPACE_CREATE,
             payload: json!({"title": "Launch Board", "kind": "board"}),
             expected_class: EventProductClass::Space,
         },
         WireVector {
             label: "ak.realm.delivery_binding_policy",
-            kind: arkret_wire::events::EventKind::REALM_DELIVERY_BINDING_POLICY,
+            kind: arkret_wire::EventKind::REALM_DELIVERY_BINDING_POLICY,
             payload: json!({
                 "allowed_recipient_services": ["did:web:soland.example"],
                 "binding_source_policy": "endorsed_only",
@@ -82,7 +82,7 @@ fn positive_vectors() -> Vec<WireVector> {
         },
         WireVector {
             label: "ak.realm.link",
-            kind: arkret_wire::events::EventKind::REALM_LINK,
+            kind: arkret_wire::EventKind::REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
                 "target_realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",

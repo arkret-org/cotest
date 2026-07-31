@@ -16,14 +16,14 @@ const CASCADE_KINDS: &[&str] = &[
 ];
 
 pub async fn controller_deactivate_cascade_run() -> Result<()> {
-    if arkret_wire::events::EventKind::SELF_AGENT_DEACTIVATE != "ak.self.agent.deactivate" {
+    if arkret_wire::EventKind::SELF_AGENT_DEACTIVATE != "ak.self.agent.deactivate" {
         return Err(anyhow!(
-            "arkret_wire::events::EventKind::SELF_AGENT_DEACTIVATE event-kind constant drifted from canonical spelling"
+            "arkret_wire::EventKind::SELF_AGENT_DEACTIVATE event-kind constant drifted from canonical spelling"
         ));
     }
-    if !CASCADE_KINDS.contains(&arkret_wire::events::EventKind::SELF_AGENT_DEACTIVATE) {
+    if !CASCADE_KINDS.contains(&arkret_wire::EventKind::SELF_AGENT_DEACTIVATE) {
         return Err(anyhow!(
-            "cascade list does not include arkret_wire::events::EventKind::SELF_AGENT_DEACTIVATE; reducer would skip step 1"
+            "cascade list does not include arkret_wire::EventKind::SELF_AGENT_DEACTIVATE; reducer would skip step 1"
         ));
     }
     // TODO(P4-impl): live vector — provision 2 agents, attach grants,

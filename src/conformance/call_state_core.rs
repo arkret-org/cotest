@@ -17,7 +17,7 @@ use arkret_models_collaboration::objects::media::{
     CallMediaTokenExchangeRequestBody,
 };
 use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
-use arkret_wire::{BottomKind, LatticeOp, LatticeOpType, PARTICIPANT_BINDING_SCHEMA};
+use arkret_wire::{BottomKind, LatticeOp, LatticeOpType, ProfileId};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
@@ -42,7 +42,6 @@ pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
 ];
 
 const CALL_STATE_CORE_FIXTURE_FILE: &str = "call-state-core-fixture.json";
-const CALL_STATE_CORE_PROFILE: &str = "ak.profile.media_service_binding.v1";
 
 const ISSUER_KID: &str = "did:web:media.example#media-token";
 const ROGUE_KID: &str = "did:web:rogue.example#media-token";
@@ -80,7 +79,7 @@ const ALLOWED_TRANSITIONS: &[(&str, &str)] = &[
 
 fn validate_call_state_core_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(CALL_STATE_CORE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, CALL_STATE_CORE_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::MEDIA_SERVICE_BINDING_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -152,7 +151,7 @@ fn unsigned_token_outcome(
         backend_token: "opaque-backend-token".to_owned(),
         participant_identity: identity.clone(),
         participant_binding: CallMediaParticipantBinding {
-            scheme: PARTICIPANT_BINDING_SCHEMA.to_owned(),
+            scheme: ParticipantBinding::SCHEMA.to_owned(),
             sig: String::new(),
             issuer_kid: arkret::DidUrl::new(ISSUER_KID).unwrap(),
             realm_id: request.realm_id.clone(),

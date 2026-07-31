@@ -23,7 +23,8 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
-use arkret_wire::{MEDIA_TOKEN_TTL_MAX_SECS, PARTICIPANT_BINDING_SCHEMA};
+use arkret_models_collaboration::objects::media::MEDIA_ICE_CONFIG_SIGNING_LABEL;
+use arkret_wire::{ExporterLabelId, MEDIA_TOKEN_TTL_MAX_SECS, ProfileId};
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use hkdf::Hkdf;
 use serde_json::{Value, json};
@@ -67,11 +68,10 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
 ];
 
 const MEDIA_BINDING_FIXTURE_FILE: &str = "media-binding-fixture.json";
-const MEDIA_BINDING_PROFILE: &str = "ak.profile.media_service_binding.v1";
 
 fn validate_media_binding_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(MEDIA_BINDING_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, MEDIA_BINDING_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::MEDIA_SERVICE_BINDING_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -117,10 +117,6 @@ const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
 fn known_backend_type(label: &str) -> bool {
     KNOWN_MEDIA_BACKEND_TYPES.contains(&label)
 }
-
-const LABEL_RTC_FRAME_KEY: &str = "ak.rtc-frame-key/v1";
-const LABEL_RTC_RECORDING_KEY: &str = "ak.rtc-recording-key/v1";
-const LABEL_RTC_TRANSCRIPT_KEY: &str = "ak.rtc-transcript-key/v1";
 
 // ─── VECT-MB-1 — focus_selection_oldest_membership ─────────────────────────
 
@@ -242,8 +238,8 @@ pub fn run_token_exchange_minimal_vector() -> Result<()> {
             "arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN"
         );
     }
-    if PARTICIPANT_BINDING_SCHEMA != "ak.media.participant_binding.v1" {
-        bail!("PARTICIPANT_BINDING_SCHEMA drifted: {PARTICIPANT_BINDING_SCHEMA}");
+    if ParticipantBinding::SCHEMA != "ak.media.participant_binding.v1" {
+        bail!("ParticipantBinding::SCHEMA drifted: {ParticipantBinding::SCHEMA}");
     }
     if MEDIA_TOKEN_TTL_MAX_SECS != 600 {
         bail!("MEDIA_TOKEN_TTL_MAX_SECS drifted: {MEDIA_TOKEN_TTL_MAX_SECS} (spec ceiling is 600)");
@@ -309,7 +305,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     // `scheme` is anything other than `ak.media.participant_binding.v1`,
     // is invalid. We pin both branches at the SDK constant layer; the
     // schema-validator integration target lands under R3.1.
-    let valid_scheme = PARTICIPANT_BINDING_SCHEMA;
+    let valid_scheme = ParticipantBinding::SCHEMA;
     for bogus in [
         "",
         "ak.media.participant_binding",
@@ -376,8 +372,8 @@ fn participant_binding_signing_input(
     });
     let jcs = arkret_canonical::canonical_json_bytes(&seven_tuple)
         .map_err(|err| anyhow!("participant_binding JCS encoding failed: {err}"))?;
-    let mut input = Vec::with_capacity(PARTICIPANT_BINDING_SCHEMA.len() + 1 + jcs.len());
-    input.extend_from_slice(PARTICIPANT_BINDING_SCHEMA.as_bytes());
+    let mut input = Vec::with_capacity(ParticipantBinding::SCHEMA.len() + 1 + jcs.len());
+    input.extend_from_slice(ParticipantBinding::SCHEMA.as_bytes());
     input.push(0x00);
     input.extend_from_slice(&jcs);
     Ok(input)
@@ -477,9 +473,8 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
 
     // 3. Domain-label separation: the same sig under the ICE-config label MUST NOT verify
     //    (cross-purpose confusion is rejected).
-    const ICE_CONFIG_LABEL: &str = "ak.media.ice_config.v1";
     let mut cross_input = Vec::new();
-    cross_input.extend_from_slice(ICE_CONFIG_LABEL.as_bytes());
+    cross_input.extend_from_slice(MEDIA_ICE_CONFIG_SIGNING_LABEL.as_bytes());
     cross_input.push(0x00);
     cross_input.extend_from_slice(
         &arkret_canonical::canonical_json_bytes(&json!({
@@ -513,6 +508,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
 
 fn hex_lower(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
+
     let mut out = String::with_capacity(bytes.len() * 2);
     for b in bytes {
         let _ = write!(out, "{b:02x}");
@@ -554,10 +550,10 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
     // escrow (any wire form that funnels keys through the focus
     // service) is rejected.
     const MLS_EXPORTER_LENGTH: usize = 19;
-    if LABEL_RTC_FRAME_KEY.len() != MLS_EXPORTER_LENGTH {
+    if ExporterLabelId::RTC_FRAME_KEY_V1.len() != MLS_EXPORTER_LENGTH {
         bail!(
             "MLS-Exporter label length drifted: expected {MLS_EXPORTER_LENGTH}, got {}",
-            LABEL_RTC_FRAME_KEY.len()
+            ExporterLabelId::RTC_FRAME_KEY_V1.len()
         );
     }
     let accept = |source: &str| matches!(source, "mls-exporter");
@@ -637,8 +633,8 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // info string is `label || 0x00 || Context` — the byte-correct domain-
     // separated input.
     const EXPORTER_SECRET: [u8; 32] = [0x42u8; 32];
-    let mut info = Vec::with_capacity(LABEL_RTC_FRAME_KEY.len() + 1 + context.len());
-    info.extend_from_slice(LABEL_RTC_FRAME_KEY.as_bytes());
+    let mut info = Vec::with_capacity(ExporterLabelId::RTC_FRAME_KEY_V1.len() + 1 + context.len());
+    info.extend_from_slice(ExporterLabelId::RTC_FRAME_KEY_V1.as_bytes());
     info.push(0x00);
     info.extend_from_slice(&context);
 
@@ -670,7 +666,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         "ak:device:01964137-0000-7000-8000-0000000000ff",
     )?;
     let mut other_info = Vec::new();
-    other_info.extend_from_slice(LABEL_RTC_FRAME_KEY.as_bytes());
+    other_info.extend_from_slice(ExporterLabelId::RTC_FRAME_KEY_V1.as_bytes());
     other_info.push(0x00);
     other_info.extend_from_slice(&other_context);
     let mut other_key = [0u8; 32];
@@ -789,15 +785,18 @@ fn recording_exporter_key_source_ok(
     label: &str,
     context: &[u8],
 ) -> std::result::Result<(), &'static str> {
-    if label != LABEL_RTC_RECORDING_KEY || context.is_empty() {
+    if label != ExporterLabelId::RTC_RECORDING_KEY_V1 || context.is_empty() {
         return Err(arkret_wire::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED);
     }
     Ok(())
 }
 
 pub fn run_recording_exporter_label_vector() -> Result<()> {
-    if LABEL_RTC_RECORDING_KEY != "ak.rtc-recording-key/v1" {
-        bail!("recording exporter label drifted: {LABEL_RTC_RECORDING_KEY}");
+    if ExporterLabelId::RTC_RECORDING_KEY_V1 != "ak.rtc-recording-key/v1" {
+        bail!(
+            "recording exporter label drifted: {exporterlabelid_rtc_recording_key_v1}",
+            exporterlabelid_rtc_recording_key_v1 = ExporterLabelId::RTC_RECORDING_KEY_V1
+        );
     }
 
     let context = recording_context(
@@ -810,9 +809,9 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     )?;
 
     for (label, candidate_context) in [
-        (LABEL_RTC_FRAME_KEY, context.as_slice()),
-        (LABEL_RTC_TRANSCRIPT_KEY, context.as_slice()),
-        (LABEL_RTC_RECORDING_KEY, &[][..]),
+        (ExporterLabelId::RTC_FRAME_KEY_V1, context.as_slice()),
+        (ExporterLabelId::RTC_TRANSCRIPT_KEY_V1, context.as_slice()),
+        (ExporterLabelId::RTC_RECORDING_KEY_V1, &[][..]),
     ] {
         match recording_exporter_key_source_ok(label, candidate_context) {
             Err(code) if code == arkret_wire::ReasonCode::E2EE_KEY_SOURCE_UNAUTHORISED => {}
@@ -823,7 +822,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         }
     }
 
-    recording_exporter_key_source_ok(LABEL_RTC_RECORDING_KEY, &context)
+    recording_exporter_key_source_ok(ExporterLabelId::RTC_RECORDING_KEY_V1, &context)
         .map_err(|code| anyhow!("valid recording exporter source rejected: {code}"))?;
 
     let context_value: serde_json::Value =
@@ -853,8 +852,9 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     const EXPORTER_SECRET: [u8; 32] = [0x42u8; 32];
-    let mut info = Vec::with_capacity(LABEL_RTC_RECORDING_KEY.len() + 1 + context.len());
-    info.extend_from_slice(LABEL_RTC_RECORDING_KEY.as_bytes());
+    let mut info =
+        Vec::with_capacity(ExporterLabelId::RTC_RECORDING_KEY_V1.len() + 1 + context.len());
+    info.extend_from_slice(ExporterLabelId::RTC_RECORDING_KEY_V1.as_bytes());
     info.push(0x00);
     info.extend_from_slice(&context);
 
@@ -881,8 +881,8 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         "ak:event:019a7360-0000-7000-8000-000000000004",
     )?;
     let mut other_info =
-        Vec::with_capacity(LABEL_RTC_RECORDING_KEY.len() + 1 + other_context.len());
-    other_info.extend_from_slice(LABEL_RTC_RECORDING_KEY.as_bytes());
+        Vec::with_capacity(ExporterLabelId::RTC_RECORDING_KEY_V1.len() + 1 + other_context.len());
+    other_info.extend_from_slice(ExporterLabelId::RTC_RECORDING_KEY_V1.as_bytes());
     other_info.push(0x00);
     other_info.extend_from_slice(&other_context);
     let mut other_key = [0u8; 32];

@@ -3,16 +3,16 @@ use arkret_models_collaboration::events_payloads::message::{
     CONTENT_TEXT_INLINE_MAX_BYTES, ContentBlock, LONG_TEXT_FALLBACK_MAX_BYTES, LongTextBodyKind,
     LongTextFormat, long_text_line_count, long_text_prefix, normalize_long_text,
 };
+use arkret_wire::ProfileId;
 use serde_json::Value;
 
 use super::{load_fixture_value, required_str, validate_profile};
 
 const FIXTURE: &str = "long-text-content-fixture.json";
-const PROFILE: &str = "ak.profile.chat_mvp.v1";
 
 pub fn run_long_text_content_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
-    validate_profile(&fixture, PROFILE)?;
+    validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
     if fixture.get("suite").and_then(Value::as_str) != Some("long_text_content")
         || fixture.pointer("/runner/kind").and_then(Value::as_str) != Some("generated_limit_cases")
     {

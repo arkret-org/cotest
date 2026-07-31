@@ -2,13 +2,14 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_crypto::{BackupKind, KeyBackupPlaintext, KeyBackupUnlockProof};
+use arkret_wire::{ProfileId, SchemaId};
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
 
 pub const VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED: &str =
     "ak.vector.key_backup.kdf_floor_rejected.v1";
-pub const VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF: &str = "ak.vector.key_backup.unlock_proof.v1";
+pub use arkret_models_crypto::key_backup::VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF;
 
 pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED,
@@ -16,15 +17,14 @@ pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const KEY_BACKUP_HARDENING_FIXTURE_FILE: &str = "key-backup-hardening-fixture.json";
-const KEY_BACKUP_HARDENING_PROFILE: &str = "ak.profile.e2ee_client.v1";
 const KEY_BACKUP_ENCRYPTION_SCHEMA: &str = "schemas/key-backup.schema.json#/properties/encryption";
 const KEY_BACKUP_UNLOCK_REQUEST_SCHEMA: &str =
     "schemas/keys-operations.schema.json#/$defs/keys_backups_unlock_request_body";
-const KEY_BACKUP_PLAINTEXT_SCHEMA: &str = "schemas/key-backup-plaintext.schema.json";
+const KEY_BACKUP_PLAINTEXT_SCHEMA_FILE: &str = "schemas/key-backup-plaintext.schema.json";
 
 fn key_backup_hardening_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(KEY_BACKUP_HARDENING_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, KEY_BACKUP_HARDENING_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::E2EE_CLIENT_V1)?;
     validate_key_backup_hardening_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
@@ -354,7 +354,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         .get("plaintext")
         .cloned()
         .ok_or_else(|| anyhow!("unlock vector missing plaintext"))?;
-    schema_valid(KEY_BACKUP_PLAINTEXT_SCHEMA, &plaintext_value)?;
+    schema_valid(KEY_BACKUP_PLAINTEXT_SCHEMA_FILE, &plaintext_value)?;
     let plaintext: KeyBackupPlaintext = serde_json::from_value(plaintext_value)?;
     if expected_bool(vector, "plaintext_metadata_matches_envelope")?
         && (plaintext.backup_id.as_str() != envelope.backup_id

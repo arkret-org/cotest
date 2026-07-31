@@ -634,7 +634,7 @@ async fn submit_event_now(
     );
     event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
     event["created_at"] = Value::String(created_at.clone());
-    let descriptor = arkret_wire::events::EventKind::from(kind).descriptor();
+    let descriptor = arkret_wire::EventKind::from(kind).descriptor();
     let is_data_event = descriptor
         .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
     if arkret_wire::events::kinds::is_invite_kind(kind) || is_data_event {

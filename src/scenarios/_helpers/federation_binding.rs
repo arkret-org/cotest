@@ -25,19 +25,16 @@ use arkret_identifiers::{EventId, Hash, RealmId};
 use arkret_models_collaboration::event_sync::{
     EventsSubmitFederationRequestBody, FederationServiceBindingRef,
 };
-use arkret_wire::Event;
+use arkret_wire::{CapabilityActionId, Event, ProfileId};
 use serde_json::json;
 
-use crate::conformance::{
-    FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest as registry_reducer_profile_digest,
-};
+use crate::conformance::reducer_profile_digest as registry_reducer_profile_digest;
 use crate::publication::federation_submission;
 
 /// Capability action the harness leases for a fabricated federation batch.
 /// It is a capability action, not an Event kind: the two are separate
 /// namespaces and the wire layer never equates them
 /// (`offline-publication.md` §2.1).
-const HARNESS_FEDERATION_ACTION: &str = "ak.realm.admin";
 
 /// Head Event IDs of a fabricated batch: every `event_id` that no other batch
 /// event references via `prev_refs` (entries may be plain id strings or
@@ -106,7 +103,7 @@ pub fn peer_service_binding_ref_with_delivery(
         delivery_binding_frontier: delivery_binding_frontier.to_vec(),
         destination_service_kind: "principal_server".to_owned(),
         reducer_profile_digest: Hash::new(registry_reducer_profile_digest(
-            FEDERATION_MINIMAL_PROFILE_ID,
+            ProfileId::FEDERATION_MINIMAL_V1,
         )?)
         .context("invalid federation reducer_profile_digest")?,
     })
@@ -138,7 +135,7 @@ fn receipted_submissions(
 ) -> Result<Vec<arkret_wire::EventFederationSubmission>> {
     events
         .into_iter()
-        .map(|event| federation_submission(event, HARNESS_FEDERATION_ACTION))
+        .map(|event| federation_submission(event, CapabilityActionId::REALM_ADMIN))
         .collect()
 }
 

@@ -392,7 +392,7 @@ impl TestActorClient {
         let response = self
             .submit_event(
                 realm_id,
-                arkret_wire::events::EventKind::CAPABILITY_GRANT,
+                arkret_wire::EventKind::CAPABILITY_GRANT,
                 serde_json::to_value(payload)?,
             )
             .await?;
@@ -496,7 +496,7 @@ impl TestActorClient {
                 .collect(),
             causal_refs,
         );
-        let is_data_event = arkret_wire::events::EventKind::from(kind)
+        let is_data_event = arkret_wire::EventKind::from(kind)
             .descriptor()
             .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
         if is_data_event {
@@ -538,7 +538,7 @@ impl TestActorClient {
                     })
                     .collect(),
             );
-            if kind == arkret_wire::events::EventKind::STRAND_UPDATE
+            if kind == arkret_wire::EventKind::STRAND_UPDATE
                 && payload_patch_touches_calendar(&event["payload"])
             {
                 event["requirements"] = json!({
@@ -580,7 +580,7 @@ impl TestActorClient {
             None,
         );
         event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
-        let descriptor = arkret_wire::events::EventKind::from(kind).descriptor();
+        let descriptor = arkret_wire::EventKind::from(kind).descriptor();
         let is_control_move = descriptor.is_some_and(|descriptor| {
             descriptor.reducer_input && descriptor.plane == Some("control")
         });

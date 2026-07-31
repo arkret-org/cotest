@@ -10,6 +10,7 @@ use arkret_crypto::{
     AeadNonceReplayTracker, Error, aead_sender_nonce_context_bytes, compose_aead_nonce,
     derive_aead_sender_nonce_prefix, verify_aead_nonce_derivation, verify_aead_sender_nonce,
 };
+use arkret_wire::ProfileId;
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_AEAD_NONCE_SENDER_DOMAIN_COLLISION: &str =
@@ -26,7 +27,6 @@ pub const ALL_MEDIA_AEAD_NONCE_VECTOR_IDS: &[&str] = &[
 ];
 
 const MEDIA_AEAD_NONCE_FIXTURE_FILE: &str = "media-aead-nonce-fixture.json";
-const MEDIA_AEAD_NONCE_PROFILE: &str = "ak.profile.e2ee_client.v1";
 const DEVICE_ONE: &str = "ak:device:01964137-0000-7000-8000-000000000001";
 const DEVICE_TWO: &str = "ak:device:01964137-0000-7000-8000-000000000002";
 const PURPOSE_MESSAGE_PAYLOAD: &str = "ak.message.encrypted_payload";
@@ -39,7 +39,7 @@ const SENDER_NONCE_PREFIX_CASE: &str = "aead_sender_nonce_prefix_aes128gcm";
 
 fn validate_media_aead_nonce_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(MEDIA_AEAD_NONCE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, MEDIA_AEAD_NONCE_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::E2EE_CLIENT_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)

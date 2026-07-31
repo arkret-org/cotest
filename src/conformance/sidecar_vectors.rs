@@ -43,7 +43,7 @@ use arkret::{
     SidecarMlsBinding, Strand, StrandCreatePayload, StrandId, agent_sidecar_desired_access_digest,
     agent_sidecar_exchange_event_set_digest, recover_agent_sidecar_context_locators,
 };
-use arkret_wire::{CapabilityActionId, PROFILE_AGENT_SIDECAR};
+use arkret_wire::{CapabilityActionId, ProfileId};
 use chrono::{DateTime, Utc};
 use garth::projection::{
     SidecarExchangeAgentFact, SidecarExchangeCacheDecision, SidecarExchangeControlFact,
@@ -103,11 +103,10 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
 ];
 
 const SIDECAR_VECTORS_FIXTURE_FILE: &str = "agent-sidecar-fixture.json";
-const SIDECAR_VECTORS_PROFILE: &str = "ak.profile.agent_sidecar.v1";
 
 fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(SIDECAR_VECTORS_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, SIDECAR_VECTORS_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::AGENT_SIDECAR_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -316,8 +315,11 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     {
         bail!("sidecar ensure capability action spelling drifted");
     }
-    if PROFILE_AGENT_SIDECAR != "ak.profile.agent_sidecar.v1" {
-        bail!("PROFILE_AGENT_SIDECAR spelling drifted: {PROFILE_AGENT_SIDECAR}");
+    if ProfileId::AGENT_SIDECAR_V1 != "ak.profile.agent_sidecar.v1" {
+        bail!(
+            "ProfileId::AGENT_SIDECAR_V1 spelling drifted: {profileid_agent_sidecar_v1}",
+            profileid_agent_sidecar_v1 = ProfileId::AGENT_SIDECAR_V1
+        );
     }
     // Idempotency invariant: same (controller, agent_principal) MUST
     // yield the same `sidecar_id`. Wire-shape: deterministic

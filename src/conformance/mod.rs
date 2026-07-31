@@ -319,7 +319,7 @@ pub use push_rule_core::{
     run_hardened_mention_routing_hint_vector, run_push_rule_core_fixture_suite,
 };
 pub use redaction::run_redaction_fixture_suite;
-pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
+pub use reducer_profile::reducer_profile_digest;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,

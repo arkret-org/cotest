@@ -12,13 +12,13 @@ use arkret_identifiers::{
 use arkret_state::lattice::ordered_log::{IssuedOp, OrderedLog};
 use arkret_state::lattice::{CasRegister, CellState, Lattice, OrSet, SealedOp};
 use arkret_wire::offline_publication::{
-    AUTHORITY_SET_POLICY_SCHEMA, AuthoritySetAuthorizationRule, AuthoritySetIssuer,
-    AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind, AuthoritySetPolicySource,
-    AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease, LeaseBasisRef, RiskTier,
+    AuthoritySetAuthorizationRule, AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy,
+    AuthoritySetPolicyKind, AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind,
+    AuthorizationLease, LeaseBasisRef, RiskTier,
 };
 use arkret_wire::{
     CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidUrl, LatticeOp,
-    LatticeOpType, NotarySig, NotaryValue, PayloadSignature, ScopeRef, Seal, SealKind,
+    LatticeOpType, NotarySig, NotaryValue, PayloadSignature, SchemaId, ScopeRef, Seal, SealKind,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -744,7 +744,7 @@ fn sample_lease(
         realm_id: sample_realm(),
     };
     let policy = AuthoritySetPolicy {
-        schema: AUTHORITY_SET_POLICY_SCHEMA.to_owned(),
+        schema: SchemaId::AUTHORITY_SET_POLICY_V1.to_owned(),
         authority_set_id: "ak.authority_set.realm_admission.v1".to_owned(),
         policy_kind: AuthoritySetPolicyKind::RealmAdmission,
         scope_ref: scope_ref.clone(),

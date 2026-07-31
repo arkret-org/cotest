@@ -5,8 +5,7 @@ use arkret::{
 };
 use chrono::{DateTime, Utc};
 use garth::{
-    MessageStreamApplyOutcome, MessageStreamProjection, SIGNAL_PLAINTEXT_KIND_MESSAGE_STREAM,
-    SignalPlaintext,
+    MESSAGE_STREAM_KIND, MessageStreamApplyOutcome, MessageStreamProjection, SignalPlaintext,
 };
 use serde_json::{Value, json};
 
@@ -47,7 +46,7 @@ fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
         unreachable!()
     };
     SignalPlaintext {
-        kind: SIGNAL_PLAINTEXT_KIND_MESSAGE_STREAM.to_owned(),
+        kind: MESSAGE_STREAM_KIND.to_owned(),
         actor_id: actor(),
         payload_sequence,
         ttl_ms: None,

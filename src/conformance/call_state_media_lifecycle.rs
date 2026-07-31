@@ -33,6 +33,7 @@ use arkret_models_collaboration::events_payloads::call::{
     CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, CallTranscriptState,
     CallTranscriptTransition, RecordingStartPayload,
 };
+use arkret_wire::{ExporterLabelId, ProfileId};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
@@ -56,11 +57,10 @@ pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
 ];
 
 const CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE: &str = "call-state-media-lifecycle-fixture.json";
-const CALL_STATE_MEDIA_LIFECYCLE_PROFILE: &str = "ak.profile.media_service_binding.v1";
 
 fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, CALL_STATE_MEDIA_LIFECYCLE_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::MEDIA_SERVICE_BINDING_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -103,10 +103,6 @@ fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
 // `arkret_wire::error_codes` (imported above) instead of local pins.
 
 // ── Exporter-label pins (exporter-label-registry.json) ──────────────────────
-
-const LABEL_RTC_FRAME_KEY: &str = "ak.rtc-frame-key/v1";
-const LABEL_RTC_RECORDING_KEY: &str = "ak.rtc-recording-key/v1";
-const LABEL_RTC_TRANSCRIPT_KEY: &str = "ak.rtc-transcript-key/v1";
 
 /// Terminal call states (`call-state.md` §4.2). `ak.call.summary` is gated on
 /// the call head being one of these.
@@ -221,7 +217,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
     let recording_id =
         CallRecordingId::new("rtc-recording-019a7360-0000-7000-8000-000000000002").unwrap();
     CallRecordingArtifact {
-        schema: arkret_wire::CALL_RECORDING_ARTIFACT_SCHEMA.to_owned(),
+        schema: arkret_wire::SchemaId::CALL_RECORDING_ARTIFACT_V1.to_owned(),
         realm_id: realm_id(),
         call_id: call_id(),
         recording_id: recording_id.clone(),
@@ -235,7 +231,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         media_type: "video/mp4".to_owned(),
         encryption: CallRecordingEncryption {
             alg: CallRecordingEncryptionAlg::MlsExporterAeadXchacha20poly1305Stream,
-            exporter_label: LABEL_RTC_RECORDING_KEY.to_owned(),
+            exporter_label: ExporterLabelId::RTC_RECORDING_KEY_V1.to_owned(),
             context: CallRecordingEncryptionContext {
                 realm_id: realm_id(),
                 call_id: call_id(),
@@ -366,10 +362,10 @@ fn evaluate_recording_result_artifact_shape(
 }
 
 pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
-    if arkret_wire::CALL_RECORDING_ARTIFACT_SCHEMA != "ak.schema.call_recording_artifact.v1" {
+    if arkret_wire::SchemaId::CALL_RECORDING_ARTIFACT_V1 != "ak.schema.call_recording_artifact.v1" {
         bail!(
             "CallRecordingArtifact schema spelling drifted: {}",
-            arkret_wire::CALL_RECORDING_ARTIFACT_SCHEMA
+            arkret_wire::SchemaId::CALL_RECORDING_ARTIFACT_V1
         );
     }
     if arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED
@@ -460,7 +456,7 @@ fn transcript_key_source_ok(
     label: &str,
     context_fields: &[&str],
 ) -> std::result::Result<(), &'static str> {
-    if label != LABEL_RTC_TRANSCRIPT_KEY {
+    if label != ExporterLabelId::RTC_TRANSCRIPT_KEY_V1 {
         return Err(arkret_wire::ReasonCode::TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
     }
     if context_fields.is_empty() {
@@ -510,9 +506,9 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
 
     // Step 2 — reusing the SFrame label or empty Context is bypass.
     for (label, context) in [
-        (LABEL_RTC_FRAME_KEY, &["realm_id"][..]),
-        (LABEL_RTC_RECORDING_KEY, &["realm_id"][..]),
-        (LABEL_RTC_TRANSCRIPT_KEY, &[][..]),
+        (ExporterLabelId::RTC_FRAME_KEY_V1, &["realm_id"][..]),
+        (ExporterLabelId::RTC_RECORDING_KEY_V1, &["realm_id"][..]),
+        (ExporterLabelId::RTC_TRANSCRIPT_KEY_V1, &[][..]),
     ] {
         match transcript_key_source_ok(label, context) {
             Err(code)
@@ -533,7 +529,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         "media_service_id",
         "transcript_start_event_id",
     ];
-    transcript_key_source_ok(LABEL_RTC_TRANSCRIPT_KEY, &transcript_context)
+    transcript_key_source_ok(ExporterLabelId::RTC_TRANSCRIPT_KEY_V1, &transcript_context)
         .map_err(|code| anyhow::anyhow!("control transcript key unexpectedly rejected: {code}"))?;
 
     let ready = CallStatePayload {
@@ -611,9 +607,9 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
     }
 
     // The three labels are mutually distinct (no cross-label reuse).
-    if LABEL_RTC_FRAME_KEY == LABEL_RTC_RECORDING_KEY
-        || LABEL_RTC_FRAME_KEY == LABEL_RTC_TRANSCRIPT_KEY
-        || LABEL_RTC_RECORDING_KEY == LABEL_RTC_TRANSCRIPT_KEY
+    if ExporterLabelId::RTC_FRAME_KEY_V1 == ExporterLabelId::RTC_RECORDING_KEY_V1
+        || ExporterLabelId::RTC_FRAME_KEY_V1 == ExporterLabelId::RTC_TRANSCRIPT_KEY_V1
+        || ExporterLabelId::RTC_RECORDING_KEY_V1 == ExporterLabelId::RTC_TRANSCRIPT_KEY_V1
     {
         bail!("exporter labels must be mutually distinct");
     }

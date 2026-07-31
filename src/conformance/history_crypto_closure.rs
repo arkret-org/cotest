@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
+use arkret_wire::ProfileId;
 use serde_json::{Map, Value, json};
 
 use crate::transcripts::record_vector_event;
@@ -33,7 +34,6 @@ pub const ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS: &[&str] = &[
 ];
 
 const HISTORY_CRYPTO_CLOSURE_FIXTURE_FILE: &str = "history-crypto-closure-fixture.json";
-const HISTORY_CRYPTO_CLOSURE_PROFILE: &str = "ak.profile.e2ee_client.v1";
 
 pub fn run_history_crypto_closure_fixture_suite() -> Result<()> {
     let fixture = history_crypto_closure_fixture()?;
@@ -126,7 +126,7 @@ pub fn run_history_sharing_principal_control_profile_baseline_vector() -> Result
 
 fn history_crypto_closure_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(HISTORY_CRYPTO_CLOSURE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, HISTORY_CRYPTO_CLOSURE_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::E2EE_CLIENT_V1)?;
     validate_history_crypto_closure_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
@@ -519,7 +519,7 @@ fn evaluate_principal_control_baseline_scenario(
     baseline_value: &Value,
 ) -> Result<Value> {
     let is_pcr = scenario.get("realm_profile").and_then(Value::as_str)
-        == Some(arkret_models_collaboration::objects::realm::PRINCIPAL_CONTROL_REALM_PROFILE);
+        == Some(ProfileId::PRINCIPAL_CONTROL_REALM_V1);
 
     // The two producer-side negatives: a PCR MUST NOT declare the policy on the
     // closed Realm object, and MUST NOT emit the facet Event that its own

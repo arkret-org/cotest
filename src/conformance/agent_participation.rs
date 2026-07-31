@@ -14,7 +14,9 @@ use arkret_models_collaboration::governance::agent_participation::{
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
-use arkret_wire::{AGENT_SELECTOR_CLAIM_SCHEMA, Audience, PayloadProof, PayloadProofPurpose};
+use arkret_wire::{
+    Audience, CapabilityActionId, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId,
+};
 use chrono::{TimeZone, Utc};
 use serde_json::Value;
 
@@ -42,17 +44,13 @@ pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
 ];
 
 const AGENT_PARTICIPATION_FIXTURE_FILE: &str = "agent-participation-fixture.json";
-const AGENT_PARTICIPATION_PROFILE: &str = "ak.profile.agent_participation_policy.v1";
 const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
     "schemas/agent-operations.schema.json#/$defs/agent_participation_entry";
-const GRANT_MESSAGE_CREATE: &str = "ak.message.create";
-const GRANT_REACTION_ADD: &str = "ak.reaction.add";
-const GRANT_EVENT_READ: &str = "ak.event.read";
 const GRANT_ACT_ON_BEHALF: &str = "ak.agent.act_on_behalf";
 
 fn participation_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, AGENT_PARTICIPATION_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::AGENT_PARTICIPATION_POLICY_V1)?;
     validate_agent_participation_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
@@ -171,7 +169,7 @@ fn expect_reason(error: AgentParticipationError, expected: &str) -> Result<()> {
 
 fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<AgentSelectorClaim> {
     Ok(AgentSelectorClaim {
-        schema: AGENT_SELECTOR_CLAIM_SCHEMA.to_owned(),
+        schema: SchemaId::AGENT_SELECTOR_CLAIM_V1.to_owned(),
         controller_subject: did_field(case, "controller_subject")?,
         agent_slug: required_str(case, slug_field)?.to_owned(),
         subject: did_field(case, agent_field)?,
@@ -310,8 +308,8 @@ pub fn run_agent_participation_ceiling_tighten_vector() -> Result<()> {
 fn materialized_grants(effective: AgentParticipation) -> Vec<&'static str> {
     let mut grants = Vec::new();
     if effective.reply {
-        grants.push(GRANT_MESSAGE_CREATE);
-        grants.push(GRANT_REACTION_ADD);
+        grants.push(CapabilityActionId::MESSAGE_CREATE);
+        grants.push(CapabilityActionId::REACTION_ADD);
     }
     if effective.act_on_behalf {
         grants.push(GRANT_ACT_ON_BEHALF);
@@ -331,7 +329,7 @@ fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<AgentParticip
                 .ok_or_else(|| anyhow!("requested_scope action must be a string"))
         })
         .collect::<Result<Vec<_>>>()?;
-    let message_create = actions.contains(&GRANT_MESSAGE_CREATE);
+    let message_create = actions.contains(&CapabilityActionId::MESSAGE_CREATE);
     let controller_constraint = scope
         .get("constraints")
         .and_then(Value::as_array)
@@ -368,13 +366,13 @@ fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<AgentParticip
                 .is_none_or(|applicable| {
                     applicable
                         .iter()
-                        .any(|action| action.as_str() == Some(GRANT_MESSAGE_CREATE))
+                        .any(|action| action.as_str() == Some(CapabilityActionId::MESSAGE_CREATE))
                 });
             controller_requirement && applies
         });
     Ok(AgentParticipation {
-        reply: message_create && actions.contains(&GRANT_REACTION_ADD),
-        accept_third_party_mention: actions.contains(&GRANT_EVENT_READ),
+        reply: message_create && actions.contains(&CapabilityActionId::REACTION_ADD),
+        accept_third_party_mention: actions.contains(&CapabilityActionId::EVENT_READ),
         act_on_behalf: message_create && controller_constraint,
     })
 }
@@ -421,7 +419,7 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     if after_tighten != participation_pointer(vector, "/expected/after_reply_tighten")? {
         bail!("tightened ceiling did not revoke reply grant");
     }
-    if materialized_grants(after_tighten).contains(&GRANT_MESSAGE_CREATE) {
+    if materialized_grants(after_tighten).contains(&CapabilityActionId::MESSAGE_CREATE) {
         bail!("reply grant survived ceiling tighten");
     }
 

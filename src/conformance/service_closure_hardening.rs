@@ -32,7 +32,6 @@ pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const SERVICE_CLOSURE_HARDENING_FIXTURE_FILE: &str = "service-closure-hardening-fixture.json";
-const SERVICE_CLOSURE_HARDENING_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 
 pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;
@@ -107,7 +106,10 @@ pub fn run_push_wakeup_policy_vector() -> Result<()> {
 
 fn service_closure_hardening_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(SERVICE_CLOSURE_HARDENING_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, SERVICE_CLOSURE_HARDENING_PROFILE)?;
+    super::validate_profile(
+        &fixture,
+        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+    )?;
     validate_service_closure_hardening_fixture_metadata(&fixture)?;
     Ok(fixture)
 }

@@ -11,7 +11,7 @@ use arkret_models_collaboration::governance::circle::{
     validate_content_encryption_floor, validate_content_encryption_floor_ratchet,
     validate_metadata_encryption_floor_ratchet,
 };
-use arkret_wire::EncryptionProfile;
+use arkret_wire::{EncryptionProfile, ProfileId};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_CONTENT_FLOOR_DOWNGRADE_REJECTED: &str =
@@ -39,7 +39,6 @@ pub const ALL_VISIBILITY_POLICY_VECTOR_IDS: &[&str] = &[
 ];
 
 const VISIBILITY_POLICY_FIXTURE_FILE: &str = "visibility-policy-fixture.json";
-const VISIBILITY_POLICY_PROFILE: &str = "ak.profile.circle_conformance.v1";
 const LOCKED_TIMING_BUCKET: &str = "circle_locked_v1";
 const LOCKED_OPAQUE_COMMITMENT: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
@@ -48,7 +47,7 @@ const PREVIEW_OPAQUE_COMMITMENT: &str =
 
 fn visibility_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(VISIBILITY_POLICY_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, VISIBILITY_POLICY_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::CIRCLE_CONFORMANCE_V1)?;
     validate_visibility_policy_fixture_metadata(&fixture)?;
     Ok(fixture)
 }

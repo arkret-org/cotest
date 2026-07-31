@@ -34,7 +34,6 @@ use super::{fixture_path, spec_artifacts_root, validate_profile};
 pub const SCHEMA_VALIDATION_FIXTURE: &str = "schema-validation-fixture.json";
 
 /// Canonical conformance profile pin.
-pub const SCHEMA_VALIDATION_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 
 /// Key-backup schema-validation fixture (25 cases against the key-backup /
 /// recovery schema family).
@@ -59,7 +58,7 @@ pub const CALENDAR_NOTIFICATION_FIXTURE: &str = "calendar-notification-fixture.j
 pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
     (
         SCHEMA_VALIDATION_FIXTURE,
-        SCHEMA_VALIDATION_PROFILE,
+        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
         "schema_validation",
     ),
     (
@@ -69,7 +68,7 @@ pub const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, &str, &str)] = &[
     ),
     (
         REALM_ORGANIZATION_FIXTURE,
-        "ak.vector_group.privacy_security.v1",
+        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
         "realm_organization_conformance",
     ),
     (

@@ -16,7 +16,7 @@ use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema::{self as schema, ProtocolSchemaRegistry};
-use arkret_wire::{ANCHOR_SCHEMA, EVENT_SCHEMA, SNAPSHOT_SCHEMA};
+use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
 /// Reusable schema registry. The artifact-backed registry is preferred (it
@@ -135,7 +135,7 @@ impl FuzzEventInput {
 ///      deserializer).
 ///   2. `serde_json::from_value::<Event>` over the `Arbitrary`-shaped JSON (catches `From<Value>` /
 ///      `TryFrom` panics, e.g. ID parsers that `unwrap()` on malformed inputs).
-///   3. `ProtocolSchemaRegistry::validate_value(EVENT_SCHEMA, ...)` over the same JSON value
+///   3. `ProtocolSchemaRegistry::validate_value(SchemaId::EVENT_V1, ...)` over the same JSON value
 ///      (catches schema-validator panics on pathological shapes — recursive arrays, deeply nested
 ///      objects, etc.).
 pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
@@ -146,7 +146,7 @@ pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
     let Ok(input) = FuzzEventInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
-    fuzz_via_value(&input.to_json(), EVENT_SCHEMA, |v| {
+    fuzz_via_value(&input.to_json(), SchemaId::EVENT_V1, |v| {
         let _ = serde_json::from_value::<arkret_wire::Event>(v.clone());
     })
 }
@@ -328,7 +328,7 @@ impl FuzzSealInput {
 }
 
 /// Fuzz the `Seal` wire shape. Uses both `from_slice` over the raw bytes
-/// and the artifact-backed `ANCHOR_SCHEMA` validator (SDK constant name;
+/// and the artifact-backed `SchemaId::SEAL_V1` validator (SDK constant name;
 /// its value is the current `ak.schema.seal.v1`) to exercise both layers.
 pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
@@ -338,7 +338,7 @@ pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
     let Ok(input) = FuzzSealInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
-    fuzz_via_value(&input.to_json(), ANCHOR_SCHEMA, |v| {
+    fuzz_via_value(&input.to_json(), SchemaId::SEAL_V1, |v| {
         let _ = serde_json::from_value::<arkret_wire::Seal>(v.clone());
     })
 }
@@ -362,7 +362,7 @@ impl FuzzSnapshotChunkInput {
     }
 }
 
-/// Fuzz the `SnapshotChunk` wire shape. `SNAPSHOT_SCHEMA` covers the
+/// Fuzz the `SnapshotChunk` wire shape. `SchemaId::SNAPSHOT_V1` covers the
 /// manifest-level envelope, so the schema validator leg uses the snapshot
 /// schema id while the typed-deserialization leg uses `SnapshotChunk` to
 /// shake out base64-url decoder edge cases (which the existing snapshot
@@ -375,7 +375,7 @@ pub fn fuzz_snapshot_chunk(data: &[u8]) -> Result<(), String> {
     let Ok(input) = FuzzSnapshotChunkInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
-    fuzz_via_value(&input.to_json(), SNAPSHOT_SCHEMA, |v| {
+    fuzz_via_value(&input.to_json(), SchemaId::SNAPSHOT_V1, |v| {
         let _ = serde_json::from_value::<arkret_state::SnapshotChunk>(v.clone());
     })
 }

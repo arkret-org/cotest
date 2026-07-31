@@ -29,9 +29,9 @@ pub async fn provisioning_pairing_grant_order_run() -> Result<()> {
             "duplicate steps in provisioning sequence: {SPEC_ORDER:?}"
         ));
     }
-    if arkret_wire::events::EventKind::SELF_AGENT_PAUSE != "ak.self.agent.pause" {
+    if arkret_wire::EventKind::SELF_AGENT_PAUSE != "ak.self.agent.pause" {
         return Err(anyhow!(
-            "arkret_wire::events::EventKind::SELF_AGENT_PAUSE event kind drifted; reducer pause invariant cannot anchor"
+            "arkret_wire::EventKind::SELF_AGENT_PAUSE event kind drifted; reducer pause invariant cannot anchor"
         ));
     }
     // TODO(P4-impl): walk a real envelope sequence:

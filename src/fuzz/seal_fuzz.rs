@@ -12,7 +12,7 @@ use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema as schema;
-use arkret_wire::ANCHOR_SCHEMA;
+use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
@@ -122,7 +122,7 @@ impl FuzzSealDeepInput {
 
 /// Drive a Seal envelope through:
 ///   1. `from_slice` on the raw fuzz bytes (catches wire parser panics);
-///   2. Schema validator against `ANCHOR_SCHEMA` (SDK constant name; its value is the current
+///   2. Schema validator against `SchemaId::SEAL_V1` (SDK constant name; its value is the current
 ///      `ak.schema.seal.v1`);
 ///   3. Typed `from_value::<Seal>` deserialization.
 pub fn fuzz_seal_deep(data: &[u8]) -> Result<(), String> {
@@ -135,7 +135,7 @@ pub fn fuzz_seal_deep(data: &[u8]) -> Result<(), String> {
     };
     let value = input.to_json();
     catch(|| {
-        let _ = registry().validate_value(ANCHOR_SCHEMA, &value);
+        let _ = registry().validate_value(SchemaId::SEAL_V1, &value);
     })?;
     catch(|| {
         let _ = serde_json::from_value::<arkret_wire::Seal>(value.clone());

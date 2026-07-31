@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::{
-    DeviceId, Did, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS, RealmId,
-    ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
+    DeviceId, Did, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS, ProfileId,
+    RealmId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
     SignalProof, SignalRelayOutcome, SignalRelayRequest,
 };
 use chrono::{Duration, TimeZone, Utc};
@@ -10,7 +10,6 @@ use serde_json::Value;
 use super::{load_fixture_value, required_str, validate_profile};
 
 const FIXTURE: &str = "signal-federation-fixture.json";
-const PROFILE: &str = "ak.profile.signal_peer_relay.v1";
 
 fn envelope() -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:01904100-0000-7000-8000-65c7feb295d7")?;
@@ -62,7 +61,7 @@ fn envelope() -> Result<SignalEnvelope> {
 
 pub fn run_signal_federation_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
-    validate_profile(&fixture, PROFILE)?;
+    validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
     if fixture.get("suite").and_then(Value::as_str) != Some("signal_peer_relay")
         || fixture.pointer("/runner/kind").and_then(Value::as_str) != Some("generated_limit_cases")
     {

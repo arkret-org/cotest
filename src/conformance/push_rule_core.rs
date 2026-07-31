@@ -3,12 +3,11 @@ use arkret::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
 use arkret_models_integration::{
     HARDENED_MENTION_ROUTING_PROFILES, MentionRoutingHint, effective_mention_routing_hint,
 };
-use arkret_wire::PROFILE_E2EE_CLIENT;
+use arkret_wire::ProfileId;
 use serde::Deserialize;
 use serde_json::Value;
 
 const PUSH_RULE_CORE_FIXTURE_FILE: &str = "push-rule-core-fixture.json";
-const PUSH_RULE_CORE_PROFILE: &str = "ak.profile.push_gateway.blind_wakeup.v1";
 pub const VECTOR_ID_HARDENED_MENTION_ROUTING_HINT: &str =
     "ak.vector.push.mention_routing_hint_disabled_on_hardened_realm.v1";
 const PUSH_RULE_CORE_VECTOR_IDS: &[&str] = &[
@@ -136,7 +135,7 @@ fn default_mentions_actor_known() -> bool {
 
 pub fn run_push_rule_core_fixture_suite() -> Result<()> {
     let fixture_value = super::load_fixture_value(PUSH_RULE_CORE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture_value, PUSH_RULE_CORE_PROFILE)?;
+    super::validate_profile(&fixture_value, ProfileId::PUSH_GATEWAY_BLIND_WAKEUP_V1)?;
     validate_push_rule_core_fixture_metadata(&fixture_value)?;
     let fixture: Fixture = super::parse_fixture_value(PUSH_RULE_CORE_FIXTURE_FILE, fixture_value)?;
     if fixture.suite != "push_rule_core_consistency" {
@@ -216,7 +215,7 @@ pub fn run_hardened_mention_routing_hint_vector() -> Result<()> {
         let has_ordinary_e2ee_profile = variant
             .realm_profiles
             .iter()
-            .any(|profile| profile == PROFILE_E2EE_CLIENT);
+            .any(|profile| profile == ProfileId::E2EE_CLIENT_V1);
         let declared = MentionRoutingHint::parse_wire(&variant.declared_mention_routing_hint);
         let effective = effective_mention_routing_hint(
             &variant.realm_profiles,

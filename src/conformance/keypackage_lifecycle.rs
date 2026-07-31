@@ -13,6 +13,7 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_crypto::{
     KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome, KeyPackagesUploadOutcome,
 };
+use arkret_wire::ProfileId;
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
@@ -37,7 +38,6 @@ pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
 ];
 
 const KEYPACKAGE_LIFECYCLE_FIXTURE_FILE: &str = "keypackage-lifecycle-fixture.json";
-const KEYPACKAGE_LIFECYCLE_PROFILE: &str = "ak.profile.mls_governance_binding.full.v1";
 const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/key_packages_upload_outcome";
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
@@ -54,7 +54,7 @@ const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
 
 fn keypackage_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(KEYPACKAGE_LIFECYCLE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, KEYPACKAGE_LIFECYCLE_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1)?;
     validate_keypackage_lifecycle_fixture_metadata(&fixture)?;
     Ok(fixture)
 }

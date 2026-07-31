@@ -6,8 +6,8 @@
 
 use anyhow::{Context, Result, bail};
 use arkret_models_collaboration::agent_signer_evidence::{
-    AGENT_KEY_COMPONENT, AGENT_SIGNER_EVIDENCE_SCHEMA, AgentAuthorizationEvidence,
-    AgentAuthorizationStateWitness, AgentAuthorizationStatus, AgentAuthorizationTransitionWitness,
+    AGENT_KEY_COMPONENT, AgentAuthorizationEvidence, AgentAuthorizationStateWitness,
+    AgentAuthorizationStatus, AgentAuthorizationTransitionWitness,
     AgentEvidenceFreshnessAttestation, AgentEvidenceSourceProof, AgentSignerEvidence,
     AgentSigningKeyBinding,
 };
@@ -24,7 +24,9 @@ use arkret_signatures::agent_evidence::{
     validate_agent_signer_evidence, verify_agent_signing_key_binding,
     verify_event_signer_controller,
 };
-use arkret_wire::{CellRef, Did, DidUrl, Event, EventId, Hash, Hlc, NonEmptyString, RealmId, Seal};
+use arkret_wire::{
+    CellRef, Did, DidUrl, Event, EventId, Hash, Hlc, NonEmptyString, RealmId, SchemaId, Seal,
+};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
 
@@ -270,7 +272,7 @@ fn fixture_evidence(binding: AgentSigningKeyBinding) -> AgentSignerEvidence {
     let authorization_frontier =
         NonEmptyString::new(authorization_seal.id.as_str().to_owned()).unwrap();
     AgentSignerEvidence {
-        schema: NonEmptyString::new(AGENT_SIGNER_EVIDENCE_SCHEMA.to_owned()).unwrap(),
+        schema: NonEmptyString::new(SchemaId::AGENT_SIGNER_EVIDENCE_V1.to_owned()).unwrap(),
         authorization: AgentAuthorizationEvidence {
             status: AgentAuthorizationStatus::Active,
             authorized_event_id: binding.agent_key_authorize_event_id.clone(),

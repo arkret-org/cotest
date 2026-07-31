@@ -43,7 +43,7 @@ pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ak.vector_group.privacy_secu
 /// The 13 vector ids the round-4 spec promotes from prose to fixture. The
 /// list is pinned here so any drift on either side is loud.
 pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
-    "ak.vector.federation.idempotency_after_key_revoke.v1",
+    crate::scenarios::security_closure_fixture::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
     "ak.vector.webrtc.media_plaintext_downgrade.v1",
     "ak.vector.identity_link.eager_invalidation.v1",
     "ak.vector.identity_link.policy_tightening_invalidation.v1",

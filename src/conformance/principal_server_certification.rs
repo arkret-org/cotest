@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
+use arkret_wire::ProfileId;
 use serde_json::{Value, json};
 
 use super::{load_local_fixture_value, required_str, validate_profile, value_array};
@@ -8,7 +9,6 @@ use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "principal-server-certification-gate.json";
 const FIXTURE_PROFILE: &str = "ak.profile.principal_server_certification_gate.v1";
-const PRINCIPAL_SERVER_PROFILE: &str = "ak.profile.principal_server.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
     "ak.server.query.describe",
@@ -107,7 +107,7 @@ pub fn run_principal_server_certification_gate_suite() -> Result<()> {
 pub fn validate_principal_server_certification(
     describe: &Value,
 ) -> Result<PrincipalCertificationStatus> {
-    let claims_full = profile_claims(describe).contains(PRINCIPAL_SERVER_PROFILE);
+    let claims_full = profile_claims(describe).contains(ProfileId::PRINCIPAL_SERVER_V1);
     let certification_status = certification_status(describe);
     if !claims_full {
         if certification_status == Some("certified") {

@@ -55,7 +55,7 @@ use arkret_models_identity::artifacts_device_identity::{
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, NonEmptyString,
-    OpaqueLocalId,
+    OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -73,7 +73,6 @@ const ALICE_DID: &str =
     "did:webvh:QmPgnKLR8FfoCkXfTYK1eB5Q9rUT3Uws4b9mLKRRWwQRnr:cotest-agent.example:webvh:alice";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a901";
 const TRUST_DOMAIN: &str = "ak:trust_domain:soland.local";
-const RECOVERY_POLICY_SIGNATURE_TYPE: &str = "ak.identity.recovery_policy.signature.v1";
 const RECOVERY_POLICY_SIGNED_FIELDS: [&str; 12] = [
     "schema",
     "policy_id",
@@ -657,8 +656,8 @@ async fn run_security_rotation_restart_matrix(
 ) -> Result<()> {
     use arkret_models_crypto::{
         BackupSeriesEraseRequestBody, BackupSeriesEraseStatus, ClientStepAttestationArtifact,
-        SECURITY_ROTATION_LOCAL_COMMIT_SCHEMA, SecurityRotationLocalCommit,
-        TypedClientStepAttestation, TypedSecurityTransactionContinueRequest,
+        SecurityRotationLocalCommit, TypedClientStepAttestation,
+        TypedSecurityTransactionContinueRequest,
     };
     use arkret_wire::{
         AuthorizationLeaseIssueIntent, AuthorizationLeaseIssueOutcome,
@@ -744,7 +743,7 @@ async fn run_security_rotation_restart_matrix(
     )?;
 
     let mut revoke = arkret::Event::new(
-        arkret::events::EventKind::DEVICE_REVOKE,
+        EventKind::DEVICE_REVOKE,
         arkret::ScopeRef::Realm {
             realm_id: arkret::RealmId::new(control_realm.clone())?,
         },
@@ -990,7 +989,7 @@ async fn run_security_rotation_restart_matrix(
     );
 
     let commit = SecurityRotationLocalCommit {
-        schema: SECURITY_ROTATION_LOCAL_COMMIT_SCHEMA.to_owned(),
+        schema: SchemaId::SECURITY_ROTATION_LOCAL_COMMIT_V1.to_owned(),
         transaction_id: transaction_id.clone(),
         transaction_request_digest: fixed_request_digest.clone(),
         prepared_plan_digest: fixed_plan_digest.clone(),
@@ -1257,7 +1256,7 @@ fn build_rotation_pointer_event(
         URL_SAFE_NO_PAD.encode(signer.sign_raw(&canonical::canonical_json_bytes(&unsigned)?)?)
     );
     let mut event = arkret::Event::new(
-        arkret::events::EventKind::KEY_BACKUP_ACTIVE_SERIES,
+        EventKind::KEY_BACKUP_ACTIVE_SERIES,
         arkret::ScopeRef::Realm {
             realm_id: arkret::RealmId::new(principal_control_realm_id(&Did::new(
                 ALICE_DID.to_owned(),
@@ -1748,7 +1747,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     };
     let mut bootstrap_authorize = arkret::Event::new_with_id_at(
         arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a911".to_owned())?,
-        arkret::events::EventKind::DEVICE_AUTHORIZE,
+        EventKind::DEVICE_AUTHORIZE,
         arkret_wire::ScopeRef::Realm {
             realm_id: typed_control_realm_id.clone(),
         },
@@ -2039,7 +2038,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     };
     let mut policy_event = arkret::Event::new_with_id_at(
         arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a912".to_owned())?,
-        arkret::events::EventKind::POLICY_SET,
+        EventKind::POLICY_SET,
         arkret_wire::ScopeRef::Realm {
             realm_id: arkret::RealmId::new(&control_realm_id)?,
         },
@@ -2267,7 +2266,7 @@ async fn live_cross_signing_recovery_create_request(
         realm_id: arkret::RealmId::new(realm_id)?,
     };
     let mut authorize = arkret::Event::new_at(
-        arkret::events::EventKind::DEVICE_AUTHORIZE,
+        EventKind::DEVICE_AUTHORIZE,
         scope_ref.clone(),
         principal.clone(),
         frontier.next_actor_seq,
@@ -2277,7 +2276,7 @@ async fn live_cross_signing_recovery_create_request(
     )?;
     authorize.prev_refs = frontier.frontier_event_ids;
     let mut list_update = arkret::Event::new_at(
-        arkret::events::EventKind::DEVICE_LIST_UPDATE,
+        EventKind::DEVICE_LIST_UPDATE,
         scope_ref,
         principal.clone(),
         frontier.next_actor_seq + 1,
@@ -2447,7 +2446,7 @@ async fn submit_delegated_agent_event(
     event["prev_refs"] = serde_json::to_value(&actor_frontier.frontier_event_ids)?;
     event["executed_by"] = json!(ALICE_DID);
     event["authorization_ref"] = json!(authorization_ref);
-    if kind == arkret::events::EventKind::REALM_CREATE {
+    if kind == EventKind::REALM_CREATE {
         if actor_frontier.next_actor_seq != 0 {
             return Err(anyhow!(
                 "delegated Realm bootstrap requires an empty actor frontier"
@@ -2465,7 +2464,7 @@ async fn submit_delegated_agent_event(
     event["proofs"][0]["verification_method"] = json!(controller_verification_method());
     refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
     let typed_event: arkret::Event = serde_json::from_value(event.clone())?;
-    if kind == arkret::events::EventKind::REALM_CREATE {
+    if kind == EventKind::REALM_CREATE {
         arkret_bootstrap::materialize_managed_agent_pcr_control(
             std::slice::from_ref(&typed_event),
             &cotest::publication::project_cells,
@@ -2477,7 +2476,7 @@ async fn submit_delegated_agent_event(
             .await?
             .events
             .into_iter()
-            .find(|event| event.kind == arkret::events::EventKind::REALM_CREATE)
+            .find(|event| event.kind == EventKind::REALM_CREATE)
             .ok_or_else(|| anyhow!("managed PCR Realm create Event is missing"))?;
         let realm_create_payload = serde_json::to_value(&realm_create.payload)?;
         let notary: arkret_wire::notary::NotaryValue = serde_json::from_value(
@@ -2757,7 +2756,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             .events;
         let realm_create_event_id = match existing_events
             .iter()
-            .find(|event| event.kind == arkret::events::EventKind::REALM_CREATE)
+            .find(|event| event.kind == EventKind::REALM_CREATE)
         {
             Some(event) => event.event_id.clone(),
             None => submit_delegated_agent_event(
@@ -2849,7 +2848,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
 
         if !existing_events
             .iter()
-            .any(|event| event.kind == arkret::events::EventKind::MLS_GENESIS)
+            .any(|event| event.kind == EventKind::MLS_GENESIS)
         {
             submit_delegated_agent_event(
                 server,
@@ -3871,7 +3870,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         .await?
         .events
         .into_iter()
-        .find(|event| event.kind == arkret::events::EventKind::REALM_CREATE)
+        .find(|event| event.kind == EventKind::REALM_CREATE)
         .ok_or_else(|| anyhow!("managed PCR Realm create Event is missing"))?;
     let realm_create_payload = serde_json::to_value(&realm_create.payload)?;
     let notary: arkret_wire::notary::NotaryValue = serde_json::from_value(
@@ -3899,7 +3898,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         .strip_prefix("agent_pairing_request:")
         .ok_or_else(|| anyhow!("pairing_request_id has an invalid prefix"))?;
     let mut requested_scope_disclosure = arkret::AgentRequestedScopeDisclosure {
-        schema: arkret::AGENT_REQUESTED_SCOPE_DISCLOSURE_SCHEMA.to_owned(),
+        schema: SchemaId::AGENT_REQUESTED_SCOPE_DISCLOSURE_V1.to_owned(),
         request_id: arkret::RequestId::new(format!("ak:request:{pairing_request_uuid}"))?,
         agent_id,
         controller_id,
@@ -3907,7 +3906,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         requested_scope_digest,
         verifier_did: arkret::Did::new(server.service_id().to_owned())?,
         audience: arkret::NonEmptyString::new(
-            arkret::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
+            ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
         )
         .map_err(|reason| anyhow!(reason))?,
         challenge: arkret::NonEmptyString::new(pairing_request_id)
@@ -3998,7 +3997,7 @@ async fn prepare_managed_agent_submission(
         .await?
         .events
         .into_iter()
-        .find(|candidate| candidate.kind == arkret::events::EventKind::REALM_CREATE)
+        .find(|candidate| candidate.kind == EventKind::REALM_CREATE)
         .ok_or_else(|| anyhow!("managed PCR Realm create Event is missing"))?;
     let realm_create_payload = serde_json::to_value(&realm_create.payload)?;
     let notary: arkret_wire::notary::NotaryValue = serde_json::from_value(

@@ -7,7 +7,6 @@ use super::{load_local_fixture_value, required_str, validate_profile, value_arra
 use crate::transcripts::record_vector_event;
 
 const SCAFFOLD_FIXTURE: &str = "scaffold-profile-gate-fixture.json";
-const SCAFFOLD_FIXTURE_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 const LIVE_DESCRIBE_FIXTURE: &str = "live-describe-profile-gate-fixture.json";
 const LIVE_DESCRIBE_FIXTURE_PROFILE: &str = "ak.profile.live_describe_profile_gate_vectors.v1";
 
@@ -29,7 +28,11 @@ const SCAFFOLD_MARKERS: &[&str] = &[
 ];
 
 pub fn run_scaffold_profile_gate_suite() -> Result<()> {
-    run_gate_fixture(SCAFFOLD_FIXTURE, SCAFFOLD_FIXTURE_PROFILE, false)
+    run_gate_fixture(
+        SCAFFOLD_FIXTURE,
+        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+        false,
+    )
 }
 
 pub fn run_live_describe_profile_gate_suite() -> Result<()> {

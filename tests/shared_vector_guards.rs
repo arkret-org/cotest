@@ -72,7 +72,7 @@ fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
             actual, expected,
             "reducer profile digest drift for {profile_id}"
         );
-        if profile_id == cotest::conformance::FEDERATION_MINIMAL_PROFILE_ID {
+        if profile_id == ProfileId::FEDERATION_MINIMAL_V1 {
             assert_eq!(
                 actual,
                 arkret_policy::generated::profiles::FEDERATION_MINIMAL_REDUCER_PROFILE_DIGEST,

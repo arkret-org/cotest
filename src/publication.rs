@@ -15,13 +15,13 @@
 use anyhow::{Context, Result};
 use arkret_canonical::DigestSuite;
 use arkret_wire::{
-    AUTHORITY_SET_POLICY_SCHEMA, AuthoritySetAuthorizationRule, AuthoritySetIssuer,
-    AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind, AuthoritySetPolicySource,
-    AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease, AuthorizationLeaseId,
-    ControlProposalDecisionPolicy, ControlProposalReceipt, ControlProposalReceiptKind, DeviceId,
-    Did, DidUrl, Event, EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt,
-    LeaseBasisRef, PayloadProof, PayloadSignature, ProjectedCellWrite, ProposalMemberReceipt,
-    ReceiptId, RiskTier, SealId, proof_kind,
+    AuthoritySetAuthorizationRule, AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy,
+    AuthoritySetPolicyKind, AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind,
+    AuthorizationLease, AuthorizationLeaseId, ControlProposalDecisionPolicy,
+    ControlProposalReceipt, ControlProposalReceiptKind, DeviceId, Did, DidUrl, Event,
+    EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef,
+    PayloadProof, PayloadSignature, ProjectedCellWrite, ProposalMemberReceipt, ReceiptId, RiskTier,
+    SchemaId, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 
@@ -123,7 +123,7 @@ pub fn authorization_lease_for(
     let issued_at = event.created_at - Duration::minutes(5);
     let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {
-        schema: AUTHORITY_SET_POLICY_SCHEMA.to_owned(),
+        schema: SchemaId::AUTHORITY_SET_POLICY_V1.to_owned(),
         authority_set_id: "ak.authority_set.realm_admission.v1".to_owned(),
         policy_kind: AuthoritySetPolicyKind::RealmAdmission,
         scope_ref: event.scope_ref.clone(),

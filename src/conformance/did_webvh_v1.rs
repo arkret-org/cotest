@@ -7,7 +7,7 @@ use arkret::webvh::{
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_models_identity::did_document::validate_did_webvh_v1_method;
-use arkret_wire::Did;
+use arkret_wire::{Did, ProfileId};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
@@ -16,12 +16,11 @@ use url::Url;
 use super::{load_fixture_value, required_str, validate_profile};
 
 const FIXTURE_FILE: &str = "did-webvh-v1-fixture.json";
-const PROFILE: &str = "ak.profile.identity_registry.v1";
 const VECTOR_ID: &str = "ak.vector.identity.did_webvh_v1_adapter.v1";
 
 pub fn run_did_webvh_v1_adapter_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE_FILE)?;
-    validate_profile(&fixture, PROFILE)?;
+    validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)

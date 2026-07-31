@@ -6,10 +6,11 @@
 use anyhow::{Result, anyhow, bail};
 use arkret::{Hash, KeyRefObject};
 use arkret_crypto::blob_aead::{
-    ALG_STREAM_XCHACHA, SCHEME_STREAM, StreamDecryptor, StreamEncryptParams, decrypt_stream,
-    encrypt_stream,
+    ALG_STREAM_XCHACHA, BLOB_SCHEME_STREAM_AEAD_V1, StreamDecryptor, StreamEncryptParams,
+    decrypt_stream, encrypt_stream,
 };
 use arkret_models_crypto::{EncryptedAttachment, StreamEncryptedAttachment};
+use arkret_wire::ProfileId;
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -30,7 +31,6 @@ pub const ALL_BLOB_STREAM_AEAD_VECTOR_IDS: &[&str] = &[
 ];
 
 const BLOB_STREAM_AEAD_FIXTURE_FILE: &str = "blob-stream-aead-fixture.json";
-const BLOB_STREAM_AEAD_PROFILE: &str = "ak.profile.blob_node.v1";
 const BLOB_ENCRYPTED_ATTACHMENT_SCHEMA: &str =
     "schemas/blob.schema.json#/$defs/encrypted_attachment";
 const SEGMENT_TAG_LEN: usize = 16;
@@ -38,7 +38,7 @@ const CONFORMANCE_SEGMENT_SIZE: u32 = 1024;
 
 fn validate_blob_stream_aead_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(BLOB_STREAM_AEAD_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, BLOB_STREAM_AEAD_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::BLOB_NODE_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -163,7 +163,7 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
 
     let stream = stream_fields(&env)?;
     let raw = serde_json::to_value(&env)?;
-    if raw["scheme"].as_str() != Some(SCHEME_STREAM) {
+    if raw["scheme"].as_str() != Some(BLOB_SCHEME_STREAM_AEAD_V1) {
         bail!("stream roundtrip produced scheme {}", raw["scheme"]);
     }
     if raw["alg"].as_str() != Some(ALG_STREAM_XCHACHA) {

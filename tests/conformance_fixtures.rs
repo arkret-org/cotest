@@ -1,4 +1,5 @@
 use anyhow::Result;
+use arkret_wire::ProfileId;
 use cotest::transcripts::{TranscriptGuard, init_transcript_writer};
 use serial_test::serial;
 
@@ -281,7 +282,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// T-CONF-PROFILE-MUST — profile dependency graph + machine-readable
+    /// T-CONF-ProfileId::SIGNAL_PEER_RELAY_V1-MUST — profile dependency graph + machine-readable
     /// requirement blocks drive inheritance, dependency, fixture, cell, feature,
     /// capability, and MUST-block conformance gates.
     profile_requirement_gate_matches_spec_artifacts,

@@ -15,7 +15,7 @@ use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema as schema;
-use arkret_wire::SNAPSHOT_SCHEMA;
+use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
@@ -94,7 +94,7 @@ pub fn fuzz_snapshot_manifest(data: &[u8]) -> Result<(), String> {
     };
     let value = input.to_json();
     catch(|| {
-        let _ = registry().validate_value(SNAPSHOT_SCHEMA, &value);
+        let _ = registry().validate_value(SchemaId::SNAPSHOT_V1, &value);
     })?;
     catch(|| {
         let _ = serde_json::to_string(&value);
@@ -142,7 +142,7 @@ pub fn fuzz_snapshot_chunk_header(data: &[u8]) -> Result<(), String> {
     };
     let value = input.to_json();
     catch(|| {
-        let _ = registry().validate_value(SNAPSHOT_SCHEMA, &value);
+        let _ = registry().validate_value(SchemaId::SNAPSHOT_V1, &value);
     })?;
     catch(|| {
         let _ = serde_json::from_value::<arkret_state::SnapshotChunk>(value.clone());

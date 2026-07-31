@@ -302,7 +302,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
         recovery_session_id: None,
     };
     let mut authorize = Event::new(
-        arkret_wire::events::EventKind::DEVICE_AUTHORIZE,
+        arkret_wire::EventKind::DEVICE_AUTHORIZE,
         arkret_wire::ScopeRef::Realm { realm_id },
         principal,
         1,

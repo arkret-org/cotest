@@ -7,7 +7,9 @@ use arkret_identifiers::{DeviceId, DeviceMessageId, Did};
 use arkret_models_collaboration::sync_frames::account_sync::{
     DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody,
 };
-use arkret_wire::ProtocolKind;
+use arkret_wire::{
+    HPKE_SUITE_X25519_CHACHA20POLY1305_V1, ProtocolKind, SECRET_REQUEST_KIND, SECRET_SEND_KIND,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
@@ -22,10 +24,6 @@ const NEW_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000b";
 const OTHER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000c";
 const REQUEST_ID: &str = "secret-share-request-001";
 const SECRET_ID: &str = "inkson_mls_account_secret";
-const SEND_KIND: &str = "ak.secret.send";
-const REQUEST_KIND: &str = "ak.secret.request";
-const SCHEME: &str = "ak.hpke_x25519_aead_chacha20poly1305.v1";
-const HPKE_INFO: &[u8] = b"ak.secret-share/v1";
 const EXPIRES_AT: &str = "2026-06-10T00:30:00.000Z";
 const ACCOUNT_SECRET: &str = "base64url-account-mls-root-secret";
 
@@ -60,7 +58,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     let request_content = request_content(&request, &requester_pk)?;
     let request_target = DeviceMessageTarget {
         message_id: DeviceMessageId::new("ak:device_message:0196419b-0000-7000-8000-000000000091")?,
-        kind: ProtocolKind::new(REQUEST_KIND).map_err(anyhow::Error::msg)?,
+        kind: ProtocolKind::new(SECRET_REQUEST_KIND).map_err(anyhow::Error::msg)?,
         content: serde_json::from_value(serde_json::to_value(&request_content)?)?,
         expires_at: parse_utc(EXPIRES_AT)?,
     };
@@ -71,7 +69,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
         request_value.pointer(
             "/messages/did:web:alice.example/ak:device:01904100-0000-7000-8000-00000000000a/kind"
         ),
-        Some(&json!(REQUEST_KIND))
+        Some(&json!(SECRET_REQUEST_KIND))
     );
     assert_eq!(
         request_value.pointer("/messages/did:web:alice.example/ak:device:01904100-0000-7000-8000-00000000000a/content/secret_id"),
@@ -90,7 +88,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     let send_content = seal_secret_send(&parsed_request, ACCOUNT_SECRET, 7, EXPIRES_AT)?;
     let send_target = DeviceMessageTarget {
         message_id: DeviceMessageId::new("ak:device_message:0196419b-0000-7000-8000-000000000092")?,
-        kind: ProtocolKind::new(SEND_KIND).map_err(anyhow::Error::msg)?,
+        kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
         content: serde_json::from_value(serde_json::to_value(&send_content)?)?,
         expires_at: parse_utc(EXPIRES_AT)?,
     };
@@ -98,7 +96,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     let send_value = serde_json::to_value(&send_body)?;
     let content = &send_value["messages"][ACCOUNT_DID][NEW_DEVICE]["content"];
 
-    assert_eq!(content["scheme"], SCHEME);
+    assert_eq!(content["scheme"], HPKE_SUITE_X25519_CHACHA20POLY1305_V1);
     assert_eq!(content["request_id"], REQUEST_ID);
     assert_eq!(content["secret_id"], SECRET_ID);
     assert!(content.get("account_secret").is_none());
@@ -223,12 +221,17 @@ fn seal_secret_send(
     let recipient_pk = URL_SAFE_NO_PAD.decode(request.recipient_hpke_public_key.as_bytes())?;
     let plaintext = secret_plaintext(secret, secret_version, &request.request_id)?;
     let aad = send_aad(OLD_DEVICE, request.from_device.as_str(), expires_at)?;
-    let sealed = hpke_seal(&recipient_pk, HPKE_INFO, &aad, &plaintext)?;
+    let sealed = hpke_seal(
+        &recipient_pk,
+        arkret_wire::SECRET_SHARE_HPKE_INFO,
+        &aad,
+        &plaintext,
+    )?;
     Ok(SecretShareSendContent {
         request_id: request.request_id.clone(),
         secret_id: request.secret_id.clone(),
         from_device: device_id(OLD_DEVICE)?,
-        scheme: SCHEME.to_owned(),
+        scheme: HPKE_SUITE_X25519_CHACHA20POLY1305_V1.to_owned(),
         enc: URL_SAFE_NO_PAD.encode(sealed.enc),
         ciphertext: URL_SAFE_NO_PAD.encode(sealed.ciphertext),
     })
@@ -238,7 +241,7 @@ fn open_secret_send(
     request: &PendingRequest,
     envelope: &DeviceMessageEnvelope,
 ) -> Result<OpenedSecret> {
-    if envelope.kind != SEND_KIND {
+    if envelope.kind != SECRET_SEND_KIND {
         bail!("not a ak.secret.send envelope");
     }
     let content: SecretShareSendContent =
@@ -252,7 +255,7 @@ fn open_secret_send(
     if content.from_device != envelope.sender_device_id {
         bail!("ak.secret.send from_device does not match envelope sender");
     }
-    if content.scheme != SCHEME {
+    if content.scheme != HPKE_SUITE_X25519_CHACHA20POLY1305_V1 {
         bail!("unsupported ak.secret.send scheme");
     }
 
@@ -266,7 +269,7 @@ fn open_secret_send(
     let plaintext = hpke_open(
         &request.recipient_private_key,
         &enc,
-        HPKE_INFO,
+        arkret_wire::SECRET_SHARE_HPKE_INFO,
         &aad,
         &ciphertext,
     )?;
@@ -311,7 +314,7 @@ fn send_aad(
 ) -> Result<Vec<u8>> {
     arkret_canonical::validate_timestamp_canonical(expires_at)?;
     Ok(canonical_json_bytes(&json!({
-        "kind": SEND_KIND,
+        "kind": SECRET_SEND_KIND,
         "sender_principal_id": ACCOUNT_DID,
         "sender_device_id": sender_device_id,
         "recipient_principal_id": ACCOUNT_DID,
@@ -334,7 +337,7 @@ fn device_message_body(
 fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<DeviceMessageEnvelope> {
     Ok(DeviceMessageEnvelope {
         message_id: DeviceMessageId::new("ak:device_message:0196419b-0000-7000-8000-000000000099")?,
-        kind: ProtocolKind::new(SEND_KIND).map_err(anyhow::Error::msg)?,
+        kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
         sender_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
         sender_device_id: device_id(OLD_DEVICE)?,
         recipient_principal_id: Did::new(ACCOUNT_DID.to_owned())?,

@@ -26,7 +26,7 @@ use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
 use arkret_models_collaboration::sync_frames::account_sync::{
     NotificationDelta, NotificationDeltaAction,
 };
-use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, ErrorEnvelope};
+use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, ErrorEnvelope, ProfileId};
 use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
@@ -56,11 +56,10 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
 ];
 
 const AGENT_VECTORS_FIXTURE_FILE: &str = "agent-vectors-fixture.json";
-const AGENT_VECTORS_PROFILE: &str = "ak.profile.personal_agent_provisioning.v1";
 
 fn validate_agent_vectors_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, AGENT_VECTORS_PROFILE)?;
+    super::validate_profile(&fixture, ProfileId::PERSONAL_AGENT_PROVISIONING_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)

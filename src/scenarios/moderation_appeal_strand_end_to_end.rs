@@ -28,7 +28,6 @@ use anyhow::{Result, anyhow};
 use arkret_identifiers::TypedAppealId;
 use arkret_schema::embedded_error_code_identifiers;
 
-pub const APPEAL_SCHEMA: &str = "ak.schema.moderation_appeal.v1";
 pub const APPEAL_ID_PREFIX: &str = "ak:appeal:";
 
 /// Wire-level executable check: the SDK's appeal-related error code
