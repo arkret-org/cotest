@@ -1,10 +1,10 @@
 {
   "profile": "ak.profile.constraint_family_vectors.v1",
   "version": "2026-05-09",
-  "comment": "C1 Round 23 — grant-constraint family × constraint_subkind coverage. Spec schemas/grant-constraint.schema.json declares 8 constraint_kind families (temporal, field_access, kind_restriction, scope_limitation, delegation_control, quota, claim_based, confidentiality) with optional constraint_subkind values. Each constraint_kind carries a canonical evaluation_class (stateless / grant_local / space_state / external) which the validator uses to gate fast-path caching. Fixture covers all 8 families with at least one positive vector + one evaluation_class fast-path test per family.",
+  "comment": "C1 Round 23 — grant-constraint family × constraint_subkind coverage. Spec schemas/grant-constraint.schema.json declares 8 constraint_kind families (temporal, field_access, kind_restriction, scope_limitation, authority_control, quota, claim_based, confidentiality) with optional constraint_subkind values. Each constraint_kind carries a canonical evaluation_class (stateless / grant_local / space_state / external) which the validator uses to gate fast-path caching. Fixture covers all 8 families with at least one positive vector + one evaluation_class fast-path test per family.",
   "encoder": {
     "schema": "schemas/grant-constraint.schema.json",
-    "valid_constraint_kinds": ["temporal", "field_access", "kind_restriction", "scope_limitation", "delegation_control", "quota", "claim_based", "confidentiality"],
+    "valid_constraint_kinds": ["temporal", "field_access", "kind_restriction", "scope_limitation", "authority_control", "quota", "claim_based", "confidentiality"],
     "valid_evaluation_classes": ["stateless", "grant_local", "space_state", "external"],
     "valid_effects": ["allow", "deny", "quarantine", "require_review"]
   },
@@ -75,14 +75,14 @@
     },
     {
       "name": "delegation_control_narrowing_only",
-      "constraint_kind": "delegation_control",
+      "constraint_kind": "authority_control",
       "constraint": {
-        "constraint_kind": "delegation_control",
+        "constraint_kind": "authority_control",
         "effect": "allow",
         "evaluation_class": "grant_local",
-        "max_delegation_depth": 3,
+        "max_authority_depth": 3,
         "delegation_scope": "narrowing_only",
-        "prohibit_subdelegation": false
+        "authority_regrant_allowed": false
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
     },
@@ -241,14 +241,14 @@
     },
     {
       "name": "delegation_control_plus_confidentiality_mixed_class",
-      "comment": "C6 Round 26 — composing delegation_control (grant_local) with confidentiality (space_state) lifts combined to space_state. Verifies the mixed-class promotion: grant_local cannot stay fast when paired with a space_state family.",
-      "families": ["delegation_control", "confidentiality"],
+      "comment": "C6 Round 26 — composing authority_control (grant_local) with confidentiality (space_state) lifts combined to space_state. Verifies the mixed-class promotion: grant_local cannot stay fast when paired with a space_state family.",
+      "families": ["authority_control", "confidentiality"],
       "constraint": {
         "constraint_kind": "confidentiality",
         "constraint_subkind": "encryption",
         "effect": "deny",
         "evaluation_class": "space_state",
-        "max_delegation_depth": 3,
+        "max_authority_depth": 3,
         "delegation_scope": "narrowing_only",
         "encryption_required": true
       },
@@ -262,14 +262,14 @@
     {
       "name": "all_four_classes_compose_to_external",
       "comment": "C6 Round 26 — exhaustive composition: stateless + grant_local + space_state + external collapses to external. Verifies the upper bound of the lattice meet.",
-      "families": ["temporal", "delegation_control", "confidentiality", "claim_based"],
+      "families": ["temporal", "authority_control", "confidentiality", "claim_based"],
       "constraint": {
         "constraint_kind": "claim_based",
         "constraint_subkind": "claim",
         "effect": "allow",
         "evaluation_class": "external",
         "expires_at": "2027-01-01T00:00:00.000Z",
-        "max_delegation_depth": 4,
+        "max_authority_depth": 4,
         "encryption_required": true,
         "required_claims": [
           { "claim_kind": "kyc_verified", "subject_matches_actor": true }

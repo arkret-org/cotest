@@ -92,7 +92,7 @@ fn build_realm(
         proposal_absolute_deadline_ms: None,
         max_proposal_defers: None,
         seal_compaction_max_interval_ms: None,
-        max_delegation_lifetime_ms: 86_400_000,
+        max_authority_lifetime_ms: 86_400_000,
         bottom_escalation_after_ms: None,
         cell_lattices: Vec::new(),
         cowrite_policy: Vec::new(),

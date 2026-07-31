@@ -96,7 +96,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             }))?],
             capability_action_registry_digest: Some(current_registry_digest),
             constraints: Vec::new(),
-            parent_grant_id: None,
+            issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
+                realm_id: arkret_identifiers::RealmId::new(realm_id.clone())?,
+                cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
+                controller_epoch_at_issuance: 0,
+                authority_generation: 0,
+            }],
             issued_at,
             not_before: None,
             expires_at: None,

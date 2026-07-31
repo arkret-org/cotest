@@ -6,14 +6,14 @@
     "evaluation_classes": ["stateless", "grant_local", "space_state", "external"],
     "fast_path_classes": ["stateless", "grant_local"],
     "slow_path_classes": ["space_state", "external"],
-    "constraint_families": ["temporal", "field_access", "kind_restriction", "scope_limitation", "delegation_control", "quota", "claim_based", "confidentiality"]
+    "constraint_families": ["temporal", "field_access", "kind_restriction", "scope_limitation", "authority_control", "quota", "claim_based", "confidentiality"]
   },
   "canonical_mapping": {
     "temporal": "stateless",
     "field_access": "stateless",
     "kind_restriction": "stateless",
     "scope_limitation": "grant_local",
-    "delegation_control": "grant_local",
+    "authority_control": "grant_local",
     "quota": "space_state",
     "claim_based": "external",
     "confidentiality": "space_state"
@@ -58,12 +58,12 @@
     },
     {
       "name": "delegation_control_grant_local_fast_path",
-      "family": "delegation_control",
+      "family": "authority_control",
       "evaluation_class": "grant_local",
       "fast_path_eligible": true,
       "needs_space_state": false,
       "needs_external_call": false,
-      "rationale": "delegation_control evaluates max_chain_depth from the grant chain itself; no remote lookup.",
+      "rationale": "authority_control evaluates max_chain_depth from the grant chain itself; no remote lookup.",
       "expected": {"outcome": "accept", "classification": "fast_path"}
     },
     {

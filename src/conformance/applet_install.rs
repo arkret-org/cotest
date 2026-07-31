@@ -8,15 +8,15 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
     let applet_id = arkret_wire::AppletId::new("ak:applet:01974100-0000-7000-8000-000000000001")?;
     let service_id = arkret_wire::Did::new("did:web:calendar.example")?;
     let registration_epoch = arkret_wire::Hash::new(format!("sha256:{}", "7".repeat(64)))?;
-    let constraint = GrantConstraint::applet_delegation(
+    let constraint = GrantConstraint::applet_authority(
         applet_id.clone(),
         service_id.clone(),
         registration_epoch.clone(),
     );
     let canonical = serde_json::to_value(&constraint)?;
     for (field, expected) in [
-        ("constraint_kind", "delegation_control"),
-        ("constraint_subkind", "applet_delegation"),
+        ("constraint_kind", "authority_control"),
+        ("constraint_subkind", "applet_authority"),
         ("evaluation_class", "grant_local"),
         ("applet_id", applet_id.as_str()),
         ("executed_by", service_id.as_str()),
@@ -145,8 +145,8 @@ fn applet_grant_binding_matches(
     service_id: &str,
     registration_epoch: &str,
 ) -> bool {
-    constraint.get("constraint_kind").and_then(Value::as_str) == Some("delegation_control")
-        && constraint.get("constraint_subkind").and_then(Value::as_str) == Some("applet_delegation")
+    constraint.get("constraint_kind").and_then(Value::as_str) == Some("authority_control")
+        && constraint.get("constraint_subkind").and_then(Value::as_str) == Some("applet_authority")
         && constraint.get("evaluation_class").and_then(Value::as_str) == Some("grant_local")
         && constraint.get("applet_id").and_then(Value::as_str) == Some(applet_id)
         && constraint.get("executed_by").and_then(Value::as_str) == Some(service_id)

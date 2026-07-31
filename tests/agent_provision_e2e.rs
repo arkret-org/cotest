@@ -311,7 +311,12 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                         "realm_id": realm_id
                     }))?],
                     constraints: Vec::new(),
-                    parent_grant_id: None,
+                    issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
+                        realm_id: arkret_identifiers::RealmId::new(realm_id.to_string())?,
+                        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
+                        controller_epoch_at_issuance: 0,
+                        authority_generation: 0,
+                    }],
                     issued_at: Utc::now(),
                     not_before: None,
                     expires_at: None,
@@ -4028,7 +4033,12 @@ async fn grant_controller_strand_create(
             "match_scope": "realm_wide"
         }))?],
         constraints: Vec::new(),
-        parent_grant_id: None,
+        issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
+            realm_id: arkret_identifiers::RealmId::new(realm_id.to_string())?,
+            cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
+            controller_epoch_at_issuance: 0,
+            authority_generation: 0,
+        }],
         issued_at,
         not_before: None,
         expires_at: None,

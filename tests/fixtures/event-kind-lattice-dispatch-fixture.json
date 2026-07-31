@@ -3,8 +3,19 @@
   "version": "2026-07-17",
   "comment": "Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors per spec event-kind-registry.json + soland/src/reducer/lattice_kinds.rs::default_lattice_registry. Validates that the spec event-kind registry's (event_kind, cell_family, lattice, bottom) tuples are coherent: (a) every active reducer-input durable kind that declares cell_family also declares a single lattice in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log}; (b) any single cell_family is bound to exactly ONE lattice across ALL kinds that declare it (no cell_family in two lattices); (c) cell_family namespace prefix is `ak.component.`; (d) bottom ∈ {reject, expose}; (e) the aggregate cell-family set covers the spec-mandated families used by Move/Anchor pipeline. Cross-checks the LIVE event-kind-registry (not a frozen snapshot). The validator is structural — does not run dispatch — and complements `validate_event_kind_registry` by surfacing the same-cell-family/different-lattice drift loudly. Pattern mirrors `discovery_profile_fixture` and the Round-21 anchor_view_compaction approach: the fixture declares EXPECTED canonical lattices per cell-family AND the validator confirms the live registry matches. Drift from either side fails loudly.",
   "encoder": {
-    "core_lattices": ["or_set", "mv_register", "cas_register", "fsm", "counter", "ordered_log"],
-    "valid_bottom_modes": ["reject", "expose", "inert"],
+    "core_lattices": [
+      "or_set",
+      "mv_register",
+      "cas_register",
+      "fsm",
+      "counter",
+      "ordered_log"
+    ],
+    "valid_bottom_modes": [
+      "reject",
+      "expose",
+      "inert"
+    ],
     "cell_family_namespace": "ak.component.",
     "registry": "registry/event-kind-registry.json"
   },
@@ -16,7 +27,6 @@
       "ak.component.call.roster.v1",
       "ak.component.covered_seals.v1",
       "ak.component.agent.key.v1",
-      "ak.component.capability.delegate.v1",
       "ak.component.capability.derived.v1",
       "ak.component.capability.grant.v1",
       "ak.component.consent.grant.v1",
