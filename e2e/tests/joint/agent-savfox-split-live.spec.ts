@@ -648,12 +648,18 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(device2Projection.responseOccurrences).toBe(1);
         const device1Fold = await sidecarFoldProjection(
           inkson,
+          jointRealm.realmId,
           evidence.request_event_id,
         );
         const device2Fold = await sidecarFoldProjection(
           secondController.page,
+          jointRealm.realmId,
           evidence.request_event_id,
         );
+        // The canonical digest is the byte-identity claim; the frontier and the
+        // full entry are compared as well so a digest that somehow matched a
+        // different projection still fails.
+        expect(device2Fold.projection_digest).toBe(device1Fold.projection_digest);
         expect(JSON.stringify(device2Fold)).toBe(JSON.stringify(device1Fold));
         expect(device2Fold.folded_frontier).toEqual(
           device1Fold.folded_frontier,
@@ -662,6 +668,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(device1Fold.folded_frontier.event_set_digest).toMatch(
           /^sha256:[0-9a-f]{64}$/,
         );
+        expect(device1Fold.projection_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
         await testInfo.attach("sidecar-two-device-convergence", {
           body: Buffer.from(
             JSON.stringify(
@@ -1268,37 +1275,88 @@ async function sidecarEchoProjection(
   };
 }
 
-type SidecarFoldProjectionEvidence = {
-  private_request_event_id: string;
-  user_facing_response_event_ids: string[];
-  folded_frontier: {
-    event_ids: string[];
-    event_set_digest: string;
-    max_hlc: string;
-  };
+/// Inkson's controller-only fold-cache evidence surface, installed only by a
+/// `wasm-localstorage-secrets-test` build. It is a callable handle rather than
+/// DOM: nothing here is rendered, screenshotted, or readable by other page
+/// script that has not been told the handle exists.
+const SIDECAR_FOLD_EVIDENCE_HOOK = "__inkson_sidecar_fold_evidence_v1";
+const SIDECAR_FOLD_EVIDENCE_SCHEMA = "inkson.test.sidecar_fold_evidence.v1";
+
+type SidecarFoldFrontier = {
+  event_ids: string[];
+  event_set_digest: string;
+  max_hlc: string;
 };
 
+type SidecarFoldEvidenceEntry = {
+  exchange_id: string;
+  private_strand_id: string;
+  status: string;
+  terminal_event_id?: string;
+  folded_frontier: SidecarFoldFrontier;
+  /// Canonical digest of `projection` — the byte-identity check.
+  projection_digest: string;
+  projection: {
+    private_request_event_id: string;
+    user_facing_response_event_ids: string[];
+    folded_frontier: SidecarFoldFrontier;
+  } & Record<string, unknown>;
+};
+
+type SidecarFoldEvidence = {
+  schema: string;
+  controller_id: string;
+  source_realm_id: string;
+  exchanges: SidecarFoldEvidenceEntry[];
+};
+
+async function readSidecarFoldEvidence(
+  page: Page,
+  sourceRealmId: string,
+): Promise<SidecarFoldEvidence> {
+  const raw = await page.evaluate(
+    ([hook, realmId]) => {
+      const read = (window as unknown as Record<string, unknown>)[hook];
+      if (typeof read !== "function") {
+        return null;
+      }
+      return (read as (realm: string) => string)(realmId);
+    },
+    [SIDECAR_FOLD_EVIDENCE_HOOK, sourceRealmId] as const,
+  );
+  expect(
+    raw,
+    `${SIDECAR_FOLD_EVIDENCE_HOOK} is missing — the bundle was not built with ` +
+      "wasm-localstorage-secrets-test",
+  ).toBeTruthy();
+  const evidence = JSON.parse(raw!) as SidecarFoldEvidence & { error?: string };
+  expect(evidence.error, "fold evidence surface reported an error").toBeUndefined();
+  expect(evidence.schema).toBe(SIDECAR_FOLD_EVIDENCE_SCHEMA);
+  return evidence;
+}
+
+/// Wait until this device's fold cache holds the exchange that carries
+/// `requestEventId`, then return that entry.
 async function sidecarFoldProjection(
   page: Page,
+  sourceRealmId: string,
   requestEventId: string,
-): Promise<SidecarFoldProjectionEvidence> {
-  const strip = page.getByTestId("sidecar-context-strip");
+): Promise<SidecarFoldEvidenceEntry> {
+  let entry: SidecarFoldEvidenceEntry | undefined;
   await expect
     .poll(
-      async () =>
-        (await strip.getAttribute("data-cotest-fold-evidence"))?.includes(
-          requestEventId,
-        ) ?? false,
+      async () => {
+        const evidence = await readSidecarFoldEvidence(page, sourceRealmId);
+        entry = evidence.exchanges.find(
+          (candidate) =>
+            candidate.projection.private_request_event_id === requestEventId,
+        );
+        return entry !== undefined;
+      },
       { timeout: 180_000, intervals: [500, 1_000, 2_000] },
     )
     .toBe(true);
-  const raw = await strip.getAttribute("data-cotest-fold-evidence");
-  const projections = JSON.parse(raw ?? "[]") as SidecarFoldProjectionEvidence[];
-  const projection = projections.find(
-    (candidate) => candidate.private_request_event_id === requestEventId,
-  );
-  expect(projection, `fold projection for ${requestEventId}`).toBeTruthy();
-  return projection!;
+  return entry!;
 }
 
 async function addAgentToRealm(
