@@ -94,6 +94,9 @@ fn spawn_mock_did_host() -> Option<MockDidHost> {
         }
     }
     let _ = child.kill();
+    // `kill` only signals; without the reap the failing run leaves a zombie
+    // behind (the success path reaps through `MockDidHost::drop`).
+    let _ = child.wait();
     panic!("mock-did-host did not report a listen address within 20s (last line: {line:?})");
 }
 

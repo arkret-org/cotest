@@ -1428,16 +1428,6 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn realm_link_fsm_transition_matrix_runs_clean() {
-        run_realm_link_fsm_transition_matrix_vector().unwrap();
-    }
-}
-
 /// Assertion ids this suite genuinely exercises, per vector.
 ///
 /// Kept as an explicit table so adding an id to the fixture without writing the
@@ -1465,5 +1455,15 @@ fn executed_lattice_assertion(vector_id: &str, assertion: &str) -> bool {
         // Other lattice vectors keep the previous coverage contract until their
         // cases are itemised the same way.
         _ => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn realm_link_fsm_transition_matrix_runs_clean() {
+        run_realm_link_fsm_transition_matrix_vector().unwrap();
     }
 }

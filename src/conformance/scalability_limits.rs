@@ -274,7 +274,7 @@ fn validate_patch_path_literals(case: &Value, generator: &Value) -> Result<()> {
     if values.is_empty()
         || values
             .iter()
-            .any(|value| value.as_str().is_none_or(|path| valid_v1_patch_path(path)))
+            .any(|value| value.as_str().is_none_or(valid_v1_patch_path))
     {
         bail!("patch_path_literals contains a valid v1 path or a non-string");
     }

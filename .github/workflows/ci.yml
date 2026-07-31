@@ -22,7 +22,7 @@ jobs:
       matrix:
         # The crate uses edition 2024 and the current SDK requires the
         # release pipeline toolchain.
-        toolchain: ["1.96"]
+        toolchain: ["1.97"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -271,7 +271,7 @@ jobs:
           node-version: "20"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.96"
+          toolchain: "1.97"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |

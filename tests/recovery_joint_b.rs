@@ -276,7 +276,6 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
         &replacement_key.to_bytes(),
     )?;
     inkson::event_signer::replace_active_signer(Some(Arc::clone(&replacement_signer)));
-    let recovery_session_id;
     let prepared =
         inkson::fresh_device_recovery::prepare_joint_enrollment_authority_recovery_from_words(
             recovery_http.clone(),
@@ -288,7 +287,7 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
             &replacement_holder_jkt,
         )
         .await?;
-    recovery_session_id = prepared.verified_session.recovery_session_id.clone();
+    let recovery_session_id = prepared.verified_session.recovery_session_id.clone();
     let backup_classes_unlocked = inkson::mls::account_recovery::unlock_joint_recovery_backups(
         recovery_http.clone(),
         &prepared.verified_session,

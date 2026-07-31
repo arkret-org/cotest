@@ -85,7 +85,7 @@ The image contract is intentionally simple:
 
 The current implementation source-builds `soland` inside Docker:
 
-- build stage: `rust:1.96-bookworm`
+- build stage: `rust:1.97-bookworm`
 - runtime stage: `debian:bookworm-slim` with `ca-certificates` and `libssl3`
 - copied source trees: `soland` and `arkret-rust-sdk`
 - build command: `cargo build --release --locked`

@@ -34,10 +34,13 @@ pub struct TestActorClient {
     /// Grants issued to this actor, keyed by Realm. Membership derives read
     /// access only (`capabilities.md` line 700); every write action still needs
     /// a covering grant, which a DataEvent names in `refs[role=authorized_by]`.
-    pub(super) held_grants: std::sync::Arc<
-        std::sync::Mutex<std::collections::BTreeMap<String, Vec<(String, Vec<String>)>>>,
-    >,
+    pub(super) held_grants: HeldGrants,
 }
+
+/// Grants held per Realm: Realm id -> [(grant id, covered actions)].
+type HeldGrants = std::sync::Arc<
+    std::sync::Mutex<std::collections::BTreeMap<String, Vec<(String, Vec<String>)>>>,
+>;
 
 impl TestActorClient {
     pub fn sdk(&self) -> SdkClient {

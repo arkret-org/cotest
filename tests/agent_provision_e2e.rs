@@ -542,7 +542,7 @@ async fn cross_signing_recovery_session_creates_durable_transaction() -> Result<
         &authorized_resource,
         inkson::fresh_device_recovery::RecoveryTerminalObservation {
             policy_id: verified_session.policy_id.clone(),
-            policy_version: verified_session.policy_version.into(),
+            policy_version: verified_session.policy_version,
             trust_domain: verified_session.trust_domain.clone(),
             proof_summary: serde_json::from_value(serde_json::to_value(
                 verified_session

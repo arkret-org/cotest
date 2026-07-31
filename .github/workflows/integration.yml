@@ -81,7 +81,7 @@ jobs:
           ref: ${{ env.SIBLING_REF }}
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.96"
+          toolchain: "1.97"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |

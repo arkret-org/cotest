@@ -285,6 +285,9 @@ pub fn run_account_data_cas_convergence_vector_suite() -> Result<()> {
     Ok(())
 }
 
+// Each parameter is one independently-asserted fixture header field;
+// grouping them would let a vector pass with the wrong suite name.
+#[allow(clippy::too_many_arguments)]
 fn validate_fixture_header(
     profile: &str,
     version: &str,
