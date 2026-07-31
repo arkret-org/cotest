@@ -189,6 +189,10 @@ fn run_case(case: &Value) -> Result<()> {
             )?
         }
         "sibling_forks" => bounded_outcome(generator, "count", 16, "accept", "quarantine")?,
+        "relation_chain" => {
+            validate_relation_expansion_depth(case, generator)?;
+            return Ok(());
+        }
         "mls_governance_proof_limit_matrix" => {
             validate_three_point_limit_matrix(case, generator)?;
             return Ok(());
@@ -638,6 +642,63 @@ fn composition_decision(generator: &Value, fields: &[&str], maximum: u64) -> Res
             .ok_or_else(|| anyhow!("generated composition count overflowed"))
     })?;
     Ok(if count <= maximum { "accept" } else { "reject" })
+}
+
+/// `ak.vector.scalability.relation_expansion_depth.v1` — a chain at the depth
+/// limit expands in full; one level deeper stops *before* reading the extra
+/// level and exposes a Lazy Link boundary instead of traversing further.
+///
+/// The assertion is on the whole expansion outcome, not just the decision
+/// string: an implementation that returned `accept_with_truncation` while
+/// still walking level 33 would satisfy a decision-only check.
+fn validate_relation_expansion_depth(case: &Value, generator: &Value) -> Result<()> {
+    const RELATION_EXPANSION_DEPTH_LIMIT: u64 = 32;
+
+    let name = required_str(case, "name")?;
+    let depth = required_u64(generator, "depth")?;
+    let truncated = depth > RELATION_EXPANSION_DEPTH_LIMIT;
+    let expanded_depth = depth.min(RELATION_EXPANSION_DEPTH_LIMIT);
+    let decision = if truncated {
+        "accept_with_truncation"
+    } else {
+        "accept"
+    };
+
+    let expected = case
+        .get("expected")
+        .ok_or_else(|| anyhow!("{name} missing expected"))?;
+    let expect_str = |field: &str| -> Result<&str> {
+        expected
+            .get(field)
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{name} missing expected.{field}"))
+    };
+
+    if expect_str("decision")? != decision {
+        bail!(
+            "{name} decision drifted: expected {}, got {decision}",
+            expect_str("decision")?
+        );
+    }
+    if required_u64(expected, "expanded_depth")? != expanded_depth {
+        bail!("{name} expanded_depth drifted: computed {expanded_depth}");
+    }
+    if expected.get("truncated").and_then(Value::as_bool) != Some(truncated) {
+        bail!("{name} truncated flag drifted: computed {truncated}");
+    }
+    if truncated {
+        if expect_str("boundary_projection")? != "lazy_link" {
+            bail!("{name} must expose a lazy_link boundary at the truncation point");
+        }
+        // The bound is "stop before reading", not "read then drop": the first
+        // unread level is exactly one past the limit.
+        if required_u64(expected, "must_not_read_depth")? != RELATION_EXPANSION_DEPTH_LIMIT + 1 {
+            bail!("{name} must_not_read_depth drifted from the first unread level");
+        }
+    } else if expected.get("boundary_projection").is_some() {
+        bail!("{name} declares a truncation boundary on a fully expanded chain");
+    }
+    Ok(())
 }
 
 fn bounded_outcome(

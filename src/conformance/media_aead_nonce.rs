@@ -7,8 +7,8 @@ use anyhow::{Result, anyhow, bail};
 use arkret_crypto::{
     AEAD_NONCE_AES_GCM_LEN, AEAD_NONCE_EXPORTER_LABEL, AEAD_NONCE_XCHACHA20_POLY1305_LEN,
     AEAD_PROFILE_AES_256_GCM, AEAD_PROFILE_XCHACHA20_POLY1305, AeadNonceContext,
-    AeadNonceReplayTracker, Error, compose_aead_nonce, derive_aead_sender_nonce_prefix,
-    verify_aead_nonce_derivation, verify_aead_sender_nonce,
+    AeadNonceReplayTracker, Error, aead_sender_nonce_context_bytes, compose_aead_nonce,
+    derive_aead_sender_nonce_prefix, verify_aead_nonce_derivation, verify_aead_sender_nonce,
 };
 use serde_json::{Value, json};
 
@@ -30,10 +30,12 @@ const MEDIA_AEAD_NONCE_PROFILE: &str = "ak.profile.e2ee_client.v1";
 const DEVICE_ONE: &str = "ak:device:01964137-0000-7000-8000-000000000001";
 const DEVICE_TWO: &str = "ak:device:01964137-0000-7000-8000-000000000002";
 const PURPOSE_MESSAGE_PAYLOAD: &str = "ak.message.encrypted_payload";
-// Golden derived from the current SDK's canonical key_ref/epoch/device/purpose
-// transcript (the context binding was tightened in the v1 encoder update).
-const EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX: &str = "5d62cff5f7a7befee1e39e3dc287cb67";
 const EXPORTER_SECRET: [u8; 32] = [0x24u8; 32];
+/// The one registered known-answer vector for the §10.1 sender nonce prefix.
+/// A locally-invented golden would only pin this suite to itself, so the
+/// byte-level anchor comes from the Spec fixture instead.
+const PRIVATE_KDF_FIXTURE_FILE: &str = "arkret-private-kdf-fixture.json";
+const SENDER_NONCE_PREFIX_CASE: &str = "aead_sender_nonce_prefix_aes128gcm";
 
 fn validate_media_aead_nonce_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(MEDIA_AEAD_NONCE_FIXTURE_FILE)?;
@@ -106,6 +108,106 @@ fn hex_lower(bytes: &[u8]) -> String {
     out
 }
 
+/// Byte-level anchor for the §10.1 sender nonce prefix, taken from the one
+/// registered known-answer vector in `arkret-private-kdf-fixture.json`.
+///
+/// The canonical exporter Context is pinned before the prefix so a
+/// canonicalization change cannot hide behind a prefix that happens to match
+/// over different bytes.
+fn check_registered_sender_nonce_prefix_vector() -> Result<()> {
+    let fixture = super::load_fixture_value(PRIVATE_KDF_FIXTURE_FILE)?;
+    let case = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("private KDF fixture missing cases[]"))?
+        .iter()
+        .find(|case| case.get("name").and_then(Value::as_str) == Some(SENDER_NONCE_PREFIX_CASE))
+        .ok_or_else(|| anyhow!("private KDF fixture missing case {SENDER_NONCE_PREFIX_CASE}"))?;
+
+    let exporter_label = case
+        .pointer("/input/exporter_label")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("{SENDER_NONCE_PREFIX_CASE} missing input.exporter_label"))?;
+    if exporter_label != AEAD_NONCE_EXPORTER_LABEL {
+        bail!("registered sender nonce exporter label drifted: {exporter_label}");
+    }
+    let secret = hex_decode(
+        case.pointer("/input/exporter_secret_hex")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!("{SENDER_NONCE_PREFIX_CASE} missing input.exporter_secret_hex")
+            })?,
+    )?;
+    let context: AeadNonceContext = serde_json::from_value(
+        case.pointer("/input/context")
+            .cloned()
+            .ok_or_else(|| anyhow!("{SENDER_NONCE_PREFIX_CASE} missing input.context"))?,
+    )
+    .map_err(|error| anyhow!("registered nonce context does not decode: {error}"))?;
+    let nonce_len = usize::try_from(
+        case.pointer("/input/nonce_length_bytes")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                anyhow!("{SENDER_NONCE_PREFIX_CASE} missing input.nonce_length_bytes")
+            })?,
+    )?;
+    if nonce_len != AEAD_NONCE_AES_GCM_LEN {
+        bail!("registered sender nonce vector is no longer the AES-GCM length");
+    }
+
+    let expected_context = case
+        .pointer("/expected/context_canonical_json")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            anyhow!("{SENDER_NONCE_PREFIX_CASE} missing expected.context_canonical_json")
+        })?;
+    let actual_context = String::from_utf8(aead_sender_nonce_context_bytes(&context)?)
+        .map_err(|error| anyhow!("canonical nonce context is not UTF-8: {error}"))?;
+    if actual_context != expected_context {
+        bail!("canonical nonce context drifted: expected {expected_context}, got {actual_context}");
+    }
+
+    let prefix = derive_aead_sender_nonce_prefix(&secret, &context, nonce_len)?;
+    let expected_prefix = case
+        .pointer("/expected/sender_nonce_prefix_hex")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            anyhow!("{SENDER_NONCE_PREFIX_CASE} missing expected.sender_nonce_prefix_hex")
+        })?;
+    let actual_prefix = hex_lower(&prefix);
+    if actual_prefix != expected_prefix {
+        bail!("sender nonce prefix drifted: expected {expected_prefix}, got {actual_prefix}");
+    }
+
+    let counter_hex = case
+        .pointer("/input/counter_be64_hex")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("{SENDER_NONCE_PREFIX_CASE} missing input.counter_be64_hex"))?;
+    let counter = u64::from_str_radix(counter_hex, 16)
+        .map_err(|error| anyhow!("registered nonce counter is not hex: {error}"))?;
+    let expected_nonce = case
+        .pointer("/expected/nonce_hex")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("{SENDER_NONCE_PREFIX_CASE} missing expected.nonce_hex"))?;
+    let actual_nonce = hex_lower(&compose_aead_nonce(&prefix, counter));
+    if actual_nonce != expected_nonce {
+        bail!("composed nonce drifted: expected {expected_nonce}, got {actual_nonce}");
+    }
+    Ok(())
+}
+
+fn hex_decode(value: &str) -> Result<Vec<u8>> {
+    if !value.len().is_multiple_of(2) {
+        bail!("hex string has an odd length");
+    }
+    (0..value.len() / 2)
+        .map(|index| {
+            u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+                .map_err(|error| anyhow!("invalid hex: {error}"))
+        })
+        .collect()
+}
+
 pub fn run_aead_nonce_sender_domain_collision_vector() -> Result<()> {
     if AEAD_NONCE_EXPORTER_LABEL != "arkret-aead-sender-nonce-prefix-v1" {
         bail!("AEAD nonce exporter label drifted: {AEAD_NONCE_EXPORTER_LABEL}");
@@ -124,14 +226,7 @@ pub fn run_aead_nonce_sender_domain_collision_vector() -> Result<()> {
         AEAD_NONCE_XCHACHA20_POLY1305_LEN,
     )?;
 
-    let prefix_one_hex = hex_lower(&prefix_one);
-    if prefix_one_hex != EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX {
-        bail!(
-            "AEAD nonce prefix golden vector drifted: expected {}, got {}",
-            EXPECTED_DEVICE_ONE_XCHACHA_PREFIX_HEX,
-            prefix_one_hex
-        );
-    }
+    check_registered_sender_nonce_prefix_vector()?;
     if prefix_one == prefix_two {
         bail!("distinct sender devices produced the same sender_nonce_prefix");
     }

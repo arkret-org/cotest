@@ -32,6 +32,9 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     run_content_kdf(case(cases, "content_key_derivation_sha256_aes128gcm")?)?;
     run_content_negatives(case(cases, "content_key_derivation_fail_closed_negatives")?)?;
     run_reaction_hmac(case(cases, "reaction_routing_hmac_nfc")?)?;
+    run_signal_exporter_key(case(cases, "signal_exporter_key_sha256_aes128gcm")?)?;
+    run_sender_nonce_prefix(case(cases, "aead_sender_nonce_prefix_aes128gcm")?)?;
+    run_mention_routing_hmac(case(cases, "mention_routing_hmac_did")?)?;
     run_rrk_missing_seals(case(cases, "rrk_eager_seal_before_gc")?)?;
     run_rrk_recipient_validation(case(
         cases,
@@ -68,6 +71,117 @@ fn run_content_kdf(case: &Value) -> Result<()> {
     )?;
     let content_key = hkdf_expand(&history_secret, &info, nk)?;
     assert_hex("content_key", &content_key, expected, "content_key_hex")
+}
+
+/// `ak.vector.signal.exporter_key_kat.v1` — the Signal Extension AEAD key.
+///
+/// Driven through the shipped SDK derivation rather than the local KDF
+/// reimplementation above: the point of this case is that what implementations
+/// actually run reproduces the registered bytes.
+fn run_signal_exporter_key(case: &Value) -> Result<()> {
+    let input = &case["input"];
+    let exporter_secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
+    let realm_id = arkret::RealmId::new(required_str(input, "realm_id_utf8")?.to_owned())
+        .map_err(|error| anyhow!("registered realm id is invalid: {error}"))?;
+    let key_len = required_u64(input, "aead_nk")? as usize;
+
+    let signal_key = arkret::mls::derive_signal_exporter_key(&exporter_secret, &realm_id, key_len)
+        .map_err(|error| anyhow!("SDK signal exporter key derivation failed: {error}"))?;
+    assert_hex(
+        "signal_key",
+        &signal_key,
+        &case["expected"],
+        "signal_key_hex",
+    )
+}
+
+/// `ak.vector.aead.sender_nonce_prefix_kat.v1` — the §10.1 sender prefix and
+/// the composed nonce, both through the shipped SDK derivation. The canonical
+/// exporter Context is pinned first so a canonicalization change cannot hide
+/// behind a prefix that happens to match over different bytes.
+fn run_sender_nonce_prefix(case: &Value) -> Result<()> {
+    let input = &case["input"];
+    let expected = &case["expected"];
+    let exporter_secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
+    let exporter_label = required_str(input, "exporter_label")?;
+    if exporter_label != arkret_crypto::AEAD_NONCE_EXPORTER_LABEL {
+        bail!("registered sender nonce exporter label drifted: {exporter_label}");
+    }
+    let context: arkret_crypto::AeadNonceContext = serde_json::from_value(
+        input
+            .get("context")
+            .cloned()
+            .ok_or_else(|| anyhow!("sender nonce case missing input.context"))?,
+    )
+    .map_err(|error| anyhow!("registered nonce context does not decode: {error}"))?;
+    let nonce_len = required_u64(input, "nonce_length_bytes")? as usize;
+
+    let canonical_context = arkret_crypto::aead_sender_nonce_context_bytes(&context)
+        .map_err(|error| anyhow!("canonical nonce context failed: {error}"))?;
+    let expected_context = required_str(expected, "context_canonical_json")?;
+    if canonical_context != expected_context.as_bytes() {
+        bail!(
+            "canonical nonce context drifted: expected {expected_context}, got {}",
+            String::from_utf8_lossy(&canonical_context)
+        );
+    }
+
+    let prefix =
+        arkret_crypto::derive_aead_sender_nonce_prefix(&exporter_secret, &context, nonce_len)
+            .map_err(|error| anyhow!("SDK sender nonce prefix derivation failed: {error}"))?;
+    assert_hex(
+        "sender_nonce_prefix",
+        &prefix,
+        expected,
+        "sender_nonce_prefix_hex",
+    )?;
+
+    let counter = u64::from_str_radix(required_str(input, "counter_be64_hex")?, 16)
+        .map_err(|error| anyhow!("registered nonce counter is not hex: {error}"))?;
+    assert_hex(
+        "nonce",
+        &arkret_crypto::compose_aead_nonce(&prefix, counter),
+        expected,
+        "nonce_hex",
+    )
+}
+
+/// `ak.vector.mention.routing_hmac_kat.v1` — the epoch routing key and the
+/// per-DID routing tag, both through the shipped SDK derivation.
+fn run_mention_routing_hmac(case: &Value) -> Result<()> {
+    let input = &case["input"];
+    let expected = &case["expected"];
+    let exporter_secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
+    let realm_id = arkret::RealmId::new(required_str(input, "realm_id_utf8")?.to_owned())
+        .map_err(|error| anyhow!("registered realm id is invalid: {error}"))?;
+    let exporter_label = required_str(input, "exporter_label")?;
+    if exporter_label != arkret::mls::MENTION_ROUTING_EXPORTER_LABEL {
+        bail!("registered mention routing exporter label drifted: {exporter_label}");
+    }
+    let mentioned = arkret::Did::new(required_str(input, "mentioned_did_utf8")?.to_owned())
+        .map_err(|error| anyhow!("registered mentioned DID is invalid: {error}"))?;
+
+    let routing_key = arkret::mls::derive_mention_routing_key(&exporter_secret, &realm_id)
+        .map_err(|error| anyhow!("SDK mention routing key derivation failed: {error}"))?;
+    assert_hex(
+        "routing_hmac_key",
+        &routing_key,
+        expected,
+        "routing_hmac_key_hex",
+    )?;
+
+    let tag = arkret::mls::mention_routing_hmac(&exporter_secret, &realm_id, &mentioned)
+        .map_err(|error| anyhow!("SDK mention routing HMAC failed: {error}"))?;
+    assert_hex("routing_tag", &tag, expected, "routing_tag_hex")?;
+
+    // The from-key entry point clients use on the send path must land on the
+    // same tag as the from-secret one this vector registers.
+    let from_key = arkret::mls::mention_routing_hmac_from_key(&routing_key, &mentioned)
+        .map_err(|error| anyhow!("SDK mention routing HMAC from key failed: {error}"))?;
+    if from_key != tag {
+        bail!("mention routing HMAC disagrees between its from-secret and from-key entry points");
+    }
+    Ok(())
 }
 
 fn run_content_negatives(case: &Value) -> Result<()> {
