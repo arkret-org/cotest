@@ -117,63 +117,46 @@ impl TestActorClient {
         subject: &TestActorClient,
         actions: &[&str],
     ) -> Result<String> {
+        let before = self.realm_seal_id(realm_id).await;
         let (grant_id, _) = self
             .grant_realm_actions_to(realm_id, &subject.actor, actions)
             .await?;
-        self.await_projected_grant(realm_id, &subject.actor, &grant_id)
-            .await?;
+        self.await_seal_after(realm_id, before.as_deref()).await?;
         subject.remember_grant(realm_id, &grant_id, actions);
         Ok(grant_id)
     }
 
-    /// Wait until `grant_id` is projected, i.e. until the Seal that covers the
-    /// grant Control Move exists.
+    /// Wait until the Seal frontier has advanced past `since_seal_id`.
     ///
     /// A DataEvent resolves its authority at `seal_ref`, so naming a grant the
     /// current Seal does not yet cover is rejected with "not projected at
-    /// seal_ref". Sealing is the durable coordinator's job and asynchronous, so
-    /// the issuer waits for it rather than racing it.
-    async fn await_projected_grant(
-        &self,
-        realm_id: &str,
-        subject: &str,
-        grant_id: &str,
-    ) -> Result<()> {
+    /// seal_ref". Sealing belongs to the durable coordinator and is
+    /// asynchronous, so the issuer waits for the next Seal rather than racing
+    /// it.
+    async fn await_seal_after(&self, realm_id: &str, since_seal_id: Option<&str>) -> Result<()> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            // Ask at the Seal a DataEvent would actually name, not at the
-            // accepted head: a grant can be accepted and still be outside the
-            // authorization pre-state every DataEvent resolves against.
-            let seal_id = self
-                .realm_seal_frontier(realm_id)
-                .await
-                .ok()
-                .and_then(|frontier| {
-                    frontier["frontier"]["seal_id"]
-                        .as_str()
-                        .map(ToOwned::to_owned)
-                });
-            if let Some(seal_id) = seal_id {
-                let grants = self
-                    .sdk()
-                    .authz_effective_grants(realm_id, subject, Some(&seal_id))
-                    .await;
-                if grants.is_ok_and(|grants| {
-                    grants
-                        .grants
-                        .iter()
-                        .any(|grant| grant.id.as_str() == grant_id)
-                }) {
-                    return Ok(());
-                }
+            if self.realm_seal_id(realm_id).await.as_deref() != since_seal_id {
+                return Ok(());
             }
             if std::time::Instant::now() >= deadline {
                 return Err(anyhow!(
-                    "grant {grant_id} for {subject} was never projected in {realm_id}"
+                    "{realm_id} published no Seal after {since_seal_id:?}"
                 ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
+    }
+
+    async fn realm_seal_id(&self, realm_id: &str) -> Option<String> {
+        self.realm_seal_frontier(realm_id)
+            .await
+            .ok()
+            .and_then(|frontier| {
+                frontier["frontier"]["seal_id"]
+                    .as_str()
+                    .map(ToOwned::to_owned)
+            })
     }
 
     pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
