@@ -14,10 +14,11 @@ import {
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 import { coauthBaseUrl } from "../../helpers/env";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import {
+  decodeEventIngressBody,
+  ingressEvents,
+  type IngressEvent,
+} from "../../helpers/event-ingress";
 
 test.describe.configure({ mode: "serial" });
 
@@ -76,23 +77,18 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         historyVisibility: "shared",
         encryptionProfile: "none",
       });
-      const bootstrapBatch = eventBatches.find(({ body }) => {
-        const submissions = body.events as Array<Record<string, unknown>>;
-        const events = submissions.map((submission) =>
-          isRecord(submission.event) ? submission.event : submission,
+      const batchEvents = (body: Record<string, unknown>): IngressEvent[] =>
+        ingressEvents(
+          decodeEventIngressBody(body, { context: "Realm bootstrap ingress" }),
         );
+      const bootstrapBatch = eventBatches.find(({ body }) => {
+        const events = batchEvents(body);
         return (
           events[0]?.kind === "ak.realm.create" &&
           events[0]?.realm_id === realmId
         );
       });
-      const bootstrap = (
-        bootstrapBatch?.body.events as
-          | Array<Record<string, unknown>>
-          | undefined
-      )?.map((submission) =>
-        isRecord(submission.event) ? submission.event : submission,
-      );
+      const bootstrap = bootstrapBatch && batchEvents(bootstrapBatch.body);
       expect(bootstrap, "Inkson Realm bootstrap POST batch").toBeTruthy();
       expect(bootstrap![0].actor_seq).toBe(0);
       expect(bootstrap![0].prev_refs).toEqual([]);

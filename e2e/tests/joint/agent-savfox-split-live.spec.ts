@@ -9,6 +9,10 @@ import {
 import { readFile } from "node:fs/promises";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
+  decodeIngressEvents,
+  type IngressEvent,
+} from "../../helpers/event-ingress";
+import {
   test as jointTest,
   type JointRealmFixture,
 } from "../../helpers/joint-fixture";
@@ -1517,29 +1521,14 @@ async function dropAccountSubscribeStream(page: Page): Promise<{
 }
 
 type MlsTransactionEvent = { kind: string; eventId: string };
-type SubmittedEvent = {
-  event_id?: string;
-  kind?: string;
-  actor_id?: string;
-  payload?: unknown;
-};
+/// The signed Event carried by an `EventInitialSubmission`; the shared decoder
+/// owns the wrapper shape.
+type SubmittedEvent = IngressEvent;
 
 function eventSubmissions(postData: string | null): SubmittedEvent[] {
-  if (!postData) return [];
-  let body: unknown;
-  try {
-    body = JSON.parse(postData);
-  } catch {
-    return [];
-  }
-  type InitialSubmission = { event?: SubmittedEvent };
-  const container = body as { events?: InitialSubmission[] };
-  const submissions = Array.isArray(container.events)
-    ? container.events
-    : [body as InitialSubmission];
-  return submissions
-    .map((submission) => submission.event)
-    .filter((event): event is SubmittedEvent => event !== undefined);
+  return decodeIngressEvents(postData, {
+    context: "Agent split-live Event ingress",
+  });
 }
 
 /// Event ingress carries `EventInitialSubmission` values, so inspect the

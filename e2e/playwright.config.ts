@@ -54,6 +54,13 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // A Playwright action inherits an unbounded timeout by default, so a
+    // `fill` against a control that the current page state does not have waits
+    // out the whole scenario budget instead of failing where the mistake is.
+    // Protocol convergence still gets its own named long window through
+    // `expect.poll` / `expect(...).toPass`; a single UI action never needs one.
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
     // Opt-in for live Caddy `tls internal` stacks (self-signed). Applies to the
     // `request` fixture's API calls; the browser context mirrors it in openUser.
     ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",

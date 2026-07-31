@@ -413,6 +413,104 @@ function Get-ArtifactFreshness {
     }
 }
 
+# One managed Savfox probe instance: home directory, deterministic model
+# provider, and the gateway that serves it.
+#
+# The joint gate runs two fully independent probes (addressed and unaddressed)
+# that differ only in ports, home directory, and token. Maintaining that as two
+# parallel copies of the config text, process commands, readiness waits, and
+# manifest fields is how a third probe — a revoke or restart case — would start
+# by duplicating a whole runner branch again. Everything a probe is made of is
+# derived from its name here, so the caller supplies only what actually differs.
+function New-ManagedSavfoxProbe {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$JointDirectory,
+        [Parameter(Mandatory = $true)][string]$MocksRoot,
+        [Parameter(Mandatory = $true)][string]$LogDirectory,
+        [Parameter(Mandatory = $true)][string]$BaseUrl,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$Token,
+        [Parameter(Mandatory = $true)][string]$ModelBaseUrl,
+        [Parameter(Mandatory = $true)][int]$ModelPort,
+        [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices
+    )
+
+    $probeHome = Join-Path $JointDirectory "$Name-home"
+    New-Item -ItemType Directory -Path $probeHome -Force | Out-Null
+    $receiptPath = Join-Path $JointDirectory "$Name-model-receipts.jsonl"
+    $config = @"
+approval_policy = "never"
+sandbox_mode = "read-only"
+model_provider = "joint_mock"
+
+[model]
+slug = "joint-pong"
+provider = "joint_mock"
+
+[features]
+remote_models = false
+
+[model_providers.joint_mock]
+name = "Cotest deterministic Savfox model"
+base_url = "$ModelBaseUrl/v1"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+requires_openai_auth = false
+"@
+    $config | Set-Content -LiteralPath (Join-Path $probeHome "config.toml") -Encoding UTF8
+
+    $modelCommand = (
+        "`$env:MOCK_SAVFOX_MODEL_PORT='{0}'; `$env:MOCK_SAVFOX_MODEL_RECEIPT_PATH={1}; node {2}"
+    ) -f $ModelPort, (Quote-PsLiteral $receiptPath), (Quote-PsLiteral (Join-Path $MocksRoot "mock-savfox-model.mjs"))
+    $modelService = Start-ManagedCommand `
+        -Name "mock-$Name-model" `
+        -Command $modelCommand `
+        -WorkingDirectory $MocksRoot `
+        -LogDirectory $LogDirectory
+    $ManagedServices.Add($modelService) | Out-Null
+    Wait-HttpReady -Url "$ModelBaseUrl/health" -TimeoutSeconds 30
+
+    [pscustomobject]@{
+        Name         = $Name
+        BaseUrl      = $BaseUrl
+        Port         = $Port
+        Token        = $Token
+        Home         = $probeHome
+        ModelBaseUrl = $ModelBaseUrl
+        ReceiptPath  = $receiptPath
+        Services     = [System.Collections.Generic.List[object]]@($modelService)
+    }
+}
+
+# Start a probe's gateway once its model provider is ready. Kept separate from
+# the factory so the gateway still boots in the same phase as the other
+# Arkret-facing services.
+function Start-ManagedSavfoxGateway {
+    param(
+        [Parameter(Mandatory = $true)][psobject]$Probe,
+        [Parameter(Mandatory = $true)][string]$Binary,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$LogDirectory,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+        [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices
+    )
+
+    $command = (
+        "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
+    ) -f (Quote-PsLiteral $Probe.Home), (Quote-PsLiteral $Binary), $Probe.Port, (Quote-PsLiteral $Probe.Token)
+    $service = Start-ManagedCommand `
+        -Name $Probe.Name `
+        -Command $command `
+        -WorkingDirectory $WorkingDirectory `
+        -LogDirectory $LogDirectory
+    $ManagedServices.Add($service) | Out-Null
+    $Probe.Services.Add($service)
+    Wait-HttpReady -Url "$($Probe.BaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $TimeoutSeconds
+    $service
+}
+
 function Test-BinaryContainsAsciiMarker {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -2587,45 +2685,30 @@ try {
         Wait-HttpReady -Url "$mockChallengeProviderBaseUrl/health" -TimeoutSeconds 30
     }
     if ($StartSavfox) {
-        $savfoxHome = Join-Path $jointDir "savfox-home"
-        $savfoxUnaddressedHome = Join-Path $jointDir "savfox-unaddressed-home"
-        New-Item -ItemType Directory -Path $savfoxHome -Force | Out-Null
-        New-Item -ItemType Directory -Path $savfoxUnaddressedHome -Force | Out-Null
-        $savfoxModelReceipts = Join-Path $jointDir "savfox-model-receipts.jsonl"
-        $savfoxUnaddressedModelReceipts = Join-Path $jointDir "savfox-unaddressed-model-receipts.jsonl"
-        $savfoxConfig = @"
-approval_policy = "never"
-sandbox_mode = "read-only"
-model_provider = "joint_mock"
-
-[model]
-slug = "joint-pong"
-provider = "joint_mock"
-
-[features]
-remote_models = false
-
-[model_providers.joint_mock]
-name = "Cotest deterministic Savfox model"
-base_url = "$savfoxModelBaseUrl/v1"
-wire_api = "responses"
-request_max_retries = 0
-stream_max_retries = 0
-requires_openai_auth = false
-"@
-        $savfoxConfig | Set-Content -LiteralPath (Join-Path $savfoxHome "config.toml") -Encoding UTF8
-        $savfoxConfig.Replace($savfoxModelBaseUrl, $savfoxUnaddressedModelBaseUrl) |
-            Set-Content -LiteralPath (Join-Path $savfoxUnaddressedHome "config.toml") -Encoding UTF8
-        $savfoxModelCommand = (
-            "`$env:MOCK_SAVFOX_MODEL_PORT='{0}'; `$env:MOCK_SAVFOX_MODEL_RECEIPT_PATH={1}; node {2}"
-        ) -f $savfoxModelPort, (Quote-PsLiteral $savfoxModelReceipts), (Quote-PsLiteral (Join-Path $mocksRoot "mock-savfox-model.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-savfox-model" -Command $savfoxModelCommand -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$savfoxModelBaseUrl/health" -TimeoutSeconds 30
-        $savfoxUnaddressedModelCommand = (
-            "`$env:MOCK_SAVFOX_MODEL_PORT='{0}'; `$env:MOCK_SAVFOX_MODEL_RECEIPT_PATH={1}; node {2}"
-        ) -f $savfoxUnaddressedModelPort, (Quote-PsLiteral $savfoxUnaddressedModelReceipts), (Quote-PsLiteral (Join-Path $mocksRoot "mock-savfox-model.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-savfox-unaddressed-model" -Command $savfoxUnaddressedModelCommand -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$savfoxUnaddressedModelBaseUrl/health" -TimeoutSeconds 30
+        $savfoxAddressedProbe = New-ManagedSavfoxProbe `
+            -Name "savfox" `
+            -JointDirectory $jointDir `
+            -MocksRoot $mocksRoot `
+            -LogDirectory $serviceLogDir `
+            -BaseUrl $SavfoxBaseUrl `
+            -Port $savfoxPort `
+            -Token $SavfoxToken `
+            -ModelBaseUrl $savfoxModelBaseUrl `
+            -ModelPort $savfoxModelPort `
+            -ManagedServices $managedServices
+        $savfoxUnaddressedProbe = New-ManagedSavfoxProbe `
+            -Name "savfox-unaddressed" `
+            -JointDirectory $jointDir `
+            -MocksRoot $mocksRoot `
+            -LogDirectory $serviceLogDir `
+            -BaseUrl $savfoxUnaddressedBaseUrl `
+            -Port $savfoxUnaddressedPort `
+            -Token $savfoxUnaddressedToken `
+            -ModelBaseUrl $savfoxUnaddressedModelBaseUrl `
+            -ModelPort $savfoxUnaddressedModelPort `
+            -ManagedServices $managedServices
+        $savfoxModelReceipts = $savfoxAddressedProbe.ReceiptPath
+        $savfoxUnaddressedModelReceipts = $savfoxUnaddressedProbe.ReceiptPath
     }
 
     if ($StartCoauth) {
@@ -2765,16 +2848,15 @@ requires_openai_auth = false
         if (-not (Test-Path -LiteralPath $savfoxBinary -PathType Leaf)) {
             throw "Savfox binary not found: $savfoxBinary"
         }
-        $savfoxCommand = (
-            "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
-        ) -f (Quote-PsLiteral $savfoxHome), (Quote-PsLiteral $savfoxBinary), $savfoxPort, (Quote-PsLiteral $SavfoxToken)
-        $managedServices.Add((Start-ManagedCommand -Name "savfox" -Command $savfoxCommand -WorkingDirectory $SavfoxRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$($SavfoxBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
-        $savfoxUnaddressedCommand = (
-            "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
-        ) -f (Quote-PsLiteral $savfoxUnaddressedHome), (Quote-PsLiteral $savfoxBinary), $savfoxUnaddressedPort, (Quote-PsLiteral $savfoxUnaddressedToken)
-        $managedServices.Add((Start-ManagedCommand -Name "savfox-unaddressed" -Command $savfoxUnaddressedCommand -WorkingDirectory $SavfoxRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$($savfoxUnaddressedBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        foreach ($probe in @($savfoxAddressedProbe, $savfoxUnaddressedProbe)) {
+            Start-ManagedSavfoxGateway `
+                -Probe $probe `
+                -Binary $savfoxBinary `
+                -WorkingDirectory $SavfoxRoot `
+                -LogDirectory $serviceLogDir `
+                -TimeoutSeconds $StartupTimeoutSeconds `
+                -ManagedServices $managedServices | Out-Null
+        }
     }
 
     function Build-SolandDockerEnvironment {
@@ -3419,18 +3501,20 @@ requires_openai_auth = false
                 $null
             }
             savfox = if ($StartSavfox) {
-                $savfoxManagedService = @($managedServices | Where-Object { $_.Name -eq "savfox" }) | Select-Object -First 1
-                $savfoxUnaddressedManagedService = @($managedServices | Where-Object { $_.Name -eq "savfox-unaddressed" }) | Select-Object -First 1
-                [ordered]@{
-                    base_url = $SavfoxBaseUrl
-                    runtime_instance = if ($savfoxManagedService) { "process:$($savfoxManagedService.Process.Id)" } else { $null }
-                    model_receipts = $savfoxModelReceipts
-                    unaddressed_probe = [ordered]@{
-                        base_url = $savfoxUnaddressedBaseUrl
-                        runtime_instance = if ($savfoxUnaddressedManagedService) { "process:$($savfoxUnaddressedManagedService.Process.Id)" } else { $null }
-                        model_receipts = $savfoxUnaddressedModelReceipts
+                # Serialized straight off the probe objects, so a probe cannot
+                # appear in the manifest with fields that belong to another one.
+                $savfoxProbeManifest = {
+                    param($probe)
+                    $gateway = @($probe.Services | Where-Object { $_.Name -eq $probe.Name }) | Select-Object -First 1
+                    [ordered]@{
+                        base_url = $probe.BaseUrl
+                        runtime_instance = if ($gateway) { "process:$($gateway.Process.Id)" } else { $null }
+                        model_receipts = $probe.ReceiptPath
                     }
                 }
+                $addressed = & $savfoxProbeManifest $savfoxAddressedProbe
+                $addressed["unaddressed_probe"] = & $savfoxProbeManifest $savfoxUnaddressedProbe
+                $addressed
             } else {
                 $null
             }
