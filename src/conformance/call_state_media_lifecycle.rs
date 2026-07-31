@@ -221,7 +221,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
     let recording_id =
         CallRecordingId::new("rtc-recording-019a7360-0000-7000-8000-000000000002").unwrap();
     CallRecordingArtifact {
-        schema: CallRecordingArtifact::SCHEMA.to_owned(),
+        schema: arkret_wire::CALL_RECORDING_ARTIFACT_SCHEMA.to_owned(),
         realm_id: realm_id(),
         call_id: call_id(),
         recording_id: recording_id.clone(),
@@ -366,10 +366,10 @@ fn evaluate_recording_result_artifact_shape(
 }
 
 pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
-    if CallRecordingArtifact::SCHEMA != "ak.schema.call_recording_artifact.v1" {
+    if arkret_wire::CALL_RECORDING_ARTIFACT_SCHEMA != "ak.schema.call_recording_artifact.v1" {
         bail!(
             "CallRecordingArtifact schema spelling drifted: {}",
-            CallRecordingArtifact::SCHEMA
+            arkret_wire::CALL_RECORDING_ARTIFACT_SCHEMA
         );
     }
     if arkret_wire::ReasonCode::RECORDING_ARTIFACT_PIPELINE_BYPASSED
