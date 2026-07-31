@@ -225,6 +225,11 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     )
     .await?;
     accept_invite_join_now(bob_client, &alice, &realm_id, &invite_id).await?;
+    // Membership derives read access only. Bob still needs a covering grant to
+    // author into the Realm (`capabilities.md` line 700).
+    alice
+        .grant_realm_actions_to_client(&realm_id, bob_client, &["ak.message.create"])
+        .await?;
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     let bob_baseline = eventually(
@@ -655,6 +660,20 @@ async fn submit_event_now(
             if actor.controls_realm_authority_root(realm_id) {
                 event["authorization_ref"] =
                     serde_json::json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+            } else {
+                event["refs"] = Value::Array(
+                    actor
+                        .held_grants_for(realm_id)
+                        .into_iter()
+                        .map(|grant_id| {
+                            serde_json::json!({
+                                "id": grant_id,
+                                "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
+                                "critical": true
+                            })
+                        })
+                        .collect(),
+                );
             }
         } else {
             event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;

@@ -31,6 +31,11 @@ pub struct TestActorClient {
     /// scenarios clone the client freely and the controller does not change.
     pub(super) controlled_realms:
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    /// Grants issued to this actor, keyed by Realm. Membership derives read
+    /// access only (`capabilities.md` line 700); every write action still needs
+    /// a covering grant, which a DataEvent names in `refs[role=authorized_by]`.
+    pub(super) held_grants:
+        std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, Vec<String>>>>,
 }
 
 impl TestActorClient {
@@ -68,6 +73,40 @@ impl TestActorClient {
     }
 
     /// Whether this actor controls `realm_id`'s authority root, i.e. created it.
+    /// Record a grant this actor now holds in `realm_id`, so its later
+    /// DataEvents name it as their covering authority.
+    pub fn remember_grant(&self, realm_id: &str, grant_id: &str) {
+        self.held_grants
+            .lock()
+            .expect("cotest held-grant map is not poisoned")
+            .entry(realm_id.to_owned())
+            .or_default()
+            .push(grant_id.to_owned());
+    }
+
+    pub fn held_grants_for(&self, realm_id: &str) -> Vec<String> {
+        self.held_grants
+            .lock()
+            .expect("cotest held-grant map is not poisoned")
+            .get(realm_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Issue a Realm grant and record it on the subject's own client.
+    pub async fn grant_realm_actions_to_client(
+        &self,
+        realm_id: &str,
+        subject: &TestActorClient,
+        actions: &[&str],
+    ) -> Result<String> {
+        let (grant_id, _) = self
+            .grant_realm_actions_to(realm_id, &subject.actor, actions)
+            .await?;
+        subject.remember_grant(realm_id, &grant_id);
+        Ok(grant_id)
+    }
+
     pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
         self.controlled_realms
             .lock()
@@ -458,6 +497,19 @@ impl TestActorClient {
             // carry `refs[role=authorized_by]`.
             if self.controls_realm_authority_root(realm_id) {
                 event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+            } else if is_data_event {
+                event["refs"] = Value::Array(
+                    self.held_grants_for(realm_id)
+                        .into_iter()
+                        .map(|grant_id| {
+                            json!({
+                                "id": grant_id,
+                                "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
+                                "critical": true
+                            })
+                        })
+                        .collect(),
+                );
             }
         }
         refresh_event_proof(&mut event)?;

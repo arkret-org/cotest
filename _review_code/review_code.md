@@ -1,5 +1,38 @@
 # Regression Review
 
+## 2026-07-31 live e2e still assumes membership implies capability
+
+Observed while landing the issuer-authority model (spec `88ef83f2`, cotest
+`7f8172ad`). Genesis, the Seal-frontier wait and the creator's own
+`authorization_ref` are fixed; what remains is a distinct, older gap.
+
+### Joined members author DataEvents with no grant
+
+- Severity: P1
+- Status: open.
+- Evidence: `invited_members_exchange_post_join_messages_over_account_subscribe`
+  gets `capability_denied` — "no capability at seal_ref covers action
+  ak.message.create on derived cell
+  ak:cell:ak.component.strand.discussion.timeline.v1:..." — for Bob, who has
+  joined the Realm but holds no grant.
+- Normative position: `zh/authz/capabilities.md` line 700 is explicit that
+  membership derives *read* access only; every write action still needs a
+  covering grant, and v1 genesis issues none. Before the authority-root model
+  the founding self-grant happened to cover members too, which is why these
+  scenarios passed without ever granting anything.
+- Harness support landed: `TestActorClient` now remembers the grants it holds
+  per Realm and names them in `refs[role=authorized_by]` on its DataEvents, and
+  `grant_realm_actions_to_client` issues a grant and records it on the subject
+  in one call.
+- Remaining fix: each scenario whose non-creator writes calls
+  `grant_realm_actions_to_client` after the join, naming the actions it
+  exercises. This stays scenario-by-scenario rather than a harness-wide switch:
+  which actions a member should hold is exactly what these tests pin down.
+  Demonstrated on `account_subscribe_long_poll`, which went 0/4 to 3/4 (the
+  remaining failure is an unrelated `ak.invite.cancel` lifecycle precondition).
+- Scope: ~30 failures across ~20 live test binaries. The conformance, vector and
+  wire suites are unaffected and green.
+
 ## 2026-07-22 release-gate baseline drift
 
 Observed while verifying the target-aware Cotest scheduler at Cotest HEAD
