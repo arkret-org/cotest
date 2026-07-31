@@ -56,13 +56,7 @@ async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObserv
         .iter()
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect();
-    let frontier = expect_json(
-        client
-            .get("/_arkret/self/events/frontier")
-            .query(&[("realm_id", realm_id)]),
-        StatusCode::OK,
-    )
-    .await?;
+    let frontier = client.realm_seal_frontier(realm_id).await?;
     let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
         serde_json::from_value(frontier.clone())
             .map_err(|error| anyhow!("invalid Realm frontier `{frontier}`: {error}"))?;
@@ -138,13 +132,7 @@ async fn author_invite_move(
     );
     event["prev_refs"] = serde_json::to_value(actor_frontier.frontier_event_ids)?;
     event["created_at"] = Value::String(created_at.clone());
-    let seal_frontier = expect_json(
-        actor
-            .get("/_arkret/self/events/frontier")
-            .query(&[("realm_id", realm_id)]),
-        StatusCode::OK,
-    )
-    .await?;
+    let seal_frontier = actor.realm_seal_frontier(realm_id).await?;
     let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
         serde_json::from_value(seal_frontier)?;
     let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(seal_frontier) =

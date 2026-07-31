@@ -131,13 +131,7 @@ async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Re
         Duration::from_secs(30),
         Duration::from_millis(100),
         || async {
-            let frontier = expect_json(
-                client
-                    .get("/_arkret/self/events/frontier")
-                    .query(&[("realm_id", realm_id)]),
-                StatusCode::OK,
-            )
-            .await?;
+            let frontier = client.realm_seal_frontier(realm_id).await?;
             let root = frontier["frontier"]["control_event_set_root"]
                 .as_str()
                 .ok_or_else(|| anyhow!("Realm frontier has no control_event_set_root"))?;
@@ -163,13 +157,7 @@ async fn wait_for_next_seal(
         Duration::from_secs(30),
         Duration::from_millis(100),
         || async {
-            let frontier = expect_json(
-                client
-                    .get("/_arkret/self/events/frontier")
-                    .query(&[("realm_id", realm_id)]),
-                StatusCode::OK,
-            )
-            .await?;
+            let frontier = client.realm_seal_frontier(realm_id).await?;
             let seal_id = frontier["frontier"]["seal_id"]
                 .as_str()
                 .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))?;
@@ -183,13 +171,7 @@ async fn wait_for_next_seal(
 }
 
 async fn current_seal(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    let frontier = expect_json(
-        client
-            .get("/_arkret/self/events/frontier")
-            .query(&[("realm_id", realm_id)]),
-        StatusCode::OK,
-    )
-    .await?;
+    let frontier = client.realm_seal_frontier(realm_id).await?;
     frontier["frontier"]["seal_id"]
         .as_str()
         .map(ToOwned::to_owned)

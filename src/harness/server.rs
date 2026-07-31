@@ -643,6 +643,9 @@ impl ArkretServer {
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             token,
+            controlled_realms: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::BTreeSet::new(),
+            )),
         })
     }
 }

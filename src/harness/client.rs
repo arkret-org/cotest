@@ -24,11 +24,55 @@ pub struct TestActorClient {
     pub actor: String,
     pub device_id: String,
     pub token: String,
+    /// Realms this actor created, i.e. the ones whose authority-root cell it
+    /// controls. `capabilities.md` section 3.2: v1 genesis issues no self-grant,
+    /// so the controller authorizes its own Events by naming that cell in
+    /// `authorization_ref` instead of a grant id. Clones share the set because
+    /// scenarios clone the client freely and the controller does not change.
+    pub(super) controlled_realms:
+        std::sync::Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
 }
 
 impl TestActorClient {
     pub fn sdk(&self) -> SdkClient {
         self.sdk.clone()
+    }
+
+    /// Read the Realm Seal frontier, waiting out the control-seal coordinator.
+    ///
+    /// Control Move finality belongs to the durable coordinator, which runs
+    /// asynchronously: between accepting a Realm genesis unit and publishing
+    /// the Seal that covers it, the frontier answers `503
+    /// frontier_unavailable`. That is a transient state a client waits out,
+    /// not an error — every Realm-scoped Seal read here therefore retries it.
+    pub async fn realm_seal_frontier(&self, realm_id: &str) -> Result<Value> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let response = expect_response(
+                self.get("/_arkret/self/events/frontier")
+                    .query(&[("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await;
+            match response {
+                Ok(response) => return response.json(),
+                Err(error) if std::time::Instant::now() < deadline => {
+                    if !format!("{error}").contains("frontier_unavailable") {
+                        return Err(error);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    /// Whether this actor controls `realm_id`'s authority root, i.e. created it.
+    pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
+        self.controlled_realms
+            .lock()
+            .expect("cotest controlled-Realm set is not poisoned")
+            .contains(realm_id)
     }
 
     pub fn service_id(&self) -> &str {
@@ -79,6 +123,10 @@ impl TestActorClient {
             .and_then(Value::as_str)
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| next_typed_id("realm"));
+        self.controlled_realms
+            .lock()
+            .expect("cotest controlled-Realm set is not poisoned")
+            .insert(realm_id.clone());
         let payload = realm_create_payload(&self.actor, &self.service_id, &realm_id, &body);
         let events = realm_bootstrap_event_batch(&self.actor, &realm_id, payload)?;
         let event_response = expect_json(
@@ -295,12 +343,7 @@ impl TestActorClient {
             .descriptor()
             .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
         if is_data_event {
-            let seal_frontier = expect_json(
-                self.get("/_arkret/self/events/frontier")
-                    .query(&[("realm_id", realm_id)]),
-                StatusCode::OK,
-            )
-            .await?;
+            let seal_frontier = self.realm_seal_frontier(realm_id).await?;
             let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
                 serde_json::from_value(seal_frontier.clone()).map_err(|error| {
                     anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
@@ -323,6 +366,9 @@ impl TestActorClient {
                 "key_id": format!("{}#cotest", self.actor),
                 "key_epoch": 0
             });
+            if self.controls_realm_authority_root(realm_id) {
+                event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+            }
             event["refs"] = Value::Array(
                 capability_refs
                     .into_iter()
@@ -383,12 +429,7 @@ impl TestActorClient {
         let is_data_event = descriptor
             .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
         if is_control_move || is_data_event {
-            let seal_frontier = expect_json(
-                self.get("/_arkret/self/events/frontier")
-                    .query(&[("realm_id", realm_id)]),
-                StatusCode::OK,
-            )
-            .await?;
+            let seal_frontier = self.realm_seal_frontier(realm_id).await?;
             let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
                 serde_json::from_value(seal_frontier.clone()).map_err(|error| {
                     anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
@@ -411,6 +452,12 @@ impl TestActorClient {
                     "key_id": format!("{}#cotest", self.actor),
                     "key_epoch": 0
                 });
+            }
+            // The Realm creator holds no grant, so it names the authority-root
+            // cell instead. Actors that only hold grants leave this unset and
+            // carry `refs[role=authorized_by]`.
+            if self.controls_realm_authority_root(realm_id) {
+                event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
             }
         }
         refresh_event_proof(&mut event)?;

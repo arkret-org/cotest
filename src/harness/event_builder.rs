@@ -248,18 +248,44 @@ pub fn realm_bootstrap_event_batch(
 
 /// The ordinary Realm genesis unit (`models/realm-and-space.md` section 2.5).
 ///
+/// The `head_eq null` Control Move precondition every Realm genesis write
+/// carries: each of these cells is written exactly once, at genesis.
+fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Precondition> {
+    Ok(arkret_wire::cba::Precondition {
+        cell: arkret_wire::CellRef::new(cell.to_owned())?,
+        predicate: arkret_wire::cba::Predicate {
+            op: arkret_wire::cba::PredicateOp::HeadEq,
+            value: Some(Value::Null),
+            values: None,
+            predicate_id: None,
+        },
+    })
+}
+
 /// v1 has no genesis `ak.capability.grant` slot: the creator's root authority is
 /// the `ak.component.realm.authority_root.v1` cell that the `ak.realm.create`
 /// reducer contract writes. Callers that need to name that authority on a later
 /// Event use [`REALM_AUTHORITY_ROOT_CELL`], not a grant id.
+///
+/// `plaintext_visible_services` is a forbidden Realm policy field
+/// (`realm.schema.json` `not.anyOf`): its only carrier is the
+/// `ak.component.realm.plaintext_visible_services.v1` facet cell. Callers still
+/// hand it to us on the create object because that is where it reads naturally,
+/// so genesis lifts it off and emits the `ak.realm.plaintext_visible_services`
+/// Event that actually writes the cell.
 pub fn realm_bootstrap_event_batch_with_signing_seed(
     actor: &str,
     realm_id: &str,
-    realm_payload: Value,
+    mut realm_payload: Value,
     signing_seed: [u8; 32],
     verification_method: &str,
 ) -> Result<Vec<Value>> {
-    let realm_event = event_envelope_with_chain_and_signing_identity(
+    let services = realm_payload
+        .get_mut("object")
+        .and_then(Value::as_object_mut)
+        .and_then(|object| object.remove("plaintext_visible_services"))
+        .filter(|services| services.as_array().is_some_and(|items| !items.is_empty()));
+    let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
         realm_id,
         "ak.realm.create",
@@ -268,8 +294,33 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         Vec::new(),
         signing_seed,
         verification_method,
+        Vec::new(),
+        vec![head_eq_null_precondition(
+            "ak:cell:ak.component.realm.create.v1:null",
+        )?],
     );
-    Ok(vec![realm_event])
+    let Some(services) = services else {
+        return Ok(vec![realm_event]);
+    };
+    let realm_event_id = realm_event
+        .get("event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("cotest Realm genesis Event carries no event_id"))?;
+    let services_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+        actor,
+        realm_id,
+        "ak.realm.plaintext_visible_services",
+        json!({ "services": services }),
+        Some(1),
+        vec![EventId::new(realm_event_id.to_owned())?],
+        signing_seed,
+        verification_method,
+        Vec::new(),
+        vec![head_eq_null_precondition(
+            "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
+        )?],
+    );
+    Ok(vec![realm_event, services_event])
 }
 
 pub async fn add_member(
@@ -543,12 +594,41 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     actor: &str,
     realm_id: &str,
     kind: &str,
+    payload: Value,
+    actor_seq: Option<u64>,
+    prev_event_ids: Vec<EventId>,
+    signing_seed: [u8; 32],
+    verification_method: &str,
+    causal_refs: Vec<String>,
+) -> Value {
+    event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        actor_seq,
+        prev_event_ids,
+        signing_seed,
+        verification_method,
+        causal_refs,
+        Vec::new(),
+    )
+}
+
+/// Preconditions are signed content, so a Control Move that needs one has to
+/// declare it here rather than have it stamped onto an already-signed envelope.
+#[allow(clippy::too_many_arguments)]
+fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
     mut payload: Value,
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &str,
     causal_refs: Vec<String>,
+    preconditions: Vec<arkret_wire::cba::Precondition>,
 ) -> Value {
     let unique_seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let actor_seq = actor_seq.unwrap_or(unique_seq);
@@ -574,6 +654,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     )
     .expect("SDK Event builder accepts cotest envelope");
     event.prev_refs = prev_event_ids;
+    event.preconditions = preconditions;
     event.causal_refs = causal_refs
         .into_iter()
         .map(|value| arkret_identifiers::Hash::new(value).expect("cotest causal ref digest"))

@@ -629,14 +629,11 @@ async fn submit_event_now(
     );
     event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
     event["created_at"] = Value::String(created_at.clone());
-    if arkret_wire::events::kinds::is_invite_kind(kind) {
-        let seal_frontier = crate::harness::expect_json(
-            seal_source
-                .get("/_arkret/self/events/frontier")
-                .query(&[("realm_id", realm_id)]),
-            StatusCode::OK,
-        )
-        .await?;
+    let descriptor = arkret_wire::events::EventKind::from(kind).descriptor();
+    let is_data_event = descriptor
+        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+    if arkret_wire::events::kinds::is_invite_kind(kind) || is_data_event {
+        let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
         let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
             serde_json::from_value(seal_frontier)?;
         let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
@@ -646,7 +643,22 @@ async fn submit_event_now(
                 "Realm selector returned the wrong frontier variant"
             ));
         };
-        event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+        if is_data_event {
+            // A DataEvent anchors on `seal_ref`; carrying `seal_basis` is what
+            // marks an Event as a Control Move.
+            event["seal_ref"] = serde_json::to_value(&frontier.seal_id)?;
+            event["auth_context"] = serde_json::json!({
+                "did": actor.actor,
+                "key_id": format!("{}#cotest", actor.actor),
+                "key_epoch": 0
+            });
+            if actor.controls_realm_authority_root(realm_id) {
+                event["authorization_ref"] =
+                    serde_json::json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+            }
+        } else {
+            event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+        }
     }
     if let Some(proof) = event
         .get_mut("proofs")

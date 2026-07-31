@@ -83,13 +83,7 @@ async fn policy_server_events(client: &TestActorClient, realm_id: &str) -> Resul
 }
 
 async fn accepted_seal_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    let frontier = expect_json(
-        client
-            .get("/_arkret/self/events/frontier")
-            .query(&[("realm_id", realm_id)]),
-        StatusCode::OK,
-    )
-    .await?;
+    let frontier = client.realm_seal_frontier(realm_id).await?;
     let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
         serde_json::from_value(frontier.clone())
             .map_err(|error| anyhow!("invalid Realm frontier `{frontier}`: {error}"))?;
