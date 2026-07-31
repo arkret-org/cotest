@@ -67,7 +67,11 @@ try {
         # member name that no field-name list could carry on its own.
         [pscustomobject]@{ name = "jwk-private-member.log"; line = "{`"kty`":`"OKP`",`"crv`":`"Ed25519`",`"d`":`"$jwkPrivateScalar`"}"; pattern = "jwk_private_member" },
         [pscustomobject]@{ name = "jwk-private-member-reordered.log"; line = "{`"d`":`"$jwkPrivateScalar`",`"crv`":`"Ed25519`",`"kty`":`"OKP`"}"; pattern = "jwk_private_member" },
-        [pscustomobject]@{ name = "plaintext-keybag-object.log"; line = "{`"keybag`":{`"entries`":1,`"k`":`"$jwkPrivateScalar`"}}"; pattern = "plaintext_keybag_object" }
+        [pscustomobject]@{ name = "plaintext-keybag-object.log"; line = "{`"keybag`":{`"entries`":1,`"k`":`"$jwkPrivateScalar`"}}"; pattern = "plaintext_keybag_object" },
+        # Database dumps carry the column name and its value far apart, so the
+        # field-name detectors match nothing; the column list is the anchor.
+        [pscustomobject]@{ name = "pg-column-insert.sql"; line = "INSERT INTO public.recovery_state (id, seed) VALUES (1, '$hexSecret');"; pattern = "sql_private_material_column" },
+        [pscustomobject]@{ name = "pg-copy-header.sql"; line = "COPY public.recovery_state (id, mnemonic) FROM stdin;"; pattern = "sql_private_material_column" }
     )
     foreach ($vector in $planted) {
         Set-Content -Path (Join-Path $scanRoot $vector.name) -Value $vector.line -Encoding utf8
@@ -89,6 +93,9 @@ try {
     $cleanLines = @(
         '{"status":"ok","principal_id":"did:webvh:QmExample:host:webvh:alice"}',
         'INFO completed request in 42ms path=/_arkret/describe',
+        # A table whose name merely starts with a private-material word is not a
+        # private-material column: `\bseed\b` must not match `seed_catalog`.
+        "INSERT INTO public.seed_catalog (id, label) VALUES (3, 'harmless');",
         '"the server logs show that retry loops kept firing until the queue drained fully"',
         '"our nightly release gate runs every suite twice before the deploy window opens for all teams"'
     )
@@ -147,7 +154,7 @@ try {
         Assert-True ($leak.artifact_class -eq "log_or_telemetry") "a bare scan root must default to the strict artifact class, got '$($leak.artifact_class)'"
         Assert-True ($leak.verdict -eq "fail") "every finding in a log artifact must fail, got '$($leak.verdict)' for $($leak.pattern)"
     }
-    foreach ($privatePattern in @("recovery_private_material_field", "recovery_private_material_assignment", "bip39_mnemonic_sequence", "private_key_block", "jwk_private_member", "plaintext_keybag_object")) {
+    foreach ($privatePattern in @("recovery_private_material_field", "recovery_private_material_assignment", "bip39_mnemonic_sequence", "private_key_block", "jwk_private_member", "plaintext_keybag_object", "sql_private_material_column")) {
         $categorised = @($leaks | Where-Object { $_.pattern -eq $privatePattern })
         Assert-True ($categorised.Count -ge 1) "expected at least one $privatePattern finding to categorise"
         foreach ($leak in $categorised) {

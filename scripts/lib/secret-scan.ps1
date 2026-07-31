@@ -65,6 +65,19 @@ $script:Bip39WordSet = $null
 $script:JwkPrivateMemberPattern = '(?i)(?:"kty"\s*:\s*"(?:OKP|EC|RSA)"[^\r\n]{0,400}?"d"\s*:\s*"[A-Za-z0-9_\-+/=]{22,}"|"d"\s*:\s*"[A-Za-z0-9_\-+/=]{22,}"[^\r\n]{0,400}?"kty"\s*:\s*"(?:OKP|EC|RSA)")'
 $script:PlaintextKeybagPattern = '(?i)"key_?bag"\s*:\s*[\{\[][^\r\n]{0,800}?"(?:k|d)"\s*:\s*"[A-Za-z0-9_\-+/=]{16,}"'
 
+# A database dump does not carry `column = value`. `pg_dump --column-inserts`
+# emits `INSERT INTO t (id, seed) VALUES (1, '…')` and the default form emits a
+# `COPY t (id, seed) FROM stdin` header followed by tab-separated rows. In both
+# the column name and its value are far apart, so the field-name detectors --
+# which all require adjacency -- match nothing at all. A store dump would have
+# scanned completely clean while carrying a seed in plain text.
+#
+# So match the *column list* instead. This flags the whole statement rather than
+# the offending value, which is the right trade for a category whose allowed
+# count is zero: the question is "does the store contain recovery private
+# material", and naming the statement answers it.
+$script:SqlPrivateMaterialColumnPattern = "(?i)\b(?:INSERT\s+INTO|COPY)\s+[^\r\n(]{1,200}\([^)\r\n]*\b($script:RecoveryPrivateMaterialFieldNames)\b[^)\r\n]*\)"
+
 # Closed set of finding categories. See the file header for the verdict matrix.
 $script:SecretCategoryPrivateMaterial = "recovery_private_material"
 $script:SecretCategoryCredential = "credential_exposure"
@@ -132,6 +145,10 @@ function ConvertTo-RedactedLine {
     # blanked in previews. A preview that loses an unrelated `d` field costs a
     # diagnostic; one that keeps a private JWK scalar costs a key.
     $preview = $preview -replace '(?i)("(?:d|k)"\s*:\s*")(?!\[redacted\])[A-Za-z0-9_\-+/=]{16,}(")', '$1[redacted]$2'
+    # A private-material column list means every value in the statement is
+    # suspect: the scanner cannot tell which position holds the secret, so the
+    # whole tuple goes. Over-redaction is the correct trade here.
+    $preview = $preview -replace "(?i)(\b(?:INSERT\s+INTO|COPY)\s+[^\r\n(]{1,200}\([^)\r\n]*\b(?:$script:RecoveryPrivateMaterialFieldNames)\b[^)\r\n]*\))[^\r\n]*", '$1 [redacted-row]'
     $preview = $preview -replace '-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----[^\r\n]*-----END (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----', '[redacted-private-key]'
     $preview = $preview -replace '-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----', '[redacted-private-key]'
     return $preview
@@ -154,6 +171,7 @@ function Get-SecretLeakPatterns {
         [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!\[redacted\])(?:'[^']+'|`"[^`"]+`"|\S+)"; validate = $null },
         [pscustomobject]@{ name = "jwk_private_member"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:JwkPrivateMemberPattern; validate = $null },
         [pscustomobject]@{ name = "plaintext_keybag_object"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:PlaintextKeybagPattern; validate = $null },
+        [pscustomobject]@{ name = "sql_private_material_column"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:SqlPrivateMaterialColumnPattern; validate = $null },
         [pscustomobject]@{ name = "json_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)`"($script:JsonSecretFieldNames)`"\s*:\s*`"(?!\[redacted\])[^`"]+`""; validate = $null },
         [pscustomobject]@{ name = "query_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|[?&\s])($script:QuerySecretFieldNames)=(?!\[redacted\]|%5[Bb]redacted%5[Dd])[^&\s]+"; validate = $null },
         [pscustomobject]@{ name = "bip39_mnemonic_sequence"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:Bip39SequencePattern; validate = { param($line) Test-Bip39MnemonicCandidate -Line $line } },

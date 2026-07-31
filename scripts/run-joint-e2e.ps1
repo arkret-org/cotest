@@ -1064,6 +1064,42 @@ function Stop-EphemeralPostgres {
     & docker rm -f $ContainerName 2>$null | Out-Null
 }
 
+# Dump the ephemeral database so the secret scan can read the durable protocol
+# store, not only the logs.
+#
+# `--column-inserts` because the scan is line-oriented and this form puts one
+# row per line with its column list attached. Note that it does NOT produce
+# `column = value` adjacency -- the name is in the column list and the value is
+# in `VALUES (...)` -- so the field-name detectors match nothing here. That is
+# what `sql_private_material_column` exists for: it matches the column list and
+# flags the whole statement.
+#
+# A dump failure is reported and skipped rather than failing the run: this is
+# additional scan coverage, and the run's own verdict must not hinge on whether
+# `pg_dump` was reachable. The scan still fails closed on everything it did read.
+function Export-EphemeralPostgresDump {
+    param(
+        [Parameter(Mandatory = $true)][string]$ContainerName,
+        [Parameter(Mandatory = $true)][string]$OutputPath
+    )
+
+    $parent = Split-Path -Parent $OutputPath
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $dump = Invoke-NativeCapture -FilePath "docker" -Arguments @(
+        "exec", $ContainerName,
+        "pg_dump", "--column-inserts", "--no-owner", "--no-privileges",
+        "-U", "arkret", "-d", "arkret"
+    )
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "pg_dump of $ContainerName failed; the durable store is not covered by this run's secret scan"
+        return $null
+    }
+    $dump -join [Environment]::NewLine | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+    return $OutputPath
+}
+
 function New-CoauthJointConfig {
     param(
         [Parameter(Mandatory = $true)][string]$CoauthBinary,
@@ -2098,6 +2134,10 @@ if ($StartMockChallengeProvider) {
 $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
 $ephemeralPostgres = $null
+# Durable protocol stores exported for the secret scan. Kept apart from the log
+# roots because the verdict differs by artifact class: signed authorization
+# evidence is expected here, recovery private material never is.
+$storeDumpDir = Join-Path $jointDir "stores"
 $exitCode = 1
 $startedAt = Get-Date
 $generatedSolandCommand = $false
@@ -3412,6 +3452,18 @@ finally {
             Stop-ManagedCommand -Service $managedServices[$index]
         }
         if ($ephemeralPostgres) {
+            # Dump before teardown: the durable protocol store is the one
+            # artifact the secret scan cannot reconstruct afterwards, and it is
+            # where a recovery-material leak would be most damaging and least
+            # visible. Scanned as `durable_protocol_store`, so the signed
+            # evidence the spec requires the server to persist does not drown
+            # the finding.
+            $postgresDump = Export-EphemeralPostgresDump `
+                -ContainerName $ephemeralPostgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir "coauth-postgres.sql")
+            if ($postgresDump) {
+                Write-Host "postgres dump: $postgresDump"
+            }
             Stop-EphemeralPostgres -ContainerName $ephemeralPostgres.ContainerName
         }
     }
@@ -3939,6 +3991,17 @@ $secretScanRootDescriptors = @(
         [pscustomobject]@{ path = $_; artifact_class = "log_or_telemetry" }
     }
 )
+# The exported database is a durable protocol store, not telemetry: the spec
+# requires the server to persist signed authorization evidence there, so
+# `credential_exposure` findings are expected and allowed. Recovery private
+# material still fails, and the private-material detectors fire independently of
+# the credential ones, so allowing the former cannot mask the latter.
+if (Test-Path -LiteralPath $storeDumpDir) {
+    $secretScanRootDescriptors += [pscustomobject]@{
+        path           = $storeDumpDir
+        artifact_class = "durable_protocol_store"
+    }
+}
 $secretLeaks = @(Find-SecretLeaks -ScanRoots $secretScanRootDescriptors)
 $secretScanCounts = Get-SecretScanSummary -Leaks $secretLeaks
 # Playwright writes the full received object into stdout and error-context.md
@@ -3947,8 +4010,15 @@ $secretScanCounts = Get-SecretScanSummary -Leaks $secretLeaks
 # file, line, pattern and category, then redact the artifacts themselves so the
 # retained copies carry no plaintext.
 $secretRedaction = Protect-SecretBearingArtifacts -Leaks $secretLeaks
+# Count from the descriptors, not from the log-root list: the store dump is a
+# descriptor-only root, and a `scanned_files` that silently omits it would
+# understate the coverage the report claims.
 $secretScanFileCount = 0
-foreach ($root in $secretScanRoots) {
+foreach ($descriptor in $secretScanRootDescriptors) {
+    $root = $descriptor.path
+    if (-not (Test-Path -LiteralPath $root)) {
+        continue
+    }
     if ((Get-Item -LiteralPath $root).PSIsContainer) {
         $secretScanFileCount += @(Get-ChildItem -LiteralPath $root -Recurse -File).Count
     } else {
