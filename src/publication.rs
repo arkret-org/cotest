@@ -43,14 +43,14 @@ fn harness_authority_set(id: &str) -> AuthoritySetRef {
 }
 
 fn issuer_proof(
-    verification_method: &str,
+    verification_method: DidUrl,
     payload_digest: Hash,
     created_at: chrono::DateTime<Utc>,
 ) -> PayloadProof {
     PayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
-        verification_method: verification_method.to_owned(),
+        verification_method,
         payload_digest,
         created_at,
         domain: None,
@@ -79,11 +79,13 @@ fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalR
         authority_set_ref: authority_set_ref.clone(),
         signature: PayloadSignature {
             alg: "EdDSA".to_owned(),
-            verification_method: "did:webvh:z6mkfixture:authority.example#key-1".to_owned(),
+            verification_method: DidUrl::new("did:webvh:z6mkfixture:authority.example#key-1")
+                .map_err(anyhow::Error::msg)?,
             payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
                 .context("static placeholder member receipt digest is valid")?,
             created_at: received_at,
             jws: "a..b".to_owned(),
+            extra: Default::default(),
         },
     };
     member_receipt.signature.payload_digest = member_receipt
@@ -175,7 +177,7 @@ pub fn authorization_lease_for(
         .lease_digest()
         .context("harness lease is canonicalizable")?;
     lease.proofs = vec![issuer_proof(
-        "did:webvh:z6mkfixture:authority.example#key-1",
+        DidUrl::new("did:webvh:z6mkfixture:authority.example#key-1").map_err(anyhow::Error::msg)?,
         digest,
         issued_at,
     )];
@@ -216,7 +218,7 @@ pub fn ingress_receipt_for(event: &Event, lease: &AuthorizationLease) -> Result<
         .receipt_digest()
         .context("harness receipt is canonicalizable")?;
     receipt.proofs = vec![issuer_proof(
-        "did:webvh:z6mkfixture:ingress.example#key-1",
+        DidUrl::new("did:webvh:z6mkfixture:ingress.example#key-1").map_err(anyhow::Error::msg)?,
         digest,
         received_at,
     )];

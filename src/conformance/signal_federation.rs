@@ -44,7 +44,9 @@ fn envelope() -> Result<SignalEnvelope> {
         },
         proof: SignalProof {
             kind: "DataIntegrityProof".to_owned(),
-            verification_method: "did:webvh:z6mkfixture:alice.example#device-key".to_owned(),
+            verification_method: crate::fixture_did_url(
+                "did:webvh:z6mkfixture:alice.example#device-key",
+            ),
             alg: "EdDSA".to_owned(),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: sent_at,

@@ -651,7 +651,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
                 .with_timezone(&chrono::Utc),
             expires_at: None,
             proof: MemberIdentityProof {
-                verification_method: "did:web:alice.acme.example#key-1".to_owned(),
+                verification_method: cotest::fixture_did_url("did:web:alice.acme.example#key-1"),
                 signature_algorithm: MemberIdentitySignatureAlgorithm::Ed25519,
                 payload_digest: Hash::new(
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -791,7 +791,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         proofs: vec![Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
-            verification_method: "did:web:principal.acme.example#key-1".to_owned(),
+            verification_method: cotest::fixture_did_url("did:web:principal.acme.example#key-1"),
             event_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",
             )?,

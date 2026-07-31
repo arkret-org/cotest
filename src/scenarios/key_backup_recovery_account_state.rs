@@ -155,7 +155,8 @@ fn unsigned_recovery_policy(
         not_before: None,
         expires_at: Some(ts("2026-06-30T00:00:00.000Z")?),
         auth_data: RecoveryPolicyAuthData {
-            verification_method: verification_method.to_owned(),
+            verification_method: DidUrl::new(verification_method.to_owned())
+                .map_err(anyhow::Error::msg)?,
             signature_algorithm: "EdDSA".to_owned(),
             signature: "c2lnbmF0dXJl".to_owned(),
             signed_fields: [

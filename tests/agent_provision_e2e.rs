@@ -121,8 +121,14 @@ fn base64_url(value: impl Into<String>) -> Result<Base64UrlString> {
     Base64UrlString::new(value).map_err(anyhow::Error::msg)
 }
 
-fn controller_verification_method() -> String {
-    format!("{ALICE_DID}#cotest")
+fn controller_verification_method() -> DidUrl {
+    DidUrl::new(format!("{ALICE_DID}#cotest")).expect("controller DID URL is well-formed")
+}
+
+/// `{ALICE_DID}#{ALICE_DEVICE}` — the device DID URL every controller-signed
+/// fixture Event in this file signs under.
+fn alice_device_verification_method() -> DidUrl {
+    DidUrl::new(format!("{ALICE_DID}#{ALICE_DEVICE}")).expect("Alice device DID URL is well-formed")
 }
 
 fn test_agent_requested_scope() -> arkret::AgentKeyScope {
@@ -785,7 +791,8 @@ async fn run_security_rotation_restart_matrix(
         vec![secret_pointer.event_id.clone()],
     )?;
     let proposal_key = SigningKey::from_bytes(&[25_u8; 32]);
-    let proposal_verification_method = format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}");
+    let proposal_verification_method =
+        did_url(format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"))?;
     let proposal_notary = arkret_wire::notary::NotaryValue::single_did(principal.clone());
     let revoke_submission = prepare_initial_submission_for_notary(
         &sdk,
@@ -1002,7 +1009,8 @@ async fn run_security_rotation_restart_matrix(
         attestation_digest: arkret::Hash::new(canonical::canonical_sha256(&artifact)?)?,
         artifact,
         auth_data: ClientStepAttestationAuthData {
-            verification_method: format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"),
+            verification_method: DidUrl::new(format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"))
+                .map_err(anyhow::Error::msg)?,
             alg: "EdDSA".to_owned(),
             signature: String::new(),
             signed_fields: CLIENT_STEP_ATTESTATION_SIGNED_FIELDS
@@ -1630,7 +1638,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let enrollment_authority_public =
         ed25519_pubkey_to_did_key_multibase(enrollment_authority_key.verifying_key().as_bytes());
     let enrollment_authority_verification_method =
-        format!("{ALICE_DID}#device-enrollment-authority");
+        did_url(format!("{ALICE_DID}#device-enrollment-authority"))?;
     let next_root = SigningKey::from_bytes(&[33_u8; 32]);
     let next_root_public =
         ed25519_pubkey_to_did_key_multibase(next_root.verifying_key().as_bytes());
@@ -1678,7 +1686,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let control_timestamp_hex = format!("{:012x}", control_created_at.timestamp_millis());
     let root_public_key = ed25519_pubkey_to_did_key_multibase(root_key.verifying_key().as_bytes());
     let root_did = Did::new(format!("did:key:{root_public_key}"))?;
-    let root_verification_method = prepared_inception.root_verification_method.clone();
+    let root_verification_method = did_url(prepared_inception.root_verification_method.clone())?;
     let root_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [32_u8; 32],
         root_did,
@@ -1787,7 +1795,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let seal_signer = arkret_signatures::Ed25519PayloadSigner::new(
         device_key.clone(),
         principal_id.clone(),
-        format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        alice_device_verification_method(),
     );
     let controller_seal = arkret_bootstrap::build_self_principal_bootstrap_seal(
         &bootstrap_create,
@@ -1829,14 +1837,14 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let mut cross_signing = CrossSigningPublish {
         principal_id: principal_id.clone(),
         trust_domain: trust_domain.clone(),
-        principal_signing_key: key_record(psk_kid.clone(), &psk),
+        principal_signing_key: key_record(psk_kid.as_str().to_owned(), &psk),
         self_signing_key: SubordinateSignedKey {
             kid: ssk_record.kid,
             alg: ssk_record.alg,
             public_key: ssk_record.public_key,
             key_format: ssk_record.key_format,
             binding: SubordinateSignedKeyBinding {
-                verification_method: non_empty(psk_kid.clone())?,
+                verification_method: psk_kid.clone(),
                 alg: non_empty("EdDSA")?,
                 signature: non_empty("pending")?,
             },
@@ -1847,7 +1855,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             public_key: usk_record.public_key,
             key_format: usk_record.key_format,
             binding: SubordinateSignedKeyBinding {
-                verification_method: non_empty(psk_kid)?,
+                verification_method: psk_kid,
                 alg: non_empty("EdDSA")?,
                 signature: non_empty("pending")?,
             },
@@ -1997,7 +2005,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         not_before: None,
         expires_at: Some(issued_at + TimeDelta::days(365)),
         auth_data: RecoveryPolicyAuthData {
-            verification_method: format!("{ALICE_DID}#{ALICE_DEVICE}"),
+            verification_method: alice_device_verification_method(),
             signature_algorithm: "Ed25519".to_owned(),
             signature: "pending".to_owned(),
             signed_fields: signed_fields.clone(),
@@ -2046,7 +2054,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     arkret::signatures::sign_event(
         &mut policy_event,
         &seal_signer,
-        &format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        &alice_device_verification_method(),
         arkret::signatures::SignEventOptions::new().with_created_at(policy_created_at),
     )?;
     let policy_submission = prepare_controller_initial_submission(
@@ -2109,7 +2117,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     arkret::signatures::sign_event(
         &mut cross_signing_event,
         &seal_signer,
-        &format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        &alice_device_verification_method(),
         arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
     )?;
     let cross_signing_submission = prepare_controller_initial_submission(
@@ -2142,7 +2150,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     arkret::signatures::sign_event(
         &mut device_authorize_event,
         &seal_signer,
-        &format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        &alice_device_verification_method(),
         arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
     )?;
     let device_authorize_submission = prepare_controller_initial_submission(
@@ -2205,7 +2213,7 @@ async fn live_cross_signing_recovery_create_request(
     let device_public_key =
         ed25519_pubkey_to_did_key_multibase(device_key.verifying_key().as_bytes());
     let ssk_key = SigningKey::from_bytes(&[22_u8; 32]);
-    let ssk_verification_method = format!("{ALICE_DID}#cotest-ssk");
+    let ssk_verification_method = did_url(format!("{ALICE_DID}#cotest-ssk"))?;
     let algorithms = TEST_DEVICE_ALGORITHMS
         .into_iter()
         .map(non_empty)
@@ -2232,7 +2240,7 @@ async fn live_cross_signing_recovery_create_request(
         device_signature: None,
         proof: None,
         cross_signing_binding: Some(DeviceCrossSigningBinding {
-            verification_method: did_url(ssk_verification_method.clone())?,
+            verification_method: ssk_verification_method.clone(),
             alg: non_empty("EdDSA")?,
             ssk_generation: std::num::NonZeroU64::new(1).unwrap(),
             signature: Base64UrlString::new(
@@ -2307,7 +2315,7 @@ async fn live_cross_signing_recovery_create_request(
     let recovery_signer = inkson::event_signer::build_ed25519_signer_with_verification_method(
         [22_u8; 32],
         ALICE_DID,
-        ssk_verification_method,
+        ssk_verification_method.as_str(),
     );
     let authorize_submission =
         inkson::fresh_device_recovery::author_recovery_publication_submission(
@@ -2812,7 +2820,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
         let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
             [24_u8; 32],
             Did::new(ALICE_DID.to_owned())?,
-            format!("{ALICE_DID}#{ALICE_DEVICE}"),
+            alice_device_verification_method(),
         );
         let mut hlc =
             arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
@@ -2908,7 +2916,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
         let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
             [24_u8; 32],
             Did::new(ALICE_DID.to_owned())?,
-            format!("{ALICE_DID}#{ALICE_DEVICE}"),
+            alice_device_verification_method(),
         );
         let mut hlc =
             arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
@@ -3214,7 +3222,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         &device_key,
         &canonical::canonical_json_bytes(&unsigned_active_series)?,
     ));
-    let active_series_verification_method = format!("{ALICE_DID}#{ALICE_DEVICE}");
+    let active_series_verification_method = alice_device_verification_method();
     let mut active_series_event =
         cotest::harness::event_envelope_with_signing_seed_and_verification_method(
             ALICE_DID,
@@ -3259,7 +3267,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     let seal_signer = arkret_signatures::Ed25519PayloadSigner::new(
         SigningKey::from_bytes(&[24_u8; 32]),
         Did::new(ALICE_DID.to_owned())?,
-        format!("{ALICE_DID}#{ALICE_DEVICE}"),
+        alice_device_verification_method(),
     );
     let mut seal_hlc = arkret::HlcGenerator::new(
         controller_realm_id.as_str(),
@@ -3423,7 +3431,7 @@ async fn provision_agent(
         .get(&server.url("/"))
         .cloned()
         .ok_or_else(|| anyhow!("controller Realm Seal basis is missing"))?;
-    let device_verification_method = format!("{ALICE_DID}#{ALICE_DEVICE}");
+    let device_verification_method = alice_device_verification_method();
     let device_event_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [24_u8; 32],
         controller_id.clone(),
@@ -3729,7 +3737,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     token: &str,
     provisioned: &P,
     fragment: &str,
-    controller_vm: &str,
+    controller_vm: &DidUrl,
     controller_signing_seed: [u8; 32],
 ) -> Result<arkret::AgentKeyPairRequestBody> {
     let agent_did = provisioned.agent_id().to_string();
@@ -3776,7 +3784,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         issued_at,
         Some(expires_at),
         controller_id.clone(),
-        arkret::DidUrl::new(controller_vm.to_owned()).map_err(|reason| anyhow!(reason))?,
+        controller_vm.clone(),
         &SigningKey::from_bytes(&controller_signing_seed),
     )
     .map_err(|reason| anyhow!(reason.as_str()))?;
@@ -3822,7 +3830,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     let controller_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         controller_signing_seed,
         controller_id.clone(),
-        controller_vm,
+        controller_vm.clone(),
     );
     let actor_frontier = managed_agent_actor_frontier(
         server,
@@ -3909,7 +3917,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         proofs: vec![arkret::Proof {
             kind: "detached_jws".to_owned(),
             alg: "EdDSA".to_owned(),
-            verification_method: controller_vm.to_owned(),
+            verification_method: controller_vm.clone(),
             event_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: disclosure_issued_at,
             domain: None,
@@ -3971,7 +3979,7 @@ async fn prepare_controller_initial_submission(
     sdk: &SdkClient,
     event: &arkret::Event,
     signing_key: &SigningKey,
-    verification_method: &str,
+    verification_method: &DidUrl,
 ) -> Result<arkret_wire::EventInitialSubmission> {
     let notary = arkret_wire::notary::NotaryValue::single_did(event.actor_id.clone());
     prepare_initial_submission_for_notary(sdk, event, signing_key, verification_method, &notary)
@@ -4127,7 +4135,7 @@ async fn prepare_initial_submission_for_notary(
     sdk: &SdkClient,
     event: &arkret::Event,
     signing_key: &SigningKey,
-    verification_method: &str,
+    verification_method: &DidUrl,
     notary: &arkret_wire::notary::NotaryValue,
 ) -> Result<arkret_wire::EventInitialSubmission> {
     let request = arkret_wire::AuthorizationLeaseIssueRequest {
@@ -4159,7 +4167,8 @@ async fn prepare_initial_submission_for_notary(
         authority_set_ref: authority_set_ref.clone(),
         signature: arkret_wire::PayloadSignature {
             alg: "EdDSA".to_owned(),
-            verification_method: verification_method.to_owned(),
+            verification_method: verification_method.clone(),
+            extra: Default::default(),
             payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: received_at,
             jws: String::new(),

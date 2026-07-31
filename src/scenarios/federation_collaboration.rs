@@ -1230,7 +1230,8 @@ fn signed_federation_event(
 }
 
 fn sign_federation_event(event: &mut Event) -> Result<()> {
-    let verification_method = format!("{}#cotest-principal-signing-key", event.actor_id);
+    let verification_method =
+        crate::fixture_did_url(format!("{}#cotest-principal-signing-key", event.actor_id));
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         test_principal_signing_key().to_bytes(),
         event.actor_id.clone(),
@@ -1252,7 +1253,7 @@ fn sign_federation_event_with_device(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<()> {
-    let verification_method = format!("{}#{device_id}", event.actor_id);
+    let verification_method = crate::fixture_did_url(format!("{}#{device_id}", event.actor_id));
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         device_signing_key.to_bytes(),
         event.actor_id.clone(),
@@ -1306,15 +1307,17 @@ async fn bootstrap_test_device_authorization(
     let root_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
     let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
+    let root_verification_method =
+        crate::fixture_did_url(prepared.root_verification_method.clone());
     let root_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         root_seed,
         root_did,
-        prepared.root_verification_method.clone(),
+        root_verification_method.clone(),
     );
     arkret::signatures::sign_event(
         &mut create,
         &root_signer,
-        &prepared.root_verification_method,
+        &root_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
 
@@ -1363,6 +1366,7 @@ async fn bootstrap_test_device_authorization(
     authorize.authorization_ref = Some(enrollment_method.clone());
     let enrollment_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
+    let enrollment_method = crate::fixture_did_url(enrollment_method);
     let enrollment_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         enrollment_seed,
         principal.clone(),
@@ -1438,7 +1442,7 @@ async fn bootstrap_test_device_authorization(
     Ok(arkret_wire::FederatedDeviceSigningKeyEvidence {
         actor_id: principal,
         device_id: DeviceId::new(device_id.to_owned())?,
-        verification_method: format!("{actor}#{device_id}"),
+        verification_method: crate::fixture_did_url(format!("{actor}#{device_id}")),
         device_signing_key: arkret_wire::DidKey::new(format!("did:key:{device_public_key}"))
             .map_err(anyhow::Error::msg)?,
         authorization_accepted_at: chrono::Utc::now(),
@@ -1523,7 +1527,7 @@ async fn claim_test_keypackage(
         pair_key: None,
         last_resort_allowed: Some(false),
         requester_authorization: PeerKeyPackageRequesterAuthorization {
-            verification_method: NonEmptyString::new(verification_method.clone())
+            verification_method: arkret_wire::DidUrl::new(verification_method.clone())
                 .map_err(anyhow::Error::msg)?,
             requester_device_id: Some(requester_evidence.device_id.clone()),
             ssk_generation: None,

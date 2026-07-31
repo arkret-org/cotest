@@ -2103,6 +2103,18 @@ if ($StartMockWitness) {
         $mockWitnessQuorumDids += $extraDid
     }
 }
+# DID-P1-C02 — Prometheus listeners for the two services that export the
+# DID-boundary counters (soland_/teabay_did_resolve_total{source="network"} and
+# *_signature_verify_total). Bound to known free ports here and exported to the
+# tests as COTEST_SOLAND_METRICS_URL / COTEST_TEABAY_METRICS_URL, the same way
+# -StartMockDidHost exports COTEST_MOCK_DID_HOST_BASE_URL. coauth / inkson /
+# bridges expose no metrics endpoint, so they have no counterpart here.
+$solandMetricsPort = $null
+$solandBetaMetricsPort = $null
+$teabayMetricsPort = $null
+$solandMetricsBaseUrl = $null
+$teabayMetricsBaseUrl = $null
+
 # DID-P1-C01 — counting DID document authority. Started after the witness so
 # it can be handed the witness base URL for POST /control/attest.
 $mockDidHostPort = $null
@@ -2720,12 +2732,19 @@ requires_openai_auth = false
         $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $workspaceRoot
         $teabayDb = if ($TeabayDatabaseUrl) { $TeabayDatabaseUrl } else { $env:DATABASE_URL }
         $teabayConfigPath = Join-Path $jointDir "teabay.env"
+        # DID-P1-C02 — teabay is launched with --no-env-overrides, so the
+        # metrics bind has to travel in the config file rather than the ambient
+        # environment. Without an explicit port it would fall back to the fixed
+        # 127.0.0.1:9095 and collide with a developer's running dev stack.
+        $teabayMetricsPort = Get-FreeTcpPort
+        $teabayMetricsBaseUrl = "http://127.0.0.1:$teabayMetricsPort"
         Write-DotEnvFile -Path $teabayConfigPath -Values ([ordered]@{
                 DATABASE_URL = $teabayDb
                 TEABAY_PUBLIC_BASE_URL = $TeabayBaseUrl
                 TEABAY_SERVICE_ID = $TeabayServiceId
                 TEABAY_DEVELOPMENT_MODE = "true"
                 TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED = "true"
+                TEABAY_METRICS_BIND = "127.0.0.1:$teabayMetricsPort"
             })
         $teabayCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
             (Quote-PsLiteral $teabayBinary),
@@ -2916,6 +2935,10 @@ requires_openai_auth = false
         $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $workspaceRoot
         $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
+        # DID-P1-C02 — process runtime binds the metrics listener on loopback,
+        # so the tests can scrape it. The docker runtime below only publishes
+        # the HTTP port, so no metrics URL is exported for that mode.
+        $solandMetricsBaseUrl = "http://127.0.0.1:$solandMetricsPort"
         $SolandCommand = Build-SolandCommand `
             -BinaryPath $solandBinary `
             -ConfigPath (Join-Path $jointDir "soland.env") `
@@ -3200,6 +3223,21 @@ requires_openai_auth = false
     } else {
         Remove-Item Env:COTEST_TEABAY_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_TEABAY_SERVICE_ID -ErrorAction SilentlyContinue
+    }
+    # DID-P1-C02 — the two DID-boundary counter endpoints. Only exported when
+    # this run actually owns the listener: an unset variable makes the metrics
+    # helpers report "not part of this run" instead of silently scraping some
+    # other process's counters (the default binds are the fixed 9090 / 9095,
+    # which a developer's dev stack is very likely already holding).
+    if ($solandMetricsBaseUrl) {
+        $env:COTEST_SOLAND_METRICS_URL = $solandMetricsBaseUrl
+    } else {
+        Remove-Item Env:COTEST_SOLAND_METRICS_URL -ErrorAction SilentlyContinue
+    }
+    if ($teabayMetricsBaseUrl) {
+        $env:COTEST_TEABAY_METRICS_URL = $teabayMetricsBaseUrl
+    } else {
+        Remove-Item Env:COTEST_TEABAY_METRICS_URL -ErrorAction SilentlyContinue
     }
     if ($StartSavfox) {
         $env:COTEST_SAVFOX_BASE_URL = $SavfoxBaseUrl.TrimEnd("/")
@@ -4155,6 +4193,10 @@ $summary = [pscustomobject]@{
     mock_did_host_base_url = $mockDidHostBaseUrl
     mock_did_host_authority = if ($mockDidHostBaseUrl) { $MockDidHostAuthority } else { $null }
     mock_did_host_scid = if ($mockDidHostBaseUrl) { $MockDidHostScid } else { $null }
+    # DID-P1-C02 resolver call-count trace: the endpoints the run's
+    # authority_network_call_count / signature_verify_count were read from.
+    soland_metrics_url = $solandMetricsBaseUrl
+    teabay_metrics_url = $teabayMetricsBaseUrl
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     inkson_base_url = $InksonBaseUrl
@@ -4299,6 +4341,12 @@ if ($mockWitnessBaseUrl) {
 }
 if ($mockDidHostBaseUrl) {
     Write-Host "  mock-did-host: $mockDidHostBaseUrl ($MockDidHostAuthority, scid=$MockDidHostScid)"
+}
+if ($solandMetricsBaseUrl) {
+    Write-Host "  soland metrics: $solandMetricsBaseUrl/metrics"
+}
+if ($teabayMetricsBaseUrl) {
+    Write-Host "  teabay metrics: $teabayMetricsBaseUrl/metrics"
 }
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"

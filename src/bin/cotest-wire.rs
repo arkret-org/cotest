@@ -24,7 +24,7 @@ struct CanonicalInput {
 #[derive(Debug, Deserialize)]
 struct EventProofInput {
     actor_did: String,
-    verification_method: String,
+    verification_method: arkret_wire::DidUrl,
     created_at: String,
     event: Value,
     signing_seed_b64url: Option<String>,
@@ -33,7 +33,7 @@ struct EventProofInput {
 #[derive(Debug, Deserialize)]
 struct MimiConsentProofInput {
     request: Value,
-    verification_method: String,
+    verification_method: arkret_wire::DidUrl,
     created_at: String,
     domain: String,
     audience: String,

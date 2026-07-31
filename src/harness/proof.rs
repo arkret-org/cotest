@@ -53,11 +53,7 @@ fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
 /// transcript using the SDK's deterministic development identity.
 pub fn refresh_event_proof(event: &mut Value) -> Result<()> {
     let label = event_fixture_label(event);
-    let verification_method = event
-        .pointer("/proofs/0/verification_method")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?
-        .to_owned();
+    let verification_method = event_proof_verification_method(event, &label)?;
     let signer = event
         .get("executed_by")
         .and_then(Value::as_str)
@@ -78,11 +74,7 @@ pub fn refresh_event_proof_with_signing_seed(
     signing_seed: [u8; 32],
 ) -> Result<()> {
     let label = event_fixture_label(event);
-    let verification_method = event
-        .pointer("/proofs/0/verification_method")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?
-        .to_owned();
+    let verification_method = event_proof_verification_method(event, &label)?;
     let mut typed: arkret_wire::Event =
         serde_json::from_value(event_value_with_parseable_proof_digests(event))
             .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
@@ -107,6 +99,23 @@ pub fn refresh_event_proof_with_signing_seed(
     *event = serde_json::to_value(typed)
         .with_context(|| format!("SDK Event fixture {label} failed to serialize"))?;
     Ok(())
+}
+
+/// `proofs[0].verification_method` as the SDK's `DidUrl`.
+///
+/// A fixture carrying a bare DID here fails loudly at this boundary rather
+/// than being widened into the wire type: `zh/identity/did-usage-and-verification.md`
+/// §2.2 requires a `#fragment`, so a bare value is a fixture bug.
+fn event_proof_verification_method(event: &Value, label: &str) -> Result<arkret_wire::DidUrl> {
+    let raw = event
+        .pointer("/proofs/0/verification_method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?;
+    arkret_wire::DidUrl::new(raw).map_err(|error| {
+        anyhow!(
+            "Event fixture {label} proofs[0].verification_method {raw:?} is not a DID URL: {error}"
+        )
+    })
 }
 
 fn event_fixture_label(event: &Value) -> String {
@@ -144,9 +153,12 @@ pub fn attach_signal_proof(
     let binding_bytes = envelope
         .proof_binding_bytes()
         .expect("signal proof binding is canonicalizable");
+    // `Ed25519DetachedJwsSigner` is a low-level primitive that still takes
+    // `impl Into<String>`; `as_str()` feeds it the already-validated `DidUrl`
+    // without re-widening the envelope field.
     let signer = arkret_signatures::proof::Ed25519DetachedJwsSigner::new(
         signing_key.clone(),
-        envelope.proof.verification_method.clone(),
+        envelope.proof.verification_method.as_str(),
     );
     envelope.proof.jws = signer.sign_detached_jws(&binding_bytes);
 }

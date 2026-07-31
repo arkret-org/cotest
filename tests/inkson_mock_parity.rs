@@ -847,7 +847,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
         realm_id,
         payload,
         MOCK_PARITY_ALICE_SIGNING_SEED,
-        &format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did),
+        &cotest::fixture_did_url(format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did)),
     )?;
     Ok(json!({"events": events}))
 }

@@ -13,7 +13,7 @@ use arkret_models_collaboration::http_bodies::{
     EventsSubmitBatchRequestBody, EventsSubmitRequestBody,
 };
 use arkret_signatures::{Ed25519PayloadSigner, SignEventOptions, sign_event};
-use arkret_wire::{Event, EventRef};
+use arkret_wire::{DidUrl, Event, EventRef};
 use cotest::harness::{ArkretServer, dev_login, expect_api_error, expect_json};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
@@ -210,14 +210,14 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
 struct DidKeyAuthority {
     seed: [u8; 32],
     did: String,
-    verification_method: String,
+    verification_method: DidUrl,
 }
 
 fn did_key_authority(seed: [u8; 32]) -> DidKeyAuthority {
     let signing = SigningKey::from_bytes(&seed);
     let multibase = multibase_public_key(&signing);
     let did = format!("did:key:{multibase}");
-    let verification_method = format!("{did}#{multibase}");
+    let verification_method = cotest::fixture_did_url(format!("{did}#{multibase}"));
     DidKeyAuthority {
         seed,
         did,
@@ -303,15 +303,17 @@ fn principal_bootstrap_request(
         &cotest::publication::project_cells,
     )?;
     let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
+    let root_verification_method =
+        cotest::fixture_did_url(prepared.root_verification_method.clone());
     let root_signer = Ed25519PayloadSigner::from_did_key_seed(
         [32_u8; 32],
         root_did,
-        prepared.root_verification_method.clone(),
+        root_verification_method.clone(),
     );
     sign_event(
         &mut create,
         &root_signer,
-        &prepared.root_verification_method,
+        &root_verification_method,
         SignEventOptions::new().with_created_at(created_at),
     )?;
 

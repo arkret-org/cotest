@@ -15,7 +15,7 @@ use arkret_models_collaboration::governance::membership_invite::{
     InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
 };
 use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
-use arkret_wire::ScopeRef;
+use arkret_wire::{DidUrl, ScopeRef};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -27,7 +27,7 @@ use super::{
     NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
 };
 
-type RegisteredEventSigner = ([u8; 32], String);
+type RegisteredEventSigner = ([u8; 32], DidUrl);
 
 static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, RegisteredEventSigner>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -37,20 +37,23 @@ pub fn register_event_signing_identity(
     signing_seed: [u8; 32],
     verification_method: impl Into<String>,
 ) {
+    let verification_method = DidUrl::new(verification_method)
+        .expect("registered Event signer verification method is a DID URL");
     REGISTERED_EVENT_SIGNERS
         .lock()
         .expect("registered Event signer lock")
-        .insert(actor.to_owned(), (signing_seed, verification_method.into()));
+        .insert(actor.to_owned(), (signing_seed, verification_method));
 }
 
-fn event_signing_identity(actor: &str) -> ([u8; 32], String) {
+fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
     REGISTERED_EVENT_SIGNERS
         .lock()
         .expect("registered Event signer lock")
         .get(actor)
         .cloned()
         .unwrap_or_else(|| {
-            let verification_method = format!("{actor}#cotest");
+            let verification_method = DidUrl::new(format!("{actor}#cotest"))
+                .expect("cotest default Event signer verification method is a DID URL");
             let signing_seed =
                 arkret::signatures::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
@@ -59,7 +62,7 @@ fn event_signing_identity(actor: &str) -> ([u8; 32], String) {
 
 pub(crate) fn registered_event_signing_seed(
     signer: &str,
-    verification_method: &str,
+    verification_method: &DidUrl,
 ) -> Option<[u8; 32]> {
     REGISTERED_EVENT_SIGNERS
         .lock()
@@ -69,11 +72,12 @@ pub(crate) fn registered_event_signing_seed(
         .map(|(seed, _)| *seed)
 }
 
-fn verification_method_for_actor(actor: &str) -> String {
-    actor.strip_prefix("did:key:").map_or_else(
+fn verification_method_for_actor(actor: &str) -> DidUrl {
+    let value = actor.strip_prefix("did:key:").map_or_else(
         || format!("{actor}#cotest"),
         |multibase| format!("{actor}#{multibase}"),
-    )
+    );
+    DidUrl::new(value).expect("cotest actor verification method is a DID URL")
 }
 
 pub async fn register_account(
@@ -278,7 +282,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     realm_id: &str,
     mut realm_payload: Value,
     signing_seed: [u8; 32],
-    verification_method: &str,
+    verification_method: &DidUrl,
 ) -> Result<Vec<Value>> {
     let services = realm_payload
         .get_mut("object")
@@ -430,7 +434,7 @@ pub async fn submit_event_with_signing_seed(
         payload,
         status,
         signing_seed,
-        &format!("{actor}#cotest"),
+        &crate::fixture_did_url(format!("{actor}#cotest")),
     )
     .await
 }
@@ -445,7 +449,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     payload: Value,
     status: StatusCode,
     signing_seed: [u8; 32],
-    verification_method: &str,
+    verification_method: &DidUrl,
 ) -> Result<Value> {
     let frontier = expect_json(
         server
@@ -529,7 +533,7 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
     kind: &str,
     payload: Value,
     signing_seed: [u8; 32],
-    verification_method: &str,
+    verification_method: &DidUrl,
 ) -> Value {
     event_envelope_with_chain_and_signing_identity(
         actor,
@@ -574,7 +578,7 @@ fn event_envelope_with_chain_and_signing_identity(
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
-    verification_method: &str,
+    verification_method: &DidUrl,
 ) -> Value {
     event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,
@@ -598,7 +602,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
-    verification_method: &str,
+    verification_method: &DidUrl,
     causal_refs: Vec<String>,
 ) -> Value {
     event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
@@ -626,7 +630,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
-    verification_method: &str,
+    verification_method: &DidUrl,
     causal_refs: Vec<String>,
     preconditions: Vec<arkret_wire::cba::Precondition>,
 ) -> Value {

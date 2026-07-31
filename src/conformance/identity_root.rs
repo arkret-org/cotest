@@ -276,7 +276,9 @@ fn validate_bootstrap_helpers() -> Result<()> {
     )?;
     let mut create = with_proof(
         create,
-        "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
+        &crate::fixture_did_url(
+            "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
+        ),
     )?;
     let authority = enrollment_binding()?;
     let payload = DeviceAuthorizePayload {
@@ -314,7 +316,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
     authorize.authorization_ref = Some(authority.authorization_ref.to_string());
     authorize = with_proof(
         authorize,
-        &format!("{}#enrollment", authority.authority_did),
+        &crate::fixture_did_url(format!("{}#enrollment", authority.authority_did)),
     )?;
 
     // The lease bounds the revocation window and is not part of the signed
@@ -482,12 +484,12 @@ fn enrollment_binding() -> Result<DeviceEnrollmentAuthorityBinding> {
     })
 }
 
-fn with_proof(mut event: Event, verification_method: &str) -> Result<Event> {
+fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Result<Event> {
     let digest = Hash::new(event.event_digest()?)?;
     event.proofs = vec![Proof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         alg: "EdDSA".to_owned(),
-        verification_method: verification_method.to_owned(),
+        verification_method: verification_method.clone(),
         event_digest: digest,
         created_at: event.created_at,
         domain: None,

@@ -16,6 +16,7 @@ pub mod collaboration_workflow;
 pub mod consent_revoke_scope_any_cascade;
 pub mod cross_signing_reset_cross_domain;
 pub mod delivery_media;
+pub mod did_boundary_call_counts;
 pub mod did_format_normalization;
 pub mod directory;
 pub mod directory_service;

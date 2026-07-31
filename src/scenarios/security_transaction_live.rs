@@ -293,7 +293,10 @@ fn event_submission(
     let event_digest = Hash::new(event.event_digest()?)?;
     event.proofs.push(arkret_wire::Proof {
         kind: "DataIntegrityProof".to_owned(),
-        verification_method: principal.as_str().to_owned(),
+        // `zh/identity/did-usage-and-verification.md` §2.2: a
+        // `verification_method` is a DID URL, never a bare DID. This fixture
+        // used `principal` itself, which no receiver could resolve to a key.
+        verification_method: crate::fixture_did_url(format!("{principal}#cotest")),
         alg: "EdDSA".to_owned(),
         event_digest,
         created_at: now,

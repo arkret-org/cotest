@@ -19,3 +19,18 @@ pub mod scenarios;
 pub mod transcripts;
 
 pub const HARNESS_NAME: &str = "cotest";
+
+/// A fixture verification method as the SDK's `arkret_wire::DidUrl`.
+///
+/// `zh/identity/did-usage-and-verification.md` §2.2 requires every
+/// `verification_method` to be a DID URL with a `#fragment`; a bare DID is a
+/// fixture bug, not something the type should be widened to accept. Fixture
+/// values are compile-time constants of this harness, so a violation is a
+/// programming error and panics here rather than being threaded through every
+/// builder's error type.
+#[track_caller]
+pub fn fixture_did_url(value: impl Into<String>) -> arkret_wire::DidUrl {
+    let value = value.into();
+    arkret_wire::DidUrl::new(value.clone())
+        .unwrap_or_else(|error| panic!("cotest fixture verification method {value:?}: {error}"))
+}

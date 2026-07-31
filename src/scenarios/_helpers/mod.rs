@@ -12,3 +12,4 @@ pub mod floria_bootstrap;
 pub mod four_service_bootstrap;
 pub mod http;
 pub mod mock_http;
+pub mod service_metrics;

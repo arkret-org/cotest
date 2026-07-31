@@ -51,7 +51,7 @@ async fn submit_adapter_event(
         )?,
         StatusCode::OK,
         TEST_PRINCIPAL_SIGNING_KEY_SEED,
-        &format!("{actor_id}#cotest-principal-signing-key"),
+        &crate::fixture_did_url(format!("{actor_id}#cotest-principal-signing-key")),
     )
     .await?;
     assert_eq!(submit["status"], "accepted");

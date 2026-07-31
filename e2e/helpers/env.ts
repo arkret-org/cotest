@@ -237,6 +237,23 @@ export function mockDidHostScid(): string | undefined {
   return optionalEnv("COTEST_MOCK_DID_HOST_SCID");
 }
 
+// Prometheus `/metrics` listeners for the two services that export the
+// DID-boundary counters (DID-P1-C01). See e2e/helpers/service-metrics.ts.
+// coauth / inkson / bridges expose no metrics endpoint, so they have no
+// counterpart here — a scenario about them cannot be expressed this way.
+export function solandMetricsUrl(): string | undefined {
+  return optionalEnv("COTEST_SOLAND_METRICS_URL")?.replace(/\/$/, "");
+}
+
+export function teabayMetricsUrl(): string | undefined {
+  return optionalEnv("COTEST_TEABAY_METRICS_URL")?.replace(/\/$/, "");
+}
+
+// teabay's public REST base URL (the directory face), when the run includes it.
+export function teabayBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_TEABAY_BASE_URL")?.replace(/\/$/, "");
+}
+
 // The joint run directory for this process. playwright.config.ts always sets
 // COTEST_JOINT_RUN_DIR (orchestrator value or a fresh joint-e2e-adhoc run)
 // before workers spawn, so the fallback here only covers non-Playwright

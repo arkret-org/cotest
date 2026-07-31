@@ -497,7 +497,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     hinted.proofs = vec![PayloadProof {
         kind: "detached_jws".to_owned(),
         alg: "EdDSA".to_owned(),
-        verification_method: "did:web:coauth.acme.example#key-1".to_owned(),
+        verification_method: crate::fixture_did_url("did:web:coauth.acme.example#key-1"),
         payload_digest: Hash::new(
             "sha256:0000000000000000000000000000000000000000000000000000000000000001",
         )?,

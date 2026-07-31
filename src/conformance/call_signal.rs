@@ -337,7 +337,7 @@ fn signed_call_signal_envelope(
         },
         proof: SignalProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-            verification_method: format!("{actor_id}#{device_id}"),
+            verification_method: crate::fixture_did_url(format!("{actor_id}#{device_id}")),
             alg: "EdDSA".to_owned(),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: sent_at(),

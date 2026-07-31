@@ -328,7 +328,7 @@ fn fixture_seal(state_root: Hash, hlc: &str, predecessor_refs: Vec<arkret_wire::
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [24; 32],
         notary_id.clone(),
-        format!("{notary_id}#notary-key"),
+        crate::fixture_did_url(format!("{notary_id}#notary-key")),
     );
     Seal::sign_single(
         RealmId::new("ak:realm:01964137-0000-7000-8000-000000000007").unwrap(),

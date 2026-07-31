@@ -455,7 +455,7 @@ fn kernel_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
     let seal = sample_seal(
         notary_seq,
         delta_byte,
-        "did:webvh:z6mkfixture:notary.example#key-1",
+        &crate::fixture_did_url("did:webvh:z6mkfixture:notary.example#key-1"),
     );
     let bundle = CbaProofBundle {
         target_seal_ref: seal.id.clone(),
@@ -604,8 +604,16 @@ fn kernel_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
     else {
         return error("schema_violation", "notary_fault_evidence_invalid");
     };
-    let seal_a = sample_seal(seq_a, delta_a, &format!("{signer_a}#key-1"));
-    let seal_b = sample_seal(seq_b, delta_b, &format!("{signer_b}#key-1"));
+    let seal_a = sample_seal(
+        seq_a,
+        delta_a,
+        &crate::fixture_did_url(format!("{signer_a}#key-1")),
+    );
+    let seal_b = sample_seal(
+        seq_b,
+        delta_b,
+        &crate::fixture_did_url(format!("{signer_b}#key-1")),
+    );
     let equivocation = signer_a == signer_b
         && seq_a == seq_b
         && seal_a.canonical_bytes_for_id().ok() != seal_b.canonical_bytes_for_id().ok();
@@ -690,7 +698,7 @@ fn lattice_op(
     }
 }
 
-fn sample_seal(notary_seq: u64, delta_byte: u8, verification_method: &str) -> Seal {
+fn sample_seal(notary_seq: u64, delta_byte: u8, verification_method: &DidUrl) -> Seal {
     let sealed_at = Utc
         .with_ymd_and_hms(2026, 7, 28, 0, 0, 0)
         .single()
@@ -714,10 +722,11 @@ fn sample_seal(notary_seq: u64, delta_byte: u8, verification_method: &str) -> Se
         previous_digest_algorithm: None,
         notary_signature: NotarySig::Single(PayloadSignature {
             alg: "EdDSA".to_owned(),
-            verification_method: verification_method.to_owned(),
+            verification_method: verification_method.clone(),
             payload_digest: repeated_hash(0x55),
             created_at: sealed_at,
             jws: "e30..c2ln".to_owned(),
+            extra: Default::default(),
         }),
         sealed_at,
         hlc: Hlc::new("01970e589d21-0000-a13f9c2e").expect("fixed HLC is valid"),

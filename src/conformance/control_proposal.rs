@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_wire::notary::{ForensicAttribution, NotaryValue};
 use arkret_wire::{
     ControlProposalDecision, ControlProposalDecisionPolicy, ControlProposalReceipt,
-    ControlProposalRejectReason, Hash, PayloadSignature, ProposalMemberReceipt, RealmId,
+    ControlProposalRejectReason, DidUrl, Hash, PayloadSignature, ProposalMemberReceipt, RealmId,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -333,10 +333,13 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         authority_set_ref: receipt.authority_set_ref.clone(),
         proofs: vec![PayloadSignature {
             alg: "EdDSA".to_owned(),
-            verification_method: "did:webvh:z6mkfixture:authority-a.example#notary".to_owned(),
+            verification_method: crate::fixture_did_url(
+                "did:webvh:z6mkfixture:authority-a.example#notary",
+            ),
             payload_digest: hash('0'),
             created_at: receipt.received_at,
             jws: "a..b".to_owned(),
+            extra: Default::default(),
         }],
     };
     let digest = decision.decision_digest()?;
@@ -413,6 +416,9 @@ fn member_from_fixture(value: &Value, authority_set_ref: Hash) -> Result<Proposa
 }
 
 fn member(
+    // Fixture-supplied text: validated into a `DidUrl` here, at the boundary,
+    // so a fixture carrying a bare DID fails with an error rather than being
+    // widened into the wire type.
     verification_method: &str,
     received_at: &str,
     decision_due_at: &str,
@@ -429,10 +435,11 @@ fn member(
         authority_set_ref,
         signature: PayloadSignature {
             alg: "EdDSA".to_owned(),
-            verification_method: verification_method.to_owned(),
+            verification_method: DidUrl::new(verification_method).map_err(anyhow::Error::msg)?,
             payload_digest: hash('0'),
             created_at: received_at,
             jws: "a..b".to_owned(),
+            extra: Default::default(),
         },
     };
     member.signature.payload_digest = member.member_receipt_digest()?;

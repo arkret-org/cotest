@@ -471,6 +471,31 @@ Note that the services under test cannot currently be pointed at this host by
 environment alone — soland/teabay/the SDK derive the DID-document URL from the
 DID string itself (hardcoded `https://` plus an SSRF guard that rejects
 loopback), with no resolver-base-URL override.
+
+Because of that, the joint call-count contract (DID-P1-C02) is read off the
+services' own Prometheus counters instead. `run-joint-e2e.ps1` binds
+`SOLAND_METRICS_BIND` / `TEABAY_METRICS_BIND` to ports it owns and exports
+`COTEST_SOLAND_METRICS_URL` / `COTEST_TEABAY_METRICS_URL` (both also land in
+`summary.json` as the run's resolver call-count trace). Two counts are derived
+from them, and every scenario records both — a zero authority count proves
+nothing unless signatures were actually verified:
+
+| number | series |
+| --- | --- |
+| `authority_network_call_count` | `*_did_resolve_total{source="network"}` |
+| `signature_verify_count` | `*_signature_verify_total` (all labels) |
+
+`source="network"` is incremented only on the branches that issue a real
+outbound request, so `binding_store` / `local_snapshot` / `sdk_cache` /
+`did_key` hits — which is what "reused the accepted binding" means — never
+inflate it. Helpers: `e2e/helpers/service-metrics.ts` and
+`src/scenarios/_helpers/service_metrics.rs`, both offering
+`expectNoAdditionalAuthorityCalls` / `expect_no_additional_authority_calls`.
+Scenarios: `e2e/tests/joint/did-boundary-call-counts.spec.ts` and
+`src/scenarios/did_boundary_call_counts.rs` (the latter also documents which
+matrix rows are deliberately uncovered). Only soland and teabay export these
+counters; coauth, inkson and bridges have no metrics endpoint, so rows that
+belong to them are reported as uncovered rather than approximated.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous
 `artifacts/latest/full/coverage-matrix.json`.

@@ -106,7 +106,7 @@ fn zero_hash() -> Result<Hash> {
 
 fn sample_proof(signature: &str) -> Result<MemberIdentityProof> {
     Ok(MemberIdentityProof {
-        verification_method: "did:web:alice.acme.example#key-1".to_owned(),
+        verification_method: crate::fixture_did_url("did:web:alice.acme.example#key-1"),
         signature_algorithm: MemberIdentitySignatureAlgorithm::Ed25519,
         payload_digest: zero_hash()?,
         signature: signature.to_owned(),

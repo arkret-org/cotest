@@ -279,7 +279,7 @@ fn signed_federation_event(
 }
 
 fn sign_federation_contract_event(event: &mut Event) -> Result<()> {
-    let verification_method = format!("{}#cotest", event.actor_id);
+    let verification_method = crate::fixture_did_url(format!("{}#cotest", event.actor_id));
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         arkret::signatures::development_signing_key_seed(&verification_method),
         event.actor_id.clone(),

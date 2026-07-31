@@ -78,7 +78,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let grant_id = arkret_identifiers::GrantId::new(manage_grant_id.to_owned())?;
     let issued_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
-    let verification_method = format!("{}#cotest", alice.actor);
+    let verification_method =
+        arkret_wire::DidUrl::new(format!("{}#cotest", alice.actor)).map_err(anyhow::Error::msg)?;
     let mut typed_grant =
         arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
             id: grant_id.clone(),

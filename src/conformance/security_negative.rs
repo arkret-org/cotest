@@ -388,7 +388,7 @@ mod tests {
         let mut proof = Proof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             alg: "EdDSA".to_owned(),
-            verification_method: "did:web:alice.example#device".to_owned(),
+            verification_method: crate::fixture_did_url("did:web:alice.example#device"),
             event_digest: Hash::new(sha256_prefixed(&canonical)).unwrap(),
             created_at: Utc.with_ymd_and_hms(2026, 5, 2, 0, 0, 0).unwrap(),
             domain: None,

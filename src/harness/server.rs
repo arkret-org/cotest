@@ -36,6 +36,12 @@ pub struct ArkretServer {
     notary_signing_key_seed: [u8; 32],
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
+    /// `host:port` this soland's Prometheus listener was bound to, when the
+    /// harness owns the bind (DID-P1-C02 reads
+    /// `soland_did_resolve_total{source="network"}` and
+    /// `soland_signature_verify_total` from it). `None` for the docker path,
+    /// which publishes only the HTTP port.
+    metrics_bind: Option<String>,
     _port_reservations: Vec<ReservedPort>,
 }
 
@@ -141,6 +147,7 @@ impl ArkretServer {
     ) -> Result<Self> {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
+        let metrics_bind_for_handle = metrics_bind.clone();
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
         let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
@@ -219,6 +226,7 @@ impl ArkretServer {
             notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
+            metrics_bind: Some(metrics_bind_for_handle),
             _port_reservations: vec![port, metrics_port],
         })
     }
@@ -302,6 +310,7 @@ impl ArkretServer {
             notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
+            metrics_bind: Some(metrics_bind),
             _port_reservations: vec![port, metrics_port],
         })
     }
@@ -404,6 +413,9 @@ impl ArkretServer {
             notary_signing_key_seed,
             blob_root: None,
             log_path,
+            // The container publishes only the HTTP port, so the metrics
+            // listener is unreachable from the host.
+            metrics_bind: None,
             _port_reservations: vec![host_port],
         })
     }
@@ -418,6 +430,33 @@ impl ArkretServer {
 
     pub fn trust_domain(&self) -> &TypedTrustDomainId {
         &self.trust_domain
+    }
+
+    /// `http://host:port` of this soland's Prometheus listener, when the
+    /// harness owns the bind.
+    ///
+    /// `None` means the metrics endpoint is unreachable for this spawn mode
+    /// (docker publishes only the HTTP port). A DID-P1-C02 scenario must skip
+    /// on `None` rather than treat an unreadable counter as a passing zero.
+    pub fn metrics_base_url(&self) -> Option<String> {
+        self.metrics_bind
+            .as_deref()
+            .map(|bind| format!("http://{bind}"))
+    }
+
+    /// Client for this soland's DID-boundary counters
+    /// (`soland_did_resolve_total{source="network"}` →
+    /// `authority_network_call_count`, `soland_signature_verify_total` →
+    /// `signature_verify_count`). `Ok(None)` when the metrics listener is not
+    /// reachable for this spawn mode.
+    pub fn did_boundary_metrics(
+        &self,
+    ) -> Result<Option<crate::scenarios::_helpers::service_metrics::ServiceMetricsClient>> {
+        use crate::scenarios::_helpers::service_metrics::{MeteredService, ServiceMetricsClient};
+        let Some(base_url) = self.metrics_base_url() else {
+            return Ok(None);
+        };
+        ServiceMetricsClient::new(MeteredService::Soland, base_url).map(Some)
     }
 
     pub(crate) fn notary_signing_key_seed(&self) -> &[u8; 32] {

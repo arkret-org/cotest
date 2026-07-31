@@ -48,10 +48,11 @@ fn hash(hex_byte: u8) -> Result<Hash> {
 fn signature() -> PayloadSignature {
     PayloadSignature {
         alg: "EdDSA".to_owned(),
-        verification_method: "did:web:notary.example#k1".to_owned(),
+        verification_method: crate::fixture_did_url("did:web:notary.example#k1"),
         payload_digest: Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap(),
         created_at: chrono::Utc.with_ymd_and_hms(2026, 5, 8, 0, 0, 0).unwrap(),
         jws: "AAAA.BBBB.CCCC".to_owned(),
+        extra: Default::default(),
     }
 }
 
