@@ -77,6 +77,7 @@ mod state_resolution;
 mod sync;
 mod vector_registry_gate;
 mod visibility_policy;
+mod websocket_binding;
 mod wire;
 
 use std::fs;
@@ -327,8 +328,8 @@ pub use scaffold_gate::{
 pub use scalability_limits::run_scalability_limits_fixture_suite;
 pub use schema_validation::run_schema_validation_suite;
 pub use schema_validation_fixture::{
-    SCHEMA_VALIDATION_FIXTURE, SCHEMA_VALIDATION_PROFILE, SchemaValidationCase,
-    SchemaValidationFixture, run_schema_validation_fixture_suite,
+    SCHEMA_VALIDATION_FIXTURE, SchemaValidationCase, SchemaValidationFixture,
+    run_schema_validation_fixture_suite,
 };
 pub use security_closure::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
@@ -381,6 +382,7 @@ pub use visibility_policy::{
     run_history_visibility_joined_prejoin_denied_vector, run_in_place_e2ee_enable_vector,
     run_metadata_floor_downgrade_rejected_vector, run_visibility_policy_fixture_suite,
 };
+pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
