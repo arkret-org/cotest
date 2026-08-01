@@ -13,7 +13,6 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { acceptInviteViaApi } from "../../helpers/api";
 import {
   addRealmMemberApi,
   canonicalTimestamp,
@@ -77,6 +76,11 @@ const APPLICATION_FORM_POLICY = {
   applicant_visibility: "reviewer_only",
 };
 
+const JOIN_POLICY_PROFILE_SCHEMA_REFS = [
+  "ak.schema.realm.v1",
+  "ak.profile.candidate.join_policy.v1",
+];
+
 async function makeUser(request: APIRequestContext, prefix: string) {
   const user = uniqueUser(prefix);
   await ensureRegistered(request, user);
@@ -103,6 +107,7 @@ test.describe("knock + application + cooldown", () => {
 
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6 Knock ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       summary: "knock + application coverage",
       discoverability: "listed",
       default_join_rule: "knock",
@@ -131,10 +136,20 @@ test.describe("knock + application + cooldown", () => {
     const bob = await makeUser(request, "s6a-bob");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6A ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
+    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+      request,
+      alice.token,
+      {
+        ownerDid: alice.user.did,
+        realmId,
+        subjectDid: alice.user.did,
+      },
+    );
     const policyDigest = await writeJoinPolicyApi(
       request,
       alice.token,
@@ -156,7 +171,8 @@ test.describe("knock + application + cooldown", () => {
       },
     );
 
-    // alice (owner ⇒ reviewer) sees the answers.
+    // Realm ownership allows the governance read; the signed review still cites
+    // the explicit capability grant required by join-policy.md §7.3.
     const reviewerView = await listMemberApplicationsApi(
       request,
       alice.token,
@@ -176,7 +192,12 @@ test.describe("knock + application + cooldown", () => {
       alice.user.did,
       bob.user.did,
       realmId,
-      { applicationRef: receiptDigest, decision: "accept", reasonCode: "ok" },
+      {
+        applicationRef: receiptDigest,
+        decision: "accept",
+        reasonCode: "ok",
+        grantId: reviewerGrantId,
+      },
     );
     const afterAccept = await listMemberApplicationsApi(
       request,
@@ -197,10 +218,20 @@ test.describe("knock + application + cooldown", () => {
     const bob = await makeUser(request, "s6b-bob");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6B ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
+    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+      request,
+      alice.token,
+      {
+        ownerDid: alice.user.did,
+        realmId,
+        subjectDid: alice.user.did,
+      },
+    );
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
     const knock = await submitKnockApi(request, bob.token, bob.user.did, realmId);
@@ -220,7 +251,12 @@ test.describe("knock + application + cooldown", () => {
       alice.user.did,
       bob.user.did,
       realmId,
-      { applicationRef: receiptDigest, decision: "accept", reasonCode: "ok" },
+      {
+        applicationRef: receiptDigest,
+        decision: "accept",
+        reasonCode: "ok",
+        grantId: reviewerGrantId,
+      },
     );
 
     // A ref pointing at a non-existent / stale review accept MUST be rejected.
@@ -271,10 +307,20 @@ test.describe("knock + application + cooldown", () => {
     const mallory = await makeUser(request, "s6c-mallory");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6C ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
+    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+      request,
+      alice.token,
+      {
+        ownerDid: alice.user.did,
+        realmId,
+        subjectDid: alice.user.did,
+      },
+    );
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
     await submitKnockApi(request, mallory.token, mallory.user.did, realmId);
@@ -296,6 +342,7 @@ test.describe("knock + application + cooldown", () => {
         decision: "reject",
         reasonCode: "policy_violation",
         reasonText: "Off-topic application",
+        grantId: reviewerGrantId,
       },
     );
 
@@ -321,6 +368,7 @@ test.describe("knock + application + cooldown", () => {
     const bob = await makeUser(request, "s6d-bob");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6D ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
       ownerDid: alice.user.did,
@@ -352,10 +400,20 @@ test.describe("knock + application + cooldown", () => {
     const bob = await makeUser(request, "s6e-bob");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6E ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
+    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+      request,
+      alice.token,
+      {
+        ownerDid: alice.user.did,
+        realmId,
+        subjectDid: alice.user.did,
+      },
+    );
     // application_ttl=PT1H (minimum); submit the application backdated >1h so it
     // is already past TTL when the reviewer signs accept.
     await writeJoinPolicyApi(request, alice.token, realmId, {
@@ -382,7 +440,12 @@ test.describe("knock + application + cooldown", () => {
       alice.user.did,
       bob.user.did,
       realmId,
-      { applicationRef: receiptDigest, decision: "accept", reasonCode: "ok" },
+      {
+        applicationRef: receiptDigest,
+        decision: "accept",
+        reasonCode: "ok",
+        grantId: reviewerGrantId,
+      },
     ).catch((error: unknown) => error);
     expect(String(reviewResp)).toMatch(/ttl_expired|application_ttl|expired/i);
   });
@@ -396,6 +459,7 @@ test.describe("knock + application + cooldown", () => {
     const bob = await makeUser(request, "s6f-bob");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6F ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
       ownerDid: alice.user.did,
@@ -464,17 +528,12 @@ test.describe("knock + application + cooldown", () => {
     const eve = await makeUser(request, "s6g-eve");
     const realmId = await createRealmApi(request, alice.token, {
       title: `S6G ${stamp}`,
+      schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      invitees: [eve.user.did],
       ownerDid: alice.user.did,
     });
-    await acceptInviteViaApi(
-      request,
-      eve.token,
-      eve.user.did,
-      realmId,
-    );
+    await addRealmMemberApi(request, alice.token, realmId, eve.user.did);
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
     await submitKnockApi(request, bob.token, bob.user.did, realmId);

@@ -270,6 +270,7 @@ export async function createRealmApi(
     sync_endpoints?: RealmObject["sync_endpoints"];
     public?: boolean;
     federation_policy?: RealmObject["federation_policy"];
+    schema_refs?: RealmObject["schema_refs"];
     ownerDid?: string;
     owning_organizations?: string[];
     default_join_rule?: RealmObject["default_join_rule"];
@@ -300,7 +301,7 @@ export async function createRealmApi(
     summary: data.summary,
     created_by: ownerDid,
     trust_domain: "ak:trust_domain:soland.local",
-    schema_refs: ["ak.schema.realm.v1"],
+    schema_refs: data.schema_refs ?? ["ak.schema.realm.v1"],
     default_discoverability:
       data.discoverability ?? (data.public ? "public" : "listed"),
     default_join_rule: data.default_join_rule ?? "invite",
@@ -540,8 +541,22 @@ export async function addRealmMemberApi(
   );
 }
 
-// join-policy.md §3 — write the per-Realm `join_policy` component through the
-// canonical generic state payload `ak.realm.policy_bundle.value.join_policy`.
+// join-policy.md §3 — write the per-Realm `join_policy` component as a
+// `ak.realm.policy_bundle` revision.
+//
+// The payload IS the flat closed `realm_policy_bundle_payload`
+// (`required: ["policy_revision"]`, `minProperties: 2`,
+// `additionalProperties: false`) — not a `{value: ...}` state-payload wrapper,
+// and it carries no `realm_id`: the governed Realm is the envelope's.
+//
+// `content_scheme` is deliberately NOT restated. The cell is a `cas_register`,
+// so a revision clears every component it omits, and restating a component
+// this helper never wrote would be inventing a value — `content_scheme` has a
+// one-way ratchet in the reducer, so an invented one risks a downgrade
+// rejection that presents as an unrelated join-policy failure. `writeJoinPolicy`
+// is the only `ak.realm.policy_bundle` producer in this suite (`createRealmApi`
+// writes none), so there is no prior component set to carry forward. A caller
+// that starts writing other components must restate them here.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
   token: string,
@@ -557,15 +572,14 @@ export async function writeJoinPolicyApi(
     realmId,
     opts.server,
   );
+  const policyRevision = nextJoinPolicyRevision(opts.server, realmId);
   const policyEvent = signedEventEnvelope({
     actorDid,
     realmId,
     kind: "ak.realm.policy_bundle",
     payload: {
-      realm_id: realmId,
-      value: {
-        join_policy: joinPolicy,
-      },
+      policy_revision: policyRevision,
+      join_policy: joinPolicy,
     },
   });
   await submitSignedEventApi(request, token, policyEvent, {
@@ -603,6 +617,36 @@ export async function writeJoinPolicyApi(
       },
     )
     .toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const cellId = "ak:cell:ak.component.realm.policy_bundle.v1:null";
+        const response = await request.get(
+          `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(cellId)}?realm_id=${encodeURIComponent(realmId)}`,
+          { headers: authHeaders(token) },
+        );
+        if (!response.ok()) {
+          return false;
+        }
+        const cell = (await response.json()) as {
+          state?: string;
+          value?: Record<string, unknown>;
+        };
+        const projectedJoinPolicy = cell.value?.join_policy;
+        return (
+          cell.state === "value" &&
+          cell.value?.policy_revision === policyRevision &&
+          projectedJoinPolicy !== undefined &&
+          `sha256:${sha256CanonicalJson(projectedJoinPolicy)}` === digest
+        );
+      },
+      {
+        message: `join policy ${realmId} revision ${policyRevision} reaches the reducer projection`,
+        timeout: 30_000,
+        intervals: [250, 500, 1_000, 2_000],
+      },
+    )
+    .toBe(true);
   joinPolicyDigestCache.set(joinWorkflowKey(opts.server, realmId), digest);
   return digest;
 }
@@ -622,6 +666,12 @@ export async function grantRealmReviewCapabilityApi(
 ): Promise<string> {
   const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
+  const previousFrontier = await readRealmSealFrontier(
+    request,
+    ownerToken,
+    args.realmId,
+    args.server,
+  );
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing.
@@ -645,33 +695,65 @@ export async function grantRealmReviewCapabilityApi(
       },
     ],
   };
+  const grantEvent = signedEventEnvelope({
+    actorDid: args.ownerDid,
+    realmId: args.realmId,
+    kind: "ak.capability.grant",
+    createdAt: issuedAt,
+    payload: {
+      grant_id: grantId,
+      grant: {
+        ...unsignedGrant,
+        proofs: [
+          buildCapabilityGrantProof({
+            issuerDid: args.ownerDid,
+            payload: unsignedGrant,
+            createdAt: issuedAt,
+          }),
+        ],
+      },
+    },
+  });
   await submitSignedEventApi(
     request,
     ownerToken,
-    signedEventEnvelope({
-      actorDid: args.ownerDid,
-      realmId: args.realmId,
-      kind: "ak.capability.grant",
-      createdAt: issuedAt,
-      payload: {
-        grant_id: grantId,
-        grant: {
-          ...unsignedGrant,
-          proofs: [
-            buildCapabilityGrantProof({
-              issuerDid: args.ownerDid,
-              payload: unsignedGrant,
-              createdAt: issuedAt,
-            }),
-          ],
-        },
-      },
-    }),
+    grantEvent,
     {
       server: args.server,
       context: `grant ak.realm.join.review to ${args.subjectDid}`,
     },
   );
+  const proposalDigest = Array.isArray(grantEvent.proofs)
+    ? stringValue(
+        (grantEvent.proofs[0] as Record<string, unknown> | undefined)
+          ?.event_digest,
+      )
+    : undefined;
+  if (!proposalDigest) {
+    throw new Error(`review capability grant ${grantId} is missing its proposal digest`);
+  }
+  await expect
+    .poll(
+      async () => {
+        const current = await readRealmSealFrontier(
+          request,
+          ownerToken,
+          args.realmId,
+          args.server,
+        );
+        return (
+          current.control_event_set_root !==
+            previousFrontier.control_event_set_root &&
+          !current.pending_proposal_digests.includes(proposalDigest)
+        );
+      },
+      {
+        message: `review capability grant ${grantId} reaches the control Seal frontier`,
+        timeout: 30_000,
+        intervals: [250, 500, 1_000, 2_000],
+      },
+    )
+    .toBe(true);
   return grantId;
 }
 
@@ -874,6 +956,25 @@ export async function revokeCapabilityApi(
 // knock Control Move carries no application body (spec §8 keeps free text out
 // of the public knock event).
 const joinPolicyDigestCache = new Map<string, string>();
+
+// Last `policy_revision` this process wrote per (server, realm).
+//
+// `ak.component.realm.policy_bundle.v1` is a `cas_register` whose supersession
+// binds by value, so the revision is what gives a bundle family its generation
+// dimension: a stateless constant makes the second write of a Realm a repeat of
+// the first, and the register has no way to order them. The helper therefore
+// has to hold this per (server, realm) rather than derive it from the payload.
+const joinPolicyRevisionCache = new Map<string, number>();
+
+function nextJoinPolicyRevision(
+  server: SolandKey | undefined,
+  realmId: string,
+): number {
+  const key = joinWorkflowKey(server, realmId);
+  const next = (joinPolicyRevisionCache.get(key) ?? 0) + 1;
+  joinPolicyRevisionCache.set(key, next);
+  return next;
+}
 const knockRefCache = new Map<string, string>();
 const joinApplicationCache = new Map<
   string,
@@ -1068,7 +1169,7 @@ export async function submitApplicationReviewApi(
     decision: "accept" | "reject" | "request_changes";
     reasonCode?: string;
     reasonText?: string;
-    grantId?: string;
+    grantId: string;
     reviewReceiptDigest?: string;
   },
   opts: { server?: SolandKey; createdAt?: string } = {},
@@ -1084,7 +1185,7 @@ export async function submitApplicationReviewApi(
   const reviewedAt = canonicalTimestamp(
     opts.createdAt === undefined ? undefined : new Date(opts.createdAt),
   );
-  const grantId = review.grantId ?? typedId("grant");
+  const grantId = review.grantId;
   const unsignedReceipt = stripUndefined({
     candidate_kind: "member.application.review",
     realm_id: realmId,
