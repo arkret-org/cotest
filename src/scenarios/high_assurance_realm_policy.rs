@@ -95,7 +95,6 @@ fn build_realm(
         max_authority_lifetime_ms: 86_400_000,
         bottom_escalation_after_ms: None,
         cell_lattices: Vec::new(),
-        cowrite_policy: Vec::new(),
     })
 }
 

@@ -23,6 +23,7 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
+use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::MEDIA_ICE_CONFIG_SIGNING_LABEL;
 use arkret_wire::{ExporterLabelId, MEDIA_TOKEN_TTL_MAX_SECS, ProfileId};
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
@@ -239,7 +240,10 @@ pub fn run_token_exchange_minimal_vector() -> Result<()> {
         );
     }
     if ParticipantBinding::SCHEMA != "ak.media.participant_binding.v1" {
-        bail!("ParticipantBinding::SCHEMA drifted: {ParticipantBinding::SCHEMA}");
+        bail!(
+            "ParticipantBinding::SCHEMA drifted: {}",
+            ParticipantBinding::SCHEMA
+        );
     }
     if MEDIA_TOKEN_TTL_MAX_SECS != 600 {
         bail!("MEDIA_TOKEN_TTL_MAX_SECS drifted: {MEDIA_TOKEN_TTL_MAX_SECS} (spec ceiling is 600)");

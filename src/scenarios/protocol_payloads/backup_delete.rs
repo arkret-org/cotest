@@ -1,20 +1,77 @@
 //! Terminal `DELETE /_arkret/self/keys/backups/{id}`.
+//!
+//! §7.8.1 made this a high-risk authority: the service issues a durable
+//! single-use challenge, and the client signs the canonical delete-intent
+//! transcript with a principal control key, a device quorum or a trusted
+//! recovery service. There is no development ownership string any more, so the
+//! scenario drives the real two-call flow.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use arkret_canonical::canonical::canonical_json_bytes;
 use arkret_models_crypto::{
-    KeyBackupDeleteDevelopmentProof, KeyBackupDeleteProof, KeysBackupsDeleteRequestBody,
+    KeyBackupDeleteProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
+    KeysBackupsIssueDeleteChallengeRequestBody,
 };
+use arkret_wire::{Base64UrlString, DidUrl, PayloadProof, PayloadProofPurpose, proof_kind};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 
 use super::key_backups::BACKUP_ID;
 use crate::harness::{ArkretServer, expect_json};
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+    let request_id = Base64UrlString::new("Y290ZXN0LWJhY2t1cC1kZWxldGUtMDE".to_owned())
+        .map_err(|error| anyhow!("delete request_id: {error}"))?;
+    let reason = Some("user_requested".to_owned());
+
+    // 1. The service mints the challenge. Every freshness value in the transcript is server-side,
+    //    so nothing here may be caller-chosen.
+    let challenge = expect_json(
+        server
+            .http()
+            .post(server.url(&format!(
+                "/_arkret/self/keys/backups/{BACKUP_ID}/delete-challenge"
+            )))
+            .bearer_auth(token)
+            .json(&KeysBackupsIssueDeleteChallengeRequestBody {
+                request_id: request_id.clone(),
+            }),
+        StatusCode::OK,
+    )
+    .await?;
+    let challenge: KeysBackupsDeleteChallenge = serde_json::from_value(challenge)?;
+
+    // 2. Sign the one canonical delete-intent transcript with the principal control key.
+    let verification_method = DidUrl::new(format!("{actor_id}#key-1"))
+        .map_err(|error| anyhow!("principal control verification method: {error}"))?;
+    let transcript = challenge.delete_intent_transcript(reason.as_deref());
+    let canonical = canonical_json_bytes(&transcript)
+        .map_err(|error| anyhow!("delete-intent transcript is not canonical: {error}"))?;
+    let jws = arkret_signatures::sign_eddsa_detached_jws(
+        &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
+            verification_method.as_str(),
+        )),
+        &canonical,
+    )?;
+    let proof = PayloadProof {
+        kind: proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method,
+        payload_digest: challenge
+            .delete_intent_digest(reason.as_deref())
+            .map_err(|error| anyhow!("delete-intent digest: {error}"))?,
+        created_at: challenge.issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
+        jws,
+    };
+
     let body = KeysBackupsDeleteRequestBody {
-        proof: KeyBackupDeleteProof::Development(KeyBackupDeleteDevelopmentProof::new(format!(
-            "dev-ssk-delete:v1:{actor_id}:{BACKUP_ID}"
-        ))),
-        reason: Some("user_requested".to_owned()),
+        request_id,
+        challenge_id: challenge.challenge_id.clone(),
+        proof: KeyBackupDeleteProof::PrincipalSigning { proof },
+        reason,
     };
     let backup_delete = expect_json(
         server

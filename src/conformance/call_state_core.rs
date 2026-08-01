@@ -12,6 +12,7 @@ use arkret::{
 };
 use arkret_canonical::base64url::base64url_encode;
 use arkret_identifiers::{CallId, CellRef, DeviceId, Did, Hash, RealmId};
+use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaServiceSignature, CallMediaTokenExchangeOutcome,
     CallMediaTokenExchangeRequestBody,

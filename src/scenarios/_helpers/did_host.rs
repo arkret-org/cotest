@@ -386,7 +386,7 @@ impl DidResolver for CountingDidResolver {
         matches!(did.method(), "web" | "webvh" | "key")
     }
 
-    fn resolve_did(&self, did: &Did) -> arkret::identity::Result<DidDocument> {
+    fn resolve_did(&self, did: &Did) -> arkret::identity::Result<arkret::identity::ResolvedDid> {
         *self
             .calls
             .lock()
@@ -399,6 +399,9 @@ impl DidResolver for CountingDidResolver {
             .expect("CountingDidResolver documents mutex poisoned")
             .get(did.as_str())
             .cloned()
+            // The counting helper serves preloaded documents from memory and
+            // runs no method verification, so it surfaces no method evidence.
+            .map(arkret::identity::ResolvedDid::proofless)
             .ok_or_else(|| {
                 arkret::identity::IdentityError::Protocol(format!(
                     "CountingDidResolver has no preloaded document for {did}",

@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_crypto::{BackupKind, KeyBackupPlaintext, KeyBackupUnlockProof};
-use arkret_wire::{ProfileId, SchemaId};
+use arkret_wire::ProfileId;
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;

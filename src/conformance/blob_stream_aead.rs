@@ -6,8 +6,8 @@
 use anyhow::{Result, anyhow, bail};
 use arkret::{Hash, KeyRefObject};
 use arkret_crypto::blob_aead::{
-    ALG_STREAM_XCHACHA, BLOB_SCHEME_STREAM_AEAD_V1, StreamDecryptor, StreamEncryptParams,
-    decrypt_stream, encrypt_stream,
+    ALG_STREAM_XCHACHA, SCHEME_STREAM, StreamDecryptor, StreamEncryptParams, decrypt_stream,
+    encrypt_stream,
 };
 use arkret_models_crypto::{EncryptedAttachment, StreamEncryptedAttachment};
 use arkret_wire::ProfileId;
@@ -163,7 +163,7 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
 
     let stream = stream_fields(&env)?;
     let raw = serde_json::to_value(&env)?;
-    if raw["scheme"].as_str() != Some(BLOB_SCHEME_STREAM_AEAD_V1) {
+    if raw["scheme"].as_str() != Some(SCHEME_STREAM) {
         bail!("stream roundtrip produced scheme {}", raw["scheme"]);
     }
     if raw["alg"].as_str() != Some(ALG_STREAM_XCHACHA) {
