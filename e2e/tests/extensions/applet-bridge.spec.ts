@@ -1038,8 +1038,8 @@ async function prepareFormalAppletInstall(
       capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
       constraints: [
         {
-          constraint_kind: "delegation_control",
-          constraint_subkind: "applet_delegation",
+          constraint_kind: "authority_control",
+          constraint_subkind: "applet_authority",
           effect: "allow",
           evaluation_class: "grant_local",
           applet_id: signed.applet_package.applet_id,
@@ -1048,6 +1048,15 @@ async function prepareFormalAppletInstall(
         },
       ],
       issued_at: createdAt,
+      issuer_authority_refs: [
+        {
+          kind: "realm_root",
+          realm_id: realmId,
+          cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+          controller_epoch_at_issuance: 0,
+          authority_generation: 0,
+        },
+      ],
     };
     const grant = {
       ...unsignedGrant,

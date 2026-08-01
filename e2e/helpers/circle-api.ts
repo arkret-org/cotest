@@ -96,6 +96,15 @@ export async function grantCircleMemberManageCapability(
       },
     ],
     issued_at: issuedAt,
+    issuer_authority_refs: [
+      {
+        kind: "realm_root",
+        realm_id: args.realmId,
+        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+        controller_epoch_at_issuance: 0,
+        authority_generation: 0,
+      },
+    ],
   };
   await submitSignedEventApi(
     request,
@@ -159,6 +168,15 @@ export async function grantCircleManageCapability(
       },
     ],
     issued_at: issuedAt,
+    issuer_authority_refs: [
+      {
+        kind: "realm_root",
+        realm_id: args.realmId,
+        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+        controller_epoch_at_issuance: 0,
+        authority_generation: 0,
+      },
+    ],
   };
   await submitSignedEventApi(
     request,

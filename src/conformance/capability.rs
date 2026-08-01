@@ -1,12 +1,12 @@
 //! Capability fixture self-consistency checks.
 //!
 //! cotest does not link soland's reducer authorization engine here. The
-//! delegation helpers below are an executable oracle for the shared fixture
+//! authority-chain helpers below are an executable oracle for the shared fixture
 //! shape and expected outcomes, not a substitute for implementation-level
 //! reducer tests. Keep this boundary explicit so fixture agreement is not
 //! mistaken for cross-implementation conformance.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
@@ -55,12 +55,19 @@ pub fn run_capability_fixture_suite() -> Result<()> {
             evaluate_direct_grant_request_fixture(fixture)?;
         }
         match name {
-            "delegate_chain_multi_level" => evaluate_delegate_chain_fixture(fixture)?,
+            "authority_chain_multi_level" => evaluate_authority_chain_fixture(fixture)?,
             "membership_without_capability_denies_core_writes" => {
                 evaluate_membership_without_capability_fixture(fixture)?;
             }
             "revoke_rollback_forward_recompute" => evaluate_revoke_rollback_fixture(fixture)?,
             "revoke_downstream_recheck" => evaluate_revoke_downstream_fixture(fixture)?,
+            "authority_liveness_and_root_lifecycle" => {
+                evaluate_authority_liveness_fixture(fixture)?;
+            }
+            "relinquish_and_dependency_pending" => evaluate_relinquish_pending_fixture(fixture)?,
+            "unified_authority_constraints" => evaluate_unified_authority_constraints(fixture)?,
+            "authority_audit_materialization" => evaluate_authority_audit_fixture(fixture)?,
+            "derived_uses_issuer_authority_rules" => evaluate_derived_authority_fixture(fixture)?,
             "sensitive_field_handling" => evaluate_sensitive_field_handling_fixture(fixture)?,
             _ => {}
         }
@@ -86,27 +93,23 @@ fn action_implies(granted: &str, requested: &str) -> bool {
     granted == requested || granted == "ak.realm.admin"
 }
 
-fn parent_can_delegate(parent_actions: &[String], child_actions: &[String]) -> bool {
-    let can_delegate = parent_actions
-        .iter()
-        .any(|action| action == "ak.capability.delegate" || action == "ak.realm.admin");
-    can_delegate
-        && child_actions.iter().all(|child| {
-            parent_actions
-                .iter()
-                .any(|granted| action_implies(granted, child))
-        })
+fn parent_can_regrant(parent_actions: &[String], child_actions: &[String]) -> bool {
+    child_actions.iter().all(|child| {
+        parent_actions
+            .iter()
+            .any(|granted| action_implies(granted, child))
+    })
 }
 
-struct Delegation {
+struct AuthorityGrant {
     grant_id: String,
-    parent_grant_id: String,
+    parent_authority_grant_id: String,
     subject: String,
     actions: Vec<String>,
     resources: Vec<Value>,
     constraints: Vec<Value>,
     authorized_by_grant: String,
-    parent_grant_ref: String,
+    issuer_authority_ref: String,
 }
 
 #[derive(Clone)]
@@ -128,14 +131,14 @@ struct ChainResult {
     audience: bool,
 }
 
-fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
+fn parse_authority_chain(fixture: &Value) -> Result<Vec<AuthorityGrant>> {
     let raw = fixture
-        .get("delegations")
+        .get("authority_chain")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("delegate_chain fixture missing delegations"))?;
+        .ok_or_else(|| anyhow!("authority_chain fixture missing authority_chain"))?;
     let mut out = Vec::with_capacity(raw.len());
-    for delegation in raw {
-        let authorized_by_grant = delegation
+    for grant in raw {
+        let authorized_by_grant = grant
             .get("refs")
             .and_then(Value::as_array)
             .and_then(|refs| {
@@ -146,46 +149,53 @@ fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
             .and_then(|reference| reference.get("id").and_then(Value::as_str))
             .unwrap_or_default()
             .to_owned();
-        let parent_grant_ref = delegation
+        let issuer_authority_ref = grant
             .get("refs")
             .and_then(Value::as_array)
             .and_then(|refs| {
                 refs.iter().find(|reference| {
-                    reference.get("role").and_then(Value::as_str) == Some("parent_grant")
+                    reference.get("role").and_then(Value::as_str) == Some("issuer_authority")
                 })
             })
             .and_then(|reference| reference.get("id").and_then(Value::as_str))
             .unwrap_or_default()
             .to_owned();
-        out.push(Delegation {
-            grant_id: delegation
+        let parent_authority_grant_id = grant
+            .pointer("/payload/issuer_authority_refs")
+            .and_then(Value::as_array)
+            .and_then(|refs| {
+                refs.iter().find(|reference| {
+                    reference.get("kind").and_then(Value::as_str) == Some("grant")
+                })
+            })
+            .and_then(|reference| reference.get("grant_id").and_then(Value::as_str))
+            .unwrap_or_default()
+            .to_owned();
+        out.push(AuthorityGrant {
+            grant_id: grant
                 .pointer("/payload/grant_id")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned(),
-            parent_grant_id: delegation
-                .pointer("/payload/parent_grant_id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            subject: delegation
+            parent_authority_grant_id,
+            subject: grant
                 .pointer("/payload/subject")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned(),
-            actions: str_vec(delegation, "/payload/actions"),
-            resources: delegation
+            actions: str_vec(grant, "/payload/actions"),
+            resources: grant
                 .pointer("/payload/resources")
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default(),
-            constraints: delegation
+            constraints: grant
                 .pointer("/payload/constraints")
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default(),
             authorized_by_grant,
-            parent_grant_ref,
+            issuer_authority_ref,
         });
     }
     Ok(out)
@@ -391,15 +401,15 @@ fn evaluate_membership_without_capability_fixture(fixture: &Value) -> Result<()>
     Ok(())
 }
 
-fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery) -> ChainResult {
+fn evaluate_chain(base: &Value, grants: &[AuthorityGrant], query: &ActionQuery) -> ChainResult {
     let base_grant = base
         .get("grant_id")
         .and_then(Value::as_str)
         .unwrap_or_default();
 
-    let Some(leaf) = delegations.iter().find(|delegation| {
-        delegation.subject == query.actor
-            && delegation
+    let Some(leaf) = grants.iter().find(|grant| {
+        grant.subject == query.actor
+            && grant
                 .actions
                 .iter()
                 .any(|action| action_implies(action, &query.action))
@@ -407,54 +417,54 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
         return ChainResult::default();
     };
 
-    let mut chain: Vec<&Delegation> = vec![leaf];
+    let mut chain: Vec<&AuthorityGrant> = vec![leaf];
     let mut current = leaf;
     loop {
-        if current.parent_grant_id == base_grant {
+        if current.parent_authority_grant_id == base_grant {
             break;
         }
-        match delegations
+        match grants
             .iter()
-            .find(|delegation| delegation.grant_id == current.parent_grant_id)
+            .find(|grant| grant.grant_id == current.parent_authority_grant_id)
         {
             Some(parent) => {
                 chain.push(parent);
                 current = parent;
             }
-            // Parent grant neither the root nor a present delegation: the
-            // chain is broken (e.g. a middle delegation was skipped).
+            // Parent grant neither the root nor a present authority edge: the
+            // chain is broken (for example, a middle grant was skipped).
             None => return ChainResult::default(),
         }
     }
     chain.reverse();
 
     let mut prev_actions = str_vec(base, "/actions");
-    for delegation in &chain {
-        if !delegation.grant_id.starts_with("ak:grant:")
-            || delegation.authorized_by_grant != delegation.parent_grant_id
-            || delegation.parent_grant_ref != delegation.parent_grant_id
+    for grant in &chain {
+        if !grant.grant_id.starts_with("ak:grant:")
+            || grant.authorized_by_grant != grant.parent_authority_grant_id
+            || grant.issuer_authority_ref != grant.parent_authority_grant_id
         {
             return ChainResult::default();
         }
-        if !parent_can_delegate(&prev_actions, &delegation.actions) {
+        if !parent_can_regrant(&prev_actions, &grant.actions) {
             return ChainResult::default();
         }
-        prev_actions = delegation.actions.clone();
+        prev_actions = grant.actions.clone();
     }
 
     let mut time = true;
     let mut resource_scope = true;
     let rate_limit = true;
     let mut audience = true;
-    for delegation in &chain {
-        if !delegation
+    for grant in &chain {
+        if !grant
             .resources
             .iter()
             .any(|resource| resource_matches(resource, &query.resource))
         {
             resource_scope = false;
         }
-        for constraint in &delegation.constraints {
+        for constraint in &grant.constraints {
             match constraint.get("constraint_kind").and_then(Value::as_str) {
                 Some("temporal") => {
                     if let Some(not_before) = constraint.get("not_before").and_then(Value::as_str)
@@ -492,8 +502,8 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
     }
 
     let mut valid_chain = vec![chain[0].authorized_by_grant.clone()];
-    for delegation in &chain {
-        valid_chain.push(delegation.grant_id.clone());
+    for grant in &chain {
+        valid_chain.push(grant.grant_id.clone());
     }
 
     ChainResult {
@@ -506,21 +516,21 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
     }
 }
 
-/// Vector `ak.vector.capability.delegate_chain.v1` (conformance §4.2).
+/// Vector `ak.vector.capability.authority_chain.v1` (conformance §4.2).
 ///
-/// A multi-level delegation chain authorizes only when every link is a valid
-/// delegation of the requested action AND every constraint (time, resource
+/// A multi-level authority chain authorizes only when every link can re-grant
+/// the requested action AND every constraint (time, resource
 /// scope, rate, audience) holds. The evaluator must not authorize directly
-/// from the root (skipping a middle delegate), must not ignore the audience
+/// from the root (skipping a middle grant), must not ignore the audience
 /// scope limitation, and must not authorize after the temporal window expires.
-fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_authority_chain_fixture(fixture: &Value) -> Result<()> {
     let base = fixture
         .get("base")
-        .ok_or_else(|| anyhow!("delegate_chain fixture missing base grant"))?;
-    let delegations = parse_delegations(fixture)?;
+        .ok_or_else(|| anyhow!("authority_chain fixture missing base grant"))?;
+    let grants = parse_authority_chain(fixture)?;
     let query_value = fixture
         .get("action_query")
-        .ok_or_else(|| anyhow!("delegate_chain fixture missing action_query"))?;
+        .ok_or_else(|| anyhow!("authority_chain fixture missing action_query"))?;
     let query = ActionQuery {
         actor: required_str(query_value, "actor_id")?.to_owned(),
         action: required_str(query_value, "action")?.to_owned(),
@@ -529,15 +539,15 @@ fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
         audience: required_str(query_value, "request_audience")?.to_owned(),
     };
 
-    let result = evaluate_chain(base, &delegations, &query);
+    let result = evaluate_chain(base, &grants, &query);
 
     let expected_authorized = fixture
         .pointer("/expected/authorized")
         .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("delegate_chain fixture missing expected.authorized"))?;
+        .ok_or_else(|| anyhow!("authority_chain fixture missing expected.authorized"))?;
     if result.authorized != expected_authorized {
         bail!(
-            "delegate_chain: authorized={} but expected {}",
+            "authority_chain: authorized={} but expected {}",
             result.authorized,
             expected_authorized
         );
@@ -545,7 +555,7 @@ fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
     let expected_chain = str_vec(fixture, "/expected/valid_chain");
     if result.valid_chain != expected_chain {
         bail!(
-            "delegate_chain: valid_chain {:?} did not match expected {:?}",
+            "authority_chain: valid_chain {:?} did not match expected {:?}",
             result.valid_chain,
             expected_chain
         );
@@ -559,9 +569,9 @@ fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
         let expected = fixture
             .pointer(&format!("/expected/constraints_checked/{key}"))
             .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("delegate_chain fixture missing constraints_checked.{key}"))?;
+            .ok_or_else(|| anyhow!("authority_chain fixture missing constraints_checked.{key}"))?;
         if value != expected {
-            bail!("delegate_chain: constraint `{key}`={value} but expected {expected}");
+            bail!("authority_chain: constraint `{key}`={value} but expected {expected}");
         }
     }
 
@@ -569,24 +579,24 @@ fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
     // decision to unauthorized.
     let mut expired = query.clone();
     expired.request_time = "2026-06-01T00:00:00.000Z".to_owned();
-    if evaluate_chain(base, &delegations, &expired).authorized {
-        bail!("delegate_chain: expired temporal window still authorized");
+    if evaluate_chain(base, &grants, &expired).authorized {
+        bail!("authority_chain: expired temporal window still authorized");
     }
     let mut wrong_audience = query.clone();
     wrong_audience.audience = "did:web:attacker.example".to_owned();
-    if evaluate_chain(base, &delegations, &wrong_audience).authorized {
-        bail!("delegate_chain: out-of-scope audience still authorized");
+    if evaluate_chain(base, &grants, &wrong_audience).authorized {
+        bail!("authority_chain: out-of-scope audience still authorized");
     }
-    let without_middle: Vec<Delegation> = delegations
+    let without_middle: Vec<AuthorityGrant> = grants
         .into_iter()
-        .filter(|delegation| delegation.subject != "did:webvh:z6mkfixture:ops.example.com")
+        .filter(|grant| grant.subject != "did:webvh:z6mkfixture:ops.example.com")
         .collect();
     if evaluate_chain(base, &without_middle, &query).authorized {
-        bail!("delegate_chain: skipping the middle delegate still authorized");
+        bail!("authority_chain: skipping the middle grant still authorized");
     }
 
     record_vector_event(
-        "capability.delegate_chain",
+        "capability.authority_chain",
         query_value,
         &fixture["expected"],
         &json!({
@@ -729,7 +739,8 @@ fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("revoke_downstream fixture missing revoke.grant_id"))?;
 
-    // Propagate revocation downstream through parent_grant_id links.
+    // Propagate current invalidity through typed grant authority refs. This is
+    // a read-time walk; no descendant grant record is rewritten.
     let mut revoked: HashSet<String> = HashSet::new();
     revoked.insert(revoked_root.to_owned());
     loop {
@@ -739,11 +750,15 @@ fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
                 .get("grant_id")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            let parent = grant.get("parent_grant_id").and_then(Value::as_str);
-            if let Some(parent) = parent
-                && revoked.contains(parent)
-                && revoked.insert(grant_id.to_owned())
-            {
+            let has_revoked_parent = grant
+                .get("issuer_authority_refs")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|reference| reference.get("kind").and_then(Value::as_str) == Some("grant"))
+                .filter_map(|reference| reference.get("grant_id").and_then(Value::as_str))
+                .any(|parent| revoked.contains(parent));
+            if has_revoked_parent && revoked.insert(grant_id.to_owned()) {
                 changed = true;
             }
         }
@@ -833,6 +848,487 @@ fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
             "revoked_grant_currently_valid": revoked_grant_currently_valid,
         }),
     );
+    Ok(())
+}
+
+fn fixture_grant_live(
+    grant_id: &str,
+    grants: &BTreeMap<&str, &Value>,
+    root_generation: u64,
+    revoked: &HashSet<String>,
+    visiting: &mut HashSet<String>,
+) -> bool {
+    if revoked.contains(grant_id) || !visiting.insert(grant_id.to_owned()) {
+        return false;
+    }
+    let live = grants
+        .get(grant_id)
+        .and_then(|grant| grant.get("issuer_authority_refs"))
+        .and_then(Value::as_array)
+        .is_some_and(|refs| {
+            refs.iter().any(
+                |reference| match reference.get("kind").and_then(Value::as_str) {
+                    Some("realm_root") => {
+                        reference
+                            .get("authority_generation")
+                            .and_then(Value::as_u64)
+                            == Some(root_generation)
+                    }
+                    Some("grant") => reference
+                        .get("grant_id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|parent| {
+                            fixture_grant_live(parent, grants, root_generation, revoked, visiting)
+                        }),
+                    _ => false,
+                },
+            )
+        });
+    visiting.remove(grant_id);
+    live
+}
+
+fn evaluate_authority_liveness_fixture(fixture: &Value) -> Result<()> {
+    let root = fixture
+        .get("root")
+        .ok_or_else(|| anyhow!("authority liveness fixture missing root"))?;
+    let initial_generation = root
+        .get("authority_generation")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("authority liveness fixture root missing generation"))?;
+    let grant_values = fixture
+        .get("grants")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("authority liveness fixture missing grants"))?;
+    let grants = grant_values
+        .iter()
+        .map(|grant| Ok((required_str(grant, "grant_id")?, grant)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("authority liveness fixture missing cases"))?;
+    for case in cases {
+        let name = required_str(case, "name")?;
+        let root_generation = case
+            .pointer("/next_root/authority_generation")
+            .and_then(Value::as_u64)
+            .unwrap_or(initial_generation);
+        let revoked = case
+            .get("revoked_grant_id")
+            .and_then(Value::as_str)
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect::<HashSet<_>>();
+        let active = grant_values
+            .iter()
+            .filter_map(|grant| grant.get("grant_id").and_then(Value::as_str))
+            .filter(|grant_id| {
+                fixture_grant_live(
+                    grant_id,
+                    &grants,
+                    root_generation,
+                    &revoked,
+                    &mut HashSet::new(),
+                )
+            })
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if let Some(expected_active) = case
+            .pointer("/expected/active_grants")
+            .and_then(Value::as_array)
+        {
+            let expected = expected_active
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            if active != expected {
+                bail!("{name}: active grants {active:?}, expected {expected:?}");
+            }
+        }
+        if let Some(expected_written) = case
+            .pointer("/expected/written_grant_ids")
+            .and_then(Value::as_array)
+        {
+            let mut actual = revoked.iter().cloned().collect::<Vec<_>>();
+            actual.sort();
+            let expected = expected_written
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            if actual != expected {
+                bail!("{name}: revoke must not cascade writes");
+            }
+        }
+        if let Some(expected_accepted) = case.pointer("/expected/accepted").and_then(Value::as_bool)
+        {
+            let accepted = match name {
+                "controller_transfer_preserves_chain" | "transfer_missing_acceptance_rejected" => {
+                    case.get("successor_active_member").and_then(Value::as_bool) == Some(true)
+                        && case
+                            .get("successor_acceptance")
+                            .and_then(Value::as_str)
+                            .is_some_and(|proof| !proof.is_empty())
+                        && case
+                            .pointer("/next_root/controller_epoch")
+                            .and_then(Value::as_u64)
+                            == root
+                                .get("controller_epoch")
+                                .and_then(Value::as_u64)
+                                .map(|epoch| epoch + 1)
+                        && root_generation == initial_generation
+                }
+                "generation_reset_invalidates_chain" => {
+                    case.get("destructive_confirmation").and_then(Value::as_str)
+                        == Some("ak.realm.authority.reset")
+                        && root_generation == initial_generation + 1
+                }
+                "stale_or_noncontroller_transfer_rejected" => {
+                    case.get("actor_is_current_controller")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                        && case.get("expected_state_matches").and_then(Value::as_bool) == Some(true)
+                }
+                "terminal_root_control_requires_root_proof" => {
+                    case.get("authorization_ref").and_then(Value::as_str)
+                        == Some("ak:cell:ak.component.realm.authority_root.v1:null")
+                }
+                "terminal_root_control_accepts_current_controller_root_proof" => {
+                    case.get("actor_is_current_controller")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                        && case.get("authorization_ref").and_then(Value::as_str)
+                            == Some("ak:cell:ak.component.realm.authority_root.v1:null")
+                        && case
+                            .get("destructive_confirmation_present")
+                            .and_then(Value::as_bool)
+                            == Some(true)
+                }
+                "basis_update_changes_only_registry_digest" => {
+                    case.get("snapshot_available").and_then(Value::as_bool) == Some(true)
+                        && case.get("snapshot_compatible").and_then(Value::as_bool) == Some(true)
+                        && case.pointer("/next_root/controller_id") == root.get("controller_id")
+                        && case.pointer("/next_root/controller_epoch")
+                            == root.get("controller_epoch")
+                        && root_generation == initial_generation
+                        && case.pointer("/next_root/capability_action_registry_digest")
+                            != root.get("capability_action_registry_digest")
+                }
+                "unknown_basis_update_rejected" => {
+                    case.get("snapshot_available").and_then(Value::as_bool) == Some(true)
+                        && case.get("snapshot_compatible").and_then(Value::as_bool) == Some(true)
+                }
+                "new_controller_can_revoke_old_controller_grant" => {
+                    case.get("actor_is_target_realm_current_controller")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                }
+                "old_controller_loses_root_authority_after_transfer" => {
+                    case.get("actor_is_target_realm_current_controller")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                        || case
+                            .get("actor_has_independent_grant")
+                            .and_then(Value::as_bool)
+                            == Some(true)
+                }
+                "concurrent_old_basis_root_write_rejected" => {
+                    case.get("expected_state_matches").and_then(Value::as_bool) == Some(true)
+                        && case
+                            .get("security_barrier_conflict")
+                            .and_then(Value::as_bool)
+                            != Some(true)
+                }
+                _ => expected_accepted,
+            };
+            if accepted != expected_accepted {
+                bail!("{name}: accepted={accepted}, expected {expected_accepted}");
+            }
+        }
+        if name == "multi_ref_partial_revocation_rechecks_per_action" {
+            let mut active_actions = case
+                .get("authority_refs")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|reference| reference.get("active").and_then(Value::as_bool) == Some(true))
+                .flat_map(|reference| str_vec(reference, "/actions"))
+                .collect::<Vec<_>>();
+            active_actions.sort();
+            active_actions.dedup();
+            let mut expected = str_vec(case, "/expected/active_actions");
+            expected.sort();
+            if active_actions != expected {
+                bail!("{name}: per-action liveness was not recomputed from active refs");
+            }
+            let inactive = str_vec(case, "/expected/inactive_actions");
+            if inactive
+                .iter()
+                .any(|action| active_actions.contains(action))
+            {
+                bail!("{name}: revoked exclusive authority still covers an action");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_relinquish_pending_fixture(fixture: &Value) -> Result<()> {
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("relinquish fixture missing cases"))?;
+    for case in cases {
+        match required_str(case, "name")? {
+            "subject_relinquishes_without_revoke_capability"
+            | "non_subject_relinquish_rejected" => {
+                let accepted = case.get("actor").and_then(Value::as_str)
+                    == case.get("target_subject").and_then(Value::as_str);
+                if case.pointer("/expected/accepted").and_then(Value::as_bool) != Some(accepted) {
+                    bail!("relinquish subject guard drifted");
+                }
+            }
+            "unknown_revoke_and_relinquish_pending" => {
+                if case.get("target_projected").and_then(Value::as_bool) != Some(false)
+                    || case.pointer("/expected/outcome").and_then(Value::as_str)
+                        != Some("dependency_pending")
+                    || case
+                        .pointer("/expected/tombstone_written")
+                        .and_then(Value::as_bool)
+                        != Some(false)
+                {
+                    bail!("unknown target no longer stays pending without a tombstone");
+                }
+            }
+            "root_cell_is_not_a_grant_target" => {
+                if case
+                    .get("target_ref")
+                    .and_then(Value::as_str)
+                    .is_none_or(|target| target.starts_with("ak:grant:"))
+                    || case.pointer("/expected/accepted").and_then(Value::as_bool) != Some(false)
+                {
+                    bail!("authority root became a grant target");
+                }
+            }
+            "subject_only_is_not_grantable" => {
+                let action = required_str(case, "action")?;
+                let basis = arkret_policy::current_capability_action_registry_digest()?;
+                if arkret_policy::owner_may_grant(action, Some(&basis), &[])?
+                    || arkret_policy::action_grants_authority_for("ak.realm.owner", action)?
+                {
+                    bail!("subject-only action entered a grant-authority set");
+                }
+            }
+            other => bail!("unknown relinquish fixture case {other}"),
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_unified_authority_constraints(fixture: &Value) -> Result<()> {
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("unified authority fixture missing cases"))?;
+    for case in cases {
+        let name = required_str(case, "name")?;
+        match name {
+            "low_and_medium_agent_multi_hop_may_be_unbounded" => {
+                let tiers = str_vec(case, "/risk_tiers");
+                let accepted = tiers.iter().all(|tier| tier == "low" || tier == "medium")
+                    && case.get("expires_at").is_some_and(Value::is_null)
+                    && case
+                        .get("authority_depth")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                        > 1;
+                if case.pointer("/expected/accepted").and_then(Value::as_bool) != Some(accepted) {
+                    bail!("{name}: low/medium multi-hop expiry rule drifted");
+                }
+            }
+            "high_risk_agent_requires_expiry" | "high_risk_service_requires_expiry" => {
+                let accepted = case.get("risk_tier").and_then(Value::as_str) != Some("high")
+                    || !case.get("expires_at").is_some_and(Value::is_null);
+                if accepted
+                    || case.pointer("/expected/accepted").and_then(Value::as_bool) != Some(false)
+                    || case
+                        .pointer("/expected/reason_code")
+                        .and_then(Value::as_str)
+                        != Some("agent_grant_expiry_required")
+                {
+                    bail!("{name}: agent/service high-risk expiry rule drifted");
+                }
+            }
+            "depth_expiry_cycle_and_constraints_remain_enforced" => {
+                let checks = case
+                    .get("checks")
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| anyhow!("{name}: missing checks"))?;
+                let required = [
+                    ("authority_depth", "authority_depth_exceeded"),
+                    ("expiry_seal", "authority_expiry_widening"),
+                    ("cycle", "authority_cycle"),
+                    ("constraint_inheritance", "grant_exceeds_issuer_authority"),
+                ];
+                if required
+                    .iter()
+                    .any(|(key, reason)| checks.get(*key).and_then(Value::as_str) != Some(*reason))
+                    || case
+                        .pointer("/expected/all_fail_closed")
+                        .and_then(Value::as_bool)
+                        != Some(true)
+                {
+                    bail!("{name}: a unified authority guard is no longer fail-closed");
+                }
+            }
+            other => bail!("unknown unified authority fixture case {other}"),
+        }
+    }
+    Ok(())
+}
+
+fn authority_root_identity(root: &Value) -> Result<String> {
+    Ok(format!(
+        "{}\u{1f}{}\u{1f}{}",
+        required_str(root, "realm_id")?,
+        required_str(root, "cell_ref")?,
+        root.get("authority_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("authority root missing generation"))?
+    ))
+}
+
+fn materialize_authority_audit(
+    fixture: &Value,
+    reverse_parents: bool,
+) -> Result<(u64, Vec<Value>, String)> {
+    let parent_values = fixture
+        .get("parents")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("authority audit fixture missing parents"))?;
+    let parents = parent_values
+        .iter()
+        .map(|parent| Ok((required_str(parent, "grant_id")?, parent)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let mut refs = fixture
+        .get("child_issuer_authority_refs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("authority audit fixture missing child refs"))?
+        .iter()
+        .collect::<Vec<_>>();
+    if reverse_parents {
+        refs.reverse();
+    }
+    let mut max_depth = 0;
+    let mut roots = BTreeMap::<String, Value>::new();
+    for reference in refs {
+        let parent_id = required_str(reference, "grant_id")?;
+        let parent = parents
+            .get(parent_id)
+            .ok_or_else(|| anyhow!("authority audit parent {parent_id} unresolved"))?;
+        max_depth = max_depth.max(
+            parent
+                .get("authority_depth")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow!("authority audit parent missing depth"))?,
+        );
+        for root in parent
+            .get("authority_root_refs")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("authority audit parent missing roots"))?
+        {
+            roots.insert(authority_root_identity(root)?, root.clone());
+        }
+    }
+    let roots = roots.into_values().collect::<Vec<_>>();
+    let audit = json!({"authority_depth": max_depth + 1, "authority_root_refs": roots});
+    let digest = arkret_canonical::canonical_sha256(&audit)?;
+    Ok((
+        max_depth + 1,
+        audit["authority_root_refs"].as_array().unwrap().clone(),
+        digest,
+    ))
+}
+
+fn evaluate_authority_audit_fixture(fixture: &Value) -> Result<()> {
+    let (depth, roots, digest) = materialize_authority_audit(fixture, false)?;
+    let (reverse_depth, reverse_roots, reverse_digest) =
+        materialize_authority_audit(fixture, true)?;
+    let parents = fixture
+        .get("parents")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("authority audit fixture missing parents"))?
+        .iter()
+        .map(|parent| Ok((required_str(parent, "grant_id")?.to_owned(), parent)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let reducer_body = json!({
+        "issuer_authority_refs": fixture.get("child_issuer_authority_refs")
+    });
+    let reducer_audit =
+        soland_domain::reducer::derive_authority_audit(&reducer_body, &|grant_id| {
+            let parent = parents.get(grant_id)?;
+            Some((
+                parent.get("authority_depth")?.as_u64()?,
+                parent.get("authority_root_refs")?.as_array()?.clone(),
+            ))
+        });
+    let expected_reducer_audit = Some((depth, roots.clone()));
+    if depth
+        != fixture
+            .pointer("/expected/authority_depth")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("authority audit expected depth missing"))?
+        || roots.as_slice()
+            != fixture
+                .pointer("/expected/authority_root_refs")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("authority audit expected roots missing"))?
+        || depth != reverse_depth
+        || roots != reverse_roots
+        || digest != reverse_digest
+        || reducer_audit != expected_reducer_audit
+        || fixture
+            .pointer("/expected/independent_state_roots_equal")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || fixture
+            .pointer("/expected/missing_parent_outcome")
+            .and_then(Value::as_str)
+            != Some("dependency_pending")
+    {
+        bail!("authority audit materialization is not deterministic or complete");
+    }
+    Ok(())
+}
+
+fn evaluate_derived_authority_fixture(fixture: &Value) -> Result<()> {
+    let descriptor = arkret_schema::embedded_capability_action("ak.capability.derived")?
+        .ok_or_else(|| anyhow!("derived capability action descriptor missing"))?;
+    let basis = arkret_policy::current_capability_action_registry_digest()?;
+    let active = fixture.get("source_refs_active").and_then(Value::as_bool) == Some(true)
+        && fixture
+            .get("realm_link_policy_allows")
+            .and_then(Value::as_bool)
+            == Some(true);
+    if fixture
+        .pointer("/expected/derived_grant_active")
+        .and_then(Value::as_bool)
+        != Some(active)
+        || fixture
+            .pointer("/expected/authority_rule")
+            .and_then(Value::as_str)
+            != Some("issuer_authority")
+        || fixture
+            .pointer("/expected/authorable_by_principal")
+            .and_then(Value::as_bool)
+            != Some(false)
+        || !descriptor.reducer_only
+        || arkret_policy::owner_may_grant("ak.capability.derived", Some(&basis), &[])?
+    {
+        bail!("derived capability escaped reducer-only issuer-authority semantics");
+    }
     Ok(())
 }
 

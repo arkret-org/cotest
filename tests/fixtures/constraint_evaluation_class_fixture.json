@@ -57,7 +57,7 @@
       "expected": {"outcome": "accept", "classification": "fast_path"}
     },
     {
-      "name": "delegation_control_grant_local_fast_path",
+      "name": "authority_control_grant_local_fast_path",
       "family": "authority_control",
       "evaluation_class": "grant_local",
       "fast_path_eligible": true,

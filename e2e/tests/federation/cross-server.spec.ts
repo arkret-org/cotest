@@ -36,7 +36,7 @@ import {
   authHeaders,
   queryPeerEventsApi,
   createRealmApi,
-  grantServiceDelegationApi,
+  grantServiceCapabilityApi,
   listInvitesApi,
   makeFederationEvent,
   peerEventFrontierApi,
@@ -1023,7 +1023,7 @@ test.describe("cross-server federation", () => {
 
     // Alice (Realm owner) delegates the federation delivery binding policy to
     // β's service DID, then confirms a baseline message still fans out to β.
-    const grantId = await grantServiceDelegationApi(request, aliceToken, {
+    const grantId = await grantServiceCapabilityApi(request, aliceToken, {
       ownerDid: alice.did,
       realmId,
       subjectServiceId: solandServiceId("beta"),

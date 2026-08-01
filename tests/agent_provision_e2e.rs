@@ -340,6 +340,8 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                         proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
                         jws: "header..signature".to_owned(),
                     }],
+                    authority_depth: None,
+                    authority_root_refs: Vec::new(),
                 },
             },
         )
@@ -4054,6 +4056,8 @@ async fn grant_controller_strand_create(
         revoked_by: None,
         revoked_at: None,
         proofs: Vec::new(),
+        authority_depth: None,
+        authority_root_refs: Vec::new(),
     };
     let mut proof = arkret::PayloadProof {
         kind: "detached_jws".to_owned(),

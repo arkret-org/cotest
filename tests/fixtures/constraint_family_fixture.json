@@ -74,14 +74,14 @@
       "expected": { "outcome": "shape_ok", "evaluation_class": "space_state", "fast_path_eligible": false }
     },
     {
-      "name": "delegation_control_narrowing_only",
+      "name": "authority_control_narrowing_only",
       "constraint_kind": "authority_control",
       "constraint": {
         "constraint_kind": "authority_control",
         "effect": "allow",
         "evaluation_class": "grant_local",
         "max_authority_depth": 3,
-        "delegation_scope": "narrowing_only",
+        "authority_scope": "narrowing_only",
         "authority_regrant_allowed": false
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
@@ -240,7 +240,7 @@
       }
     },
     {
-      "name": "delegation_control_plus_confidentiality_mixed_class",
+      "name": "authority_control_plus_confidentiality_mixed_class",
       "comment": "C6 Round 26 — composing authority_control (grant_local) with confidentiality (space_state) lifts combined to space_state. Verifies the mixed-class promotion: grant_local cannot stay fast when paired with a space_state family.",
       "families": ["authority_control", "confidentiality"],
       "constraint": {
@@ -249,7 +249,7 @@
         "effect": "deny",
         "evaluation_class": "space_state",
         "max_authority_depth": 3,
-        "delegation_scope": "narrowing_only",
+        "authority_scope": "narrowing_only",
         "encryption_required": true
       },
       "expected": {

@@ -363,10 +363,10 @@ export async function grantCallCapability(
   const grantId = typedId("grant");
   const resources = [{ kind: "realm", realm_id: realmId }];
   const issuedAt = canonicalTimestamp();
-  const delegationConstraint: Record<string, unknown> = {
-    constraint_kind: "delegation_control",
+  const authorityConstraint: Record<string, unknown> = {
+    constraint_kind: "authority_control",
     effect: "allow",
-    max_delegation_depth: 0,
+    max_authority_depth: 0,
   };
   if (
     [
@@ -375,7 +375,7 @@ export async function grantCallCapability(
       "ak.realm.moderation_policy",
     ].includes(action)
   ) {
-    delegationConstraint.depends_on_moderation_state = true;
+    authorityConstraint.depends_on_moderation_state = true;
   }
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
@@ -386,8 +386,17 @@ export async function grantCallCapability(
     actions: [action],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources,
-    constraints: [delegationConstraint],
+    constraints: [authorityConstraint],
     issued_at: issuedAt,
+    issuer_authority_refs: [
+      {
+        kind: "realm_root",
+        realm_id: realmId,
+        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+        controller_epoch_at_issuance: 0,
+        authority_generation: 0,
+      },
+    ],
   };
   const grant = {
     ...unsignedGrant,

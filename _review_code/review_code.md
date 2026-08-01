@@ -747,3 +747,14 @@ selection failures.
 - Prevention dimension: a required joint gate must own every external process
   it names, assert canonical wire envelopes rather than historical DTO shapes,
   and distinguish UI echo evidence from protocol fold evidence.
+
+## 2026-08-01 — renamed capability vector was silently undispatched
+
+- Severity: conformance false-positive risk, resolved.
+- Regression: the capability fixture was renamed to `authority_chain_multi_level`, but the
+  suite dispatcher still matched the removed name. The fixture remained valid JSON and the
+  suite passed without executing its authority-chain oracle.
+- Correction: dispatch now matches the registered fixture name, typed `issuer_authority_refs`
+  drive the oracle, and every new root lifecycle/audit vector has an explicit evaluator arm.
+- Prevention dimension: fixture registries should require one-to-one evaluator consumption;
+  a known fixture name without a dispatcher must fail instead of falling through to success.

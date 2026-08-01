@@ -111,6 +111,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             revoked_by: None,
             revoked_at: None,
             proofs: Vec::new(),
+            authority_depth: None,
+            authority_root_refs: Vec::new(),
         };
     let mut grant_proof = arkret_wire::PayloadProof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),

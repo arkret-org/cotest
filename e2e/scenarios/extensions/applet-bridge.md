@@ -49,7 +49,7 @@
    - `requested_scopes = ["ak.message.create", "ak.applet.ghost.provision"]`
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
-3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`，读取返回的 canonical registration payload 与 approved actions；随后以 alice 的 Event signer、当前 actor frontier 和 accepted Seal basis 构造同一 actor chain 上的完整 `registration_event` 与 `capability_grant_events[]`（grant 同时带 issuer payload proof 和标准 `delegation_control.applet_delegation` 绑定），连同 `plan_digest` 调 `POST /_arkret/self/applets/install`
+3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`，读取返回的 canonical registration payload 与 approved actions；随后以 alice 的 Event signer、当前 actor frontier 和 accepted Seal basis 构造同一 actor chain 上的完整 `registration_event` 与 `capability_grant_events[]`（grant 同时带 issuer payload proof、typed Realm-root authority ref 和标准 `authority_control.applet_authority` 绑定），连同 `plan_digest` 调 `POST /_arkret/self/applets/install`
    - commit 不发送已删除的 `approved_scopes` 旧字段；soland 只验证、记录和提交 caller-signed Events，不代签或重建 Event
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
    - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`

@@ -635,6 +635,15 @@ export async function grantRealmReviewCapabilityApi(
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
+    issuer_authority_refs: [
+      {
+        kind: "realm_root",
+        realm_id: args.realmId,
+        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+        controller_epoch_at_issuance: 0,
+        authority_generation: 0,
+      },
+    ],
   };
   await submitSignedEventApi(
     request,
@@ -666,10 +675,10 @@ export async function grantRealmReviewCapabilityApi(
   return grantId;
 }
 
-// Grant a Realm-scoped service delegation capability to a peer service DID.
+// Grant a Realm-scoped capability to a peer service DID.
 // sync/federation.md §4.4: the grant subject is a service DID; revoking it
 // makes the source Principal Server stop pushing future events to that peer.
-export async function grantServiceDelegationApi(
+export async function grantServiceCapabilityApi(
   request: APIRequestContext,
   ownerToken: string,
   args: {
@@ -685,7 +694,7 @@ export async function grantServiceDelegationApi(
   // `ak.realm.delivery_binding_policy` is an Event kind, not a capability
   // action. Use a core collaboration action advertised by both federation
   // peers; the service-DID subject and Realm resource make this a service
-  // delegation, independently of which registered action is delegated.
+  // service grant, independently of which registered action is granted.
   const action = args.action ?? "ak.message.create";
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
@@ -700,6 +709,15 @@ export async function grantServiceDelegationApi(
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
+    issuer_authority_refs: [
+      {
+        kind: "realm_root",
+        realm_id: args.realmId,
+        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+        controller_epoch_at_issuance: 0,
+        authority_generation: 0,
+      },
+    ],
   };
   await submitSignedEventApi(
     request,
@@ -725,7 +743,7 @@ export async function grantServiceDelegationApi(
     }),
     {
       server: args.server,
-      context: `grant ${action} service delegation to ${args.subjectServiceId}`,
+      context: `grant ${action} service capability to ${args.subjectServiceId}`,
     },
   );
   return grantId;
@@ -741,20 +759,19 @@ export type CapabilityGrantEventArgs = {
   realmId: string;
   subjectDid: string;
   actions: string[];
-  // capabilities.md §8: optional finite validity upper bound. Delegated
-  // grants (parentGrantId set) MUST narrow — child effective_expires_at MUST
-  // be <= the parent's (§10.1).
+  // capabilities.md §8: optional finite validity upper bound. Child grants
+  // issued from grant refs MUST narrow: child effective_expires_at MUST be
+  // <= the issuer authority's (§10.1).
   expiresAt?: string;
-  // capabilities.md §10: delegation chain anchor. When set the grant is a
-  // delegated (child) grant and the reducer enforces the §10.1 narrowing
-  // invariants against the referenced parent grant.
-  parentGrantId?: string;
+  // capabilities.md §3.2 / §10: typed authority anchors. Omitted only by this
+  // test helper, which then emits the initial Realm authority-root ref.
+  issuerAuthorityRefs?: CapabilityGrantObject["issuer_authority_refs"];
   server?: SolandKey;
 };
 
 // Build (but do not submit) a signed `ak.capability.grant` envelope. Exposed
-// separately from grantCapabilityEventApi so negative suites (delegation
-// widening, revoked-parent re-delegation, ...) can submit the same canonical
+// separately from grantCapabilityEventApi so negative suites (authority
+// widening, revoked-ancestor re-granting, ...) can submit the same canonical
 // envelope shape raw and assert the reducer rejection instead of the 200 the
 // happy-path helper pins.
 export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
@@ -779,7 +796,15 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     ...(args.expiresAt ? { expires_at: args.expiresAt } : {}),
-    ...(args.parentGrantId ? { parent_grant_id: args.parentGrantId } : {}),
+    issuer_authority_refs: args.issuerAuthorityRefs ?? [
+      {
+        kind: "realm_root",
+        realm_id: args.realmId,
+        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
+        controller_epoch_at_issuance: 0,
+        authority_generation: 0,
+      },
+    ],
   };
   const envelope = signedEventEnvelope({
     actorDid: args.ownerDid,
@@ -787,8 +812,8 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     kind: "ak.capability.grant",
     eventId,
     createdAt: issuedAt,
-    // capability_grant_payload (event-payload.schema.json) is closed —
-    // parent_grant_id travels inside the grant object, not the payload.
+    // capability_grant_payload (event-payload.schema.json) is closed; typed
+    // issuer-authority refs travel inside the grant object.
     payload: {
       grant_id: grantId,
       grant: {

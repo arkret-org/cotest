@@ -109,7 +109,7 @@ export type RealmObject = {
   "proposal_absolute_deadline_ms"?: number;
   "max_proposal_defers"?: number;
   "seal_compaction_max_interval_ms"?: number;
-  "max_delegation_lifetime_ms"?: number;
+  "max_authority_lifetime_ms"?: number;
   "bottom_escalation_after_ms"?: number;
   "cell_lattices"?: Array<{
     "cell_family": string;
@@ -122,7 +122,6 @@ export type RealmObject = {
     "initial_value"?: unknown;
     "sentinel_writers"?: string[];
   }>;
-  "cowrite_policy"?: string[][];
   "retention_policy_id"?: string;
   "avatar_blob_ref"?: string;
   "created_by": string;
@@ -200,10 +199,10 @@ export type CapabilityGrantObject = {
   "capability_action_registry_digest"?: string;
   "constraints"?: Array<{
     "constraint_id"?: string;
-    "constraint_kind": "temporal" | "field_access" | "kind_restriction" | "scope_limitation" | "delegation_control" | "quota" | "claim_based" | "confidentiality";
+    "constraint_kind": "temporal" | "field_access" | "kind_restriction" | "scope_limitation" | "authority_control" | "quota" | "claim_based" | "confidentiality";
     "effect": "allow" | "deny" | "quarantine" | "require_review";
     "evaluation_class"?: "stateless" | "grant_local" | "realm_state" | "external";
-    "constraint_subkind"?: "claim" | "approval" | "accountability" | "rate" | "resource" | "encryption" | "visibility" | "window" | "edit_window" | "redact_window" | "session" | "applet_delegation";
+    "constraint_subkind"?: "claim" | "approval" | "accountability" | "rate" | "resource" | "encryption" | "visibility" | "window" | "edit_window" | "redact_window" | "session" | "applet_authority";
     "applies_to_actions"?: string[];
     "not_before"?: string;
     "expires_at"?: string;
@@ -264,12 +263,11 @@ export type CapabilityGrantObject = {
     };
     "allowed_data_labels"?: string[];
     "allowed_endpoints"?: string[];
-    "max_delegation_depth"?: number;
-    "delegation_path"?: string[];
-    "prohibit_subdelegation"?: boolean;
-    "delegation_scope"?: "narrowing_only" | "same_scope" | "custom";
+    "max_authority_depth"?: number;
+    "authority_path"?: string[];
+    "authority_regrant_allowed"?: boolean;
+    "authority_scope"?: "narrowing_only" | "same_scope" | "custom";
     "scope_expansion_allowed"?: boolean;
-    "parent_reference_required"?: boolean;
     "applet_id"?: string;
     "executed_by"?: string;
     "registration_epoch"?: string;
@@ -311,7 +309,6 @@ export type CapabilityGrantObject = {
     "approved_key_issuers"?: string[];
     "depends_on_moderation_state"?: boolean;
   }>;
-  "parent_grant_id"?: string;
   "issued_at"?: string;
   "not_before"?: string;
   "expires_at"?: string;
@@ -329,6 +326,23 @@ export type CapabilityGrantObject = {
     "audience"?: string | string[];
     "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
     "jws": string;
+  }>;
+  "issuer_authority_refs": Array<{
+    "kind": "grant";
+    "grant_id": string;
+  } | {
+    "kind": "realm_root";
+    "realm_id": string;
+    "cell_ref": "ak:cell:ak.component.realm.authority_root.v1:null";
+    "controller_epoch_at_issuance": number;
+    "authority_generation": number;
+  }>;
+  "authority_depth"?: number;
+  "authority_root_refs"?: Array<{
+    "kind": "realm_root";
+    "realm_id": string;
+    "cell_ref": "ak:cell:ak.component.realm.authority_root.v1:null";
+    "authority_generation": number;
   }>;
 };
 

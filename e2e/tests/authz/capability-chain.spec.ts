@@ -1,7 +1,7 @@
-// Capability chain on the event wire: grant / delegate (narrowing) / revoke cascade
+// Capability chain on the event wire: grant narrowing / revoke cascade
 // Contract: e2e/scenarios/authz/capability-chain.md
 // Spec: authz/capabilities.md §3 (grant + §3.1a issuer upper bound),
-//       §10 (delegation narrowing + §10.3 revoke propagation), §12 (revocation)
+//       §10 (authority narrowing + §10.3 revoke propagation), §12 (revocation)
 //
 // Capabilities are event-minted: grants are `ak.capability.grant` events and
 // revocations `ak.capability.revoke` events submitted to /_arkret/self/events
@@ -159,11 +159,11 @@ test.describe("capability chain (event wire)", () => {
     expect(grants.map((grant) => grant.id)).toContain(grantId);
   });
 
-  test("§10 narrowing delegation: bob re-grants to carol with a subset window via parent_grant_id; carol's check passes through the chain", async ({
+  test("§10 narrowing authority: bob re-grants to carol with a subset window via issuer_authority_refs; carol's check passes through the chain", async ({
     request,
   }) => {
     const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
-      await setupOwnerRealm(request, "delegate");
+      await setupOwnerRealm(request, "authority");
 
     const parent = await grantCapabilityEventApi(request, aliceToken, {
       ownerDid: alice.did,
@@ -180,7 +180,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
-      parentGrantId: parent.grantId,
+      issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
 
     const carolCheck = await authzCheck(request, carolToken, {
@@ -191,7 +191,7 @@ test.describe("capability chain (event wire)", () => {
     expect(carolCheck.decision).toBe("allow");
   });
 
-  test("§10.1/§3.1a over-action delegation fails closed: bob cannot re-grant an action bob does not hold", async ({
+  test("§10.1/§3.1a over-action authority fails closed: bob cannot re-grant an action bob does not hold", async ({
     request,
   }) => {
     const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
@@ -205,7 +205,7 @@ test.describe("capability chain (event wire)", () => {
       expiresAt: plusSeconds(3600),
     });
 
-    // bob only holds ak.message.create; delegating moderation authority
+    // bob only holds ak.message.create; re-granting moderation authority
     // violates child.actions ⊆ parent.actions (§10.1) / the issuer upper
     // bound (§3.1a, reason grant_exceeds_issuer_authority).
     const overAction = await submitGrantRaw(request, bobToken, {
@@ -214,7 +214,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.moderation.decision"],
       expiresAt: plusSeconds(1800),
-      parentGrantId: parent.grantId,
+      issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
     expectGrantRejected(overAction, ["grant_exceeds_issuer_authority"]);
 
@@ -241,17 +241,17 @@ test.describe("capability chain (event wire)", () => {
     });
 
     // child effective_expires_at MUST be <= parent.effective_expires_at
-    // (§10.1, reason delegation_expiry_widening).
+    // (§10.1, reason authority_expiry_widening).
     const overExpire = await submitGrantRaw(request, bobToken, {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(7200),
-      parentGrantId: parent.grantId,
+      issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
     expectGrantRejected(overExpire, [
-      "delegation_expiry_widening",
+      "authority_expiry_widening",
       "grant_exceeds_issuer_authority",
     ]);
 
@@ -263,7 +263,7 @@ test.describe("capability chain (event wire)", () => {
     expect(carolCheck.decision).toBe("hard_deny");
   });
 
-  test("§12/§10.3 revoke cascade: revoking the parent grant invalidates the delegated child and blocks re-delegation from the revoked parent", async ({
+  test("§12/§10.3 revoke cascade: revoking the parent grant invalidates the child and blocks re-granting from the revoked parent", async ({
     request,
   }) => {
     const { alice, bob, carol, aliceToken, bobToken, carolToken, realmId } =
@@ -282,7 +282,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
-      parentGrantId: parent.grantId,
+      issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
 
     // Sanity: both allowed before the revoke.
@@ -319,7 +319,7 @@ test.describe("capability chain (event wire)", () => {
     });
     expect(carolAfter.decision).toBe("hard_deny");
 
-    // Re-delegating from the revoked parent MUST fail closed with
+    // Re-granting from the revoked parent MUST fail closed with
     // grant_revoked_upstream (§10.3).
     const fromRevoked = await submitGrantRaw(request, bobToken, {
       ownerDid: bob.did,
@@ -327,7 +327,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(600),
-      parentGrantId: parent.grantId,
+      issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
     expectGrantRejected(fromRevoked, ["grant_revoked_upstream"]);
   });
