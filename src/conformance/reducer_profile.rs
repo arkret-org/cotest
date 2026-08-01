@@ -18,17 +18,12 @@
 //! any divergence MUST reject the whole batch with `reducer_profile_mismatch`.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_wire::ProfileId;
 use serde_json::Value;
 
 use super::{canonical_json, load_artifact_json, sha256_prefixed};
 
 /// Registry path relative to `spec/v1/artifacts/`.
 const REDUCER_PROFILE_REGISTRY: &str = "registry/reducer-profile-registry.json";
-
-/// The reducer profile soland declares for its federation surface
-/// (`ak.peer.events.query.describe` → `supported_profiles`), and the profile pinned
-/// by the registered conformance vector.
 
 /// Compute the §4.1.1 `reducer_profile_digest` for `profile_id` from the
 /// published registry row. Fails closed when the registry row is missing, the
@@ -88,6 +83,8 @@ pub(crate) fn reducer_profile_digest_for_input(resolved_digest_input: &Value) ->
 
 #[cfg(test)]
 mod tests {
+    use arkret_wire::ProfileId;
+
     use super::*;
     use crate::conformance::{FederationFixture, load_fixture, looks_like_sha256_digest};
 

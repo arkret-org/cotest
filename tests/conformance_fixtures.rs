@@ -1,5 +1,4 @@
 use anyhow::Result;
-use arkret_wire::ProfileId;
 use cotest::transcripts::{TranscriptGuard, init_transcript_writer};
 use serial_test::serial;
 
