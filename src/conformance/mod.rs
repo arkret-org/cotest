@@ -1,3 +1,4 @@
+mod aad_visibility_ceiling;
 mod agent_mls_keypackage_authorization;
 mod agent_participation;
 mod agent_signer_evidence;
@@ -57,6 +58,7 @@ mod profile_matrix;
 mod profile_registry;
 mod protocol_gap_closure;
 mod push_rule_core;
+mod read_receipt_signal;
 pub mod recovery_transaction_faults;
 mod redaction;
 mod reducer_profile;
@@ -93,6 +95,10 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
+pub use aad_visibility_ceiling::{
+    REASON_AAD_VISIBILITY_POLICY_VIOLATION, VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
+    run_aad_visibility_policy_ceiling_vector,
+};
 pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
 pub use agent_participation::{
     ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,
@@ -318,6 +324,11 @@ pub use profile_registry::{
 pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
 pub use push_rule_core::{
     run_hardened_mention_routing_hint_vector, run_push_rule_core_fixture_suite,
+};
+pub use read_receipt_signal::{
+    ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS, VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE,
+    VECTOR_ID_READ_RECEIPT_ROUND_TRIP, run_genesis_join_policy_bundle_vector,
+    run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
 };
 pub use redaction::run_redaction_fixture_suite;
 pub use reducer_profile::reducer_profile_digest;

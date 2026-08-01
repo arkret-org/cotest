@@ -396,15 +396,28 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("pairing agent_id missing"))?,
     )?;
-    let expiry_inputs = pairing
+    // The fixture separates the spelling the wire accepts from the spellings it
+    // rejects at ingress. Both still have to normalize to the same digest:
+    // rejecting a microsecond or offset spelling is an ingress policy, and the
+    // signed binding must not additionally depend on which equivalent spelling
+    // of the same instant reached the signer.
+    let accepted_expiry_inputs = pairing
         .get("pairing_expires_at_inputs")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("pairing_expires_at_inputs missing"))?;
-    if expiry_inputs.len() < 3 {
+    let rejected_expiry_inputs = pairing
+        .get("rejected_noncanonical_pairing_expires_at_inputs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("rejected_noncanonical_pairing_expires_at_inputs missing"))?;
+    if accepted_expiry_inputs.is_empty() || rejected_expiry_inputs.len() < 2 {
         bail!(
             "pairing timestamp normalization vector needs canonical, microsecond and offset inputs"
         );
     }
+    let expiry_inputs: Vec<&Value> = accepted_expiry_inputs
+        .iter()
+        .chain(rejected_expiry_inputs.iter())
+        .collect();
     let expected_pairing_digest = case
         .get("expected_pairing_request_binding_digest")
         .and_then(Value::as_str)

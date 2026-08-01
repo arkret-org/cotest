@@ -42,7 +42,7 @@ fn at(seconds: i64) -> DateTime<Utc> {
 
 fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
     let payload_sequence = frame.payload_sequence();
-    let Value::Object(body) = serde_json::to_value(frame).unwrap() else {
+    let Value::Object(body) = serde_json::to_value(&frame).unwrap() else {
         unreachable!()
     };
     SignalPlaintext {
@@ -50,6 +50,8 @@ fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
         actor_id: actor(),
         payload_sequence,
         ttl_ms: None,
+        // The typed profile the receiver dispatched to (`signal.md` §1.1).
+        payload: garth::SdkSignalPlaintext::MessageStream(frame),
         body: body.into_iter().collect(),
         sent_at: at(0),
         expires_at: at(30),

@@ -40,8 +40,8 @@ pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-fixture.jso
 /// Canonical conformance profile for the security closure fixture suite.
 pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 
-/// The 13 vector ids the round-4 spec promotes from prose to fixture. The
-/// list is pinned here so any drift on either side is loud.
+/// The vector ids the round-4 spec promotes from prose to fixture. The list is
+/// pinned here so any drift on either side is loud.
 pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     crate::scenarios::security_closure_fixture::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
     "ak.vector.webrtc.media_plaintext_downgrade.v1",
@@ -56,6 +56,11 @@ pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     "ak.vector.sync.soft_fail_reconcile.v1",
     "ak.vector.lattice.lww_open_set.v1",
     "ak.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
+    // 2026-08-01 — `aad_visibility` became a registered policy_bundle
+    // component with a disclosure ceiling (`encryption-and-audit.md` §2.8).
+    // The rule is cross-object (policy value vs envelope discriminator), so
+    // JSON Schema cannot express it and it lives here instead.
+    crate::conformance::aad_visibility_ceiling::VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
 ];
 
 /// Top-level fixture shape.

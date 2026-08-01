@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
+use arkret_wire::ProfileId;
 use serde::Deserialize;
 use serde_json::Value;
 

@@ -20,9 +20,11 @@ use cotest::conformance::{
     SecurityClosureFixture, run_security_closure_fixture_suite,
 };
 use cotest::scenarios::federation_idempotency_historical_only::{
-    HISTORICAL_ONLY_REASON, VECTOR_ID as FEDERATION_HISTORICAL_VECTOR_ID,
-    run_federation_idempotency_historical_only,
+    HISTORICAL_ONLY_REASON, run_federation_idempotency_historical_only,
 };
+// The scenario no longer re-declares the vector id; the fixture module is the
+// single source, and the scenario doc points at it.
+use cotest::scenarios::security_closure_fixture::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE as FEDERATION_HISTORICAL_VECTOR_ID;
 use cotest::scenarios::security_closure_fixture::{
     VECTOR_CONSENT_CACHE_INVALIDATION, VECTOR_CONSENT_SCOPE_CASCADE,
     VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING, VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,

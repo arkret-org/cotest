@@ -51,11 +51,17 @@ pub fn run_state_closed_set_vector() -> Result<()> {
         if PresenceStatus::parse_wire(retired).is_some() {
             bail!("{VECTOR_ID_STATE_CLOSED_SET} accepted the non-v1 state `{retired}`");
         }
+        // The drop may land at either of two gates, and both count: since the
+        // 2026-08-01 closure the plaintext is validated against
+        // `ak.schema.signal_presence.v1` on the way in (`signal.md` §1.1), so a
+        // non-v1 `state` is usually rejected before a projection ever sees it.
+        // What §3.2 forbids is the third outcome — being mapped onto a nearby
+        // state — so the assertion is that nothing is retained either way.
+        let Ok(plaintext) = presence_plaintext(json!({"state": retired}), 1) else {
+            continue;
+        };
         let mut projection = PresenceProjection::new();
-        if projection
-            .apply(&presence_plaintext(json!({"state": retired}), 1)?)
-            .is_ok()
-        {
+        if projection.apply(&plaintext).is_ok() {
             bail!(
                 "{VECTOR_ID_STATE_CLOSED_SET} projected the non-v1 state `{retired}` instead of dropping it"
             );
@@ -141,14 +147,15 @@ pub fn run_status_message_bounds_vector() -> Result<()> {
         if validate_status_message(rejected).is_ok() {
             bail!("{VECTOR_ID_STATUS_MESSAGE_BOUNDS} accepted a malformed status_message");
         }
+        // As in VECT-PS-1, the drop may land at the plaintext gate or at the
+        // projection. Both are conformant; retaining the value is not.
+        let Ok(plaintext) =
+            presence_plaintext(json!({"state": "dnd", "status_message": rejected}), 1)
+        else {
+            continue;
+        };
         let mut projection = PresenceProjection::new();
-        if projection
-            .apply(&presence_plaintext(
-                json!({"state": "dnd", "status_message": rejected}),
-                1,
-            )?)
-            .is_ok()
-        {
+        if projection.apply(&plaintext).is_ok() {
             bail!(
                 "{VECTOR_ID_STATUS_MESSAGE_BOUNDS} projected a presence signal with a malformed status_message"
             );
@@ -268,11 +275,21 @@ fn device_presence(
         }
     }
     debug_assert_eq!(SignalClass::Session.max_ttl(), Duration::seconds(30));
+    // The typed profile is what a receiver actually dispatches to
+    // (`sync/signal.md` §1.1), so the fixture carries it rather than a bare
+    // JSON body. A `state` outside the closed v1 set fails here — which is the
+    // §3.2 drop these vectors assert — so it is surfaced as the payload the
+    // vector then feeds to the projection.
+    let payload = garth::open_signal_plaintext(&arkret_canonical::canonical_json_bytes(
+        &Value::Object(body.clone()),
+    )?)
+    .map_err(|error| anyhow::anyhow!("presence fixture is not a registered plaintext: {error}"))?;
     Ok(SignalPlaintext {
         kind: SIGNAL_PLAINTEXT_KIND_PRESENCE.to_owned(),
         actor_id: actor()?,
         payload_sequence,
         ttl_ms: Some(TTL_MS),
+        payload,
         body: body.into_iter().collect(),
         sent_at,
         expires_at: sent_at + Duration::milliseconds(TTL_MS as i64),

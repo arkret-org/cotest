@@ -54,8 +54,8 @@ use arkret_models_identity::artifacts_device_identity::{
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
-    AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, NonEmptyString,
-    OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId,
+    AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, EventKind, NonEmptyString,
+    OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -1823,7 +1823,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         .context("principal bootstrap Seal frontier is available")?;
 
     let key_record = |kid: String, key: &SigningKey| PublishedKey {
-        kid: NonEmptyString::new(kid).unwrap(),
+        kid: DidUrl::new(kid).unwrap(),
         alg: NonEmptyString::new("EdDSA").unwrap(),
         public_key: NonEmptyString::new(ed25519_pubkey_to_did_key_multibase(
             key.verifying_key().as_bytes(),

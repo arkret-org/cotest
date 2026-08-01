@@ -183,6 +183,25 @@ fn call_signal_receiver_vector_suite_runs_clean() {
 // `status_message` bounds and the deterministic multi-device aggregation are
 // all receiver obligations.
 
+/// 2026-08-01 — the Signal plaintext family closed on `kind` +
+/// `payload_sequence`, and `ak.receipt.read` became a plaintext profile rather
+/// than a durable object. A round trip is the only place the seal side and the
+/// open side meet, so it lives here rather than in either repo's unit tests.
+#[test]
+fn read_receipt_signal_vector_suite_runs_clean() {
+    cotest::conformance::run_read_receipt_signal_vector_suite()
+        .expect("read receipt Signal plaintext vectors must pass");
+}
+
+/// 2026-08-01 — `aad_visibility` became a registered policy_bundle component
+/// with a disclosure ceiling. The rule compares a policy value against an
+/// envelope discriminator, which no JSON Schema can express.
+#[test]
+fn aad_visibility_policy_ceiling_vector_runs_clean() {
+    cotest::conformance::run_aad_visibility_policy_ceiling_vector()
+        .expect("aad_visibility ceiling vector must pass");
+}
+
 #[test]
 fn presence_signal_receiver_vector_suite_runs_clean() {
     run_presence_signal_vector_suite().expect("presence receiver vectors must pass");
