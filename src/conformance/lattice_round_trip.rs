@@ -41,6 +41,8 @@ use arkret_wire::{ErrorCode, LatticeOp, LatticeOpType};
 use serde_json::{Value, json};
 
 const REALM_LINK_FSM_VECTOR_ID: &str = "ak.vector.realm_link.fsm_transition_matrix.v1";
+pub const VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION: &str =
+    "ak.vector.lattice.cas_register_supersession.v1";
 const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 6] = [
     "ak.vector.lattice.mv_register_join.v1",
     "ak.vector.lattice.counter_join.v1",
@@ -59,6 +61,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     or_set_idempotent_re_add_after_remove()?;
     cas_register_concurrent_set_returns_bottom_conflict()?;
     cas_register_single_set_returns_value()?;
+    run_lattice_cas_register_supersession_vector()?;
     counter_pn_sums_increments_and_decrements()?;
     fsm_legal_transition_advances_state()?;
     fsm_duplicate_transition_is_idempotent()?;
@@ -474,6 +477,15 @@ fn op_set(value: serde_json::Value) -> LatticeOp {
     }
 }
 
+fn op_supersede(value: serde_json::Value, from: serde_json::Value) -> LatticeOp {
+    LatticeOp {
+        op_type: LatticeOpType::Set,
+        value: Some(value),
+        from: Some(from),
+        ..base_op()
+    }
+}
+
 fn op_inc(value: u64) -> LatticeOp {
     LatticeOp {
         op_type: LatticeOpType::Inc,
@@ -643,6 +655,57 @@ fn cas_register_single_set_returns_value() -> Result<()> {
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("CasRegister with a single sealed set must NOT Bottom; got {resolved:?}");
+    }
+    Ok(())
+}
+
+/// Exact runner for `ak.vector.lattice.cas_register_supersession.v1`.
+pub fn run_lattice_cas_register_supersession_vector() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = cell(
+        "ak.component.realm.policy_server.v1",
+        "ak.realm.01js0sp0000000000000000002",
+    );
+    let declaration = json!({"policy_server_did": "did:web:policy.example"});
+    let tombstone = json!({"tombstone": true});
+    let replacement = json!({"policy_server_did": "did:web:replacement.example"});
+
+    let chain = vec![
+        SealedOp::new(issuer_digest("d1"), op_set(declaration.clone())),
+        SealedOp::new(
+            issuer_digest("d2"),
+            op_supersede(tombstone.clone(), declaration.clone()),
+        ),
+        SealedOp::new(
+            issuer_digest("d3"),
+            op_supersede(replacement.clone(), tombstone.clone()),
+        ),
+    ];
+    if lattice.join(&cref, &chain) != CellState::Value(replacement.clone()) {
+        bail!("a complete declaration -> tombstone -> replacement chain did not settle");
+    }
+    if lattice.join(&cref, &chain[..2]) != CellState::Value(tombstone.clone()) {
+        bail!("a prefix-closed historical view did not settle at its chain terminal");
+    }
+
+    let siblings = vec![
+        chain[0].clone(),
+        SealedOp::new(
+            issuer_digest("d4"),
+            op_supersede(tombstone.clone(), declaration.clone()),
+        ),
+        SealedOp::new(
+            issuer_digest("d5"),
+            op_supersede(replacement, declaration.clone()),
+        ),
+    ];
+    if !matches!(lattice.join(&cref, &siblings), CellState::Bottom(_)) {
+        bail!("concurrent distinct siblings on one predecessor must conflict");
+    }
+
+    let duplicate = vec![chain[0].clone(), chain[1].clone(), chain[1].clone()];
+    if lattice.join(&cref, &duplicate) != CellState::Value(tombstone) {
+        bail!("a byte-identical repeated set was not idempotently deduplicated");
     }
     Ok(())
 }

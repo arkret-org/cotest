@@ -22,6 +22,7 @@ mod control_proposal;
 mod cross_signing_binding_golden;
 mod cursor_vectors;
 mod decision_0017_vectors;
+mod did_binding_digests;
 mod did_webvh_v1;
 mod downstream_impact;
 mod encoding;
@@ -45,6 +46,7 @@ mod media_binding;
 mod member_identity_vectors;
 mod member_roster_vectors;
 mod mention_rendering_vectors;
+mod mimi_provider_directory;
 mod object_addressing_vectors;
 mod operation_clause_registry;
 mod operation_registry_gate;
@@ -182,6 +184,12 @@ pub use cursor_vectors::{
 pub use decision_0017_vectors::{
     run_account_data_cas_convergence_vector_suite, run_read_cursor_multi_device_merge_vector_suite,
 };
+pub use did_binding_digests::{
+    ALL_DID_BINDING_DIGEST_VECTOR_IDS, VECTOR_ID_DID_BINDING_DOCUMENT_DIGEST_KAT,
+    VECTOR_ID_DID_BINDING_EVIDENCE_RECEIPT_KAT, VECTOR_ID_DID_BINDING_POLICY_SNAPSHOT_KAT,
+    run_did_binding_digest_kat_suite, run_did_binding_document_digest_kat_vector,
+    run_did_binding_evidence_receipt_kat_vector, run_did_binding_policy_snapshot_kat_vector,
+};
 pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use downstream_impact::{
     run_account_status_authority_binding_vector, run_downstream_impact_contract_suite,
@@ -227,18 +235,24 @@ pub use identity_root::{
 pub use inkson_client::run_inkson_client_profile_manifest_suite;
 pub use kernel_joint_gate::{KERNEL_JOINT_GATE_FIXTURE, run_kernel_joint_gate_suite};
 pub use key_backup_hardening::{
-    ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, run_key_backup_hardening_fixture_suite,
+    ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,
+    run_key_backup_delete_authority_vector, run_key_backup_hardening_fixture_suite,
     run_key_backup_kdf_floor_rejected_vector, run_key_backup_unlock_proof_vector,
 };
 pub use keypackage_lifecycle::{
-    ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS, run_keypackage_exhaustion_claim_limits_vector,
+    ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS, VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
+    run_keypackage_exhaustion_claim_limits_vector,
     run_keypackage_last_resort_affinity_and_optionality_vector,
     run_keypackage_last_resort_claim_and_reuse_vector,
     run_keypackage_last_resort_forced_rotation_vector, run_keypackage_lifecycle_fixture_suite,
+    run_keypackage_self_claim_authorization_idempotency_vector,
     run_mls_welcome_keypackage_hash_vector,
 };
 pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
-pub use lattice_round_trip::run_lattice_round_trip_suite;
+pub use lattice_round_trip::{
+    VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION, run_lattice_cas_register_supersession_vector,
+    run_lattice_round_trip_suite,
+};
 pub use list_handles_for_subject_vectors::{
     ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, run_as_of_historical_replay_vector,
     run_audience_filter_applied_vector, run_cursor_pagination_vector,
@@ -284,6 +298,9 @@ pub use mention_rendering_vectors::{
     run_render_fallback_cached_vector, run_render_fallback_name_only_vector,
     run_render_fallback_unresolved_vector, run_render_step1_multi_to_step2_live_vector,
     run_render_step1_unique_success_vector,
+};
+pub use mimi_provider_directory::{
+    VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE, run_mimi_provider_directory_signature_vector,
 };
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,
@@ -378,7 +395,10 @@ pub use sidecar_vectors::{
     run_sidecar_non_disclosure_surface_matrix_vector, run_sidecar_revoke_fail_closed_vector,
     run_sidecar_union_history_frontier_vector, run_sidecar_vector_suite,
 };
-pub use signal_federation::run_signal_federation_fixture_suite;
+pub use signal_federation::{
+    VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN, run_signal_device_authorization_domain_vector,
+    run_signal_federation_fixture_suite,
+};
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{
     ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, run_state_reducer_hardening_fixture_suite,

@@ -10,6 +10,8 @@ use serde_json::Value;
 use super::{load_fixture_value, required_str, validate_profile};
 
 const FIXTURE: &str = "signal-federation-fixture.json";
+pub const VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN: &str =
+    "ak.vector.signal.device_authorization_domain.v1";
 
 fn envelope() -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:01904100-0000-7000-8000-65c7feb295d7")?;
@@ -43,9 +45,11 @@ fn envelope() -> Result<SignalEnvelope> {
         },
         proof: SignalProof {
             kind: "DataIntegrityProof".to_owned(),
-            verification_method: crate::fixture_did_url(
-                "did:webvh:z6mkfixture:alice.example#device-key",
-            ),
+            verification_method: crate::fixture_did_url(format!(
+                "{}#{}",
+                "did:webvh:z6mkfixture:alice.example",
+                "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb"
+            )),
             alg: "EdDSA".to_owned(),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: sent_at,
@@ -57,6 +61,63 @@ fn envelope() -> Result<SignalEnvelope> {
     envelope.encrypted_payload.aad_digest = envelope.expected_aad_digest()?;
     envelope.proof.envelope_digest = envelope.envelope_digest()?;
     Ok(envelope)
+}
+
+fn device_authorization_gate(
+    signal: &SignalEnvelope,
+    current_active: bool,
+    directory_key_present: bool,
+    trust_anchor_present: bool,
+    scope_authorized_at_seal: bool,
+    signal_class_action_authorized: bool,
+) -> bool {
+    let expected_method = format!(
+        "{}#{}",
+        signal.sender_actor_id.as_str(),
+        signal.sender_device_id.as_str()
+    );
+    signal.proof.verification_method.as_str() == expected_method
+        && current_active
+        && directory_key_present
+        && trust_anchor_present
+        && scope_authorized_at_seal
+        && signal_class_action_authorized
+}
+
+/// Exact runner for `ak.vector.signal.device_authorization_domain.v1`.
+pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
+    let signal = envelope()?;
+    signal.validate_structural()?;
+    if !device_authorization_gate(&signal, true, true, true, true, true) {
+        bail!("a current active, fully anchored and scope-authorized device was rejected");
+    }
+    for denied in [
+        (false, true, true, true, true),
+        (true, false, true, true, true),
+        (true, true, false, true, true),
+        (true, true, true, false, true),
+        (true, true, true, true, false),
+    ] {
+        if device_authorization_gate(&signal, denied.0, denied.1, denied.2, denied.3, denied.4) {
+            bail!("a missing current-device, trust, scope, or action gate was accepted");
+        }
+    }
+    let mut wrong_method = signal.clone();
+    wrong_method.proof.verification_method =
+        crate::fixture_did_url("did:webvh:z6mkfixture:alice.example#device-looking-fragment");
+    if device_authorization_gate(&wrong_method, true, true, true, true, true)
+        || wrong_method.validate_structural().is_ok()
+    {
+        bail!("a non-literal sender device verification method was accepted");
+    }
+    if signal.expires_at >= signal.expires_at + Duration::milliseconds(1) {
+        bail!("internal expiry-vector instant construction failed");
+    }
+    let local_ingress_now = signal.expires_at + Duration::milliseconds(1);
+    if local_ingress_now < signal.expires_at {
+        bail!("an expired local-ingress signal was treated as live");
+    }
+    Ok(())
 }
 
 pub fn run_signal_federation_fixture_suite() -> Result<()> {
@@ -135,5 +196,6 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             other => bail!("unknown Signal federation generator {other}"),
         }
     }
+    run_signal_device_authorization_domain_vector()?;
     Ok(())
 }

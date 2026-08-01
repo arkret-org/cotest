@@ -3746,8 +3746,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     let pairing_code = provisioned
         .pairing_code()
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
-    let pairing_expires_at =
-        arkret::canonical::format_timestamp_canonical(provisioned.expires_at());
+    let pairing_expires_at = provisioned.expires_at();
     let agent_id = provisioned.agent_id().clone();
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
@@ -3761,15 +3760,18 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         .await?;
     let runtime_public_key_digest = builder.public_key_digest()?;
     let pairing_binding_digest =
-        arkret_signatures::agent::agent_key_pairing_request_binding_digest(
+        arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
             &controller_id,
             &agent_id,
-            &verification_method,
-            &runtime_public_key_digest,
-            pairing_request_id,
+            &approval_request.pairing_request_id,
             pairing_code,
-            &pairing_expires_at,
-            server.service_id(),
+            pairing_expires_at,
+            &arkret::Did::new(server.service_id().to_owned())?,
+            &approval_request
+                .proof_of_possession
+                .runtime_key_binding_digest,
+            &approval_request.proof_of_possession,
         )?;
     let issued_at = canonical_now();
     let expires_at =

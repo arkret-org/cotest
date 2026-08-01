@@ -10,16 +10,6 @@
 //!   * `DELETE` against an inherited-only or never-declared Realm answers `not_found`, appends no
 //!     Event and does not advance the Seal frontier;
 //!   * with a durable PostgreSQL backend the declaration survives a full process restart.
-//!
-//! The value-tombstone legs of `policy-server.md` §2.2 are NOT asserted here.
-//! They are blocked by
-//! `arkret-work/review/spec-open/2026-07-30-cas-register-join-lacks-reachability.md`:
-//! `cas_register.join` gets no reachability information, so the second accepted
-//! write to the cell joins to `⊥` and every dependent read fails closed. That
-//! finding carries the reproduction; once the protocol decides how the join
-//! learns reachability, the tombstone / idempotent-repeat / fallback-restored
-//! legs belong in this file.
-
 use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -226,6 +216,32 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
         "a refused DELETE must not advance the accepted Seal frontier"
     );
 
+    // A settled direct child declaration can be tombstoned. The tombstone
+    // restores organization fallback, and repeating DELETE appends nothing.
+    let (status, direct) = put_policy_server(
+        &alice,
+        &child_realm,
+        &declaration_body("child-policy.example"),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "child PUT: {direct}");
+    let (deleted_status, deleted) = delete_policy_server(&alice, &child_realm).await?;
+    assert_eq!(deleted_status, StatusCode::OK, "child DELETE: {deleted}");
+    let child_events = policy_server_events(&alice, &child_realm).await?;
+    assert_eq!(child_events.len(), 2, "declaration plus tombstone");
+    assert_eq!(child_events[1]["payload"]["tombstone"], true);
+    let (fallback_status, fallback) = get_policy_server(&alice, &child_realm).await?;
+    assert_eq!(
+        fallback_status,
+        StatusCode::OK,
+        "fallback after DELETE: {fallback}"
+    );
+    assert_eq!(fallback["policy_server_did"], "did:web:org-policy.example");
+    assert_eq!(fallback["from_org_fallback"], true);
+    let (repeat_status, repeat) = delete_policy_server(&alice, &child_realm).await?;
+    assert_eq!(repeat_status, StatusCode::OK, "repeat DELETE: {repeat}");
+    assert_eq!(policy_server_events(&alice, &child_realm).await?.len(), 2);
+
     // A Realm with neither a direct binding nor a governed_by chain.
     let never_declared = create_policy_realm(
         &alice,
@@ -257,6 +273,9 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
                 org_events_after.len() - declared.len(),
             "inherited_delete_seal_advanced": seal_after_put != seal_after_refusal,
             "missing_direct_history_delete": missing_status.as_u16(),
+            "settled_delete": deleted_status.as_u16(),
+            "repeat_delete": repeat_status.as_u16(),
+            "fallback_after_tombstone": fallback["policy_server_did"].clone(),
             "fallback_policy_server_did": inherited["policy_server_did"].clone(),
         }),
     );
@@ -326,13 +345,33 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
         "the durable log must retain the declaration after restart: {events:?}"
     );
 
+    let (delete_status, deleted) = delete_policy_server(&alice, &realm_id).await?;
+    assert_eq!(
+        delete_status,
+        StatusCode::OK,
+        "DELETE after restart: {deleted}"
+    );
+    server.restart_external_process().await?;
+    let (tombstone_status, tombstoned) = get_policy_server(&alice, &realm_id).await?;
+    assert_eq!(
+        tombstone_status,
+        StatusCode::NOT_FOUND,
+        "tombstone after second restart: {tombstoned}"
+    );
+    let events = policy_server_events(&alice, &realm_id).await?;
+    assert_eq!(events.len(), 2, "declaration and tombstone remain durable");
+
     record_vector_event(
         "policy_server.tombstone_federation_replay",
         &json!({"realm_id": realm_id}),
-        &json!({"restart_replay_restores_declaration": true}),
+        &json!({
+            "restart_replay_restores_declaration": true,
+            "restart_replay_restores_tombstone": true
+        }),
         &json!({
             "post_restart_get": status.as_u16(),
             "post_restart_policy_server_did": restored["policy_server_did"].clone(),
+            "post_tombstone_restart_get": tombstone_status.as_u16(),
             "durable_policy_events": events.len(),
         }),
     );

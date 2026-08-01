@@ -351,12 +351,20 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let public_digest = arkret_signatures::agent::agent_runtime_public_key_digest(public_key)?;
     let attestation_digest =
         arkret_signatures::agent::agent_runtime_attestation_digest(attestation)?;
-    let binding = arkret_signatures::agent::agent_runtime_key_binding_digest(
+    let typed_public_key: arkret_models_collaboration::governance::agent_artifacts::PublicKey =
+        serde_json::from_value(public_key.clone())?;
+    let typed_pairing_request_id =
+        arkret_wire::OpaqueLocalId::new("pairing_request:01964137-0000-7000-8000-000000000000")
+            .map_err(|error| anyhow!(error))?;
+    let typed_verification_method =
+        arkret_wire::DidUrl::new("did:webvh:z6mkagent:agent.example#runtime-1")
+            .map_err(|error| anyhow!(error))?;
+    let binding = arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
         &agent_id,
-        "pairing_request:01964137-0000-7000-8000-000000000000",
-        "did:webvh:z6mkagent:agent.example#runtime-1",
-        public_key,
-        attestation,
+        &typed_pairing_request_id,
+        &typed_verification_method,
+        &typed_public_key,
+        None,
     )?;
     for (actual, expected_key) in [
         (public_digest.as_str(), "expected_public_key_digest"),
@@ -396,11 +404,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("pairing agent_id missing"))?,
     )?;
-    // The fixture separates the spelling the wire accepts from the spellings it
-    // rejects at ingress. Both still have to normalize to the same digest:
-    // rejecting a microsecond or offset spelling is an ingress policy, and the
-    // signed binding must not additionally depend on which equivalent spelling
-    // of the same instant reached the signer.
+    // The fixture separates the one canonical wire spelling from equivalent
+    // timestamps that are rejected before digest verification.
     let accepted_expiry_inputs = pairing
         .get("pairing_expires_at_inputs")
         .and_then(Value::as_array)
@@ -414,18 +419,10 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             "pairing timestamp normalization vector needs canonical, microsecond and offset inputs"
         );
     }
-    let expiry_inputs: Vec<&Value> = accepted_expiry_inputs
-        .iter()
-        .chain(rejected_expiry_inputs.iter())
-        .collect();
     let expected_pairing_digest = case
         .get("expected_pairing_request_binding_digest")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("expected pairing request binding digest missing"))?;
-    let verification_method = pairing
-        .get("verification_method")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("pairing verification_method missing"))?;
     let pairing_request_id = pairing
         .get("pairing_request_id")
         .and_then(Value::as_str)
@@ -442,6 +439,34 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .get("canonical_pairing_expires_at")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("canonical pairing expiry missing"))?;
+    let proof: arkret_models_collaboration::agent_operations::AgentRuntimeKeyPossessionProof =
+        serde_json::from_value(
+            case.get("proof_of_possession")
+                .cloned()
+                .ok_or_else(|| anyhow!("proof_of_possession missing"))?,
+        )?;
+    let transcript = proof.canonical_transcript_bytes(pairing_code)?;
+    let canonical_transcript = String::from_utf8(transcript.clone())?;
+    if case
+        .get("canonical_possession_transcript_json")
+        .and_then(Value::as_str)
+        != Some(canonical_transcript.as_str())
+    {
+        bail!("runtime possession transcript canonical JSON drifted");
+    }
+    if proof.transcript_digest.as_str()
+        != case
+            .get("expected_possession_transcript_digest")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("expected possession transcript digest missing"))?
+        || proof.wire_digest()?.as_str()
+            != case
+                .get("expected_proof_of_possession_digest")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("expected proof digest missing"))?
+    {
+        bail!("runtime possession proof digest drifted");
+    }
     let canonical_pairing_binding = serde_json::json!({
         "agent_id": pairing_agent_id,
         "audience": audience,
@@ -451,8 +476,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "operation_id": arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
         "pairing_code": pairing_code,
         "pairing_request_id": pairing_request_id,
-        "runtime_public_key_digest": public_digest,
-        "verification_method": verification_method,
+        "proof_of_possession_digest": proof.wire_digest()?,
+        "runtime_key_binding_digest": binding,
     });
     let canonical_pairing_binding = String::from_utf8(arkret_canonical::canonical_json_bytes(
         &canonical_pairing_binding,
@@ -464,25 +489,36 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     {
         bail!("pairing request binding canonical JSON drifted");
     }
-    for expires_at in expiry_inputs {
+    for expires_at in accepted_expiry_inputs {
         let expires_at = expires_at
             .as_str()
             .ok_or_else(|| anyhow!("pairing expiry input must be a string"))?;
-        let digest = arkret_signatures::agent::agent_key_pairing_request_binding_digest(
+        let digest =
+            arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
             &controller_id,
             &pairing_agent_id,
-            verification_method,
-            &public_digest,
-            pairing_request_id,
+            &arkret_wire::OpaqueLocalId::new(pairing_request_id)
+                .map_err(|error| anyhow!(error))?,
             pairing_code,
-            expires_at,
-            audience,
+            expires_at.parse()?,
+            &Did::new(audience)?,
+            &binding,
+            &proof,
         )?;
         if digest.as_str() != expected_pairing_digest {
             bail!(
                 "pairing request binding timestamp normalization drifted for {expires_at}: {}",
                 digest.as_str()
             );
+        }
+    }
+    for expires_at in rejected_expiry_inputs {
+        let expires_at = expires_at
+            .as_str()
+            .ok_or_else(|| anyhow!("rejected pairing expiry must be a string"))?;
+        if arkret_canonical::validate_timestamp_canonical(expires_at).is_ok() {
+            bail!("noncanonical pairing expiry unexpectedly accepted: {expires_at}");
         }
     }
 

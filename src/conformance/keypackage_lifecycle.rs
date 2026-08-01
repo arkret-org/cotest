@@ -3,7 +3,7 @@
 //! Covers single-use claim limits, last-resort KeyPackage semantics, and MLS
 //! Welcome digest binding against the spec artifact fixture.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
@@ -28,12 +28,15 @@ pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION: &str =
 pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY: &str =
     "ak.vector.keypackage.last_resort_affinity_and_optionality.v1";
 pub const VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH: &str = "ak.vector.mls.welcome_keypackage_hash.v1";
+pub const VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY: &str =
+    "ak.vector.keypackage.self_claim_authorization_idempotency.v1";
 
 pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_CLAIM_AND_REUSE,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY,
+    VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
     VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH,
 ];
 
@@ -1211,6 +1214,90 @@ fn parse_welcome_with_early_binding_rejection(
     }
 }
 
+/// Exact runner for `ak.vector.keypackage.self_claim_authorization_idempotency.v1`.
+pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()> {
+    let fixture = keypackage_fixture()?;
+    let vector = case(
+        &fixture,
+        VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
+    )?;
+    let mut request = vector["proof_free_request"].clone();
+    request["proofs"] = json!([{
+        "kind": "detached_jws",
+        "verification_method": "did:webvh:z6mkfixture:alice.example#ak_self_signing_v1",
+        "alg": "EdDSA",
+        "payload_digest": required_str(vector, "payload_digest")?,
+        "created_at": "2026-07-31T00:00:00.000Z",
+        "audience": required_str(vector, "authority_service_id")?,
+        "proof_purpose": "holder_acceptance",
+        "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
+    }]);
+    let typed: arkret_models_crypto::KeyPackagesClaimRequestBody =
+        serde_json::from_value(request.clone())?;
+    if typed.payload_digest()?.as_str() != required_str(vector, "payload_digest")? {
+        bail!("self-claim proof-free payload digest drifted");
+    }
+    let proof_free_bytes = arkret_canonical::canonical_json_bytes(&vector["proof_free_request"])?;
+    if std::str::from_utf8(&proof_free_bytes)?
+        != required_str(vector, "canonical_proof_free_request_json")?
+    {
+        bail!("self-claim proof-free canonical projection drifted");
+    }
+    let binding = typed.proof_binding_bytes()?;
+    let actual_binding = std::str::from_utf8(&binding)?;
+    let actual_binding_digest =
+        arkret_canonical::canonical_sha256(&serde_json::from_slice::<Value>(&binding)?)?;
+    if actual_binding != required_str(vector, "canonical_proof_binding_json")?
+        || actual_binding_digest != required_str(vector, "proof_binding_digest")?
+    {
+        bail!(
+            "self-claim proof binding or digest drifted: binding={actual_binding}, digest={actual_binding_digest}"
+        );
+    }
+    let authority = did(required_str(vector, "authority_service_id")?)?;
+    typed.validate_proof_shape(&authority, parse_time("2026-07-31T00:01:00.000Z")?)?;
+
+    let identity = (
+        typed.requester.as_str().to_owned(),
+        typed.claim_nonce.as_str().to_owned(),
+    );
+    let outcome = br#"{"claims":[{"claim_id":"fixture"}],"failures":[]}"#.to_vec();
+    let mut ledger = BTreeMap::new();
+    ledger.insert(
+        identity.clone(),
+        (typed.payload_digest()?.to_string(), outcome.clone()),
+    );
+    let replay = ledger.get(&identity).expect("inserted terminal outcome");
+    if replay.0 != typed.payload_digest()?.as_str() || replay.1 != outcome {
+        bail!("exact retry did not return the byte-identical terminal outcome");
+    }
+    let mut conflict = request;
+    conflict["target_principal_id"] = json!("did:webvh:z6mkfixture:mallory.example");
+    let conflict: arkret_models_crypto::KeyPackagesClaimRequestBody =
+        serde_json::from_value(conflict)?;
+    if conflict.payload_digest()?.as_str() == replay.0 {
+        bail!("same requester/nonce with a changed payload did not conflict");
+    }
+
+    let mut missing = serde_json::to_value(&typed)?;
+    missing
+        .as_object_mut()
+        .expect("request object")
+        .remove("proofs");
+    if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(missing).is_ok()
+    {
+        bail!("a self claim without exactly one proof was accepted");
+    }
+    let mut multiple = serde_json::to_value(&typed)?;
+    let proof = multiple["proofs"][0].clone();
+    multiple["proofs"] = json!([proof.clone(), proof]);
+    if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(multiple).is_ok()
+    {
+        bail!("a self claim with multiple proofs was accepted");
+    }
+    Ok(())
+}
+
 pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
     validate_keypackage_lifecycle_fixture_metadata(&keypackage_fixture()?)?;
 
@@ -1218,6 +1305,7 @@ pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
     run_keypackage_last_resort_claim_and_reuse_vector()?;
     run_keypackage_last_resort_forced_rotation_vector()?;
     run_keypackage_last_resort_affinity_and_optionality_vector()?;
+    run_keypackage_self_claim_authorization_idempotency_vector()?;
     run_mls_welcome_keypackage_hash_vector()?;
     Ok(())
 }
