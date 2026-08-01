@@ -24,6 +24,7 @@ pub mod durable_effect_live_spotcheck;
 pub mod e2ee_relaxed_window_negative;
 pub mod event_idempotency_replay;
 pub mod events_backfill;
+pub mod events_resolve;
 pub mod extension_surface_gaps;
 pub mod federation_collaboration;
 pub mod federation_contract;

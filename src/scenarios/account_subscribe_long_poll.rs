@@ -17,11 +17,104 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    TestServerGroup, eventually, expect_account_subscribe_delta,
+    TestServerGroup, account_subscribe_delta_from_text, eventually, expect_account_subscribe_delta,
     expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
 };
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
+
+pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
+    let group = TestServerGroup::single("account-subscribe-wait-for").await?;
+    let server = group.server(0);
+    let alice = server
+        .register_client(
+            "did:web:wait-for-alice.example",
+            "@wait-for-alice",
+            "ak:device:01904100-0000-7000-8000-00000000b501",
+        )
+        .await?;
+    let bob = server
+        .register_client(
+            "did:web:wait-for-bob.example",
+            "@wait-for-bob",
+            "ak:device:01904100-0000-7000-8000-00000000b502",
+        )
+        .await?;
+    let realm_id = alice.create_realm("Wait-For Barrier Realm").await?;
+
+    let stream_baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
+    let stream_cursor = cursor_from_sync(&stream_baseline)?;
+
+    let submitted = alice
+        .send_message(&realm_id, "ak:thread:wait-for", "barrier target")
+        .await?;
+    let event_id = submitted_event_id(&submitted)
+        .ok_or_else(|| anyhow!("send response missing event id: {submitted}"))?
+        .to_owned();
+    let barrier_cursor = submitted["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("send response missing barrier cursor: {submitted}"))?
+        .to_owned();
+
+    let response = alice
+        .get("/_arkret/self/account/subscribe?catchup=true")
+        .header("accept", "application/x-ndjson")
+        .header("X-Arkret-Wait-For", &barrier_cursor)
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("x-arkret-wait-for-satisfied")
+            .and_then(|value| value.to_str().ok()),
+        Some("true")
+    );
+    let body = tokio::time::timeout(Duration::from_secs(5), response.text())
+        .await
+        .map_err(|_| anyhow!("barrier subscribe did not complete catchup response"))??;
+    let first_delta = account_subscribe_delta_from_text(&body)?;
+    let events = first_delta["realms"][&realm_id]["timeline"]["events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("barrier first delta missing Realm timeline: {first_delta}"))?;
+    assert!(
+        events.iter().any(|event| event["event_id"] == event_id),
+        "first delta after a satisfied barrier must include the target event"
+    );
+
+    let wrong_purpose = crate::harness::expect_response(
+        alice
+            .get("/_arkret/self/account/subscribe?catchup=true")
+            .header("X-Arkret-Wait-For", stream_cursor),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    let wrong_purpose_body = wrong_purpose.json()?;
+    assert_eq!(
+        wrong_purpose_body
+            .pointer("/error/code")
+            .or_else(|| wrong_purpose_body.pointer("/error/errcode"))
+            .and_then(Value::as_str),
+        Some("invalid_param")
+    );
+
+    let wrong_scope = crate::harness::expect_response(
+        bob.get("/_arkret/self/account/subscribe?catchup=true")
+            .header("X-Arkret-Wait-For", barrier_cursor),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    let wrong_scope_body = wrong_scope.json()?;
+    assert_eq!(
+        wrong_scope_body
+            .pointer("/error/code")
+            .or_else(|| wrong_scope_body.pointer("/error/errcode"))
+            .and_then(Value::as_str),
+        Some("cursor_integrity_invalid")
+    );
+
+    Ok(())
+}
 
 pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result<()> {
     let group = TestServerGroup::single("account-subscribe-quiet-realm").await?;

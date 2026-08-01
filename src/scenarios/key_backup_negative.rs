@@ -30,6 +30,15 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         )
         .await?;
 
+    expect_backup_error(
+        alice
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
+            .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?),
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
+    )
+    .await?;
+
     let mut missing_ciphertext = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
     missing_ciphertext
         .as_object_mut()
@@ -38,6 +47,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
+            .header("Idempotency-Key", "missing-ciphertext")
             .json(&missing_ciphertext),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -52,6 +62,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
+            .header("Idempotency-Key", "body-id-mismatch")
             .json(&body_id_mismatch),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -62,21 +73,59 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
+            .header("Idempotency-Key", "wrong-actor")
             .json(&wrong_actor),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
+    let accepted_body = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
     let accepted = expect_json(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
-            .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?),
+            .header("Idempotency-Key", "accepted-replay")
+            .json(&accepted_body),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(accepted["backup_id"], BACKUP_ID);
     assert_eq!(accepted["status"], "accepted");
+
+    let replayed = expect_json(
+        alice
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
+            .header("Idempotency-Key", "accepted-replay")
+            .json(&accepted_body),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(replayed, accepted, "same key and body must replay exactly");
+
+    let mut conflicting = accepted_body.clone();
+    conflicting["plaintext_commitment"] = Value::String(
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+    );
+    expect_backup_error(
+        alice
+            .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
+            .header("Idempotency-Key", "accepted-replay")
+            .json(&conflicting),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
+
+    let signed_fields = accepted_body
+        .pointer("/auth_data/signed_fields")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("key backup auth_data.signed_fields is missing"))?;
+    assert!(
+        signed_fields
+            .iter()
+            .all(|field| field.as_str() != Some("idempotency_key")),
+        "Idempotency-Key is an HTTP replay header, not part of the backup content signature"
+    );
 
     let bob_backups = expect_json(bob.get("/_arkret/self/keys/backups"), StatusCode::OK).await?;
     assert!(
@@ -104,6 +153,7 @@ async fn reject_wrong_device_on_put(server: &ArkretServer, token: &str, actor: &
             .http()
             .put(server.url(&format!("/_arkret/self/keys/backups/{id}")))
             .bearer_auth(token)
+            .header("Idempotency-Key", "wrong-device")
             .json(&body),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -127,6 +177,7 @@ async fn reject_digest_mismatch_on_put(
             .http()
             .put(server.url(&format!("/_arkret/self/keys/backups/{id}")))
             .bearer_auth(token)
+            .header("Idempotency-Key", "digest-mismatch")
             .json(&body),
         StatusCode::BAD_REQUEST,
         "digest_mismatch",

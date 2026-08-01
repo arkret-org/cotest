@@ -23,6 +23,7 @@ mod cross_signing_binding_golden;
 mod cursor_vectors;
 mod decision_0017_vectors;
 mod did_webvh_v1;
+mod downstream_impact;
 mod encoding;
 mod envelope;
 mod federation;
@@ -146,7 +147,8 @@ pub use blob_stream_aead::{
 pub use call_signal::{
     ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite,
     run_outer_metadata_minimal_vector as run_call_signal_outer_metadata_minimal_vector,
-    run_proof_detached_jws_vector, run_seq_monotonic_vector, run_signal_kind_enum_vector,
+    run_plaintext_closed_schema_vector, run_proof_detached_jws_vector, run_seq_monotonic_vector,
+    run_signal_kind_enum_vector,
 };
 pub use call_state_core::{
     ALL_CALL_STATE_CORE_VECTOR_IDS, run_call_state_core_fixture_suite,
@@ -181,6 +183,11 @@ pub use decision_0017_vectors::{
     run_account_data_cas_convergence_vector_suite, run_read_cursor_multi_device_merge_vector_suite,
 };
 pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
+pub use downstream_impact::{
+    run_account_status_authority_binding_vector, run_downstream_impact_contract_suite,
+    run_error_status_context_vector, run_moderation_dismiss_and_concurrent_fold_vector,
+    run_policy_transcript_tamper_vector, run_private_view_account_data_vector,
+};
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
 };
@@ -323,7 +330,8 @@ pub use profile_registry::{
 };
 pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
 pub use push_rule_core::{
-    run_hardened_mention_routing_hint_vector, run_push_rule_core_fixture_suite,
+    run_hardened_mention_routing_hint_vector, run_push_rule_client_only_vector,
+    run_push_rule_core_fixture_suite,
 };
 pub use read_receipt_signal::{
     ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS, VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE,

@@ -168,12 +168,13 @@ fn media_binding_vector_suite_runs_clean() {
 // signal_kind enum on the decrypted plaintext (rejects retired
 // offer/ice/device_change) + per-(realm, call, actor, device) seq monotonicity
 // + a REAL ed25519 round-trip under the `ak.signal-proof-v1` transcript +
-// outer-header metadata minimisation and the class TTL ceiling.
+// outer-header metadata minimisation, the class TTL ceiling, and SDK-backed
+// closed plaintext schema rejection.
 
 #[test]
 fn call_signal_receiver_vector_suite_runs_clean() {
     run_call_signal_vector_suite().expect("call-signal receiver vectors must pass");
-    assert_eq!(ALL_CALL_SIGNAL_VECTOR_IDS.len(), 4);
+    assert_eq!(ALL_CALL_SIGNAL_VECTOR_IDS.len(), 5);
 }
 
 // ─── profiles-presence.md §3 — presence receiver vectors ───────────────────

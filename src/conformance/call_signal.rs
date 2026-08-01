@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{CallId, DeviceId, Did, Hash, RealmId};
+use arkret_models_collaboration::call_signal::CallSignalPlaintext;
 use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::proof::verify_eddsa_signal_proof;
 use arkret_wire::signal::{SIGNAL_AEAD_PURPOSE, SIGNAL_AEAD_SCHEME};
@@ -35,12 +36,15 @@ pub const VECTOR_ID_SEQ_MONOTONIC: &str = "ak.vector.call_signal.seq_monotonic.v
 pub const VECTOR_ID_PROOF_DETACHED_JWS: &str = "ak.vector.call_signal.proof_detached_jws.v1";
 pub const VECTOR_ID_OUTER_METADATA_MINIMAL: &str =
     "ak.vector.call_signal.outer_metadata_minimal.v1";
+pub const VECTOR_ID_PLAINTEXT_CLOSED_SCHEMA: &str =
+    "ak.vector.call_signal.plaintext_closed_schema.v1";
 
 pub const ALL_CALL_SIGNAL_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIGNAL_KIND_ENUM,
     VECTOR_ID_SEQ_MONOTONIC,
     VECTOR_ID_PROOF_DETACHED_JWS,
     VECTOR_ID_OUTER_METADATA_MINIMAL,
+    VECTOR_ID_PLAINTEXT_CLOSED_SCHEMA,
 ];
 
 const CALL_SIGNAL_KINDS: &[&str] = &[
@@ -97,12 +101,40 @@ pub fn run_signal_kind_enum_vector() -> Result<()> {
         if CALL_SIGNAL_KINDS.contains(&retired) {
             bail!("retired non-spec signal_kind `{retired}` leaked into CALL_SIGNAL_KINDS");
         }
-        if validate_call_signal_plaintext(&call_signal_plaintext(retired, 1)).is_ok() {
+        if decode_call_signal_plaintext(&call_signal_plaintext(retired, 1)).is_ok() {
             bail!("receiver accepted a retired signal_kind `{retired}` — must be rejected");
         }
     }
-    validate_call_signal_plaintext(&call_signal_plaintext("invite", 1))
+    decode_call_signal_plaintext(&call_signal_plaintext("invite", 1))
         .map_err(|err| anyhow!("canonical invite plaintext must validate: {err}"))?;
+    Ok(())
+}
+
+/// The decrypted call plaintext is a closed SDK-owned schema. In particular,
+/// `payload_sequence` and the per-call `seq` are independent required axes.
+pub fn run_plaintext_closed_schema_vector() -> Result<()> {
+    let valid = call_signal_plaintext("candidate", 3);
+    let decoded = decode_call_signal_plaintext(&valid)?;
+    if decoded.payload_sequence != 11 || decoded.seq != 3 {
+        bail!("call signal sequence axes did not survive SDK decoding");
+    }
+
+    for required in ["data", "payload_sequence"] {
+        let mut missing = valid.clone();
+        missing
+            .as_object_mut()
+            .expect("fixture is an object")
+            .remove(required);
+        if decode_call_signal_plaintext(&missing).is_ok() {
+            bail!("call signal plaintext without required `{required}` was accepted");
+        }
+    }
+
+    let mut extra = valid;
+    extra["actor_id"] = json!("did:web:leaked.example");
+    if decode_call_signal_plaintext(&extra).is_ok() {
+        bail!("call signal plaintext accepted an unknown top-level field");
+    }
     Ok(())
 }
 
@@ -262,6 +294,7 @@ fn observe_seq(
 fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
     json!({
         "kind": "ak.call.signal",
+        "payload_sequence": 11,
         "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
         "signal_kind": signal_kind,
         "seq": seq,
@@ -269,31 +302,8 @@ fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
     })
 }
 
-fn validate_call_signal_plaintext(plaintext: &Value) -> Result<()> {
-    if plaintext.get("kind").and_then(Value::as_str) != Some("ak.call.signal") {
-        bail!("call signal plaintext must declare kind=ak.call.signal");
-    }
-    let signal_kind = plaintext
-        .get("signal_kind")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("call signal plaintext requires signal_kind"))?;
-    if !CALL_SIGNAL_KINDS.contains(&signal_kind) {
-        bail!("call signal plaintext carries an unregistered signal_kind `{signal_kind}`");
-    }
-    CallId::new(
-        plaintext
-            .get("call_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("call signal plaintext requires call_id"))?,
-    )?;
-    plaintext
-        .get("seq")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("call signal plaintext requires seq"))?;
-    if !plaintext.get("data").is_some_and(Value::is_object) {
-        bail!("call signal plaintext requires a data object");
-    }
-    Ok(())
+fn decode_call_signal_plaintext(plaintext: &Value) -> Result<CallSignalPlaintext> {
+    serde_json::from_value(plaintext.clone()).map_err(Into::into)
 }
 
 fn sent_at() -> DateTime<Utc> {
@@ -352,7 +362,7 @@ fn signed_call_signal_envelope(
 
 /// Suite entry point — runs all call-signal receiver vectors back to back.
 pub fn run_call_signal_vector_suite() -> Result<()> {
-    if ALL_CALL_SIGNAL_VECTOR_IDS.len() != 4 {
+    if ALL_CALL_SIGNAL_VECTOR_IDS.len() != 5 {
         bail!(
             "expected 4 call_signal vector ids, got {}",
             ALL_CALL_SIGNAL_VECTOR_IDS.len()
@@ -362,6 +372,7 @@ pub fn run_call_signal_vector_suite() -> Result<()> {
     run_seq_monotonic_vector()?;
     run_proof_detached_jws_vector()?;
     run_outer_metadata_minimal_vector()?;
+    run_plaintext_closed_schema_vector()?;
     Ok(())
 }
 

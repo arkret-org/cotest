@@ -15,6 +15,13 @@ async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> {
 
 #[tokio::test]
 #[serial]
+async fn account_subscribe_wait_for_barrier_is_scoped_and_orders_first_frame() -> Result<()> {
+    cotest::scenarios::account_subscribe_long_poll::account_subscribe_wait_for_barrier_contract()
+        .await
+}
+
+#[tokio::test]
+#[serial]
 async fn invited_members_exchange_post_join_messages_over_account_subscribe() -> Result<()> {
     cotest::scenarios::account_subscribe_long_poll::invited_members_exchange_post_join_messages_over_account_subscribe()
         .await

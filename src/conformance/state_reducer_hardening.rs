@@ -368,6 +368,8 @@ fn run_strand_tracks_update_atomic_case(case: &Value) -> Result<()> {
     for required in [
         "primary_switch_atomic",
         "disable_and_profile_update_atomic",
+        "disabled_primary_rejected",
+        "last_enabled_track_rejected",
         "primary_conflict_rejected_all_or_nothing",
         "unregistered_track_name_rejected",
         "selector_segment_rejected",
@@ -625,14 +627,18 @@ fn validate_tracks_invariant(
             return Err(arkret_wire::ErrorCode::SCHEMA_VIOLATION);
         }
         if track.is_primary && !track.enabled {
-            return Err(arkret_wire::ErrorCode::SCHEMA_VIOLATION);
+            return Err(arkret_wire::ReasonCode::PRIMARY_TRACK_REQUIRED);
         }
         if track.enabled && track.is_primary {
             primary_count += 1;
         }
     }
     if primary_count != 1 {
-        return Err(arkret_wire::ErrorCode::SCHEMA_VIOLATION);
+        return Err(if primary_count == 0 {
+            arkret_wire::ReasonCode::PRIMARY_TRACK_REQUIRED
+        } else {
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION
+        });
     }
     Ok(())
 }

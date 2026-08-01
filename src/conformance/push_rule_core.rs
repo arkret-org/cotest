@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use arkret::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
 use arkret_models_integration::{
-    HARDENED_MENTION_ROUTING_PROFILES, MentionRoutingHint, effective_mention_routing_hint,
+    HARDENED_MENTION_ROUTING_PROFILES, MentionRoutingHint, PushRule, effective_mention_routing_hint,
 };
 use arkret_wire::ProfileId;
 use serde::Deserialize;
@@ -166,7 +166,29 @@ pub fn run_push_rule_core_fixture_suite() -> Result<()> {
         assert_shared_core(case).with_context(|| format!("shared core vector {}", case.name))?;
     }
     run_hardened_mention_routing_hint_vector()?;
+    run_push_rule_client_only_vector()?;
 
+    Ok(())
+}
+
+/// v1 push rules are evaluated by the client.  Decode through the SDK wire
+/// type so cotest cannot accidentally grow a second, more permissive parser.
+pub fn run_push_rule_client_only_vector() -> Result<()> {
+    let client: PushRule = serde_json::from_value(serde_json::json!({
+        "rule_id": "ak.rule.cotest.client-only",
+        "evaluation_locus": "client"
+    }))?;
+    if client.evaluation_locus != "client" {
+        bail!("v1 push rule did not preserve evaluation_locus=client");
+    }
+
+    let server = serde_json::from_value::<PushRule>(serde_json::json!({
+        "rule_id": "ak.rule.cotest.server",
+        "evaluation_locus": "server"
+    }));
+    if server.is_ok() {
+        bail!("v1 push rule accepted forbidden evaluation_locus=server");
+    }
     Ok(())
 }
 
