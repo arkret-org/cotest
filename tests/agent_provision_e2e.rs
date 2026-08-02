@@ -329,19 +329,6 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                     updated_at: None,
                     revoked_by: None,
                     revoked_at: None,
-                    proofs: vec![arkret::PayloadProof {
-                        kind: "detached_jws".to_owned(),
-                        alg: "EdDSA".to_owned(),
-                        verification_method: controller_verification_method(),
-                        payload_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-                        created_at: Utc::now(),
-                        domain: None,
-                        audience: None,
-                        proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
-                        jws: "header..signature".to_owned(),
-                    }],
-                    authority_depth: None,
-                    authority_root_refs: Vec::new(),
                 },
             },
         )
@@ -1322,7 +1309,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let stale = pair_agent_runtime_key(&server, &token, &prov).await;
     assert!(stale.is_err(), "expired pairing handle must remain dead");
     let paired = pair_agent_runtime_key(&server, &token, &renewed).await?;
-    assert!(!paired.authorized_event_ref.as_str().is_empty());
+    assert!(!paired.authorize_event_ref.as_str().is_empty());
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
         agent_runtime_state(&server, &token, &agent_did).await?,
@@ -1347,7 +1334,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     assert!(stale.is_err(), "superseded pairing handle must remain dead");
     let replaced =
         pair_agent_runtime_key_as(&server, &token, &replacement, "runtime-key-2").await?;
-    assert_ne!(replaced.authorized_event_ref, paired.authorized_event_ref);
+    assert_ne!(replaced.authorize_event_ref, paired.authorize_event_ref);
     // No resume required: the active agent immediately serves with the new key.
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
@@ -1371,8 +1358,8 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let paused_replaced =
         pair_agent_runtime_key_as(&server, &token, &paused_replacement, "runtime-key-3").await?;
     assert_ne!(
-        paused_replaced.authorized_event_ref,
-        replaced.authorized_event_ref
+        paused_replaced.authorize_event_ref,
+        replaced.authorize_event_ref
     );
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
     assert_eq!(
@@ -1503,7 +1490,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
     assert!(status.approval_request_id.is_none());
     assert_eq!(
         status.authorized_event_ref.as_ref().map(|id| id.as_str()),
-        Some(pair.authorized_event_ref.as_str())
+        Some(pair.authorize_event_ref.as_str())
     );
     let signing_key = runtime_signing_key();
     let verification_method = format!("{agent_did}#runtime-key-1");
@@ -1569,7 +1556,7 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
     prepare_agent_pcr_recovery(&server, &token, &provisioned).await?;
     let outcome = controller.agent_key_pair(&body).await?;
     assert_eq!(
-        outcome.authorized_event_ref, body.authorize_event.event.event_id,
+        outcome.authorize_event_ref, body.authorize_event.event.event_id,
         "the retry must accept the original authorization event"
     );
     assert_eq!(
@@ -1761,7 +1748,10 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     )?;
     bootstrap_authorize.prev_refs = vec![bootstrap_create.event_id.clone()];
     bootstrap_authorize.executed_by = Some(principal_id.clone());
-    bootstrap_authorize.authorization_ref = Some(enrollment_authorization_ref.to_string());
+    bootstrap_authorize.authorization_ref = Some(
+        arkret::AuthorizationRef::new(enrollment_authorization_ref.to_string())
+            .map_err(anyhow::Error::msg)?,
+    );
     let enrollment_authority_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [17_u8; 32],
         principal_id.clone(),
@@ -3578,8 +3568,8 @@ async fn provision_and_pair_agent(
         .await
         .context("pair agent runtime key")?;
     assert!(
-        !pair.authorized_event_ref.as_str().is_empty(),
-        "authorized_event_ref present"
+        !pair.authorize_event_ref.as_str().is_empty(),
+        "authorize_event_ref present"
     );
     assert_eq!(
         agent_status(server, token, &agent_did)
@@ -4030,7 +4020,7 @@ async fn grant_controller_strand_create(
 ) -> Result<()> {
     let grant_id = arkret::GrantId::new(arkret::new_prefixed_uuid7("ak:grant:"))?;
     let issued_at = canonical_now();
-    let mut grant = arkret::CapabilityGrant {
+    let grant = arkret::CapabilityGrant {
         id: grant_id.clone(),
         schema: "ak.schema.capability.v1".to_owned(),
         realm_id: Some(arkret::RealmId::new(realm_id.to_owned())?),
@@ -4059,26 +4049,7 @@ async fn grant_controller_strand_create(
         updated_at: None,
         revoked_by: None,
         revoked_at: None,
-        proofs: Vec::new(),
-        authority_depth: None,
-        authority_root_refs: Vec::new(),
     };
-    let mut proof = arkret::PayloadProof {
-        kind: "detached_jws".to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: controller_verification_method(),
-        payload_digest: grant.payload_digest()?,
-        created_at: issued_at,
-        domain: None,
-        audience: None,
-        proof_purpose: Some(arkret::PayloadProofPurpose::IssuerAttestation),
-        jws: String::new(),
-    };
-    proof.jws = arkret_signatures::sign_eddsa_detached_jws(
-        &SigningKey::from_bytes(&[21_u8; 32]),
-        &grant.canonical_proof_binding_bytes(&proof)?,
-    )?;
-    grant.proofs.push(proof);
     let mut event_value = actor_client
         .author_event(
             realm_id,

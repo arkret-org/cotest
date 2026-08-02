@@ -328,7 +328,9 @@ fn service_attested_device_authorize_event(
     event.created_at = created_at;
     event.prev_refs = prev_refs;
     event.executed_by = Some(authority_did.clone());
-    event.authorization_ref = Some(authorization_ref.to_owned());
+    event.authorization_ref = Some(
+        arkret::AuthorizationRef::new(authorization_ref.to_owned()).map_err(anyhow::Error::msg)?,
+    );
     let authority_signer = Ed25519PayloadSigner::from_did_key_seed(
         authority.seed,
         authority_did,
