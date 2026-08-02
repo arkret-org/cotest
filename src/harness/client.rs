@@ -385,11 +385,8 @@ impl TestActorClient {
         )?;
         grant.proofs.push(proof);
         let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
-            grant: Some(grant),
+            grant,
             grant_id: arkret_identifiers::GrantId::new(grant_id.clone())?,
-            subject: None,
-            actions: None,
-            resources: None,
         };
         let response = self
             .submit_event(
