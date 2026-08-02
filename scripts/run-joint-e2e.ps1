@@ -3544,9 +3544,12 @@ try {
             $ErrorActionPreference = "Continue"
             $driverOutput = & $ExternalDriverScript @ExternalDriverArgument 2>&1
             $exitCode = $LASTEXITCODE
-            $driverOutput | Set-Content -LiteralPath $playwrightStdout -Encoding UTF8
+            $persistedDriverOutput = @($driverOutput | ForEach-Object { [string]$_ } | Where-Object {
+                    $_ -notmatch '(?i)^\s*(?:-\s*)?authorization\s*:'
+                })
+            $persistedDriverOutput | Set-Content -LiteralPath $playwrightStdout -Encoding UTF8
             "" | Set-Content -LiteralPath $playwrightStderr -Encoding UTF8
-            $driverOutput | ForEach-Object { Write-Host $_ }
+            $persistedDriverOutput | ForEach-Object { Write-Host $_ }
         }
         finally {
             $ErrorActionPreference = $previousErrorActionPreference
@@ -3599,9 +3602,12 @@ try {
             $ErrorActionPreference = "Continue"
             $playwrightOutput = & $playwrightCommand @playwrightCommandArgs 2>&1
             $exitCode = $LASTEXITCODE
-            $playwrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
+            $persistedPlaywrightOutput = @($playwrightOutput | ForEach-Object { [string]$_ } | Where-Object {
+                    $_ -notmatch '(?i)^\s*(?:-\s*)?authorization\s*:'
+                })
+            $persistedPlaywrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
             "" | Set-Content -Path $playwrightStderr -Encoding UTF8
-            $playwrightOutput | ForEach-Object { Write-Host $_ }
+            $persistedPlaywrightOutput | ForEach-Object { Write-Host $_ }
         }
         finally {
             if ($null -ne $previousErrorActionPreference) {

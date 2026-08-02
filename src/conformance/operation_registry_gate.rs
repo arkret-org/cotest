@@ -429,7 +429,12 @@ fn validate_durable_effects(
         let kind = effect.get("kind").and_then(Value::as_str).unwrap_or("");
         let allowed_keys: &[&str] = match kind {
             "none" => &["kind", "rationale"],
-            "event_log" => &["kind", "event_kinds", "event_kind_source"],
+            "event_log" => &[
+                "kind",
+                "event_kinds",
+                "event_kind_source",
+                "event_kind_sources",
+            ],
             "actor_private_event" => &["kind", "event_kind"],
             _ => {
                 failures.push(format!(
@@ -463,9 +468,19 @@ fn validate_durable_effects(
             "event_log" => {
                 let static_kinds = effect.get("event_kinds").and_then(Value::as_array);
                 let dynamic_source = effect.get("event_kind_source").and_then(Value::as_str);
-                if static_kinds.is_some() == dynamic_source.is_some() {
+                let dynamic_sources = effect.get("event_kind_sources").and_then(Value::as_array);
+                if [
+                    static_kinds.is_some(),
+                    dynamic_source.is_some(),
+                    dynamic_sources.is_some(),
+                ]
+                .into_iter()
+                .filter(|present| *present)
+                .count()
+                    != 1
+                {
                     failures.push(format!(
-                        "{} event_log durable_effect must declare exactly one of event_kinds or event_kind_source",
+                        "{} event_log durable_effect must declare exactly one of event_kinds, event_kind_source, or event_kind_sources",
                         operation.operation_id
                     ));
                 }
@@ -499,6 +514,30 @@ fn validate_durable_effects(
                         "{} has an unresolvable event_kind_source {source}",
                         operation.operation_id
                     ));
+                }
+                if let Some(sources) = dynamic_sources {
+                    if sources.is_empty() {
+                        failures.push(format!(
+                            "{} event_log durable_effect has empty event_kind_sources",
+                            operation.operation_id
+                        ));
+                    }
+                    for source in sources {
+                        match source.as_str() {
+                            Some(source)
+                                if source.starts_with("$request.")
+                                    && source.ends_with(".event.kind")
+                                    && !source.contains(char::is_whitespace) => {}
+                            Some(source) => failures.push(format!(
+                                "{} has an unresolvable event_kind_sources entry {source}",
+                                operation.operation_id
+                            )),
+                            None => failures.push(format!(
+                                "{} event_kind_sources contains a non-string value",
+                                operation.operation_id
+                            )),
+                        }
+                    }
                 }
             }
             "actor_private_event" => {

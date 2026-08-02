@@ -43,12 +43,13 @@ use serde_json::{Value, json};
 const REALM_LINK_FSM_VECTOR_ID: &str = "ak.vector.realm_link.fsm_transition_matrix.v1";
 pub const VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION: &str =
     "ak.vector.lattice.cas_register_supersession.v1";
-const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 6] = [
+const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 7] = [
     "ak.vector.lattice.mv_register_join.v1",
     "ak.vector.lattice.counter_join.v1",
     "ak.vector.lattice.ordered_log_join.v1",
     "ak.vector.lattice.ordered_log_gap.v1",
     "ak.vector.lattice.fsm_join.v1",
+    VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION,
     REALM_LINK_FSM_VECTOR_ID,
 ];
 

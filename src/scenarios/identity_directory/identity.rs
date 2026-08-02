@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
-use crate::scenarios::federation_collaboration::prepare_actor_inception_for_service;
+use crate::scenarios::identity_test_support::prepare_actor_inception_for_service;
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let server = ArkretServer::spawn("identity-surface").await?;
@@ -96,7 +96,10 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(receipts["threshold_met"], false);
+    assert!(
+        receipts.get("threshold_met").is_none(),
+        "registry that cannot evaluate witness policy must omit threshold_met: {receipts}"
+    );
     assert!(
         receipts["receipts"].as_array().is_some_and(Vec::is_empty),
         "registry without a witness must return an empty receipt set: {receipts}"

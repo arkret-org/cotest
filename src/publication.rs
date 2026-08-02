@@ -186,7 +186,17 @@ pub fn authorization_lease_for(
 
 /// Package `event` as the initial publication the self submit rail accepts.
 pub fn initial_submission(event: Event, action: &str) -> Result<EventInitialSubmission> {
-    let authorization_lease = authorization_lease_for(&event, action, RiskTier::Low)?;
+    let risk_tier = arkret_schema::REGISTERED_CAPABILITY_ACTIONS
+        .iter()
+        .find(|descriptor| descriptor.action.as_str() == action)
+        .map(|descriptor| match descriptor.risk_tier.as_str() {
+            "low" => RiskTier::Low,
+            "medium" => RiskTier::Medium,
+            "high" => RiskTier::High,
+            _ => unreachable!("generated capability risk tier is closed"),
+        })
+        .unwrap_or(RiskTier::High);
+    let authorization_lease = authorization_lease_for(&event, action, risk_tier)?;
     let control_proposal_receipt = control_proposal_receipt_for(&event)?;
     Ok(EventInitialSubmission {
         event,

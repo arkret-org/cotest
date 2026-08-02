@@ -20,7 +20,7 @@ const VECTOR_ID: &str = "ak.vector.identity.did_webvh_v1_adapter.v1";
 
 pub fn run_did_webvh_v1_adapter_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE_FILE)?;
-    validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
+    validate_profile(&fixture, ProfileId::IDENTITY_REGISTRY_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)

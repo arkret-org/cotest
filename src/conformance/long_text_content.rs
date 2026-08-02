@@ -12,7 +12,7 @@ const FIXTURE: &str = "long-text-content-fixture.json";
 
 pub fn run_long_text_content_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
-    validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
+    validate_profile(&fixture, ProfileId::CHAT_MVP_V1)?;
     if fixture.get("suite").and_then(Value::as_str) != Some("long_text_content")
         || fixture.pointer("/runner/kind").and_then(Value::as_str) != Some("generated_limit_cases")
     {

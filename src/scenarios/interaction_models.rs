@@ -45,6 +45,12 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     for member in [bob, carol, dave] {
         alice.add_member(&realm_id, member).await?;
     }
+    alice
+        .grant_realm_actions_to_client(&realm_id, bob, &["ak.reaction.add"])
+        .await?;
+    alice
+        .grant_realm_actions_to_client(&realm_id, carol, &["ak.reaction.remove"])
+        .await?;
 
     let sent = alice
         .send_message(&realm_id, "ak:thread:interaction", "hello interaction")

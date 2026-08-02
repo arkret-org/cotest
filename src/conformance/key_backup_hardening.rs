@@ -15,6 +15,7 @@ pub const VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY: &str = "ak.vector.key_backup.de
 pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED,
     VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF,
+    VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,
 ];
 
 const KEY_BACKUP_HARDENING_FIXTURE_FILE: &str = "key-backup-hardening-fixture.json";
@@ -527,9 +528,9 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
 
 pub fn run_key_backup_hardening_fixture_suite() -> Result<()> {
     validate_key_backup_hardening_fixture_metadata(&key_backup_hardening_fixture()?)?;
-    if ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len() != 2 {
+    if ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len() != 3 {
         bail!(
-            "expected 2 key backup hardening vector ids, got {}",
+            "expected 3 key backup hardening vector ids, got {}",
             ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len()
         );
     }

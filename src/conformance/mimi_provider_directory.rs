@@ -167,6 +167,25 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
 
 /// Exact runner for `ak.vector.mimi.provider_directory_signature.v1`.
 pub fn run_mimi_provider_directory_signature_vector() -> Result<()> {
+    let fixture = super::load_fixture_value("mimi-interop-fixture.json")?;
+    super::validate_profile(&fixture, "ak.profile.mimi_interop.v1")?;
+    let case = fixture
+        .get("cases")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("vector_id").and_then(serde_json::Value::as_str)
+                    == Some(VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE)
+            })
+        })
+        .ok_or_else(|| anyhow!("MIMI fixture is missing the provider-directory signature case"))?;
+    if case
+        .get("assertions")
+        .and_then(serde_json::Value::as_array)
+        .is_none_or(Vec::is_empty)
+    {
+        bail!("MIMI provider-directory signature fixture has no assertions");
+    }
     let (directory, key) = signed_directory()?;
     validate_directory(&directory, directory.proof.0.created_at, &key)?;
 

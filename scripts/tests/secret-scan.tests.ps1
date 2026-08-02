@@ -96,6 +96,10 @@ try {
         # A table whose name merely starts with a private-material word is not a
         # private-material column: `\bseed\b` must not match `seed_catalog`.
         "INSERT INTO public.seed_catalog (id, label) VALUES (3, 'harmless');",
+        # Playwright error-context code frames contain source expressions, not
+        # runtime values. The bare assignment branch must require a secret-like
+        # base64url/hex token rather than treating `Buffer.from(...)` as a seed.
+        'const seed = Buffer.from(registered.signingSeedB64url, "base64url");',
         '"the server logs show that retry loops kept firing until the queue drained fully"',
         '"our nightly release gate runs every suite twice before the deploy window opens for all teams"'
     )

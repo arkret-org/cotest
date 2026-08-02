@@ -15,9 +15,9 @@ import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   canonicalJson,
   createRealmApi,
+  grantServiceCapabilityApi,
   queryRealmEventsApi,
   resolveDefaultStrandId,
-  seedConformanceRealmBasisApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -186,12 +186,16 @@ async function createBoundMimiRoom(
     history_visibility: "joined",
     encryption_profile: "mls_rfc9420",
   });
-  await seedConformanceRealmBasisApi(
-    request,
+  // MIMI ingress is translated by the local Principal Server, so its service
+  // DID needs a real sealed Realm capability. Membership and the room binding
+  // are not authorization sources, and a canonical Realm must never be
+  // modified through the conformance fixture endpoint.
+  await grantServiceCapabilityApi(request, token, {
+    ownerDid: alice.did,
     realmId,
-    solandServiceId(),
-    ["ak.message.create"],
-  );
+    subjectServiceId: solandServiceId(),
+    action: "ak.message.create",
+  });
   const strandId = await resolveDefaultStrandId(request, token, realmId);
   const roomId = `MIMI-${suffix}-${stamp}`;
   const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/strands/${roomId}/update`;

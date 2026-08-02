@@ -34,7 +34,7 @@ import {
   type DpopDeviceKey,
 } from "./session-grant-dpop";
 import { enrollOnboardedDeviceSigningKey } from "./device-holder-proof";
-import { authHeaders, registerEventSigner } from "./soland-api";
+import { authHeaders, registerEventSigner, typedId } from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -141,7 +141,10 @@ export type CreateRealmOpts = {
   completeRecoveryKeySetup?: boolean;
 };
 
-function buildInviteLocatorUrl(serverUrl: string, locatorToken: string): string {
+function buildInviteLocatorUrl(
+  serverUrl: string,
+  locatorToken: string,
+): string {
   const base = serverUrl.replace(/\/$/, "");
   return `${base}/_arkret/open/invite-locators/resolve#token=${locatorToken}`;
 }
@@ -372,6 +375,50 @@ export class JointUserPage {
     });
   }
 
+  // Membership is not an authorization source (capabilities.md §3.2).
+  // Drive Inkson's canonical grant UI, then wait for the accepted Control Move
+  // to become visible in the authoritative grant projection before a workflow
+  // relies on the delegated action.
+  async grantRealmCapability(
+    realmId: string,
+    subjectDid: string,
+    action: string,
+  ): Promise<string> {
+    const grantId = typedId("grant");
+    await this.gotoRealmAdminSection(realmId, "security");
+    await this.page.getByTestId("cap-grant-id-input").fill(grantId);
+    await this.page.getByTestId("cap-grant-tag-input").fill(action);
+    await this.page.getByTestId("cap-grant-subject-input").fill(subjectDid);
+    await this.page.getByTestId("cap-grant-submit-button").click();
+    const status = this.page.getByTestId("realm-admin-status");
+    await expect(status).toContainText("ak.capability.grant event", {
+      timeout: 60_000,
+    });
+    expect(await status.innerText()).not.toContain("failed");
+
+    const grantsUrl = new URL(
+      `${this.serverUrl}/_arkret/self/authz/effective-grants`,
+    );
+    grantsUrl.searchParams.set("subject", subjectDid);
+    grantsUrl.searchParams.set("realm_id", realmId);
+    await expect
+      .poll(
+        async () => {
+          const response = await this.page.request.get(grantsUrl.toString(), {
+            headers: this.selfPathHeaders("GET", grantsUrl.toString()),
+          });
+          if (response.status() !== 200) return false;
+          const body = (await response.json()) as {
+            grants?: Array<{ id?: string }>;
+          };
+          return body.grants?.some((grant) => grant.id === grantId) ?? false;
+        },
+        { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
+      )
+      .toBe(true);
+    return grantId;
+  }
+
   private async dismissDeviceAuthorizationPrompt() {
     if (!this.session.keepDeviceAuthorizationModal) {
       await dismissDeviceAuthorizationPrompt(this.page);
@@ -386,7 +433,9 @@ export class JointUserPage {
       const openRecoverySetup = this.page
         .getByTestId("recovery-setup-open-recovery")
         .last();
-      if (await openRecoverySetup.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      if (
+        await openRecoverySetup.isVisible({ timeout: 1_000 }).catch(() => false)
+      ) {
         await openRecoverySetup.click();
         handled = true;
       }
@@ -532,7 +581,9 @@ export class JointUserPage {
       await expect(dialog).toBeHidden({ timeout: 10_000 });
     };
     const hasRecoverableGenerationError = async () => {
-      const text = ((await status.textContent({ timeout: 100 }).catch(() => "")) ?? "")
+      const text = (
+        (await status.textContent({ timeout: 100 }).catch(() => "")) ?? ""
+      )
         .trim()
         .toLowerCase();
       return (
@@ -568,9 +619,7 @@ export class JointUserPage {
         return undefined;
       }
       if (
-        await generatedKeyField
-          .isVisible({ timeout: 100 })
-          .catch(() => false)
+        await generatedKeyField.isVisible({ timeout: 100 }).catch(() => false)
       ) {
         break;
       }
@@ -583,7 +632,9 @@ export class JointUserPage {
     if (await dialog.isHidden({ timeout: 100 }).catch(() => false)) {
       return undefined;
     }
-    if (!(await generatedKeyField.isVisible({ timeout: 100 }).catch(() => false))) {
+    if (
+      !(await generatedKeyField.isVisible({ timeout: 100 }).catch(() => false))
+    ) {
       if (await hasRecoverableGenerationError()) {
         await closeRecoveryPrompt();
         return undefined;
@@ -600,7 +651,10 @@ export class JointUserPage {
       await generatedKeyField.inputValue({ timeout: 10_000 }).catch(() => "")
     ).trim();
     const keyReadable = recoveryKey.split(/\s+/).filter(Boolean).length === 24;
-    if (!keyReadable && !(await dialog.isHidden({ timeout: 100 }).catch(() => false))) {
+    if (
+      !keyReadable &&
+      !(await dialog.isHidden({ timeout: 100 }).catch(() => false))
+    ) {
       expect(
         recoveryKey.split(/\s+/).filter(Boolean),
         "recovery-key setup prompt must expose a 24-word key",
@@ -678,7 +732,9 @@ export class JointUserPage {
     // UI state without weakening the subsequent field assertions.
     const titleInput = strand.getByTestId("realm-title-input");
     if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
-      const basicsStep = strand.getByRole("button", { name: /^Basics/ }).first();
+      const basicsStep = strand
+        .getByRole("button", { name: /^Basics/ })
+        .first();
       if (await basicsStep.isVisible({ timeout: 2_000 }).catch(() => false)) {
         await basicsStep.click();
       }
@@ -804,14 +860,14 @@ export class JointUserPage {
     await members.getByTestId("open-invite-modal-button").click();
     const invite = this.page.getByTestId("invite-member-modal");
     await expect(invite).toBeVisible({ timeout: 30_000 });
-    await invite
-      .getByTestId("invite-target-input")
-      .fill(targetInput);
+    await invite.getByTestId("invite-target-input").fill(targetInput);
     await invite.getByTestId("send-invite-button").click();
     const status = members.getByTestId("realm-members-status");
     const displayLabel = expectedDisplayLabel ?? displayLabelForDid(targetDid);
     await expect(status).toContainText(
-      new RegExp(`invited (${escapeRegex(displayLabel)}|${escapeRegex(targetDid)})`),
+      new RegExp(
+        `invited (${escapeRegex(displayLabel)}|${escapeRegex(targetDid)})`,
+      ),
       { timeout: 30_000 },
     );
     return await status.innerText();
@@ -999,9 +1055,7 @@ export class JointUserPage {
     const rehydrated = this.timelineEvent(body);
     const remainingTimeout = Math.max(5_000, timeout - initialTimeout);
     await expect(rehydrated).toBeVisible({ timeout: remainingTimeout });
-    await expect(
-      rehydrated.getByTestId("message-send-status"),
-    ).toHaveCount(0, {
+    await expect(rehydrated.getByTestId("message-send-status")).toHaveCount(0, {
       timeout: remainingTimeout,
     });
   }
@@ -1192,7 +1246,11 @@ export async function issueDevSession(
 export async function createDpopUserSession(
   _request: APIRequestContext,
   prefix: string,
-  opts: { server?: SolandKey; coauthBase?: string; skipDeviceEnrollment?: boolean } = {},
+  opts: {
+    server?: SolandKey;
+    coauthBase?: string;
+    skipDeviceEnrollment?: boolean;
+  } = {},
 ): Promise<DpopUserSession | undefined> {
   const coauth = opts.coauthBase ?? coauthBaseUrl();
   if (!coauth) {
@@ -1206,11 +1264,20 @@ export async function createDpopUserSession(
     ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
   });
   try {
-    const account = await registerCoauthPasswordAccount(accountRequest, coauth, {
-      password: "1amTester!",
-      server: opts.server,
-    });
-    return await createDpopUserSessionForAccount(accountRequest, prefix, account, opts);
+    const account = await registerCoauthPasswordAccount(
+      accountRequest,
+      coauth,
+      {
+        password: "1amTester!",
+        server: opts.server,
+      },
+    );
+    return await createDpopUserSessionForAccount(
+      accountRequest,
+      prefix,
+      account,
+      opts,
+    );
   } finally {
     await accountRequest.dispose();
   }
@@ -1243,24 +1310,23 @@ export async function createDpopUserSessionForAccount(
   const deviceKey = generateDpopDeviceKey();
   const eventSigningKey = generateDpopDeviceKey();
   const audience = solandServiceId(opts.server);
-  const grant = await issueCanonicalHandoffSession(
-    request,
-    coauth,
-    {
-      principalId: account.did,
-      deviceId: seed.deviceId,
-      deviceKey,
-      audience,
-      account: { handle: account.handle, password: account.password },
-    },
-  );
+  const grant = await issueCanonicalHandoffSession(request, coauth, {
+    principalId: account.did,
+    deviceId: seed.deviceId,
+    deviceKey,
+    audience,
+    account: { handle: account.handle, password: account.password },
+  });
   expect(grant.audience).toBe(audience);
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
   expect(grant.scopes).toContain(`urn:arkret:client:device:${seed.deviceId}`);
   // Model-B identity: consume only the verified DID returned by the canonical
   // pre-registration handoff. There is deliberately no actor-id fallback.
-  expect(grant.principalDid, "handoff session must return the bound principal DID").toBeTruthy();
+  expect(
+    grant.principalDid,
+    "handoff session must return the bound principal DID",
+  ).toBeTruthy();
   const user = {
     ...seed,
     name: account.handle,
@@ -1412,12 +1478,10 @@ export async function completePendingPrincipalBootstrap(
   const completed = page.page
     .getByTestId("onboarding-complete")
     .or(page.page.getByRole("heading", { name: "You're all set" }));
-  const retryableFailure = page.page
-    .getByTestId("bootstrap-status")
-    .filter({
-      hasText:
-        /auth_unavailable|session grant introspection (?:request failed|service unavailable)/i,
-    });
+  const retryableFailure = page.page.getByTestId("bootstrap-status").filter({
+    hasText:
+      /auth_unavailable|session grant introspection (?:request failed|service unavailable)/i,
+  });
   const bootstrapState = pending.or(completed);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt === 0) {
@@ -1439,9 +1503,7 @@ export async function completePendingPrincipalBootstrap(
     return;
   }
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.page
-      .getByTestId("bootstrap-recovery-key")
-      .fill(recoveryKey);
+    await page.page.getByTestId("bootstrap-recovery-key").fill(recoveryKey);
     const submit = page.page.getByTestId("bootstrap-submit");
     await submit.click();
     await expect
@@ -1495,18 +1557,17 @@ export async function openUser(
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const sessionInjection =
-    (opts.grantJwt && opts.dpopSeedB64url) ||
-    opts.pendingPrincipalRegistration
+    (opts.grantJwt && opts.dpopSeedB64url) || opts.pendingPrincipalRegistration
       ? {
           ...(opts.grantJwt && opts.dpopSeedB64url
             ? {
-          grant_jwt: opts.grantJwt,
-          dpop_seed_b64url: opts.dpopSeedB64url,
-          ...(opts.eventSigningSeedB64url
-            ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
-            : {}),
-          grant_id: opts.grantId ?? "",
-          audience: opts.grantAudience ?? "",
+                grant_jwt: opts.grantJwt,
+                dpop_seed_b64url: opts.dpopSeedB64url,
+                ...(opts.eventSigningSeedB64url
+                  ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
+                  : {}),
+                grant_id: opts.grantId ?? "",
+                audience: opts.grantAudience ?? "",
               }
             : {}),
           ...(opts.pendingPrincipalRegistration
@@ -1579,7 +1640,9 @@ export async function openUser(
     !seededNames.has("inkson.test.session_injection.v1")
   ) {
     await context.close();
-    throw new Error("Inkson browser context is missing its test session fixture");
+    throw new Error(
+      "Inkson browser context is missing its test session fixture",
+    );
   }
   if (
     !sessionInjection &&
@@ -1640,7 +1703,9 @@ export async function openUser(
     await page.addLocatorHandler(
       page.getByTestId("recovery-key-setup-generated-key"),
       async (generated) => {
-        const recoveryKey = (await generated.inputValue().catch(() => "")).trim();
+        const recoveryKey = (
+          await generated.inputValue().catch(() => "")
+        ).trim();
         if (recoveryKey.split(/\s+/).filter(Boolean).length !== 24) {
           return;
         }
@@ -1782,10 +1847,7 @@ export async function openUserPage(
     // Load the pending bootstrap route directly. Navigating through `/` first
     // can tear down session-boot WebSocket/IndexedDB callbacks while they are
     // still resolving, which aborts the WASM runtime before onboarding mounts.
-    await completePendingPrincipalBootstrap(
-      userPage,
-      resolvedOpts.recoveryKey,
-    );
+    await completePendingPrincipalBootstrap(userPage, resolvedOpts.recoveryKey);
     pendingBootstrapByGrant.delete(resolvedOpts.grantJwt);
   }
   return userPage;
@@ -1838,7 +1900,9 @@ function displayLabelForDid(did: string): string {
   // did:webvh fixture principals minted by uniqueUser():
   // `did:webvh:<scid>:<slug>.example` — same label derivation as the
   // did:web simple-example form above.
-  const webvhExample = did.match(/^did:webvh:[a-z0-9]+:([a-z0-9._-]+)\.example$/i);
+  const webvhExample = did.match(
+    /^did:webvh:[a-z0-9]+:([a-z0-9._-]+)\.example$/i,
+  );
   if (webvhExample) {
     return `${webvhExample[1].toLowerCase()}:example.com`;
   }

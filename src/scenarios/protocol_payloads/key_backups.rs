@@ -70,6 +70,7 @@ async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Resul
             .http()
             .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
+            .header("Idempotency-Key", "protocol-payloads-key-backup-put")
             .json(&signed_backup_envelope(actor_id)?),
         StatusCode::OK,
     )

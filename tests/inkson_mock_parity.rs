@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
 use cotest::harness::{ArkretServer, register_account};
-use cotest::scenarios::federation_collaboration::{
+use cotest::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key,
 };
 use reqwest::Method;

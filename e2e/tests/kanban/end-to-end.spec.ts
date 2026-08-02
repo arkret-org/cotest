@@ -348,12 +348,8 @@ test.describe("kanban end-to-end", () => {
         rank: "m",
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, winnerMove, {
-      force: true,
-    });
-    await prepareSignedEventCbaApi(request, aliceToken, loserMove, {
-      force: true,
-    });
+    await prepareSignedEventCbaApi(request, aliceToken, winnerMove);
+    await prepareSignedEventCbaApi(request, aliceToken, loserMove);
     await alignSignedEventToActorFrontierApi(request, aliceToken, winnerMove);
     await alignSignedEventToActorFrontierApi(request, aliceToken, loserMove);
     // Winner is accepted (submitSignedEventApi asserts 200/201).
@@ -436,9 +432,7 @@ test.describe("kanban end-to-end", () => {
         }),
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, crossRealm, {
-      force: true,
-    });
+    await prepareSignedEventCbaApi(request, aliceToken, crossRealm);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

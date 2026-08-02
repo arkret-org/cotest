@@ -25,7 +25,7 @@ test.describe("key backup restore live path", () => {
     const backup = makeBackupBody(alice, backupId);
 
     const put = await putBackup(request, aliceToken, backupId, backup);
-    expect(put.status()).toBe(200);
+    expect(put.status(), await put.text()).toBe(200);
     // spec `keys-operations.schema.json#/$defs/keys_backups_put_outcome`:
     // { status, backup_id, ciphertext_digest } (the SDK KeysBackupsPutOutcome shape).
     expect(await put.json()).toMatchObject({
@@ -183,7 +183,10 @@ async function putBackup(
   body: Record<string, unknown>,
 ) {
   return await request.put(`${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`, {
-    headers: authHeaders(token),
+    headers: {
+      ...authHeaders(token),
+      "idempotency-key": `cotest-key-backup-${backupId}`,
+    },
     data: body,
   });
 }

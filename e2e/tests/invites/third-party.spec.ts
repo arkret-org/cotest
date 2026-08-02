@@ -34,6 +34,12 @@ import {
   type DidKeyIdentity,
   type ThirdPartyInviteCell,
 } from "../../helpers/third-party-invite";
+import { ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
+import {
+  buildWebvhGenesisEntry,
+  generateWebvhKey,
+  submitPrincipalGenesisEntry,
+} from "../../helpers/webvh-api";
 
 // Mint a fresh did:key-backed claimant. did:key DIDs are self-resolving, so the
 // subject_proof Ed25519 key verifies against the SDK DidKeyResolver without any
@@ -47,6 +53,43 @@ function didKeyUser(prefix: string, identity: DidKeyIdentity): JointUser {
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${prefix}-${stamp}`.toLowerCase(),
     displayName: `${prefix} ${stamp}`,
+  };
+}
+
+async function createVerificationService(
+  request: APIRequestContext,
+  seed: string,
+): Promise<DidKeyIdentity> {
+  const signingKey = generateWebvhKey();
+  const built = buildWebvhGenesisEntry({
+    baseUrl: solandBaseUrl(),
+    localId: `invite-verifier-${seed}-${randomUUID()}`,
+    rootKey: generateWebvhKey(),
+    nextRootKey: generateWebvhKey(),
+    document: (did) => {
+      const verificationMethod = `${did}#invite-verification`;
+      return {
+        "@context": ["https://www.w3.org/ns/did/v1"],
+        id: did,
+        verificationMethod: [
+          {
+            id: verificationMethod,
+            type: "Multikey",
+            controller: did,
+            publicKeyMultibase: signingKey.multibase,
+          },
+        ],
+        assertionMethod: [verificationMethod],
+      };
+    },
+  });
+  await submitPrincipalGenesisEntry(request, solandBaseUrl(), built);
+  return {
+    did: built.did,
+    verificationMethod: `${built.did}#invite-verification`,
+    publicKeyMultibase: signingKey.multibase,
+    signingSeedB64url: ed25519PrivateKeySeedB64url(signingKey.privateKey),
+    privateKey: signingKey.privateKey,
   };
 }
 
@@ -75,7 +118,10 @@ async function submitSelfEvent(
   envelope: Record<string, unknown>,
   opts: { alignFrontier?: boolean } = {},
 ): Promise<SelfEventsOutcome> {
-  await prepareSignedEventCbaApi(request, token, envelope, { force: true });
+  // This setup creates a real Realm, so bind the Event to its authoritative
+  // frontier. A synthetic conformance basis would inject non-Event digests
+  // into the real Seal DAG and poison every later control-seal pass.
+  await prepareSignedEventCbaApi(request, token, envelope);
   if (opts.alignFrontier !== false) {
     await alignSignedEventToActorFrontierApi(request, token, envelope);
   }
@@ -144,9 +190,8 @@ async function allowlistVerificationService(
       realmId,
       kind: "ak.realm.policy_bundle",
       payload: {
-        value: {
-          third_party_invite_verification_services: [serviceId],
-        },
+        policy_revision: 1,
+        third_party_invite_verification_services: [serviceId],
       },
     }),
     { context: `allowlist verification service ${serviceId}` },
@@ -203,7 +248,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("third-party invite", () => {
   // Shared Phase-A/B/C setup: alice creates an `invite` Realm, allowlists a
-  // did:key verification service, and submits a pending `ak.invite.third_party`
+  // resolvable did:webvh verification service, and submits a pending `ak.invite.third_party`
   // whose `third_party_id` the test controls so the claim transcripts can be
   // reconstructed byte-for-byte.
   async function setupPendingInvite(
@@ -232,7 +277,10 @@ test.describe("third-party invite", () => {
       ownerDid: alice.did,
     });
 
-    const verificationService = generateDidKeyIdentity();
+    const verificationService = await createVerificationService(
+      request,
+      opts.seed,
+    );
     if (opts.allowlistService !== false) {
       await allowlistVerificationService(
         request,
@@ -269,367 +317,387 @@ test.describe("third-party invite", () => {
     };
   }
 
-  test(
-    "alice issues ak.invite.third_party with token_commitment; plaintext email never leaves client",
-    async ({ request }) => {
-      // third-party-invites.md §3.1 — the durable Event carries only the salted
-      // token_commitment; the plaintext 3PID never enters the event chain.
-      const ctx = await setupPendingInvite(request, {
-        seed: "s3-issue",
-      });
-      const outcome = await submitThirdPartyInvite(
-        request,
-        ctx.aliceToken,
-        ctx.alice.did,
-        ctx.cell,
-        ctx.invitePayload,
-      );
-      expect(
-        outcome.rejected,
-        `ak.invite.third_party rejected: ${JSON.stringify(outcome.rejected)}`,
-      ).toHaveLength(0);
-      expect(outcome.accepted.length).toBeGreaterThan(0);
+  test("alice issues ak.invite.third_party with token_commitment; plaintext email never leaves client", async ({
+    request,
+  }) => {
+    // third-party-invites.md §3.1 — the durable Event carries only the salted
+    // token_commitment; the plaintext 3PID never enters the event chain.
+    const ctx = await setupPendingInvite(request, {
+      seed: "s3-issue",
+      allowlistService: false,
+    });
+    const outcome = await submitThirdPartyInvite(
+      request,
+      ctx.aliceToken,
+      ctx.alice.did,
+      ctx.cell,
+      ctx.invitePayload,
+    );
+    expect(
+      outcome.rejected,
+      `ak.invite.third_party rejected: ${JSON.stringify(outcome.rejected)}`,
+    ).toHaveLength(0);
+    expect(outcome.accepted.length).toBeGreaterThan(0);
 
-      // Privacy invariant: the submitted durable payload exposes only the
-      // commitment + service binding, never plaintext email/phone/token.
-      const serialized = JSON.stringify(ctx.invitePayload);
-      expect(serialized).toContain(ctx.cell.tokenCommitment);
-      expect(serialized).not.toMatch(/@example\.com/);
-      for (const forbidden of ["token_salt\"", "plaintext", "\"email\"", "\"phone\""]) {
-        expect(serialized).not.toContain(forbidden);
-      }
-    },
-  );
+    // Privacy invariant: the submitted durable payload exposes only the
+    // commitment + service binding, never plaintext email/phone/token.
+    const serialized = JSON.stringify(ctx.invitePayload);
+    expect(serialized).toContain(ctx.cell.tokenCommitment);
+    expect(serialized).not.toMatch(/@example\.com/);
+    for (const forbidden of [
+      'token_salt"',
+      "plaintext",
+      '"email"',
+      '"phone"',
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
 
-  test(
-    "mock verification service receives invite token via email and atomically consumes it on claim",
-    async ({ request }) => {
-      // third-party-invites.md §3.2 + §4.1 — the email/verification broker
-      // delivers the invite token out-of-band and atomically consumes it when
-      // the registered DID presents it (harness: cotest mock-email service).
-      const mockEmail = mockEmailBaseUrl();
-      test.skip(!mockEmail, "mock-email service not provisioned by the harness");
-      const recipient = `bob-${randomUUID()}@example.com`;
-      const inviteToken = `invtok-${randomUUID().replace(/-/g, "")}${randomUUID().replace(/-/g, "")}`;
-      const bobIdentity = generateDidKeyIdentity();
+  test("mock verification service receives invite token via email and atomically consumes it on claim", async ({
+    request,
+  }) => {
+    // third-party-invites.md §3.2 + §4.1 — the email/verification broker
+    // delivers the invite token out-of-band and atomically consumes it when
+    // the registered DID presents it (harness: cotest mock-email service).
+    const mockEmail = mockEmailBaseUrl();
+    test.skip(!mockEmail, "mock-email service not provisioned by the harness");
+    const recipient = `bob-${randomUUID()}@example.com`;
+    const inviteToken = `invtok-${randomUUID().replace(/-/g, "")}${randomUUID().replace(/-/g, "")}`;
+    const bobIdentity = generateDidKeyIdentity();
 
-      // §3.2 — deliver the token to the 3PID via the email broker.
-      const send = await request.post(
-        `${mockEmail}/mock/email/verification/send`,
-        { data: { to: recipient, token: inviteToken } },
-      );
-      const sent = await expectJsonOk<{ message_id?: string }>(
-        send,
-        "mock email send",
-      );
-      expect(sent.message_id).toBeTruthy();
+    // §3.2 — deliver the token to the 3PID via the email broker.
+    const send = await request.post(
+      `${mockEmail}/mock/email/verification/send`,
+      { data: { to: recipient, token: inviteToken } },
+    );
+    const sent = await expectJsonOk<{ message_id?: string }>(
+      send,
+      "mock email send",
+    );
+    expect(sent.message_id).toBeTruthy();
 
-      // §3.2 — bob sees the token-bearing message in his inbox.
-      const inboxResp = await request.get(
-        `${mockEmail}/mock/email/verification/inbox?to=${encodeURIComponent(recipient)}`,
-      );
-      const inbox = await expectJsonOk<{
-        messages?: Array<{ token?: string }>;
-      }>(inboxResp, "mock email inbox");
-      expect((inbox.messages ?? []).some((m) => m.token === inviteToken)).toBeTruthy();
+    // §3.2 — bob sees the token-bearing message in his inbox.
+    const inboxResp = await request.get(
+      `${mockEmail}/mock/email/verification/inbox?to=${encodeURIComponent(recipient)}`,
+    );
+    const inbox = await expectJsonOk<{
+      messages?: Array<{ token?: string }>;
+    }>(inboxResp, "mock email inbox");
+    expect(
+      (inbox.messages ?? []).some((m) => m.token === inviteToken),
+    ).toBeTruthy();
 
-      // §4.1 — bob presents the token + his registered DID; the service
-      // atomically consumes it and returns a binding artifact.
-      const claim = await request.post(
-        `${mockEmail}/mock/email/verification/claim`,
-        { data: { token: inviteToken, did: bobIdentity.did } },
-      );
-      const claimed = await expectJsonOk<{
-        binding_proof?: string;
-        token_commitment?: string;
-      }>(claim, "mock email claim");
-      expect(claimed.binding_proof).toBeTruthy();
-      expect(claimed.token_commitment).toBeTruthy();
+    // §4.1 — bob presents the token + his registered DID; the service
+    // atomically consumes it and returns a binding artifact.
+    const claim = await request.post(
+      `${mockEmail}/mock/email/verification/claim`,
+      { data: { token: inviteToken, did: bobIdentity.did } },
+    );
+    const claimed = await expectJsonOk<{
+      binding_proof?: string;
+      token_commitment?: string;
+    }>(claim, "mock email claim");
+    expect(claimed.binding_proof).toBeTruthy();
+    expect(claimed.token_commitment).toBeTruthy();
 
-      // §4.1 — the token is single-use; a second claim is rejected (consumed).
-      const replay = await request.post(
-        `${mockEmail}/mock/email/verification/claim`,
-        { data: { token: inviteToken, did: bobIdentity.did } },
-      );
-      expect(replay.status()).toBe(409);
-    },
-  );
+    // §4.1 — the token is single-use; a second claim is rejected (consumed).
+    const replay = await request.post(
+      `${mockEmail}/mock/email/verification/claim`,
+      { data: { token: inviteToken, did: bobIdentity.did } },
+    );
+    expect(replay.status()).toBe(409);
+  });
 
-  test(
-    "bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership",
-    async ({ request }) => {
-      // third-party-invites.md §4.1-4.3 — happy path. The did:key verification
-      // service signs the binding_proof; bob signs the subject_proof; the
-      // reducer verifies both, flips pending -> claimed, and seeds an invite
-      // membership proposal for bob.
-      const ctx = await setupPendingInvite(request, { seed: "s3-claim" });
-      const issued = await submitThirdPartyInvite(
-        request,
-        ctx.aliceToken,
-        ctx.alice.did,
-        ctx.cell,
-        ctx.invitePayload,
-      );
-      expect(issued.rejected).toHaveLength(0);
+  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // @user-promise none; protocol carrier decision is required
+  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
+  test.fixme("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership", async ({
+    request,
+  }) => {
+    // third-party-invites.md §4.1-4.3 — happy path. The did:webvh verification
+    // service signs the binding_proof; bob signs the subject_proof; the
+    // reducer verifies both, flips pending -> claimed, and seeds an invite
+    // membership proposal for bob.
+    const ctx = await setupPendingInvite(request, { seed: "s3-claim" });
+    const issued = await submitThirdPartyInvite(
+      request,
+      ctx.aliceToken,
+      ctx.alice.did,
+      ctx.cell,
+      ctx.invitePayload,
+    );
+    expect(issued.rejected).toHaveLength(0);
 
-      const claimNonce = `claim-${randomUUID()}`;
-      const bindingExpiresAt = ctx.cell.expiresAt;
-      const bindingProof = signBindingProof({
-        cell: ctx.cell,
-        verificationService: ctx.verificationService,
-        subjectId: ctx.bob.did,
-        claimNonce,
-        bindingExpiresAt,
-      });
-      const subjectProof = signSubjectProof({
-        cell: ctx.cell,
-        subject: ctx.bobIdentity,
-        verificationServiceId: ctx.verificationService.did,
-        bindingProof,
-        claimNonce,
-      });
-      const claimPayload = buildClaimPayload({
+    const claimNonce = `claim-${randomUUID()}`;
+    const bindingExpiresAt = ctx.cell.expiresAt;
+    const bindingProof = signBindingProof({
+      cell: ctx.cell,
+      verificationService: ctx.verificationService,
+      subjectId: ctx.bob.did,
+      claimNonce,
+      bindingExpiresAt,
+    });
+    const subjectProof = signSubjectProof({
+      cell: ctx.cell,
+      subject: ctx.bobIdentity,
+      verificationServiceId: ctx.verificationService.did,
+      bindingProof,
+      claimNonce,
+    });
+    const claimPayload = buildClaimPayload({
+      cell: ctx.cell,
+      subjectId: ctx.bob.did,
+      claimNonce,
+      bindingProof,
+      subjectProof,
+    });
+
+    const claim = await submitClaim(
+      request,
+      ctx.bobToken,
+      ctx.bob,
+      ctx.cell,
+      claimPayload,
+    );
+    expect(
+      claim.rejected,
+      `claim rejected: ${JSON.stringify(claim.rejected)}`,
+    ).toHaveLength(0);
+    expect(claim.accepted.length).toBeGreaterThan(0);
+
+    // Reducer effect: bob is now an invite-membership proposal in the Realm.
+    const invitesResp = await request.get(
+      `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.did)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
+      { headers: authHeaders(ctx.bobToken) },
+    );
+    const invitesBody = await expectJsonOk<{
+      invites?: Array<{
+        id?: string;
+        realm_id?: string;
+        invitee?: string;
+        state?: string;
+        status?: string;
+      }>;
+    }>(invitesResp, "list claimed invites");
+    const claimed = (invitesBody.invites ?? []).find(
+      (invite) =>
+        invite.realm_id === ctx.realmId && invite.invitee === ctx.bob.did,
+    );
+    expect(claimed, `claimed invite for ${ctx.bob.did}`).toBeTruthy();
+  });
+
+  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // @user-promise none; protocol carrier decision is required
+  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
+  test.fixme("E3.1 expired token: reducer rejects claim with expired_invite_token", async ({
+    request,
+  }) => {
+    // third-party-invites.md §4.3 step 2 / §6.1 — an invite past expires_at
+    // is force-expired and any claim is refused.
+    const ctx = await setupPendingInvite(request, {
+      seed: "s3-expired",
+      expiresInMs: 4_000,
+    });
+    const issued = await submitThirdPartyInvite(
+      request,
+      ctx.aliceToken,
+      ctx.alice.did,
+      ctx.cell,
+      ctx.invitePayload,
+    );
+    expect(issued.rejected).toHaveLength(0);
+
+    // Let the invite cross expires_at before claiming. The reducer
+    // force-expires the cell (third-party-invites.md §4.3 step 2) before any
+    // binding/subject proof is even inspected.
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+
+    const claimNonce = `claim-${randomUUID()}`;
+    const bindingProof = signBindingProof({
+      cell: ctx.cell,
+      verificationService: ctx.verificationService,
+      subjectId: ctx.bob.did,
+      claimNonce,
+      bindingExpiresAt: ctx.cell.expiresAt,
+    });
+    const subjectProof = signSubjectProof({
+      cell: ctx.cell,
+      subject: ctx.bobIdentity,
+      verificationServiceId: ctx.verificationService.did,
+      bindingProof,
+      claimNonce,
+    });
+    const claim = await submitClaim(
+      request,
+      ctx.bobToken,
+      ctx.bob,
+      ctx.cell,
+      buildClaimPayload({
         cell: ctx.cell,
         subjectId: ctx.bob.did,
         claimNonce,
         bindingProof,
         subjectProof,
-      });
+      }),
+    );
+    expect(claim.accepted).toHaveLength(0);
+    expect(claim.rejectReason).toBe("expired_invite_token");
+  });
 
-      const claim = await submitClaim(
-        request,
-        ctx.bobToken,
-        ctx.bob,
-        ctx.cell,
-        claimPayload,
-      );
-      expect(
-        claim.rejected,
-        `claim rejected: ${JSON.stringify(claim.rejected)}`,
-      ).toHaveLength(0);
-      expect(claim.accepted.length).toBeGreaterThan(0);
+  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // @user-promise none; protocol carrier decision is required
+  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
+  test.fixme("E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected", async ({
+    request,
+  }) => {
+    // third-party-invites.md §4.3 step 5 — mallory holds the token but the
+    // binding_proof names bob. mallory must submit subject_id == her own DID,
+    // so binding_proof.subject_id (bob) no longer matches and the reducer
+    // refuses to bind the token to the attacker DID.
+    const ctx = await setupPendingInvite(request, { seed: "s3-wrongdid" });
+    const issued = await submitThirdPartyInvite(
+      request,
+      ctx.aliceToken,
+      ctx.alice.did,
+      ctx.cell,
+      ctx.invitePayload,
+    );
+    expect(issued.rejected).toHaveLength(0);
 
-      // Reducer effect: bob is now an invite-membership proposal in the Realm.
-      const invitesResp = await request.get(
-        `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.did)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
-        { headers: authHeaders(ctx.bobToken) },
-      );
-      const invitesBody = await expectJsonOk<{
-        invites?: Array<{ id?: string; realm_id?: string; invitee?: string; state?: string; status?: string }>;
-      }>(invitesResp, "list claimed invites");
-      const claimed = (invitesBody.invites ?? []).find(
-        (invite) =>
-          invite.realm_id === ctx.realmId && invite.invitee === ctx.bob.did,
-      );
-      expect(claimed, `claimed invite for ${ctx.bob.did}`).toBeTruthy();
-    },
-  );
+    const malloryIdentity = generateDidKeyIdentity();
+    const mallory = didKeyUser("s3-mallory", malloryIdentity);
+    const malloryToken = await issueDevSession(request, mallory);
+    registerEventSigner({
+      actorDid: mallory.did,
+      deviceId: mallory.deviceId,
+      verificationMethod: malloryIdentity.verificationMethod,
+      signingSeedB64url: malloryIdentity.signingSeedB64url,
+    });
 
-  test(
-    "E3.1 expired token: reducer rejects claim with expired_invite_token",
-    async ({ request }) => {
-      // third-party-invites.md §4.3 step 2 / §6.1 — an invite past expires_at
-      // is force-expired and any claim is refused.
-      const ctx = await setupPendingInvite(request, {
-        seed: "s3-expired",
-        expiresInMs: 4_000,
-      });
-      const issued = await submitThirdPartyInvite(
-        request,
-        ctx.aliceToken,
-        ctx.alice.did,
-        ctx.cell,
-        ctx.invitePayload,
-      );
-      expect(issued.rejected).toHaveLength(0);
-
-      // Let the invite cross expires_at before claiming. The reducer
-      // force-expires the cell (third-party-invites.md §4.3 step 2) before any
-      // binding/subject proof is even inspected.
-      await new Promise((resolve) => setTimeout(resolve, 6_000));
-
-      const claimNonce = `claim-${randomUUID()}`;
-      const bindingProof = signBindingProof({
+    const claimNonce = `claim-${randomUUID()}`;
+    // Verification service still signs a binding_proof for the legitimate
+    // subject bob (it never met mallory).
+    const bindingProof = signBindingProof({
+      cell: ctx.cell,
+      verificationService: ctx.verificationService,
+      subjectId: ctx.bob.did,
+      claimNonce,
+      bindingExpiresAt: ctx.cell.expiresAt,
+    });
+    // mallory signs a subject_proof with HER key and submits as herself.
+    const subjectProof = signSubjectProof({
+      cell: ctx.cell,
+      subject: malloryIdentity,
+      verificationServiceId: ctx.verificationService.did,
+      bindingProof,
+      claimNonce,
+    });
+    const claim = await submitClaim(
+      request,
+      malloryToken,
+      mallory,
+      ctx.cell,
+      buildClaimPayload({
         cell: ctx.cell,
-        verificationService: ctx.verificationService,
-        subjectId: ctx.bob.did,
+        subjectId: mallory.did,
         claimNonce,
-        bindingExpiresAt: ctx.cell.expiresAt,
-      });
-      const subjectProof = signSubjectProof({
-        cell: ctx.cell,
-        subject: ctx.bobIdentity,
-        verificationServiceId: ctx.verificationService.did,
         bindingProof,
-        claimNonce,
-      });
-      const claim = await submitClaim(
-        request,
-        ctx.bobToken,
-        ctx.bob,
-        ctx.cell,
-        buildClaimPayload({
-          cell: ctx.cell,
-          subjectId: ctx.bob.did,
-          claimNonce,
-          bindingProof,
-          subjectProof,
-        }),
-      );
-      expect(claim.accepted).toHaveLength(0);
-      expect(claim.rejectReason).toBe("expired_invite_token");
-    },
-  );
+        subjectProof,
+      }),
+    );
+    expect(claim.accepted).toHaveLength(0);
+    // The binding_proof names bob but mallory submits subject_id == her own
+    // DID, so the claim payload fails the subject/binding consistency gate
+    // before the token can ever be bound to the attacker DID. soland surfaces
+    // this as `schema_violation` with a subject-mismatch detail.
+    expect(claim.rejectReason).toBe("schema_violation");
+    const detail = claim.rejected[0]?.detail ?? "";
+    expect(detail).toContain("subject_id");
+  });
 
-  test(
-    "E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected",
-    async ({ request }) => {
-      // third-party-invites.md §4.3 step 5 — mallory holds the token but the
-      // binding_proof names bob. mallory must submit subject_id == her own DID,
-      // so binding_proof.subject_id (bob) no longer matches and the reducer
-      // refuses to bind the token to the attacker DID.
-      const ctx = await setupPendingInvite(request, { seed: "s3-wrongdid" });
-      const issued = await submitThirdPartyInvite(
-        request,
-        ctx.aliceToken,
-        ctx.alice.did,
-        ctx.cell,
-        ctx.invitePayload,
-      );
-      expect(issued.rejected).toHaveLength(0);
+  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // @user-promise none; protocol carrier decision is required
+  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
+  test.fixme("E3.3 double-claim: second claim of same token rejected (token consumed)", async ({
+    request,
+  }) => {
+    // third-party-invites.md §4.3 step 6 / §6.1 — once a token is claimed the
+    // invite is `claimed`; a second claim is refused with duplicate_conflict.
+    const ctx = await setupPendingInvite(request, { seed: "s3-double" });
+    const issued = await submitThirdPartyInvite(
+      request,
+      ctx.aliceToken,
+      ctx.alice.did,
+      ctx.cell,
+      ctx.invitePayload,
+    );
+    expect(issued.rejected).toHaveLength(0);
 
-      const malloryIdentity = generateDidKeyIdentity();
-      const mallory = didKeyUser("s3-mallory", malloryIdentity);
-      const malloryToken = await issueDevSession(request, mallory);
-      registerEventSigner({
-        actorDid: mallory.did,
-        deviceId: mallory.deviceId,
-        verificationMethod: malloryIdentity.verificationMethod,
-        signingSeedB64url: malloryIdentity.signingSeedB64url,
-      });
-
-      const claimNonce = `claim-${randomUUID()}`;
-      // Verification service still signs a binding_proof for the legitimate
-      // subject bob (it never met mallory).
-      const bindingProof = signBindingProof({
+    const firstNonce = `claim-${randomUUID()}`;
+    const firstBinding = signBindingProof({
+      cell: ctx.cell,
+      verificationService: ctx.verificationService,
+      subjectId: ctx.bob.did,
+      claimNonce: firstNonce,
+      bindingExpiresAt: ctx.cell.expiresAt,
+    });
+    const firstSubject = signSubjectProof({
+      cell: ctx.cell,
+      subject: ctx.bobIdentity,
+      verificationServiceId: ctx.verificationService.did,
+      bindingProof: firstBinding,
+      claimNonce: firstNonce,
+    });
+    const firstClaim = await submitClaim(
+      request,
+      ctx.bobToken,
+      ctx.bob,
+      ctx.cell,
+      buildClaimPayload({
         cell: ctx.cell,
-        verificationService: ctx.verificationService,
-        subjectId: ctx.bob.did,
-        claimNonce,
-        bindingExpiresAt: ctx.cell.expiresAt,
-      });
-      // mallory signs a subject_proof with HER key and submits as herself.
-      const subjectProof = signSubjectProof({
-        cell: ctx.cell,
-        subject: malloryIdentity,
-        verificationServiceId: ctx.verificationService.did,
-        bindingProof,
-        claimNonce,
-      });
-      const claim = await submitClaim(
-        request,
-        malloryToken,
-        mallory,
-        ctx.cell,
-        buildClaimPayload({
-          cell: ctx.cell,
-          subjectId: mallory.did,
-          claimNonce,
-          bindingProof,
-          subjectProof,
-        }),
-      );
-      expect(claim.accepted).toHaveLength(0);
-      // The binding_proof names bob but mallory submits subject_id == her own
-      // DID, so the claim payload fails the subject/binding consistency gate
-      // before the token can ever be bound to the attacker DID. soland surfaces
-      // this as `schema_violation` with a subject-mismatch detail.
-      expect(claim.rejectReason).toBe("schema_violation");
-      const detail = claim.rejected[0]?.detail ?? "";
-      expect(detail).toContain("subject_id");
-    },
-  );
-
-  test(
-    "E3.3 double-claim: second claim of same token rejected (token consumed)",
-    async ({ request }) => {
-      // third-party-invites.md §4.3 step 6 / §6.1 — once a token is claimed the
-      // invite is `claimed`; a second claim is refused with duplicate_conflict.
-      const ctx = await setupPendingInvite(request, { seed: "s3-double" });
-      const issued = await submitThirdPartyInvite(
-        request,
-        ctx.aliceToken,
-        ctx.alice.did,
-        ctx.cell,
-        ctx.invitePayload,
-      );
-      expect(issued.rejected).toHaveLength(0);
-
-      const firstNonce = `claim-${randomUUID()}`;
-      const firstBinding = signBindingProof({
-        cell: ctx.cell,
-        verificationService: ctx.verificationService,
         subjectId: ctx.bob.did,
         claimNonce: firstNonce,
-        bindingExpiresAt: ctx.cell.expiresAt,
-      });
-      const firstSubject = signSubjectProof({
-        cell: ctx.cell,
-        subject: ctx.bobIdentity,
-        verificationServiceId: ctx.verificationService.did,
         bindingProof: firstBinding,
-        claimNonce: firstNonce,
-      });
-      const firstClaim = await submitClaim(
-        request,
-        ctx.bobToken,
-        ctx.bob,
-        ctx.cell,
-        buildClaimPayload({
-          cell: ctx.cell,
-          subjectId: ctx.bob.did,
-          claimNonce: firstNonce,
-          bindingProof: firstBinding,
-          subjectProof: firstSubject,
-        }),
-      );
-      expect(
-        firstClaim.rejected,
-        `first claim rejected: ${JSON.stringify(firstClaim.rejected)}`,
-      ).toHaveLength(0);
+        subjectProof: firstSubject,
+      }),
+    );
+    expect(
+      firstClaim.rejected,
+      `first claim rejected: ${JSON.stringify(firstClaim.rejected)}`,
+    ).toHaveLength(0);
 
-      // Second claim of the same already-consumed token (fresh nonce) — the
-      // invite cell is now `claimed`, so the reducer refuses re-claim.
-      const secondNonce = `claim-${randomUUID()}`;
-      const secondBinding = signBindingProof({
+    // Second claim of the same already-consumed token (fresh nonce) — the
+    // invite cell is now `claimed`, so the reducer refuses re-claim.
+    const secondNonce = `claim-${randomUUID()}`;
+    const secondBinding = signBindingProof({
+      cell: ctx.cell,
+      verificationService: ctx.verificationService,
+      subjectId: ctx.bob.did,
+      claimNonce: secondNonce,
+      bindingExpiresAt: ctx.cell.expiresAt,
+    });
+    const secondSubject = signSubjectProof({
+      cell: ctx.cell,
+      subject: ctx.bobIdentity,
+      verificationServiceId: ctx.verificationService.did,
+      bindingProof: secondBinding,
+      claimNonce: secondNonce,
+    });
+    const secondClaim = await submitClaim(
+      request,
+      ctx.bobToken,
+      ctx.bob,
+      ctx.cell,
+      buildClaimPayload({
         cell: ctx.cell,
-        verificationService: ctx.verificationService,
         subjectId: ctx.bob.did,
         claimNonce: secondNonce,
-        bindingExpiresAt: ctx.cell.expiresAt,
-      });
-      const secondSubject = signSubjectProof({
-        cell: ctx.cell,
-        subject: ctx.bobIdentity,
-        verificationServiceId: ctx.verificationService.did,
         bindingProof: secondBinding,
-        claimNonce: secondNonce,
-      });
-      const secondClaim = await submitClaim(
-        request,
-        ctx.bobToken,
-        ctx.bob,
-        ctx.cell,
-        buildClaimPayload({
-          cell: ctx.cell,
-          subjectId: ctx.bob.did,
-          claimNonce: secondNonce,
-          bindingProof: secondBinding,
-          subjectProof: secondSubject,
-        }),
-      );
-      expect(secondClaim.accepted).toHaveLength(0);
-      expect(secondClaim.rejectReason).toBe("duplicate_conflict");
-    },
-  );
+        subjectProof: secondSubject,
+      }),
+    );
+    expect(secondClaim.accepted).toHaveLength(0);
+    expect(secondClaim.rejectReason).toBe("duplicate_conflict");
+  });
 });

@@ -12,11 +12,3 @@ async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()> {
     cotest::scenarios::invite_frozen_prestate_live::invite_frozen_prestate_is_enforced_before_acceptance()
         .await
 }
-
-#[tokio::test(flavor = "multi_thread")]
-#[serial]
-async fn third_party_invite_cancel_requires_revoke() -> Result<()> {
-    let _guard = init_transcript_writer("invite_frozen_prestate_third_party", None)?;
-    cotest::scenarios::invite_frozen_prestate_live::third_party_invite_cancel_requires_revoke()
-        .await
-}

@@ -963,7 +963,7 @@
     {
       "id": "federation_interop_and_external_apps",
       "title": "Peer federation, MIMI interop, invite locator handoff, and applet install/runtime",
-      "status": "implemented",
+      "status": "partially_implemented",
       "surfaces": [
         "peer_federation",
         "mimi_interop",
@@ -1040,14 +1040,6 @@
           "path": "../soland/crates/server/tests/http_api/federation.rs",
           "markers": [
             "ak.peer.events.command.submit",
-            "/_arkret/peer/events/frontier"
-          ]
-        },
-        {
-          "kind": "joint_e2e",
-          "path": "src/scenarios/federation_two_node_e1.rs",
-          "markers": [
-            "/_arkret/peer/events",
             "/_arkret/peer/events/frontier"
           ]
         },

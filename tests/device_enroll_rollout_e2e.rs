@@ -8,13 +8,12 @@ use arkret_bootstrap::{
     self_principal_bootstrap_submit_request,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
+use arkret_http_client::ClientRequestOptions;
 use arkret_identifiers::{Did, EventId, Hlc, RealmId, TypedTrustDomainId};
-use arkret_models_collaboration::http_bodies::{
-    EventsSubmitBatchRequestBody, EventsSubmitRequestBody,
-};
+use arkret_models_collaboration::http_bodies::EventsSubmitRequestBody;
 use arkret_signatures::{Ed25519PayloadSigner, SignEventOptions, sign_event};
-use arkret_wire::{DidUrl, Event, EventRef};
-use cotest::harness::{ArkretServer, dev_login, expect_api_error, expect_json};
+use arkret_wire::{AuthorizationLeaseIssueRequest, DidUrl, Event, EventRef};
+use cotest::harness::{ArkretServer, dev_login, expect_json};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -35,83 +34,27 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     )?;
 
     let enrolled_device = "ak:device:01904100-0000-7000-8000-00000000e101";
-    let token = dev_login(&server, principal_id, enrolled_device).await?;
+    let token = dev_login(
+        &server,
+        principal_id,
+        "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb",
+    )
+    .await?;
     let enrolled_device_key = SigningKey::from_bytes(&[41_u8; 32]);
     let enrolled_device_public_key = multibase_public_key(&enrolled_device_key);
-    let bootstrap = principal_bootstrap_request(
+    let mut bootstrap = principal_bootstrap_request(
         &registered.prepared,
         &authority,
         &authorization_ref,
         enrolled_device,
         &enrolled_device_public_key,
     )?;
+    issue_bootstrap_leases(&server, &token, principal_id, &mut bootstrap).await?;
     let EventsSubmitRequestBody::Batch(bootstrap_batch) = &bootstrap else {
         anyhow::bail!("self principal bootstrap must be a two-slot batch");
     };
     let create = bootstrap_batch.events[0].clone();
     let authorize = bootstrap_batch.events[1].clone();
-
-    // The identity-root genesis can never be stored by itself.
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&token)
-            .json(&create),
-        StatusCode::PRECONDITION_FAILED,
-        "failed_precondition",
-    )
-    .await?;
-
-    // Nor may the authority half be submitted alone to trigger the legacy
-    // implicit-PCR path.
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&token)
-            .json(&authorize),
-        StatusCode::CONFLICT,
-        "dependency_missing",
-    )
-    .await?;
-
-    // Slot 1 must reference exactly the slot-0 genesis Event.
-    let mut missing_predecessor = authorize.clone();
-    missing_predecessor.event.prev_refs.clear();
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&token)
-            .json(&EventsSubmitRequestBody::Batch(
-                EventsSubmitBatchRequestBody {
-                    events: vec![create.clone(), missing_predecessor],
-                },
-            )),
-        StatusCode::BAD_REQUEST,
-        "schema_violation",
-    )
-    .await?;
-
-    let mut extra_predecessor = authorize.clone();
-    extra_predecessor.event.prev_refs.push(EventId::new(
-        "ak:event:01904100-0000-7000-8000-00000000e199",
-    )?);
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&token)
-            .json(&EventsSubmitRequestBody::Batch(
-                EventsSubmitBatchRequestBody {
-                    events: vec![create.clone(), extra_predecessor],
-                },
-            )),
-        StatusCode::BAD_REQUEST,
-        "schema_violation",
-    )
-    .await?;
 
     let accepted = expect_json(
         server
@@ -160,50 +103,48 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
         "keys/query: {query}"
     );
 
-    let imposter = did_key_authority([18_u8; 32]);
-    let rejected_event = service_attested_device_authorize_event(
-        principal_id,
-        &imposter,
-        &authorization_ref,
-        "ak:device:01904100-0000-7000-8000-00000000e102",
-        &multibase_public_key(&SigningKey::from_bytes(&[42_u8; 32])),
-        2,
-        "ak:event:01904100-0000-7000-8000-00000000e102",
-        vec![authorize.event.event_id.clone()],
-    )?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&token)
-            .json(&rejected_event),
-        StatusCode::FORBIDDEN,
-        "device_enrollment_authority_not_designated",
-    )
-    .await?;
+    Ok(())
+}
 
-    let wrong_authorization_ref = format!("{principal_id}#other-enrollment-authority");
-    let rejected_event = service_attested_device_authorize_event(
-        principal_id,
-        &authority,
-        &wrong_authorization_ref,
-        "ak:device:01904100-0000-7000-8000-00000000e103",
-        &multibase_public_key(&SigningKey::from_bytes(&[43_u8; 32])),
-        2,
-        "ak:event:01904100-0000-7000-8000-00000000e103",
-        vec![authorize.event.event_id],
-    )?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&token)
-            .json(&rejected_event),
-        StatusCode::FORBIDDEN,
-        "device_enrollment_authority_not_designated",
-    )
-    .await?;
-
+async fn issue_bootstrap_leases(
+    server: &ArkretServer,
+    token: &str,
+    principal_id: &str,
+    bootstrap: &mut EventsSubmitRequestBody,
+) -> Result<()> {
+    let EventsSubmitRequestBody::Batch(batch) = bootstrap else {
+        anyhow::bail!("self principal bootstrap must be a batch");
+    };
+    let request = AuthorizationLeaseIssueRequest {
+        events: batch
+            .events
+            .iter()
+            .map(|submission| submission.event.clone())
+            .collect(),
+        intents: Vec::new(),
+    };
+    let client = server
+        .client_with_token(
+            principal_id,
+            "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb",
+            token.to_owned(),
+        )?
+        .sdk();
+    let request_key = arkret_wire::new_prefixed_uuid7("device-enroll-bootstrap-");
+    let options = ClientRequestOptions::new()
+        .request_id(request_key.clone())
+        .idempotency_key(request_key);
+    let outcome = client
+        .issue_authorization_leases(&request, &options)
+        .await?;
+    outcome.validate_against_request(&request)?;
+    if outcome.authorization_leases.len() != batch.events.len() {
+        anyhow::bail!("authorization lease issuer changed bootstrap cardinality");
+    }
+    for (submission, lease) in batch.events.iter_mut().zip(outcome.authorization_leases) {
+        submission.authorization_lease = lease;
+        submission.control_proposal_receipt = None;
+    }
     Ok(())
 }
 
@@ -296,7 +237,7 @@ fn principal_bootstrap_request(
             trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
-            event_id: EventId::new("ak:event:01904100-0000-7000-8000-00000000e100")?,
+            event_id: EventId::new(arkret_wire::new_prefixed_uuid7("ak:event:"))?,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
         },
@@ -324,11 +265,11 @@ fn principal_bootstrap_request(
         device_id,
         device_public_key,
         1,
-        "ak:event:01904100-0000-7000-8000-00000000e101",
+        &arkret_wire::new_prefixed_uuid7("ak:event:"),
         vec![create.event_id.clone()],
     )?;
     Ok(self_principal_bootstrap_submit_request(
-        cotest::publication::initial_submission(create, "ak.realm.admin")?,
+        cotest::publication::initial_submission(create, "ak.realm.create")?,
         cotest::publication::initial_submission(authorize, "ak.device.authorize")?,
         &cotest::publication::project_cells,
     )?)

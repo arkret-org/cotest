@@ -207,9 +207,7 @@ test.describe("workflow: incident response", () => {
         patch: { metadata: { fields: { status: "resolved" } } },
       },
     });
-    await prepareSignedEventCbaApi(request, token, badResolvedEvent, {
-      force: true,
-    });
+    await prepareSignedEventCbaApi(request, token, badResolvedEvent);
     await alignSignedEventToActorFrontierApi(request, token, badResolvedEvent);
     const badResolved = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,

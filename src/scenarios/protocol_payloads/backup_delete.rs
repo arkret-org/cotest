@@ -18,6 +18,7 @@ use reqwest::StatusCode;
 
 use super::key_backups::BACKUP_ID;
 use crate::harness::{ArkretServer, expect_json};
+use crate::scenarios::identity_test_support::TEST_PRINCIPAL_SIGNING_KEY_SEED;
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let request_id = Base64UrlString::new("Y290ZXN0LWJhY2t1cC1kZWxldGUtMDE".to_owned())
@@ -42,15 +43,13 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     let challenge: KeysBackupsDeleteChallenge = serde_json::from_value(challenge)?;
 
     // 2. Sign the one canonical delete-intent transcript with the principal control key.
-    let verification_method = DidUrl::new(format!("{actor_id}#key-1"))
+    let verification_method = DidUrl::new(format!("{actor_id}#cotest-principal-signing-key"))
         .map_err(|error| anyhow!("principal control verification method: {error}"))?;
     let transcript = challenge.delete_intent_transcript(reason.as_deref());
     let canonical = canonical_json_bytes(&transcript)
         .map_err(|error| anyhow!("delete-intent transcript is not canonical: {error}"))?;
     let jws = arkret_signatures::sign_eddsa_detached_jws(
-        &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
-            verification_method.as_str(),
-        )),
+        &SigningKey::from_bytes(&TEST_PRINCIPAL_SIGNING_KEY_SEED),
         &canonical,
     )?;
     let proof = PayloadProof {
@@ -78,6 +77,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
             .http()
             .delete(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
+            .header("Idempotency-Key", "protocol-payloads-key-backup-delete")
             .json(&body),
         StatusCode::OK,
     )

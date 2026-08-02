@@ -178,8 +178,21 @@ function Get-RetryArtifactReconciliation {
     # carries, and match on the common prefix so truncation and the trailing
     # project name do not break the association.
     $failureSlugs = @($FinalFailures | ForEach-Object {
-            $scenario = ($_.scenario -replace '\.spec\.ts$', '')
-            (($scenario + $_.test) -replace '[^A-Za-z0-9]', '').ToLowerInvariant()
+            $scenarioProperty = $_.PSObject.Properties['scenario']
+            $testProperty = $_.PSObject.Properties['test']
+            if ($null -eq $testProperty) {
+                # run-joint-e2e's junit parser calls this field `name`; accept
+                # both shapes so reconciliation cannot abort the final report.
+                $testProperty = $_.PSObject.Properties['name']
+            }
+            $scenario = if ($null -ne $scenarioProperty) {
+                ([string]$scenarioProperty.Value -replace '\.spec\.ts$', '')
+            } else { '' }
+            $testName = if ($null -ne $testProperty) { [string]$testProperty.Value } else { '' }
+            [pscustomobject]@{
+                scenario = (($scenario -replace '[^A-Za-z0-9]', '').ToLowerInvariant())
+                full = ((($scenario + $testName) -replace '[^A-Za-z0-9]', '').ToLowerInvariant())
+            }
         })
     $entries = New-Object System.Collections.Generic.List[object]
     foreach ($directory in $directories) {
@@ -190,9 +203,16 @@ function Get-RetryArtifactReconciliation {
         foreach ($failureSlug in $failureSlugs) {
             # Require a substantial prefix so two unrelated specs in the same
             # domain directory cannot be conflated.
-            $common = [Math]::Min($failureSlug.Length, $slug.Length)
+            $common = [Math]::Min($failureSlug.full.Length, $slug.Length)
             if ($common -lt 20) { continue }
-            if ($failureSlug.Substring(0, $common) -eq $slug.Substring(0, $common)) {
+            if ($failureSlug.full.Substring(0, $common) -eq $slug.Substring(0, $common)) {
+                $matchesFinalFailure = $true
+                break
+            }
+            # Playwright inserts a hash when a long title is truncated, so the
+            # post-spec title segment is not reversible. In that case the
+            # strongest available structural key is the complete spec path.
+            if ($failureSlug.scenario.Length -ge 20 -and $slug.StartsWith($failureSlug.scenario)) {
                 $matchesFinalFailure = $true
                 break
             }

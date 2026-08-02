@@ -758,3 +758,66 @@ selection failures.
   drive the oracle, and every new root lifecycle/audit vector has an explicit evaluator arm.
 - Prevention dimension: fixture registries should require one-to-one evaluator consumption;
   a known fixture name without a dispatcher must fail instead of falling through to success.
+
+## 2026-08-01 — Agent live fixtures omitted key-backup idempotency
+
+- Severity: live-gate drift; resolved.
+- Regression: every `agent_provision_e2e` case uploaded its prerequisite `KeyBackup` with a bare
+  PUT. The current operation contract requires `Idempotency-Key`, so Soland correctly rejected all
+  six scenarios before Agent pairing with `invalid_param`.
+- Correction: both shared backup upload paths now derive a stable request key from the canonical
+  `backup_id`. Replaying an identical fixture therefore addresses the same durable operation,
+  while different backups cannot collide.
+- Prevention dimension: live setup helpers must exercise the same required transport headers as
+  product clients; bypassing idempotency at fixture setup hides the exact replay guarantees the
+  recovery suite is meant to verify.
+
+## 2026-08-01 — stale live scenarios produced false green or exercised retired wire models
+
+- Severity: conformance false-positive risk; resolved.
+- Regression: the third-party invite scenario returned success when create failed, while three
+  federation suites fabricated static Seals, placeholder proofs, and direct peer submissions that
+  no longer represent the current receiver-relative CBA and proposal-receipt protocol.
+- Correction: the skip-as-success 3PID path and obsolete federation suites were deleted. The open
+  3PID carrier gap is tracked in `arkret-work/review/spec-open`; canonical Soland peer HTTP coverage
+  and the real federation readiness gate remain registered.
+- Prevention dimension: required live scenarios may not convert setup failure into success, and a
+  protocol migration must delete private fixture protocols once authoritative integration coverage
+  exists.
+
+## 2026-08-01 — live fixtures omitted current authorization and CAS inputs
+
+- Severity: live-gate drift; resolved.
+- Regression: interaction members relied on membership as write authority, Realm actor-frontier
+  Events omitted `seal_ref`/`auth_context`, key-backup PUT omitted `Idempotency-Key`, and account
+  data writes omitted `expected_revision`. The recovery-policy negative still posted the retired
+  raw policy body instead of `EventInitialSubmission`.
+- Correction: fixtures now issue explicit reaction grants, bind DataEvents to the actual Seal and
+  authority root, carry stable idempotency/CAS inputs, and delete the obsolete raw-policy test.
+- Prevention dimension: fixture builders must consume live frontier/authority state and required
+  transport preconditions rather than reconstructing historical request shapes.
+
+## 2026-08-01 — calendar tests raced one shared control coordinator
+
+- Severity: test isolation flake; resolved.
+- Regression: only one of three tests in the same binary was serial, so parallel Realm bootstrap
+  operations intermittently exhausted the shared coordinator window and timed out before Seal
+  publication.
+- Correction: all tests in the binary use the same serial isolation contract.
+- Prevention dimension: scenarios that share process-global ports, logs, or coordinator state must
+  declare isolation consistently at the binary boundary.
+
+## 2026-08-02 — recovery restart gate silently fell back to volatile Soland storage
+
+- Severity: recovery durability false-positive risk; resolved.
+- Regression: the ignored four-service recovery test required generic `DATABASE_URL` for Teabay,
+  but `FourServiceConfig` reads the independent `COTEST_SOLAND_DATABASE_URL` for Soland. Running
+  the documented gate without that second variable booted Soland on its memory store and only
+  failed later when the first restart produced a different service identity.
+- Correction: the test now requires `COTEST_SOLAND_DATABASE_URL` before bootstrap and passes it
+  explicitly into the stack configuration, so the restart gate cannot run against volatile state.
+- Verification: the real Coauth/Starid/Teabay/Soland test passed with both server stores backed by
+  temporary PostgreSQL; Soland retained its service identity and replayed every durable authority
+  ticket, outcome, and terminal receipt across forced restarts.
+- Prevention dimension: a durability test must assert its durable backend prerequisite at its own
+  entry point; an optional harness default is not an acceptable substitute.

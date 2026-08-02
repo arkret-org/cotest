@@ -59,6 +59,17 @@ type RegisteredEventSigner = {
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
 const localProposalMemberReceipts = new Map<string, Record<string, unknown>>();
+const realmAuthorityControllers = new Map<string, string>();
+
+const REALM_AUTHORITY_ROOT_CELL =
+  "ak:cell:ak.component.realm.authority_root.v1:null";
+
+function realmAuthorityControllerKey(
+  server: SolandKey | undefined,
+  realmId: string,
+): string {
+  return `${server ?? "default"}\0${realmId}`;
+}
 
 /**
  * Register the real browser device signer for direct API events emitted by the
@@ -460,6 +471,10 @@ export async function createRealmApi(
     server: opts.server,
     context: `create realm ${data.title}`,
   });
+  realmAuthorityControllers.set(
+    realmAuthorityControllerKey(opts.server, realmId),
+    ownerDid,
+  );
   // The founding unit is accepted before the durable coordinator publishes
   // its first Seal. Do not let the next helper call mistake that short window
   // for an uninitialised conformance-only Realm and inject a synthetic basis:
@@ -714,15 +729,10 @@ export async function grantRealmReviewCapabilityApi(
       },
     },
   });
-  await submitSignedEventApi(
-    request,
-    ownerToken,
-    grantEvent,
-    {
-      server: args.server,
-      context: `grant ak.realm.join.review to ${args.subjectDid}`,
-    },
-  );
+  await submitSignedEventApi(request, ownerToken, grantEvent, {
+    server: args.server,
+    context: `grant ak.realm.join.review to ${args.subjectDid}`,
+  });
   const proposalDigest = Array.isArray(grantEvent.proofs)
     ? stringValue(
         (grantEvent.proofs[0] as Record<string, unknown> | undefined)
@@ -730,7 +740,9 @@ export async function grantRealmReviewCapabilityApi(
       )
     : undefined;
   if (!proposalDigest) {
-    throw new Error(`review capability grant ${grantId} is missing its proposal digest`);
+    throw new Error(
+      `review capability grant ${grantId} is missing its proposal digest`,
+    );
   }
   await expect
     .poll(
@@ -845,6 +857,10 @@ export type CapabilityGrantEventArgs = {
   // issued from grant refs MUST narrow: child effective_expires_at MUST be
   // <= the issuer authority's (§10.1).
   expiresAt?: string;
+  // capabilities.md §10: a grant can authorize a derived grant only when an
+  // authority_control constraint explicitly permits it. Omitting this field
+  // is the canonical non-delegable form (effective max_authority_depth = 0).
+  constraints?: CapabilityGrantObject["constraints"];
   // capabilities.md §3.2 / §10: typed authority anchors. Omitted only by this
   // test helper, which then emits the initial Realm authority-root ref.
   issuerAuthorityRefs?: CapabilityGrantObject["issuer_authority_refs"];
@@ -878,6 +894,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     ...(args.expiresAt ? { expires_at: args.expiresAt } : {}),
+    ...(args.constraints ? { constraints: args.constraints } : {}),
     issuer_authority_refs: args.issuerAuthorityRefs ?? [
       {
         kind: "realm_root",
@@ -923,6 +940,13 @@ export async function grantCapabilityEventApi(
     server: args.server,
     context: `grant [${args.actions.join(", ")}] to ${args.subjectDid}`,
   });
+  // A derived grant must be authored against a predecessor Seal that already
+  // contains its parent. Returning while this grant is merely pending lets a
+  // caller submit parent and child into one frozen-predecessor batch, where
+  // the child correctly cannot observe the parent authority.
+  await waitForRealmControlIdleApi(request, ownerToken, args.realmId, {
+    server: args.server,
+  });
   return { grantId, eventId };
 }
 
@@ -937,7 +961,7 @@ export async function revokeCapabilityApi(
     server?: SolandKey;
   },
 ) {
-  return await submitSignedEventApi(
+  const outcome = await submitSignedEventApi(
     request,
     ownerToken,
     signedEventEnvelope({
@@ -950,6 +974,10 @@ export async function revokeCapabilityApi(
     }),
     { server: args.server, context: `revoke grant ${args.grantId}` },
   );
+  await waitForRealmControlIdleApi(request, ownerToken, args.realmId, {
+    server: args.server,
+  });
+  return outcome;
 }
 
 // join-policy.md §7.1 stage 1 — `ak.member.state{membership=knock}`. The
@@ -2123,6 +2151,16 @@ export async function submitSignedEventApi(
       opts.server,
       context,
     );
+    const realmId = stringValue(envelope.realm_id);
+    const actorDid = stringValue(envelope.actor_id);
+    const previousControlRoot =
+      controlProposalReceipt &&
+      realmId &&
+      actorDid &&
+      realmId !== principalControlRealmForDid(actorDid)
+        ? (await readRealmSealFrontier(request, token, realmId, opts.server))
+            .control_event_set_root
+        : undefined;
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
@@ -2140,12 +2178,25 @@ export async function submitSignedEventApi(
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
       rememberPublicationEvidence([envelope], [authorizationLease], outcome);
+      if (realmId && previousControlRoot) {
+        await waitForRealmControlIdleApi(request, token, realmId, {
+          server: opts.server,
+          afterControlEventSetRoot: previousControlRoot,
+          timeoutMs: 60_000,
+        });
+      }
       return outcome;
     }
     const body = JSON.parse(text) as unknown;
     if (
       response.status() === 403 &&
       wireErrCode(body) === "capability_denied" &&
+      !(
+        realmId &&
+        realmAuthorityControllers.has(
+          realmAuthorityControllerKey(opts.server, realmId),
+        )
+      ) &&
       attempt < 2
     ) {
       await forceConformanceCbaBasis(request, envelope, opts.server);
@@ -2257,6 +2308,15 @@ export async function submitSignedEventBatchApi(
     if (
       response.status() === 403 &&
       wireErrCode(body) === "capability_denied" &&
+      !events.some((event) => {
+        const realmId = stringValue(event.realm_id);
+        return (
+          realmId !== undefined &&
+          realmAuthorityControllers.has(
+            realmAuthorityControllerKey(opts.server, realmId),
+          )
+        );
+      }) &&
       attempt < 2
     ) {
       for (const event of events) {
@@ -2897,6 +2957,22 @@ async function applyRegisteredCbaPlane(
   }
 
   let changed = false;
+  const canonicalRealm = realmAuthorityControllers.has(
+    realmAuthorityControllerKey(server, realmId),
+  );
+  if (
+    envelope.authorization_ref === undefined &&
+    realmAuthorityControllers.get(
+      realmAuthorityControllerKey(server, realmId),
+    ) === actorDid &&
+    realmRootMayAuthorEventKind(kind)
+  ) {
+    // realm-and-space.md section 2.5: the creator identity is only audit
+    // metadata. Operational owner authority is an explicit inclusion proof of
+    // the registered authority-root cell at this Event's governance basis.
+    envelope.authorization_ref = REALM_AUTHORITY_ROOT_CELL;
+    changed = true;
+  }
   if (descriptor.plane === "control") {
     const sealBasis = envelope.seal_basis as
       Record<string, unknown> | undefined;
@@ -2913,18 +2989,28 @@ async function applyRegisteredCbaPlane(
           server,
         );
       } catch {
-        const directoryBasis = await readDirectoryJoinCandidateSealBasis(
-          request,
-          token,
-          realmId,
-          actorDid,
-          server,
-        );
-        if (directoryBasis) {
-          envelope.seal_basis = directoryBasis;
+        if (canonicalRealm) {
+          envelope.seal_basis = await waitForRealmSealBasis(
+            request,
+            token,
+            realmId,
+            server,
+            60_000,
+          );
         } else {
-          await forceConformanceCbaBasis(request, envelope, server);
-          return;
+          const directoryBasis = await readDirectoryJoinCandidateSealBasis(
+            request,
+            token,
+            realmId,
+            actorDid,
+            server,
+          );
+          if (directoryBasis) {
+            envelope.seal_basis = directoryBasis;
+          } else {
+            await forceConformanceCbaBasis(request, envelope, server);
+            return;
+          }
         }
       }
       changed = true;
@@ -2934,21 +3020,53 @@ async function applyRegisteredCbaPlane(
       envelope.seal_ref === undefined ||
       envelope.auth_context === undefined
     ) {
-      const response = await request.post(
-        `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
-        {
-          data: {
-            realm_id: realmId,
-            subject: actorDid,
-            data_plane_actions: [kind],
-          },
-        },
-      );
-      const basis = await expectJsonOk<{ seal_id: string }>(
-        response,
-        `seed conformance Realm basis for ${kind}`,
-      );
-      envelope.seal_ref = basis.seal_id;
+      try {
+        const basis = await readRealmSealBasis(
+          request,
+          token,
+          realmId,
+          server,
+        );
+        const leaves = basis.leaves;
+        if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
+          throw new Error(`Realm ${realmId} has no citable Seal leaf`);
+        }
+        envelope.seal_ref = leaves[0];
+      } catch {
+        if (canonicalRealm) {
+          const basis = await waitForRealmSealBasis(
+            request,
+            token,
+            realmId,
+            server,
+            60_000,
+          );
+          const leaves = basis.leaves;
+          if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
+            throw new Error(`Realm ${realmId} has no citable Seal leaf`);
+          }
+          envelope.seal_ref = leaves[0];
+        } else {
+          // Only an isolated conformance Realm has no canonical Seal frontier.
+          // A canonically created Realm must use its real frozen governance
+          // state; the server refuses synthetic state grafts onto that DAG.
+          const response = await request.post(
+            `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
+            {
+              data: {
+                realm_id: realmId,
+                subject: actorDid,
+                data_plane_actions: [kind],
+              },
+            },
+          );
+          const basis = await expectJsonOk<{ seal_id: string }>(
+            response,
+            `seed conformance Realm basis for ${kind}`,
+          );
+          envelope.seal_ref = basis.seal_id;
+        }
+      }
       const proof = Array.isArray(envelope.proofs)
         ? (envelope.proofs[0] as Record<string, unknown> | undefined)
         : undefined;
@@ -3078,13 +3196,9 @@ export async function prepareSignedEventCbaApi(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
-  opts: { server?: SolandKey; force?: boolean } = {},
+  opts: { server?: SolandKey } = {},
 ): Promise<void> {
-  if (opts.force) {
-    await forceConformanceCbaBasis(request, envelope, opts.server);
-  } else {
-    await applyRegisteredCbaPlane(request, token, envelope, opts.server);
-  }
+  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
 }
 
 export async function seedConformanceRealmBasisApi(
@@ -3521,6 +3635,43 @@ function eventKindDescriptor(kind: string): EventKindRegistryRow | undefined {
 }
 
 let fixtureCapabilityActionCache: Map<string, string> | undefined;
+let realmRootAuthorableEventKinds: Set<string> | undefined;
+
+function realmRootMayAuthorEventKind(eventKind: string): boolean {
+  if (!realmRootAuthorableEventKinds) {
+    const registry = JSON.parse(
+      readFileSync(
+        join(
+          SPEC_ARTIFACTS_ROOT,
+          "registry",
+          "capability-action-registry.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      actions?: Array<{
+        action?: unknown;
+        target_event_kinds?: unknown;
+        root_control_only?: unknown;
+      }>;
+    };
+    realmRootAuthorableEventKinds = new Set<string>();
+    for (const row of registry.actions ?? []) {
+      if (!Array.isArray(row.target_event_kinds)) {
+        continue;
+      }
+      if (row.action !== "ak.realm.owner" && row.root_control_only !== true) {
+        continue;
+      }
+      for (const target of row.target_event_kinds) {
+        if (typeof target === "string") {
+          realmRootAuthorableEventKinds.add(target);
+        }
+      }
+    }
+  }
+  return realmRootAuthorableEventKinds.has(eventKind);
+}
 
 function fixtureCapabilityAction(eventKind: string): string {
   if (!fixtureCapabilityActionCache) {

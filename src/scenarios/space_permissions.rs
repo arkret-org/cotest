@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
@@ -5,7 +7,6 @@ use serde_json::json;
 use crate::harness::{
     ArkretServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
     expect_json, member_join_payload_value, message_create_text_payload, register_account,
-    send_message, submit_event,
 };
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
@@ -173,6 +174,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
+    let pre_member_seal = current_seal_id(&alice, &realm_id).await?;
     add_member(
         &server,
         &alice.token,
@@ -181,37 +183,39 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         "did:web:bob-visible.example",
     )
     .await?;
-    send_message(
-        &server,
-        &bob.token,
-        "did:web:bob-visible.example",
+    await_seal_advance(&alice, &realm_id, &pre_member_seal).await?;
+    alice
+        .grant_realm_actions_to_client(&realm_id, &bob, &["ak.message.create"])
+        .await?;
+    bob.submit_event(
         &realm_id,
-        "ak:thread:space",
-        "member can send",
+        "ak.message.create",
+        message_create_text_payload(&realm_id, "member can send")?,
     )
     .await?;
 
-    submit_event(
-        &server,
-        &alice.token,
-        "did:web:alice.example",
-        &realm_id,
-        "ak.realm.destroy",
-        json!({"reason": "owner_requested"}),
-        StatusCode::OK,
-    )
-    .await?;
+    let pre_destroy_seal = current_seal_id(&alice, &realm_id).await?;
+    alice
+        .submit_event(
+            &realm_id,
+            "ak.realm.destroy",
+            json!({"reason": "owner_requested"}),
+        )
+        .await?;
+    await_seal_advance(&alice, &realm_id, &pre_destroy_seal).await?;
+    let after_destroy = alice
+        .author_event(
+            &realm_id,
+            "ak.message.create",
+            message_create_text_payload(&realm_id, "after delete")?,
+        )
+        .await?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&alice.token)
-            .json(&event_envelope(
-                "did:web:alice.example",
-                &realm_id,
-                "ak.message.create",
-                message_create_text_payload(&realm_id, "after delete")?,
-            )),
+            .json(&after_destroy),
         StatusCode::CONFLICT,
         // The top-level wire error code is `failed_precondition`; the
         // terminal-state condition is carried as the `realm_terminal_state`
@@ -221,4 +225,31 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     .await?;
 
     Ok(())
+}
+
+async fn current_seal_id(
+    client: &crate::harness::TestActorClient,
+    realm_id: &str,
+) -> Result<String> {
+    client.realm_seal_frontier(realm_id).await?["frontier"]["seal_id"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("Realm frontier omitted seal_id"))
+}
+
+async fn await_seal_advance(
+    client: &crate::harness::TestActorClient,
+    realm_id: &str,
+    predecessor: &str,
+) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if current_seal_id(client, realm_id).await? != predecessor {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(anyhow!("membership Control Move was not sealed"));
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }

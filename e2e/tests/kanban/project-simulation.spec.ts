@@ -443,9 +443,7 @@ test.describe("project simulation", () => {
         patch: { metadata: { fields: { status: "done" } } },
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, badDoneEvent, {
-      force: true,
-    });
+    await prepareSignedEventCbaApi(request, aliceToken, badDoneEvent);
     await alignSignedEventToActorFrontierApi(request, aliceToken, badDoneEvent);
     const badDone = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
@@ -526,9 +524,7 @@ test.describe("project simulation", () => {
         patch: { metadata: { fields: { status: "resolved" } } },
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, badResolvedEvent, {
-      force: true,
-    });
+    await prepareSignedEventCbaApi(request, aliceToken, badResolvedEvent);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

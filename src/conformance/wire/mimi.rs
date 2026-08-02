@@ -12,6 +12,7 @@ use crate::conformance::{
 
 const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
     "ak.vector.mimi.provider_directory_draft_pinning.v1",
+    "ak.vector.mimi.provider_directory_signature.v1",
     "ak.vector.mimi.room_binding_projection.v1",
     "ak.vector.mimi.keypackage_claim_lifecycle.v1",
     "ak.vector.mimi.content_roundtrip.v1",
@@ -52,6 +53,9 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
         match vector_id {
             "ak.vector.mimi.provider_directory_draft_pinning.v1" => {
                 validate_provider_directory_case(case, drafts)?
+            }
+            "ak.vector.mimi.provider_directory_signature.v1" => {
+                crate::conformance::run_mimi_provider_directory_signature_vector()?
             }
             "ak.vector.mimi.room_binding_projection.v1" => validate_room_binding_case(case)?,
             "ak.vector.mimi.keypackage_claim_lifecycle.v1" => validate_keypackage_claim_case(case)?,

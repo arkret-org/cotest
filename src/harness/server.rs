@@ -26,6 +26,8 @@ use super::event_builder::{dev_login, register_account, register_account_with_lo
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
 const DURABLE_TEST_KEYSTORE_MASTER_KEY: &str = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=";
+const HARNESS_HTTP_TIMEOUT: Duration = Duration::from_secs(45);
+const HARNESS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct ArkretServer {
     handle: SutHandle,
@@ -33,7 +35,6 @@ pub struct ArkretServer {
     base_url: Url,
     service_id: String,
     trust_domain: TypedTrustDomainId,
-    notary_signing_key_seed: [u8; 32],
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
     /// `host:port` this soland's Prometheus listener was bound to, when the
@@ -149,7 +150,7 @@ impl ArkretServer {
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let metrics_bind_for_handle = metrics_bind.clone();
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
+        let (notary_signing_key, _) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -223,7 +224,6 @@ impl ArkretServer {
             base_url,
             service_id,
             trust_domain,
-            notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
             metrics_bind: Some(metrics_bind_for_handle),
@@ -251,7 +251,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
+        let (notary_signing_key, _) = test_service_signing_key(name);
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -307,7 +307,6 @@ impl ArkretServer {
             base_url,
             service_id,
             trust_domain,
-            notary_signing_key_seed,
             blob_root: Some(blob_root),
             log_path,
             metrics_bind: Some(metrics_bind),
@@ -324,7 +323,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let (notary_signing_key, notary_signing_key_seed) = test_service_signing_key(name);
+        let (notary_signing_key, _) = test_service_signing_key(name);
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -410,7 +409,6 @@ impl ArkretServer {
             base_url,
             service_id,
             trust_domain,
-            notary_signing_key_seed,
             blob_root: None,
             log_path,
             // The container publishes only the HTTP port, so the metrics
@@ -457,10 +455,6 @@ impl ArkretServer {
             return Ok(None);
         };
         ServiceMetricsClient::new(MeteredService::Soland, base_url).map(Some)
-    }
-
-    pub(crate) fn notary_signing_key_seed(&self) -> &[u8; 32] {
-        &self.notary_signing_key_seed
     }
 
     pub fn http(&self) -> HttpClient {
@@ -578,6 +572,8 @@ impl ArkretServer {
         // endpoints. Do not copy this into non-local service clients.
         Ok(SdkClient::builder(self.base_url())
             .allow_insecure_localhost()
+            .timeout(HARNESS_HTTP_TIMEOUT)
+            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
             .build()?)
     }
 
@@ -673,6 +669,8 @@ impl ArkretServer {
         let sdk = SdkClient::builder(self.base_url())
             .allow_insecure_localhost()
             .auth(Auth::Bearer(token.clone()))
+            .timeout(HARNESS_HTTP_TIMEOUT)
+            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
             .build()?;
         Ok(TestActorClient {
             http: self.http(),
@@ -1198,7 +1196,7 @@ fn cleanup_stale_port_reservations(dir: &Path) {
 }
 
 async fn wait_until_healthy(base_url: Url) -> Result<()> {
-    let client = HttpClient::new();
+    let client = probe_http_client()?;
     let health_url = base_url.join("health")?;
     let mut last_error = None;
     let attempts = std::env::var("COTEST_SUT_HEALTH_ATTEMPTS")
@@ -1237,7 +1235,7 @@ fn test_trust_domain(name: &str) -> String {
 
 async fn fetch_service_identity(base_url: &Url) -> Result<(String, TypedTrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
-    let response = HttpClient::new()
+    let response = probe_http_client()?
         .get(url.clone())
         .send()
         .await
@@ -1258,4 +1256,12 @@ async fn fetch_service_identity(base_url: &Url) -> Result<(String, TypedTrustDom
     let trust_domain = TypedTrustDomainId::new(trust_domain.to_owned())
         .with_context(|| format!("service describe at {url} returned invalid trust_domain"))?;
     Ok((service_id, trust_domain))
+}
+
+fn probe_http_client() -> Result<HttpClient> {
+    HttpClient::builder()
+        .connect_timeout(HARNESS_CONNECT_TIMEOUT)
+        .timeout(HARNESS_HTTP_TIMEOUT)
+        .build()
+        .context("build bounded Cotest health-probe client")
 }

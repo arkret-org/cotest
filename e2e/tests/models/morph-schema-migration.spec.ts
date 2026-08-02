@@ -656,7 +656,7 @@ async function submitSchemaMigrateRaw(
       ...(args.transformationRules ? { transformation_rules: args.transformationRules } : {}),
     },
   });
-  await prepareSignedEventCbaApi(request, token, envelope, { force: true });
+  await prepareSignedEventCbaApi(request, token, envelope);
   await alignSignedEventToActorFrontierApi(request, token, envelope);
   const response = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),

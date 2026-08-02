@@ -613,9 +613,7 @@ test.describe("core object invariants", () => {
           }),
         },
       });
-      await prepareSignedEventCbaApi(request, aliceToken, crossRealmEnvelope, {
-        force: true,
-      });
+      await prepareSignedEventCbaApi(request, aliceToken, crossRealmEnvelope);
       await alignSignedEventToActorFrontierApi(
         request,
         aliceToken,

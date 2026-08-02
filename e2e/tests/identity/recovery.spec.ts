@@ -140,7 +140,11 @@ async function putBackup(
   return request.put(
     `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
     {
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "idempotency-key": `cotest-key-backup-${backupId}`,
+      },
       data: envelope,
     },
   );

@@ -3,9 +3,7 @@ use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
 use crate::harness::ArkretServer;
-use crate::scenarios::federation_collaboration::{
-    actor_did_for_service, authorize_device_public_key,
-};
+use crate::scenarios::identity_test_support::{actor_did_for_service, authorize_device_public_key};
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = ArkretServer::spawn("typing-push-rules").await?;
@@ -71,6 +69,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             json!({
                 "key": "ak.push_rules",
                 "owner": bob.actor.as_str(),
+                "expected_revision": 0,
                 "body": push_rules_carrier.clone(),
                 "updated_at": "2026-05-02T00:00:00.000Z"
             }),
@@ -93,6 +92,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             json!({
                 "key": "ak.push_rules",
                 "owner": bob.actor.as_str(),
+                "expected_revision": 1,
                 "tombstone": true,
                 "updated_at": "2026-05-02T00:00:01.000Z"
             }),

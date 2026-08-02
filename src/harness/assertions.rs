@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 const ACCOUNT_SUBSCRIBE_FRAME_DEADLINE: Duration = Duration::from_secs(40);
+const HTTP_REQUEST_DEADLINE: Duration = Duration::from_secs(45);
 
 pub struct RecordedResponse {
     pub status: StatusCode,
@@ -248,7 +249,7 @@ fn append_transcript_entry(entry: &Value) -> Result<()> {
 async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
     let request = snapshot_request_builder(&builder);
     let started = Instant::now();
-    let response = match builder.send().await {
+    let response = match builder.timeout(HTTP_REQUEST_DEADLINE).send().await {
         Ok(response) => response,
         Err(error) => {
             let error_snapshot = json!({

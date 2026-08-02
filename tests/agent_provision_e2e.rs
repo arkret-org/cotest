@@ -3151,6 +3151,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                 backup_id.as_str()
             )))
             .bearer_auth(token)
+            .header("Idempotency-Key", format!("agent-pcr-{backup_id}"))
             .json(&backup),
         StatusCode::OK,
     )
@@ -3657,8 +3658,10 @@ fn runtime_key_request_builder<'a, P: PairingOutcome>(
         .map(str::to_owned)
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
     let service_id = arkret::Did::new(server.service_id().to_owned())?;
-    let proof_expires_at =
-        chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
+    let proof_expires_at = std::cmp::min(
+        provisioned.expires_at(),
+        canonical_now() + chrono::Duration::minutes(4),
+    );
     Ok(arkret_signatures::agent::RuntimeKeyRequestBuilder::new(
         signing_key,
         arkret::AgentPairingBootstrap {
@@ -3774,8 +3777,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
             &approval_request.proof_of_possession,
         )?;
     let issued_at = canonical_now();
-    let expires_at =
-        chrono::DateTime::parse_from_rfc3339("2999-01-01T00:00:00.000Z")?.with_timezone(&Utc);
+    let expires_at = std::cmp::min(pairing_expires_at, issued_at + chrono::Duration::minutes(4));
     let authorize_event_id = arkret::EventId::new(arkret::new_prefixed_uuid7("ak:event:"))?;
     let signing_key_binding = arkret_signatures::agent_evidence::build_agent_signing_key_binding(
         agent_id.clone(),

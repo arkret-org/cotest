@@ -132,6 +132,16 @@ correlation_id: 01JQZ7K3NB4S9WTX
     Assert-True ($retryEntry[0].attempt -eq 1) "the retry attempt number must be parsed"
     Assert-True ($retryEntry[0].classification -eq "retry_artifact_of_passing_test") "retry debris of a passing test must be classified as such"
 
+    # The real junit parser uses `name` rather than `test`; both record shapes
+    # must reconcile identically instead of failing under StrictMode.
+    $nameShape = Get-RetryArtifactReconciliation `
+        -PlaywrightOutputDir $outputDir `
+        -FinalFailures @([pscustomobject]@{
+            scenario = "identity/contact-graph.spec.ts"
+            name     = "S1 add friend with greeting"
+        })
+    Assert-True ($nameShape.final_failure_artifacts -eq 2) "junit `name` records must match their final-failure artifacts"
+
     # An absent output directory is normal (no failures at all), not an error.
     $empty = Get-RetryArtifactReconciliation -PlaywrightOutputDir (Join-Path $scanRoot "missing") -FinalFailures @()
     Assert-True ($empty.artifact_directories -eq 0) "a missing playwright-output directory must reconcile to zero"

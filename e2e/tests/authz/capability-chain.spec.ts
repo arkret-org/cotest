@@ -21,15 +21,43 @@ import {
   buildCapabilityGrantEnvelope,
   createRealmApi,
   grantCapabilityEventApi,
+  queryRealmEventsApi,
   revokeCapabilityApi,
   wireErrCode,
   type CapabilityGrantEventArgs,
 } from "../../helpers/soland-api";
-import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+} from "../../helpers/users";
 
 function plusSeconds(deltaSec: number): string {
   return new Date(Date.now() + deltaSec * 1000).toISOString();
 }
+
+const ONE_LEVEL_REGRANT: NonNullable<CapabilityGrantEventArgs["constraints"]> =
+  [
+    {
+      constraint_kind: "authority_control",
+      effect: "allow",
+      max_authority_depth: 1,
+      authority_regrant_allowed: true,
+      authority_scope: "narrowing_only",
+      scope_expansion_allowed: false,
+    },
+  ];
+
+const NON_REGRANTABLE: NonNullable<CapabilityGrantEventArgs["constraints"]> = [
+  {
+    constraint_kind: "authority_control",
+    effect: "allow",
+    max_authority_depth: 0,
+    authority_regrant_allowed: false,
+    authority_scope: "narrowing_only",
+    scope_expansion_allowed: false,
+  },
+];
 
 // POST /_arkret/self/authz/check — spec AuthzCheckOutcome: five-valued
 // `decision` enum; `allow` / `hard_deny` are the terminal values the local
@@ -39,18 +67,38 @@ async function authzCheck(
   token: string,
   args: { actorDid: string; action: string; realmId: string },
 ): Promise<{ decision: string; reasonCode?: string }> {
-  const response = await request.post(`${solandBaseUrl()}/_arkret/self/authz/check`, {
-    headers: authHeaders(token),
-    data: {
-      actor_id: args.actorDid,
-      action: args.action,
-      resource: { kind: "realm", realm_id: args.realmId },
+  const response = await request.post(
+    `${solandBaseUrl()}/_arkret/self/authz/check`,
+    {
+      headers: authHeaders(token),
+      data: {
+        actor_id: args.actorDid,
+        action: args.action,
+        resource: { kind: "realm", realm_id: args.realmId },
+      },
     },
-  });
+  );
   const text = await response.text();
   expect(response.status(), `authz/check: ${text}`).toBe(200);
   const body = JSON.parse(text) as { decision: string; reason_code?: string };
   return { decision: body.decision, reasonCode: body.reason_code };
+}
+
+async function effectiveGrantIds(
+  request: APIRequestContext,
+  ownerToken: string,
+  subjectDid: string,
+  realmId: string,
+): Promise<string[]> {
+  const response = await request.get(
+    `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(subjectDid)}&realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(ownerToken) },
+  );
+  const text = await response.text();
+  expect(response.status(), `effective grants: ${text}`).toBe(200);
+  return (
+    (JSON.parse(text) as { grants?: Array<{ id?: string }> }).grants ?? []
+  ).flatMap((grant) => (grant.id ? [grant.id] : []));
 }
 
 // Submit a `ak.capability.grant` envelope raw (no 200 assertion) so negative
@@ -61,10 +109,13 @@ async function submitGrantRaw(
   args: CapabilityGrantEventArgs,
 ): Promise<{ status: number; text: string; body: unknown; grantId: string }> {
   const { envelope, grantId } = buildCapabilityGrantEnvelope(args);
-  const response = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-    headers: authHeaders(token),
-    data: envelope,
-  });
+  const response = await request.post(
+    `${solandBaseUrl()}/_arkret/self/events`,
+    {
+      headers: authHeaders(token),
+      data: envelope,
+    },
+  );
   const text = await response.text();
   let body: unknown;
   try {
@@ -155,7 +206,9 @@ test.describe("capability chain (event wire)", () => {
     );
     const grantsText = await grantsResp.text();
     expect(grantsResp.status(), grantsText).toBe(200);
-    const grants = (JSON.parse(grantsText) as { grants?: Array<{ id?: string }> }).grants ?? [];
+    const grants =
+      (JSON.parse(grantsText) as { grants?: Array<{ id?: string }> }).grants ??
+      [];
     expect(grants.map((grant) => grant.id)).toContain(grantId);
   });
 
@@ -171,24 +224,68 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: bob.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
+      constraints: ONE_LEVEL_REGRANT,
     });
 
+    // A derived grant consumes the parent's projected capability cell, not
+    // merely the newer Control Seal. Wait for that dependency to be visible
+    // on the registered effective-grants read surface before authoring the
+    // child, otherwise the reducer correctly leaves it dependency-pending.
+    await expect
+      .poll(
+        () => effectiveGrantIds(request, aliceToken, bob.did, realmId),
+        { timeout: 30_000 },
+      )
+      .toContain(parent.grantId);
+
     // Child grant narrows: same action set, strictly earlier expiry (§10.1).
-    await grantCapabilityEventApi(request, bobToken, {
+    const child = await grantCapabilityEventApi(request, bobToken, {
       ownerDid: bob.did,
       realmId,
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
+      constraints: NON_REGRANTABLE,
       issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
 
-    const carolCheck = await authzCheck(request, carolToken, {
-      actorDid: carol.did,
-      action: "ak.message.create",
-      realmId,
-    });
-    expect(carolCheck.decision).toBe("allow");
+    // The Control frontier becoming idle and the authorization read index
+    // publishing the newly sealed child grant are separate observable
+    // boundaries. Pin the latter instead of racing its in-memory refresh.
+    await expect
+      .poll(
+        async () => ({
+          check: await authzCheck(request, carolToken, {
+              actorDid: carol.did,
+              action: "ak.message.create",
+              realmId,
+            }),
+          parentGrantIds: await effectiveGrantIds(
+            request,
+            aliceToken,
+            bob.did,
+            realmId,
+          ),
+          childGrantIds: await effectiveGrantIds(
+            request,
+            aliceToken,
+            carol.did,
+            realmId,
+          ),
+          realmEventIds: (
+            (await queryRealmEventsApi(request, aliceToken, realmId, {
+              limit: 100,
+            })).events as Array<{ event_id?: string }>
+          ).flatMap((event) => (event.event_id ? [event.event_id] : [])),
+        }),
+        { timeout: 30_000 },
+      )
+      .toMatchObject({
+        check: { decision: "allow" },
+        parentGrantIds: expect.arrayContaining([parent.grantId]),
+        childGrantIds: expect.arrayContaining([child.grantId]),
+        realmEventIds: expect.arrayContaining([child.eventId]),
+      });
   });
 
   test("§10.1/§3.1a over-action authority fails closed: bob cannot re-grant an action bob does not hold", async ({
@@ -203,6 +300,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: bob.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
+      constraints: ONE_LEVEL_REGRANT,
     });
 
     // bob only holds ak.message.create; re-granting moderation authority
@@ -214,6 +312,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.moderation.decision"],
       expiresAt: plusSeconds(1800),
+      constraints: NON_REGRANTABLE,
       issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
     expectGrantRejected(overAction, ["grant_exceeds_issuer_authority"]);
@@ -238,6 +337,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: bob.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
+      constraints: ONE_LEVEL_REGRANT,
     });
 
     // child effective_expires_at MUST be <= parent.effective_expires_at
@@ -248,6 +348,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(7200),
+      constraints: NON_REGRANTABLE,
       issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
     expectGrantRejected(overExpire, [
@@ -275,6 +376,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: bob.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(3600),
+      constraints: ONE_LEVEL_REGRANT,
     });
     await grantCapabilityEventApi(request, bobToken, {
       ownerDid: bob.did,
@@ -282,6 +384,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(1800),
+      constraints: NON_REGRANTABLE,
       issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
 
@@ -327,6 +430,7 @@ test.describe("capability chain (event wire)", () => {
       subjectDid: carol.did,
       actions: ["ak.message.create"],
       expiresAt: plusSeconds(600),
+      constraints: NON_REGRANTABLE,
       issuerAuthorityRefs: [{ kind: "grant", grant_id: parent.grantId }],
     });
     expectGrantRejected(fromRevoked, ["grant_revoked_upstream"]);

@@ -29,6 +29,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
+  rawSubmitSignedEventApi,
   refreshEventEnvelopeProof,
   sdkCapabilityActionRegistryDigest,
   signedEventEnvelope,
@@ -794,29 +795,24 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
         realmId,
         kind: "ak.realm.policy_bundle",
         payload: {
-          realm_id: realmId,
-          value: {
-            durability_policy: {
-              mode: "org_recovery_key",
-              recovery_recipients: [
-                recoveryRecipient({
-                  recipientId: "org-primary",
-                  principalId: orgRrk.did,
-                  rrkVerificationMethod: `${orgRrk.did}#realm-history-recovery-1`,
-                }),
-              ],
-            },
+          policy_revision: 1,
+          durability_policy: {
+            mode: "org_recovery_key",
+            recovery_recipients: [
+              recoveryRecipient({
+                recipientId: "org-primary",
+                principalId: orgRrk.did,
+                rrkVerificationMethod: `${orgRrk.did}#realm-history-recovery-1`,
+              }),
+            ],
           },
         },
       });
-      await prepareSignedEventCbaApi(request, aliceToken, policyEvent, {
-        force: true,
-      });
-      await alignSignedEventToActorFrontierApi(request, aliceToken, policyEvent);
-      const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(aliceToken),
-        data: policyEvent,
-      });
+      const write = await rawSubmitSignedEventApi(
+        request,
+        aliceToken,
+        policyEvent,
+      );
       expect([400, 409, 412, 422]).toContain(write.status());
       expect(wireErrCode(await write.json())).toBe("durability_scheme_incompatible");
     },

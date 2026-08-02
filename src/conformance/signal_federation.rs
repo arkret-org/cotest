@@ -86,6 +86,30 @@ fn device_authorization_gate(
 
 /// Exact runner for `ak.vector.signal.device_authorization_domain.v1`.
 pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
+    let fixture = load_fixture_value(FIXTURE)?;
+    let covered = fixture
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .is_some_and(|vectors| {
+            vectors
+                .iter()
+                .any(|vector| vector.as_str() == Some(VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN))
+        });
+    let asserted = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("vector_id").and_then(Value::as_str)
+                    == Some(VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN)
+            })
+        })
+        .and_then(|case| case.get("assertions"))
+        .and_then(Value::as_array)
+        .is_some_and(|assertions| !assertions.is_empty());
+    if !covered || !asserted {
+        bail!("Signal fixture is missing asserted device-authorization-domain evidence");
+    }
     let signal = envelope()?;
     signal.validate_structural()?;
     if !device_authorization_gate(&signal, true, true, true, true, true) {
@@ -139,12 +163,18 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
     {
         bail!("Signal relay outcome is not opaque");
     }
+    run_signal_device_authorization_domain_vector()?;
 
     let cases = fixture
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("Signal federation fixture missing cases[]"))?;
     for case in cases {
+        if case.get("vector_id").and_then(Value::as_str)
+            == Some(VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN)
+        {
+            continue;
+        }
         let generator = case
             .pointer("/input/generator")
             .or_else(|| case.pointer("/given_state/generator"))

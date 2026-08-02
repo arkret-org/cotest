@@ -168,7 +168,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .await?;
     let realm_id = alice.create_realm("Durable Effect Spot-Check").await?;
     alice
-        .grant_self_realm_actions(&realm_id, &["ak.policy.manage", "ak.moderation.report"])
+        .grant_self_realm_actions(&realm_id, &["ak.policy.manage"])
         .await?;
 
     let mut observations = serde_json::Map::new();
@@ -243,7 +243,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
                 "realm_id": realm_id,
                 "target_ref": realm_id,
                 "reporter": alice.actor,
-                "abuse_reason_code": "spam",
+                "report_reason_code": "spam",
             }))
             .send()
             .await?;

@@ -159,7 +159,7 @@ test.describe("account states", () => {
       `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/unlock`,
       {
         headers: authHeaders(adminToken),
-        data: { reason: "recovery_complete" },
+        data: { reason: "operator_verified" },
       },
     );
     expect(unlock.status()).toBe(200);

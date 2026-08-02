@@ -29,9 +29,10 @@
 
 1. Mei `createRealm` `"Welcome to the team"`,`joinRule = invite`,`seedMembers = [yuki.did]`
 2. Yuki `acceptInvite`
-3. Mei 进 timeline,发 `"Hi Yuki, welcome aboard! Ping me if anything blocks you."`
-4. Yuki 回复 Mei 的欢迎消息:`"Thanks Mei — happy to be here."`
-5. Mei 在自己的欢迎消息上 edit,补充入职日链接:`"Hi Yuki, welcome aboard! Ping me if anything blocks you. (Onboarding hub: https://corp.example/onboarding)"`
+3. Mei 通过显式 `ak.capability.grant` 授予 Yuki Realm 范围的 `ak.message.create`；membership 本身不作为授权来源（`authz/capabilities.md` §3.2）
+4. Mei 进 timeline,发 `"Hi Yuki, welcome aboard! Ping me if anything blocks you."`
+5. Yuki 回复 Mei 的欢迎消息:`"Thanks Mei — happy to be here."`
+6. Mei 在自己的欢迎消息上 edit,补充入职日链接:`"Hi Yuki, welcome aboard! Ping me if anything blocks you. (Onboarding hub: https://corp.example/onboarding)"`
 
 ### Phase B — Mei 用 kanban 列出入职任务
 

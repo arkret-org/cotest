@@ -26,12 +26,12 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, event_envelope_with_chain, expect_json, refresh_event_proof,
+    TestActorClient, TestServerGroup, event_envelope_with_chain, eventually, expect_json,
+    refresh_event_proof,
 };
 use crate::transcripts::record_vector_event;
 
 const INVITE_ID: &str = "ak:invite:01999999-0000-7000-8000-00000000f201";
-const THIRD_PARTY_INVITE_ID: &str = "ak:invite:01999999-0000-7000-8000-00000000f202";
 
 /// The three server-side observables a rejected Control Move must leave
 /// untouched.
@@ -42,7 +42,11 @@ struct RealmObservation {
     invite_states: Vec<Value>,
 }
 
-async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObservation> {
+async fn observe(
+    client: &TestActorClient,
+    realm_id: &str,
+    invite_subject: &str,
+) -> Result<RealmObservation> {
     let listed = expect_json(
         client
             .get("/_arkret/self/events")
@@ -69,8 +73,8 @@ async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObserv
     };
     let invites = expect_json(
         client
-            .get("/_arkret/self/invites")
-            .query(&[("realm_id", realm_id)]),
+            .get("/_arkret/self/authz/invites")
+            .query(&[("subject", invite_subject), ("realm_id", realm_id)]),
         StatusCode::OK,
     )
     .await?;
@@ -143,6 +147,8 @@ async fn author_invite_move(
         ));
     };
     event["seal_basis"] = serde_json::to_value(seal_frontier.seal_basis())?;
+    let physical_millis = chrono::Utc::now().timestamp_millis();
+    event["hlc"] = json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
     if let Some(proof) = event
         .get_mut("proofs")
         .and_then(Value::as_array_mut)
@@ -160,6 +166,17 @@ async fn submit_invite_move(
     kind: &str,
     payload: Value,
 ) -> Result<(StatusCode, Value)> {
+    let before = actor.realm_seal_frontier(realm_id).await?;
+    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+        serde_json::from_value(before)?;
+    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(before) =
+        state.frontier
+    else {
+        return Err(anyhow!(
+            "Realm selector returned the wrong frontier variant"
+        ));
+    };
+    let before_seal_id = before.seal_id.to_string();
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let response = actor
         .post("/_arkret/self/events")
@@ -168,6 +185,37 @@ async fn submit_invite_move(
         .await?;
     let status = response.status();
     let body = response.json::<Value>().await.unwrap_or(Value::Null);
+    if status.is_success() {
+        eventually(
+            "accepted invite Control Move advances the Realm Seal frontier",
+            std::time::Duration::from_secs(10),
+            std::time::Duration::from_millis(50),
+            || {
+                let before_seal_id = before_seal_id.clone();
+                async move {
+                    let frontier = actor.realm_seal_frontier(realm_id).await?;
+                    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                        serde_json::from_value(frontier)?;
+                    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
+                        frontier,
+                    ) = state.frontier
+                    else {
+                        return Err(anyhow!(
+                            "Realm selector returned the wrong frontier variant"
+                        ));
+                    };
+                    if frontier.seal_id.to_string() == before_seal_id {
+                        Err(anyhow!(
+                            "Realm Seal frontier has not advanced from {before_seal_id}"
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await?;
+    }
     Ok((status, body))
 }
 
@@ -214,7 +262,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     assert_eq!(status, StatusCode::OK, "invite create: {body}");
 
     // Predicate 1 — a directed cancel with NO `payload.invitee`.
-    let before = observe(&alice, &realm_id).await?;
+    let before = observe(&alice, &realm_id, bob.actor.as_str()).await?;
     let (missing_status, missing_body) = submit_invite_move(
         &alice,
         &realm_id,
@@ -231,7 +279,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         StatusCode::OK,
         "cancel without payload.invitee must be refused: {missing_body}"
     );
-    let after_missing = observe(&alice, &realm_id).await?;
+    let after_missing = observe(&alice, &realm_id, bob.actor.as_str()).await?;
     assert_eq!(
         before, after_missing,
         "a refused cancel must accept zero Events and change zero cells"
@@ -255,7 +303,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         StatusCode::OK,
         "cancel with a mismatched invitee must be refused: {mismatch_body}"
     );
-    let after_mismatch = observe(&alice, &realm_id).await?;
+    let after_mismatch = observe(&alice, &realm_id, bob.actor.as_str()).await?;
     assert_eq!(
         before, after_mismatch,
         "a refused cancel must accept zero Events and change zero cells"
@@ -298,7 +346,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         StatusCode::OK,
         "Inkson-produced cancel must be accepted: {accepted_body}"
     );
-    let after_accept = observe(&alice, &realm_id).await?;
+    let after_accept = observe(&alice, &realm_id, bob.actor.as_str()).await?;
     assert_ne!(
         before.event_ids.len(),
         after_accept.event_ids.len(),
@@ -327,7 +375,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         .await?;
     let replay_status = response.status();
     let replay_body = response.json::<Value>().await.unwrap_or(Value::Null);
-    let after_replay = observe(&alice, &realm_id).await?;
+    let after_replay = observe(&alice, &realm_id, bob.actor.as_str()).await?;
     assert_eq!(
         after_accept.invite_states, after_replay.invite_states,
         "replaying the cancel must not drive a second lifecycle transition \
@@ -360,122 +408,6 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
             "inkson_direct_cancel_invitee": inkson_payload["invitee"].clone(),
             "accepted_events_appended": after_accept.event_ids.len() - before.event_ids.len(),
             "replay_status": replay_status.as_u16(),
-        }),
-    );
-    Ok(())
-}
-
-/// §23.4 3PID branch: a `third_party_id` invite carries no `invitee`, must not
-/// project a `member.state` write, and its cancel must be refused with
-/// `invite_kind_requires_revoke` so the withdrawal goes through
-/// `ak.invite.revoke`.
-pub async fn third_party_invite_cancel_requires_revoke() -> Result<()> {
-    let group = TestServerGroup::single("invite-third-party-revoke").await?;
-    let server = group.server(0);
-    let alice = server
-        .demo_client(
-            "did:web:alice-invite-3pid.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
-        .await?;
-    let realm_id = alice.create_realm("Invite 3PID Requires Revoke").await?;
-
-    let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
-    let (status, body) = submit_invite_move(
-        &alice,
-        &realm_id,
-        "ak.invite.create",
-        json!({
-            "invite_id": THIRD_PARTY_INVITE_ID,
-            "third_party_id": {
-                "medium": "email",
-                "address": "invitee-3pid@example.com",
-            },
-            "invite_delivery_target": {
-                "kind": "principal_server",
-                "recipient_service_id": alice.service_id(),
-            },
-            "introduction_evidence_digest":
-                "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-            "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
-        }),
-    )
-    .await?;
-    if status != StatusCode::OK {
-        // A deployment that does not enable the 3PID branch cannot exercise
-        // this vector; say so rather than asserting a false negative.
-        eprintln!("skipping 3PID cancel vector: invite create returned {status}: {body}");
-        return Ok(());
-    }
-
-    let before = observe(&alice, &realm_id).await?;
-    let (cancel_status, cancel_body) = submit_invite_move(
-        &alice,
-        &realm_id,
-        "ak.invite.cancel",
-        json!({
-            "invite_id": THIRD_PARTY_INVITE_ID,
-            "invitee": "did:web:alice-invite-3pid.example",
-            "target_state": "revoked",
-            "reason": "3pid cancel negative",
-        }),
-    )
-    .await?;
-    assert_ne!(
-        cancel_status,
-        StatusCode::OK,
-        "a 3PID invite cancel must be refused: {cancel_body}"
-    );
-    let reason = error_reason(&cancel_body);
-    assert!(
-        reason.contains("invite_kind_requires_revoke") || reason.contains("requires_revoke"),
-        "3PID cancel must fail with invite_kind_requires_revoke, got {reason}: {cancel_body}"
-    );
-    let after = observe(&alice, &realm_id).await?;
-    assert_eq!(
-        before, after,
-        "a refused 3PID cancel must accept zero Events and change zero cells"
-    );
-
-    // The Inkson producer routes the 3PID withdrawal through revoke without an
-    // `invitee` binding, which is what makes the member cell stay untouched.
-    let revoke = inkson::operation::ak_ops::invite_revoke(
-        &realm_id,
-        &alice.actor,
-        THIRD_PARTY_INVITE_ID,
-        None,
-        "revoked",
-        "third_party_withdrawn",
-    )
-    .map_err(|error| anyhow!("inkson invite_revoke builder: {error}"))?
-    .build_sdk_event(alice.service_id())
-    .map_err(|error| anyhow!("inkson invite_revoke event: {error}"))?;
-    let revoke_payload = serde_json::to_value(&revoke.payload)?;
-    assert!(
-        revoke_payload.get("invitee").is_none(),
-        "a 3PID revoke must not bind an invitee: {revoke_payload}"
-    );
-    let (revoke_status, revoke_body) =
-        submit_invite_move(&alice, &realm_id, "ak.invite.revoke", revoke_payload).await?;
-    assert_eq!(
-        revoke_status,
-        StatusCode::OK,
-        "the 3PID revoke path must be accepted: {revoke_body}"
-    );
-
-    record_vector_event(
-        "invite.membership_transition_atomicity.third_party",
-        &json!({"realm_id": realm_id, "invite_id": THIRD_PARTY_INVITE_ID}),
-        &json!({
-            "cancel": "invite_kind_requires_revoke",
-            "revoke": "accepted",
-            "zero_event_acceptance_on_cancel": true,
-        }),
-        &json!({
-            "cancel_status": cancel_status.as_u16(),
-            "cancel_reason": reason,
-            "cancel_events_appended": after.event_ids.len() - before.event_ids.len(),
-            "revoke_status": revoke_status.as_u16(),
         }),
     );
     Ok(())

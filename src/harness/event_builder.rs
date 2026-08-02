@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::Ordering;
 use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use arkret::{
@@ -22,6 +23,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::assertions::expect_json;
+use super::proof::refresh_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
     NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
@@ -473,7 +475,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     if frontier.realm_id.as_str() != realm_id || frontier.actor_id.as_str() != actor {
         return Err(anyhow!("combined selector returned the wrong actor scope"));
     }
-    let event = event_envelope_with_chain_and_signing_identity(
+    let mut event = event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
         kind,
@@ -483,6 +485,37 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         signing_seed,
         verification_method,
     );
+    let descriptor = arkret_wire::EventKind::from(kind).descriptor();
+    let is_control_move = descriptor
+        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("control"));
+    let is_data_event = descriptor
+        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+    if is_control_move || is_data_event {
+        let seal_frontier =
+            realm_seal_frontier_for(server, token, realm_id, Duration::from_secs(10)).await?;
+        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+            serde_json::from_value(seal_frontier)?;
+        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
+            state.frontier
+        else {
+            return Err(anyhow!(
+                "Realm selector returned the wrong frontier variant"
+            ));
+        };
+        if is_control_move {
+            event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+            let physical_millis = chrono::Utc::now().timestamp_millis();
+            event["hlc"] = json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
+        } else {
+            event["seal_ref"] = serde_json::to_value(frontier.seal_id)?;
+            event["auth_context"] = json!({
+                "did": actor,
+                "key_id": verification_method,
+                "key_epoch": 0
+            });
+        }
+        refresh_event_proof_with_signing_seed(&mut event, signing_seed)?;
+    }
     let mut body = expect_json(
         server
             .http()
@@ -496,6 +529,39 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         ensure_submit_event_id(&mut body, &event);
     }
     Ok(body)
+}
+
+async fn realm_seal_frontier_for(
+    server: &ArkretServer,
+    token: &str,
+    realm_id: &str,
+    timeout: Duration,
+) -> Result<Value> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let response = server
+            .http()
+            .get(server.url("/_arkret/self/events/frontier"))
+            .query(&[("realm_id", realm_id)])
+            .bearer_auth(token)
+            .send()
+            .await?;
+        let status = response.status();
+        if status == StatusCode::OK {
+            return Ok(response.json().await?);
+        }
+        let body = response.text().await.unwrap_or_default();
+        if status == StatusCode::SERVICE_UNAVAILABLE
+            && body.contains("frontier_unavailable")
+            && Instant::now() < deadline
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            continue;
+        }
+        return Err(anyhow!(
+            "expected Realm frontier HTTP 200, got {status}: {body}"
+        ));
+    }
 }
 
 pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -> Value {
@@ -885,22 +951,6 @@ pub(crate) fn member_join_payload_value(realm_id: &str, actor_id: &str) -> Resul
         MembershipPayloadState::Join,
         Some(DeliveryStatus::Unroutable),
         None,
-        None,
-        None,
-    )
-}
-
-pub(crate) fn member_join_payload_with_delivery_binding(
-    realm_id: &str,
-    actor_id: &str,
-    delivery_binding: Value,
-) -> Result<Value> {
-    member_payload(
-        realm_id,
-        actor_id,
-        MembershipPayloadState::Join,
-        Some(DeliveryStatus::Routable),
-        Some(delivery_binding),
         None,
         None,
     )

@@ -54,18 +54,30 @@ test.describe("workflow: team onboarding", () => {
         seedMembers: [yuki.did],
       });
       await yukiPage.acceptInvite(realmId);
+      await meiPage.grantRealmCapability(
+        realmId,
+        yuki.did,
+        "ak.message.create",
+      );
       await meiPage.sendTimelineMessage(realmId, welcome);
       await stepShot(meiPage.page, testInfo, "A-welcome");
 
       // Phase B — Yuki picks up the welcome and replies.
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.page.getByTestId("message-list")).toContainText(welcome, {
+      await expect(yukiPage.page.getByTestId("message-list")).toContainText(
+        welcome,
+        {
+          timeout: 30_000,
+        },
+      );
+      await yukiPage.clickTimelineReply(welcome);
+      await expect(
+        yukiPage.page.getByTestId("chat-reply-banner"),
+      ).toBeVisible();
+      await yukiPage.sendTimelineMessage(realmId, yukiThanks);
+      await expect(yukiPage.timelineEvent(yukiThanks)).toBeVisible({
         timeout: 30_000,
       });
-      await yukiPage.clickTimelineReply(welcome);
-      await expect(yukiPage.page.getByTestId("chat-reply-banner")).toBeVisible();
-      await yukiPage.sendTimelineMessage(realmId, yukiThanks);
-      await expect(yukiPage.timelineEvent(yukiThanks)).toBeVisible({ timeout: 30_000 });
       await expect(
         yukiPage.timelineEvent(yukiThanks).getByTestId("chat-reply-indicator"),
       ).toBeVisible({ timeout: 30_000 });
@@ -73,23 +85,36 @@ test.describe("workflow: team onboarding", () => {
 
       // Phase C — Mei edits the welcome in place; Yuki sees the patched copy.
       await meiPage.gotoTimelineRealm(realmId);
-      await expect(meiPage.timelineEvent(welcome)).toBeVisible({ timeout: 30_000 });
+      await expect(meiPage.timelineEvent(welcome)).toBeVisible({
+        timeout: 30_000,
+      });
       await meiPage.clickTimelineEdit(welcome);
-      await meiPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(welcomeEdited);
+      await meiPage.page
+        .getByTestId("chat-edit-composer")
+        .locator("textarea")
+        .fill(welcomeEdited);
       await meiPage.page.getByTestId("chat-save-edit-button").click();
       await meiPage.waitForTimelineEventSettled(welcomeEdited);
-      await expect(meiPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
+      await expect(meiPage.page.getByTestId("chat-status")).toContainText(
+        /Message updated/i,
+      );
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
+      await expect(yukiPage.timelineEvent(welcomeEdited)).toBeVisible({
+        timeout: 30_000,
+      });
       await stepShot(meiPage.page, testInfo, "C-welcome-edited");
 
       // Phase D — close the day with a small back-and-forth.
       await meiPage.sendTimelineMessage(realmId, wrap);
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.timelineEvent(wrap)).toBeVisible({ timeout: 30_000 });
+      await expect(yukiPage.timelineEvent(wrap)).toBeVisible({
+        timeout: 30_000,
+      });
       await yukiPage.sendTimelineMessage(realmId, yukiWrap);
       await meiPage.gotoTimelineRealm(realmId);
-      await expect(meiPage.timelineEvent(yukiWrap)).toBeVisible({ timeout: 30_000 });
+      await expect(meiPage.timelineEvent(yukiWrap)).toBeVisible({
+        timeout: 30_000,
+      });
       await stepShot(meiPage.page, testInfo, "D-wrap-up");
     } finally {
       await Promise.allSettled([yukiPage.close(), meiPage.close()]);
@@ -142,17 +167,21 @@ test.describe("workflow: team onboarding", () => {
       await pinButton.click();
 
       const meiPinnedBar = meiPage.page.getByTestId("pinned-bar");
-      await expect(
-        meiPinnedBar.getByTestId("pinned-bar-item"),
-      ).toContainText(welcome.slice(0, 40), { timeout: 30_000 });
+      await expect(meiPinnedBar.getByTestId("pinned-bar-item")).toContainText(
+        welcome.slice(0, 40),
+        { timeout: 30_000 },
+      );
       await stepShot(meiPage.page, testInfo, "E1-mei-pinned");
 
       // Yuki keeps seeing the welcome at the top: the shared pin projects
       // into Yuki's pinned bar once the `ak.pin.add` event syncs.
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.page.getByTestId("message-list")).toContainText(welcome, {
-        timeout: 30_000,
-      });
+      await expect(yukiPage.page.getByTestId("message-list")).toContainText(
+        welcome,
+        {
+          timeout: 30_000,
+        },
+      );
       const yukiPinnedItem = yukiPage.page
         .getByTestId("pinned-bar")
         .getByTestId("pinned-bar-item");
@@ -171,7 +200,11 @@ test.describe("workflow: team onboarding", () => {
   }, testInfo) => {
     test.setTimeout(300_000);
     const stamp = Date.now();
-    const meiFlow = await openDpopUserPage(browser, request, "wf-onboard-rev-mei");
+    const meiFlow = await openDpopUserPage(
+      browser,
+      request,
+      "wf-onboard-rev-mei",
+    );
     test.skip(
       !meiFlow,
       "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",

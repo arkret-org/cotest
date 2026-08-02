@@ -153,6 +153,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             ),
             "revoked_at": null,
             "revocation_ref": "ak:session:mock",
+            "credential_class": "standard",
             // `SessionGrantIntrospectGrant.session_public_key` is a required
             // (non-Option) field in the SDK wire type; omitting it makes soland
             // fail to deserialize the introspection outcome and return 503.

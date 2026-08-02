@@ -790,7 +790,7 @@ test.describe("multi-device pairing + revocation", () => {
       request,
       aliceToken,
       selfRevokeEnvelope,
-      { force: true },
+      {},
     );
     await alignSignedEventToActorFrontierApi(
       request,
@@ -1766,7 +1766,7 @@ async function submitPrincipalControlEvent(
   envelope: Record<string, unknown>,
   context: string,
 ) {
-  await prepareSignedEventCbaApi(request, "", envelope, { force: true });
+  await alignEventToSealFrontier(request, headersSource, envelope);
   await alignEventToActorFrontier(request, headersSource, envelope);
 
   const leaseUrl = `${solandBaseUrl()}/_arkret/self/authorization-leases`;
@@ -1814,6 +1814,46 @@ async function submitPrincipalControlEvent(
     [200, 201],
     `${context} returned ${response.status()}: ${text}`,
   ).toContain(response.status());
+}
+
+async function alignEventToSealFrontier(
+  request: APIRequestContext,
+  headersSource: SelfPathHeadersSource,
+  envelope: Record<string, unknown>,
+) {
+  const realmId = String(envelope.realm_id ?? "");
+  const frontierUrl =
+    `${solandBaseUrl()}/_arkret/self/events/frontier` +
+    `?realm_id=${encodeURIComponent(realmId)}`;
+  const response = await request.get(frontierUrl, {
+    headers: selfPathHeaders(headersSource, "GET", frontierUrl),
+  });
+  const text = await response.text();
+  expect(response.status(), text).toBe(200);
+  const body = JSON.parse(text) as {
+    frontier?: {
+      kind?: string;
+      seal_id?: string;
+      control_event_set_root?: string;
+      state_root?: string;
+    };
+  };
+  expect(body.frontier?.kind).toBe("realm_seal");
+  expect(body.frontier?.seal_id).toBeTruthy();
+  expect(body.frontier?.control_event_set_root).toBeTruthy();
+  expect(body.frontier?.state_root).toBeTruthy();
+  envelope.seal_basis = {
+    leaves: [body.frontier!.seal_id],
+    control_event_set_root: body.frontier!.control_event_set_root,
+    state_root: body.frontier!.state_root,
+  };
+  delete envelope.seal_ref;
+  delete envelope.auth_context;
+  const verificationMethod = Array.isArray(envelope.proofs)
+    ? (envelope.proofs[0] as { verification_method?: string } | undefined)
+        ?.verification_method
+    : undefined;
+  refreshEventEnvelopeProof(envelope, verificationMethod);
 }
 
 async function alignEventToActorFrontier(

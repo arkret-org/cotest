@@ -8,7 +8,7 @@ const FIXTURE_FILE: &str = "scalability-limits-fixture.json";
 
 pub fn run_scalability_limits_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE_FILE)?;
-    validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
+    validate_profile(&fixture, ProfileId::CORE_EVENT_STORE_V1)?;
     if fixture.pointer("/runner/kind").and_then(Value::as_str) != Some("generated_limit_cases") {
         bail!("scalability fixture runner kind drifted");
     }

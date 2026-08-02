@@ -168,7 +168,7 @@ function Get-SecretLeakPatterns {
     @(
         [pscustomobject]@{ name = "authorization_header"; category = $script:SecretCategoryCredential; pattern = '(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!\[redacted\])\S+'; validate = $null },
         [pscustomobject]@{ name = "recovery_private_material_field"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!\[redacted\])[^`"]+`""; validate = $null },
-        [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!\[redacted\])(?:'[^']+'|`"[^`"]+`"|\S+)"; validate = $null },
+        [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!\[redacted\])(?:'[^']+'|`"[^`"]+`"|[A-Za-z0-9_-]{16,})"; validate = $null },
         [pscustomobject]@{ name = "jwk_private_member"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:JwkPrivateMemberPattern; validate = $null },
         [pscustomobject]@{ name = "plaintext_keybag_object"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:PlaintextKeybagPattern; validate = $null },
         [pscustomobject]@{ name = "sql_private_material_column"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:SqlPrivateMaterialColumnPattern; validate = $null },

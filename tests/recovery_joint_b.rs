@@ -91,12 +91,14 @@ async fn post_json(http: &reqwest::Client, url: String, body: Value) -> Result<V
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-#[ignore = "requires current coauth/starid/teabay/soland binaries and PostgreSQL"]
+#[ignore = "requires current coauth/starid/teabay/soland binaries plus DATABASE_URL and COTEST_SOLAND_DATABASE_URL"]
 async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()> {
-    let mut stack = bootstrap_required(FourServiceConfig::new(
-        "joint-enrollment-authority-recovery",
-    ))
-    .await?;
+    let soland_database_url = std::env::var("COTEST_SOLAND_DATABASE_URL").context(
+        "COTEST_SOLAND_DATABASE_URL is required: this restart recovery gate must not use Soland's in-memory store",
+    )?;
+    let mut config = FourServiceConfig::new("joint-enrollment-authority-recovery");
+    config.soland_database_url = Some(soland_database_url);
+    let mut stack = bootstrap_required(config).await?;
     stack.assert_healthy().await?;
     let principal_base = stack.soland.base_url().clone();
     let coauth_base = stack

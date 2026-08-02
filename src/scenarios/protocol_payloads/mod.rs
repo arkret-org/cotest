@@ -29,7 +29,7 @@
 use anyhow::Result;
 
 use crate::harness::{ArkretServer, dev_login};
-use crate::scenarios::federation_collaboration::actor_did_for_service;
+use crate::scenarios::identity_test_support::actor_did_for_service;
 
 mod backup_delete;
 mod blob;

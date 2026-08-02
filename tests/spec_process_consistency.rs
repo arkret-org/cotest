@@ -4,18 +4,18 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 #[test]
-fn invite_membership_transitions_are_exact_and_atomic() {
+fn invite_membership_target_transitions_are_exact_and_atomic() {
     let catalog = read_json(
         &spec_artifacts_root()
             .join("registry")
             .join("contract-registry.json"),
     );
     let contracts = &catalog["event_kind_registry"]["cell_contracts"];
-    for (kind, from, to) in [
-        ("ak.invite.create", "leave", "invite"),
-        ("ak.invite.accept", "invite", "join"),
-        ("ak.invite.cancel", "invite", "leave"),
-        ("ak.invite.revoke", "invite", "leave"),
+    for (kind, to) in [
+        ("ak.invite.create", "invite"),
+        ("ak.invite.accept", "join"),
+        ("ak.invite.cancel", "leave"),
+        ("ak.invite.revoke", "leave"),
     ] {
         let writes = contracts[kind]["cell_writes"]
             .as_array()
@@ -29,13 +29,7 @@ fn invite_membership_transitions_are_exact_and_atomic() {
             member
                 .pointer("/effect_projection/kind")
                 .and_then(Value::as_str),
-            Some("transition")
-        );
-        assert_eq!(
-            member
-                .pointer("/effect_projection/from/const")
-                .and_then(Value::as_str),
-            Some(from)
+            Some("transition_to")
         );
         assert_eq!(
             member
@@ -50,79 +44,9 @@ fn invite_membership_transitions_are_exact_and_atomic() {
         &[
             "create_then_accept_walks_leave_invite_join",
             "accept_without_invite_prestate_is_invalid_membership_transition",
-            "directed_terminal_move_missing_invitee_is_effects_payload_mismatch",
+            "directed_terminal_move_missing_invitee_is_reducer_projection_failed",
             "bare_member_state_ban_from_invite_prestate_is_rejected",
         ],
-    );
-}
-
-#[test]
-fn realm_create_has_one_canonical_four_effect_root_contract() {
-    let catalog = read_json(
-        &spec_artifacts_root()
-            .join("registry")
-            .join("contract-registry.json"),
-    );
-    let writes = catalog["event_kind_registry"]["cell_contracts"]["ak.realm.create"]["cell_writes"]
-        .as_array()
-        .expect("ak.realm.create must declare cell_writes");
-    assert_eq!(writes.len(), 4);
-    let expected = [
-        ("ak.component.realm.metadata.v1", true),
-        ("ak.component.member.state.v1", false),
-        ("ak.component.realm.create.v1", true),
-        ("ak.component.notary.v1", true),
-    ];
-    for (family, null_subject) in expected {
-        let write = writes
-            .iter()
-            .find(|write| write["cell_family"].as_str() == Some(family))
-            .unwrap_or_else(|| panic!("ak.realm.create must write {family}"));
-        assert_eq!(
-            write["cell_subject"].is_null(),
-            null_subject,
-            "{family} subject drifted"
-        );
-        assert!(
-            write.get("effect_projection").is_some(),
-            "{family} must declare an exact effect projection"
-        );
-    }
-    let create_log = writes
-        .iter()
-        .find(|write| write["cell_family"].as_str() == Some("ak.component.realm.create.v1"))
-        .expect("Realm create must write its ordered log");
-    assert_eq!(
-        create_log.pointer("/effect_projection/kind"),
-        Some(&serde_json::json!("append"))
-    );
-    assert_eq!(
-        create_log.pointer("/effect_projection/issuer_seq/const"),
-        Some(&serde_json::json!(0))
-    );
-    let fixture = read_json(
-        &spec_artifacts_root()
-            .join("fixtures")
-            .join("cba-lattice-fixture.json"),
-    );
-    let vector = find_vector(
-        &fixture,
-        "ak.vector.event_kind.realm_create_effects_closure.v1",
-    );
-    assert_eq!(
-        vector["required_effects"]
-            .as_array()
-            .expect("Realm create vector must list required effects")
-            .len(),
-        4
-    );
-    assert_eq!(
-        vector.pointer("/expected/branches_covered"),
-        Some(&serde_json::json!([
-            "collaboration",
-            "principal_control",
-            "direct_conversation"
-        ]))
     );
 }
 

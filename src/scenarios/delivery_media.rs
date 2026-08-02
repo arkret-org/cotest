@@ -8,7 +8,7 @@ use crate::harness::{
     expect_api_error, expect_indistinguishable_api_errors, expect_json, expect_response,
     expect_text, register_account,
 };
-use crate::scenarios::federation_collaboration::{
+use crate::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
 };
 

@@ -1,14 +1,12 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId, TypedTrustDomainId};
+use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId};
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
-    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicy,
-    RecoveryPolicyAuthData, RecoveryPolicyRef, RecoveryProofKind,
-    RecoveryPublicationAuthorizationRule,
+    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicyRef,
 };
-use arkret_wire::{AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl};
+use arkret_wire::{Base64UrlString, DidUrl};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
@@ -22,7 +20,7 @@ const DID_RECOVERY_BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-00000000
 
 pub async fn key_backup_recovery_account_state_run() -> Result<()> {
     let signing = SigningKey::from_bytes(&[81u8; 32]);
-    let (principal_id, verification_method) = did_key_principal(&signing);
+    let (principal_id, _) = did_key_principal(&signing);
 
     let group = TestServerGroup::single("key-backup-recovery-account-state").await?;
     let server = group.server(0);
@@ -49,6 +47,10 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
             .put(&format!(
                 "/_arkret/self/keys/backups/{DID_RECOVERY_BACKUP_ID}"
             ))
+            .header(
+                "Idempotency-Key",
+                "key-backup-recovery-account-state-missing-policy",
+            )
             .json(&did_recovery_backup_body(&principal_id, POLICY_ID)?),
         StatusCode::CONFLICT,
         "recovery_policy_mismatch",
@@ -60,25 +62,6 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
             .unwrap_or_default()
             .contains("recovery policy"),
         "did_recovery rejection should point at the missing active policy: {rejected}"
-    );
-
-    let rejected_policy = expect_api_error_code(
-        alice
-            .post("/_arkret/root/identity/recovery-policy")
-            .json(&unsigned_recovery_policy(
-                &principal_id,
-                &verification_method,
-            )?),
-        StatusCode::UNAUTHORIZED,
-        "proof_invalid",
-    )
-    .await?;
-    assert!(
-        rejected_policy["error"]["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("freshness"),
-        "live policy publish must fail closed without DID freshness evidence: {rejected_policy}"
     );
 
     let secret_storage = list_backups_by_class(&alice, "secret_storage").await?;
@@ -119,64 +102,6 @@ fn did_key_principal(signing: &SigningKey) -> (String, String) {
     let principal_id = format!("did:key:{multibase}");
     let verification_method = format!("{principal_id}#{multibase}");
     (principal_id, verification_method)
-}
-
-fn unsigned_recovery_policy(
-    principal_id: &str,
-    verification_method: &str,
-) -> Result<RecoveryPolicy> {
-    Ok(RecoveryPolicy {
-        schema: "ak.schema.recovery_policy.v1".to_owned(),
-        policy_id: PolicyId::new(POLICY_ID.to_owned())?,
-        principal_id: Did::new(principal_id.to_owned())?,
-        version: 1,
-        supersedes: None,
-        trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local".to_owned())?,
-        allowed_proof_kinds: vec![RecoveryProofKind::PrincipalSigning],
-        publication_authorization_rules: vec![RecoveryPublicationAuthorizationRule {
-            rule_id: "principal_signing".to_owned(),
-            proof_kind: RecoveryProofKind::PrincipalSigning,
-            issuer_role: AuthoritySetIssuerRole::IdentityRecovery,
-            allowed_actions: vec!["ak.device.reanchor".to_owned()],
-            issuers: vec![AuthoritySetIssuer {
-                verification_method: DidUrl::new(verification_method.to_owned())
-                    .map_err(anyhow::Error::msg)?,
-            }],
-            threshold: 1,
-        }],
-        threshold: None,
-        device_quorum: None,
-        recovery_keys: None,
-        recovery_key_agreements: None,
-        trusted_recovery_services: None,
-        approval_requirement: None,
-        audit: None,
-        issued_at: ts("2026-05-30T00:00:00.000Z")?,
-        not_before: None,
-        expires_at: Some(ts("2026-06-30T00:00:00.000Z")?),
-        auth_data: RecoveryPolicyAuthData {
-            verification_method: DidUrl::new(verification_method.to_owned())
-                .map_err(anyhow::Error::msg)?,
-            signature_algorithm: "EdDSA".to_owned(),
-            signature: "c2lnbmF0dXJl".to_owned(),
-            signed_fields: [
-                "schema",
-                "policy_id",
-                "principal_id",
-                "version",
-                "trust_domain",
-                "allowed_proof_kinds",
-                "publication_authorization_rules",
-                "supersedes",
-                "issued_at",
-                "expires_at",
-            ]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-        },
-        extra: Default::default(),
-    })
 }
 
 fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBackup> {

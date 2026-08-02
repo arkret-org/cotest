@@ -6,9 +6,7 @@ use serde_json::{Value, json};
 use crate::harness::{
     ArkretServer, TestActorClient, expect_api_error, expect_json, expect_status, submit_event,
 };
-use crate::scenarios::federation_collaboration::{
-    actor_did_for_service, authorize_device_public_key,
-};
+use crate::scenarios::identity_test_support::{actor_did_for_service, authorize_device_public_key};
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = ArkretServer::spawn("authz-grants").await?;

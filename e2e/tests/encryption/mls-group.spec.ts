@@ -1213,7 +1213,7 @@ test.describe("MLS group encryption", () => {
       request,
       aliceToken,
       staleCommitEnvelope,
-      { force: true },
+      {},
     );
     await alignSignedEventToActorFrontierApi(
       request,

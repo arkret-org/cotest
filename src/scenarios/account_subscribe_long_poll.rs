@@ -635,7 +635,7 @@ async fn create_invite_now(
     realm_id: &str,
     invitee: &crate::harness::TestActorClient,
 ) -> Result<String> {
-    let invite_id = "ak:invite:01999999-0000-7000-8000-00000000b0b1".to_owned();
+    let invite_id = arkret::new_prefixed_uuid7("ak:invite:");
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
     submit_event_now(
         inviter,
@@ -686,6 +686,7 @@ async fn cancel_invite_now(
         serde_json::json!({
             "invite_id": invite_id,
             "invitee": invitee,
+            "target_state": "revoked",
             "reason": "admin_cancel",
         }),
     )
@@ -728,9 +729,12 @@ async fn submit_event_now(
     event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
     event["created_at"] = Value::String(created_at.clone());
     let descriptor = arkret_wire::EventKind::from(kind).descriptor();
+    let is_control_move = descriptor
+        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("control"));
     let is_data_event = descriptor
         .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
-    if arkret_wire::events::kinds::is_invite_kind(kind) || is_data_event {
+    let mut previous_control_seal_id = None;
+    if is_control_move || is_data_event {
         let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
         let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
             serde_json::from_value(seal_frontier)?;
@@ -769,7 +773,10 @@ async fn submit_event_now(
                 );
             }
         } else {
+            previous_control_seal_id = Some(frontier.seal_id.to_string());
             event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+            let physical_millis = chrono::Utc::now().timestamp_millis();
+            event["hlc"] = serde_json::json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
         }
     }
     if let Some(proof) = event
@@ -790,6 +797,37 @@ async fn submit_event_now(
         && let Some(object) = response.as_object_mut()
     {
         object.insert("event_id".to_owned(), Value::String(event_id.to_owned()));
+    }
+    if let Some(previous_seal_id) = previous_control_seal_id {
+        eventually(
+            "accepted Control Move advances the Realm Seal frontier",
+            Duration::from_secs(10),
+            Duration::from_millis(50),
+            || {
+                let previous_seal_id = previous_seal_id.clone();
+                async move {
+                    let frontier = seal_source.realm_seal_frontier(realm_id).await?;
+                    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                        serde_json::from_value(frontier)?;
+                    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
+                        frontier,
+                    ) = state.frontier
+                    else {
+                        return Err(anyhow::anyhow!(
+                            "Realm selector returned the wrong frontier variant"
+                        ));
+                    };
+                    if frontier.seal_id.to_string() == previous_seal_id {
+                        Err(anyhow::anyhow!(
+                            "Realm Seal frontier has not advanced from {previous_seal_id}"
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                }
+            },
+        )
+        .await?;
     }
     Ok(response)
 }

@@ -126,9 +126,7 @@ test.describe("moderation and ban", () => {
         reason: "non_moderator_attempt",
       },
     });
-    await prepareSignedEventCbaApi(request, bobToken, unauthorizedBanEvent, {
-      force: true,
-    });
+    await prepareSignedEventCbaApi(request, bobToken, unauthorizedBanEvent);
     await alignSignedEventToActorFrontierApi(
       request,
       bobToken,

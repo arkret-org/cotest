@@ -7,7 +7,7 @@ use arkret_models_collaboration::event_sync::{
 };
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope_at_frontier_with_signing_seed,
-    expect_json, register_account,
+    expect_json, refresh_event_proof_with_signing_seed, register_account,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -47,6 +47,42 @@ async fn frontier(
     };
     frontier.validate()?;
     Ok(frontier)
+}
+
+async fn seal_basis(
+    server: &ArkretServer,
+    token: &str,
+    realm_id: &str,
+) -> Result<arkret_wire::SealBasis> {
+    let value = expect_json(
+        server
+            .http()
+            .get(server.url("/_arkret/self/events/frontier"))
+            .query(&[("realm_id", realm_id)])
+            .bearer_auth(token),
+        StatusCode::OK,
+    )
+    .await?;
+    let state: EventsFrontierAccountClientState = serde_json::from_value(value)?;
+    let EventsFrontierView::RealmSeal(frontier) = state.frontier else {
+        return Err(anyhow!("Realm selector returned a non-Seal frontier"));
+    };
+    Ok(frontier.seal_basis())
+}
+
+fn bind_seal_ref(event: &mut Value, basis: &arkret_wire::SealBasis) -> Result<()> {
+    let seal_ref = basis
+        .leaves
+        .first()
+        .ok_or_else(|| anyhow!("Realm Seal frontier has no leaf"))?;
+    event["seal_ref"] = serde_json::to_value(seal_ref)?;
+    event["auth_context"] = json!({
+        "did": ACTOR.as_str(),
+        "key_id": format!("{}#cotest", ACTOR.as_str()),
+        "key_epoch": 0
+    });
+    event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+    refresh_event_proof_with_signing_seed(event, SIGNING_SEED)
 }
 
 fn strand_payload(realm_id: &str, suffix: &str) -> Value {
@@ -115,7 +151,8 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     assert_eq!(basis_a.next_actor_seq, basis_b.next_actor_seq);
     assert_ne!(basis_a.frontier_digest, basis_b.frontier_digest);
 
-    let sibling_a = event_envelope_at_frontier_with_signing_seed(
+    let current_seal_basis = seal_basis(&server, &token, &realm_a).await?;
+    let mut sibling_a = event_envelope_at_frontier_with_signing_seed(
         ACTOR.as_str(),
         &realm_a,
         "ak.strand.create",
@@ -124,7 +161,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         basis_a.frontier_event_ids.clone(),
         SIGNING_SEED,
     );
-    let sibling_b = event_envelope_at_frontier_with_signing_seed(
+    let mut sibling_b = event_envelope_at_frontier_with_signing_seed(
         ACTOR.as_str(),
         &realm_a,
         "ak.strand.create",
@@ -133,6 +170,8 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         basis_a.frontier_event_ids.clone(),
         SIGNING_SEED,
     );
+    bind_seal_ref(&mut sibling_a, &current_seal_basis)?;
+    bind_seal_ref(&mut sibling_b, &current_seal_basis)?;
     for event in [&sibling_b, &sibling_a] {
         let response = submit_bytes(&server, &token, serde_json::to_vec(event)?).await?;
         assert_eq!(
@@ -153,7 +192,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     assert_eq!(siblings.frontier_event_ids, expected_ids);
     assert_eq!(frontier(&server, &token, &realm_b).await?, basis_b);
 
-    let merge = event_envelope_at_frontier_with_signing_seed(
+    let mut merge = event_envelope_at_frontier_with_signing_seed(
         ACTOR.as_str(),
         &realm_a,
         "ak.strand.create",
@@ -162,6 +201,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         siblings.frontier_event_ids.clone(),
         SIGNING_SEED,
     );
+    bind_seal_ref(&mut merge, &seal_basis(&server, &token, &realm_a).await?)?;
     let exact_body = arkret_canonical::canonical_json_bytes(&merge)?;
     let lost = submit_bytes(&server, &token, exact_body.clone()).await?;
     assert_eq!(lost.status(), StatusCode::OK);
@@ -188,7 +228,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         current_sequence(&merge)?
     );
 
-    let stale = event_envelope_at_frontier_with_signing_seed(
+    let mut stale = event_envelope_at_frontier_with_signing_seed(
         ACTOR.as_str(),
         &realm_a,
         "ak.strand.create",
@@ -197,6 +237,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         basis_a.frontier_event_ids,
         SIGNING_SEED,
     );
+    bind_seal_ref(&mut stale, &seal_basis(&server, &token, &realm_a).await?)?;
     let stale_response = submit_bytes(&server, &token, serde_json::to_vec(&stale)?).await?;
     assert_eq!(stale_response.status(), StatusCode::CONFLICT);
     let conflict: Value = stale_response.json().await?;
@@ -214,7 +255,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     assert_eq!(stale_lookup.status(), StatusCode::NOT_FOUND);
 
     let current = frontier(&server, &token, &realm_a).await?;
-    let replacement = event_envelope_at_frontier_with_signing_seed(
+    let mut replacement = event_envelope_at_frontier_with_signing_seed(
         ACTOR.as_str(),
         &realm_a,
         "ak.strand.create",
@@ -223,6 +264,10 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         current.frontier_event_ids,
         SIGNING_SEED,
     );
+    bind_seal_ref(
+        &mut replacement,
+        &seal_basis(&server, &token, &realm_a).await?,
+    )?;
     assert_ne!(stale["event_id"], replacement["event_id"]);
     let accepted = submit_bytes(&server, &token, serde_json::to_vec(&replacement)?).await?;
     assert_eq!(
