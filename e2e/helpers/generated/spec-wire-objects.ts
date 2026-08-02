@@ -309,24 +309,13 @@ export type CapabilityGrantObject = {
     "approved_key_issuers"?: string[];
     "depends_on_moderation_state"?: boolean;
   }>;
-  "issued_at"?: string;
+  "issued_at": string;
   "not_before"?: string;
   "expires_at"?: string;
   "updated_by"?: string;
   "updated_at"?: string;
   "revoked_by"?: string;
   "revoked_at"?: string;
-  "proofs": Array<{
-    "kind": "detached_jws";
-    "verification_method": string;
-    "alg": "EdDSA" | "ES256" | "ML-DSA-65";
-    "payload_digest": string;
-    "created_at": string;
-    "domain"?: string;
-    "audience"?: string | string[];
-    "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
-    "jws": string;
-  }>;
   "issuer_authority_refs": Array<{
     "kind": "grant";
     "grant_id": string;
@@ -363,7 +352,7 @@ export type InviteDeliveryRequestBody = {
     };
     "actor_id": string;
     "executed_by"?: string;
-    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null";
+    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -413,8 +402,6 @@ export type InviteDeliveryRequestBody = {
     };
     "seal_basis"?: {
       "leaves": string[];
-      "control_event_set_root": string;
-      "state_root": string;
     };
     "payload": Record<string, unknown>;
     "redacts"?: string;
@@ -704,7 +691,7 @@ export type EventFederationSubmission = {
     };
     "actor_id": string;
     "executed_by"?: string;
-    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null";
+    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -754,8 +741,6 @@ export type EventFederationSubmission = {
     };
     "seal_basis"?: {
       "leaves": string[];
-      "control_event_set_root": string;
-      "state_root": string;
     };
     "payload": Record<string, unknown>;
     "redacts"?: string;
@@ -787,12 +772,10 @@ export type EventFederationSubmission = {
       }>;
     };
   };
-  "authorization_lease": {
+  "authorization_lease"?: {
     "authorization_lease_id": string;
     "basis_ref": string | {
       "leaves": string[];
-      "control_event_set_root": string;
-      "state_root": string;
     } | {
       "anchor_unit": {
         "realm_id": string;

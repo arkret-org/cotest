@@ -1,7 +1,7 @@
 // One typed decoder for everything a test observes on Event ingress.
 //
-// `POST /_arkret/self/events` carries `EventsSubmitBatchRequestBody`, whose
-// `events[]` are `EventInitialSubmission { event, authorization_lease, ... }` —
+// `POST /_arkret/self/events` carries either one `EventInitialSubmission` or an
+// `EventsSubmitBatchRequestBody`, whose `events[]` contain that same wrapper —
 // not bare Events (`arkret-rust-sdk/crates/wire/src/event_submission.rs`).
 // Every listener that reached into `events[0].kind` directly kept working right
 // up to the moment the wire shape moved, and then reported "no request" for a
@@ -62,7 +62,7 @@ function decodeSubmission(
   );
 }
 
-/// Decode an already-parsed `EventsSubmitBatchRequestBody`.
+/// Decode an already-parsed single or batch initial-publication request.
 export function decodeEventIngressBody(
   body: unknown,
   options: IngressDecodeOptions = {},
@@ -70,13 +70,17 @@ export function decodeEventIngressBody(
   if (!isRecord(body)) {
     throw new Error(`${options.context ?? "Event ingress"} body is not an object`);
   }
-  if (!Array.isArray(body.events)) {
-    throw new Error(
-      `${options.context ?? "Event ingress"} body omits the events[] array`,
+  if (Array.isArray(body.events)) {
+    return body.events.map((candidate, index) =>
+      decodeSubmission(candidate, index, options),
     );
   }
-  return body.events.map((candidate, index) =>
-    decodeSubmission(candidate, index, options),
+  if (isRecord(body.event)) {
+    return [decodeSubmission(body, 0, options)];
+  }
+  throw new Error(
+    `${options.context ?? "Event ingress"} body is neither a single ` +
+      `EventInitialSubmission nor an events[] batch`,
   );
 }
 

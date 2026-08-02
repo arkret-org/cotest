@@ -4,6 +4,7 @@ import {
   type Browser,
   type BrowserContext,
   type Page,
+  type Request,
   type Route,
 } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -98,7 +99,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       }
       jointTest.skip(
         !savfoxBaseUrlRaw || !savfoxTokenRaw,
-        "PRECONDITION_SAVFOX_UNAVAILABLE: COTEST_SAVFOX_BASE_URL / COTEST_SAVFOX_TOKEN unset (harness does not provision the savfox gateway)",
+        "PRECONDITION_SAVFOX_UNAVAILABLE: COTEST_SAVFOX_BASE_URL / COTEST_SAVFOX_TOKEN unset (run with scripts/run-joint-e2e.ps1 -StartSavfox or provide an external gateway)",
       );
       const savfoxBaseUrl = savfoxBaseUrlRaw!.replace(/\/$/, "");
       const savfoxToken = savfoxTokenRaw!;
@@ -160,7 +161,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
       // No runtime has submitted anything yet: the handle is open and carries
       // neither an approval request nor an authorized binding.
-      const beforeRequest = await runtimeKeyRequestStatus(request, firstPairing);
+      const beforeRequest = await runtimeKeyRequestStatus(
+        request,
+        firstPairing,
+      );
       expect(beforeRequest.status).toBe("active");
       expect(beforeRequest.runtime_state).toBe("pending_runtime_key");
       expect(beforeRequest.approval_request_id ?? null).toBeNull();
@@ -228,7 +232,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               message: "Savfox should surface the live Arkret session",
             },
           )
-          .toContain("Listening");
+          .toMatch(/Runtime\s*Listening/);
 
         const firstBinding = await runtimeKeyRequestStatus(
           request,
@@ -381,7 +385,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await crash.restore();
 
         await inkson.reload();
-        await openOwnAgentDirectChat(inkson, agentSlug);
+        await openOwnAgentDirectChat(inkson, agentSlug, {
+          retryUntilChatReady: true,
+          diagnostics: () => JSON.stringify(mlsSubmissions.diagnostics()),
+        });
         await expect(inkson.getByTestId("chat-panel")).toBeVisible({
           timeout: 180_000,
         });
@@ -401,8 +408,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           "the cut submission must have been retried after the reload",
         ).toBeGreaterThanOrEqual(2);
         expect(
-          mlsSubmissions.distinctEventIds("ak.mls.commit"),
-          "a resumed materialization must not author a second Commit",
+          mlsSubmissions.distinctEventIds("ak.mls.commit", 1),
+          "a resumed materialization must not author a second epoch-1 Commit",
         ).toHaveLength(1);
         expect(
           mlsSubmissions.distinctEventIds("ak.mls.welcome").length,
@@ -478,11 +485,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // routes a source-card mention into the private backing scope. Savfox
         // consumes that accepted request and its reply is refolded by Inkson
         // back into the same hosted source card.
-        await addAgentToRealm(
-          inkson,
-          jointRealm.realmId,
-          firstPairing.agentId,
-        );
+        await addAgentToRealm(inkson, jointRealm.realmId, firstPairing.agentId);
         const sourceCard = await createSidecarSourceCard(
           inkson,
           jointRealm.realmId,
@@ -598,9 +601,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await secondController.page.goto(sourceCardUrl, {
           waitUntil: "domcontentloaded",
         });
-        const secondCard = secondController.page.getByTestId(
-          "card-detail-modal",
-        );
+        const secondCard =
+          secondController.page.getByTestId("card-detail-modal");
         await expect(secondCard).toBeVisible({ timeout: 120_000 });
         await expect(
           secondController.page.getByTestId("sidecar-context-strip"),
@@ -659,7 +661,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // The canonical digest is the byte-identity claim; the frontier and the
         // full entry are compared as well so a digest that somehow matched a
         // different projection still fails.
-        expect(device2Fold.projection_digest).toBe(device1Fold.projection_digest);
+        expect(device2Fold.projection_digest).toBe(
+          device1Fold.projection_digest,
+        );
         expect(JSON.stringify(device2Fold)).toBe(JSON.stringify(device1Fold));
         expect(device2Fold.folded_frontier).toEqual(
           device1Fold.folded_frontier,
@@ -702,25 +706,23 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           process.env.COTEST_SAVFOX_UNADDRESSED_TOKEN?.trim() ?? "";
         const unaddressedReceiptPath =
           process.env.COTEST_SAVFOX_UNADDRESSED_MODEL_RECEIPTS?.trim() ?? "";
-        expect(unaddressedBaseUrl, "second managed Savfox gateway").not.toBe("");
+        expect(unaddressedBaseUrl, "second managed Savfox gateway").not.toBe(
+          "",
+        );
         expect(unaddressedToken, "second managed Savfox token").not.toBe("");
         expect(
           unaddressedReceiptPath,
           "second managed Savfox receipt path",
         ).not.toBe("");
         unaddressedRuntimeContext = await browser.newContext();
-        const unaddressedSavfox =
-          await unaddressedRuntimeContext.newPage();
+        const unaddressedSavfox = await unaddressedRuntimeContext.newPage();
         await openSavfoxArkretChannel(
           unaddressedSavfox,
           unaddressedBaseUrl,
           unaddressedToken,
         );
         const unaddressedSlug = `savfox-unaddressed-${Date.now().toString(36)}`;
-        const unaddressedAgent = await provisionAgent(
-          inkson,
-          unaddressedSlug,
-        );
+        const unaddressedAgent = await provisionAgent(inkson, unaddressedSlug);
         await pairManagedSavfoxAgent(
           inkson,
           unaddressedSavfox,
@@ -734,12 +736,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         const addressedReceiptPath =
           process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim() ?? "";
-        expect(addressedReceiptPath, "managed Savfox model receipt path").not.toBe(
-          "",
-        );
-        const addressedReceiptsBefore = await receiptCount(
+        expect(
           addressedReceiptPath,
-        );
+          "managed Savfox model receipt path",
+        ).not.toBe("");
+        const addressedReceiptsBefore =
+          await receiptCount(addressedReceiptPath);
         const unaddressedReceiptsBefore = await receiptCount(
           unaddressedReceiptPath,
         );
@@ -779,9 +781,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const privacyEnsureText = await privacyEnsure.text();
         expect(privacyEnsure.status(), privacyEnsureText).toBe(200);
         expect(
-          (privacyEnsure.request().postDataJSON() as {
-            addressed_agent_ids?: string[];
-          }).addressed_agent_ids,
+          (
+            privacyEnsure.request().postDataJSON() as {
+              addressed_agent_ids?: string[];
+            }
+          ).addressed_agent_ids,
         ).toEqual([firstPairing.agentId]);
         const privacyEnsureBody = JSON.parse(privacyEnsureText) as {
           effective_agent_ids?: string[];
@@ -953,13 +957,19 @@ async function openSavfoxArkretChannel(
 ): Promise<void> {
   await savfox.goto(`${savfoxBaseUrl}/channels/edit/arkret`);
   const tokenInput = savfox.getByPlaceholder("Gateway token", { exact: true });
+  const configureHeading = savfox.getByRole("heading", {
+    name: "Configure Arkret",
+  });
+  // The Dioxus shell can render after `goto` resolves. Wait for the actual
+  // authenticated-or-login branch before deciding whether a token is needed.
+  await expect(tokenInput.or(configureHeading)).toBeVisible({ timeout: 30_000 });
   if (await tokenInput.isVisible()) {
     await tokenInput.fill(savfoxToken);
-    await savfox.getByRole("button", { name: "Connect" }).click();
+    const connect = savfox.getByRole("button", { name: "Connect" });
+    await expect(connect).toBeEnabled({ timeout: 30_000 });
+    await connect.click();
   }
-  await expect(
-    savfox.getByRole("heading", { name: "Configure Arkret" }),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(configureHeading).toBeVisible({ timeout: 30_000 });
 }
 
 async function startSavfoxPairing(
@@ -989,6 +999,11 @@ async function startSavfoxPairing(
   });
   await expect(startPairing).toBeEnabled({ timeout: 30_000 });
   await startPairing.click({ timeout: 30_000 });
+  const pairingStatus = savfox.locator(".arkret-pairing-status");
+  await expect(pairingStatus).toBeVisible({ timeout: 30_000 });
+  await expect(pairingStatus).toContainText("Waiting for Inkson approval", {
+    timeout: 30_000,
+  });
 }
 
 async function saveSavfoxChannel(savfox: Page): Promise<void> {
@@ -1009,9 +1024,7 @@ async function provisionAgent(
     timeout: 120_000,
   });
   await inkson.getByTestId("agent-admin-create-open-button").click();
-  await inkson
-    .getByTestId("agent-admin-provision-agent-slug")
-    .fill(agentSlug);
+  await inkson.getByTestId("agent-admin-provision-agent-slug").fill(agentSlug);
   const commitResponsePromise = inkson.waitForResponse((response) => {
     const outgoing = response.request();
     return (
@@ -1080,6 +1093,10 @@ async function pairManagedSavfoxAgent(
 async function openOwnAgentDirectChat(
   inkson: Page,
   agentSlug: string,
+  options: {
+    retryUntilChatReady?: boolean;
+    diagnostics?: () => string | Promise<string>;
+  } = {},
 ): Promise<void> {
   await expect(inkson.getByTestId("realm-sidebar-tab-direct")).toBeVisible({
     timeout: 120_000,
@@ -1090,7 +1107,60 @@ async function openOwnAgentDirectChat(
     .getByTestId("contact-sidebar-agent-row")
     .filter({ hasText: agentSlug });
   await expect(ownAgentRow).toBeVisible({ timeout: 120_000 });
-  await ownAgentRow.click();
+  if (!options.retryUntilChatReady) {
+    await ownAgentRow.click();
+    return;
+  }
+
+  const chatPanel = inkson.getByTestId("chat-panel");
+  let lastOpenFailure = "no product error was rendered";
+  try {
+    await expect
+      .poll(
+        async () => {
+          if (await chatPanel.isVisible().catch(() => false)) return true;
+          const toastText = (
+            await inkson.getByTestId("toast-item").allTextContents()
+          )
+            .map((text) => text.trim())
+            .filter(Boolean)
+            .join(" | ");
+          if (toastText) lastOpenFailure = toastText;
+          const directTab = inkson.getByTestId("realm-sidebar-tab-direct");
+          if (
+            !(await ownAgentRow.isVisible().catch(() => false)) &&
+            (await directTab.isVisible().catch(() => false))
+          ) {
+            await directTab.click();
+            await ownAgentRow
+              .waitFor({ state: "visible", timeout: 2_000 })
+              .catch(() => undefined);
+          }
+          if (
+            (await ownAgentRow.isVisible().catch(() => false)) &&
+            (await ownAgentRow.isEnabled().catch(() => false)) &&
+            (await ownAgentRow.getAttribute("data-opening")) !== "true"
+          ) {
+            await ownAgentRow.click();
+          }
+          return await chatPanel.isVisible().catch(() => false);
+        },
+        {
+          timeout: 180_000,
+          intervals: [500, 1_000, 2_000, 5_000],
+          message:
+            "the reload must resume the persisted Direct Conversation transaction",
+        },
+      )
+      .toBe(true);
+  } catch (error) {
+    const diagnostics = (await options.diagnostics?.()) ?? "unavailable";
+    throw new Error(
+      `persisted Direct Conversation recovery failed: ${lastOpenFailure}; ` +
+        `MLS submissions: ${diagnostics}`,
+      { cause: error },
+    );
+  }
 }
 
 async function openAndPairSecondController(
@@ -1150,11 +1220,7 @@ async function openAndPairSecondController(
       .poll(
         async () => {
           const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(
-              session!,
-              "GET",
-              viewerUrl,
-            ),
+            headers: selfPathHeadersForDpopSession(session!, "GET", viewerUrl),
           });
           if (!response.ok()) return `http-${response.status()}`;
           const body = (await response.json()) as {
@@ -1162,8 +1228,7 @@ async function openAndPairSecondController(
           };
           return (
             body.devices?.find(
-              (candidate) =>
-                candidate.device_id === session!.user.deviceId,
+              (candidate) => candidate.device_id === session!.user.deviceId,
             )?.status ?? "missing"
           );
         },
@@ -1265,9 +1330,8 @@ async function sidecarEchoProjection(
   return {
     serializedBytes: JSON.stringify(canonicalProjection),
     echoEventIds,
-    requestOccurrences: echoes.filter(
-      (echo) => echo.eventId === requestEventId,
-    ).length,
+    requestOccurrences: echoes.filter((echo) => echo.eventId === requestEventId)
+      .length,
     responseOccurrences: echoes.filter(
       (echo) => echo.eventId === responseEventId,
     ).length,
@@ -1330,7 +1394,10 @@ async function readSidecarFoldEvidence(
       "wasm-localstorage-secrets-test",
   ).toBeTruthy();
   const evidence = JSON.parse(raw!) as SidecarFoldEvidence & { error?: string };
-  expect(evidence.error, "fold evidence surface reported an error").toBeUndefined();
+  expect(
+    evidence.error,
+    "fold evidence surface reported an error",
+  ).toBeUndefined();
   expect(evidence.schema).toBe(SIDECAR_FOLD_EVIDENCE_SCHEMA);
   return evidence;
 }
@@ -1578,7 +1645,11 @@ async function dropAccountSubscribeStream(page: Page): Promise<{
   };
 }
 
-type MlsTransactionEvent = { kind: string; eventId: string };
+type MlsTransactionEvent = {
+  kind: string;
+  eventId: string;
+  nextEpoch?: number;
+};
 /// The signed Event carried by an `EventInitialSubmission`; the shared decoder
 /// owns the wrapper shape.
 type SubmittedEvent = IngressEvent;
@@ -1595,7 +1666,18 @@ function mlsTransactionEvents(postData: string | null): MlsTransactionEvent[] {
   return eventSubmissions(postData)
     .filter((event) => MLS_TRANSACTION_KINDS.includes(event.kind ?? ""))
     .filter((event) => (event.event_id ?? "") !== "")
-    .map((event) => ({ kind: event.kind!, eventId: event.event_id! }));
+    .map((event) => {
+      const governanceBinding = event.payload?.governance_binding;
+      const nextEpoch =
+        typeof governanceBinding === "object" && governanceBinding !== null
+          ? (governanceBinding as Record<string, unknown>).next_epoch
+          : undefined;
+      return {
+        kind: event.kind!,
+        eventId: event.event_id!,
+        nextEpoch: typeof nextEpoch === "number" ? nextEpoch : undefined,
+      };
+    });
 }
 
 async function receiptCount(path: string): Promise<number> {
@@ -1612,9 +1694,16 @@ async function receiptCount(path: string): Promise<number> {
 /// materialization can be compared against the one that was cut.
 function trackMlsSubmissions(page: Page): {
   all: () => MlsTransactionEvent[][];
-  distinctEventIds: (kind: string) => string[];
+  distinctEventIds: (kind: string, nextEpoch?: number) => string[];
+  diagnostics: () => unknown;
 } {
   const submitted: MlsTransactionEvent[][] = [];
+  const outcomes: Array<{
+    eventIds: string[];
+    status: number | "failed" | "pending";
+    failure?: string;
+  }> = [];
+  const tracked = new Map<Request, number>();
   page.on("request", (outgoing) => {
     if (
       outgoing.method() !== "POST" ||
@@ -1625,15 +1714,38 @@ function trackMlsSubmissions(page: Page): {
     const events = mlsTransactionEvents(outgoing.postData());
     if (events.length > 0) {
       submitted.push(events);
+      outcomes.push({
+        eventIds: events.map((event) => event.eventId),
+        status: "pending",
+      });
+      tracked.set(outgoing, outcomes.length - 1);
+    }
+  });
+  page.on("response", (response) => {
+    const index = tracked.get(response.request());
+    if (index !== undefined) {
+      outcomes[index].status = response.status();
+    }
+  });
+  page.on("requestfailed", (request) => {
+    const index = tracked.get(request);
+    if (index !== undefined) {
+      outcomes[index].status = "failed";
+      outcomes[index].failure = request.failure()?.errorText;
     }
   });
   return {
     all: () => submitted,
-    distinctEventIds: (kind) => [
+    diagnostics: () => ({ submissions: submitted, outcomes }),
+    distinctEventIds: (kind, nextEpoch) => [
       ...new Set(
         submitted
           .flat()
-          .filter((event) => event.kind === kind)
+          .filter(
+            (event) =>
+              event.kind === kind &&
+              (nextEpoch === undefined || event.nextEpoch === nextEpoch),
+          )
           .map((event) => event.eventId),
       ),
     ],

@@ -78,6 +78,10 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], channel: "chrome" },
     },
     {
+      name: "msedge",
+      use: { ...devices["Desktop Edge"], channel: "msedge" },
+    },
+    {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },

@@ -34,7 +34,12 @@ import {
   type DpopDeviceKey,
 } from "./session-grant-dpop";
 import { enrollOnboardedDeviceSigningKey } from "./device-holder-proof";
-import { authHeaders, registerEventSigner, typedId } from "./soland-api";
+import {
+  authHeaders,
+  canonicalJson,
+  registerEventSigner,
+  typedId,
+} from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -1190,12 +1195,18 @@ export async function ensureRegistered(
     device_id: user.deviceId,
   };
   const registrationBearer = embeddedWebvhRegistrationBearer();
-  const headers = registrationBearer
-    ? { authorization: `Bearer ${registrationBearer}` }
-    : undefined;
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (registrationBearer) {
+    headers.authorization = `Bearer ${registrationBearer}`;
+  }
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-    const response = await request.post(url, { data, headers });
+    const response = await request.post(url, {
+      data: canonicalJson(data),
+      headers,
+    });
     if ([200, 409].includes(response.status())) {
       return;
     }
@@ -1226,7 +1237,10 @@ export async function issueDevSession(
   };
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-    const response = await request.post(url, { data });
+    const response = await request.post(url, {
+      data: canonicalJson(data),
+      headers: { "content-type": "application/json" },
+    });
     if (response.status() === 200) {
       const body = await response.json();
       expect(body.session_credential).toBeTruthy();
