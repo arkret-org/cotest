@@ -401,13 +401,11 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-20 M7 — MLS covered_frontier or-set vectors (idempotent re-add,
-    /// rotation?causal remove, governance Move not blocked, MLS commit writes
-    /// 3 cells in 1 Move, missing/stale covered_frontier precondition?
-    /// fail_precondition).
-    mls_move_covered_frontier_fixture_suite_matches_reference_semantics,
-    "mls_move_covered_frontier_fixture",
-    cotest::conformance::run_mls_move_covered_frontier_fixture_suite,
+    /// MLS Security Frontier KAT plus orthogonality, active-leaf and
+    /// Realm/Circle isolation checks through the public SDK projector.
+    mls_security_frontier_fixture_suite_matches_reference_semantics,
+    "mls_security_frontier_fixture",
+    cotest::conformance::run_mls_security_frontier_fixture_suite,
 );
 
 conformance_test!(

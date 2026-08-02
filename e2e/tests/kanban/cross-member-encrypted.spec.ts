@@ -21,7 +21,7 @@
 // DECRYPTING its private content. Every historically-recurring bug in this area
 // lives here: "invitee sees 0 cards", "the other member's board flashes then
 // disappears", "card stuck Restoring", "body locked / can't decrypt",
-// pre-join history, MLS policy_root drift. This test is the missing main chain.
+// pre-join history, MLS Security Frontier drift. This test is the missing main chain.
 //
 // FALSE-GREEN PROOFS (this test is written to be un-cheatable)
 //   1. Card TITLE is plaintext container metadata, so bob seeing the title only

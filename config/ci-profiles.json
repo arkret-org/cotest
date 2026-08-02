@@ -134,7 +134,7 @@
         },
         {
           "target": "conformance_fixtures",
-          "filter": "mls_move_covered_frontier_fixture_suite_matches_reference_semantics"
+          "filter": "mls_security_frontier_fixture_suite_matches_reference_semantics"
         },
         {
           "target": "conformance_fixtures",

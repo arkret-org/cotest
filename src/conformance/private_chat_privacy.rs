@@ -214,31 +214,72 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
     assert_schema_contract(
         "direct_conversation_resolve_outcome",
         response_def,
-        &["state"],
+        &["state", "pair_key"],
         &[
             "state",
+            "pair_key",
             "realm_id",
             "main_strand_id",
             "binding_event_ref",
-            "created",
-            "authoring_kind",
+            "operation",
+            "next_action",
             "claim_authorization_draft",
             "materialization_draft",
         ],
-        &["status", "binding_ref", "default_strand_id"],
+        &[
+            "status",
+            "binding_ref",
+            "default_strand_id",
+            "created",
+            "authoring_kind",
+        ],
     )?;
     let resolver_states = response_def
         .pointer("/properties/state/enum")
         .ok_or_else(|| anyhow!("direct conversation resolver state enum is missing"))?;
     let expected_states = BTreeSet::from([
-        "authoring_required".to_owned(),
+        "creation_required".to_owned(),
         "found".to_owned(),
-        "non_canonical".to_owned(),
-        "not_found".to_owned(),
-        "retired".to_owned(),
+        "suspended".to_owned(),
+        "temporarily_unavailable".to_owned(),
     ]);
     if string_set(resolver_states)? != expected_states {
         bail!("direct conversation resolver state enum drifted");
+    }
+
+    let operation_def = contact_schema
+        .pointer("/$defs/direct_conversation_operation")
+        .ok_or_else(|| anyhow!("missing direct_conversation_operation schema"))?;
+    assert_schema_contract(
+        "direct_conversation_operation",
+        operation_def,
+        &[
+            "operation_id",
+            "pair_key",
+            "coordinator_service_id",
+            "operation_state",
+        ],
+        &[
+            "operation_id",
+            "pair_key",
+            "coordinator_service_id",
+            "operation_state",
+            "realm_id",
+            "main_strand_id",
+            "expires_at",
+        ],
+        &["candidate_id", "materialization_id", "retirement_state"],
+    )?;
+    let operation_states = operation_def
+        .pointer("/properties/operation_state/enum")
+        .ok_or_else(|| anyhow!("direct conversation operation state enum is missing"))?;
+    let expected_operation_states = BTreeSet::from([
+        "reserved".to_owned(),
+        "materializing".to_owned(),
+        "found".to_owned(),
+    ]);
+    if string_set(operation_states)? != expected_operation_states {
+        bail!("direct conversation operation state enum drifted");
     }
 
     let event_payload_schema = load_artifact_json("schemas/event-payload.schema.json")?;
@@ -256,7 +297,6 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "authorization_basis",
             "member_event_refs",
             "main_strand_create_ref",
-            "mls_group_id",
             "mls_genesis_event_ref",
             "mls_commit_event_ref",
             "mls_welcome_event_ref",
@@ -270,15 +310,19 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "authorization_basis",
             "member_event_refs",
             "main_strand_create_ref",
-            "mls_group_id",
             "mls_genesis_event_ref",
             "mls_commit_event_ref",
             "mls_welcome_event_ref",
             "created_at",
+        ],
+        &[
+            "default_strand_id",
+            "status",
+            "binding_ref",
+            "mls_group_id",
             "binding_state",
             "supersedes_binding_ref",
         ],
-        &["default_strand_id", "status", "binding_ref"],
     )?;
 
     record_vector_event(
@@ -498,11 +542,12 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
         value,
         &[
             "state",
+            "pair_key",
             "realm_id",
             "main_strand_id",
             "binding_event_ref",
-            "created",
-            "authoring_kind",
+            "operation",
+            "next_action",
             "claim_authorization_draft",
             "materialization_draft",
         ],
@@ -510,24 +555,23 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     let state = required_str(value, "state")?;
     if !matches!(
         state,
-        "found" | "authoring_required" | "not_found" | "retired" | "non_canonical"
+        "found" | "creation_required" | "suspended" | "temporarily_unavailable"
     ) {
         bail!("unknown direct conversation resolver state `{state}`");
     }
-    if matches!(state, "found" | "authoring_required") {
+    let pair_key = required_str(value, "pair_key")?;
+    if !pair_key.starts_with("sha256:") || pair_key.len() != 71 {
+        bail!("direct conversation resolver pair_key must be a sha256 digest");
+    }
+    if matches!(state, "found" | "suspended") {
         validate_realm_id(required_str(value, "realm_id")?)?;
         validate_strand_id(required_str(value, "main_strand_id")?)?;
         validate_event_id(required_str(value, "binding_event_ref")?)?;
     }
-    if value.get("created").and_then(Value::as_bool) == Some(true) {
-        bail!("resolver must not report created=true before a signed binding is accepted");
-    }
     match state {
-        "authoring_required" => {
-            if value.get("created").and_then(Value::as_bool) != Some(false) {
-                bail!("authoring_required resolver response must carry created=false");
-            }
-            match required_str(value, "authoring_kind")? {
+        "creation_required" => {
+            validate_direct_conversation_operation(required_field(value, "operation")?)?;
+            match required_str(value, "next_action")? {
                 "direct_conversation_materialization" => {
                     validate_materialization_draft(required_field(
                         value,
@@ -543,7 +587,14 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
                         bail!("remote claim authoring must not carry materialization_draft");
                     }
                 }
-                other => bail!("unknown direct conversation authoring_kind `{other}`"),
+                "retry" => {
+                    if value.get("materialization_draft").is_some()
+                        || value.get("claim_authorization_draft").is_some()
+                    {
+                        bail!("retry must not carry an authoring draft");
+                    }
+                }
+                other => bail!("unknown direct conversation next_action `{other}`"),
             }
         }
         "found"
@@ -552,7 +603,7 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
         {
             bail!("found resolver response must not carry authoring drafts");
         }
-        "not_found" | "retired" | "non_canonical"
+        "suspended" | "temporarily_unavailable"
             if value.get("materialization_draft").is_some()
                 || value.get("claim_authorization_draft").is_some() =>
         {
@@ -563,16 +614,58 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     Ok(())
 }
 
+fn validate_direct_conversation_operation(value: &Value) -> Result<()> {
+    assert_allowed_object_fields(
+        "direct conversation operation",
+        value,
+        &[
+            "operation_id",
+            "pair_key",
+            "coordinator_service_id",
+            "operation_state",
+            "realm_id",
+            "main_strand_id",
+            "expires_at",
+        ],
+    )?;
+    if required_str(value, "operation_id")?.is_empty() {
+        bail!("direct conversation operation_id must not be empty");
+    }
+    let pair_key = required_str(value, "pair_key")?;
+    if !pair_key.starts_with("sha256:") || pair_key.len() != 71 {
+        bail!("direct conversation operation pair_key must be a sha256 digest");
+    }
+    Did::new(required_str(value, "coordinator_service_id")?.to_owned())
+        .map_err(|err| anyhow!("invalid coordinator service DID: {err}"))?;
+    match required_str(value, "operation_state")? {
+        "reserved" => {
+            required_str(value, "expires_at")?;
+            if value.get("realm_id").is_some() || value.get("main_strand_id").is_some() {
+                bail!("reserved direct conversation operation must not allocate coordinates");
+            }
+        }
+        "materializing" | "found" => {
+            validate_realm_id(required_str(value, "realm_id")?)?;
+            validate_strand_id(required_str(value, "main_strand_id")?)?;
+            if value.get("expires_at").is_some() {
+                bail!("durable direct conversation operation must not expire");
+            }
+        }
+        other => bail!("unknown direct conversation operation state `{other}`"),
+    }
+    Ok(())
+}
+
 fn validate_binding_event_draft(
     response: &Value,
     binding_event_ref: &str,
     binding_payload: &Value,
 ) -> Result<()> {
-    if required_str(response, "state")? != "authoring_required" {
-        bail!("binding Event draft fixture must use authoring_required state");
+    if required_str(response, "state")? != "creation_required" {
+        bail!("binding Event draft fixture must use creation_required state");
     }
-    if required_str(response, "authoring_kind")? != "direct_conversation_materialization" {
-        bail!("binding Event draft fixture must use materialization authoring kind");
+    if required_str(response, "next_action")? != "direct_conversation_materialization" {
+        bail!("binding Event draft fixture must request materialization");
     }
     let materialization = required_field(response, "materialization_draft")?;
     let event = required_field(materialization, "binding_event")?;
@@ -596,7 +689,7 @@ fn validate_binding_event_draft(
     }
     let proofs = value_array(required_field(event, "proofs")?)?;
     if !proofs.is_empty() {
-        bail!("authoring_required binding Event draft must be unsigned");
+        bail!("creation_required binding Event draft must be unsigned");
     }
     let participants = value_array(required_field(binding_payload, "participants_unordered")?)?;
     if !participants
@@ -625,13 +718,10 @@ fn validate_binding_payload(
             "authorization_basis",
             "member_event_refs",
             "main_strand_create_ref",
-            "mls_group_id",
             "mls_genesis_event_ref",
             "mls_commit_event_ref",
             "mls_welcome_event_ref",
             "created_at",
-            "binding_state",
-            "supersedes_binding_ref",
         ],
     )?;
     let pair_key = required_str(payload, "pair_key")?;
@@ -641,9 +731,6 @@ fn validate_binding_payload(
     validate_realm_id(required_str(payload, "realm_id")?)?;
     validate_strand_id(required_str(payload, "main_strand_id")?)?;
     validate_event_id(required_str(payload, "main_strand_create_ref")?)?;
-    if required_str(payload, "mls_group_id")?.is_empty() {
-        bail!("direct conversation binding mls_group_id must not be empty");
-    }
     for field in [
         "mls_genesis_event_ref",
         "mls_commit_event_ref",
@@ -701,11 +788,6 @@ fn validate_binding_payload(
         expected_authorization_refs,
     )?;
     validate_event_ref_array(payload, "member_event_refs", 2)?;
-    if let Some(state) = payload.get("binding_state").and_then(Value::as_str)
-        && !matches!(state, "active" | "retired")
-    {
-        bail!("unknown direct conversation binding_state `{state}`");
-    }
     Ok(())
 }
 
@@ -714,7 +796,10 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
         "direct conversation materialization draft",
         value,
         &[
-            "materialization_id",
+            "operation_id",
+            "operation_state",
+            "pair_key",
+            "coordinator_service_id",
             "claim_nonce",
             "mls_group_id",
             "mls_genesis_event_ref",
@@ -723,18 +808,18 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
             "claimed_keypackage",
             "claim_receipt",
             "realm_event",
-            "creator_member_event",
             "peer_member_event",
             "main_strand_event",
             "binding_event",
-            "expires_at",
         ],
     )?;
     for field in [
-        "materialization_id",
+        "operation_id",
+        "operation_state",
+        "pair_key",
+        "coordinator_service_id",
         "claim_nonce",
         "mls_group_id",
-        "expires_at",
     ] {
         if required_str(value, field)?.is_empty() {
             bail!("materialization draft `{field}` must not be empty");
@@ -763,18 +848,11 @@ fn validate_materialization_draft(value: &Value) -> Result<()> {
             bail!("materialization draft `{field}` must be unsigned");
         }
     }
-    if let Some(event) = value.get("creator_member_event") {
-        if required_str(event, "kind")? != "ak.member.state" {
-            bail!("materialization draft `creator_member_event` kind drifted");
-        }
-        validate_event_id(required_str(event, "event_id")?)?;
-        if !value_array(required_field(event, "proofs")?)?.is_empty() {
-            bail!("materialization draft `creator_member_event` must be unsigned");
-        }
+    if required_str(value, "operation_state")? != "materializing" {
+        bail!("materialization draft operation_state must be materializing");
     }
     let binding = required_field(required_field(value, "binding_event")?, "payload")?;
     for (draft_field, binding_field) in [
-        ("mls_group_id", "mls_group_id"),
         ("mls_genesis_event_ref", "mls_genesis_event_ref"),
         ("mls_commit_event_ref", "mls_commit_event_ref"),
         ("mls_welcome_event_ref", "mls_welcome_event_ref"),
@@ -879,14 +957,7 @@ fn validate_pending_contact_negative(case: &PendingContactNegative) -> Result<()
             bail!("pending contact negative must not create or return `{forbidden}`");
         }
     }
-    if case
-        .observed_response
-        .get("created")
-        .and_then(Value::as_bool)
-        == Some(true)
-    {
-        bail!("pending contact negative must not mark created=true");
-    }
+    validate_resolve_response_shape(&case.observed_response)?;
     Ok(())
 }
 

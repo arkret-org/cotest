@@ -57,7 +57,7 @@
    - 计算 `ak.mls.commit`:Add 提案(bob.leaf)
    - 派生新 epoch secrets
    - 为 bob 生成 `ak.mls.welcome`(用 bob KeyPackage 的 InitKey 加密)
-   - `governance_binding` 嵌入 `realm_policy_digest` + `membership_frontier` + `reducer_profile_digest`
+   - `governance_binding` 仅嵌入唯一 `security_frontier_digest`，并固定 scope/group/epoch/profile
 7. alice 提交 commit + welcome 到 soland;welcome 通过 durable Event 路由给 bob(spec §2.2.1)
 8. bob inkson 拉 sync → 解 welcome → 派生 epoch 1 secrets
 9. 断言:bob `/timeline/${realmId}` 可访问,timeline 渲染说"Welcome to encrypted Realm"

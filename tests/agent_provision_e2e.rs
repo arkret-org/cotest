@@ -54,9 +54,8 @@ use arkret_models_identity::artifacts_device_identity::{
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
-    AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
-    EventKind, NonEmptyString, OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId,
-    ServiceOperationId,
+    AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, EventKind, NonEmptyString,
+    OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -2753,7 +2752,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             .events_query_all_pages(realm_id)
             .await?
             .events;
-        let realm_create_event_id = match existing_events
+        let _realm_create_event_id = match existing_events
             .iter()
             .find(|event| event.kind == EventKind::REALM_CREATE)
         {
@@ -2873,11 +2872,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         "mls_group_id": group_id,
                         "previous_epoch": 0,
                         "next_epoch": 0,
-                        "membership_frontier": [realm_create_event_id],
-                        "covered_seal_refs": [genesis_seal.id],
-                        "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                        "capability_root": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
-                        "discussion_metadata_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+                        "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
                         "binding_profile": "ak.profile.mls_governance_binding.full.v1",
                         "reducer_profile": "ak.reducer.v1"
                     },

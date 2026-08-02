@@ -955,6 +955,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
                 "sig": "c2ln"
             }
         },
+        "commit_ref": "ak:event:0196419b-0000-7000-8000-000000000010",
         "governance_binding": {
             "binding_version": 1,
             "encoding_profile": "cbor-deterministic-rfc8949-v1",
@@ -966,15 +967,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "mls_group_id": "mls-group-a",
             "previous_epoch": 0,
             "next_epoch": 1,
-            "membership_frontier": [
-                "ak:event:0196419b-0000-7000-8000-000000000001"
-            ],
-            "covered_seal_refs": [
-                "ak:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-            ],
-            "policy_root": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "capability_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "discussion_metadata_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "security_frontier_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             "binding_profile": "ak.profile.mls_governance_binding.full.v1",
             "reducer_profile": "ak.reducer.v1"
         },

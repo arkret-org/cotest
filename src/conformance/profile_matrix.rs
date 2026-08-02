@@ -133,11 +133,19 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
         .requirements
         .get("ak.profile.mls_governance_binding.full.v1")
         .ok_or_else(|| anyhow!("missing mls governance binding requirement block"))?;
+    for required in [
+        "ak:cell:ak.component.mls.epoch.v1:<mls_group_id>",
+        "ak:cell:ak.component.mls.key_schedule.v1:<mls_group_id>",
+    ] {
+        if !mls_binding.required_cells.contains(required) {
+            bail!("mls governance binding requirement block missing {required}");
+        }
+    }
     if !mls_binding
-        .required_cells
-        .contains("ak:cell:ak.component.covered_seals.v1:<mls_group_id>")
+        .required_features
+        .contains("security_frontier_digest")
     {
-        bail!("mls governance binding requirement block missing covered_seals cell");
+        bail!("mls governance binding requirement block missing security_frontier_digest");
     }
 
     let circle = matrix
@@ -360,7 +368,20 @@ fn collect_profile_requirements(
             collect_known_refs(requirement, "required_schemas", schema_ids, "schema")?;
         let required_capability_actions =
             collect_plain_refs(requirement, "required_capability_actions")?;
-        let required_features = collect_plain_refs(requirement, "required_features")?;
+        let mut required_features = collect_plain_refs(requirement, "required_features")?;
+        let feature_discovery = requirement
+            .pointer("/feature_discovery/required")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{profile} missing feature_discovery.required[]"))?;
+        for feature in feature_discovery {
+            let feature = feature.as_str().ok_or_else(|| {
+                anyhow!("{profile} feature_discovery.required entries must be strings")
+            })?;
+            if feature.trim().is_empty() {
+                bail!("{profile} feature_discovery.required contains an empty value");
+            }
+            required_features.insert(feature.to_owned());
+        }
         let required_cell_namespaces =
             collect_cell_refs(requirement, "required_cell_namespaces", false)?;
         let required_cells = collect_cell_refs(requirement, "required_cells", true)?;
@@ -373,14 +394,6 @@ fn collect_profile_requirements(
                 bail!("{profile} references unknown optional profile {extension}");
             }
         }
-        if requirement
-            .pointer("/feature_discovery/required")
-            .and_then(Value::as_array)
-            .is_none()
-        {
-            bail!("{profile} missing feature_discovery.required[]");
-        }
-
         matrix.insert(
             profile.to_owned(),
             ProfileRequirement {

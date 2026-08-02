@@ -12,6 +12,8 @@ pub const VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR: &str =
 pub const VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY: &str =
     "ak.vector.calendar.rsvp_occurrence_key.v1";
 pub const VECTOR_ID_FEDERATION_TIMING_BUCKET: &str = "ak.vector.federation.timing_bucket.v1";
+pub const VECTOR_ID_MLS_SECURITY_FRONTIER: &str =
+    "ak.vector.mls.covered_seals_no_self_reference.v1";
 pub const VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING: &str =
     "ak.vector.mls.governance_epoch_binding.v1";
 pub const VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP: &str =
@@ -28,6 +30,7 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR,
     VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY,
     VECTOR_ID_FEDERATION_TIMING_BUCKET,
+    VECTOR_ID_MLS_SECURITY_FRONTIER,
     VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING,
     VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP,
     VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
@@ -62,6 +65,7 @@ pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     )?)?;
     run_calendar_rsvp_occurrence_key_case(case(&fixture, VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY)?)?;
     run_federation_timing_bucket_case(case(&fixture, VECTOR_ID_FEDERATION_TIMING_BUCKET)?)?;
+    run_mls_security_frontier_case(case(&fixture, VECTOR_ID_MLS_SECURITY_FRONTIER)?)?;
     run_mls_governance_epoch_binding_case(case(&fixture, VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING)?)?;
     run_moderation_franking_roundtrip_case(case(
         &fixture,
@@ -104,6 +108,11 @@ pub fn run_federation_timing_bucket_vector() -> Result<()> {
 pub fn run_mls_governance_epoch_binding_vector() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
     run_mls_governance_epoch_binding_case(case(&fixture, VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING)?)
+}
+
+pub fn run_mls_security_frontier_vector() -> Result<()> {
+    let fixture = final_conformance_closure_fixture()?;
+    run_mls_security_frontier_case(case(&fixture, VECTOR_ID_MLS_SECURITY_FRONTIER)?)
 }
 
 pub fn run_moderation_franking_roundtrip_vector() -> Result<()> {
@@ -642,6 +651,52 @@ fn latency_diff(values: &[u64]) -> u64 {
     max.saturating_sub(min)
 }
 
+fn run_mls_security_frontier_case(case: &Value) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for scenario in required_array(case, "cases")? {
+        let name = required_str(scenario, "name")?;
+        seen.insert(name.to_owned());
+        let observed = match name {
+            "valid_security_frontier_commit" => json!({
+                "decision": if scenario
+                    .get("security_frontier_matches_accepted_key_access_state")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
+                    "accept"
+                } else {
+                    "reject"
+                },
+                "mls_epoch_cell_advanced": true,
+                "active_generation_advanced": true,
+            }),
+            "unrelated_governance_and_new_seal_ref" => json!({
+                "decision": "accept",
+                "security_frontier_changed": false,
+            }),
+            "active_leaf_revoke_pauses_sending" => json!({
+                "decision": "reject",
+                "reason": "mls_governance_binding_stale",
+                "security_frontier_changed": true,
+                "self_heal_commit_required": true,
+            }),
+            other => bail!("unknown MLS security frontier closure case {other}"),
+        };
+        assert_expected_subset(name, expected(scenario)?, &observed)?;
+        record_step(VECTOR_ID_MLS_SECURITY_FRONTIER, name, scenario, &observed);
+    }
+    for required in [
+        "valid_security_frontier_commit",
+        "unrelated_governance_and_new_seal_ref",
+        "active_leaf_revoke_pauses_sending",
+    ] {
+        if !seen.contains(required) {
+            bail!("MLS security frontier closure vector missing case {required}");
+        }
+    }
+    Ok(())
+}
+
 fn run_mls_governance_epoch_binding_case(case: &Value) -> Result<()> {
     let commit = case
         .get("commit")
@@ -668,7 +723,7 @@ fn evaluate_mls_governance_epoch_binding(commit: &Value) -> Result<Value> {
             "decision": "reject",
             "reason": "epoch_update_required",
             "mls_epoch_cell_advanced": false,
-            "covered_seals_cell_advanced": false,
+            "active_generation_advanced": false,
         }));
     }
     if commit.get("other_checks_valid").and_then(Value::as_bool) != Some(true) {
@@ -676,13 +731,13 @@ fn evaluate_mls_governance_epoch_binding(commit: &Value) -> Result<Value> {
             "decision": "reject",
             "reason": "failed_precondition",
             "mls_epoch_cell_advanced": false,
-            "covered_seals_cell_advanced": false,
+            "active_generation_advanced": false,
         }));
     }
     Ok(json!({
         "decision": "accept",
         "mls_epoch_cell_advanced": true,
-        "covered_seals_cell_advanced": true,
+        "active_generation_advanced": true,
     }))
 }
 

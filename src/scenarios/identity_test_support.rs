@@ -13,8 +13,8 @@ use arkret_signatures::webvh::{
     prepare_principal_inception,
 };
 use arkret_wire::{
-    AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, AuthorizationRef,
-    Base64UrlString, Event, EventInitialSubmission, EventRef, NonEmptyString,
+    AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, Base64UrlString, Event,
+    EventInitialSubmission, EventRef, NonEmptyString,
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;

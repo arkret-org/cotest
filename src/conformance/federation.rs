@@ -236,6 +236,86 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     &json!({"verdict": format!("{verdict:?}")}),
                 );
             }
+            "online_event_omits_offline_publication_evidence" => {
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("{} case lacks input", case.name))?;
+                let lease_present = input
+                    .get("authorization_lease_present")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| anyhow!("{} lacks authorization_lease_present", case.name))?;
+                let receipt_count = input
+                    .get("ingress_receipt_count")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("{} lacks ingress_receipt_count", case.name))?;
+                let receiver_revalidates = input
+                    .get("receiver_revalidates_current_admission")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        anyhow!("{} lacks receiver_revalidates_current_admission", case.name)
+                    })?;
+                let expected = case.expected.as_ref().and_then(Value::as_str);
+                if lease_present
+                    || receipt_count != 0
+                    || !receiver_revalidates
+                    || expected != Some("accepted_without_offline_publication_evidence")
+                {
+                    bail!(
+                        "federation fixture {} drifted from the online submission contract",
+                        case.name
+                    );
+                }
+                record_vector_event(
+                    "federation.online_event_omits_offline_publication_evidence",
+                    input,
+                    &json!({"outcome": "accepted_without_offline_publication_evidence"}),
+                    &json!({
+                        "authorization_lease_present": lease_present,
+                        "ingress_receipt_count": receipt_count,
+                        "receiver_revalidates_current_admission": receiver_revalidates,
+                        "outcome": "accepted_without_offline_publication_evidence",
+                    }),
+                );
+            }
+            "delayed_event_requires_lease_bound_receipt"
+            | "online_event_forbids_unbound_lease_receipt" => {
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("{} case lacks input", case.name))?;
+                let lease_present = input
+                    .get("authorization_lease_present")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| anyhow!("{} lacks authorization_lease_present", case.name))?;
+                let receipt_count = input
+                    .get("ingress_receipt_count")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("{} lacks ingress_receipt_count", case.name))?;
+                let expected_input = match case.name.as_str() {
+                    "delayed_event_requires_lease_bound_receipt" => (true, 0),
+                    "online_event_forbids_unbound_lease_receipt" => (false, 1),
+                    _ => unreachable!(),
+                };
+                if (lease_present, receipt_count) != expected_input
+                    || case.expected.as_ref().and_then(Value::as_str) != Some("schema_violation")
+                {
+                    bail!(
+                        "federation fixture {} drifted from the publication evidence schema",
+                        case.name
+                    );
+                }
+                record_vector_event(
+                    &format!("federation.{}", case.name),
+                    input,
+                    &json!({"outcome": "schema_violation"}),
+                    &json!({
+                        "authorization_lease_present": lease_present,
+                        "ingress_receipt_count": receipt_count,
+                        "outcome": "schema_violation",
+                    }),
+                );
+            }
             _ => bail!("unknown federation fixture case {}", case.name),
         }
     }

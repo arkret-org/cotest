@@ -143,10 +143,7 @@
               "mls_group_id": "ak:mls_group:abc",
               "previous_epoch": 0,
               "next_epoch": 0,
-              "membership_frontier": [
-                "ak:event:0196419b-0000-7000-8000-000000000010"
-              ],
-              "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
               "binding_profile": "ak.profile.mls_governance_binding.full.v1",
               "reducer_profile": "ak.reducer.v1"
             },
@@ -169,10 +166,7 @@
               "mls_group_id": "ak:mls_group:abc",
               "previous_epoch": 0,
               "next_epoch": 1,
-              "membership_frontier": [
-                "ak:event:0196419b-0000-7000-8000-000000000010"
-              ],
-              "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
               "binding_profile": "ak.profile.mls_governance_binding.full.v1",
               "reducer_profile": "ak.reducer.v1"
             }
@@ -180,9 +174,7 @@
         },
         "basis": {
           "atomic_unit": true,
-          "membership_frontier": [
-            "ak:event:0196419b-0000-7000-8000-000000000010"
-          ]
+          "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
         },
         "pre_state": {
           "membership": null,
@@ -193,9 +185,7 @@
         "outcome": "projection",
         "value": {
           "membership": "join",
-          "membership_frontier": [
-            "ak:event:0196419b-0000-7000-8000-000000000010"
-          ],
+          "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
           "mls_epoch": 1
         }
       }

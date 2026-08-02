@@ -2175,6 +2175,7 @@ type MlsRealmGroupFixture = {
   realmId: string;
   effectiveScope: Record<string, unknown>;
   policyRoot: string;
+  securityFrontierDigest: string;
   genesisEventId: string;
 };
 
@@ -2182,7 +2183,6 @@ function mlsGovernanceBinding(
   group: MlsRealmGroupFixture,
   previousEpoch: number,
   nextEpoch: number,
-  membershipFrontier: string[],
 ): Record<string, unknown> {
   return {
     binding_version: 1,
@@ -2192,8 +2192,7 @@ function mlsGovernanceBinding(
     mls_group_id: group.groupId,
     previous_epoch: previousEpoch,
     next_epoch: nextEpoch,
-    membership_frontier: membershipFrontier,
-    policy_root: group.policyRoot,
+    security_frontier_digest: group.securityFrontierDigest,
     binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
     reducer_profile: MLS_REDUCER_PROFILE_V1,
   };

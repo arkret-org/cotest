@@ -222,16 +222,18 @@ fn kernel_membership_mls(input: &KernelGateInput) -> KernelGateOutcome {
     if input.basis.get("atomic_unit").and_then(Value::as_bool) != Some(true) {
         return error("failed_precondition", "membership_mls_commit_not_atomic");
     }
-    let basis_frontier = string_set(input.basis.get("membership_frontier"));
-    let binding_frontier = string_set(
-        input
-            .payload
-            .pointer("/commit/governance_binding/membership_frontier"),
-    );
-    if basis_frontier.is_empty() || basis_frontier != binding_frontier {
+    let basis_frontier = input
+        .basis
+        .get("security_frontier_digest")
+        .and_then(Value::as_str);
+    let binding_frontier = input
+        .payload
+        .pointer("/commit/governance_binding/security_frontier_digest")
+        .and_then(Value::as_str);
+    if basis_frontier.is_none() || basis_frontier != binding_frontier {
         return error(
             "state_mismatch",
-            "mls_governance_binding_membership_frontier_mismatch",
+            "mls_governance_binding_security_frontier_mismatch",
         );
     }
 
@@ -254,7 +256,7 @@ fn kernel_membership_mls(input: &KernelGateInput) -> KernelGateOutcome {
         ProjectionEffect::Mls(MlsEffect::CommitEpochAdvanced { new_epoch, .. }) => {
             projection(json!({
                 "membership": "join",
-                "membership_frontier": basis_frontier,
+                "security_frontier_digest": basis_frontier,
                 "mls_epoch": new_epoch
             }))
         }

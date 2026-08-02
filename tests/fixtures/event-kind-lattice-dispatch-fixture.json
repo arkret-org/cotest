@@ -25,7 +25,6 @@
       "ak.component.object.redaction.v1",
       "ak.component.call.moderation.v1",
       "ak.component.call.roster.v1",
-      "ak.component.covered_seals.v1",
       "ak.component.agent.key.v1",
       "ak.component.capability.derived.v1",
       "ak.component.capability.grant.v1",
@@ -41,6 +40,7 @@
     ],
     "cas_register_families": [
       "ak.component.actor.discovery.v1",
+      "ak.component.agent.provision.v1",
       "ak.component.applet.discovery.v1",
       "ak.component.applet.registration.v1",
       "ak.component.circle.metadata.v1",

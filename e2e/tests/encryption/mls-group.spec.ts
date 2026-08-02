@@ -1794,13 +1794,13 @@ test.describe("MLS group encryption", () => {
     expect(after.accepted ?? []).toContain(afterEventId);
   });
 
-  test("E11.2 governance_binding.realm_policy_digest mismatch causes federation push to reject with governance_binding_mismatch", async ({
+  test("E11.2 governance_binding.security_frontier_digest mismatch causes federation push to reject with governance_binding_mismatch", async ({
     request,
   }) => {
     // spec: encryption-and-audit.md §2.5.1
     //
-    // A commit's governance_binding.policy_root MUST stay bound to the policy
-    // root the MLS group's epoch chain was genesis-locked to. soland's reducer
+    // A commit's governance_binding.security_frontier_digest MUST match the
+    // accepted key-access state and active leaf set. soland's reducer
     // (reducer/mls.rs apply_commit_epoch) rejects a forged / stale binding with
     // `governance_binding_mismatch`. This is the same reducer gate the
     // federation-push ingest pipeline (submit_federation_events ->
@@ -1828,11 +1828,11 @@ test.describe("MLS group encryption", () => {
     );
 
     const forgedCommitBinding = structuredClone(originalCommitBinding);
-    forgedCommitBinding.policy_root = sha256Digest(
-      Buffer.from(`forged-policy-root-${stamp}`, "utf8"),
+    forgedCommitBinding.security_frontier_digest = sha256Digest(
+      Buffer.from(`forged-security-frontier-${stamp}`, "utf8"),
     );
 
-    // A syntactically valid binding with a policy_root that does not match the
+    // A syntactically valid binding with a frontier digest that does not match the
     // accepted Realm control state is rejected with governance_binding_mismatch.
     const forged = await submitMlsCommit(request, aliceToken, alice, {
       realmId,
@@ -1845,7 +1845,7 @@ test.describe("MLS group encryption", () => {
     expect([400, 409, 412, 422]).toContain(forged.__status as number);
     expect(wireErrCode(forged.__body)).toBe("governance_binding_mismatch");
 
-    // The matching-root commit at the same base still advances the epoch — the
+    // The matching-frontier commit at the same base still advances the epoch — the
     // gate rejects only the forged binding, not the legitimate one.
     const cleanEventId = typedId("event");
     const clean = await submitMlsCommit(request, aliceToken, alice, {

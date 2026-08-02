@@ -35,13 +35,11 @@ test.describe("mimi federation", () => {
     const stamp = Date.now();
     const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "e2ee");
     const governanceBinding = mimiGovernanceBinding(realmId, roomId);
-    const coveredSealsCell = mimiCoveredSealsCell(governanceBinding);
 
     const unmarked = await postSignedMimiMessage(request, roomId, {
         source_format: "application/mimi-content",
         e2ee: true,
         governance_binding: governanceBinding,
-        covered_seals_cell: coveredSealsCell,
         content: {
           kind: "ak.content.text",
           body: `silent plaintext leak ${stamp}`,
@@ -60,7 +58,6 @@ test.describe("mimi federation", () => {
         e2ee: true,
         e2ee_downgrade: "mimi_bridge",
         governance_binding: governanceBinding,
-        covered_seals_cell: coveredSealsCell,
         content: {
           kind: "ak.content.text",
           body: downgradeText,
@@ -81,7 +78,6 @@ test.describe("mimi federation", () => {
         source_format: "application/mimi-content",
         e2ee: true,
         governance_binding: governanceBinding,
-        covered_seals_cell: coveredSealsCell,
         transcript_binding: {
           profile: "mls-via-ietf-mimi",
           transcript_hash: transcriptHash,
@@ -136,12 +132,10 @@ test.describe("mimi federation", () => {
     const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "content");
     const rawLocation = `geo:31.2304,121.4737;u=${stamp % 100}`;
     const governanceBinding = mimiGovernanceBinding(realmId, roomId);
-    const coveredSealsCell = mimiCoveredSealsCell(governanceBinding);
 
     const quarantine = await postSignedMimiMessage(request, roomId, {
         source_format: "application/mimi-content",
         governance_binding: governanceBinding,
-        covered_seals_cell: coveredSealsCell,
         content_kind: "m.location.share.live",
         content: {
           kind: "m.location.share.live",
@@ -241,7 +235,6 @@ function mimiMessagesUrl(roomId: string): string {
 }
 
 function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, unknown> {
-  const policyRoot = `sha256:${"2".repeat(64)}`;
   return {
     binding_version: 1,
     encoding_profile: "cbor-deterministic-rfc8949-v1",
@@ -253,22 +246,9 @@ function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, 
     mls_group_id: `mls:${roomId}`,
     previous_epoch: 0,
     next_epoch: 1,
-    membership_frontier: [`ak:event:${"1".repeat(8)}-${"1".repeat(4)}-7${"1".repeat(3)}-8${"1".repeat(3)}-${"1".repeat(12)}`],
-    policy_root: policyRoot,
+    security_frontier_digest: `sha256:${"2".repeat(64)}`,
     binding_profile: "ak.profile.mls_governance_binding.full.v1",
     reducer_profile: "ak.reducer.v1",
-  };
-}
-
-function mimiCoveredSealsCell(
-  governanceBinding: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    profile: "ak.covered_seals_cell.v1",
-    governance_binding_digest: `sha256:${createHash("sha256")
-      .update(canonicalJson(governanceBinding))
-      .digest("hex")}`,
-    frontier: ["mimi-frontier"],
   };
 }
 

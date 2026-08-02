@@ -21,6 +21,7 @@ mod key_backup;
 mod lattice;
 mod mimi;
 mod multisig;
+mod security_frontier;
 
 use std::path::PathBuf;
 
@@ -57,8 +58,7 @@ pub use key_backup::{
 pub use lattice::{
     run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
     run_event_kind_lattice_dispatch_fixture_suite, run_event_kind_payload_coverage_fixture_suite,
-    run_membership_fsm_fixture_suite, run_mls_move_covered_frontier_fixture_suite,
-    run_state_resolution_quarantine_fixture_suite,
+    run_membership_fsm_fixture_suite, run_state_resolution_quarantine_fixture_suite,
 };
 pub use mimi::{
     run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
@@ -68,6 +68,7 @@ pub use multisig::{
     run_multi_admin_distinct_approver_gate_check, run_production_signing_fixture_suite,
     run_threshold_multisig_fixture_suite,
 };
+pub use security_frontier::run_mls_security_frontier_fixture_suite;
 use serde_json::{Value, json};
 
 use crate::transcripts::{is_active, record_vector_event};

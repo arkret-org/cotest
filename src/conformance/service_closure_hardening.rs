@@ -541,7 +541,7 @@ fn run_device_revocation_seal_binding_case(case: &Value) -> Result<()> {
     }
     for required in [
         "post_seal_operations",
-        "mls_remove_missing_governance_frontier",
+        "mls_remove_missing_security_frontier",
         "missing_frontier_for_revoke",
     ] {
         if !seen.contains(required) {
@@ -556,12 +556,12 @@ fn evaluate_device_revocation_step(step: &Value) -> Result<Value> {
         return Ok(json!({"decision": "reject", "reason": "actor_signature_revoked"}));
     }
     if step
-        .get("mls_remove_covers_revocation")
+        .get("security_frontier_includes_revocation")
         .and_then(Value::as_bool)
         == Some(false)
     {
         return Ok(json!({
-            "covered_seals_cell_claims_revocation": false,
+            "active_generation_advanced": false,
             "e2ee_data_gate": "blocked",
             "reason": "epoch_update_required",
         }));

@@ -71,6 +71,7 @@ type MlsGroupContext = {
   realmId: string;
   effectiveScope: { kind: "realm"; realm_id: string };
   policyRoot: string;
+  securityFrontierDigest: string;
   frontierRef: string;
 };
 
@@ -87,8 +88,7 @@ function mlsGovernanceBinding(
     mls_group_id: group.groupId,
     previous_epoch: previousEpoch,
     next_epoch: nextEpoch,
-    membership_frontier: [group.frontierRef],
-    policy_root: group.policyRoot,
+    security_frontier_digest: group.securityFrontierDigest,
     binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
     reducer_profile: MLS_REDUCER_PROFILE_V1,
   };
@@ -305,7 +305,7 @@ async function registeredSession(
 }
 
 // Submit ak.mls.genesis (epoch 0) for a fresh group bound to realmId, with the
-// content_scheme=mls_exporter_aead_v1 policy_root locked in.
+// content_scheme=mls_exporter_aead_v1 projected into its Security Frontier.
 async function submitExporterAeadGenesis(
   request: APIRequestContext,
   token: string,
@@ -318,9 +318,10 @@ async function submitExporterAeadGenesis(
     groupId,
     realmId,
     effectiveScope: { kind: "realm", realm_id: realmId },
-    // policy_root MUST carry content_scheme (§2.10), so the RRK suite pins a
-    // distinct root from the plain mls_rfc9420 groups.
+    // RealmKey policy_digest remains an orthogonal key-release binding, while
+    // the MLS transcript carries only security_frontier_digest.
     policyRoot: digestNibble("a"),
+    securityFrontierDigest: digestNibble("b"),
     frontierRef: genesisEventId,
   };
   const body = await submitSignedEventApi(
