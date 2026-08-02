@@ -1,0 +1,189 @@
+{
+  "schema": "cotest.protocol_journey_coverage.v1",
+  "id_namespace": "protocol_journey_id uses PJ01-PJ18; agent-journeys checkpoint ids are scenario-local and unrelated",
+  "journeys": [
+    {
+      "protocol_journey_id": "PJ01", "request_id": "J01", "title": "用户注册与首设备可用", "status": "partial",
+      "primary_layer": "playwright_joint_e2e", "agent_journey_role": "supplemental_ux",
+      "stages": ["service_discovery", "recovery_policy", "did_pcr_genesis", "first_device_authorization", "session_grant"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/onboarding.spec.ts", "markers": ["completes atomic PCR bootstrap", "client-signed cold-root inception"]},
+        {"layer": "rust_black_box", "path": "src/scenarios/api_contracts_auth.rs", "markers": ["register", "session-grants"]}
+      ], "gaps": ["首设备 bootstrap 缺少 machine-registered bootstrap_restricted/device_bootstrap credential", "enroll_device 在 operation registry 中 retry_safe=false，响应丢失后没有闭环重试"]
+    },
+    {
+      "protocol_journey_id": "PJ02", "request_id": "J02", "title": "登录与会话生命周期", "status": "existing",
+      "primary_layer": "playwright_joint_e2e", "agent_journey_role": "supplemental_ux",
+      "stages": ["passkey_or_oidc", "session_grant", "dpop", "refresh", "logout"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/passkey-login-flow.spec.ts", "markers": ["register → rename → logout → passkey login"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/oidc-login-flow.spec.ts", "markers": ["register → login → reload persists → logout → returning login"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/device-key-lifecycle.spec.ts", "markers": ["soft refresh must keep the same grant-binding DPoP key"]},
+        {"layer": "rust_black_box", "path": "src/scenarios/bridge_contracts/session_grant.rs", "markers": ["X-Arkret-Session-Grant", "client.session-key.push-proof.jwt"]}
+      ], "gaps": []
+    },
+    {
+      "protocol_journey_id": "PJ03", "request_id": "J03", "title": "多设备授权、同步、撤销与恢复", "status": "partial",
+      "primary_layer": "playwright_joint_e2e", "agent_journey_role": "supplemental_ux",
+      "stages": ["new_device", "cross_signing", "mls_join", "sync", "revoke", "lost_device_recovery"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/multi-device.spec.ts", "markers": ["publishes cross-signing keys", "retires its unconsumed one-time and last-resort KeyPackages", "to-device message queued"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/key-backup.spec.ts", "markers": ["restore encrypted cards on a fresh browser"]}
+      ], "gaps": ["第二设备 fresh-device restricted session 只有 prose，credential schema 仍仅允许 standard/recovery_restricted"]
+    },
+    {
+      "protocol_journey_id": "PJ04", "request_id": "J04", "title": "目录发现、联系人建立、同意与私聊资格", "status": "partial",
+      "primary_layer": "playwright_joint_e2e", "agent_journey_role": "supplemental_ux",
+      "stages": ["handle_directory", "contact_request", "contact_accept", "consent", "direct_message_eligibility"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/contact-graph.spec.ts", "markers": ["accept -> bidirectional + invite_consent_grant_ref", "friends via direct_message -> immutable participant-authoring plan"]},
+        {"layer": "rust_black_box", "path": "src/scenarios/handle_to_join_e2e.rs", "markers": ["resolve_handle"]}
+      ], "gaps": ["contact request/respond operation body 没有 signed Event carrier，无法证明 durable Event 来源", "跨 PS consent proof 与 revoke 缺少完整 carrier"]
+    },
+    {
+      "protocol_journey_id": "PJ05", "request_id": "J05", "title": "同域成员稳定私聊首条密文", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["resolve", "keypackage_claim", "stable_dm_materialize", "welcome", "first_ciphertext"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/contact-graph.spec.ts", "markers": ["direct-conversation materialization draft must be deterministic across retries"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/mls-group.spec.ts", "markers": ["joined member decrypts E2EE timeline messages"]},
+        {"layer": "conformance_fixture", "path": "tests/fixtures/private_chat_privacy_contracts.json", "markers": ["direct_conversation_materialization", "ak.direct_conversation.bound"]}
+      ],
+      "gaps": ["规范已收敛为单一 immutable stable binding，但 Cotest 没有公开接口测试把 resolve 返回的 materialization 精确提交、Welcome 消费和首条密文串起来"]
+    },
+    {
+      "protocol_journey_id": "PJ06", "request_id": "J06", "title": "跨域成员稳定私聊与重试", "status": "partial",
+      "primary_layer": "playwright_joint_e2e", "agent_journey_role": "supplemental_ux",
+      "stages": ["dual_principal_server", "locator", "coordinator", "federated_keypackage_claim", "materialize", "encrypted_exchange", "retry"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/federation/contact-graph-federation.spec.ts", "markers": ["cross-PS direct conversation returns remote KeyPackage claim authoring", "materializes one MLS Realm and exchanges encrypted messages"]}
+      ],
+      "gaps": ["完整密文旅程仍受 opt-in/条件 skip 约束", "coordinator 失联后的同坐标接管没有可执行协议接口"]
+    },
+    {
+      "protocol_journey_id": "PJ07", "request_id": "J07", "title": "已有稳定私聊在离线、重启、阻断解除和重加入后恢复", "status": "missing",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["existing_binding", "offline_or_empty_keypackage", "restart", "block_unblock", "leave_rejoin", "same_coordinates"],
+      "evidence": [
+        {"layer": "conformance_fixture", "path": "tests/fixtures/private_chat_privacy_contracts.json", "markers": ["pair_key", "direct_conversation"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/joint/agent-savfox-split-live.spec.ts", "markers": ["resumes a crashed direct conversation"]}
+      ],
+      "gaps": ["规范已明确 suspended/rejoin 复用 immutable binding，但没有普通成员 stable-DM 的公开接口恢复测试", "没有证明 KP 库为空或对端离线时已有坐标仍可打开", "没有 block 解除及 leave-rejoin 后坐标不变的断言"]
+    },
+    {
+      "protocol_journey_id": "PJ08", "request_id": "J08", "title": "Realm founding unit、owner authority、policy 与 MLS genesis", "status": "existing",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["founding_unit", "owner_membership", "authority_root", "policy", "mls_genesis"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/events/batch-realm-bootstrap.spec.ts", "markers": ["authors genesis as 0 -> 1 without a pre-existing frontier"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/mls-group.spec.ts", "markers": ["creates space with encryption_profile=mls_rfc9420 at create time"]}
+      ], "gaps": []
+    },
+    {
+      "protocol_journey_id": "PJ09", "request_id": "J09", "title": "多种准入方式下的成员加入与 MLS 自愈", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["public", "invite", "closed", "knock", "admin_add", "membership_accepted", "epoch_update_required", "mls_self_heal"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/spaces/knock-application.spec.ts", "markers": ["fresh review accept"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/mls-group.spec.ts", "markers": ["durable Welcome delivery and commit epoch stay live"]},
+        {"layer": "conformance_fixture", "path": "tests/fixtures/kernel-joint-gate.json", "markers": ["membership_and_mls_commit_are_atomic"]}
+      ],
+      "gaps": ["没有参数化黑盒测试覆盖五种准入并共同断言 accepted→epoch_update_required→Commit 自愈", "kernel-joint-gate 仍断言 membership 与 MLS Commit 原子化，和最新自愈顺序相反", "ordinary E2EE join 没有 KeyPackage reservation，竞争或丢失后可能永久停在 send-pause"]
+    },
+    {
+      "protocol_journey_id": "PJ10", "request_id": "J10", "title": "成员退出、移除、封禁、MLS Remove 与重加入", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["leave", "remove", "ban", "immediate_write_denial", "mls_remove", "rejoin"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/spaces/moderation-ban.spec.ts", "markers": ["post-ban writes rejected"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/mls-group.spec.ts", "markers": ["pauses until the MLS Remove commit covers the membership frontier"]}
+      ],
+      "gaps": ["leave/remove/rejoin 与 ban 路径没有统一成员状态×MLS epoch 矩阵", "重加入后的历史边界和新 Welcome 尚未在同一测试中证明"]
+    },
+    {
+      "protocol_journey_id": "PJ11", "request_id": "J11", "title": "加密历史可见性与旧 epoch 密钥边界", "status": "partial",
+      "primary_layer": "playwright_joint_e2e", "agent_journey_role": "supplemental_ux",
+      "stages": ["membership_t0", "history_policy", "old_epoch_key_share", "late_recovery", "revocation_recheck"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/mls-group.spec.ts", "markers": ["cannot decrypt pre-join messages (history_visibility=joined)"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/kanban/cross-member-encrypted.spec.ts", "markers": ["shared-history MLS realm", "decrypts the pre-join card content"]},
+        {"layer": "conformance_fixture", "path": "tests/security_closure_vectors.rs", "markers": ["vector_late_key_recovery_removed_actor"]}
+      ],
+      "gaps": ["realm recovery-key 的撤权后重验用例仍有 fixme", "缺少 joined/shared 对 T0、旧 epoch key share、late recovery 的统一参数化断言", "history-joined-enforcement 是明文测试，不能充当本流程证据", "late recovery 固定 T0=join，与 shared/invited 的 pre-join history 语义冲突", "removed_t0_visible 与 removed actor terminal reject 规则冲突"]
+    },
+    {
+      "protocol_journey_id": "PJ12", "request_id": "J12", "title": "加密消息创建、编辑、反应、撤回与重放", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["encrypted_send", "edit", "reaction", "redact", "stale_frontier", "idempotent_retry", "offline_replay"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/messaging/chat-advanced.spec.ts", "markers": ["reactions add/remove round-trip", "reply messages preserve reply_to"]},
+        {"layer": "rust_black_box", "path": "tests/realm_actor_frontier_e2e.rs", "markers": ["lost_response_and_cas_reauthor"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/sync/offline-queue-replay.spec.ts", "markers": ["offline compose is queued locally and flushed after reconnect"]}
+      ],
+      "gaps": ["edit/reaction/redact 现有断言没有全部使用真实 MLS 密文 envelope", "缺少把 frontier stale、精确重试和离线恢复串起来的密文消息测试"]
+    },
+    {
+      "protocol_journey_id": "PJ13", "request_id": "J13", "title": "设备或会话撤销后的密钥安全边界", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "not_applicable",
+      "stages": ["session_revoke", "keypackage_retire", "to_device_purge", "backup_gate", "history_key_denial"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/multi-device.spec.ts", "markers": ["retires its unconsumed one-time and last-resort KeyPackages", "to-device message queued for Device 2 before revocation is dropped"]},
+        {"layer": "conformance_fixture", "path": "tests/security_closure_vectors.rs", "markers": ["late_key_recovery_removed_actor"]},
+        {"layer": "rust_black_box", "path": "tests/key_backup_recovery_account_state.rs", "markers": ["requires_policy_and_did_recovery"]}
+      ],
+      "gaps": ["session/KP/to-device/backup/history-key 目前是分散断言，缺少同一撤销事实驱动的级联安全测试"]
+    },
+    {
+      "protocol_journey_id": "PJ14", "request_id": "J14", "title": "联邦 push/pull、依赖补齐、分区恢复与去重", "status": "existing",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["push", "pull", "partial_dependency", "partition", "backfill", "deduplicate", "converge"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/federation/cross-server.spec.ts", "markers": ["peer query recovery: after a network partition", "exchange messages and both servers converge"]},
+        {"layer": "rust_black_box", "path": "tests/federation_network_partition_recovery.rs", "markers": ["partition_then_heal_converges_on_canonical_frontier"]},
+        {"layer": "rust_black_box", "path": "tests/events_backfill.rs", "markers": ["backfill_pages_recover_messages"]}
+      ], "gaps": []
+    },
+    {
+      "protocol_journey_id": "PJ15", "request_id": "J15", "title": "离线延迟写、AuthorizationLease 与恢复在线重验", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["lease_issue", "offline_author", "receipt", "replay", "online_revalidation"],
+      "evidence": [
+        {"layer": "conformance_fixture", "path": "tests/authorization_lease_issuance.rs", "markers": ["authorization lease issuance"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/sync/offline-queue-replay.spec.ts", "markers": ["queued locally and flushed after reconnect"]},
+        {"layer": "rust_black_box", "path": "src/scenarios/event_idempotency_replay.rs", "markers": ["idempot"]}
+      ],
+      "gaps": ["离线队列 UI 用例仍依赖条件 skip", "没有把 lease、receipt、replay 与恢复在线后的当前权限重验串起来", "通用在线 submit helpers 仍默认先申请 AuthorizationLease，会掩盖最新版 online-no-lease 路径"]
+    },
+    {
+      "protocol_journey_id": "PJ16", "request_id": "J16", "title": "个人 Agent provision、pair、Realm 加入与加密发送", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["provision", "pair", "pcr_recovery", "keypackage", "realm_join", "welcome", "encrypted_send"],
+      "evidence": [
+        {"layer": "rust_black_box", "path": "tests/agent_provision_e2e.rs", "markers": ["agent_provision_pair_lifecycle_e2e", "build_agent_provision_event_drafts", "pending_runtime_key"]},
+        {"layer": "rust_black_box", "path": "tests/agent_encrypted_realm_member_e2e.rs", "markers": ["agent_member_welcome_fixture_joins_persists_and_recovers_locally", "agent encrypted hello after restart"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/joint/agent-savfox-split-live.spec.ts", "markers": ["answers a real message"]}
+      ],
+      "gaps": ["规范已收敛为单 ak.agent.provision Event 和三轴 generic view，但主黑盒仍构造 accountability+selector closed Event pair，并断言旧 runtime_state", "测试迁移完成前，现有通过结果不能证明最新纵向协议"]
+    },
+    {
+      "protocol_journey_id": "PJ17", "request_id": "J17", "title": "Agent Sidecar 建立、边界与幂等", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["ensure", "idempotent_retry", "private_membership", "context_routing", "boundary"],
+      "evidence": [
+        {"layer": "rust_black_box", "path": "tests/spec_section_11_scenarios.rs", "markers": ["s11_sidecar_idempotent_ensure"]},
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/joint/circle-sidecar-boundary.spec.ts", "markers": ["Circle and Sidecar object boundary"]}
+      ], "gaps": ["Sidecar ensure 要产生五类 durable Event，但 request 无 signed material", "pending removal prose 要求 stage+membership_frontier，closed schema 却只允许 provisioning_phase 且禁止 frontier", "leave 无法区分 suspend 与 tombstone，controller approval 也没有唯一真源"]
+    },
+    {
+      "protocol_journey_id": "PJ18", "request_id": "J18", "title": "账户生命周期与恢复对 session、DM、历史和 Agent 的级联", "status": "partial",
+      "primary_layer": "rust_black_box", "agent_journey_role": "supplemental_ux",
+      "stages": ["account_suspend_or_deactivate", "session_effect", "dm_coordinates", "history_visibility", "agent_cascade", "recovery"],
+      "evidence": [
+        {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/account-states.spec.ts", "markers": ["deactivate revokes tokens, hides directory row, and leaves messages visible"]},
+        {"layer": "rust_black_box", "path": "tests/spec_section_11_scenarios.rs", "markers": ["s11_controller_deactivate_cascade"]},
+        {"layer": "rust_black_box", "path": "tests/key_backup_recovery_account_state.rs", "markers": ["requires_policy_and_did_recovery"]}
+      ],
+      "gaps": ["没有一个状态转换测试同时证明 session 失效、stable-DM 坐标保留、历史读取边界和 Agent 级联", "恢复后的重新授权与旧会话/旧 Agent key 隔离尚未纵向联测", "account/Agent deactivation 后已 claim KeyPackage 的终态与可恢复性不明确"]
+    }
+  ]
+}
