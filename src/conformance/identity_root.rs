@@ -313,7 +313,10 @@ fn validate_bootstrap_helpers() -> Result<()> {
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
     authorize.executed_by = Some(authority.authority_did.clone());
-    authorize.authorization_ref = Some(authority.authorization_ref.to_string());
+    authorize.authorization_ref = Some(
+        arkret_wire::AuthorizationRef::new(authority.authorization_ref.to_string())
+            .map_err(anyhow::Error::msg)?,
+    );
     authorize = with_proof(
         authorize,
         &crate::fixture_did_url(format!("{}#enrollment", authority.authority_did)),

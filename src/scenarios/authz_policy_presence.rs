@@ -76,61 +76,35 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let grant_id = arkret_identifiers::GrantId::new(manage_grant_id.to_owned())?;
     let issued_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
-    let verification_method =
-        arkret_wire::DidUrl::new(format!("{}#cotest", alice.actor)).map_err(anyhow::Error::msg)?;
-    let mut typed_grant =
-        arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
-            id: grant_id.clone(),
-            schema: "ak.schema.capability.v1".to_owned(),
-            realm_id: Some(arkret_identifiers::RealmId::new(realm_id.clone())?),
-            issuer: arkret_identifiers::Did::new(alice.actor.clone())?,
-            subject:
-                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
-                    arkret_identifiers::Did::new(bob.actor.clone())?,
-                ),
-            actions,
-            resources: vec![serde_json::from_value(json!({
-                "kind": "realm",
-                "realm_id": realm_id
-            }))?],
-            capability_action_registry_digest: Some(current_registry_digest),
-            constraints: Vec::new(),
-            issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
-                realm_id: arkret_identifiers::RealmId::new(realm_id.clone())?,
-                cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
-                controller_epoch_at_issuance: 0,
-                authority_generation: 0,
-            }],
-            issued_at,
-            not_before: None,
-            expires_at: None,
-            updated_by: None,
-            updated_at: None,
-            revoked_by: None,
-            revoked_at: None,
-            proofs: Vec::new(),
-            authority_depth: None,
-            authority_root_refs: Vec::new(),
-        };
-    let mut grant_proof = arkret_wire::PayloadProof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
-        verification_method: verification_method.clone(),
-        payload_digest: typed_grant.payload_digest()?,
-        created_at: issued_at,
-        domain: None,
-        audience: None,
-        proof_purpose: Some(arkret_wire::PayloadProofPurpose::IssuerAttestation),
-        jws: String::new(),
+    let typed_grant = arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
+        id: grant_id.clone(),
+        schema: "ak.schema.capability.v1".to_owned(),
+        realm_id: Some(arkret_identifiers::RealmId::new(realm_id.clone())?),
+        issuer: arkret_identifiers::Did::new(alice.actor.clone())?,
+        subject: arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
+            arkret_identifiers::Did::new(bob.actor.clone())?,
+        ),
+        actions,
+        resources: vec![serde_json::from_value(json!({
+            "kind": "realm",
+            "realm_id": realm_id
+        }))?],
+        capability_action_registry_digest: Some(current_registry_digest),
+        constraints: Vec::new(),
+        issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
+            realm_id: arkret_identifiers::RealmId::new(realm_id.clone())?,
+            cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
+            controller_epoch_at_issuance: 0,
+            authority_generation: 0,
+        }],
+        issued_at,
+        not_before: None,
+        expires_at: None,
+        updated_by: None,
+        updated_at: None,
+        revoked_by: None,
+        revoked_at: None,
     };
-    let grant_binding = typed_grant.canonical_proof_binding_bytes(&grant_proof)?;
-    grant_proof.jws = arkret_signatures::sign_eddsa_detached_jws(
-        &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
-            &verification_method,
-        )),
-        &grant_binding,
-    )?;
-    typed_grant.proofs.push(grant_proof);
     let grant_payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
         grant: typed_grant,
         grant_id,

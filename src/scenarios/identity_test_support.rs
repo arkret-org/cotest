@@ -294,7 +294,10 @@ async fn bootstrap_test_device_authorization(
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
     authorize.executed_by = Some(principal.clone());
-    authorize.authorization_ref = Some(enrollment_method.clone());
+    authorize.authorization_ref = Some(
+        arkret_wire::AuthorizationRef::new(enrollment_method.clone())
+            .map_err(anyhow::Error::msg)?,
+    );
     let enrollment_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
     let enrollment_method = crate::fixture_did_url(enrollment_method);
