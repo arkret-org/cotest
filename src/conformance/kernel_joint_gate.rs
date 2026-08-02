@@ -334,7 +334,10 @@ fn kernel_merge_safe(input: &KernelGateInput) -> KernelGateOutcome {
         ));
         sequence = sequence.saturating_add(1);
     }
-    match OrSet.join(&sample_cell("ak.component.capability.grant.v1"), &ops) {
+    match OrSet.join(
+        &sample_cell(arkret_wire::CellFamilyId::CAPABILITY_GRANT_V1),
+        &ops,
+    ) {
         CellState::Value(entries) => projection(json!({"entries": entries})),
         CellState::Bottom(_) => error("state_mismatch", "merge_safe_control_bottom"),
     }
@@ -358,7 +361,10 @@ fn kernel_exclusive_control(input: &KernelGateInput) -> KernelGateOutcome {
             )
         })
         .collect::<Vec<_>>();
-    match CasRegister.join(&sample_cell("ak.component.realm.policy.v1"), &ops) {
+    match CasRegister.join(
+        &sample_cell(arkret_wire::CellFamilyId::REALM_POLICY_V1),
+        &ops,
+    ) {
         CellState::Value(value) => projection(json!({"value": value})),
         CellState::Bottom(bottom) => {
             let mut heads = bottom.heads;

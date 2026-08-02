@@ -611,7 +611,7 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
 fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ak.component.realm.policy.v1",
+        arkret_wire::CellFamilyId::REALM_POLICY_V1,
         "ak.realm.01js0sp0000000000000000000",
     );
     // Two sealed Moves concurrently set the cell to distinct values.
@@ -646,7 +646,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
 fn cas_register_single_set_returns_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ak.component.realm.policy.v1",
+        arkret_wire::CellFamilyId::REALM_POLICY_V1,
         "ak.realm.01js0sp0000000000000000001",
     );
     let ops = vec![SealedOp::new(
@@ -664,7 +664,7 @@ fn cas_register_single_set_returns_value() -> Result<()> {
 pub fn run_lattice_cas_register_supersession_vector() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ak.component.realm.policy_server.v1",
+        arkret_wire::CellFamilyId::REALM_POLICY_SERVER_V1,
         "ak.realm.01js0sp0000000000000000002",
     );
     let declaration = json!({"policy_server_did": "did:web:policy.example"});
@@ -763,7 +763,10 @@ fn membership_fsm() -> Fsm {
 
 fn fsm_legal_transition_advances_state() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
+    let cref = cell(
+        arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+        "did.web.alice.example",
+    );
     // Single legal transition: invited → joined.
     let ops = vec![SealedOp::new(
         issuer_digest("22"),
@@ -778,7 +781,10 @@ fn fsm_legal_transition_advances_state() -> Result<()> {
 
 fn fsm_duplicate_transition_is_idempotent() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
+    let cref = cell(
+        arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+        "did.web.alice.example",
+    );
     let ops = vec![
         SealedOp::new(
             issuer_digest("23"),
@@ -798,7 +804,10 @@ fn fsm_duplicate_transition_is_idempotent() -> Result<()> {
 
 fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
+    let cref = cell(
+        arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+        "did.web.alice.example",
+    );
     let ops = vec![
         SealedOp::new(
             issuer_digest("25"),
@@ -822,7 +831,10 @@ fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
 
 fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("ak.component.member.state.v1", "did.web.alice.example");
+    let cref = cell(
+        arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+        "did.web.alice.example",
+    );
     // Two concurrent transitions claiming distinct `from` states for the
     // same cell — a join of these MUST surface a Bottom because the
     // pre-state can only be one value at a time.
@@ -1214,7 +1226,7 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
 
 fn notary_cell(realm_suffix: &str) -> CellRef {
     cell(
-        "ak.component.notary.v1",
+        arkret_wire::CellFamilyId::NOTARY_V1,
         &format!("ak.realm.01js{realm_suffix}000000000000000000"),
     )
 }
@@ -1346,7 +1358,7 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
 fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ak.component.realm.policy.v1",
+        arkret_wire::CellFamilyId::REALM_POLICY_V1,
         "ak.realm.01js0sp0000000000000000000",
     );
     // Seal view AFTER recovery: only the repair Move's sealed op is in
@@ -1372,7 +1384,7 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
 fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "ak.component.realm.policy.v1",
+        arkret_wire::CellFamilyId::REALM_POLICY_V1,
         "ak.realm.01js0sp0000000000000000001",
     );
     // Two concurrent set-Moves where one self-references its own "winner"

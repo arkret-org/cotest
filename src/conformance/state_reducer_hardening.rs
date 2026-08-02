@@ -22,7 +22,7 @@ pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
 
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
 const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
-const STRAND_TRACKS_CELL_FAMILY: &str = "ak.component.strand.tracks.v1";
+const STRAND_TRACKS_CELL_FAMILY: &str = arkret_wire::CellFamilyId::STRAND_TRACKS_V1;
 
 pub fn run_state_reducer_hardening_fixture_suite() -> Result<()> {
     let fixture = state_reducer_hardening_fixture()?;
