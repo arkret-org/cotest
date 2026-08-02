@@ -1034,7 +1034,7 @@ async fn prepare_live_publication_body(
                 .map(
                     |(event, authorization_lease)| arkret_wire::EventInitialSubmission {
                         event,
-                        authorization_lease,
+                        authorization_lease: Some(authorization_lease),
                         cba_proof_bundles: Vec::new(),
                         control_proposal_receipt: None,
                     },

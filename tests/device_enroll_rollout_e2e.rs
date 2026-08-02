@@ -142,7 +142,7 @@ async fn issue_bootstrap_leases(
         anyhow::bail!("authorization lease issuer changed bootstrap cardinality");
     }
     for (submission, lease) in batch.events.iter_mut().zip(outcome.authorization_leases) {
-        submission.authorization_lease = lease;
+        submission.authorization_lease = Some(lease);
         submission.control_proposal_receipt = None;
     }
     Ok(())

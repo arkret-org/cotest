@@ -13,8 +13,8 @@ use arkret_signatures::webvh::{
     prepare_principal_inception,
 };
 use arkret_wire::{
-    AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, Base64UrlString, Event,
-    EventInitialSubmission, EventRef, NonEmptyString,
+    AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, AuthorizationRef,
+    Base64UrlString, Event, EventInitialSubmission, EventRef, NonEmptyString,
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -345,13 +345,13 @@ async fn bootstrap_test_device_authorization(
     let request = self_principal_bootstrap_submit_request(
         EventInitialSubmission {
             event: create,
-            authorization_lease: create_lease.clone(),
+            authorization_lease: Some(create_lease.clone()),
             cba_proof_bundles: Vec::new(),
             control_proposal_receipt: None,
         },
         EventInitialSubmission {
             event: authorize.clone(),
-            authorization_lease: authorize_lease.clone(),
+            authorization_lease: Some(authorize_lease.clone()),
             cba_proof_bundles: Vec::new(),
             control_proposal_receipt: None,
         },

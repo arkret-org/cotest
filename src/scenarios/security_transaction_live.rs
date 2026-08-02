@@ -308,7 +308,7 @@ fn event_submission(
     let authorization_lease =
         crate::publication::authorization_lease_for(&event, "ak.realm.admin", RiskTier::High)?;
     let mut submission = crate::publication::initial_submission(event, "ak.realm.admin")?;
-    submission.authorization_lease = authorization_lease;
+    submission.authorization_lease = Some(authorization_lease);
     Ok(submission)
 }
 

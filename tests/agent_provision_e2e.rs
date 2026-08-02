@@ -54,8 +54,9 @@ use arkret_models_identity::artifacts_device_identity::{
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
-    AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, EventKind, NonEmptyString,
-    OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
+    AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
+    EventKind, NonEmptyString, OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId,
+    ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -2083,8 +2084,14 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             policy_seal_outcome.seal_id
         ));
     }
-    let policy_request =
-        arkret_models_crypto::RecoveryPolicyPublishRequest::from(policy_submission);
+    let policy_request = arkret_models_crypto::RecoveryPolicyPublishRequest {
+        event: policy_submission.event,
+        authorization_lease: policy_submission
+            .authorization_lease
+            .ok_or_else(|| anyhow!("recovery-policy publication requires delayed authorization"))?,
+        cba_proof_bundles: policy_submission.cba_proof_bundles,
+        control_proposal_receipt: policy_submission.control_proposal_receipt,
+    };
     let response = server
         .http()
         .post(server.url("/_arkret/root/identity/recovery-policy"))
@@ -4171,7 +4178,7 @@ async fn prepare_initial_submission_for_notary(
     control_proposal_receipt.validate_structural(policy)?;
     let submission = arkret_wire::EventInitialSubmission {
         event: event.clone(),
-        authorization_lease: lease,
+        authorization_lease: Some(lease),
         cba_proof_bundles: Vec::new(),
         control_proposal_receipt: Some(control_proposal_receipt),
     };

@@ -23,7 +23,9 @@ use arkret_models_crypto::{
 use arkret_models_identity::artifacts_device_identity::{
     DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind,
 };
-use arkret_wire::{Audience, Base64UrlString, DidUrl, Event, EventRef, NonEmptyString, Proof};
+use arkret_wire::{
+    Audience, AuthorizationRef, Base64UrlString, DidUrl, Event, EventRef, NonEmptyString, Proof,
+};
 use serde_json::{Value, json};
 
 use super::load_fixture_value;
