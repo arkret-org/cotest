@@ -10,7 +10,7 @@
 // soland status (2026-06 re-audit against arkret-spec v1):
 //   ✓ POST /_arkret/peer/events handler routed (canonical single rail)
 //   ✓ Envelope validation + idempotency on signed Event IDs
-//   ✓ RFC 9421 INBOUND: full — Content-Digest, Request-Canonical-Digest,
+//   ✓ RFC 9421 INBOUND: full — the single RFC 9530 Content-Digest,
 //     created/expires freshness window (±30s skew, ≤300s window,
 //     expires-in-future), @authority/endpoint-digest binding, and the
 //     §3.2/§8.3 minimal-disclosure failure envelope are all wired

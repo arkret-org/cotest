@@ -3986,7 +3986,6 @@ function signedFederationPushHeaders(
 ): Record<string, string> {
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
-  const requestDigest = `sha256:${createHash("sha256").update(bodyBytes).digest("hex")}`;
   const sourceTrustDomain = trustDomainFromServiceId(sourceDid);
   const destinationTrustDomain = trustDomainFromServiceId(destinationDid);
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -4000,8 +3999,8 @@ function signedFederationPushHeaders(
   const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
-    `"destination-service-id" "source-trust-domain" "destination-trust-domain" ` +
-    `"request-canonical-digest"${idempotencyComponent});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
+    `"destination-service-id" "source-trust-domain" "destination-trust-domain"` +
+    `${idempotencyComponent});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
     `"@method": POST`,
     `"@target-uri": ${targetUri}`,
@@ -4011,7 +4010,6 @@ function signedFederationPushHeaders(
     `"destination-service-id": ${destinationDid}`,
     `"source-trust-domain": ${sourceTrustDomain}`,
     `"destination-trust-domain": ${destinationTrustDomain}`,
-    `"request-canonical-digest": ${requestDigest}`,
     ...(opts.idempotencyKey
       ? [`"idempotency-key": ${opts.idempotencyKey}`]
       : []),
@@ -4025,7 +4023,6 @@ function signedFederationPushHeaders(
   return {
     "content-type": "application/json",
     "content-digest": contentDigest,
-    "request-canonical-digest": requestDigest,
     "source-service-id": sourceDid,
     "destination-service-id": destinationDid,
     "source-trust-domain": sourceTrustDomain,

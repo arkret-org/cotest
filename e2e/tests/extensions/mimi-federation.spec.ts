@@ -324,7 +324,6 @@ function signedMimiHeaders(args: {
 }): Record<string, string> {
   const canonicalBody = Buffer.from(canonicalJson(args.body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
-  const requestDigest = sha256Prefixed(canonicalBody);
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 300;
   const keyid = `${MIMI_SOURCE_SERVICE_ID}#mimi-provider-key`;
@@ -333,7 +332,6 @@ function signedMimiHeaders(args: {
     "@target-uri",
     "@authority",
     "content-digest",
-    "request-canonical-digest",
     "source-service-id",
     "destination-service-id",
     "provider-id",
@@ -348,7 +346,6 @@ function signedMimiHeaders(args: {
     `"@target-uri": ${args.targetUri}`,
     `"@authority": ${new URL(args.targetUri).host}`,
     `"content-digest": ${contentDigest}`,
-    `"request-canonical-digest": ${requestDigest}`,
     `"source-service-id": ${MIMI_SOURCE_SERVICE_ID}`,
     `"destination-service-id": ${destinationServiceId}`,
     `"provider-id": ${MIMI_PROVIDER_ID}`,
@@ -363,7 +360,6 @@ function signedMimiHeaders(args: {
   return {
     "content-type": "application/json",
     "content-digest": contentDigest,
-    "request-canonical-digest": requestDigest,
     "source-service-id": MIMI_SOURCE_SERVICE_ID,
     "destination-service-id": destinationServiceId,
     "provider-id": MIMI_PROVIDER_ID,

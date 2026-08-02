@@ -10,7 +10,7 @@
 //! 1. **Server A** constructs a `federation_transaction` request:
 //!    - `Source-Trust-Domain = ak:trust_domain:a`
 //!    - `Destination-Trust-Domain = ak:trust_domain:b`
-//!    - `Request-Canonical-Digest = sha256:<hash>`
+//!    - RFC 9530 `Content-Digest` over the exact canonical body bytes
 //!    - request body `X`, carrying `idempotency_key=idem-c3-001`
 //! 2. **Server B** receives the request, runs the cache key composition (`source_did + dest_did +
 //!    request_canonical_digest + idempotency_key
@@ -29,8 +29,8 @@
 //! - cache key composition includes `origin_key_state_digest` (strict key diverges across key-state
 //!   rotation while the canonical-replay key stays stable).
 //! - the signing-transcript fragment built via [`federation_trust_domain_transcript_fragment`] is
-//!   byte-stable across calls and contains the three header names in lowercase quoted form plus the
-//!   source/destination/canonical-hash values.
+//!   byte-stable across calls and contains the two trust-domain header names in lowercase quoted
+//!   form plus their source/destination values.
 //! - the cached body returned on canonical-replay carries `reason_code=historical_only` AND
 //!   `historical_only=true`, and the recorded "new reducer side effect" counter stays at the
 //!   original value (zero increment on replay).
@@ -49,9 +49,7 @@ use anyhow::{Result, anyhow};
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_identifiers::{Hash, TypedTrustDomainId};
 use arkret_signatures::federation::federation_trust_domain_transcript_fragment;
-use arkret_wire::{
-    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
-};
+use arkret_wire::{HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
 use serde_json::{Value, json};
 
 // ── Canonical pins for the C3 vector ────────────────────────────────────
@@ -257,26 +255,17 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
 
     // Signing-transcript fragment assertion: SDK helper output is
     // byte-stable across calls.
-    let fragment_a = federation_trust_domain_transcript_fragment(
-        &source_td,
-        &dest_td,
-        &request_canonical_digest,
-    );
-    let fragment_b = federation_trust_domain_transcript_fragment(
-        &source_td,
-        &dest_td,
-        &request_canonical_digest,
-    );
+    let fragment_a = federation_trust_domain_transcript_fragment(&source_td, &dest_td);
+    let fragment_b = federation_trust_domain_transcript_fragment(&source_td, &dest_td);
     if fragment_a != fragment_b {
         return Err(anyhow!(
             "federation_trust_domain_transcript_fragment is not byte-stable across calls"
         ));
     }
-    // Fragment MUST contain the three header names in lowercase + values.
+    // Fragment MUST contain the two trust-domain header names in lowercase + values.
     for required in [
         HEADER_SOURCE_TRUST_DOMAIN.to_ascii_lowercase(),
         HEADER_DESTINATION_TRUST_DOMAIN.to_ascii_lowercase(),
-        HEADER_REQUEST_CANONICAL_DIGEST.to_ascii_lowercase(),
     ] {
         if !fragment_a.contains(&required) {
             return Err(anyhow!(
@@ -284,11 +273,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
             ));
         }
     }
-    for required_value in [
-        source_td.as_str(),
-        dest_td.as_str(),
-        request_canonical_digest.as_str(),
-    ] {
+    for required_value in [source_td.as_str(), dest_td.as_str()] {
         if !fragment_a.contains(required_value) {
             return Err(anyhow!(
                 "transcript fragment missing required header value {required_value:?}: {fragment_a}"
@@ -405,8 +390,8 @@ mod tests {
     use super::*;
 
     /// Wire-shape gate (non-ignored) — build a `FederationTrustHeaders`-
-    /// equivalent triple via the SDK federation surface, call the transcript
-    /// fragment helper, and assert the bytes contain the three header
+    /// equivalent pair via the SDK federation surface, call the transcript
+    /// fragment helper, and assert the bytes contain the two header
     /// names in lowercase + the carried values.
     ///
     /// Tests pass without a running soland / teabay; the scenario
@@ -415,13 +400,8 @@ mod tests {
     fn federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values() {
         let source_td = TypedTrustDomainId::new("ak:trust_domain:a").unwrap();
         let dest_td = TypedTrustDomainId::new("ak:trust_domain:b").unwrap();
-        let request_canonical_digest = Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
-        let fragment = federation_trust_domain_transcript_fragment(
-            &source_td,
-            &dest_td,
-            &request_canonical_digest,
-        );
-        // The three header names MUST appear in lowercase (RFC 9421 §2.2).
+        let fragment = federation_trust_domain_transcript_fragment(&source_td, &dest_td);
+        // The two header names MUST appear in lowercase (RFC 9421 §2.2).
         assert!(
             fragment.contains(&HEADER_SOURCE_TRUST_DOMAIN.to_ascii_lowercase()),
             "fragment missing lowercase source-trust-domain header name: {fragment}"
@@ -429,10 +409,6 @@ mod tests {
         assert!(
             fragment.contains(&HEADER_DESTINATION_TRUST_DOMAIN.to_ascii_lowercase()),
             "fragment missing lowercase destination-trust-domain header name: {fragment}"
-        );
-        assert!(
-            fragment.contains(&HEADER_REQUEST_CANONICAL_DIGEST.to_ascii_lowercase()),
-            "fragment missing lowercase request-canonical-digest header name: {fragment}"
         );
         // The carried values MUST appear verbatim.
         assert!(
@@ -443,16 +419,8 @@ mod tests {
             fragment.contains(dest_td.as_str()),
             "fragment missing destination trust domain value: {fragment}"
         );
-        assert!(
-            fragment.contains(request_canonical_digest.as_str()),
-            "fragment missing request canonical hash value: {fragment}"
-        );
         // Byte-stable: a second call returns the same bytes.
-        let fragment_again = federation_trust_domain_transcript_fragment(
-            &source_td,
-            &dest_td,
-            &request_canonical_digest,
-        );
+        let fragment_again = federation_trust_domain_transcript_fragment(&source_td, &dest_td);
         assert_eq!(fragment, fragment_again);
     }
 
@@ -517,14 +485,14 @@ mod tests {
         // 1. Boot a 2-service test rig (soland-A + teabay-B) with `ak:trust_domain:a` and
         //    `ak:trust_domain:b` respectively.
         // 2. soland-A signs and POSTs a federation_transaction request to teabay-B carrying
-        //    Source-/Destination-Trust-Domain headers + Request-Canonical-Digest + Idempotency-Key.
+        //    Source-/Destination-Trust-Domain headers + Content-Digest + Idempotency-Key.
         // 3. Confirm teabay-B caches the response (200 accepted), side effects fire (directory row
         //    inserted, etc.).
         // 4. Rotate soland-A's service key (origin_key_state_digest flips).
         // 5. Replay the same request bytes.
         // 6. Assert teabay-B returns the cached body with `reason_code=historical_only` AND no new
         //    directory rows / push fan-out / index updates.
-        // 7. Assert the recorded message-signature transcript includes the three trust-domain
-        //    headers (lowercase, RFC 9421 §2.2).
+        // 7. Assert the recorded message-signature transcript includes both trust-domain headers
+        //    and Content-Digest (lowercase, RFC 9421 §2.2).
     }
 }
