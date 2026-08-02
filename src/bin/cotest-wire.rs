@@ -8,7 +8,7 @@ use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_models_identity::artifacts_device_identity::CrossSigningPublish;
 use arkret_models_identity::did_document::principal_control_realm_id;
-use arkret_wire::{Audience, Event, PayloadProof, Proof, proof_kind};
+use arkret_wire::{Audience, Event, NonEmptyString, PayloadProof, Proof, proof_kind};
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -454,7 +454,9 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         .request
         .get("reason")
         .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
+        .map(NonEmptyString::new)
+        .transpose()
+        .map_err(|error| anyhow::anyhow!("parse MIMI consent reason: {error}"))?;
     let expires_at = input
         .request
         .get("expires_at")

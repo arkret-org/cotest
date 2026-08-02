@@ -12,7 +12,9 @@ use arkret_models_crypto::{
     KeyBackupDeleteProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
     KeysBackupsIssueDeleteChallengeRequestBody,
 };
-use arkret_wire::{Base64UrlString, DidUrl, PayloadProof, PayloadProofPurpose, proof_kind};
+use arkret_wire::{
+    Base64UrlString, DidUrl, NonEmptyString, PayloadProof, PayloadProofPurpose, proof_kind,
+};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 
@@ -23,7 +25,8 @@ use crate::scenarios::identity_test_support::TEST_PRINCIPAL_SIGNING_KEY_SEED;
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let request_id = Base64UrlString::new("Y290ZXN0LWJhY2t1cC1kZWxldGUtMDE".to_owned())
         .map_err(|error| anyhow!("delete request_id: {error}"))?;
-    let reason = Some("user_requested".to_owned());
+    let reason =
+        NonEmptyString::new("user_requested").map_err(|error| anyhow!("delete reason: {error}"))?;
 
     // 1. The service mints the challenge. Every freshness value in the transcript is server-side,
     //    so nothing here may be caller-chosen.
@@ -45,7 +48,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     // 2. Sign the one canonical delete-intent transcript with the principal control key.
     let verification_method = DidUrl::new(format!("{actor_id}#cotest-principal-signing-key"))
         .map_err(|error| anyhow!("principal control verification method: {error}"))?;
-    let transcript = challenge.delete_intent_transcript(reason.as_deref());
+    let transcript = challenge.delete_intent_transcript(Some(reason.as_str()));
     let canonical = canonical_json_bytes(&transcript)
         .map_err(|error| anyhow!("delete-intent transcript is not canonical: {error}"))?;
     let jws = arkret_signatures::sign_eddsa_detached_jws(
@@ -57,7 +60,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
         alg: "EdDSA".to_owned(),
         verification_method,
         payload_digest: challenge
-            .delete_intent_digest(reason.as_deref())
+            .delete_intent_digest(Some(reason.as_str()))
             .map_err(|error| anyhow!("delete-intent digest: {error}"))?,
         created_at: challenge.issued_at,
         domain: None,
@@ -70,7 +73,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
         request_id,
         challenge_id: challenge.challenge_id.clone(),
         proof: KeyBackupDeleteProof::PrincipalSigning { proof },
-        reason,
+        reason: Some(reason),
     };
     let backup_delete = expect_json(
         server

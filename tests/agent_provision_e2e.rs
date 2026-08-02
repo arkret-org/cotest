@@ -2636,7 +2636,7 @@ async fn pause_agent_runtime<P: PairingOutcome>(
         .agent_pause(
             agent_id.as_str(),
             &arkret::AgentPauseRequestBody {
-                reason: Some("runtime_replacement".to_owned()),
+                reason: Some(NonEmptyString::new("runtime_replacement").unwrap()),
                 lifecycle_event,
             },
         )
@@ -3901,7 +3901,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         .strip_prefix("agent_pairing_request:")
         .ok_or_else(|| anyhow!("pairing_request_id has an invalid prefix"))?;
     let mut requested_scope_disclosure = arkret::AgentRequestedScopeDisclosure {
-        schema: SchemaId::AGENT_REQUESTED_SCOPE_DISCLOSURE_V1.to_owned(),
+        schema: SchemaId::AgentRequestedScopeDisclosureV1,
         request_id: arkret::RequestId::new(format!("ak:request:{pairing_request_uuid}"))?,
         agent_id,
         controller_id,

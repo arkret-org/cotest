@@ -13,7 +13,7 @@ use anyhow::{Context, Result, bail};
 use arkret::{
     ArkretMlsGroup, ArkretMlsIdentity, DeviceId, Did, KeyPackageUploadEntry,
     KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
-    KeyPackagesUploadUnsignedRequest, MlsDeviceWorkflowAction, MlsGroupStateSink,
+    KeyPackagesUploadUnsignedRequest, MlsDeviceWorkflowAction, MlsGroupStateSink, NonEmptyString,
     keypackage_upload_entry_signing_input, keypackages_consume_signing_input,
     keypackages_revoke_signing_input, keypackages_upload_signing_input, late_device_join_steps,
     sign_keypackage_upload_entry, sign_keypackages_consume_request,
@@ -370,7 +370,7 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
         KeyPackagesRevokeUnsignedRequest {
             key_package_refs: vec![record.keypackage_ref.as_str().to_owned()],
             device_id: agent_device.clone(),
-            reason: Some("authorization_superseded".to_owned()),
+            reason: Some(NonEmptyString::new("authorization_superseded").unwrap()),
         },
         &verification_method,
     )?;
