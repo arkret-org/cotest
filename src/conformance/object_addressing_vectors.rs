@@ -523,9 +523,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "as_of": "2026-05-27T00:00:00.000Z",
                 "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
-                    "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-                    "control_event_set_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "state_root": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
                 }
             },
             {
@@ -541,9 +539,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "as_of": "2026-05-27T00:00:00.000Z",
                 "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
-                    "leaves": ["ak:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
-                    "control_event_set_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-                    "state_root": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    "leaves": ["ak:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
                 }
             }
         ],

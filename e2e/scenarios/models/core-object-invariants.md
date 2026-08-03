@@ -80,7 +80,7 @@
 7. 查询 `GET /_arkret/self/events/frontier?realm_id=<realmId>`，取得当前 Realm Seal
    view；提交完整 Control Move，把 position cell 从 `null` 写为
    `{list_space_id:L1, rank:"m"}`：
-   - 顶层 `seal_basis={leaves, control_event_set_root, state_root}`；
+   - 顶层 `seal_basis={leaves}`；Seal 根仅存在于被引用的 Seal 上，由接收方解析叶子后重算；
    - 顶层 `preconditions[].head_eq=null`；
    - payload 为注册的 `ak.strand.move` closed shape；cell target/value 由 registry
      从 `kind + payload` 推导，wire 不携带 producer-authored `effects[]`。

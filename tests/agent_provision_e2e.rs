@@ -30,8 +30,7 @@ use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, Did, Hlc, PolicyId, TypedTrustDomainId,
-    new_prefixed_uuid7,
+    BackupId, BackupSeriesId, DeviceId, Did, Hlc, PolicyId, TypedTrustDomainId, new_prefixed_uuid7,
 };
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
@@ -3147,9 +3146,9 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         match managed_agent_frontier(server, token, controller_realm.as_str()).await? {
             Some(frontier) => frontier,
             None => {
-                let basis = CONTROLLER_SEAL_BASES
+                let seal = CONTROLLER_SEALS
                     .lock()
-                    .expect("controller Seal basis lock")
+                    .expect("controller Seal lock")
                     .get(&server.url("/"))
                     .cloned()
                     .ok_or_else(|| {
@@ -3157,13 +3156,9 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                     })?;
                 arkret_models_collaboration::event_sync::RealmSealFrontierView::new(
                     arkret::RealmId::new(controller_realm)?,
-                    basis
-                        .leaves
-                        .first()
-                        .cloned()
-                        .ok_or_else(|| anyhow!("controller Seal basis has no leaf"))?,
-                    basis.control_event_set_root,
-                    basis.state_root,
+                    seal.id,
+                    seal.control_event_set_root,
+                    seal.state_root,
                     arkret_models_collaboration::event_sync::ControlGovernanceHealth::healthy(),
                     None,
                 )

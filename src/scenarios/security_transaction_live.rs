@@ -287,8 +287,6 @@ fn event_submission(
     )?;
     event.seal_basis = Some(arkret_wire::SealBasis {
         leaves: vec![SealId::new(format!("ak:seal:sha256:{}", "b".repeat(64)))?],
-        control_event_set_root: hash('e')?,
-        state_root: hash('f')?,
     });
     let event_digest = Hash::new(event.event_digest()?)?;
     event.proofs.push(arkret_wire::Proof {
