@@ -76,14 +76,15 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
         .ok_or_else(|| anyhow!("Realm Seal frontier has no leaf"))?;
     event.seal_ref = Some(seal_ref.clone());
     event.auth_context = Some(arkret_wire::AuthContext {
-        did: ACTOR.clone(),
+        did: arkret_identifiers::Did::new(ACTOR.clone()).map_err(anyhow::Error::msg)?,
         key_id: format!("{}#cotest", ACTOR.as_str()),
         key_epoch: 0,
         credential_epoch: None,
     });
-    event.authorization_ref = Some(arkret_wire::AuthorizationRef::new(
-        arkret_wire::REALM_AUTHORITY_ROOT_CELL,
-    )?);
+    event.authorization_ref = Some(
+        arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
+            .map_err(anyhow::Error::msg)?,
+    );
     cotest::harness::refresh_typed_event_proof_with_signing_seed(event, SIGNING_SEED)
 }
 
