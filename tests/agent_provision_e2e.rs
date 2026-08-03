@@ -2430,6 +2430,41 @@ async fn submit_delegated_agent_event(
             std::slice::from_ref(&typed_event),
             &cotest::publication::project_cells,
         )?;
+        let sdk = bearer_sdk_client(server, token)?;
+        let request = arkret_wire::AuthorizationLeaseIssueRequest {
+            events: vec![typed_event.clone()],
+            intents: Vec::new(),
+        };
+        let request_key = arkret_wire::new_prefixed_uuid7("lease-");
+        let options = arkret_http_client::ClientRequestOptions::new()
+            .request_id(request_key.clone())
+            .idempotency_key(request_key);
+        let authorization_lease = sdk
+            .issue_authorization_leases(&request, &options)
+            .await?
+            .authorization_leases
+            .into_iter()
+            .next()
+            .context("managed Agent PCR genesis lease issuer returned no lease")?;
+        let submission = arkret_wire::EventInitialSubmission {
+            event: typed_event.clone(),
+            authorization_lease: Some(authorization_lease),
+            cba_proof_bundles: Vec::new(),
+            control_proposal_receipt: None,
+            membership_compensation_evidence: None,
+        };
+        submission.validate_structural()?;
+        let outcome = sdk.events_submit(&submission).await?;
+        if !outcome.accepted.contains(&typed_event.event_id) {
+            return Err(anyhow!("delegated {kind} was not accepted: {outcome:?}"));
+        }
+        if outcome.control_proposal_receipts.len() != 1 {
+            return Err(anyhow!(
+                "delegated {kind} returned {} proposal receipts instead of one",
+                outcome.control_proposal_receipts.len()
+            ));
+        }
+        return Ok(typed_event);
     } else {
         let sdk = bearer_sdk_client(server, token)?;
         let realm_create = sdk
@@ -2460,22 +2495,6 @@ async fn submit_delegated_agent_event(
         }
         return Ok(typed_event);
     }
-    let body = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(token)
-            .json(&cotest::publication::initial_submission(
-                typed_event.clone(),
-                "",
-            )?),
-        StatusCode::OK,
-    )
-    .await?;
-    if body["status"] != "accepted" {
-        return Err(anyhow!("delegated {kind} was not accepted: {body}"));
-    }
-    Ok(typed_event)
 }
 
 async fn managed_agent_frontier(
