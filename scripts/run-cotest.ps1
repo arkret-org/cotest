@@ -2067,6 +2067,29 @@ if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -I
     }
 }
 
+# Process-mode scenarios prefer a pre-built sibling binary so the test
+# process never deadlocks by invoking `cargo run` while Cargo already holds
+# cotest's workspace lock.  Merely finding that binary is not sufficient:
+# it may embed an older SDK/spec snapshot and then reject envelopes authored
+# by the current cotest build.  Build the selected SUT once, before starting
+# any Cargo test invocation, so both sides are compiled from the same checkout.
+# An explicit SOLAND_BIN remains an intentional immutable-binary override.
+if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
+    Add-RawLogLine -Path $rawLog -Value "=== prepare process SUT ==="
+    $buildOutput = @(
+        & cargo build --manifest-path $SutManifest --bin soland 2>&1
+    )
+    $buildExitCode = $LASTEXITCODE
+    foreach ($line in $buildOutput) {
+        $text = [string]$line
+        Write-Host $text
+        Add-RawLogLine -Path $rawLog -Value $text
+    }
+    if ($buildExitCode -ne 0) {
+        throw "Failed to build process SUT from $SutManifest (exit code $buildExitCode)"
+    }
+}
+
 $originalEnv = @()
 foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH") {
     $originalEnv += [pscustomobject]@{

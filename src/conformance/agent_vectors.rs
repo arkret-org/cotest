@@ -192,17 +192,17 @@ pub fn run_agent_provision_vector() -> Result<()> {
             .cloned()
             .ok_or_else(|| anyhow!("commitment requested_scope is missing"))?,
     )?;
+    let participation_ceiling: ParticipationBits = serde_json::from_value(
+        commitment
+            .get("participation_ceiling")
+            .cloned()
+            .ok_or_else(|| anyhow!("commitment participation_ceiling is missing"))?,
+    )?;
     let digest = agent_requested_scope_digest(
         &agent_id,
         &controller_id,
         &requested_scope,
-        ParticipationBits {
-            reply_message: false,
-            reaction_add: false,
-            reaction_remove: false,
-            accept_third_party_mention: true,
-            act_on_behalf: false,
-        },
+        participation_ceiling,
     )?;
     if commitment.get("expected_digest").and_then(Value::as_str) != Some(digest.as_str()) {
         bail!("Agent requested_scope DID commitment digest drifted");

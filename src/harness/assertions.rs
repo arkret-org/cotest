@@ -247,6 +247,7 @@ fn append_transcript_entry(entry: &Value) -> Result<()> {
 }
 
 async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
+    let builder = canonicalize_protocol_json_body(builder)?;
     let request = snapshot_request_builder(&builder);
     let started = Instant::now();
     let response = match builder.timeout(HTTP_REQUEST_DEADLINE).send().await {
@@ -285,6 +286,46 @@ async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
         body,
         context,
     })
+}
+
+/// Make the conformance harness a compliant producer for
+/// `body_class=non_streaming_json` operations.
+///
+/// `reqwest::RequestBuilder::json` only promises JSON serialization; it does
+/// not promise the RFC 8785/JCS byte representation required by Arkret's HTTP
+/// binding.  In particular, typed structs retain declaration order.  The
+/// production SDK already canonicalizes every JSON request.  Cotest uses raw
+/// request builders so it can exercise arbitrary endpoints and negative
+/// shapes, therefore its shared send boundary must apply the same SDK
+/// canonicalizer before bytes reach the wire.
+///
+/// Invalid JSON is intentionally left untouched so malformed-body tests still
+/// exercise the receiver's `bad_json` path.  Schema-invalid but syntactically
+/// valid values are canonicalized: schema validity and wire encoding are
+/// independent protocol layers.
+fn canonicalize_protocol_json_body(builder: RequestBuilder) -> Result<RequestBuilder> {
+    let Some(clone) = builder.try_clone() else {
+        return Ok(builder);
+    };
+    let request = clone.build().context("inspect outgoing cotest request")?;
+    let is_json = request
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("application/json"));
+    if !is_json {
+        return Ok(builder);
+    }
+    let Some(bytes) = request.body().and_then(|body| body.as_bytes()) else {
+        return Ok(builder);
+    };
+    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+        return Ok(builder);
+    };
+    let canonical = arkret_canonical::canonical_json_bytes(&value)
+        .context("canonicalize outgoing cotest protocol JSON")?;
+    Ok(builder.body(canonical))
 }
 
 fn snapshot_request_builder(builder: &RequestBuilder) -> Value {

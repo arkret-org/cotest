@@ -12,7 +12,7 @@
 //! accepts the input or rejects it with a typed `Err` — only a panic
 //! escapes via `catch_unwind` (the caller's responsibility).
 
-use std::panic;
+use std::{panic, sync::OnceLock};
 
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema::{self as schema, ProtocolSchemaRegistry};
@@ -23,11 +23,14 @@ use serde_json::{Value, json};
 /// has the published schemas mounted) but falls back to the empty default
 /// registry so the harness still runs in environments where the artifact
 /// directory is not vendored.
-fn registry() -> ProtocolSchemaRegistry {
-    schema::schema_registry_from_default_spec_artifacts()
-        .ok()
-        .flatten()
-        .unwrap_or_default()
+fn registry() -> &'static ProtocolSchemaRegistry {
+    static REGISTRY: OnceLock<ProtocolSchemaRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        schema::schema_registry_from_default_spec_artifacts()
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    })
 }
 
 /// Wraps a panic-safe call so a panic inside the validator surfaces as a
