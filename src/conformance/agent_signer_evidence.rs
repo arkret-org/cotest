@@ -1,16 +1,36 @@
-//! Executable shape checks for the current/historical Agent-signer evidence fixture.
+//! Executable current/historical Agent signer-evidence conformance.
 //!
-//! Spec 1936d1c0 deliberately stopped publishing synthetic authorization
-//! snapshots and fake signatures as conformance vectors.  The fixture now
-//! declares the two verification regimes and their closed result matrix;
-//! cryptographic construction and verification remain owned by the SDK.
+//! Fixture labels are only the closed registry. Every case below exercises the
+//! SDK-owned state verifier, current validator, historical validator, or signer
+//! regime dispatcher against cryptographically signed evidence.
 
-use anyhow::{Context, Result, bail};
-use arkret_signatures::agent_evidence::{
-    AgentEvidenceRejectedReason, SignerPrincipalKind, SignerRegime,
-    agent_authorization_dot_matches_event, dispatch_signer_regime, verify_event_signer_controller,
+use anyhow::{Context, Result, anyhow, bail};
+use arkret_models_collaboration::agent_signer_evidence::{
+    AGENT_KEY_COMPONENT, AGENT_STATUS_COMPONENT, AgentAdmissionEvidence, AgentAuthoritySnapshot,
+    AgentAuthoritySnapshotCore, AgentAuthorizationEvidence, AgentAuthorizationStateWitness,
+    AgentAuthorizationStatus, AgentCurrentObservation, AgentDetachedJws,
+    AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation, AgentKeyCellEntry,
+    AgentLifecycleProvenance, AgentLifecycleStatus, AgentLifecycleWitness, AgentSignerEvidence,
+    AgentSnapshotLease, ControllerAccountEligibility, ControllerAccountGateAttestation,
+    ControllerAccountGateBasis, ControllerAccountStatus,
 };
-use arkret_wire::{Did, DidUrl, Event, EventKind, Hlc, RealmId, ScopeRef};
+use arkret_signatures::agent_evidence::{
+    AgentEvidenceCommonContext, AgentEvidenceRejectedReason, AgentEvidenceStateVerificationContext,
+    AgentSignerEvidenceVerdict, CurrentAgentSignerEvidenceValidationContext,
+    HistoricalAgentSignerEvidenceValidationContext, SignerPrincipalKind, SignerRegime,
+    agent_authorization_cell_ref, agent_signing_key_binding_digest,
+    agent_signing_public_key_runtime_digest, build_agent_signing_key_binding,
+    dispatch_signer_regime, validate_current_agent_signer_evidence,
+    validate_historical_agent_signer_evidence, verify_agent_evidence_state,
+};
+use arkret_signatures::{PublicKeyMaterial, sign_eddsa_detached_jws};
+use arkret_wire::{
+    Did, DidUrl, Event, EventId, EventKind, Hash, Hlc, NonEmptyString, NotarySig, PayloadSignature,
+    ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealKind,
+};
+use chrono::{DateTime, Duration, TimeZone, Utc};
+use ed25519_dalek::{Signer, SigningKey};
+use serde::Serialize;
 use serde_json::Value;
 
 use super::{fixture_runner_entrypoint, load_fixture_value, validate_profile};
@@ -42,61 +62,76 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "minimal_metadata_forbids_agent_evidence_query",
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutcomeClass {
+    Verified,
+    Unresolved,
+    Rejected,
+}
+
+#[derive(Clone, Copy)]
+struct EvidenceConfig {
+    authorization_status: AgentAuthorizationStatus,
+    lifecycle_status: AgentLifecycleStatus,
+    controller_eligibility: ControllerAccountEligibility,
+    controller_status: ControllerAccountStatus,
+    bare_authorization_tag: bool,
+    stale_snapshot_lease: bool,
+}
+
+impl Default for EvidenceConfig {
+    fn default() -> Self {
+        Self {
+            authorization_status: AgentAuthorizationStatus::Active,
+            lifecycle_status: AgentLifecycleStatus::Active,
+            controller_eligibility: ControllerAccountEligibility::Active,
+            controller_status: ControllerAccountStatus::Active,
+            bare_authorization_tag: false,
+            stale_snapshot_lease: false,
+        }
+    }
+}
+
+struct ExecutableEvidence {
+    current: AgentSignerEvidence,
+    historical: AgentSignerEvidence,
+    signer_id: Did,
+    agent_key_id: NonEmptyString,
+    controller_id: Did,
+    verification_method: DidUrl,
+    authorize_event_id: EventId,
+    authorize_public_key_digest: Hash,
+    binding_digest: Hash,
+    authority_service_id: Did,
+    authority_verification_method: DidUrl,
+    account_authority_service_id: Did,
+    account_authority_verification_method: DidUrl,
+    receiver_service_id: Did,
+    receiver_verification_method: DidUrl,
+    controller_public_key: [u8; 32],
+    authority_public_key: [u8; 32],
+    account_authority_public_key: [u8; 32],
+    receiver_public_key: [u8; 32],
+    operation_id: ProtocolOperationId,
+    request_digest: Hash,
+    verifier_id: Did,
+    audience: Did,
+    challenge: NonEmptyString,
+    event_id: EventId,
+    event_digest: Hash,
+    realm_id: RealmId,
+    event_admitted_seal_id: SealId,
+    now: DateTime<Utc>,
+}
+
 pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
     let fixture = load_fixture_value(AGENT_SIGNER_EVIDENCE_FIXTURE)?;
     validate_profile(&fixture, "ak.profile.agent_signer_evidence.v1")?;
     if fixture_runner_entrypoint(&fixture)? != AGENT_SIGNER_EVIDENCE_SUITE {
         bail!("Agent signer-evidence fixture runner entrypoint drifted");
     }
-
     validate_binding_requirements(&fixture)?;
-    validate_case_matrix(&fixture)?;
-    exercise_sdk_owned_dispatch_and_event_binding()?;
-    Ok(())
-}
 
-fn validate_binding_requirements(fixture: &Value) -> Result<()> {
-    let binding = fixture
-        .get("binding_vector")
-        .and_then(Value::as_object)
-        .context("Agent signer-evidence fixture missing binding_vector")?;
-    for field in [
-        "agent_id",
-        "controller_id",
-        "verification_method",
-        "agent_key_authorize_event_id",
-        "public_key",
-        "binding_digest",
-    ] {
-        binding
-            .get(field)
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .with_context(|| format!("binding_vector.{field} must be a non-empty string"))?;
-    }
-    let requirements = binding
-        .get("requirements")
-        .and_then(Value::as_array)
-        .context("binding_vector.requirements missing")?;
-    let expected = [
-        "recompute_controller_proof_transcript",
-        "recompute_public_key_digest",
-        "match_authorize_event_commitment",
-        "match_agent_and_controller",
-    ];
-    if requirements
-        .iter()
-        .map(|value| value.as_str())
-        .collect::<Option<Vec<_>>>()
-        .as_deref()
-        != Some(expected.as_slice())
-    {
-        bail!("Agent signer binding requirements drifted");
-    }
-    Ok(())
-}
-
-fn validate_case_matrix(fixture: &Value) -> Result<()> {
     let cases = fixture
         .get("cases")
         .and_then(Value::as_array)
@@ -111,71 +146,953 @@ fn validate_case_matrix(fixture: &Value) -> Result<()> {
     }
 
     for case in cases {
-        let expected = case
-            .get("expected")
-            .and_then(Value::as_str)
-            .context("Agent signer-evidence case expected result missing")?;
-        if !matches!(
-            expected,
-            "verified" | "rejected" | "unresolved" | "verified_by_minimal_metadata_only"
-        ) {
-            bail!("Agent signer-evidence case has open expected result {expected}");
-        }
-        if let Some(mode) = case.get("verification_mode").and_then(Value::as_str)
-            && !matches!(mode, "current_admission" | "historical_event")
-        {
-            bail!("Agent signer-evidence case has open verification mode {mode}");
-        }
-        let reason = case.get("reason").and_then(Value::as_str);
-        if matches!(expected, "rejected" | "unresolved") && reason.is_none() {
-            bail!("negative Agent signer-evidence case must name a reason");
+        let name = case["name"].as_str().context("case name missing")?;
+        let expected = expected_class(case["expected"].as_str().context("expected missing")?)?;
+        let observed = execute_case(name)?;
+        if observed != expected {
+            bail!("Agent signer-evidence case {name} expected {expected:?}, observed {observed:?}");
         }
     }
     Ok(())
 }
 
-fn exercise_sdk_owned_dispatch_and_event_binding() -> Result<()> {
-    if dispatch_signer_regime(false, SignerPrincipalKind::NativeAgent)
-        .map_err(|reason| anyhow::anyhow!("{reason:?}"))?
-        != SignerRegime::OrdinaryNativeAgent
-        || dispatch_signer_regime(true, SignerPrincipalKind::NativeAgent)
-            .map_err(|reason| anyhow::anyhow!("{reason:?}"))?
-            != SignerRegime::MinimalMetadata
-        || dispatch_signer_regime(false, SignerPrincipalKind::Unknown)
-            != Err(AgentEvidenceRejectedReason::SigningKeyMismatch)
-    {
-        bail!("SDK Agent signer regime dispatch drifted");
+fn expected_class(expected: &str) -> Result<OutcomeClass> {
+    match expected {
+        "verified" | "verified_by_minimal_metadata_only" => Ok(OutcomeClass::Verified),
+        "unresolved" => Ok(OutcomeClass::Unresolved),
+        "rejected" => Ok(OutcomeClass::Rejected),
+        other => bail!("open Agent signer-evidence outcome {other}"),
     }
+}
 
-    let actor = Did::new("did:webvh:z6mkactor:actor.example")?;
-    let signer = Did::new("did:webvh:z6mkagent:agent.example")?;
-    let mut event = Event::new(
-        EventKind::MESSAGE_CREATE,
-        ScopeRef::Realm {
-            realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000009")?,
-        },
-        actor.clone(),
-        1,
-        Hlc::new("01970e589d21-0004-a13f9c2e")?,
-        serde_json::json!({}),
-    )?;
-    event.executed_by = Some(signer.clone());
-    let binding = verify_event_signer_controller(
-        &event,
-        &DidUrl::new(format!("{signer}#runtime-1")).map_err(anyhow::Error::msg)?,
-    )
-    .map_err(|reason| anyhow::anyhow!("{reason:?}"))?;
-    if binding.binding_actor_id != actor || binding.signer_id != signer {
-        bail!("SDK delegated Agent actor/signer binding drifted");
+fn execute_case(name: &str) -> Result<OutcomeClass> {
+    match name {
+        "current_exact_request_and_three_active_gates_verified" => {
+            current_outcome(&build_evidence(EvidenceConfig::default())?, None)
+        }
+        "current_cross_verifier_replay_rejected" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            current_outcome(
+                &fixture,
+                Some(CurrentOverride::Verifier(Did::new(
+                    "did:webvh:z6mkother:verifier.example",
+                )?)),
+            )
+        }
+        "current_request_or_challenge_replay_rejected" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            current_outcome(
+                &fixture,
+                Some(CurrentOverride::RequestDigest(hash_byte(0xa7)?)),
+            )
+        }
+        "current_snapshot_digest_mix_and_match_rejected" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            if let AgentSignerEvidence::CurrentAdmission {
+                current_observation,
+                ..
+            } = &mut fixture.current
+            {
+                current_observation.agent_snapshot_digest = hash_byte(0xa8)?;
+            }
+            current_outcome(&fixture, None)
+        }
+        "current_stale_lease_is_unresolved" => {
+            let fixture = build_evidence(EvidenceConfig {
+                stale_snapshot_lease: true,
+                ..EvidenceConfig::default()
+            })?;
+            current_stale_outcome(&fixture)
+        }
+        "current_paused_agent_rejected" => current_outcome(
+            &build_evidence(EvidenceConfig {
+                lifecycle_status: AgentLifecycleStatus::Paused,
+                ..EvidenceConfig::default()
+            })?,
+            None,
+        ),
+        "current_inactive_controller_account_rejected" => current_outcome(
+            &build_evidence(EvidenceConfig {
+                controller_eligibility: ControllerAccountEligibility::Inactive,
+                controller_status: ControllerAccountStatus::Suspended,
+                ..EvidenceConfig::default()
+            })?,
+            None,
+        ),
+        "current_revoked_or_superseded_key_rejected" => current_outcome(
+            &build_evidence(EvidenceConfig {
+                authorization_status: AgentAuthorizationStatus::Revoked,
+                ..EvidenceConfig::default()
+            })?,
+            None,
+        ),
+        "historical_destination_receipt_preserves_admission" => {
+            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
+        }
+        "historical_current_snapshot_substitution_rejected" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            historical_outcome_with(&fixture, Some(&fixture.current), None, false)
+        }
+        "historical_wrong_destination_receipt_rejected" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            historical_outcome(
+                &fixture,
+                Some(Did::new("did:webvh:z6mkwrong:receiver.example")?),
+                false,
+            )
+        }
+        "historical_inactive_gate_at_receipt_time_rejected" => historical_outcome(
+            &build_evidence(EvidenceConfig {
+                controller_eligibility: ControllerAccountEligibility::Inactive,
+                controller_status: ControllerAccountStatus::Locked,
+                ..EvidenceConfig::default()
+            })?,
+            None,
+            false,
+        ),
+        "account_gate_never_discloses_local_identity" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            let serialized = serde_json::to_value(&fixture.current)?;
+            if contains_forbidden_local_identity(&serialized) {
+                bail!("portable account gate disclosed service-local identity");
+            }
+            current_outcome(&fixture, None)
+        }
+        "agent_genesis_active_requires_provision_ref" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            let admission = admission(&fixture.current);
+            let provenance = &admission
+                .agent_authority_snapshot
+                .core
+                .agent_lifecycle_witness
+                .provenance;
+            if !matches!(
+                provenance,
+                AgentLifecycleProvenance::DelegatedPcrGenesis {
+                    agent_provision_event_id,
+                    ..
+                } if !agent_provision_event_id.as_str().is_empty()
+            ) {
+                bail!("active Agent genesis lacks provision reference");
+            }
+            current_outcome(&fixture, None)
+        }
+        "organization_pcr_cannot_materialize_agent_active" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            state_outcome_with_policy(&fixture, &|_| {
+                Err(AgentEvidenceRejectedReason::AuthorizationInactive)
+            })
+        }
+        "state_witness_uses_canonical_event_dot" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            state_outcome_with_policy(&fixture, &|_| Ok(()))
+        }
+        "bare_event_id_state_tag_rejected" => {
+            let fixture = build_evidence(EvidenceConfig {
+                bare_authorization_tag: true,
+                ..EvidenceConfig::default()
+            })?;
+            state_outcome_with_policy(&fixture, &|_| Ok(()))
+        }
+        "outer_attestation_prevents_mode_splice" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            let current_outer = match &fixture.current {
+                AgentSignerEvidence::CurrentAdmission {
+                    outer_attestation, ..
+                } => outer_attestation.clone(),
+                AgentSignerEvidence::HistoricalEvent { .. } => unreachable!(),
+            };
+            if let AgentSignerEvidence::HistoricalEvent {
+                outer_attestation, ..
+            } = &mut fixture.historical
+            {
+                *outer_attestation = current_outer;
+            }
+            historical_outcome(&fixture, None, false)
+        }
+        "historical_mls_leaf_cross_binding_verified" => {
+            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
+        }
+        "duplicate_or_mismatched_mls_leaf_rejected" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            if let AgentSignerEvidence::HistoricalEvent {
+                event_admission_receipt,
+                ..
+            } = &mut fixture.historical
+            {
+                event_admission_receipt.verification_method =
+                    DidUrl::new(format!("{}#mismatched-mls-leaf", fixture.signer_id))
+                        .map_err(anyhow::Error::msg)?;
+            }
+            historical_outcome(&fixture, None, false)
+        }
+        "minimal_metadata_forbids_agent_evidence_query" => {
+            if dispatch_signer_regime(true, SignerPrincipalKind::NativeAgent)
+                .map_err(|reason| anyhow!("{reason:?}"))?
+                == SignerRegime::MinimalMetadata
+            {
+                Ok(OutcomeClass::Verified)
+            } else {
+                Ok(OutcomeClass::Rejected)
+            }
+        }
+        other => bail!("unimplemented Agent signer-evidence case {other}"),
     }
-    if !agent_authorization_dot_matches_event(
-        "ak:event:01964137-0000-7000-8000-000000000001:0",
-        "ak:event:01964137-0000-7000-8000-000000000001",
-    ) || agent_authorization_dot_matches_event(
-        "ak:event:01964137-0000-7000-8000-000000000001",
-        "ak:event:01964137-0000-7000-8000-000000000001",
-    ) {
-        bail!("SDK Agent authorization dot validation drifted");
+}
+
+enum CurrentOverride {
+    Verifier(Did),
+    RequestDigest(Hash),
+}
+
+fn current_outcome(
+    fixture: &ExecutableEvidence,
+    override_value: Option<CurrentOverride>,
+) -> Result<OutcomeClass> {
+    let verified_state = verified_state(fixture, &fixture.current, &|_| Ok(()))?;
+    let controller_key = public_key(fixture.controller_public_key);
+    let authority_key = public_key(fixture.authority_public_key);
+    let account_key = public_key(fixture.account_authority_public_key);
+    let common = common_context(
+        fixture,
+        &verified_state,
+        &controller_key,
+        &authority_key,
+        &account_key,
+    );
+    let alternate_verifier;
+    let alternate_digest;
+    let verifier_id = match &override_value {
+        Some(CurrentOverride::Verifier(value)) => {
+            alternate_verifier = value;
+            alternate_verifier
+        }
+        _ => &fixture.verifier_id,
+    };
+    let request_digest = match &override_value {
+        Some(CurrentOverride::RequestDigest(value)) => {
+            alternate_digest = value;
+            alternate_digest
+        }
+        _ => &fixture.request_digest,
+    };
+    Ok(verdict_class(validate_current_agent_signer_evidence(
+        Some(&fixture.current),
+        &CurrentAgentSignerEvidenceValidationContext {
+            common,
+            operation_id: &fixture.operation_id,
+            request_digest,
+            verifier_id,
+            audience: &fixture.audience,
+            challenge: &fixture.challenge,
+        },
+    )))
+}
+
+fn current_stale_outcome(fixture: &ExecutableEvidence) -> Result<OutcomeClass> {
+    let verified_state = verified_state(fixture, &fixture.current, &|_| Ok(()))?;
+    let controller_key = public_key(fixture.controller_public_key);
+    let authority_key = public_key(fixture.authority_public_key);
+    let account_key = public_key(fixture.account_authority_public_key);
+    let verdict = validate_current_agent_signer_evidence(
+        Some(&fixture.current),
+        &CurrentAgentSignerEvidenceValidationContext {
+            common: common_context(
+                fixture,
+                &verified_state,
+                &controller_key,
+                &authority_key,
+                &account_key,
+            ),
+            operation_id: &fixture.operation_id,
+            request_digest: &fixture.request_digest,
+            verifier_id: &fixture.verifier_id,
+            audience: &fixture.audience,
+            challenge: &fixture.challenge,
+        },
+    );
+    match verdict {
+        AgentSignerEvidenceVerdict::Unresolved(
+            arkret_signatures::agent_evidence::AgentEvidenceUnresolvedReason::Stale,
+        ) => Ok(OutcomeClass::Unresolved),
+        other => bail!("expired signed current snapshot lease returned {other:?}"),
+    }
+}
+
+fn historical_outcome(
+    fixture: &ExecutableEvidence,
+    receiver_override: Option<Did>,
+    deny_key_resolution: bool,
+) -> Result<OutcomeClass> {
+    historical_outcome_with(
+        fixture,
+        Some(&fixture.historical),
+        receiver_override,
+        deny_key_resolution,
+    )
+}
+
+fn historical_outcome_with(
+    fixture: &ExecutableEvidence,
+    evidence: Option<&AgentSignerEvidence>,
+    receiver_override: Option<Did>,
+    deny_key_resolution: bool,
+) -> Result<OutcomeClass> {
+    let state_source = evidence.unwrap_or(&fixture.historical);
+    let verified_state = verified_state(fixture, state_source, &|_| Ok(()))?;
+    let controller_key = public_key(fixture.controller_public_key);
+    let authority_key = public_key(fixture.authority_public_key);
+    let account_key = public_key(fixture.account_authority_public_key);
+    let receiver_service_id = receiver_override
+        .as_ref()
+        .unwrap_or(&fixture.receiver_service_id);
+    let resolve = |method: &DidUrl, _at: DateTime<Utc>| {
+        (!deny_key_resolution && method == &fixture.receiver_verification_method)
+            .then(|| public_key(fixture.receiver_public_key))
+    };
+    Ok(verdict_class(validate_historical_agent_signer_evidence(
+        evidence,
+        &HistoricalAgentSignerEvidenceValidationContext {
+            common: common_context(
+                fixture,
+                &verified_state,
+                &controller_key,
+                &authority_key,
+                &account_key,
+            ),
+            event_id: &fixture.event_id,
+            event_digest: &fixture.event_digest,
+            realm_id: &fixture.realm_id,
+            event_admitted_seal_id: &fixture.event_admitted_seal_id,
+            receiver_service_id,
+            resolve_receiver_historical_key: &resolve,
+        },
+    )))
+}
+
+fn state_outcome_with_policy(
+    fixture: &ExecutableEvidence,
+    policy: &dyn Fn(&AgentLifecycleWitness) -> std::result::Result<(), AgentEvidenceRejectedReason>,
+) -> Result<OutcomeClass> {
+    match verified_state(fixture, &fixture.current, policy) {
+        Ok(_) => Ok(OutcomeClass::Verified),
+        Err(_) => Ok(OutcomeClass::Rejected),
+    }
+}
+
+fn verified_state<'a>(
+    fixture: &'a ExecutableEvidence,
+    evidence: &'a AgentSignerEvidence,
+    lifecycle_policy: &'a dyn Fn(
+        &AgentLifecycleWitness,
+    ) -> std::result::Result<(), AgentEvidenceRejectedReason>,
+) -> Result<arkret_signatures::agent_evidence::VerifiedAgentEvidenceState> {
+    let seal_policy = |_seal: &Seal| Ok(());
+    verify_agent_evidence_state(
+        admission(evidence),
+        &AgentEvidenceStateVerificationContext {
+            signer_id: &fixture.signer_id,
+            agent_key_id: &fixture.agent_key_id,
+            controller_id: &fixture.controller_id,
+            agent_key_authorize_event_id: &fixture.authorize_event_id,
+            authorize_public_key_digest: &fixture.authorize_public_key_digest,
+            authorize_signing_key_binding_digest: &fixture.binding_digest,
+            verify_seal_signature: &seal_policy,
+            verify_lifecycle_reducer: lifecycle_policy,
+        },
+    )
+    .map_err(|reason| anyhow!("state verification rejected: {reason:?}"))
+}
+
+fn common_context<'a>(
+    fixture: &'a ExecutableEvidence,
+    verified_state: &'a arkret_signatures::agent_evidence::VerifiedAgentEvidenceState,
+    controller_key: &'a PublicKeyMaterial,
+    authority_key: &'a PublicKeyMaterial,
+    account_key: &'a PublicKeyMaterial,
+) -> AgentEvidenceCommonContext<'a> {
+    AgentEvidenceCommonContext {
+        signer_id: &fixture.signer_id,
+        agent_key_id: &fixture.agent_key_id,
+        controller_id: &fixture.controller_id,
+        verification_method: &fixture.verification_method,
+        agent_key_authorize_event_id: &fixture.authorize_event_id,
+        authorize_public_key_digest: &fixture.authorize_public_key_digest,
+        authorize_signing_key_binding_digest: &fixture.binding_digest,
+        expected_authority_service_id: &fixture.authority_service_id,
+        expected_authority_verification_method: &fixture.authority_verification_method,
+        expected_account_authority_service_id: &fixture.account_authority_service_id,
+        expected_account_authority_verification_method: &fixture
+            .account_authority_verification_method,
+        controller_public_key: controller_key,
+        authority_public_key: authority_key,
+        account_authority_public_key: account_key,
+        verified_state,
+        require_transparency: false,
+        transparency_verified: false,
+        now: fixture.now,
+    }
+}
+
+fn verdict_class(verdict: AgentSignerEvidenceVerdict) -> OutcomeClass {
+    match verdict {
+        AgentSignerEvidenceVerdict::Verified(_) => OutcomeClass::Verified,
+        AgentSignerEvidenceVerdict::Unresolved(_) => OutcomeClass::Unresolved,
+        AgentSignerEvidenceVerdict::Rejected(_) => OutcomeClass::Rejected,
+    }
+}
+
+fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
+    let issued_at = Utc
+        .with_ymd_and_hms(2026, 8, 3, 0, 0, 0)
+        .single()
+        .context("fixed timestamp")?;
+    let now = issued_at + Duration::minutes(20);
+    let expires_at = issued_at + Duration::hours(2);
+    let snapshot_lease_expires_at = if config.stale_snapshot_lease {
+        now - Duration::minutes(1)
+    } else {
+        expires_at
+    };
+    let controller_signing = SigningKey::from_bytes(&[11; 32]);
+    let agent_signing = SigningKey::from_bytes(&[12; 32]);
+    let authority_signing = SigningKey::from_bytes(&[13; 32]);
+    let account_signing = SigningKey::from_bytes(&[14; 32]);
+    let receiver_signing = SigningKey::from_bytes(&[15; 32]);
+
+    let signer_id = Did::new("did:webvh:z6mkagent:agent.example")?;
+    let controller_id = Did::new("did:webvh:z6mkcontroller:controller.example")?;
+    let authority_service_id = Did::new("did:webvh:z6mkauthority:authority.example")?;
+    let account_authority_service_id = Did::new("did:webvh:z6mkaccount:account-authority.example")?;
+    let receiver_service_id = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
+    let verification_method =
+        DidUrl::new(format!("{signer_id}#runtime-1")).map_err(anyhow::Error::msg)?;
+    let controller_verification_method =
+        DidUrl::new(format!("{controller_id}#controller-1")).map_err(anyhow::Error::msg)?;
+    let authority_verification_method =
+        DidUrl::new(format!("{authority_service_id}#assertion-1")).map_err(anyhow::Error::msg)?;
+    let account_authority_verification_method =
+        DidUrl::new(format!("{account_authority_service_id}#assertion-1"))
+            .map_err(anyhow::Error::msg)?;
+    let receiver_verification_method =
+        DidUrl::new(format!("{receiver_service_id}#assertion-1")).map_err(anyhow::Error::msg)?;
+    let agent_key_id = nes("runtime-1")?;
+    let authorize_event_id = event_id(1)?;
+    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-000000000009")?;
+
+    let binding = build_agent_signing_key_binding(
+        signer_id.clone(),
+        agent_key_id.clone(),
+        verification_method.clone(),
+        agent_signing.verifying_key().to_bytes(),
+        authorize_event_id.clone(),
+        issued_at,
+        Some(expires_at),
+        controller_id.clone(),
+        controller_verification_method,
+        &controller_signing,
+    )
+    .map_err(|reason| anyhow!("binding: {reason:?}"))?;
+    let authorize_public_key_digest =
+        agent_signing_public_key_runtime_digest(&verification_method, &binding.public_key)
+            .map_err(|reason| anyhow!("runtime key digest: {reason:?}"))?;
+    let binding_digest =
+        agent_signing_key_binding_digest(&binding).map_err(|reason| anyhow!("{reason:?}"))?;
+
+    let tag = if config.bare_authorization_tag {
+        authorize_event_id.to_string()
+    } else {
+        format!("{authorize_event_id}:0")
+    };
+    let key_cell_value = vec![AgentKeyCellEntry {
+        tag: nes(&tag)?,
+        value: serde_json::json!({
+            "agent_id": signer_id,
+            "key_id": agent_key_id,
+            "verification_method": verification_method,
+            "public_key_digest": authorize_public_key_digest,
+            "signing_key_binding_digest": binding_digest,
+        }),
+    }];
+    let key_cell_ref = agent_authorization_cell_ref(&signer_id, &agent_key_id)
+        .map_err(|reason| anyhow!("cell ref: {reason:?}"))?;
+    let key_leaf_digest = arkret_state::state_value_leaf_digest(
+        &arkret_wire::CellRef::new(key_cell_ref.as_str().to_owned())?,
+        &serde_json::to_value(&key_cell_value)?,
+    )?;
+    let lifecycle_cell_ref = nes(&arkret_wire::composite_subject(&[signer_id.as_str()])?)?;
+    let lifecycle_cell_ref = nes(&format!(
+        "ak:cell:{AGENT_STATUS_COMPONENT}:{}",
+        lifecycle_cell_ref.as_str()
+    ))?;
+    let lifecycle_leaf_digest = arkret_state::state_value_leaf_digest(
+        &arkret_wire::CellRef::new(lifecycle_cell_ref.as_str().to_owned())?,
+        &serde_json::to_value(config.lifecycle_status)?,
+    )?;
+
+    let key_seal = make_seal(
+        &realm_id,
+        Vec::new(),
+        key_leaf_digest.clone(),
+        1,
+        issued_at,
+        "01970e589d21-0000-a13f9c2e",
+        &authority_verification_method,
+    )?;
+    let lifecycle_seal = make_seal(
+        &realm_id,
+        vec![key_seal.id.clone()],
+        lifecycle_leaf_digest.clone(),
+        2,
+        issued_at + Duration::seconds(1),
+        "01970e589d21-0001-a13f9c2e",
+        &authority_verification_method,
+    )?;
+    let accepted_status_event = Event::new(
+        EventKind::AGENT_PROVISION,
+        ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        controller_id.clone(),
+        1,
+        Hlc::new("01970e589d21-0002-a13f9c2e")?,
+        serde_json::json!({"agent_id": signer_id}),
+    )?;
+    let provision_event_id = accepted_status_event.event_id.clone();
+    let authorization = AgentAuthorizationEvidence {
+        status: config.authorization_status,
+        authorized_event_id: authorize_event_id.clone(),
+        accepted_seal_id: key_seal.id.clone(),
+        accepted_at: issued_at,
+        not_before: issued_at,
+        expires_at: Some(expires_at),
+        transition_event_id: None,
+        transition_seal_id: None,
+    };
+    let key_state_witness = AgentAuthorizationStateWitness {
+        component: nes(AGENT_KEY_COMPONENT)?,
+        agent_id: signer_id.clone(),
+        authorization_event_id: authorize_event_id.clone(),
+        seal_id: key_seal.id.clone(),
+        state_root: key_leaf_digest.clone(),
+        seal: key_seal.clone(),
+        cell_ref: key_cell_ref,
+        cell_value: key_cell_value,
+        leaf_digest: key_leaf_digest,
+        leaf_index: 0,
+        leaf_count: 1,
+        inclusion_proof: Vec::new(),
+    };
+    let lifecycle_witness = AgentLifecycleWitness {
+        component: nes(AGENT_STATUS_COMPONENT)?,
+        agent_id: signer_id.clone(),
+        controller_id: controller_id.clone(),
+        status: config.lifecycle_status,
+        provenance: AgentLifecycleProvenance::DelegatedPcrGenesis {
+            realm_create_event_id: event_id(2)?,
+            agent_provision_event_id: provision_event_id,
+        },
+        accepted_status_event,
+        seal_id: lifecycle_seal.id.clone(),
+        state_root: lifecycle_leaf_digest.clone(),
+        seal: lifecycle_seal.clone(),
+        cell_ref: lifecycle_cell_ref,
+        cell_value: config.lifecycle_status,
+        leaf_digest: lifecycle_leaf_digest,
+        leaf_index: 0,
+        leaf_count: 1,
+        inclusion_proof: Vec::new(),
+    };
+    let core = AgentAuthoritySnapshotCore {
+        authority_service_id: authority_service_id.clone(),
+        principal_control_realm_id: realm_id.clone(),
+        frontier_seal_id: lifecycle_seal.id.clone(),
+        frontier_state_root: lifecycle_seal.state_root.clone(),
+        signing_key_binding: binding,
+        authorization,
+        key_state_witness,
+        key_transition_witness: None,
+        agent_lifecycle_witness: lifecycle_witness,
+        seal_lineage: vec![key_seal, lifecycle_seal],
+    };
+    let snapshot_digest = canonical_hash(&core)?;
+    let mut snapshot = AgentAuthoritySnapshot {
+        core,
+        snapshot_digest: snapshot_digest.clone(),
+        lease: AgentSnapshotLease {
+            authority_kind: nes("agent_authority")?,
+            authority_service_id: authority_service_id.clone(),
+            verification_method: authority_verification_method.clone(),
+            snapshot_digest: snapshot_digest.clone(),
+            issued_at,
+            expires_at: snapshot_lease_expires_at,
+            proof: pending_proof()?,
+        },
+    };
+    snapshot.lease.proof = sign_domain(
+        "ak.agent-authority-snapshot-v1",
+        &snapshot.lease,
+        &authority_signing,
+        None,
+    )?;
+
+    let basis = ControllerAccountGateBasis::AccountBindingDefault {
+        binding_version: 1,
+        binding_frontier_digest: hash_byte(0x31)?,
+    };
+    let mut gate = ControllerAccountGateAttestation {
+        schema: nes(SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1)?,
+        principal_id: controller_id.clone(),
+        eligibility: config.controller_eligibility,
+        status: config.controller_status,
+        basis_digest: canonical_hash(&basis)?,
+        basis,
+        authority_service_id: account_authority_service_id.clone(),
+        verification_method: account_authority_verification_method.clone(),
+        issued_at,
+        expires_at,
+        proof: pending_proof()?,
+    };
+    gate.proof = sign_domain(
+        "ak.controller-account-gate-v1",
+        &gate,
+        &account_signing,
+        None,
+    )?;
+    let gate_digest = canonical_hash(&gate)?;
+    let admission_evidence_digest = canonical_hash(&serde_json::json!({
+        "agent_authority_snapshot": snapshot,
+        "controller_account_gate_attestation": gate,
+    }))?;
+    let admission = AgentAdmissionEvidence {
+        agent_authority_snapshot: snapshot,
+        controller_account_gate_attestation: gate,
+        admission_evidence_digest: admission_evidence_digest.clone(),
+    };
+
+    let operation_id = ProtocolOperationId::new("ak:operation:cotest.agent-evidence")
+        .map_err(anyhow::Error::msg)?;
+    let request_digest = hash_byte(0x41)?;
+    let verifier_id = Did::new("did:webvh:z6mkverifier:verifier.example")?;
+    let audience = Did::new("did:webvh:z6mkaudience:audience.example")?;
+    let challenge = nes("cotest-agent-evidence-challenge-0001")?;
+    let observation = AgentCurrentObservation {
+        operation_id: operation_id.clone(),
+        request_digest: request_digest.clone(),
+        verifier_id: verifier_id.clone(),
+        audience: audience.clone(),
+        challenge: challenge.clone(),
+        agent_snapshot_digest: snapshot_digest.clone(),
+        agent_key_seal_id: admission
+            .agent_authority_snapshot
+            .core
+            .key_state_witness
+            .seal_id
+            .clone(),
+        agent_status_seal_id: admission
+            .agent_authority_snapshot
+            .core
+            .agent_lifecycle_witness
+            .seal_id
+            .clone(),
+        controller_gate_attestation_digest: gate_digest.clone(),
+        evaluated_at: now,
+        expires_at: now + Duration::minutes(10),
+    };
+    let mut current = AgentSignerEvidence::CurrentAdmission {
+        schema: nes(SchemaId::AGENT_SIGNER_EVIDENCE_V1)?,
+        admission_evidence: admission.clone(),
+        current_observation: observation,
+        outer_attestation: pending_outer(
+            &authority_service_id,
+            &authority_verification_method,
+            issued_at,
+            expires_at,
+        )?,
+        transparency: None,
+    };
+    sign_outer(&mut current, &authority_signing)?;
+
+    let event_id = event_id(3)?;
+    let event_digest = hash_byte(0x51)?;
+    let event_admitted_seal_id = admission
+        .agent_authority_snapshot
+        .core
+        .frontier_seal_id
+        .clone();
+    let mut receipt = AgentEventAdmissionReceipt {
+        schema: nes(SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1)?,
+        event_id: event_id.clone(),
+        event_digest: event_digest.clone(),
+        realm_id: realm_id.clone(),
+        event_admitted_seal_id: event_admitted_seal_id.clone(),
+        accepted_at: now,
+        agent_id: signer_id.clone(),
+        verification_method: verification_method.clone(),
+        agent_key_authorize_event_id: authorize_event_id.clone(),
+        admission_evidence_digest,
+        agent_snapshot_digest: snapshot_digest,
+        agent_key_seal_id: admission
+            .agent_authority_snapshot
+            .core
+            .key_state_witness
+            .seal_id
+            .clone(),
+        agent_status_seal_id: admission
+            .agent_authority_snapshot
+            .core
+            .agent_lifecycle_witness
+            .seal_id
+            .clone(),
+        controller_gate_attestation_digest: gate_digest,
+        receiver_service_id: receiver_service_id.clone(),
+        proof: pending_proof()?,
+    };
+    receipt.proof = sign_domain(
+        "ak.agent-signer-admission-receipt-v1",
+        &receipt,
+        &receiver_signing,
+        Some(&receiver_verification_method),
+    )?;
+    let mut historical = AgentSignerEvidence::HistoricalEvent {
+        schema: nes(SchemaId::AGENT_SIGNER_EVIDENCE_V1)?,
+        admission_evidence: admission,
+        event_admission_receipt: receipt,
+        outer_attestation: pending_outer(
+            &authority_service_id,
+            &authority_verification_method,
+            issued_at,
+            expires_at,
+        )?,
+        transparency: None,
+    };
+    sign_outer(&mut historical, &authority_signing)?;
+
+    Ok(ExecutableEvidence {
+        current,
+        historical,
+        signer_id,
+        agent_key_id,
+        controller_id,
+        verification_method,
+        authorize_event_id,
+        authorize_public_key_digest,
+        binding_digest,
+        authority_service_id,
+        authority_verification_method,
+        account_authority_service_id,
+        account_authority_verification_method,
+        receiver_service_id,
+        receiver_verification_method,
+        controller_public_key: controller_signing.verifying_key().to_bytes(),
+        authority_public_key: authority_signing.verifying_key().to_bytes(),
+        account_authority_public_key: account_signing.verifying_key().to_bytes(),
+        receiver_public_key: receiver_signing.verifying_key().to_bytes(),
+        operation_id,
+        request_digest,
+        verifier_id,
+        audience,
+        challenge,
+        event_id,
+        event_digest,
+        realm_id,
+        event_admitted_seal_id,
+        now,
+    })
+}
+
+fn make_seal(
+    realm_id: &RealmId,
+    predecessor_refs: Vec<SealId>,
+    state_root: Hash,
+    sequence: u64,
+    sealed_at: DateTime<Utc>,
+    hlc: &str,
+    verification_method: &DidUrl,
+) -> Result<Seal> {
+    let mut seal = Seal {
+        id: SealId::new(format!("ak:seal:{}", hash_byte(0)?))?,
+        realm_id: realm_id.clone(),
+        predecessor_refs,
+        delta: vec![hash_byte(sequence as u8)?],
+        control_event_set_root: hash_byte(0x61)?,
+        state_root,
+        completeness_root: hash_byte(0x62)?,
+        notary_seq: sequence,
+        data_view_root: None,
+        data_event_set_root: None,
+        availability_root: None,
+        coverage_scope: None,
+        covered_event_digests: Vec::new(),
+        previous_state_root: None,
+        previous_digest_algorithm: None,
+        notary_signature: NotarySig::Single(PayloadSignature {
+            alg: "EdDSA".to_owned(),
+            verification_method: verification_method.clone(),
+            payload_digest: hash_byte(0x63)?,
+            created_at: sealed_at,
+            jws: "e30..c2ln".to_owned(),
+            extra: Default::default(),
+        }),
+        sealed_at,
+        hlc: Hlc::new(hlc)?,
+        kind: SealKind::Normal,
+    };
+    seal.id = seal.derive_id()?;
+    Ok(seal)
+}
+
+fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> Result<()> {
+    let mut core = serde_json::to_value(&*evidence)?;
+    core.as_object_mut()
+        .and_then(|object| object.remove("outer_attestation"))
+        .context("outer attestation missing")?;
+    let core_digest = canonical_hash(&core)?;
+    let outer = match evidence {
+        AgentSignerEvidence::CurrentAdmission {
+            outer_attestation, ..
+        }
+        | AgentSignerEvidence::HistoricalEvent {
+            outer_attestation, ..
+        } => outer_attestation,
+    };
+    outer.core_digest = core_digest;
+    outer.proof = sign_domain("ak.agent-signer-evidence.v1", outer, signing_key, None)?;
+    Ok(())
+}
+
+fn pending_outer(
+    service_id: &Did,
+    method: &DidUrl,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+) -> Result<AgentEvidenceOuterAttestation> {
+    Ok(AgentEvidenceOuterAttestation {
+        domain: nes("ak.agent-signer-evidence.v1")?,
+        core_digest: hash_byte(0)?,
+        source_service_id: service_id.clone(),
+        verification_method: method.clone(),
+        issued_at,
+        expires_at,
+        proof: pending_proof()?,
+    })
+}
+
+fn sign_domain(
+    domain: &str,
+    value: &impl Serialize,
+    signing_key: &SigningKey,
+    protected_kid: Option<&DidUrl>,
+) -> Result<AgentDetachedJws> {
+    let mut unsigned = serde_json::to_value(value)?;
+    unsigned
+        .as_object_mut()
+        .and_then(|object| object.get_mut("proof"))
+        .and_then(Value::as_object_mut)
+        .and_then(|proof| proof.remove("jws"))
+        .context("signed evidence object missing proof.jws")?;
+    let canonical = arkret_canonical::canonical_json_bytes(&unsigned)?;
+    let mut signing_bytes = format!("{domain}\n").into_bytes();
+    signing_bytes.extend(canonical);
+    let jws = match protected_kid {
+        Some(kid) => detached_jws_with_kid(signing_key, &signing_bytes, kid)?,
+        None => sign_eddsa_detached_jws(signing_key, &signing_bytes)
+            .map_err(|error| anyhow!(error.to_string()))?,
+    };
+    Ok(AgentDetachedJws {
+        kind: nes("detached_jws")?,
+        jws: nes(&jws)?,
+    })
+}
+
+fn detached_jws_with_kid(key: &SigningKey, payload: &[u8], kid: &DidUrl) -> Result<String> {
+    let protected = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "alg": "EdDSA",
+        "kid": kid,
+    }))?;
+    let protected = arkret_canonical::base64url_encode(protected);
+    let payload = arkret_canonical::base64url_encode(payload);
+    let signing_input = format!("{protected}.{payload}");
+    let signature = key.sign(signing_input.as_bytes());
+    Ok(format!(
+        "{protected}..{}",
+        arkret_canonical::base64url_encode(signature.to_bytes())
+    ))
+}
+
+fn pending_proof() -> Result<AgentDetachedJws> {
+    Ok(AgentDetachedJws {
+        kind: nes("detached_jws")?,
+        jws: nes("pending")?,
+    })
+}
+
+fn admission(evidence: &AgentSignerEvidence) -> &AgentAdmissionEvidence {
+    match evidence {
+        AgentSignerEvidence::CurrentAdmission {
+            admission_evidence, ..
+        }
+        | AgentSignerEvidence::HistoricalEvent {
+            admission_evidence, ..
+        } => admission_evidence,
+    }
+}
+
+fn public_key(bytes: [u8; 32]) -> PublicKeyMaterial {
+    PublicKeyMaterial::Ed25519Raw {
+        bytes: bytes.to_vec(),
+    }
+}
+
+fn contains_forbidden_local_identity(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => object.iter().any(|(key, nested)| {
+            matches!(
+                key.as_str(),
+                "local_account_id" | "session_id" | "internal_user_id" | "database_id"
+            ) || contains_forbidden_local_identity(nested)
+        }),
+        Value::Array(values) => values.iter().any(contains_forbidden_local_identity),
+        _ => false,
+    }
+}
+
+fn validate_binding_requirements(fixture: &Value) -> Result<()> {
+    let requirements = fixture
+        .pointer("/binding_vector/requirements")
+        .and_then(Value::as_array)
+        .context("binding_vector.requirements missing")?;
+    let expected = [
+        "recompute_controller_proof_transcript",
+        "recompute_public_key_digest",
+        "match_authorize_event_commitment",
+        "match_agent_and_controller",
+    ];
+    if requirements
+        .iter()
+        .map(Value::as_str)
+        .collect::<Option<Vec<_>>>()
+        .as_deref()
+        != Some(expected.as_slice())
+    {
+        bail!("Agent signer binding requirements drifted");
     }
     Ok(())
+}
+
+fn canonical_hash(value: &impl Serialize) -> Result<Hash> {
+    Hash::new(arkret_canonical::canonical_sha256(value)?).map_err(anyhow::Error::msg)
+}
+
+fn hash_byte(byte: u8) -> Result<Hash> {
+    Hash::new(format!("sha256:{}", format!("{byte:02x}").repeat(32))).map_err(anyhow::Error::msg)
+}
+
+fn event_id(suffix: u8) -> Result<EventId> {
+    EventId::new(format!("ak:event:01964137-0000-7000-8000-{suffix:012x}"))
+        .map_err(anyhow::Error::msg)
+}
+
+fn nes(value: &str) -> Result<NonEmptyString> {
+    NonEmptyString::new(value.to_owned()).map_err(anyhow::Error::msg)
 }
