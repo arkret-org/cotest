@@ -248,7 +248,7 @@ function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, 
     next_epoch: 1,
     security_frontier_digest: `sha256:${"2".repeat(64)}`,
     binding_profile: "ak.profile.mls_governance_binding.full.v1",
-    reducer_profile: "ak.reducer.v1",
+    reducer_profile: "ak.reducer.core.v1",
   };
 }
 

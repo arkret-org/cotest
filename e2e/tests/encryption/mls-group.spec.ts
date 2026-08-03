@@ -75,7 +75,7 @@ const BASE58BTC_ALPHABET =
 const CROSS_SIGNING_BINDING_LABEL = "ak.cross-signing-bind-v1\n";
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
   "ak.profile.mls_governance_binding.full.v1";
-const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
+const MLS_REDUCER_PROFILE_V1 = "ak.reducer.core.v1";
 
 type Ed25519FixtureKey = {
   privateKey: KeyObject;

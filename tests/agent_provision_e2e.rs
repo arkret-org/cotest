@@ -2836,7 +2836,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         "next_epoch": 0,
                         "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
                         "binding_profile": "ak.profile.mls_governance_binding.full.v1",
-                        "reducer_profile": "ak.reducer.v1"
+                        "reducer_profile": "ak.reducer.core.v1"
                     },
                     "created_at": "2026-05-02T00:00:01.000Z"
                 }),

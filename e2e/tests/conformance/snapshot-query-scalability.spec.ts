@@ -116,7 +116,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const manifest = {
       id: "ak:snapshot:ak:realm:01904100-0000-7000-8000-000000000001:fixture",
       realm_id: "ak:realm:01904100-0000-7000-8000-000000000001",
-      reducer_profile: "ak.reducer.v1",
+      reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunkHashes,
       created_by: "did:web:soland.conformance",
@@ -156,7 +156,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const manifest = {
       id: "ak:snapshot:ak:realm:01904100-0000-7000-8000-000000000002:signed",
       realm_id: "ak:realm:01904100-0000-7000-8000-000000000002",
-      reducer_profile: "ak.reducer.v1",
+      reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),
       created_by: signerDid,

@@ -969,7 +969,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "next_epoch": 1,
             "security_frontier_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
             "binding_profile": "ak.profile.mls_governance_binding.full.v1",
-            "reducer_profile": "ak.reducer.v1"
+            "reducer_profile": "ak.reducer.core.v1"
         },
         "ciphertext": "AQID",
         "expires_at": "2100-01-01T00:00:00.000Z"

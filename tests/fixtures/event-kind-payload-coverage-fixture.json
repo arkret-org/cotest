@@ -18,12 +18,12 @@
       "payload_shape": { "name": "string", "kind": "collaboration" }
     },
     {
-      "name": "space_upgrade_cas_register",
+      "name": "realm_reducer_profile_upgrade_cas_register",
       "event_kind": "ak.realm.upgrade",
-      "cell_family": "ak.component.realm.upgrade.v1",
+      "cell_family": "ak.component.realm.reducer_profile.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "payload_shape": { "target_reducer_profile": "ak.profile.chat_mvp.v1" }
+      "payload_shape": { "target_reducer_profile": "ak.reducer.core.v1" }
     },
     {
       "name": "space_policy_cas_register",

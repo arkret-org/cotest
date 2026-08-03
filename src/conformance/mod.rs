@@ -64,7 +64,6 @@ mod push_rule_core;
 mod read_receipt_signal;
 pub mod recovery_transaction_faults;
 mod redaction;
-mod reducer_profile;
 mod scaffold_gate;
 mod scalability_limits;
 mod schema_validation;
@@ -357,7 +356,6 @@ pub use read_receipt_signal::{
     run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
 };
 pub use redaction::run_redaction_fixture_suite;
-pub use reducer_profile::reducer_profile_digest;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,
@@ -552,21 +550,9 @@ pub(crate) struct NamedCase {
     pub(crate) input: Option<Value>,
     pub(crate) inputs: Option<Vec<Value>>,
     pub(crate) expected: Option<Value>,
-    // ak.vector.federation.reducer_profile_digest.v1 case fields.
-    pub(crate) resolved_digest_input_source: Option<ResolvedDigestInputSource>,
     pub(crate) expected_digest: Option<String>,
-    pub(crate) sender_reducer_profile_digest: Option<String>,
-    pub(crate) receiver_reducer_profile_digest: Option<String>,
     pub(crate) request_contract: Option<Value>,
     pub(crate) cases: Option<Vec<Value>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ResolvedDigestInputSource {
-    pub(crate) registry: String,
-    pub(crate) profile_id: String,
-    pub(crate) field: String,
-    pub(crate) recompute_from_local_contracts: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

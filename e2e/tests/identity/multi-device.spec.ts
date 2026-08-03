@@ -54,7 +54,7 @@ test.describe.configure({ mode: "serial" });
 
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
   "ak.profile.mls_governance_binding.full.v1";
-const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
+const MLS_REDUCER_PROFILE_V1 = "ak.reducer.core.v1";
 
 type SelfPathHeadersSource =
   string | ((method: string, url: string) => Record<string, string>);

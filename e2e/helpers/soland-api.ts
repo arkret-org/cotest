@@ -3416,9 +3416,6 @@ export async function rawPushFederationEvents(
     // itself stays cryptographically valid — only created/expires are stale.
     expireSignature?: boolean;
     relaySourceDid?: string;
-    // Negative-coverage hook: submit a digest that diverges from the
-    // receiver's registry-derived value (expect reducer_profile_mismatch).
-    reducerProfileDigestOverride?: string;
     serviceBindingFrontier?: string[];
   },
 ) {
@@ -3428,7 +3425,6 @@ export async function rawPushFederationEvents(
     opts.realmId,
     events.map(federationEventWireBody),
     {
-      reducerProfileDigest: opts.reducerProfileDigestOverride,
       serviceBindingFrontier: opts.serviceBindingFrontier,
     },
   );
@@ -3584,16 +3580,6 @@ function schemaIdForEventKind(kind: string): string {
   return "ak.schema.event.v1";
 }
 
-// ── Federation reducer profile digest ───────────────────────────────────────
-// Spec: arkret-spec/spec/v1/zh/sync/federation.md §4.1.1 (normative). The only
-// machine-readable source for service_binding_ref.reducer_profile_digest is
-// spec/v1/artifacts/registry/reducer-profile-registry.json: resolve the row
-// whose profile_id equals the Realm's declared reducer profile and hash ONLY
-// that row's digest_input object (Arkret canonical JSON → sha256 lowercase
-// hex). Registered vector: ak.vector.federation.reducer_profile_digest.v1
-// (federation-fixture.json case reducer_profile_digest_federation_minimal),
-// used below as a drift guard on the computed value.
-
 // helpers → e2e → cotest → arkret root → arkret-spec/spec/v1/artifacts.
 const SPEC_ARTIFACTS_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -3717,61 +3703,6 @@ const E2E_FIXTURES_ROOT = resolve(
   "fixtures",
 );
 
-// The reducer profile soland declares for its federation surface
-// (ak.peer.events.query.describe → supported_profiles), also the vector's profile.
-export const FEDERATION_REDUCER_PROFILE_ID = "ak.profile.federation_minimal.v1";
-
-const reducerProfileDigestCache = new Map<string, string>();
-
-export function reducerProfileDigest(profileId: string): string {
-  const cached = reducerProfileDigestCache.get(profileId);
-  if (cached) {
-    return cached;
-  }
-  const registry = JSON.parse(
-    readFileSync(
-      join(SPEC_ARTIFACTS_ROOT, "registry", "reducer-profile-registry.json"),
-      "utf8",
-    ),
-  ) as {
-    canonicalization?: string;
-    digest_suite?: string;
-    profiles?: Array<{
-      profile_id?: string;
-      status?: string;
-      digest_input?: unknown;
-      resolved_digest_input?: unknown;
-      reducer_profile_digest?: string;
-    }>;
-  };
-  // federation.md §4.1.1 fail-closed preconditions.
-  if (
-    registry.canonicalization !== "json_jcs" ||
-    registry.digest_suite !== "sha256"
-  ) {
-    throw new Error(
-      "reducer-profile-registry canonicalization/digest_suite unsupported; fail closed",
-    );
-  }
-  const row = (registry.profiles ?? []).find(
-    (profile) => profile.profile_id === profileId,
-  );
-  if (
-    !row ||
-    row.status !== "active" ||
-    row.digest_input === undefined ||
-    row.resolved_digest_input === undefined
-  ) {
-    throw new Error(
-      `reducer profile ${profileId} has no active reducer-profile-registry row; fail closed`,
-    );
-  }
-  const digest = `sha256:${sha256CanonicalJson(row.resolved_digest_input)}`;
-  assertReducerProfileDigestMatchesRegistry(profileId, digest, registry);
-  reducerProfileDigestCache.set(profileId, digest);
-  return digest;
-}
-
 let principalControlRealmVectorsChecked = false;
 
 function assertPrincipalControlRealmVectors(
@@ -3817,60 +3748,6 @@ function assertPrincipalControlRealmVectors(
   }
 }
 
-let reducerProfileRegistryChecked = false;
-
-function assertReducerProfileDigestMatchesRegistry(
-  profileId: string,
-  digest: string,
-  registry: {
-    profiles?: Array<{
-      profile_id?: string;
-      status?: string;
-      digest_input?: unknown;
-      resolved_digest_input?: unknown;
-      reducer_profile_digest?: string;
-    }>;
-  },
-): void {
-  const current = (registry.profiles ?? []).find(
-    (row) => row.profile_id === profileId,
-  );
-  if (!current?.reducer_profile_digest) {
-    throw new Error(
-      `reducer-profile-registry lacks reducer_profile_digest for ${profileId}`,
-    );
-  }
-  if (current.reducer_profile_digest !== digest) {
-    throw new Error(
-      `computed reducer_profile_digest ${digest} drifted from registry ${current.reducer_profile_digest} for ${profileId}`,
-    );
-  }
-  if (reducerProfileRegistryChecked) {
-    return;
-  }
-  for (const row of registry.profiles ?? []) {
-    if (row.status !== "active") {
-      continue;
-    }
-    if (
-      !row.profile_id ||
-      row.resolved_digest_input === undefined ||
-      !row.reducer_profile_digest
-    ) {
-      throw new Error(
-        "reducer-profile-registry contains an incomplete active profile",
-      );
-    }
-    const actual = `sha256:${sha256CanonicalJson(row.resolved_digest_input)}`;
-    if (actual !== row.reducer_profile_digest) {
-      throw new Error(
-        `active reducer profile ${row.profile_id} digest ${actual} drifted from registry ${row.reducer_profile_digest}`,
-      );
-    }
-  }
-  reducerProfileRegistryChecked = true;
-}
-
 // federation.md §4.1: membership_frontier / delivery_binding_frontier are the
 // sender's causal frontiers (`id[]`). The harness acts as the origin peer of a
 // fabricated realm whose entire causal history is the submitted batch, so the
@@ -3905,7 +3782,6 @@ function peerEventsSubmitBody(
   realmId: string,
   events: Array<Record<string, unknown>>,
   overrides: {
-    reducerProfileDigest?: string;
     serviceBindingFrontier?: string[];
   } = {},
 ): Record<string, unknown> {
@@ -3928,11 +3804,6 @@ function peerEventsSubmitBody(
       membership_frontier: frontier,
       delivery_binding_frontier: frontier,
       destination_service_kind: "principal_server",
-      // §4.1.1 registry-derived canonical digest (override only exists for
-      // the reducer_profile_mismatch negative case).
-      reducer_profile_digest:
-        overrides.reducerProfileDigest ??
-        reducerProfileDigest(FEDERATION_REDUCER_PROFILE_ID),
     },
     events,
   }) as Record<string, unknown>;

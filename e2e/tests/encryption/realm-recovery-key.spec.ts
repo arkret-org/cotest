@@ -49,7 +49,7 @@ test.describe.configure({ mode: "serial" });
 
 const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
   "ak.profile.mls_governance_binding.full.v1";
-const MLS_REDUCER_PROFILE_V1 = "ak.reducer.v1";
+const MLS_REDUCER_PROFILE_V1 = "ak.reducer.core.v1";
 const MLS_CIPHER_SUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 
 // Content scheme that makes per-epoch history_secret shareable (§2.10). RRK

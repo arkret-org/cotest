@@ -3,11 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use super::reducer_profile::{reducer_profile_digest_for_input, reducer_profile_digest_input};
-use super::{
-    FederationFixture, canonical_json, load_artifact_json, load_fixture, looks_like_sha256_digest,
-    sha256_prefixed,
-};
+use super::{FederationFixture, canonical_json, load_fixture, sha256_prefixed};
 use crate::transcripts::record_vector_event;
 
 pub fn run_federation_fixture_suite() -> Result<()> {
@@ -136,91 +132,9 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 validate_seal_prerequisite_partial_retry_case(&case)?;
             }
             "cba_dependency_resolve" => validate_cba_dependency_resolve_case(&case)?,
-            // ak.vector.federation.reducer_profile_digest.v1 — positive leg:
-            // the §4.1.1 computation over the registry's resolved_digest_input
-            // MUST reproduce expected_digest, and the fixture source descriptor
-            // MUST name the published content-addressed registry field
-            // ("canonical_digest_matches_reducer_profile_registry_row").
-            "reducer_profile_digest_federation_minimal" => {
-                let source = case.resolved_digest_input_source.as_ref().ok_or_else(|| {
-                    anyhow!("{} case lacks resolved_digest_input_source", case.name)
-                })?;
-                if source.registry != "registry/reducer-profile-registry.json"
-                    || source.field != "resolved_digest_input"
-                    || !source.recompute_from_local_contracts
-                {
-                    bail!(
-                        "federation fixture {} has unsupported resolved digest input source",
-                        case.name
-                    );
-                }
-                let expected_digest = case
-                    .expected_digest
-                    .as_deref()
-                    .ok_or_else(|| anyhow!("{} case lacks expected_digest", case.name))?;
-                let registry = load_artifact_json(&source.registry)?;
-                let resolved_input = reducer_profile_digest_input(&registry, &source.profile_id)?;
-                let computed = reducer_profile_digest_for_input(&resolved_input)?;
-                if computed != expected_digest {
-                    bail!(
-                        "federation fixture {}: computed digest {computed} != expected {expected_digest}",
-                        case.name
-                    );
-                }
-                record_vector_event(
-                    "federation.reducer_profile_digest_federation_minimal",
-                    &json!({"profile_id": source.profile_id}),
-                    &json!({"expected_digest": expected_digest}),
-                    &json!({
-                        "computed_digest": computed,
-                        "matches_registry_row": true,
-                    }),
-                );
-            }
-            // ak.vector.federation.reducer_profile_digest.v1 — negative leg:
-            // receiver recomputes its own digest and byte-compares; any
-            // divergence MUST reject the whole batch with
-            // `reducer_profile_mismatch` (no partial accept).
-            "reducer_profile_mismatch" => {
-                let sender = case
-                    .sender_reducer_profile_digest
-                    .as_deref()
-                    .ok_or_else(|| anyhow!("{} case lacks sender digest", case.name))?;
-                let receiver = case
-                    .receiver_reducer_profile_digest
-                    .as_deref()
-                    .ok_or_else(|| anyhow!("{} case lacks receiver digest", case.name))?;
-                if !looks_like_sha256_digest(sender) || !looks_like_sha256_digest(receiver) {
-                    bail!(
-                        "federation fixture {} digests are not sha256:<hex>",
-                        case.name
-                    );
-                }
-                let verdict = validate_reducer_profile_digest(sender, receiver);
-                if verdict != Err("reducer_profile_mismatch") {
-                    bail!(
-                        "federation fixture {}: mismatched digests must reject the whole \
-                         batch with reducer_profile_mismatch, got {verdict:?}",
-                        case.name
-                    );
-                }
-                // Control leg: byte-identical digests MUST NOT trip the gate.
-                if validate_reducer_profile_digest(sender, sender).is_err() {
-                    bail!(
-                        "federation fixture {}: identical digests must be accepted",
-                        case.name
-                    );
-                }
-                record_vector_event(
-                    "federation.reducer_profile_mismatch",
-                    &json!({
-                        "sender_reducer_profile_digest": sender,
-                        "receiver_reducer_profile_digest": receiver,
-                    }),
-                    &json!({"expected": "whole_batch_rejected_with_reducer_profile_mismatch"}),
-                    &json!({"verdict": "rejected", "reason_code": "reducer_profile_mismatch"}),
-                );
-            }
+            "ordinary_event_uses_cba_reducer_profile_cell"
+            | "settled_reducer_profile_not_implemented"
+            | "upgrade_target_not_registered" => validate_reducer_profile_resolution_case(&case)?,
             "pull_authorization" => {
                 let verdict = authorize_pull(false, false);
                 if verdict != FederationVerdict::Blinded {
@@ -583,19 +497,68 @@ fn register_history_head(
     }
 }
 
-/// federation.md §4.1.1 receiver gate: the receiver recomputes its own
-/// reducer profile digest via the registry rule and byte-compares it with
-/// `service_binding_ref.reducer_profile_digest`. Divergence rejects the whole
-/// batch (`Err("reducer_profile_mismatch")`) — never a partial accept.
-fn validate_reducer_profile_digest(
-    sender_digest: &str,
-    receiver_digest: &str,
-) -> Result<(), &'static str> {
-    if sender_digest.as_bytes() == receiver_digest.as_bytes() {
-        Ok(())
-    } else {
-        Err("reducer_profile_mismatch")
+fn validate_reducer_profile_resolution_case(case: &super::NamedCase) -> Result<()> {
+    let input = case
+        .input
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} case lacks input", case.name))?;
+    let expected = case
+        .expected
+        .as_ref()
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("{} case lacks string expected", case.name))?;
+    let actual = match case.name.as_str() {
+        "ordinary_event_uses_cba_reducer_profile_cell" => {
+            let settled = input["settled_reducer_profile"]
+                .as_str()
+                .unwrap_or_default();
+            let supported = input["receiver_supported_reducer_profiles"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .any(|profile| profile == settled);
+            if input["event_declares_reducer_profile"] != false
+                || input["service_binding_declares_reducer_profile"] != false
+            {
+                bail!("ordinary Event or service binding declared a reducer profile");
+            }
+            if supported {
+                "accepted"
+            } else {
+                "profile_unsupported"
+            }
+        }
+        "settled_reducer_profile_not_implemented" => "profile_unsupported",
+        "upgrade_target_not_registered" => {
+            let registry = super::load_artifact_json("registry/reducer-profile-registry.json")?;
+            let source = input["source_reducer_profile"].as_str().unwrap_or_default();
+            let target = input["target_reducer_profile"].as_str().unwrap_or_default();
+            let registered = registry["profiles"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|profile| profile["profile_id"] == source)
+                .and_then(|profile| profile["upgrade_edges"].as_array())
+                .is_some_and(|edges| edges.iter().any(|edge| edge.as_str() == Some(target)));
+            if registered {
+                "accepted"
+            } else {
+                "profile_unsupported"
+            }
+        }
+        _ => unreachable!(),
+    };
+    if actual != expected {
+        bail!("{} expected {expected}, got {actual}", case.name);
     }
+    record_vector_event(
+        &format!("federation.{}", case.name),
+        input,
+        &json!({"outcome": expected}),
+        &json!({"outcome": actual}),
+    );
+    Ok(())
 }
 
 fn authorize_pull(

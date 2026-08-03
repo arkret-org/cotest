@@ -2,7 +2,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
-use arkret_wire::ProfileId;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -37,7 +36,7 @@ fn principal_control_realm_vectors_match_sdk() -> Result<()> {
 }
 
 #[test]
-fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
+fn reducer_profile_registry_and_sdk_support_set_agree() -> Result<()> {
     let registry: Value = serde_json::from_str(&fs::read_to_string(
         manifest_dir()
             .parent()
@@ -59,28 +58,20 @@ fn reducer_profile_digest_vectors_cover_active_registry() -> Result<()> {
         .collect::<Vec<_>>();
     assert!(!active_rows.is_empty(), "active reducer registry is empty");
 
-    for row in active_rows {
-        let profile_id = row
-            .get("profile_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("active reducer profile lacks profile_id"))?;
-        let expected = row
-            .get("reducer_profile_digest")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("active reducer profile {profile_id} lacks generated digest"))?;
-        let actual = cotest::conformance::reducer_profile_digest(profile_id)?;
-        assert_eq!(
-            actual, expected,
-            "reducer profile digest drift for {profile_id}"
-        );
-        if profile_id == ProfileId::FEDERATION_MINIMAL_V1 {
-            assert_eq!(
-                actual,
-                arkret_policy::generated::profiles::FEDERATION_MINIMAL_REDUCER_PROFILE_DIGEST,
-                "Spec, SDK, Soland consumer, and Cotest federation digest must share one generated value"
-            );
-        }
-    }
+    let active_ids = active_rows
+        .iter()
+        .map(|row| {
+            row.get("profile_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("active reducer profile lacks profile_id"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    assert_eq!(
+        active_ids,
+        arkret_policy::generated::profiles::REDUCER_PROFILE_IDS,
+        "Spec registry and generated SDK reducer profile ids must agree"
+    );
+    assert_eq!(active_ids, [arkret_wire::CORE_REDUCER_PROFILE]);
     Ok(())
 }
 

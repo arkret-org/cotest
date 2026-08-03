@@ -18,7 +18,7 @@
 //   ✓ peer events query pulls peer pages and ingests missing local Events
 //   ✓ peer events frontier exposes deterministic Event ID coverage
 //   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
-//   ✓ service_binding_ref.reducer_profile_digest validated (whole-batch reject)
+//   ✓ reducer profile resolved from each Event's authenticated CBA
 //   ✓ §4.4 capability revoke fanout: revoking a peer's service delegation
 //     stops outbound federation push to that peer
 
@@ -906,63 +906,6 @@ test.describe("cross-server federation", () => {
     );
     for (const event of backfilledEvents) {
       expect(betaAfterIds).toContain(String(event.event_id));
-    }
-  });
-
-  test("reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch", async ({
-    request,
-  }) => {
-    // spec: federation.md §4.1 service_binding_ref.reducer_profile_digest +
-    // §4.1.1 receiver gate; registered vector
-    // ak.vector.federation.reducer_profile_digest.v1: a digest diverging from
-    // the receiver's registry-derived value MUST reject the WHOLE batch with
-    // reducer_profile_mismatch — no partial accept.
-    // soland: validated in event_log/admission.rs
-    // (validate_federation_service_binding) and wired into the federation
-    // submit path before any event admission.
-    const realmId = typedId("realm");
-    const event = makeFederationEvent({
-      realmId,
-      kind: "ak.message.create",
-      actorDid: "did:web:alice-reducer-mismatch.example",
-      payload: {
-        strand_id: typedId("strand"),
-        track_name: "discussion",
-        content: {
-          kind: "ak.content.text",
-          body: `reducer profile mismatch probe ${Date.now()}`,
-        },
-      },
-    });
-    const response = await rawPushFederationEvents(request, [event], {
-      origin: solandServiceId("alpha"),
-      destination: solandServiceId("beta"),
-      server: "beta",
-      realmId,
-      idempotencyKey: `${solandServiceId("alpha")}#cotest-reducer-profile-mismatch`,
-      // Well-formed sha256:<hex> that cannot equal β's registry-derived
-      // digest for ak.profile.federation_minimal.v1.
-      reducerProfileDigestOverride: `sha256:${"9".repeat(64)}`,
-    });
-    const body = (await response.json()) as {
-      accepted?: string[];
-      duplicate?: string[];
-      rejected?: Array<Record<string, unknown>>;
-    };
-    // Whole-batch rejection: either an error envelope carrying the code, or a
-    // rejected[] entry per event with reason_code=reducer_profile_mismatch.
-    expect(body.accepted ?? []).toEqual([]);
-    expect(body.duplicate ?? []).toEqual([]);
-    if (response.ok()) {
-      const rejected = body.rejected ?? [];
-      expect(rejected.map((entry) => entry.id ?? entry.event_id)).toContain(
-        String(event.event_id),
-      );
-      for (const entry of rejected) {
-        expect(entry.reason_code).toBe("reducer_profile_mismatch");
-      }
-    } else {
-      expect(wireErrCode(body)).toBe("reducer_profile_mismatch");
     }
   });
 

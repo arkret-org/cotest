@@ -217,7 +217,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         0,
         Hash::new(format!("sha256:{}", "1".repeat(64)))?,
         "ak.profile.mls_governance_binding.full.v1",
-        "ak.reducer.v1",
+        "ak.reducer.core.v1",
     )?
     .with_sidecar_binding(sidecar_binding.clone())?;
     let cbor = binding.to_deterministic_cbor()?;

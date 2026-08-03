@@ -79,7 +79,7 @@
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `realm_id = realmId`
-   - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier` / `reducer_profile_digest`
+   - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier` / `delivery_binding_frontier`
    - `events: [<完整签名的 ak.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
 7. β 校验:
@@ -87,7 +87,7 @@
    - content-digest 覆盖 body
    - service_binding_ref 与 β 本地的 Realm policy snapshot 一致
    - 每个 Event 的 actor 签名 + 因果链
-   - `reducer_profile_digest` 与 β 本地匹配(不匹配整批返回 `reducer_profile_mismatch`)
+   - β 从每个 Event 的 `seal_ref` 或 `seal_basis` 所确定的 CBA 读取 Realm reducer-profile cell；请求和 binding 均不声明 profile
 8. β 返回 `{accepted: [invite_event_id], rejected: [], quarantine: []}`
 9. 断言(测试侧从 α 视角拿响应,或者从测试 harness 直接读 β 的 sync state):invite event 在 β 上可见
 
@@ -140,7 +140,7 @@
 
 ## Edge cases / sub-tests
 
-- **E2.3 reducer_profile_mismatch**:把 β 的 reducer profile 改一个 hash,α push 时整批拒绝;断言返回 `rejected` 且 `reason_code=reducer_profile_mismatch`
+- **E2.3 profile_unsupported**：让 Event 的 CBA 落在 β 未实现的 reducer profile；断言 Event 以 `profile_unsupported` 拒绝
 - **E2.4 idempotent push**:α 把同一个 invite event 推两次,β 第二次也返回 `accepted`(幂等),不重复写入
 - **E2.5 signature 失败**:篡改 α 的 HTTP signature header,β 整批拒绝;断言 4xx 状态码 + 标准 JSON error envelope
 - **E2.6 dependency_missing**:α 发一个 `prev_refs` 指向 β 未见过的 event 的 message,β 把它放 `rejected[]` with `reason_code=dependency_missing`
@@ -168,7 +168,7 @@
 ## 风险 / 前置依赖
 
 - **已落地**:双 soland 拓扑、`peer events submit` / `peer events query` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
-- **仍待后续 GAP**:`reducer_profile_digest` 强校验、服务委托 revoke fanout。
+- **仍待后续 GAP**：服务委托 revoke fanout。
 - **inkson invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `ak.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
 
 ## 总耗时预估
