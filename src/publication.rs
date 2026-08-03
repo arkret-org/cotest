@@ -15,13 +15,13 @@
 use anyhow::{Context, Result};
 use arkret_canonical::DigestSuite;
 use arkret_wire::{
-    AuthoritySetAuthorizationRule, AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy,
-    AuthoritySetPolicyKind, AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind,
-    AuthorizationLease, AuthorizationLeaseId, ControlProposalDecisionPolicy,
-    ControlProposalReceipt, ControlProposalReceiptKind, DeviceId, Did, DidUrl, Event,
-    EventFederationSubmission, EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef,
-    PayloadProof, PayloadSignature, ProjectedCellWrite, ProposalMemberReceipt, ReceiptId, RiskTier,
-    SchemaId, SealId, proof_kind,
+    AnchorUnitLeaseBasis, AnchorUnitLeaseBasisRef, AuthoritySetAuthorizationRule,
+    AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind,
+    AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease,
+    AuthorizationLeaseId, ControlProposalDecisionPolicy, ControlProposalReceipt,
+    ControlProposalReceiptKind, DeviceId, Did, DidUrl, Event, EventFederationSubmission,
+    EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef, PayloadProof, PayloadSignature,
+    ProjectedCellWrite, ProposalMemberReceipt, ReceiptId, RiskTier, SchemaId, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 /// The one registry projection evaluator cotest uses.
@@ -119,6 +119,23 @@ pub fn authorization_lease_for(
     action: &str,
     risk_tier: RiskTier,
 ) -> Result<AuthorizationLease> {
+    authorization_lease_for_basis(
+        event,
+        action,
+        risk_tier,
+        LeaseBasisRef::Seal(
+            SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))
+                .context("static harness lease basis Seal id is typed")?,
+        ),
+    )
+}
+
+fn authorization_lease_for_basis(
+    event: &Event,
+    action: &str,
+    risk_tier: RiskTier,
+    basis_ref: LeaseBasisRef,
+) -> Result<AuthorizationLease> {
     let issued_at = event.created_at - Duration::minutes(5);
     let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {
@@ -155,10 +172,7 @@ pub fn authorization_lease_for(
             "ak:authorization_lease:01904100-0000-7000-8000-aaaaaaaaaaaa",
         )
         .context("static harness lease id is typed")?,
-        basis_ref: LeaseBasisRef::Seal(
-            SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))
-                .context("static harness lease basis Seal id is typed")?,
-        ),
+        basis_ref,
         actor_id: event.actor_id.clone(),
         device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")
             .context("static harness lease device id is typed")?,
@@ -186,6 +200,49 @@ pub fn authorization_lease_for(
 /// Package `event` as the initial publication the self submit rail accepts.
 pub fn initial_submission(event: Event, _action: &str) -> Result<EventInitialSubmission> {
     Ok(EventInitialSubmission::online(event))
+}
+
+/// Package the self-principal bootstrap pair with leases bound to the same
+/// complete ordered unit. This mirrors the pre-admission response without
+/// pretending either Event already has an accepted Seal basis.
+pub fn self_principal_bootstrap_submissions(
+    events: [Event; 2],
+    actions: [&str; 2],
+) -> Result<[EventInitialSubmission; 2]> {
+    let mut anchor_unit = AnchorUnitLeaseBasis {
+        realm_id: events[0].realm_id.clone(),
+        event_digests: events
+            .iter()
+            .map(|event| {
+                Hash::new(event.event_digest().context("Event is canonicalizable")?)
+                    .context("Event digest is a valid Hash")
+            })
+            .collect::<Result<Vec<_>>>()?,
+        unit_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
+            .context("static placeholder unit digest is valid")?,
+    };
+    anchor_unit.unit_digest = anchor_unit
+        .expected_unit_digest()
+        .context("anchor unit digest is canonicalizable")?;
+    let [create, authorize] = events;
+    let create_lease = authorization_lease_for_basis(
+        &create,
+        actions[0],
+        RiskTier::High,
+        LeaseBasisRef::AnchorUnit(AnchorUnitLeaseBasisRef {
+            anchor_unit: anchor_unit.clone(),
+        }),
+    )?;
+    let authorize_lease = authorization_lease_for_basis(
+        &authorize,
+        actions[1],
+        RiskTier::High,
+        LeaseBasisRef::AnchorUnit(AnchorUnitLeaseBasisRef { anchor_unit }),
+    )?;
+    Ok([
+        EventInitialSubmission::delayed(create, create_lease),
+        EventInitialSubmission::delayed(authorize, authorize_lease),
+    ])
 }
 
 /// The receipt a policy-accepted ingress issues for `event` under `lease`.

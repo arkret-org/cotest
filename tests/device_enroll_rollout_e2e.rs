@@ -8,11 +8,10 @@ use arkret_bootstrap::{
     self_principal_bootstrap_submit_request,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_http_client::ClientRequestOptions;
 use arkret_identifiers::{Did, EventId, Hlc, RealmId, TypedTrustDomainId};
 use arkret_models_collaboration::http_bodies::EventsSubmitRequestBody;
 use arkret_signatures::{Ed25519PayloadSigner, SignEventOptions, sign_event};
-use arkret_wire::{AuthorizationLeaseIssueRequest, DidUrl, Event, EventRef};
+use arkret_wire::{DidUrl, Event, EventRef};
 use cotest::harness::{ArkretServer, dev_login, expect_json};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
@@ -42,14 +41,14 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     .await?;
     let enrolled_device_key = SigningKey::from_bytes(&[41_u8; 32]);
     let enrolled_device_public_key = multibase_public_key(&enrolled_device_key);
-    let mut bootstrap = principal_bootstrap_request(
+    let bootstrap_events = principal_bootstrap_events(
         &registered.prepared,
         &authority,
         &authorization_ref,
         enrolled_device,
         &enrolled_device_public_key,
     )?;
-    issue_bootstrap_leases(&server, &token, principal_id, &mut bootstrap).await?;
+    let bootstrap = issue_bootstrap_leases(&server, &token, principal_id, bootstrap_events).await?;
     let EventsSubmitRequestBody::Batch(bootstrap_batch) = &bootstrap else {
         anyhow::bail!("self principal bootstrap must be a two-slot batch");
     };
@@ -112,19 +111,8 @@ async fn issue_bootstrap_leases(
     server: &ArkretServer,
     token: &str,
     principal_id: &str,
-    bootstrap: &mut EventsSubmitRequestBody,
-) -> Result<()> {
-    let EventsSubmitRequestBody::Batch(batch) = bootstrap else {
-        anyhow::bail!("self principal bootstrap must be a batch");
-    };
-    let request = AuthorizationLeaseIssueRequest {
-        events: batch
-            .events
-            .iter()
-            .map(|submission| submission.event.clone())
-            .collect(),
-        intents: Vec::new(),
-    };
+    events: [Event; 2],
+) -> Result<EventsSubmitRequestBody> {
     let client = server
         .client_with_token(
             principal_id,
@@ -132,22 +120,22 @@ async fn issue_bootstrap_leases(
             token.to_owned(),
         )?
         .sdk();
-    let request_key = arkret_wire::new_prefixed_uuid7("device-enroll-bootstrap-");
-    let options = ClientRequestOptions::new()
-        .request_id(request_key.clone())
-        .idempotency_key(request_key);
-    let outcome = client
-        .issue_authorization_leases(&request, &options)
-        .await?;
-    outcome.validate_against_request(&request)?;
-    if outcome.authorization_leases.len() != batch.events.len() {
-        anyhow::bail!("authorization lease issuer changed bootstrap cardinality");
-    }
-    for (submission, lease) in batch.events.iter_mut().zip(outcome.authorization_leases) {
-        submission.authorization_lease = Some(lease);
-        submission.control_proposal_receipt = None;
-    }
-    Ok(())
+    let [create_submission, authorize_submission]: [arkret_wire::EventInitialSubmission; 2] =
+        client
+            .prepare_initial_submissions(&events)
+            .await?
+            .try_into()
+            .map_err(|submissions: Vec<_>| {
+                anyhow!(
+                    "bootstrap preparation returned {} submissions, expected 2",
+                    submissions.len()
+                )
+            })?;
+    Ok(self_principal_bootstrap_submit_request(
+        create_submission,
+        authorize_submission,
+        &cotest::publication::project_cells,
+    )?)
 }
 
 struct DidKeyAuthority {
@@ -223,13 +211,13 @@ async fn register_webvh_principal(
     })
 }
 
-fn principal_bootstrap_request(
+fn principal_bootstrap_events(
     prepared: &PreparedPrincipalInception,
     authority: &DidKeyAuthority,
     authorization_ref: &str,
     device_id: &str,
     device_public_key: &str,
-) -> Result<EventsSubmitRequestBody> {
+) -> Result<[Event; 2]> {
     let principal = Did::new(prepared.did.clone())?;
     let realm_id =
         RealmId::new(arkret_models_identity::did_document::principal_control_realm_id(&principal))?;
@@ -272,11 +260,7 @@ fn principal_bootstrap_request(
         &arkret_wire::new_prefixed_uuid7("ak:event:"),
         vec![create.event_id.clone()],
     )?;
-    Ok(self_principal_bootstrap_submit_request(
-        cotest::publication::initial_submission(create, "ak.realm.create")?,
-        cotest::publication::initial_submission(authorize, "ak.device.authorize")?,
-        &cotest::publication::project_cells,
-    )?)
+    Ok([create, authorize])
 }
 
 #[allow(clippy::too_many_arguments)]

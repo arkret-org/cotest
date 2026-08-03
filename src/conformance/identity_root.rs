@@ -322,13 +322,14 @@ fn validate_bootstrap_helpers() -> Result<()> {
         &crate::fixture_did_url(format!("{}#enrollment", authority.authority_did)),
     )?;
 
-    // The lease bounds the revocation window and is not part of the signed
-    // Event, so each bootstrap slot travels as an `EventInitialSubmission`
-    // (`offline-publication.md` §2.1).
-    let create_submission =
-        crate::publication::initial_submission(create.clone(), "ak.realm.admin")?;
-    let authorize_submission =
-        crate::publication::initial_submission(authorize, "ak.device.authorize")?;
+    // The admitting service pre-authorizes the complete ordered anchor, so
+    // both transport wrappers carry leases with the same unit basis while the
+    // signed Events remain unchanged (`offline-publication.md` §2.1).
+    let [create_submission, authorize_submission] =
+        crate::publication::self_principal_bootstrap_submissions(
+            [create.clone(), authorize],
+            ["ak.realm.admin", "ak.device.authorize"],
+        )?;
     let request = self_principal_bootstrap_submit_request(
         create_submission,
         authorize_submission.clone(),
