@@ -756,9 +756,10 @@ async fn submit_event_now(
                 credential_epoch: None,
             });
             if actor.controls_realm_authority_root(realm_id) {
-                event.authorization_ref = Some(arkret_wire::AuthorizationRef::new(
-                    arkret_wire::REALM_AUTHORITY_ROOT_CELL,
-                )?);
+                event.authorization_ref = Some(
+                    arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
+                        .map_err(anyhow::Error::msg)?,
+                );
             } else {
                 event.refs = actor
                     .covering_grants_for(realm_id, kind)

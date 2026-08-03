@@ -155,7 +155,7 @@ fn operation_id_from_event(event: &arkret_wire::Event) -> Result<String> {
         .get("local_operation_idempotency_alias")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("event missing local_operation_idempotency_alias: {event}"))
+        .ok_or_else(|| anyhow!("event missing local_operation_idempotency_alias: {event:?}"))
 }
 
 async fn assert_midflight_post_was_cut(

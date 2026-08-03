@@ -325,7 +325,6 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "ak:cell:ak.component.realm.create.v1:null",
         )?],
     );
-    let realm_event: arkret_wire::Event = serde_json::from_value(realm_event)?;
     let Some(services) = plaintext_visible_services else {
         return Ok(vec![realm_event]);
     };
@@ -343,7 +342,6 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
         )?],
     );
-    let services_event = serde_json::from_value(services_event)?;
     Ok(vec![realm_event, services_event])
 }
 

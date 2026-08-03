@@ -225,7 +225,8 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
         .proofs
         .first_mut()
         .ok_or_else(|| anyhow!("authored Event has no proof"))?
-        .verification_method = arkret_wire::DidUrl::new(verification_method)?;
+        .verification_method =
+        arkret_wire::DidUrl::new(verification_method).map_err(anyhow::Error::msg)?;
     crate::harness::refresh_typed_event_proof(event)
 }
 
