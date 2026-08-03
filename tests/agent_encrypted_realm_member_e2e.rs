@@ -221,6 +221,19 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
                 &agent_device,
             )
             .action,
+        MlsRecoveryAction::RequestEpochRecovery { .. }
+    ));
+    runtime_store.mark_welcome_accepted(&add.welcome.welcome_hash)?;
+    assert!(matches!(
+        runtime_store
+            .plan_mls_recovery(
+                &add.welcome.group_id,
+                None,
+                add.welcome.epoch,
+                &agent_did,
+                &agent_device,
+            )
+            .action,
         MlsRecoveryAction::ConsumeWelcome
     ));
 
@@ -230,6 +243,7 @@ fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<
         &agent_private_state,
     )?;
     let agent_group = ArkretMlsGroup::join_from_welcome(restarted_identity, &add.welcome)?;
+    runtime_store.mark_welcome_consumed(&add.welcome.welcome_hash)?;
     assert_eq!(agent_group.group_id(), add.welcome.group_id);
     assert_eq!(agent_group.epoch(), add.welcome.epoch);
     assert!(

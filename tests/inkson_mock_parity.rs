@@ -1015,9 +1015,11 @@ async fn prepare_live_publication_body(
         .context("Realm bootstrap template omitted events")?
         .iter()
         .cloned()
-        .map(serde_json::from_value::<arkret_wire::Event>)
-        .collect::<Result<Vec<_>, _>>()
-        .context("decode Realm bootstrap Events")?;
+        .map(serde_json::from_value::<arkret_wire::EventInitialSubmission>)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|submission| submission.event)
+        .collect::<Vec<_>>();
     let request = arkret_wire::AuthorizationLeaseIssueRequest {
         events: events.clone(),
         intents: Vec::new(),
