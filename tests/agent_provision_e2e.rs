@@ -35,10 +35,13 @@ use arkret_identifiers::{
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
 };
-use arkret_models_collaboration::events_payloads::SignatureMaterial;
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceListUpdatePayload,
     DeviceOrPrincipalRef,
+};
+use arkret_models_collaboration::events_payloads::{
+    KeyBackupActiveSeries, KeyBackupActiveSeriesAuthData, KeyBackupActiveSeriesFrontierGeneration,
+    KeyBackupActiveSeriesFrontierRef, KeyBackupActiveSeriesTrustBinding, SignatureMaterial,
 };
 use arkret_models_collaboration::protocol_journey::{
     SidecarContextRef, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
@@ -100,9 +103,8 @@ const RECOVERY_POLICY_ID: &str = "ak:policy:019a0000-0000-7000-8000-00000000a901
 const RECOVERY_REPLACEMENT_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000a902";
 const RECOVERY_WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 static NEXT_AGENT_BACKUP: AtomicUsize = AtomicUsize::new(1);
-type AgentBackupPointer = (u64, Vec<String>);
 
-static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, AgentBackupPointer>>> =
+static AGENT_BACKUP_POINTERS: LazyLock<Mutex<HashMap<String, KeyBackupActiveSeries>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static CONTROLLER_SEAL_BASES: LazyLock<Mutex<HashMap<String, arkret::SealBasis>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -2955,12 +2957,20 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         "ak:backup_series:019a0000-0000-7000-8001-{sequence:012x}"
     ))?;
     let pointer_key = format!("{}|{}", server.base_url(), provisioned.agent_id());
-    let (series_pointer_version, previous_series_ids) = {
+    let (series_pointer_version, previous_series_ids, previous_active_series) = {
         let pointers = AGENT_BACKUP_POINTERS.lock().expect("backup pointer lock");
         pointers
             .get(&pointer_key)
-            .map(|(version, series_ids)| (version + 1, series_ids.clone()))
-            .unwrap_or_else(|| (1, Vec::new()))
+            .map(|record| {
+                let mut previous_series_ids = record.previous_series_ids.clone();
+                previous_series_ids.push(record.active_series_id.clone());
+                (
+                    record.series_pointer_version + 1,
+                    previous_series_ids,
+                    Some(record.clone()),
+                )
+            })
+            .unwrap_or_else(|| (1, Vec::new(), None))
     };
     let managed_frontier_ref = ManagedFrontierRef {
         frontier_digest: frontier.control_event_set_root.clone(),
@@ -3146,24 +3156,25 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                 )
             }
         };
-    let mut active_series = json!({
-        "schema": "ak.schema.key_backup_active_series.v1",
-        "actor_id": ALICE_DID,
-        "backup_kind": "mls_history",
-        "active_series_id": series_id,
-        "series_pointer_version": series_pointer_version,
-        "previous_series_ids": previous_series_ids,
-        "frontier_ref": {
-            "frontier_digest": controller_frontier.control_event_set_root,
-            "seal_ref": controller_frontier.seal_id,
-            "ssk_generation": 1
+    let generation = std::num::NonZeroU64::new(1).expect("one is non-zero");
+    let mut active_series = KeyBackupActiveSeries {
+        schema: "ak.schema.key_backup_active_series.v1".to_owned(),
+        actor_id: Did::new(ALICE_DID.to_owned())?,
+        backup_kind: BackupKind::MlsHistory,
+        active_series_id: series_id.clone(),
+        series_pointer_version,
+        previous_series_ids,
+        frontier_ref: KeyBackupActiveSeriesFrontierRef {
+            frontier_digest: controller_frontier.control_event_set_root,
+            seal_ref: Some(controller_frontier.seal_id),
+            generation: KeyBackupActiveSeriesFrontierGeneration::SskGeneration(generation),
         },
-        "issued_at": arkret::canonical::format_timestamp_canonical(canonical_now()),
-        "auth_data": {
-            "verification_method": format!("{ALICE_DID}#{ALICE_DEVICE}"),
-            "signature_algorithm": "Ed25519",
-            "signature": "pending",
-            "signed_fields": [
+        issued_at: canonical_now(),
+        auth_data: KeyBackupActiveSeriesAuthData {
+            verification_method: alice_device_verification_method(),
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: base64_url("pending")?,
+            signed_fields: [
                 "schema",
                 "actor_id",
                 "backup_kind",
@@ -3171,30 +3182,35 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
                 "series_pointer_version",
                 "previous_series_ids",
                 "frontier_ref",
-                "issued_at"
-            ],
-            "ssk_generation": 1
-        }
-    });
-    let mut unsigned_active_series = active_series.clone();
-    unsigned_active_series["auth_data"]
-        .as_object_mut()
-        .ok_or_else(|| anyhow!("active series auth_data did not serialize as an object"))?
-        .remove("signature");
-    active_series["auth_data"]["signature"] = Value::String(sign_ed25519_b64url(
+                "issued_at",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+            trust_binding: KeyBackupActiveSeriesTrustBinding::SskGeneration(generation),
+        },
+        extra: Default::default(),
+    };
+    let active_series_signature_payload = active_series.signature_payload_bytes()?;
+    active_series.auth_data.signature = base64_url(sign_ed25519_b64url(
         &device_key,
-        &canonical::canonical_json_bytes(&unsigned_active_series)?,
-    ));
+        &active_series_signature_payload,
+    ))?;
     let active_series_verification_method = alice_device_verification_method();
     let mut active_series_event =
         cotest::harness::event_envelope_with_signing_seed_and_verification_method(
             ALICE_DID,
             principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?).as_str(),
             "ak.key_backup.active_series",
-            active_series,
+            serde_json::to_value(&active_series)?,
             [24_u8; 32],
             &active_series_verification_method,
         );
+    if let Some(previous) = &previous_active_series {
+        active_series_event
+            .preconditions
+            .push(previous.replacement_precondition()?);
+    }
     move_event_after_actor_frontier(server, token, ALICE_DID, &mut active_series_event).await?;
     let controller_realm_id = principal_control_realm_id(&Did::new(ALICE_DID.to_owned())?);
     let controller_frontier = managed_agent_frontier(server, token, &controller_realm_id)
@@ -3282,12 +3298,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     AGENT_BACKUP_POINTERS
         .lock()
         .expect("backup pointer lock")
-        .entry(pointer_key)
-        .and_modify(|(version, series_ids)| {
-            *version = series_pointer_version;
-            series_ids.push(series_id.to_string());
-        })
-        .or_insert_with(|| (series_pointer_version, vec![series_id.to_string()]));
+        .insert(pointer_key, active_series);
     Ok(())
 }
 
