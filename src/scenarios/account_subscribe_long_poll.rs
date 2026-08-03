@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use base64::Engine as _;
-use chrono::Duration as ChronoDuration;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
 
@@ -726,8 +726,8 @@ async fn submit_event_now(
         frontier.next_actor_seq,
         None,
     );
-    event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
-    event["created_at"] = Value::String(created_at.clone());
+    event.prev_refs = frontier.frontier_event_ids;
+    event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
     let descriptor = arkret_wire::EventKind::from(kind).descriptor();
     let is_control_move = descriptor
         .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("control"));
@@ -748,55 +748,53 @@ async fn submit_event_now(
         if is_data_event {
             // A DataEvent anchors on `seal_ref`; carrying `seal_basis` is what
             // marks an Event as a Control Move.
-            event["seal_ref"] = serde_json::to_value(&frontier.seal_id)?;
-            event["auth_context"] = serde_json::json!({
-                "did": actor.actor,
-                "key_id": format!("{}#cotest", actor.actor),
-                "key_epoch": 0
+            event.seal_ref = Some(frontier.seal_id);
+            event.auth_context = Some(arkret_wire::AuthContext {
+                did: arkret_identifiers::Did::new(actor.actor.clone())?,
+                key_id: format!("{}#cotest", actor.actor),
+                key_epoch: 0,
+                credential_epoch: None,
             });
             if actor.controls_realm_authority_root(realm_id) {
-                event["authorization_ref"] =
-                    serde_json::json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+                event.authorization_ref = Some(arkret_wire::AuthorizationRef::new(
+                    arkret_wire::REALM_AUTHORITY_ROOT_CELL,
+                )?);
             } else {
-                event["refs"] = Value::Array(
-                    actor
-                        .covering_grants_for(realm_id, kind)
-                        .into_iter()
-                        .map(|grant_id| {
-                            serde_json::json!({
-                                "id": grant_id,
-                                "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
-                                "critical": true
-                            })
-                        })
-                        .collect(),
-                );
+                event.refs = actor
+                    .covering_grants_for(realm_id, kind)
+                    .into_iter()
+                    .map(|grant_id| {
+                        arkret_wire::EventRef::new(
+                            grant_id,
+                            arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
+                        )
+                    })
+                    .collect();
             }
         } else {
             previous_control_seal_id = Some(frontier.seal_id.to_string());
-            event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+            event.seal_basis = Some(frontier.seal_basis());
             let physical_millis = chrono::Utc::now().timestamp_millis();
-            event["hlc"] = serde_json::json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
+            event.hlc = Some(arkret_identifiers::Hlc::new(format!(
+                "{physical_millis:012x}-0000-a13f9c2e"
+            ))?);
         }
     }
-    if let Some(proof) = event
-        .get_mut("proofs")
-        .and_then(Value::as_array_mut)
-        .and_then(|proofs| proofs.first_mut())
-    {
-        proof["created_at"] = Value::String(created_at);
-    }
-    crate::harness::refresh_event_proof(&mut event)?;
+    crate::harness::refresh_typed_event_proof(&mut event)?;
     let mut response = crate::harness::expect_json(
-        actor.post("/_arkret/self/events").json(&event),
+        actor
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
     if response.get("event_id").and_then(Value::as_str).is_none()
-        && let Some(event_id) = event.get("event_id").and_then(Value::as_str)
         && let Some(object) = response.as_object_mut()
     {
-        object.insert("event_id".to_owned(), Value::String(event_id.to_owned()));
+        object.insert(
+            "event_id".to_owned(),
+            Value::String(event.event_id.to_string()),
+        );
     }
     if let Some(previous_seal_id) = previous_control_seal_id {
         eventually(

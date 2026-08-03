@@ -9,6 +9,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use anyhow::Result;
 use serde_json::{Value, json};
 
 mod assertions;
@@ -41,7 +42,8 @@ pub(crate) use event_builder::{
 };
 pub use proof::{
     attach_signal_proof, attach_signal_proof_value, refresh_event_proof,
-    refresh_event_proof_with_signing_seed,
+    refresh_event_proof_with_signing_seed, refresh_typed_event_proof,
+    refresh_typed_event_proof_with_signing_seed,
 };
 pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};
@@ -164,7 +166,12 @@ pub(crate) fn realm_create_payload(
     service_id: &str,
     realm_id: &str,
     input: &Value,
-) -> Value {
+) -> Result<(
+    arkret_models_collaboration::events_payloads::RealmCreatePayload,
+    Option<
+        arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
+    >,
+)>{
     let title = input
         .get("title")
         .and_then(Value::as_str)
@@ -215,61 +222,60 @@ pub(crate) fn realm_create_payload(
         .cloned()
         .filter(Value::is_array)
         .unwrap_or_else(|| json!([service_id]));
-    let plaintext_visible_services = Value::Array(
-        plaintext_visible_services
-            .as_array()
-            .map(|items| {
-                items
-                    .iter()
-                    .map(normalize_plaintext_visible_service)
-                    .collect()
-            })
-            .unwrap_or_default(),
-    );
-
-    let mut object = json!({
-        "id": realm_id,
-        "schema": "ak.schema.realm.v1",
-        "title": title,
-        "summary": summary,
-        "created_by": actor,
-        "trust_domain": "ak:trust_domain:soland.local",
-        "schema_refs": schema_refs,
-        "default_discoverability": discoverability,
-        "default_join_rule": join_rule,
-        "history_visibility": history_visibility,
-        "encryption_profile": encryption_profile,
-        "plaintext_visible_services": plaintext_visible_services,
-        "security_class": "standard",
-        "federation_policy": "restricted",
-        "notary_profile": "single_did",
-        "digest_algorithm": "sha256",
-        "notary": {
-            "kind": "single_did",
-            "did": service_id,
-            "recovery_members": ["did:webvh:z6mkfixture:recovery.soland.local"],
-            "controller_organization": "did:webvh:z6mkfixture:organization.primary.soland.local",
-            "recovery_controller_organizations": [
-                "did:webvh:z6mkfixture:organization.recovery.soland.local"
-            ],
-        },
-        // Create-locked (realm-and-space.md section 2.5): the reducer copies this
-        // verbatim into the Realm authority-root cell, so it MUST be the digest
-        // the harness itself resolves rather than a literal.
-        "capability_action_registry_digest": arkret::current_capability_action_registry_digest()
-            .expect("embedded capability-action registry is available to the cotest harness"),
-        "created_at": "2026-05-02T00:00:00.000Z",
+    let services = plaintext_visible_services
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|entry| {
+            serde_json::from_value::<
+                arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleService,
+            >(normalize_plaintext_visible_service(entry))
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let plaintext_visible_services = (!services.is_empty()).then(|| {
+        arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
-    // Realm-level `sync_endpoints` (ak.schema.realm.v1#/properties/sync_endpoints):
-    // shared notary / sync / mirror / federation-peer service bindings. Passed
-    // through verbatim so federation tests can authorise a peer service as a
-    // `federation_peer` endpoint (member-delivery-binding.md §7 — orthogonal to
-    // member-level delivery_binding).
+
+    let created_by = arkret_identifiers::Did::new(actor.to_owned())?;
+    let notary_did = arkret_identifiers::Did::new(service_id.to_owned())?;
+    let notary = arkret_wire::notary::NotaryValue::single_did_with_org(
+        notary_did.clone(),
+        vec![arkret_identifiers::Did::new(
+            "did:webvh:z6mkfixture:recovery.soland.local".to_owned(),
+        )?],
+        arkret_identifiers::Did::new(
+            "did:webvh:z6mkfixture:organization.primary.soland.local".to_owned(),
+        )?,
+        vec![arkret_identifiers::Did::new(
+            "did:webvh:z6mkfixture:organization.recovery.soland.local".to_owned(),
+        )?],
+    );
+    let mut realm = arkret_models_collaboration::objects::realm::Realm::new(
+        arkret_identifiers::RealmId::new(realm_id.to_owned())?,
+        title,
+        created_by,
+        arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:soland.local".to_owned())?,
+        arkret_wire::CORE_REDUCER_PROFILE,
+        arkret_models_collaboration::objects::realm::NotaryProfile::SingleDid,
+        notary,
+        arkret::current_capability_action_registry_digest()?,
+    );
+    realm.summary = Some(summary.to_owned());
+    realm.schema_refs = serde_json::from_value(Value::Array(schema_refs))?;
+    realm.default_discoverability = serde_json::from_value(json!(discoverability))?;
+    realm.default_join_rule = serde_json::from_value(json!(join_rule))?;
+    realm.history_visibility = serde_json::from_value(json!(history_visibility))?;
+    realm.encryption_profile = serde_json::from_value(json!(encryption_profile))?;
+    realm.security_class = Some(serde_json::from_value(json!("standard"))?);
+    realm.federation_policy = Some(serde_json::from_value(json!("restricted"))?);
+    realm.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
     if let Some(sync_endpoints) = input.get("sync_endpoints").filter(|value| value.is_array()) {
-        object
-            .as_object_mut()
-            .expect("realm object literal")
-            .insert("sync_endpoints".to_owned(), sync_endpoints.clone());
+        realm.sync_endpoints = serde_json::from_value(sync_endpoints.clone())?;
     }
-    json!({ "object": object })
+    realm.validate_kind_invariants()?;
+    Ok((
+        arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm),
+        plaintext_visible_services,
+    ))
 }

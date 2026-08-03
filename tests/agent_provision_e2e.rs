@@ -29,7 +29,9 @@ use arkret_canonical as canonical;
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};
-use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId, TypedTrustDomainId};
+use arkret_identifiers::{
+    BackupId, BackupSeriesId, DeviceId, Did, Hlc, PolicyId, TypedTrustDomainId,
+};
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
 };
@@ -58,16 +60,16 @@ use arkret_models_identity::artifacts_device_identity::{
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
-    AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, EventKind, NonEmptyString,
-    OpaqueLocalId, ProtocolOpaqueId, ProtocolOperationId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId,
-    ServiceOperationId,
+    AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
+    EventKind, NonEmptyString, OpaqueLocalId, ProtocolOpaqueId, ProtocolOperationId,
+    RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, dev_login, event_envelope, eventually,
-    expect_api_error, expect_json, refresh_event_proof_with_signing_seed, register_account,
+    expect_api_error, expect_json, refresh_typed_event_proof_with_signing_seed, register_account,
 };
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
@@ -247,8 +249,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
             }),
         )
         .await?;
-    refresh_event_proof_with_signing_seed(&mut strand_event, [21_u8; 32])?;
-    let strand_event: arkret::Event = serde_json::from_value(strand_event)?;
+    refresh_typed_event_proof_with_signing_seed(&mut strand_event, [21_u8; 32])?;
     let strand_submission = actor_client
         .sdk()
         .prepare_initial_submissions(std::slice::from_ref(&strand_event))
@@ -2397,29 +2398,32 @@ async fn submit_delegated_agent_event(
     let mut event = event_envelope(agent_id, realm_id, kind, payload);
     let actor_frontier = managed_agent_actor_frontier(server, token, agent_id, realm_id).await?;
     let actor_seq = actor_frontier.next_actor_seq;
-    event["actor_seq"] = json!(actor_seq);
-    event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
-    event["prev_refs"] = serde_json::to_value(&actor_frontier.frontier_event_ids)?;
-    event["executed_by"] = json!(ALICE_DID);
-    event["authorization_ref"] = json!(authorization_ref);
+    event.actor_seq = actor_seq;
+    event.hlc = Some(Hlc::new(format!(
+        "01970e589d21-{:04x}-a13f9c2e",
+        actor_seq & 0xffff
+    ))?);
+    event.prev_refs = actor_frontier.frontier_event_ids;
+    event.executed_by = Some(Did::new(ALICE_DID.to_owned())?);
+    event.authorization_ref = Some(AuthorizationRef::new(authorization_ref.to_owned())?);
     if kind == EventKind::REALM_CREATE {
         if actor_frontier.next_actor_seq != 0 {
             return Err(anyhow!(
                 "delegated Realm bootstrap requires an empty actor frontier"
             ));
         }
-        event["actor_seq"] = json!(0);
-        event["hlc"] = json!("01970e589d21-0001-a13f9c2e");
-        event["prev_refs"] = json!([]);
+        event.actor_seq = 0;
+        event.hlc = Some(Hlc::new("01970e589d21-0001-a13f9c2e")?);
+        event.prev_refs.clear();
     } else {
         let seal_frontier = managed_agent_frontier(server, token, realm_id)
             .await?
             .ok_or_else(|| anyhow!("delegated Control Move requires an accepted PCR Seal"))?;
-        event["seal_basis"] = serde_json::to_value(seal_frontier.seal_basis())?;
+        event.seal_basis = Some(seal_frontier.seal_basis());
     }
-    event["proofs"][0]["verification_method"] = json!(controller_verification_method());
-    refresh_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
-    let typed_event: arkret::Event = serde_json::from_value(event.clone())?;
+    event.proofs[0].verification_method = controller_verification_method();
+    refresh_typed_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
+    let typed_event = event;
     if kind == EventKind::REALM_CREATE {
         arkret_bootstrap::materialize_managed_agent_pcr_control(
             std::slice::from_ref(&typed_event),
@@ -2460,7 +2464,10 @@ async fn submit_delegated_agent_event(
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&event),
+            .json(&cotest::publication::initial_submission(
+                typed_event.clone(),
+                "",
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -2667,17 +2674,18 @@ async fn move_event_after_actor_frontier(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
-    event: &mut Value,
+    event: &mut arkret::Event,
 ) -> Result<()> {
-    let realm_id = event["realm_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("event realm_id missing before actor-frontier move"))?;
-    let frontier = managed_agent_actor_frontier(server, token, actor_id, realm_id).await?;
+    let realm_id = event.realm_id.to_string();
+    let frontier = managed_agent_actor_frontier(server, token, actor_id, &realm_id).await?;
     let actor_seq = frontier.next_actor_seq;
-    event["actor_seq"] = json!(actor_seq);
-    event["hlc"] = json!(format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff));
-    event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
-    refresh_event_proof_with_signing_seed(event, [21_u8; 32])?;
+    event.actor_seq = actor_seq;
+    event.hlc = Some(Hlc::new(format!(
+        "01970e589d21-{:04x}-a13f9c2e",
+        actor_seq & 0xffff
+    ))?);
+    event.prev_refs = frontier.frontier_event_ids;
+    refresh_typed_event_proof_with_signing_seed(event, [21_u8; 32])?;
     Ok(())
 }
 
@@ -3189,9 +3197,8 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
     let controller_frontier = managed_agent_frontier(server, token, &controller_realm_id)
         .await?
         .ok_or_else(|| anyhow!("controller PCR Seal frontier is missing"))?;
-    active_series_event["seal_basis"] = serde_json::to_value(controller_frontier.seal_basis())?;
-    refresh_event_proof_with_signing_seed(&mut active_series_event, [24_u8; 32])?;
-    let active_series_event: arkret::Event = serde_json::from_value(active_series_event)?;
+    active_series_event.seal_basis = Some(controller_frontier.seal_basis());
+    refresh_typed_event_proof_with_signing_seed(&mut active_series_event, [24_u8; 32])?;
     let sdk = bearer_sdk_client(server, token)?;
     let submission = prepare_controller_initial_submission(
         &sdk,
@@ -4010,7 +4017,7 @@ async fn grant_controller_strand_create(
         revoked_by: None,
         revoked_at: None,
     };
-    let mut event_value = actor_client
+    let mut event = actor_client
         .author_event(
             realm_id,
             "ak.capability.grant",
@@ -4020,8 +4027,7 @@ async fn grant_controller_strand_create(
             }),
         )
         .await?;
-    refresh_event_proof_with_signing_seed(&mut event_value, [21_u8; 32])?;
-    let event: arkret::Event = serde_json::from_value(event_value)?;
+    refresh_typed_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;
     let submission = actor_client
         .sdk()
         .prepare_initial_submissions(std::slice::from_ref(&event))

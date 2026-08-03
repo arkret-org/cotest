@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow};
 use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
-use arkret_identifiers::{Did, EventId, Hash, InviteId, MessageId, RealmId, StrandId};
+use arkret_identifiers::{Did, EventId, Hash, Hlc, InviteId, MessageId, RealmId, StrandId};
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
@@ -16,14 +16,14 @@ use arkret_models_collaboration::governance::membership_invite::{
     InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
 };
 use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
-use arkret_wire::{DidUrl, ScopeRef};
+use arkret_wire::{AuthContext, DidUrl, Event, ScopeRef};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::assertions::expect_json;
-use super::proof::refresh_event_proof_with_signing_seed;
+use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
     NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
@@ -181,7 +181,7 @@ pub async fn create_realm(
     title: &str,
 ) -> Result<String> {
     let realm_id = next_typed_id("realm");
-    let payload = realm_create_payload(
+    let (payload, plaintext_visible_services) = realm_create_payload(
         actor,
         server.service_id(),
         &realm_id,
@@ -191,16 +191,20 @@ pub async fn create_realm(
             "public": false,
             "plaintext_visible_services": [server.service_id()]
         }),
-    );
-    let events = realm_bootstrap_event_batch(actor, &realm_id, payload)?;
+    )?;
+    let events =
+        realm_bootstrap_event_batch(actor, &realm_id, payload, plaintext_visible_services)?;
+    let events = events
+        .into_iter()
+        .map(arkret_wire::EventInitialSubmission::online)
+        .collect();
+    let request = arkret_wire::EventsSubmitBatchRequestBody { events };
     expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&serde_json::from_value::<
-                arkret_wire::EventsSubmitBatchRequestBody,
-            >(json!({"events": events}))?),
+            .json(&request),
         StatusCode::OK,
     )
     .await?;
@@ -215,7 +219,7 @@ pub async fn create_realm_with_signing_seed(
     signing_seed: [u8; 32],
 ) -> Result<String> {
     let realm_id = next_typed_id("realm");
-    let payload = realm_create_payload(
+    let (payload, plaintext_visible_services) = realm_create_payload(
         actor,
         server.service_id(),
         &realm_id,
@@ -225,22 +229,26 @@ pub async fn create_realm_with_signing_seed(
             "public": false,
             "plaintext_visible_services": [server.service_id()]
         }),
-    );
+    )?;
     let events = realm_bootstrap_event_batch_with_signing_seed(
         actor,
         &realm_id,
         payload,
+        plaintext_visible_services,
         signing_seed,
         &verification_method_for_actor(actor),
     )?;
+    let events = events
+        .into_iter()
+        .map(arkret_wire::EventInitialSubmission::online)
+        .collect();
+    let request = arkret_wire::EventsSubmitBatchRequestBody { events };
     expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&serde_json::from_value::<
-                arkret_wire::EventsSubmitBatchRequestBody,
-            >(json!({"events": events}))?),
+            .json(&request),
         StatusCode::OK,
     )
     .await?;
@@ -250,13 +258,17 @@ pub async fn create_realm_with_signing_seed(
 pub fn realm_bootstrap_event_batch(
     actor: &str,
     realm_id: &str,
-    realm_payload: Value,
-) -> Result<Vec<Value>> {
+    realm_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload,
+    plaintext_visible_services: Option<
+        arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
+    >,
+) -> Result<Vec<arkret_wire::Event>> {
     let (signing_seed, verification_method) = event_signing_identity(actor);
     realm_bootstrap_event_batch_with_signing_seed(
         actor,
         realm_id,
         realm_payload,
+        plaintext_visible_services,
         signing_seed,
         &verification_method,
     )
@@ -292,20 +304,18 @@ fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Preconditio
 pub fn realm_bootstrap_event_batch_with_signing_seed(
     actor: &str,
     realm_id: &str,
-    mut realm_payload: Value,
+    realm_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload,
+    plaintext_visible_services: Option<
+        arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
+    >,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-) -> Result<Vec<Value>> {
-    let services = realm_payload
-        .get_mut("object")
-        .and_then(Value::as_object_mut)
-        .and_then(|object| object.remove("plaintext_visible_services"))
-        .filter(|services| services.as_array().is_some_and(|items| !items.is_empty()));
+) -> Result<Vec<arkret_wire::Event>> {
     let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
         realm_id,
         "ak.realm.create",
-        realm_payload,
+        realm_payload.to_value()?,
         Some(0),
         Vec::new(),
         signing_seed,
@@ -315,20 +325,17 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "ak:cell:ak.component.realm.create.v1:null",
         )?],
     );
-    let Some(services) = services else {
+    let realm_event: arkret_wire::Event = serde_json::from_value(realm_event)?;
+    let Some(services) = plaintext_visible_services else {
         return Ok(vec![realm_event]);
     };
-    let realm_event_id = realm_event
-        .get("event_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("cotest Realm genesis Event carries no event_id"))?;
     let services_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
         realm_id,
         "ak.realm.plaintext_visible_services",
-        json!({ "services": services }),
+        services.to_value()?,
         Some(1),
-        vec![EventId::new(realm_event_id.to_owned())?],
+        vec![realm_event.event_id.clone()],
         signing_seed,
         verification_method,
         Vec::new(),
@@ -336,6 +343,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
         )?],
     );
+    let services_event = serde_json::from_value(services_event)?;
     Ok(vec![realm_event, services_event])
 }
 
@@ -513,25 +521,26 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
             ));
         };
         if is_control_move {
-            event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+            event.seal_basis = Some(frontier.seal_basis());
             let physical_millis = chrono::Utc::now().timestamp_millis();
-            event["hlc"] = json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
+            event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
         } else {
-            event["seal_ref"] = serde_json::to_value(frontier.seal_id)?;
-            event["auth_context"] = json!({
-                "did": actor,
-                "key_id": verification_method,
-                "key_epoch": 0
+            event.seal_ref = Some(frontier.seal_id);
+            event.auth_context = Some(AuthContext {
+                did: Did::new(actor.to_owned())?,
+                key_id: verification_method.to_string(),
+                key_epoch: 0,
+                credential_epoch: None,
             });
         }
-        refresh_event_proof_with_signing_seed(&mut event, signing_seed)?;
+        refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
     }
     let mut body = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&event),
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         status,
     )
     .await?;
@@ -574,7 +583,7 @@ async fn realm_seal_frontier_for(
     }
 }
 
-pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -> Value {
+pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -> Event {
     let (signing_seed, verification_method) = event_signing_identity(actor);
     event_envelope_with_signing_seed_and_verification_method(
         actor,
@@ -592,7 +601,7 @@ pub fn event_envelope_with_signing_seed(
     kind: &str,
     payload: Value,
     signing_seed: [u8; 32],
-) -> Value {
+) -> Event {
     event_envelope_with_signing_seed_and_verification_method(
         actor,
         realm_id,
@@ -610,7 +619,7 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
     payload: Value,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-) -> Value {
+) -> Event {
     event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
@@ -632,7 +641,7 @@ pub fn event_envelope_at_frontier_with_signing_seed(
     next_actor_seq: u64,
     frontier_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
-) -> Value {
+) -> Event {
     event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
@@ -655,7 +664,7 @@ fn event_envelope_with_chain_and_signing_identity(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-) -> Value {
+) -> Event {
     event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,
         realm_id,
@@ -680,7 +689,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
     causal_refs: Vec<String>,
-) -> Value {
+) -> Event {
     event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
         realm_id,
@@ -709,7 +718,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     verification_method: &DidUrl,
     causal_refs: Vec<String>,
     preconditions: Vec<arkret_wire::cba::Precondition>,
-) -> Value {
+) -> Event {
     let unique_seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let actor_seq = actor_seq.unwrap_or(unique_seq);
     let hlc_logical = unique_seq & 0xffff;
@@ -759,7 +768,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .expect("SDK Event signer accepts cotest envelope");
-    serde_json::to_value(event).expect("SDK Event serializes")
+    event
 }
 
 pub(crate) fn event_envelope_with_chain(
@@ -769,7 +778,7 @@ pub(crate) fn event_envelope_with_chain(
     payload: Value,
     actor_seq: u64,
     prev_event_id: Option<&str>,
-) -> Value {
+) -> Event {
     let (signing_seed, verification_method) = event_signing_identity(actor);
     event_envelope_with_chain_and_signing_identity(
         actor,
@@ -844,7 +853,7 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
     }
 }
 
-pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Value) {
+pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Event) {
     let Some(object) = body.as_object_mut() else {
         return;
     };
@@ -857,12 +866,7 @@ pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Value) {
         .and_then(|accepted| accepted.first())
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
-    let event_id = accepted_id.or_else(|| {
-        event
-            .get("event_id")
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned)
-    });
+    let event_id = accepted_id.or_else(|| Some(event.event_id.to_string()));
     if let Some(event_id) = event_id {
         object.insert("event_id".to_owned(), Value::String(event_id));
     }
@@ -1089,7 +1093,7 @@ pub(crate) fn event_envelope_with_causal_refs(
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     causal_refs: Vec<String>,
-) -> Value {
+) -> Event {
     let (signing_seed, verification_method) = event_signing_identity(actor);
     event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,

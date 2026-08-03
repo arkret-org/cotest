@@ -21,13 +21,13 @@
 //! cancel envelope is an idempotent duplicate rather than a second transition.
 
 use anyhow::{Result, anyhow};
-use chrono::Duration as ChronoDuration;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
     TestActorClient, TestServerGroup, event_envelope_with_chain, eventually, expect_json,
-    refresh_event_proof,
+    refresh_typed_event_proof,
 };
 use crate::transcripts::record_vector_event;
 
@@ -109,7 +109,7 @@ async fn author_invite_move(
     realm_id: &str,
     kind: &str,
     payload: Value,
-) -> Result<Value> {
+) -> Result<arkret_wire::Event> {
     let frontier = expect_json(
         actor
             .get("/_arkret/self/events/frontier")
@@ -134,8 +134,8 @@ async fn author_invite_move(
         actor_frontier.next_actor_seq,
         None,
     );
-    event["prev_refs"] = serde_json::to_value(actor_frontier.frontier_event_ids)?;
-    event["created_at"] = Value::String(created_at.clone());
+    event.prev_refs = actor_frontier.frontier_event_ids;
+    event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
     let seal_frontier = actor.realm_seal_frontier(realm_id).await?;
     let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
         serde_json::from_value(seal_frontier)?;
@@ -146,17 +146,12 @@ async fn author_invite_move(
             "Realm selector returned the wrong frontier variant"
         ));
     };
-    event["seal_basis"] = serde_json::to_value(seal_frontier.seal_basis())?;
+    event.seal_basis = Some(seal_frontier.seal_basis());
     let physical_millis = chrono::Utc::now().timestamp_millis();
-    event["hlc"] = json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
-    if let Some(proof) = event
-        .get_mut("proofs")
-        .and_then(Value::as_array_mut)
-        .and_then(|proofs| proofs.first_mut())
-    {
-        proof["created_at"] = Value::String(created_at);
-    }
-    refresh_event_proof(&mut event)?;
+    event.hlc = Some(arkret_identifiers::Hlc::new(format!(
+        "{physical_millis:012x}-0000-a13f9c2e"
+    ))?);
+    refresh_typed_event_proof(&mut event)?;
     Ok(event)
 }
 
@@ -180,7 +175,7 @@ async fn submit_invite_move(
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let response = actor
         .post("/_arkret/self/events")
-        .json(&event)
+        .json(&crate::publication::initial_submission(event, "")?)
         .send()
         .await?;
     let status = response.status();
@@ -370,7 +365,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     .await?;
     let response = alice
         .post("/_arkret/self/events")
-        .json(&replay_event)
+        .json(&crate::publication::initial_submission(replay_event, "")?)
         .send()
         .await?;
     let replay_status = response.status();

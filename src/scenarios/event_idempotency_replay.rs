@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use arkret_wire::Event;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -34,17 +35,21 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         .await?;
 
     let first = expect_json(
-        alice.post("/_arkret/self/events").json(&event),
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(first["status"], "accepted");
     let event_id = submitted_event_id(&first)
         .ok_or_else(|| anyhow!("accepted response missing event_id: {first}"))?;
-    assert_eq!(event_id, json_string(&event, "event_id")?);
+    assert_eq!(event_id, event.event_id.as_str());
 
     let duplicate = expect_json(
-        alice.post("/_arkret/self/events").json(&event),
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
@@ -178,18 +183,22 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
     Ok(realm_id.to_owned())
 }
 
-async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<Value> {
+async fn submit_and_duplicate(alice: &TestActorClient, event: &Event) -> Result<Value> {
     let first = expect_json(
-        alice.post("/_arkret/self/events").json(event),
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(first["status"], "accepted");
-    let event_id = event["event_id"].as_str();
+    let event_id = Some(event.event_id.as_str());
     assert_eq!(submitted_event_id(&first), event_id);
 
     let duplicate = expect_json(
-        alice.post("/_arkret/self/events").json(event),
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;

@@ -206,15 +206,21 @@ async fn grant_calendar_rsvp_to(
     Ok(vec![grant_id])
 }
 
-async fn submit_prepared_event(client: &TestActorClient, event: &Value) -> Result<String> {
+async fn submit_prepared_event(
+    client: &TestActorClient,
+    event: &arkret_wire::Event,
+) -> Result<String> {
     expect_json(
-        client.post("/_arkret/self/events").json(event),
+        client
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
-    event["proofs"][0]["event_digest"]
-        .as_str()
-        .map(ToOwned::to_owned)
+    event
+        .proofs
+        .first()
+        .map(|proof| proof.event_digest.to_string())
         .ok_or_else(|| anyhow!("prepared Event carries no event digest"))
 }
 
@@ -707,17 +713,20 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
 
     let frontier = inkson_schedule_frontier(&alice, &realm_id).await?;
 
-    let mut event = alice
+    let event = alice
         .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(&realm_id, ALICE_DID, "accepted", &frontier)?,
         )
         .await?;
-    event["effects"] = json!([]);
+    let submission = crate::publication::initial_submission(event, "")?;
+    let invalid_submission = crate::harness::wire_negative_from_sdk(&submission, |body| {
+        body["event"]["effects"] = json!([]);
+    })?;
     let response = alice
         .post("/_arkret/self/events")
-        .json(&event)
+        .json(&invalid_submission)
         .send()
         .await?;
     if response.status() == StatusCode::OK {

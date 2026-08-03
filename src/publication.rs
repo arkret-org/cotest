@@ -24,6 +24,7 @@ use arkret_wire::{
     SchemaId, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
+use serde_json::Value;
 
 /// The one registry projection evaluator cotest uses.
 ///

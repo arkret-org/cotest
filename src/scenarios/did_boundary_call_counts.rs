@@ -111,10 +111,11 @@ async fn seeded_actor(server: &ArkretServer, actor: &str, device: &str) -> Resul
 /// The Event therefore stays structurally valid and correctly authorized; the
 /// only thing wrong with it is the signature, which is precisely the property
 /// under test.
-fn corrupt_detached_jws(event: &mut serde_json::Value) -> Result<()> {
+fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
     let jws = event
-        .pointer("/proofs/0/jws")
-        .and_then(serde_json::Value::as_str)
+        .proofs
+        .first()
+        .map(|proof| proof.jws.as_str())
         .context("authored Event carries no proofs[0].jws")?
         .to_owned();
     let (header, signature) = jws
@@ -128,7 +129,11 @@ fn corrupt_detached_jws(event: &mut serde_json::Value) -> Result<()> {
     // not the encoding's validity.
     *last = if *last == 'A' { 'B' } else { 'A' };
     let corrupted: String = bytes.into_iter().collect();
-    event["proofs"][0]["jws"] = serde_json::Value::String(format!("{header}.{corrupted}"));
+    event
+        .proofs
+        .first_mut()
+        .context("authored Event carries no proofs[0]")?
+        .jws = format!("{header}.{corrupted}");
     Ok(())
 }
 
@@ -224,7 +229,7 @@ pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> 
         .measure_did_boundary(None, || async {
             let response = alice
                 .post("/_arkret/self/events")
-                .json(&forged)
+                .json(&crate::publication::initial_submission(forged.clone(), "")?)
                 .send()
                 .await?;
             let status = response.status();
@@ -309,7 +314,7 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
         .measure_did_boundary(None, || async {
             let response = alice
                 .post("/_arkret/self/events")
-                .json(&event)
+                .json(&crate::publication::initial_submission(event.clone(), "")?)
                 .send()
                 .await?;
             let status = response.status();

@@ -1,13 +1,12 @@
 use std::sync::LazyLock;
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::EventId;
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
 };
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope_at_frontier_with_signing_seed,
-    expect_json, refresh_event_proof_with_signing_seed, register_account,
+    expect_json, register_account,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -70,19 +69,22 @@ async fn seal_basis(
     Ok(frontier.seal_basis())
 }
 
-fn bind_seal_ref(event: &mut Value, basis: &arkret_wire::SealBasis) -> Result<()> {
+fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis) -> Result<()> {
     let seal_ref = basis
         .leaves
         .first()
         .ok_or_else(|| anyhow!("Realm Seal frontier has no leaf"))?;
-    event["seal_ref"] = serde_json::to_value(seal_ref)?;
-    event["auth_context"] = json!({
-        "did": ACTOR.as_str(),
-        "key_id": format!("{}#cotest", ACTOR.as_str()),
-        "key_epoch": 0
+    event.seal_ref = Some(seal_ref.clone());
+    event.auth_context = Some(arkret_wire::AuthContext {
+        did: ACTOR.clone(),
+        key_id: format!("{}#cotest", ACTOR.as_str()),
+        key_epoch: 0,
+        credential_epoch: None,
     });
-    event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
-    refresh_event_proof_with_signing_seed(event, SIGNING_SEED)
+    event.authorization_ref = Some(arkret_wire::AuthorizationRef::new(
+        arkret_wire::REALM_AUTHORITY_ROOT_CELL,
+    )?);
+    cotest::harness::refresh_typed_event_proof_with_signing_seed(event, SIGNING_SEED)
 }
 
 fn strand_payload(realm_id: &str, suffix: &str) -> Value {
@@ -112,6 +114,11 @@ async fn submit_bytes(
         .body(bytes)
         .send()
         .await?)
+}
+
+fn submission_bytes(event: &arkret_wire::Event) -> Result<Vec<u8>> {
+    let submission = cotest::publication::initial_submission(event.clone(), "")?;
+    Ok(arkret_canonical::canonical_json_bytes(&submission)?)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -173,7 +180,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     bind_seal_ref(&mut sibling_a, &current_seal_basis)?;
     bind_seal_ref(&mut sibling_b, &current_seal_basis)?;
     for event in [&sibling_b, &sibling_a] {
-        let response = submit_bytes(&server, &token, serde_json::to_vec(event)?).await?;
+        let response = submit_bytes(&server, &token, submission_bytes(event)?).await?;
         assert_eq!(
             response.status(),
             StatusCode::OK,
@@ -184,10 +191,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
 
     let siblings = frontier(&server, &token, &realm_a).await?;
     assert_eq!(siblings.next_actor_seq, basis_a.next_actor_seq + 1);
-    let mut expected_ids = vec![
-        serde_json::from_value::<EventId>(sibling_a["event_id"].clone())?,
-        serde_json::from_value::<EventId>(sibling_b["event_id"].clone())?,
-    ];
+    let mut expected_ids = vec![sibling_a.event_id.clone(), sibling_b.event_id.clone()];
     expected_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     assert_eq!(siblings.frontier_event_ids, expected_ids);
     assert_eq!(frontier(&server, &token, &realm_b).await?, basis_b);
@@ -202,7 +206,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         SIGNING_SEED,
     );
     bind_seal_ref(&mut merge, &seal_basis(&server, &token, &realm_a).await?)?;
-    let exact_body = arkret_canonical::canonical_json_bytes(&merge)?;
+    let exact_body = submission_bytes(&merge)?;
     let lost = submit_bytes(&server, &token, exact_body.clone()).await?;
     assert_eq!(lost.status(), StatusCode::OK);
     drop(lost);
@@ -210,9 +214,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     assert_eq!(duplicate.status(), StatusCode::OK);
     let duplicate_body: Value = duplicate.json().await?;
     assert_eq!(duplicate_body["status"], "duplicate");
-    let merge_event_id = merge["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("merge event has no event_id"))?;
+    let merge_event_id = merge.event_id.as_str();
     let stored_merge = expect_json(
         server
             .http()
@@ -238,14 +240,12 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         SIGNING_SEED,
     );
     bind_seal_ref(&mut stale, &seal_basis(&server, &token, &realm_a).await?)?;
-    let stale_response = submit_bytes(&server, &token, serde_json::to_vec(&stale)?).await?;
+    let stale_response = submit_bytes(&server, &token, submission_bytes(&stale)?).await?;
     assert_eq!(stale_response.status(), StatusCode::CONFLICT);
     let conflict: Value = stale_response.json().await?;
     assert_eq!(conflict["error"]["code"], "cas_conflict");
     assert_eq!(conflict["error"]["details"]["accepted"], false);
-    let stale_event_id = stale["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("stale event has no event_id"))?;
+    let stale_event_id = stale.event_id.as_str();
     let stale_lookup = server
         .http()
         .get(server.url(&format!("/_arkret/self/events/{stale_event_id}")))
@@ -268,17 +268,15 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         &mut replacement,
         &seal_basis(&server, &token, &realm_a).await?,
     )?;
-    assert_ne!(stale["event_id"], replacement["event_id"]);
-    let accepted = submit_bytes(&server, &token, serde_json::to_vec(&replacement)?).await?;
+    assert_ne!(stale.event_id, replacement.event_id);
+    let accepted = submit_bytes(&server, &token, submission_bytes(&replacement)?).await?;
     assert_eq!(
         accepted.status(),
         StatusCode::OK,
         "{}",
         accepted.text().await?
     );
-    let replacement_event_id = replacement["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("replacement event has no event_id"))?;
+    let replacement_event_id = replacement.event_id.as_str();
     expect_json(
         server
             .http()
@@ -290,8 +288,6 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     Ok(())
 }
 
-fn current_sequence(event: &Value) -> Result<u64> {
-    event["actor_seq"]
-        .as_u64()
-        .ok_or_else(|| anyhow!("event has no actor_seq"))
+fn current_sequence(event: &arkret_wire::Event) -> Result<u64> {
+    Ok(event.actor_seq)
 }

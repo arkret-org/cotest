@@ -111,36 +111,20 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     // as a defence-in-depth signal that the production server never
     // exposes the proof path to unauthenticated clients.
     let actor = "did:web:alice.cotest.local";
-    let realm_id = "ak:realm:0196419b-0000-7000-8000-cot13t13t13t";
-    let event_id = "ak:event:0196419b-0000-7000-8000-pp1pp1pp1pp1";
-    let envelope = json!({
-        "event_id": event_id,
-        "kind": "ak.message.create",
-        "actor_id": actor,
-        "actor_seq": 1,
-        "realm_id": realm_id,
-        "created_at": "2026-05-19T00:00:00.000Z",
-        "hlc": "1747613100000-0-cotest",
-        "prev_refs": [],
-        "refs": [],
-        "payload": {"body": "hi"},
-        "proofs": [{
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": format!("{actor}#inkson"),
-            "event_digest":
-                "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-            "created_at": "2026-05-19T00:00:00.000Z",
-            // The inkson pre-T1.3 placeholder. T1.3 soland MUST reject
-            // this on a production server with `dev_proof_in_production`.
-            "jws": "a..b",
-        }]
-    });
+    let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000013";
+    let mut event = crate::harness::event_envelope(
+        actor,
+        realm_id,
+        "ak.message.create",
+        crate::harness::message_create_text_payload(realm_id, "hi")?,
+    );
+    event.proofs[0].jws = "a..b".to_owned();
+    let submission = crate::publication::initial_submission(event, "")?;
 
     let resp = client
         .post(&url)
         .bearer_auth("cotest-bogus-token-not-a-real-session")
-        .json(&envelope)
+        .json(&submission)
         .send()
         .await
         .context("POST /_arkret/self/events to production soland")?;

@@ -58,7 +58,8 @@ use arkret_wire::{
     Base64UrlString, CapabilityActionId, EventRequirements, ProfileId, ProtocolOpaqueId,
     ProtocolOperationId, RelationId,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeZone, Utc};
 use garth::projection::{
     SidecarExchangeAgentFact, SidecarExchangeCacheDecision, SidecarExchangeControlFact,

@@ -42,3 +42,37 @@ fn http_json_bodies_cannot_start_from_an_untyped_json_macro() {
         violations.join("\n")
     );
 }
+
+#[test]
+fn authored_events_remain_sdk_events_until_the_submission_wrapper() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let builder = fs::read_to_string(manifest.join("src/harness/event_builder.rs"))
+        .expect("read Event builder source");
+    for function in [
+        "event_envelope",
+        "event_envelope_with_signing_seed",
+        "event_envelope_with_signing_seed_and_verification_method",
+        "event_envelope_at_frontier_with_signing_seed",
+        "event_envelope_with_chain",
+        "event_envelope_with_causal_refs",
+    ] {
+        let start = builder
+            .find(&format!("fn {function}"))
+            .unwrap_or_else(|| panic!("missing {function}"));
+        let signature = builder[start..]
+            .split_once('{')
+            .map(|(signature, _)| signature)
+            .expect("function signature has a body");
+        assert!(
+            signature.contains("-> Event"),
+            "{function} must return the SDK Event type, not an untyped JSON value: {signature}"
+        );
+    }
+
+    let publication =
+        fs::read_to_string(manifest.join("src/publication.rs")).expect("read publication helpers");
+    assert!(
+        !publication.contains("initial_submission_value"),
+        "normal Event publication must not decode an arbitrary JSON value at the HTTP boundary"
+    );
+}

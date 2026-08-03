@@ -8,7 +8,8 @@ use arkret::protocol_journey::{
     ProtocolOperationId, RequestAcceptanceReceipt,
 };
 use arkret_http_client::Client as SdkClient;
-use arkret_identifiers::{Did, Hash};
+use arkret_identifiers::{Did, Hash, Hlc};
+use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
@@ -20,7 +21,7 @@ use super::event_builder::{
 };
 use super::{
     member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
-    refresh_event_proof,
+    refresh_typed_event_proof,
 };
 
 #[derive(Clone)]
@@ -403,13 +404,21 @@ impl TestActorClient {
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")
             .insert(realm_id.clone());
-        let payload = realm_create_payload(&self.actor, &self.service_id, &realm_id, &body);
-        let events = realm_bootstrap_event_batch(&self.actor, &realm_id, payload)?;
+        let (payload, plaintext_visible_services) =
+            realm_create_payload(&self.actor, &self.service_id, &realm_id, &body)?;
+        let events = realm_bootstrap_event_batch(
+            &self.actor,
+            &realm_id,
+            payload,
+            plaintext_visible_services,
+        )?;
+        let events = events
+            .into_iter()
+            .map(arkret_wire::EventInitialSubmission::online)
+            .collect();
+        let request = arkret_wire::EventsSubmitBatchRequestBody { events };
         let event_response = expect_json(
-            self.post("/_arkret/self/events")
-                .json(&serde_json::from_value::<
-                    arkret_wire::EventsSubmitBatchRequestBody,
-                >(json!({"events": events}))?),
+            self.post("/_arkret/self/events").json(&request),
             StatusCode::OK,
         )
         .await?;
@@ -440,27 +449,24 @@ impl TestActorClient {
     /// wrong: the root path deliberately skips the per-cell grant search, so an
     /// Event carrying it is judged only by whether `ak.realm.owner` covers the
     /// kind at all.
-    fn stamp_authority(&self, event: &mut Value, realm_id: &str, kind: &str, is_data_event: bool) {
+    fn stamp_authority(&self, event: &mut Event, realm_id: &str, kind: &str, is_data_event: bool) {
         let covering = self.covering_grants_for(realm_id, kind);
         if !covering.is_empty() {
             if is_data_event {
-                event["refs"] = Value::Array(
-                    covering
-                        .into_iter()
-                        .map(|grant_id| {
-                            json!({
-                                "id": grant_id,
-                                "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
-                                "critical": true
-                            })
-                        })
-                        .collect(),
-                );
+                event.refs = covering
+                    .into_iter()
+                    .map(|grant_id| {
+                        EventRef::new(grant_id, arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY)
+                    })
+                    .collect();
             }
             return;
         }
         if self.controls_realm_authority_root(realm_id) {
-            event["authorization_ref"] = json!(arkret_wire::REALM_AUTHORITY_ROOT_CELL);
+            event.authorization_ref = Some(
+                AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
+                    .expect("Realm authority root is an AuthorizationRef"),
+            );
         }
     }
 
@@ -576,7 +582,8 @@ impl TestActorClient {
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
         let event = self.author_event(realm_id, kind, payload).await?;
         let mut body = expect_json(
-            self.post("/_arkret/self/events").json(&event),
+            self.post("/_arkret/self/events")
+                .json(&crate::publication::initial_submission(event.clone(), "")?),
             StatusCode::OK,
         )
         .await?;
@@ -603,14 +610,15 @@ impl TestActorClient {
             .author_event_with_causal_refs(realm_id, kind, payload, causal_refs, capability_refs)
             .await?;
         let mut body = expect_json(
-            self.post("/_arkret/self/events").json(&event),
+            self.post("/_arkret/self/events")
+                .json(&crate::publication::initial_submission(event.clone(), "")?),
             StatusCode::OK,
         )
         .await?;
         ensure_submit_event_id(&mut body, &event);
         // The digest is what a later response names to dominate this head, so
         // hand it back to the caller alongside the submit result.
-        body["cotest_event_digest"] = event["proofs"][0]["event_digest"].clone();
+        body["cotest_event_digest"] = json!(event.proofs[0].event_digest);
         Ok(body)
     }
 
@@ -624,7 +632,7 @@ impl TestActorClient {
         payload: Value,
         causal_refs: Vec<String>,
         capability_refs: Vec<String>,
-    ) -> Result<Value> {
+    ) -> Result<Event> {
         let frontier = expect_json(
             self.get("/_arkret/self/events/frontier")
                 .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
@@ -675,42 +683,39 @@ impl TestActorClient {
             // A DataEvent anchors its effects with `seal_ref`, not
             // `seal_basis`: carrying a Seal basis is what marks an Event as a
             // Control Move, and a Control Move may not write a data-plane cell.
-            event["seal_ref"] = serde_json::to_value(&frontier.seal_id)?;
+            event.seal_ref = Some(frontier.seal_id);
             // Capability coverage is per DataEvent: the reducer checks that a
             // named grant actually covers this action on this target.
-            event["auth_context"] = json!({
-                "did": self.actor,
-                "key_id": format!("{}#cotest", self.actor),
-                "key_epoch": 0
+            event.auth_context = Some(AuthContext {
+                did: Did::new(self.actor.clone())?,
+                key_id: format!("{}#cotest", self.actor),
+                key_epoch: 0,
+                credential_epoch: None,
             });
             if capability_refs.is_empty() {
                 self.stamp_authority(&mut event, realm_id, kind, true);
             }
-            event["refs"] = Value::Array(
-                capability_refs
-                    .into_iter()
-                    .map(|grant_id| {
-                        json!({
-                            "id": grant_id,
-                            "role": arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
-                            "critical": true
-                        })
-                    })
-                    .collect(),
-            );
+            event.refs = capability_refs
+                .into_iter()
+                .map(|grant_id| EventRef::new(grant_id, arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY))
+                .collect();
             if kind == arkret_wire::EventKind::STRAND_UPDATE
-                && payload_patch_touches_calendar(&event["payload"])
+                && event
+                    .payload
+                    .get("patch")
+                    .is_some_and(|patch| payload_patch_touches_calendar(&json!({"patch": patch})))
             {
-                event["requirements"] = json!({
-                    "schema": ["ak.schema.calendar_event.v1"]
-                });
+                event.requirements.schema_profile_refs = vec![
+                    ProfileRef::new("ak.schema.calendar_event.v1")
+                        .expect("calendar schema profile is registered"),
+                ];
             }
-            refresh_event_proof(&mut event)?;
+            refresh_typed_event_proof(&mut event)?;
         }
         Ok(event)
     }
 
-    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
+    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
         let frontier = expect_json(
             self.get("/_arkret/self/events/frontier")
@@ -739,7 +744,7 @@ impl TestActorClient {
             frontier.next_actor_seq,
             None,
         );
-        event["prev_refs"] = serde_json::to_value(frontier.frontier_event_ids)?;
+        event.prev_refs = frontier.frontier_event_ids;
         let descriptor = arkret_wire::EventKind::from(kind).descriptor();
         let is_control_move = descriptor.is_some_and(|descriptor| {
             descriptor.reducer_input && descriptor.plane == Some("control")
@@ -760,20 +765,21 @@ impl TestActorClient {
                 ));
             };
             if is_control_move {
-                event["seal_basis"] = serde_json::to_value(frontier.seal_basis())?;
+                event.seal_basis = Some(frontier.seal_basis());
                 let physical_millis = chrono::Utc::now().timestamp_millis();
-                event["hlc"] = json!(format!("{physical_millis:012x}-0000-a13f9c2e"));
+                event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
             } else {
-                event["seal_ref"] = serde_json::to_value(&frontier.seal_id)?;
-                event["auth_context"] = json!({
-                    "did": self.actor,
-                    "key_id": format!("{}#cotest", self.actor),
-                    "key_epoch": 0
+                event.seal_ref = Some(frontier.seal_id);
+                event.auth_context = Some(AuthContext {
+                    did: Did::new(self.actor.clone())?,
+                    key_id: format!("{}#cotest", self.actor),
+                    key_epoch: 0,
+                    credential_epoch: None,
                 });
             }
             self.stamp_authority(&mut event, realm_id, kind, is_data_event);
         }
-        refresh_event_proof(&mut event)?;
+        refresh_typed_event_proof(&mut event)?;
         Ok(event)
     }
 

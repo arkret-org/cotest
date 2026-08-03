@@ -812,44 +812,44 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 }
 
 fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Result<Value> {
-    let payload = json!({
-        "object": {
-            "id": realm_id,
-            "schema": "ak.schema.realm.v1",
-            "title": title,
-            "trust_domain": "ak:trust_domain:mock-parity.cotest.local",
-            "created_by": ctx.alice_did,
-            "schema_refs": ["ak.schema.realm.v1"],
-            "summary": "created by T-P0-04 parity baseline",
-            "default_discoverability": "public",
-            "default_join_rule": "public",
-            "history_visibility": "world_readable",
-            "encryption_profile": "none",
-            "security_class": "standard",
-            "federation_policy": "open",
-            "notary_profile": "single_did",
-            "digest_algorithm": "sha256",
-            "notary": {
-                "kind": "single_did",
-                "did": ctx.service_id,
-                "recovery_members": [ctx.service_id],
-                "controller_organization": ctx.service_id,
-                "recovery_controller_organizations": [ctx.service_id]
-            },
-            "capability_action_registry_digest":
-                arkret::current_capability_action_registry_digest()
-                    .expect("embedded capability-action registry"),
-            "created_at": "2026-05-22T10:00:00.000Z"
-        }
-    });
+    let creator = arkret_identifiers::Did::new(ctx.alice_did.clone())?;
+    let service_id = arkret_identifiers::Did::new(ctx.service_id.clone())?;
+    let mut realm = arkret_models_collaboration::objects::realm::Realm::new(
+        arkret_identifiers::RealmId::new(realm_id.to_owned())?,
+        title,
+        creator,
+        arkret_identifiers::TypedTrustDomainId::new(
+            "ak:trust_domain:mock-parity.cotest.local".to_owned(),
+        )?,
+        arkret_wire::CORE_REDUCER_PROFILE,
+        arkret_models_collaboration::objects::realm::NotaryProfile::SingleDid,
+        arkret_wire::notary::NotaryValue::single_did(service_id),
+        arkret::current_capability_action_registry_digest()?,
+    );
+    realm.summary = Some("created by T-P0-04 parity baseline".to_owned());
+    realm.default_discoverability = serde_json::from_value(json!("public"))?;
+    realm.default_join_rule = serde_json::from_value(json!("public"))?;
+    realm.history_visibility = serde_json::from_value(json!("world_readable"))?;
+    realm.security_class = Some(serde_json::from_value(json!("standard"))?);
+    realm.federation_policy = Some(serde_json::from_value(json!("open"))?);
+    realm.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-22T10:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
+    let payload = arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm);
     let events = cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
         &ctx.alice_did,
         realm_id,
         payload,
+        None,
         MOCK_PARITY_ALICE_SIGNING_SEED,
         &cotest::fixture_did_url(format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did)),
     )?;
-    Ok(json!({"events": events}))
+    let request = arkret_wire::EventsSubmitBatchRequestBody {
+        events: events
+            .into_iter()
+            .map(arkret_wire::EventInitialSubmission::online)
+            .collect(),
+    };
+    Ok(serde_json::to_value(request)?)
 }
 
 fn call_mock_contract(

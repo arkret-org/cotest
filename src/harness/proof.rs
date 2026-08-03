@@ -101,6 +101,56 @@ pub fn refresh_event_proof_with_signing_seed(
     Ok(())
 }
 
+/// Re-sign an SDK Event after changing typed fields.
+pub fn refresh_typed_event_proof_with_signing_seed(
+    event: &mut arkret_wire::Event,
+    signing_seed: [u8; 32],
+) -> Result<()> {
+    let verification_method = event
+        .proofs
+        .first()
+        .map(|proof| proof.verification_method.clone())
+        .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
+    let signer_did = event
+        .executed_by
+        .clone()
+        .unwrap_or_else(|| event.actor_id.clone());
+    let created_at = event.created_at;
+    event.proofs.clear();
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        signing_seed,
+        signer_did,
+        verification_method.clone(),
+    );
+    arkret::signatures::sign_event(
+        event,
+        &signer,
+        &verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .with_context(|| format!("SDK Event signer rejected {}", event.event_id))
+}
+
+/// Re-sign a typed Event through the registered cotest identity.
+pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
+    let verification_method = event
+        .proofs
+        .first()
+        .map(|proof| proof.verification_method.clone())
+        .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
+    let signer = event
+        .executed_by
+        .as_ref()
+        .unwrap_or(&event.actor_id)
+        .as_str();
+    let signing_seed =
+        super::event_builder::registered_event_signing_seed(signer, &verification_method)
+            .unwrap_or_else(|| {
+                arkret::signatures::development_signing_key_seed(&verification_method)
+            });
+    refresh_typed_event_proof_with_signing_seed(event, signing_seed)
+}
+
 /// `proofs[0].verification_method` as the SDK's `DidUrl`.
 ///
 /// A fixture carrying a bare DID here fails loudly at this boundary rather

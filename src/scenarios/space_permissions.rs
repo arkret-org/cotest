@@ -5,8 +5,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
-    expect_json, member_join_payload_value, message_create_text_payload, register_account,
+    ArkretServer, add_member, create_realm, dev_login, expect_api_error, expect_json,
+    member_join_payload_value, message_create_text_payload,
 };
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
@@ -19,13 +19,13 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
         "ak:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
-    let bob = register_account(
-        server,
-        "did:web:bob-space.example",
-        "@bob-space",
-        "ak:device:01904100-0000-7000-8000-0000000000b0",
-    )
-    .await?;
+    let bob = server
+        .register_client(
+            "did:web:bob-space.example",
+            "@bob-space",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
+        )
+        .await?;
 
     expect_api_error(
         server.http().post(server.url("/_soland/self/spaces")).json(
@@ -36,67 +36,39 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let unauth_realm_id = "ak:realm:01904100-0000-7000-8000-000000005ace";
+    let realm_id =
+        create_realm(server, &alice, "did:web:alice.example", "Permission Space").await?;
+    let alice_client = server.client_with_token(
+        "did:web:alice.example",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        alice.clone(),
+    )?;
+    let mut unauthorized_join = alice_client
+        .author_event(
+            &realm_id,
+            "ak.member.state",
+            member_join_payload_value(&realm_id, "did:web:bob-space.example")?,
+        )
+        .await?;
+    rebind_authored_event(&mut unauthorized_join, &bob.actor)?;
+    let unauthorized_submission =
+        crate::publication::initial_submission(unauthorized_join.clone(), "")?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
-            .json(&event_envelope(
-                "did:web:alice.example",
-                unauth_realm_id,
-                "ak.realm.create",
-                json!({
-                    "object": {
-                        "id": unauth_realm_id,
-                        "schema": "ak.schema.realm.v1",
-                        "title": "No Auth",
-                        "summary": "No Auth",
-                        "created_by": "did:web:alice.example",
-                        "trust_domain": "ak:trust_domain:soland.local",
-                        "schema_refs": ["ak.schema.realm.v1"],
-                        "default_discoverability": "invite_only",
-                        "default_join_rule": "invite",
-                        "history_visibility": "shared",
-                        "encryption_profile": "none",
-                        "plaintext_visible_services": [server.service_id()],
-                        "security_class": "standard",
-                        "federation_policy": "restricted",
-                        "notary_profile": "single_did",
-                        "digest_algorithm": "sha256",
-                        "notary": {
-                            "kind": "single_did",
-                            "did": "did:web:alice.example",
-                            "recovery_members": ["did:web:recovery.soland.local"],
-                            "controller_organization": "did:web:organization.primary.soland.local",
-                            "recovery_controller_organizations": [
-                                "did:web:organization.recovery.soland.local"
-                            ]
-                        },
-                        "capability_action_registry_digest":
-                            arkret::current_capability_action_registry_digest()
-                                .expect("embedded capability-action registry"),
-                        "created_at": "2026-05-02T00:00:00.000Z"
-                    }
-                }),
-            )),
+            .json(&unauthorized_submission),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
     .await?;
 
-    let realm_id =
-        create_realm(server, &alice, "did:web:alice.example", "Permission Space").await?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&bob)
-            .json(&event_envelope(
-                "did:web:bob-space.example",
-                &realm_id,
-                "ak.member.state",
-                member_join_payload_value(&realm_id, "did:web:bob-space.example")?,
-            )),
+            .bearer_auth(&bob.token)
+            .json(&unauthorized_submission),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -159,17 +131,23 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         serde_json::to_string_pretty(&anonymous_search)?
     );
 
+    let mut non_member_event = alice
+        .author_event(
+            &realm_id,
+            "ak.message.create",
+            message_create_text_payload(&realm_id, "not a member")?,
+        )
+        .await?;
+    rebind_authored_event(&mut non_member_event, &bob.actor)?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&bob.token)
-            .json(&event_envelope(
-                "did:web:bob-visible.example",
-                &realm_id,
-                "ak.message.create",
-                message_create_text_payload(&realm_id, "not a member")?,
-            )),
+            .json(&crate::publication::initial_submission(
+                non_member_event,
+                "",
+            )?),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -216,7 +194,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&alice.token)
-            .json(&after_destroy),
+            .json(&crate::publication::initial_submission(after_destroy, "")?),
         StatusCode::CONFLICT,
         // The top-level wire error code is `failed_precondition`; the
         // terminal-state condition is carried as the `realm_terminal_state`
@@ -226,6 +204,29 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     .await?;
 
     Ok(())
+}
+
+fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
+    let verification_method = format!("{actor}#cotest");
+    event.actor_id = arkret_identifiers::Did::new(actor.to_owned())?;
+    event.actor_seq = 0;
+    event.prev_refs.clear();
+    if event.seal_basis.is_some() {
+        event.auth_context = None;
+    } else {
+        event.auth_context = Some(arkret_wire::AuthContext {
+            did: arkret_identifiers::Did::new(actor.to_owned())?,
+            key_id: verification_method.clone(),
+            key_epoch: 0,
+            credential_epoch: None,
+        });
+    }
+    event
+        .proofs
+        .first_mut()
+        .ok_or_else(|| anyhow!("authored Event has no proof"))?
+        .verification_method = arkret_wire::DidUrl::new(verification_method)?;
+    crate::harness::refresh_typed_event_proof(event)
 }
 
 async fn current_seal_id(

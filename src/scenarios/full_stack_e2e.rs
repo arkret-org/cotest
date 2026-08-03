@@ -592,31 +592,18 @@ async fn live_stack_probe() -> Result<()> {
             .await
             .context("T8.1 live probe: spawn production-mode soland")?
     {
-        let placeholder_envelope = json!({
-            "event_id": STABLE_EVENT_ID,
-            "kind": "ak.message.create",
-            "actor_id": ALICE_DID,
-            "actor_seq": 1,
-            "realm_id": TARGET_REALM_ID,
-            "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
-            "hlc": "1747613100000-0-cotest",
-            "prev_refs": [],
-            "refs": [],
-            "payload": {"body": "hi"},
-            "proofs": [{
-                "kind": "detached_jws",
-                "alg": "EdDSA",
-                "verification_method": format!("{ALICE_DID}#inkson"),
-                "event_digest":
-                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
-                "jws": "a..b",
-            }]
-        });
+        let mut placeholder_event = crate::harness::event_envelope(
+            ALICE_DID,
+            TARGET_REALM_ID,
+            "ak.message.create",
+            crate::harness::message_create_text_payload(TARGET_REALM_ID, "hi")?,
+        );
+        placeholder_event.proofs[0].jws = "a..b".to_owned();
+        let placeholder_submission = crate::publication::initial_submission(placeholder_event, "")?;
         let prod_resp = client
             .post(prod_soland.url("/_arkret/self/events"))
             .bearer_auth("cotest-bogus-token-not-a-real-session")
-            .json(&placeholder_envelope)
+            .json(&placeholder_submission)
             .send()
             .await
             .context("T8.1 live probe: POST placeholder proof to production soland")?;

@@ -12,7 +12,8 @@
 //! accepts the input or rejects it with a typed `Err` — only a panic
 //! escapes via `catch_unwind` (the caller's responsibility).
 
-use std::{panic, sync::OnceLock};
+use std::panic;
+use std::sync::OnceLock;
 
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema::{self as schema, ProtocolSchemaRegistry};

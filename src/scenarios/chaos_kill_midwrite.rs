@@ -22,8 +22,7 @@ use serde_json::{Value, json};
 use tokio::task::JoinSet;
 
 use crate::harness::{
-    ArkretServer, TestActorClient, dev_login, event_envelope, expect_json,
-    message_create_text_payload,
+    ArkretServer, dev_login, event_envelope, expect_json, message_create_text_payload,
 };
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
 
@@ -41,8 +40,8 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
         return Ok(());
     };
 
-    let realm_event = chaos_realm_event();
     let event = chaos_message_event();
+    let submission = crate::publication::initial_submission(event.clone(), "")?;
     let operation_id = operation_id_from_event(&event)?;
 
     let mut server = ArkretServer::spawn_with_database_url(
@@ -59,7 +58,18 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let alice = server
         .register_client(ACTOR_DID, "@chaos_midwrite", DEVICE_ID)
         .await?;
-    create_chaos_realm(&alice, &realm_event).await?;
+    alice
+        .create_realm_with(json!({
+            "realm_id": REALM_ID,
+            "title": "Chaos Midwrite",
+            "summary": "Chaos Midwrite",
+            "public": true,
+            "discoverability": "public",
+            "join_rule": "public",
+            "history_visibility": "world_readable",
+            "plaintext_visible_services": [SERVICE_ID]
+        }))
+        .await?;
     let token = dev_login(&server, ACTOR_DID, DEVICE_ID).await?;
 
     let mut tasks = JoinSet::new();
@@ -67,12 +77,12 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
         let client = server.http();
         let url = server.url("/_arkret/self/events");
         let token = token.clone();
-        let event = event.clone();
+        let submission = submission.clone();
         async move {
             client
                 .post(url)
                 .bearer_auth(token)
-                .json(&event)
+                .json(&submission)
                 .send()
                 .await
         }
@@ -96,7 +106,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(&token)
-            .json(&event),
+            .json(&submission),
         StatusCode::OK,
     )
     .await?;
@@ -130,58 +140,7 @@ impl ChaosDatabase {
     }
 }
 
-async fn create_chaos_realm(alice: &TestActorClient, event: &Value) -> Result<()> {
-    let response = expect_json(
-        alice.post("/_arkret/self/events").json(event),
-        StatusCode::OK,
-    )
-    .await?;
-    if response["status"] != "accepted" && response["status"] != "duplicate" {
-        bail!("realm setup event did not commit: {response}");
-    }
-    Ok(())
-}
-
-fn chaos_realm_event() -> Value {
-    event_envelope(
-        ACTOR_DID,
-        REALM_ID,
-        "ak.realm.create",
-        json!({
-            "object": {
-                "id": REALM_ID,
-                "schema": "ak.schema.realm.v1",
-                "title": "Chaos Midwrite",
-                "summary": "Chaos Midwrite",
-                "trust_domain": "ak:trust_domain:chaos-midwrite.cotest.local",
-                "created_by": ACTOR_DID,
-                "schema_refs": ["ak.schema.realm.v1"],
-                "default_discoverability": "public",
-                "default_join_rule": "public",
-                "history_visibility": "world_readable",
-                "encryption_profile": "none",
-                "security_class": "standard",
-                "federation_policy": "open",
-                "notary_profile": "single_did",
-                "digest_algorithm": "sha256",
-                "plaintext_visible_services": [SERVICE_ID],
-                "notary": {
-                    "kind": "single_did",
-                    "did": ACTOR_DID,
-                    "recovery_members": ["did:web:recovery-chaos-midwrite.cotest.local"],
-                    "controller_organization": "did:web:chaos-midwrite.cotest.local",
-                    "recovery_controller_organizations": ["did:web:recovery-chaos-org.cotest.local"]
-                },
-                "capability_action_registry_digest":
-                    arkret::current_capability_action_registry_digest()
-                        .expect("embedded capability-action registry"),
-                "created_at": "2026-05-02T00:00:00.000Z"
-            }
-        }),
-    )
-}
-
-fn chaos_message_event() -> Value {
+fn chaos_message_event() -> arkret_wire::Event {
     event_envelope(
         ACTOR_DID,
         REALM_ID,
@@ -190,9 +149,10 @@ fn chaos_message_event() -> Value {
     )
 }
 
-fn operation_id_from_event(event: &Value) -> Result<String> {
+fn operation_id_from_event(event: &arkret_wire::Event) -> Result<String> {
     event
-        .pointer("/unsigned/local_operation_idempotency_alias")
+        .unsigned
+        .get("local_operation_idempotency_alias")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow!("event missing local_operation_idempotency_alias: {event}"))
