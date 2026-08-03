@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{Did, EventId, RealmId, StrandId};
+use arkret_identifiers::{EventId, RealmId, StrandId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -55,14 +55,13 @@ struct PrivacyPayloadVector {
 struct DirectConversationVectors {
     trust_domain: String,
     resolve_request: Value,
-    resolve_authoring_response: Value,
+    resolve_creation_required_response: Value,
     resolve_response: Value,
     binding_event_ref: String,
     binding_payload: Value,
     contact_list_row: Value,
     derived_strand_selection: DerivedStrandSelection,
     pending_contact_negative: PendingContactNegative,
-    schema_negative_shapes: Vec<SchemaNegativeShape>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,13 +85,6 @@ struct PendingContactNegative {
 struct ExpectedError {
     error_code: String,
     reason_code: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct SchemaNegativeShape {
-    name: String,
-    kind: String,
-    body: Value,
 }
 
 pub fn run_private_chat_privacy_contract_suite() -> Result<()> {
@@ -165,165 +157,30 @@ fn validate_realm_remark_registry() -> Result<()> {
 }
 
 fn validate_direct_conversation_artifacts() -> Result<()> {
-    let operation_registry = load_artifact_json("registry/operation-registry.json")?;
-    let operation = operation_registry
-        .get("operations")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .find(|operation| {
-            operation.get("operation_id").and_then(Value::as_str)
-                == Some("ak.self.direct_conversation.command.resolve")
-        })
-        .ok_or_else(|| {
-            anyhow!("operation registry missing ak.self.direct_conversation.command.resolve")
-        })?;
-    if operation.get("http").and_then(Value::as_str)
-        != Some("POST /_arkret/self/direct-conversations/resolve")
+    let operation = arkret_wire::ServiceOperationId::from_wire(
+        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_COMMAND_RESOLVE,
+    )
+    .ok_or_else(|| anyhow!("SDK missing direct conversation resolve operation"))?
+    .descriptor();
+    if operation.http_method != "POST"
+        || operation.http_path != "/_arkret/self/direct-conversations/resolve"
     {
         bail!("direct conversation resolver HTTP binding drifted");
     }
-    if operation.get("request_schema_ref").and_then(Value::as_str)
+    if operation.request_schema_ref
         != Some(
-            "schemas/contact-operations.schema.json#/$defs/direct_conversation_resolve_request_body",
+            "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_request",
         )
     {
         bail!("direct conversation request schema ref drifted");
     }
-    if operation.get("response_schema_ref").and_then(Value::as_str)
-        != Some("schemas/contact-operations.schema.json#/$defs/direct_conversation_resolve_outcome")
+    if operation.response_schema_ref
+        != Some(
+            "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_outcome",
+        )
     {
         bail!("direct conversation response schema ref drifted");
     }
-
-    let contact_schema = load_artifact_json("schemas/contact-operations.schema.json")?;
-    let request_def = contact_schema
-        .pointer("/$defs/direct_conversation_resolve_request_body")
-        .ok_or_else(|| anyhow!("missing direct_conversation_resolve_request_body schema"))?;
-    assert_schema_contract(
-        "direct_conversation_resolve_request_body",
-        request_def,
-        &["peer"],
-        &["peer", "create", "idempotency_key", "peer_claim_request"],
-        &["target", "realm_id", "main_strand_id"],
-    )?;
-
-    let response_def = contact_schema
-        .pointer("/$defs/direct_conversation_resolve_outcome")
-        .ok_or_else(|| anyhow!("missing direct_conversation_resolve_outcome schema"))?;
-    assert_schema_contract(
-        "direct_conversation_resolve_outcome",
-        response_def,
-        &["state", "pair_key"],
-        &[
-            "state",
-            "pair_key",
-            "realm_id",
-            "main_strand_id",
-            "binding_event_ref",
-            "operation",
-            "next_action",
-            "claim_authorization_draft",
-            "materialization_draft",
-        ],
-        &[
-            "status",
-            "binding_ref",
-            "default_strand_id",
-            "created",
-            "authoring_kind",
-        ],
-    )?;
-    let resolver_states = response_def
-        .pointer("/properties/state/enum")
-        .ok_or_else(|| anyhow!("direct conversation resolver state enum is missing"))?;
-    let expected_states = BTreeSet::from([
-        "creation_required".to_owned(),
-        "found".to_owned(),
-        "suspended".to_owned(),
-        "temporarily_unavailable".to_owned(),
-    ]);
-    if string_set(resolver_states)? != expected_states {
-        bail!("direct conversation resolver state enum drifted");
-    }
-
-    let operation_def = contact_schema
-        .pointer("/$defs/direct_conversation_operation")
-        .ok_or_else(|| anyhow!("missing direct_conversation_operation schema"))?;
-    assert_schema_contract(
-        "direct_conversation_operation",
-        operation_def,
-        &[
-            "operation_id",
-            "pair_key",
-            "coordinator_service_id",
-            "operation_state",
-        ],
-        &[
-            "operation_id",
-            "pair_key",
-            "coordinator_service_id",
-            "operation_state",
-            "realm_id",
-            "main_strand_id",
-            "expires_at",
-        ],
-        &["candidate_id", "materialization_id", "retirement_state"],
-    )?;
-    let operation_states = operation_def
-        .pointer("/properties/operation_state/enum")
-        .ok_or_else(|| anyhow!("direct conversation operation state enum is missing"))?;
-    let expected_operation_states = BTreeSet::from([
-        "reserved".to_owned(),
-        "materializing".to_owned(),
-        "found".to_owned(),
-    ]);
-    if string_set(operation_states)? != expected_operation_states {
-        bail!("direct conversation operation state enum drifted");
-    }
-
-    let event_payload_schema = load_artifact_json("schemas/event-payload.schema.json")?;
-    let binding_def = event_payload_schema
-        .pointer("/$defs/direct_conversation_bound_payload")
-        .ok_or_else(|| anyhow!("missing direct_conversation_bound_payload schema"))?;
-    assert_schema_contract(
-        "direct_conversation_bound_payload",
-        binding_def,
-        &[
-            "pair_key",
-            "participants_unordered",
-            "realm_id",
-            "main_strand_id",
-            "authorization_basis",
-            "member_event_refs",
-            "main_strand_create_ref",
-            "mls_genesis_event_ref",
-            "mls_commit_event_ref",
-            "mls_welcome_event_ref",
-            "created_at",
-        ],
-        &[
-            "pair_key",
-            "participants_unordered",
-            "realm_id",
-            "main_strand_id",
-            "authorization_basis",
-            "member_event_refs",
-            "main_strand_create_ref",
-            "mls_genesis_event_ref",
-            "mls_commit_event_ref",
-            "mls_welcome_event_ref",
-            "created_at",
-        ],
-        &[
-            "default_strand_id",
-            "status",
-            "binding_ref",
-            "mls_group_id",
-            "binding_state",
-            "supersedes_binding_ref",
-        ],
-    )?;
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_artifacts",
@@ -336,44 +193,11 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "main_strand_id_from_binding": true,
         }),
         &json!({
-            "http": operation.get("http").cloned(),
-            "request_schema_ref": operation.get("request_schema_ref").cloned(),
-            "response_schema_ref": operation.get("response_schema_ref").cloned(),
+            "http": format!("{} {}", operation.http_method, operation.http_path),
+            "request_schema_ref": operation.request_schema_ref,
+            "response_schema_ref": operation.response_schema_ref,
         }),
     );
-    Ok(())
-}
-
-fn assert_schema_contract(
-    label: &str,
-    schema: &Value,
-    required_fields: &[&str],
-    allowed_properties: &[&str],
-    forbidden_properties: &[&str],
-) -> Result<()> {
-    if schema.get("additionalProperties").and_then(Value::as_bool) != Some(false) {
-        bail!("{label} must be a closed DTO with additionalProperties=false");
-    }
-    let required = string_set(schema.get("required").unwrap_or(&Value::Null))?;
-    for field in required_fields {
-        if !required.contains(*field) {
-            bail!("{label} missing required field `{field}`");
-        }
-    }
-    let properties = schema
-        .get("properties")
-        .and_then(Value::as_object)
-        .ok_or_else(|| anyhow!("{label} missing properties"))?;
-    for property in allowed_properties {
-        if !properties.contains_key(*property) {
-            bail!("{label} missing property `{property}`");
-        }
-    }
-    for property in forbidden_properties {
-        if properties.contains_key(*property) {
-            bail!("{label} must not expose retired property `{property}`");
-        }
-    }
     Ok(())
 }
 
@@ -480,28 +304,23 @@ fn validate_privacy_payload_vectors(vectors: &[PrivacyPayloadVector]) -> Result<
 
 fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> Result<()> {
     validate_resolve_request_shape(&vectors.resolve_request)?;
-    validate_resolve_response_shape(&vectors.resolve_authoring_response)?;
+    validate_resolve_response_shape(&vectors.resolve_creation_required_response)?;
     validate_resolve_response_shape(&vectors.resolve_response)?;
     validate_binding_payload(
         &vectors.trust_domain,
         &vectors.binding_event_ref,
         &vectors.binding_payload,
     )?;
-    validate_binding_event_draft(
-        &vectors.resolve_authoring_response,
-        &vectors.binding_event_ref,
-        &vectors.binding_payload,
-    )?;
     validate_resolver_uses_binding_main_strand(vectors)?;
     validate_contact_list_row(vectors)?;
     validate_pending_contact_negative(&vectors.pending_contact_negative)?;
-    validate_schema_negative_shapes(&vectors.schema_negative_shapes)?;
+    validate_schema_negative_shapes(&vectors.resolve_request, &vectors.resolve_response)?;
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_vectors",
         &json!({
             "request": &vectors.resolve_request,
-            "authoring_response": &vectors.resolve_authoring_response,
+            "creation_required_response": &vectors.resolve_creation_required_response,
             "response": &vectors.resolve_response,
             "binding_event_ref": &vectors.binding_event_ref,
         }),
@@ -513,7 +332,7 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
         }),
         &json!({
             "response_state": vectors.resolve_response.get("state").cloned(),
-            "response_main_strand_id": vectors.resolve_response.get("main_strand_id").cloned(),
+            "response_main_strand_id": vectors.resolve_response.pointer("/coordinates/main_strand_id").cloned(),
             "binding_main_strand_id": vectors.binding_payload.get("main_strand_id").cloned(),
         }),
     );
@@ -521,183 +340,30 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
 }
 
 fn validate_resolve_request_shape(value: &Value) -> Result<()> {
-    assert_allowed_object_fields(
-        "direct conversation resolve request",
-        value,
-        &["peer", "create", "idempotency_key", "peer_claim_request"],
+    let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
+    let validator = env.compile(
+        "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_request",
     )?;
-    let peer = required_str(value, "peer")?;
-    Did::new(peer.to_owned()).map_err(|err| anyhow!("invalid request peer DID: {err}"))?;
-    if let Some(create) = value.get("create")
-        && !create.is_boolean()
-    {
-        bail!("direct conversation resolve request create must be bool");
+    if !validator.is_valid(value) {
+        bail!("direct conversation request does not match the canonical journey schema");
     }
+    serde_json::from_value::<
+        arkret_models_collaboration::protocol_journey::DirectConversationResolveRequestBody,
+    >(value.clone())?;
     Ok(())
 }
 
 fn validate_resolve_response_shape(value: &Value) -> Result<()> {
-    assert_allowed_object_fields(
-        "direct conversation resolve response",
-        value,
-        &[
-            "state",
-            "pair_key",
-            "realm_id",
-            "main_strand_id",
-            "binding_event_ref",
-            "operation",
-            "next_action",
-            "claim_authorization_draft",
-            "materialization_draft",
-        ],
+    let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
+    let validator = env.compile(
+        "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_outcome",
     )?;
-    let state = required_str(value, "state")?;
-    if !matches!(
-        state,
-        "found" | "creation_required" | "suspended" | "temporarily_unavailable"
-    ) {
-        bail!("unknown direct conversation resolver state `{state}`");
+    if !validator.is_valid(value) {
+        bail!("direct conversation response does not match the canonical journey schema");
     }
-    let pair_key = required_str(value, "pair_key")?;
-    if !pair_key.starts_with("sha256:") || pair_key.len() != 71 {
-        bail!("direct conversation resolver pair_key must be a sha256 digest");
-    }
-    if matches!(state, "found" | "suspended") {
-        validate_realm_id(required_str(value, "realm_id")?)?;
-        validate_strand_id(required_str(value, "main_strand_id")?)?;
-        validate_event_id(required_str(value, "binding_event_ref")?)?;
-    }
-    match state {
-        "creation_required" => {
-            validate_direct_conversation_operation(required_field(value, "operation")?)?;
-            match required_str(value, "next_action")? {
-                "direct_conversation_materialization" => {
-                    validate_materialization_draft(required_field(
-                        value,
-                        "materialization_draft",
-                    )?)?;
-                    if value.get("claim_authorization_draft").is_some() {
-                        bail!("materialization authoring must not carry claim_authorization_draft");
-                    }
-                }
-                "remote_keypackage_claim" => {
-                    required_field(value, "claim_authorization_draft")?;
-                    if value.get("materialization_draft").is_some() {
-                        bail!("remote claim authoring must not carry materialization_draft");
-                    }
-                }
-                "retry" => {
-                    if value.get("materialization_draft").is_some()
-                        || value.get("claim_authorization_draft").is_some()
-                    {
-                        bail!("retry must not carry an authoring draft");
-                    }
-                }
-                other => bail!("unknown direct conversation next_action `{other}`"),
-            }
-        }
-        "found"
-            if value.get("materialization_draft").is_some()
-                || value.get("claim_authorization_draft").is_some() =>
-        {
-            bail!("found resolver response must not carry authoring drafts");
-        }
-        "suspended" | "temporarily_unavailable"
-            if value.get("materialization_draft").is_some()
-                || value.get("claim_authorization_draft").is_some() =>
-        {
-            bail!("inactive resolver response must not carry authoring drafts");
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn validate_direct_conversation_operation(value: &Value) -> Result<()> {
-    assert_allowed_object_fields(
-        "direct conversation operation",
-        value,
-        &[
-            "operation_id",
-            "pair_key",
-            "coordinator_service_id",
-            "operation_state",
-            "realm_id",
-            "main_strand_id",
-            "expires_at",
-        ],
-    )?;
-    if required_str(value, "operation_id")?.is_empty() {
-        bail!("direct conversation operation_id must not be empty");
-    }
-    let pair_key = required_str(value, "pair_key")?;
-    if !pair_key.starts_with("sha256:") || pair_key.len() != 71 {
-        bail!("direct conversation operation pair_key must be a sha256 digest");
-    }
-    Did::new(required_str(value, "coordinator_service_id")?.to_owned())
-        .map_err(|err| anyhow!("invalid coordinator service DID: {err}"))?;
-    match required_str(value, "operation_state")? {
-        "reserved" => {
-            required_str(value, "expires_at")?;
-            if value.get("realm_id").is_some() || value.get("main_strand_id").is_some() {
-                bail!("reserved direct conversation operation must not allocate coordinates");
-            }
-        }
-        "materializing" | "found" => {
-            validate_realm_id(required_str(value, "realm_id")?)?;
-            validate_strand_id(required_str(value, "main_strand_id")?)?;
-            if value.get("expires_at").is_some() {
-                bail!("durable direct conversation operation must not expire");
-            }
-        }
-        other => bail!("unknown direct conversation operation state `{other}`"),
-    }
-    Ok(())
-}
-
-fn validate_binding_event_draft(
-    response: &Value,
-    binding_event_ref: &str,
-    binding_payload: &Value,
-) -> Result<()> {
-    if required_str(response, "state")? != "creation_required" {
-        bail!("binding Event draft fixture must use creation_required state");
-    }
-    if required_str(response, "next_action")? != "direct_conversation_materialization" {
-        bail!("binding Event draft fixture must request materialization");
-    }
-    let materialization = required_field(response, "materialization_draft")?;
-    let event = required_field(materialization, "binding_event")?;
-    if required_str(event, "event_id")? != binding_event_ref {
-        bail!("binding Event draft id must match binding_event_ref");
-    }
-    if required_str(event, "kind")? != "ak.direct_conversation.bound" {
-        bail!("binding Event draft kind drifted");
-    }
-    validate_realm_id(required_str(event, "realm_id")?)?;
-    let actor = required_str(event, "actor_id")?;
-    Did::new(actor.to_owned()).map_err(|err| anyhow!("invalid binding Event actor DID: {err}"))?;
-    if !required_field(event, "actor_seq")?.is_u64() {
-        bail!("binding Event draft actor_seq must be an unsigned integer");
-    }
-    if required_str(event, "hlc")?.is_empty() {
-        bail!("binding Event draft hlc must not be empty");
-    }
-    if required_field(event, "payload")? != binding_payload {
-        bail!("binding Event draft payload must equal the validated binding payload");
-    }
-    let proofs = value_array(required_field(event, "proofs")?)?;
-    if !proofs.is_empty() {
-        bail!("creation_required binding Event draft must be unsigned");
-    }
-    let participants = value_array(required_field(binding_payload, "participants_unordered")?)?;
-    if !participants
-        .iter()
-        .any(|participant| participant.as_str() == Some(actor))
-    {
-        bail!("binding Event draft actor must be one of the two participants");
-    }
+    serde_json::from_value::<
+        arkret_models_collaboration::protocol_journey::DirectConversationResolveOutcome,
+    >(value.clone())?;
     Ok(())
 }
 
@@ -707,167 +373,23 @@ fn validate_binding_payload(
     payload: &Value,
 ) -> Result<()> {
     validate_event_id(binding_event_ref)?;
-    assert_allowed_object_fields(
-        "direct conversation binding payload",
-        payload,
-        &[
-            "pair_key",
-            "participants_unordered",
-            "realm_id",
-            "main_strand_id",
-            "authorization_basis",
-            "member_event_refs",
-            "main_strand_create_ref",
-            "mls_genesis_event_ref",
-            "mls_commit_event_ref",
-            "mls_welcome_event_ref",
-            "created_at",
-        ],
-    )?;
-    let pair_key = required_str(payload, "pair_key")?;
-    if pair_key.contains('@') || pair_key.starts_with('@') {
-        bail!("direct conversation pair_key must not be a handle string");
-    }
-    validate_realm_id(required_str(payload, "realm_id")?)?;
-    validate_strand_id(required_str(payload, "main_strand_id")?)?;
-    validate_event_id(required_str(payload, "main_strand_create_ref")?)?;
-    for field in [
-        "mls_genesis_event_ref",
-        "mls_commit_event_ref",
-        "mls_welcome_event_ref",
-    ] {
-        validate_event_id(required_str(payload, field)?)?;
-    }
-
-    let participants = value_array(required_field(payload, "participants_unordered")?)?;
-    if participants.len() != 2 {
-        bail!("direct conversation binding must have exactly two participants");
-    }
-    let mut seen = BTreeSet::new();
-    let mut typed_participants = Vec::with_capacity(2);
-    for participant in participants {
-        let did = participant
-            .as_str()
-            .ok_or_else(|| anyhow!("participant must be a DID string"))?;
-        let did =
-            Did::new(did.to_owned()).map_err(|err| anyhow!("invalid participant DID: {err}"))?;
-        if !seen.insert(did.clone()) {
-            bail!("direct conversation participants must be unique");
-        }
-        typed_participants.push(did);
-    }
-    let [left, right]: [Did; 2] = typed_participants
-        .try_into()
-        .map_err(|_| anyhow!("direct conversation requires two participants"))?;
+    let binding = serde_json::from_value::<
+        arkret_models_collaboration::events_payloads::device_identity::DirectConversationBoundPayload,
+    >(payload.clone())?;
     let trust_domain = arkret::TypedTrustDomainId::new(trust_domain.to_owned())
         .map_err(|err| anyhow!("invalid trust domain: {err}"))?;
-    let expected_pair_key = arkret::direct_conversation_pair_key(
-        trust_domain,
-        arkret::DirectConversationPairKeyParticipant::unmapped(left),
-        arkret::DirectConversationPairKeyParticipant::unmapped(right),
-    )?;
-    if pair_key != expected_pair_key.as_str() {
-        bail!("direct conversation pair_key does not match the canonical participant pair");
-    }
-
-    let authorization_basis = required_field(payload, "authorization_basis")?;
-    assert_allowed_object_fields(
-        "direct conversation authorization basis",
-        authorization_basis,
-        &["kind", "event_refs"],
-    )?;
-    let authorization_kind = required_str(authorization_basis, "kind")?;
-    let expected_authorization_refs = match authorization_kind {
-        "accepted_contact" => 2,
-        "managed_agent_controller" => 3,
-        other => bail!("unknown direct conversation authorization kind `{other}`"),
-    };
-    validate_event_ref_array(
-        authorization_basis,
-        "event_refs",
-        expected_authorization_refs,
-    )?;
-    validate_event_ref_array(payload, "member_event_refs", 2)?;
-    Ok(())
-}
-
-fn validate_materialization_draft(value: &Value) -> Result<()> {
-    assert_allowed_object_fields(
-        "direct conversation materialization draft",
-        value,
-        &[
-            "operation_id",
-            "operation_state",
-            "pair_key",
-            "coordinator_service_id",
-            "claim_nonce",
-            "mls_group_id",
-            "mls_genesis_event_ref",
-            "mls_commit_event_ref",
-            "mls_welcome_event_ref",
-            "claimed_keypackage",
-            "claim_receipt",
-            "realm_event",
-            "peer_member_event",
-            "main_strand_event",
-            "binding_event",
-        ],
-    )?;
-    for field in [
-        "operation_id",
-        "operation_state",
-        "pair_key",
-        "coordinator_service_id",
-        "claim_nonce",
-        "mls_group_id",
-    ] {
-        if required_str(value, field)?.is_empty() {
-            bail!("materialization draft `{field}` must not be empty");
-        }
-    }
-    for field in [
-        "mls_genesis_event_ref",
-        "mls_commit_event_ref",
-        "mls_welcome_event_ref",
-    ] {
-        validate_event_id(required_str(value, field)?)?;
-    }
-    required_field(value, "claimed_keypackage")?;
-    for (field, kind) in [
-        ("realm_event", "ak.realm.create"),
-        ("peer_member_event", "ak.member.state"),
-        ("main_strand_event", "ak.strand.create"),
-        ("binding_event", "ak.direct_conversation.bound"),
-    ] {
-        let event = required_field(value, field)?;
-        if required_str(event, "kind")? != kind {
-            bail!("materialization draft `{field}` kind drifted");
-        }
-        validate_event_id(required_str(event, "event_id")?)?;
-        if !value_array(required_field(event, "proofs")?)?.is_empty() {
-            bail!("materialization draft `{field}` must be unsigned");
-        }
-    }
-    if required_str(value, "operation_state")? != "materializing" {
-        bail!("materialization draft operation_state must be materializing");
-    }
-    let binding = required_field(required_field(value, "binding_event")?, "payload")?;
-    for (draft_field, binding_field) in [
-        ("mls_genesis_event_ref", "mls_genesis_event_ref"),
-        ("mls_commit_event_ref", "mls_commit_event_ref"),
-        ("mls_welcome_event_ref", "mls_welcome_event_ref"),
-    ] {
-        if required_str(value, draft_field)? != required_str(binding, binding_field)? {
-            bail!("materialization draft `{draft_field}` must match binding payload");
-        }
-    }
+    binding.validate_pair_key(trust_domain)?;
     Ok(())
 }
 
 fn validate_resolver_uses_binding_main_strand(vectors: &DirectConversationVectors) -> Result<()> {
-    let response_realm_id = required_str(&vectors.resolve_response, "realm_id")?;
-    let response_main_strand_id = required_str(&vectors.resolve_response, "main_strand_id")?;
-    let response_binding_ref = required_str(&vectors.resolve_response, "binding_event_ref")?;
+    let response_coordinates = vectors
+        .resolve_response
+        .get("coordinates")
+        .ok_or_else(|| anyhow!("found response missing coordinates"))?;
+    let response_realm_id = required_str(response_coordinates, "realm_id")?;
+    let response_main_strand_id = required_str(response_coordinates, "main_strand_id")?;
+    let response_binding_ref = required_str(response_coordinates, "binding_event_ref")?;
     let binding_realm_id = required_str(&vectors.binding_payload, "realm_id")?;
     let binding_main_strand_id = required_str(&vectors.binding_payload, "main_strand_id")?;
 
@@ -924,12 +446,14 @@ fn validate_contact_list_row(vectors: &DirectConversationVectors) -> Result<()> 
     if required_str(summary, "state")? != "active" {
         bail!("accepted contact fixture must point at active direct conversation summary");
     }
-    if required_str(summary, "realm_id")? != required_str(&vectors.resolve_response, "realm_id")? {
+    let coordinates = vectors
+        .resolve_response
+        .get("coordinates")
+        .ok_or_else(|| anyhow!("found response missing coordinates"))?;
+    if required_str(summary, "realm_id")? != required_str(coordinates, "realm_id")? {
         bail!("contact direct_conversation realm_id must match resolver response");
     }
-    if required_str(summary, "main_strand_id")?
-        != required_str(&vectors.resolve_response, "main_strand_id")?
-    {
+    if required_str(summary, "main_strand_id")? != required_str(coordinates, "main_strand_id")? {
         bail!("contact direct_conversation main_strand_id must match resolver response");
     }
     Ok(())
@@ -961,45 +485,23 @@ fn validate_pending_contact_negative(case: &PendingContactNegative) -> Result<()
     Ok(())
 }
 
-fn validate_schema_negative_shapes(cases: &[SchemaNegativeShape]) -> Result<()> {
-    if cases.is_empty() {
-        bail!("direct conversation schema negative shapes must not be empty");
+fn validate_schema_negative_shapes(valid_request: &Value, valid_response: &Value) -> Result<()> {
+    let mut request_with_retired_target = valid_request.clone();
+    request_with_retired_target
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("valid request is not an object"))?
+        .insert("target".to_owned(), json!("did:web:bob.example"));
+    if validate_resolve_request_shape(&request_with_retired_target).is_ok() {
+        bail!("direct conversation request accepted an injected target field");
     }
-    for case in cases {
-        let accepted = match case.kind.as_str() {
-            "request" => validate_resolve_request_shape(&case.body).is_ok(),
-            "response" => validate_resolve_response_shape(&case.body).is_ok(),
-            other => bail!("schema negative `{}` has unknown kind `{other}`", case.name),
-        };
-        if accepted {
-            bail!("schema negative `{}` was accepted", case.name);
-        }
-    }
-    Ok(())
-}
 
-fn assert_allowed_object_fields(label: &str, value: &Value, allowed: &[&str]) -> Result<()> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| anyhow!("{label} must be an object"))?;
-    for key in object.keys() {
-        if !allowed.contains(&key.as_str()) {
-            bail!("{label} contains forbidden field `{key}`");
-        }
-    }
-    Ok(())
-}
-
-fn validate_event_ref_array(value: &Value, field: &str, min_items: usize) -> Result<()> {
-    let refs = value_array(required_field(value, field)?)?;
-    if refs.len() < min_items {
-        bail!("{field} must contain at least {min_items} refs");
-    }
-    for event_ref in refs {
-        let event_ref = event_ref
-            .as_str()
-            .ok_or_else(|| anyhow!("{field} entries must be event ids"))?;
-        validate_event_id(event_ref)?;
+    let mut response_without_coordinates = valid_response.clone();
+    response_without_coordinates
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("valid response is not an object"))?
+        .remove("coordinates");
+    if validate_resolve_response_shape(&response_without_coordinates).is_ok() {
+        bail!("direct conversation found response accepted missing coordinates");
     }
     Ok(())
 }

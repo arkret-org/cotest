@@ -1,5 +1,14 @@
 use anyhow::{Result, anyhow};
+use arkret::ContactIntroductionEvidence;
+use arkret::protocol_journey::{
+    ContactAcceptAction, ContactAcceptPrepareRequestBody, ContactAcceptRequestBody,
+    ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
+    ContactOperationRequestBody, ContactPeer, ContactPreparePhase, ContactPrepareRequestBody,
+    ContactPreparedEventDraft, ContactPreparedOutcome, ContactScope, ProtocolOpaqueId,
+    ProtocolOperationId, RequestAcceptanceReceipt,
+};
 use arkret_http_client::Client as SdkClient;
+use arkret_identifiers::{Did, Hash};
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
@@ -7,7 +16,7 @@ use url::Url;
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{
     ensure_submit_event_id, event_envelope_with_causal_refs, event_envelope_with_chain,
-    realm_bootstrap_event_batch,
+    event_signing_identity, realm_bootstrap_event_batch,
 };
 use super::{
     member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
@@ -44,6 +53,156 @@ type HeldGrants = std::sync::Arc<
 impl TestActorClient {
     pub fn sdk(&self) -> SdkClient {
         self.sdk.clone()
+    }
+
+    pub fn contact_request_prepare(&self, target: &str) -> Result<ContactOperationRequestBody> {
+        let operation_id = ProtocolOperationId::new(next_typed_id("operation"))
+            .map_err(anyhow::Error::msg)?;
+        let idempotency_key = ProtocolOpaqueId::new(next_typed_id("idempotency"))
+            .map_err(anyhow::Error::msg)?;
+        Ok(ContactOperationRequestBody::Prepare(ContactPrepareRequestBody {
+            phase: ContactPreparePhase::Prepare,
+            operation_id,
+            idempotency_key,
+            peer: ContactPeer::Human {
+                principal_id: Did::new(target.to_owned())?,
+            },
+            granted_to_peer_scopes: vec![ContactScope::DirectMessage],
+            introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
+            message: None,
+        }))
+    }
+
+    pub async fn request_contact(&self, target: &str) -> Result<RequestAcceptanceReceipt> {
+        let request = self.contact_request_prepare(target)?;
+        let (operation_id, idempotency_key) = match &request {
+            ContactOperationRequestBody::Prepare(body) => {
+                (body.operation_id.clone(), body.idempotency_key.clone())
+            }
+            ContactOperationRequestBody::Commit(_) => unreachable!("prepare constructor"),
+        };
+        let prepared = self.sdk.contacts_request(&request).await?;
+        let prepared_replay = self.sdk.contacts_request(&request).await?;
+        if serde_json::to_value(&prepared)? != serde_json::to_value(prepared_replay)? {
+            return Err(anyhow!("Contact request prepare replay changed its outcome"));
+        }
+        let (prepared_operation_id, reservation_handle, event_draft) = match prepared {
+            ContactOperationOutcome::Prepared {
+                outcome:
+                    ContactPreparedOutcome::Request {
+                        operation_id,
+                        reservation_handle,
+                        event_draft,
+                        ..
+                    },
+            } => (operation_id, reservation_handle, event_draft),
+            ContactOperationOutcome::Failed { outcome } => {
+                return Err(anyhow!("Contact request prepare failed: {:?}", outcome.reason));
+            }
+            _ => return Err(anyhow!("Contact request prepare returned the wrong result kind")),
+        };
+        if prepared_operation_id != operation_id {
+            return Err(anyhow!("Contact request prepare changed operation_id"));
+        }
+        let commit = ContactOperationRequestBody::Commit(ContactCommitRequestBody {
+            phase: ContactCommitPhase::Commit,
+            operation_id,
+            idempotency_key,
+            reservation_handle,
+            signed_event: self.sign_prepared_contact_event(&event_draft)?,
+        });
+        let accepted = self.sdk.contacts_request(&commit).await?;
+        let accepted_replay = self.sdk.contacts_request(&commit).await?;
+        if serde_json::to_value(&accepted)? != serde_json::to_value(accepted_replay)? {
+            return Err(anyhow!("Contact request commit replay changed its outcome"));
+        }
+        match accepted {
+            ContactOperationOutcome::Accepted {
+                outcome:
+                    ContactAcceptedOutcome::Request {
+                        request_acceptance_receipt,
+                        ..
+                    },
+            } => Ok(request_acceptance_receipt),
+            ContactOperationOutcome::Failed { outcome } => {
+                Err(anyhow!("Contact request commit failed: {:?}", outcome.reason))
+            }
+            _ => Err(anyhow!("Contact request commit returned the wrong result kind")),
+        }
+    }
+
+    pub async fn accept_contact(&self, request_receipt: RequestAcceptanceReceipt) -> Result<()> {
+        let operation_id = ProtocolOperationId::new(next_typed_id("operation"))
+            .map_err(anyhow::Error::msg)?;
+        let idempotency_key = ProtocolOpaqueId::new(next_typed_id("idempotency"))
+            .map_err(anyhow::Error::msg)?;
+        let request = ContactAcceptRequestBody::Prepare(ContactAcceptPrepareRequestBody {
+            phase: ContactPreparePhase::Prepare,
+            operation_id: operation_id.clone(),
+            idempotency_key: idempotency_key.clone(),
+            request_receipt,
+            action: ContactAcceptAction::Accept,
+            granted_to_peer_scopes: vec![ContactScope::DirectMessage],
+        });
+        let prepared = self.sdk.contacts_respond(&request).await?;
+        let (prepared_operation_id, reservation_handle, event_draft) = match prepared {
+            ContactOperationOutcome::Prepared {
+                outcome:
+                    ContactPreparedOutcome::Response {
+                        operation_id,
+                        reservation_handle,
+                        event_draft,
+                        ..
+                    },
+            } => (operation_id, reservation_handle, event_draft),
+            ContactOperationOutcome::Failed { outcome } => {
+                return Err(anyhow!("Contact accept prepare failed: {:?}", outcome.reason));
+            }
+            _ => return Err(anyhow!("Contact accept prepare returned the wrong result kind")),
+        };
+        if prepared_operation_id != operation_id {
+            return Err(anyhow!("Contact accept prepare changed operation_id"));
+        }
+        let commit = ContactAcceptRequestBody::Commit(ContactCommitRequestBody {
+            phase: ContactCommitPhase::Commit,
+            operation_id,
+            idempotency_key,
+            reservation_handle,
+            signed_event: self.sign_prepared_contact_event(&event_draft)?,
+        });
+        match self.sdk.contacts_respond(&commit).await? {
+            ContactOperationOutcome::Accepted {
+                outcome: ContactAcceptedOutcome::Response { .. },
+            } => Ok(()),
+            ContactOperationOutcome::Failed { outcome } => {
+                Err(anyhow!("Contact accept commit failed: {:?}", outcome.reason))
+            }
+            _ => Err(anyhow!("Contact accept commit returned the wrong result kind")),
+        }
+    }
+
+    fn sign_prepared_contact_event(
+        &self,
+        draft: &ContactPreparedEventDraft,
+    ) -> Result<arkret_wire::Event> {
+        let mut event = draft.unsigned_event()?;
+        let created_at = event.created_at;
+        let (signing_seed, verification_method) = event_signing_identity(&self.actor);
+        let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+            signing_seed,
+            Did::new(self.actor.clone())?,
+            verification_method.clone(),
+        );
+        arkret_signatures::sign_event(
+            &mut event,
+            &signer,
+            &verification_method,
+            arkret_signatures::SignEventOptions::new().with_created_at(created_at),
+        )?;
+        if Hash::new(event.event_digest()?)? != draft.event_digest {
+            return Err(anyhow!("signing changed the prepared Contact Event digest"));
+        }
+        Ok(event)
     }
 
     /// Read the Realm Seal frontier, waiting out the control-seal coordinator.

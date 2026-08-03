@@ -7,10 +7,11 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{Did, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode};
 use arkret_models_collaboration::governance::agent_participation::{
-    AgentParticipation, AgentParticipationEntry, AgentParticipationError,
-    AgentParticipationOutcome, AgentParticipationScope, effective_participation,
+    AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome,
+    effective_participation,
     fold_ceiling_chain, validate_agent_participation_tightens, validate_selection_within_ceiling,
 };
+use arkret_models_collaboration::protocol_journey::{ParticipationBits, ParticipationScope};
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
@@ -116,7 +117,7 @@ fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .ok_or_else(|| anyhow!("case missing expected.{field}"))
 }
 
-fn participation_field(value: &Value, field: &str) -> Result<AgentParticipation> {
+fn participation_field(value: &Value, field: &str) -> Result<ParticipationBits> {
     serde_json::from_value(
         value
             .get(field)
@@ -126,7 +127,7 @@ fn participation_field(value: &Value, field: &str) -> Result<AgentParticipation>
     .map_err(|err| anyhow!("invalid participation field {field}: {err}"))
 }
 
-fn participation_pointer(value: &Value, pointer: &str) -> Result<AgentParticipation> {
+fn participation_pointer(value: &Value, pointer: &str) -> Result<ParticipationBits> {
     serde_json::from_value(
         value
             .pointer(pointer)
@@ -136,7 +137,7 @@ fn participation_pointer(value: &Value, pointer: &str) -> Result<AgentParticipat
     .map_err(|err| anyhow!("invalid participation pointer {pointer}: {err}"))
 }
 
-fn scope_field(value: &Value, field: &str) -> Result<AgentParticipationScope> {
+fn scope_field(value: &Value, field: &str) -> Result<ParticipationScope> {
     serde_json::from_value(
         value
             .get(field)
@@ -305,11 +306,16 @@ pub fn run_agent_participation_ceiling_tighten_vector() -> Result<()> {
     Ok(())
 }
 
-fn materialized_grants(effective: AgentParticipation) -> Vec<&'static str> {
+fn materialized_grants(effective: ParticipationBits) -> Vec<&'static str> {
     let mut grants = Vec::new();
-    if effective.reply {
+    if effective.reply_message {
         grants.push(CapabilityActionId::MESSAGE_CREATE);
+    }
+    if effective.reaction_add {
         grants.push(CapabilityActionId::REACTION_ADD);
+    }
+    if effective.reaction_remove {
+        grants.push(CapabilityActionId::REACTION_REMOVE);
     }
     if effective.act_on_behalf {
         grants.push(GRANT_ACT_ON_BEHALF);
@@ -317,7 +323,7 @@ fn materialized_grants(effective: AgentParticipation) -> Vec<&'static str> {
     grants
 }
 
-fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<AgentParticipation> {
+fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<ParticipationBits> {
     let actions = scope
         .get("actions")
         .and_then(Value::as_array)
@@ -370,8 +376,10 @@ fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<AgentParticip
                 });
             controller_requirement && applies
         });
-    Ok(AgentParticipation {
-        reply: message_create && actions.contains(&CapabilityActionId::REACTION_ADD),
+    Ok(ParticipationBits {
+        reply_message: message_create,
+        reaction_add: actions.contains(&CapabilityActionId::REACTION_ADD),
+        reaction_remove: actions.contains(&CapabilityActionId::REACTION_REMOVE),
         accept_third_party_mention: actions.contains(&CapabilityActionId::EVENT_READ),
         act_on_behalf: message_create && controller_constraint,
     })
@@ -411,8 +419,10 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
         }
     }
 
-    let tightened = AgentParticipation {
-        reply: false,
+    let tightened = ParticipationBits {
+        reply_message: false,
+        reaction_add: false,
+        reaction_remove: false,
         ..ceiling
     };
     let after_tighten = effective_participation(tightened, selection);
@@ -423,7 +433,7 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
         bail!("reply grant survived ceiling tighten");
     }
 
-    let unknown_source_effective = AgentParticipation::NONE;
+    let unknown_source_effective = ParticipationBits::NONE;
     if unknown_source_effective
         != participation_pointer(vector, "/expected/unknown_source_effective")?
     {
@@ -439,7 +449,7 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
                 .get("requested_scope")
                 .ok_or_else(|| anyhow!("derivation variant missing requested_scope"))?,
         )?;
-        let expected: AgentParticipation = serde_json::from_value(
+        let expected: ParticipationBits = serde_json::from_value(
             variant
                 .get("expected")
                 .cloned()
@@ -492,7 +502,7 @@ pub fn run_agent_participation_selection_within_ceiling_vector() -> Result<()> {
 pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     let fixture = participation_fixture()?;
     let vector = case(&fixture, VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY)?;
-    let scope = scope_field(vector, "participation_scope")?;
+    let scope = scope_field(vector, "target_scope")?;
     let selection = participation_field(vector, "selection")?;
     let ceiling = participation_field(vector, "ceiling")?;
     let effective = effective_participation(ceiling, selection);
@@ -535,9 +545,9 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     malformed
         .as_object_mut()
         .ok_or_else(|| anyhow!("serialized participation entry was not an object"))?
-        .remove("participation_scope");
+        .remove("target_scope");
     if validator.is_valid(&malformed) {
-        bail!("agent participation entry without participation_scope passed schema validation");
+        bail!("agent participation entry without target_scope passed schema validation");
     }
 
     let no_grant_runtime = "failed_precondition";
@@ -546,7 +556,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     }
 
     let realm_id = match scope {
-        AgentParticipationScope::Realm { realm_id } => realm_id,
+        ParticipationScope::Realm { realm_id } => realm_id,
         other => bail!("session overlay vector expected Realm scope, got {other:?}"),
     };
     if realm_id != RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())? {
@@ -605,7 +615,7 @@ fn artifacts_from_expected(value: &Value, pointer: &str) -> Result<DeliveryArtif
 fn mention_delivery(
     author: &Did,
     controller: &Did,
-    effective: AgentParticipation,
+    effective: ParticipationBits,
 ) -> DeliveryArtifacts {
     if author == controller || effective.accept_third_party_mention {
         DeliveryArtifacts::ALL

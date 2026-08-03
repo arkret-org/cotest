@@ -10,9 +10,7 @@ use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
     MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
 };
-use arkret_models_crypto::{
-    KeyPackagesClaimOutcome, KeyPackagesConsumeOutcome, KeyPackagesUploadOutcome,
-};
+use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
 use arkret_wire::ProfileId;
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -45,10 +43,6 @@ const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/key_packages_upload_outcome";
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/key_packages_claim_outcome";
-const KEY_PACKAGES_CONSUME_OUTCOME_SCHEMA: &str =
-    "schemas/keypackage-operations.schema.json#/$defs/key_packages_consume_outcome";
-const KEY_PACKAGES_FAILURE_SCHEMA: &str =
-    "schemas/keypackage-operations.schema.json#/$defs/failure";
 const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_welcome_payload";
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
@@ -239,40 +233,9 @@ fn claim_failure_outcome_value(reason_code: &str, available_count: Option<u64>) 
     value
 }
 
-fn consume_success_outcome_value(keypackage_ref: &str) -> Value {
-    json!({
-        "consumed": [keypackage_ref]
-    })
-}
-
-fn consume_failure_outcome_value(keypackage_ref: &str, reason_code: &str) -> Value {
-    json!({
-        "consumed": [],
-        "failures": [failure_value(Some(keypackage_ref), reason_code)]
-    })
-}
-
 fn parse_claim_outcome(value: Value) -> Result<KeyPackagesClaimOutcome> {
     schema_valid(KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA, &value)?;
     serde_json::from_value(value).map_err(Into::into)
-}
-
-fn parse_consume_outcome(value: Value) -> Result<KeyPackagesConsumeOutcome> {
-    schema_valid(KEY_PACKAGES_CONSUME_OUTCOME_SCHEMA, &value)?;
-    serde_json::from_value(value).map_err(Into::into)
-}
-
-fn consume_failure_reason(value: &Value) -> Result<&str> {
-    let failure = value
-        .get("failures")
-        .and_then(Value::as_array)
-        .and_then(|failures| failures.first())
-        .ok_or_else(|| anyhow!("consume failure outcome missing failures[0]"))?;
-    schema_valid(KEY_PACKAGES_FAILURE_SCHEMA, failure)?;
-    failure
-        .get("reason_code")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("consume failure missing reason_code"))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -282,6 +245,12 @@ enum MiniKeypackageState {
     Consumed,
     Revoked,
     Retired,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum MiniConsumeDecision {
+    Consumed(String),
+    Rejected(String),
 }
 
 impl MiniKeypackageState {
@@ -380,18 +349,21 @@ impl MiniKeypackage {
         )
     }
 
-    fn consume(&mut self, claim_id: &str, realm_id: &RealmId, now: DateTime<Utc>) -> Result<Value> {
+    fn consume(
+        &mut self,
+        claim_id: &str,
+        realm_id: &RealmId,
+        now: DateTime<Utc>,
+    ) -> Result<MiniConsumeDecision> {
         if self.last_resort && &self.intended_realm_id != realm_id {
-            return Ok(consume_failure_outcome_value(
-                &self.keypackage_ref,
-                arkret_wire::ReasonCode::LAST_RESORT_REALM_AFFINITY_VIOLATION,
+            return Ok(MiniConsumeDecision::Rejected(
+                arkret_wire::ReasonCode::LAST_RESORT_REALM_AFFINITY_VIOLATION.to_owned(),
             ));
         }
         if !self.last_resort && now > self.expires_at {
             self.state = MiniKeypackageState::Revoked;
-            return Ok(consume_failure_outcome_value(
-                &self.keypackage_ref,
-                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
+            return Ok(MiniConsumeDecision::Rejected(
+                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN.to_owned(),
             ));
         }
         match (self.last_resort, self.state) {
@@ -403,28 +375,25 @@ impl MiniKeypackage {
                     intended_realm_id: realm_id.clone(),
                     last_resort: true,
                 });
-                Ok(consume_success_outcome_value(&self.keypackage_ref))
+                Ok(MiniConsumeDecision::Consumed(self.keypackage_ref.clone()))
             }
             (false, MiniKeypackageState::Claimed) => {
                 self.state = MiniKeypackageState::Consumed;
-                Ok(consume_success_outcome_value(&self.keypackage_ref))
+                Ok(MiniConsumeDecision::Consumed(self.keypackage_ref.clone()))
             }
-            (false, MiniKeypackageState::Consumed) => Ok(consume_failure_outcome_value(
-                &self.keypackage_ref,
-                arkret_wire::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED,
+            (false, MiniKeypackageState::Consumed) => Ok(MiniConsumeDecision::Rejected(
+                arkret_wire::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED.to_owned(),
             )),
             (
                 _,
                 MiniKeypackageState::Revoked
                 | MiniKeypackageState::Retired
                 | MiniKeypackageState::Consumed,
-            ) => Ok(consume_failure_outcome_value(
-                &self.keypackage_ref,
-                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
+            ) => Ok(MiniConsumeDecision::Rejected(
+                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN.to_owned(),
             )),
-            (false, MiniKeypackageState::Published) => Ok(consume_failure_outcome_value(
-                &self.keypackage_ref,
-                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
+            (false, MiniKeypackageState::Published) => Ok(MiniConsumeDecision::Rejected(
+                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN.to_owned(),
             )),
         }
     }
@@ -575,10 +544,9 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         bail!("expired claimed keypackage did not become revoked");
     }
     if consume
-        .get("consumed")
-        .and_then(Value::as_array)
-        .is_some_and(|consumed| !consumed.is_empty())
-        || consume_failure_reason(&consume)? != expected_str(vector, "expired_external_reason")?
+        != MiniConsumeDecision::Rejected(
+            expected_str(vector, "expired_external_reason")?.to_owned(),
+        )
     {
         bail!("expired keypackage consume did not reject with expected reason");
     }
@@ -700,8 +668,8 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
         let claim_id = claim_id
             .as_str()
             .ok_or_else(|| anyhow!("last-resort claim id must be string"))?;
-        let consume = parse_consume_outcome(last_resort.consume(claim_id, &realm, expires_at)?)?;
-        if consume.consumed != [last_resort.keypackage_ref.clone()] {
+        let consume = last_resort.consume(claim_id, &realm, expires_at)?;
+        if consume != MiniConsumeDecision::Consumed(last_resort.keypackage_ref.clone()) {
             bail!("last-resort consume did not return idempotent success");
         }
     }
@@ -830,7 +798,9 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         expires_at,
     );
     let cross_realm = package.consume("mls-keypackage-claim-x", &r2, expires_at)?;
-    if consume_failure_reason(&cross_realm)? != expected_str(vector, "cross_realm_reason")? {
+    if cross_realm
+        != MiniConsumeDecision::Rejected(expected_str(vector, "cross_realm_reason")?.to_owned())
+    {
         bail!("cross-Realm last-resort reuse did not fail with affinity violation");
     }
 
@@ -1215,7 +1185,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
     )?;
     let mut request = vector["proof_free_request"].clone();
-    request["proofs"] = json!([{
+    request["holder_acceptance_proof"] = json!({
         "kind": "detached_jws",
         "verification_method": "did:webvh:z6mkfixture:alice.example#ak_self_signing_v1",
         "alg": "EdDSA",
@@ -1224,7 +1194,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         "audience": required_str(vector, "authority_service_id")?,
         "proof_purpose": "holder_acceptance",
         "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
-    }]);
+    });
     let typed: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(request.clone())?;
     if typed.payload_digest()?.as_str() != required_str(vector, "payload_digest")? {
@@ -1276,13 +1246,13 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     missing
         .as_object_mut()
         .expect("request object")
-        .remove("proofs");
+        .remove("holder_acceptance_proof");
     if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(missing).is_ok()
     {
         bail!("a self claim without exactly one proof was accepted");
     }
     let mut multiple = serde_json::to_value(&typed)?;
-    let proof = multiple["proofs"][0].clone();
+    let proof = multiple["holder_acceptance_proof"].clone();
     multiple["proofs"] = json!([proof.clone(), proof]);
     if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(multiple).is_ok()
     {

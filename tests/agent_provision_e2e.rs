@@ -1551,24 +1551,69 @@ async fn agent_participation_selection_is_persisted_without_server_authored_even
     let agent_did = provision_and_pair_agent(&server, &token, "Reply Assistant", "reply").await?;
 
     let controller = bearer_sdk_client(&server, &token)?;
-    let participation = controller
+    let target_scope = arkret::protocol_journey::ParticipationScope::Realm {
+        realm_id: arkret::RealmId::new(realm_id)?,
+    };
+    let now = Utc::now();
+    let service_id = arkret::Did::new(server.service_id().to_owned())?;
+    let receipt = controller
         .agent_participation_replace(
             &agent_did,
-            &arkret::AgentParticipationReplaceRequestBody {
-                scope: arkret::AgentParticipationScope::Realm {
-                    realm_id: arkret::RealmId::new(realm_id)?,
-                },
-                selection: arkret::AgentParticipation {
-                    reply: true,
+            &arkret::protocol_journey::ParticipationReplacementBatch {
+                agent_id: arkret::Did::new(agent_did.clone())?,
+                target_scope: target_scope.clone(),
+                selection: arkret::protocol_journey::ParticipationBits {
+                    reply_message: true,
+                    reaction_add: false,
+                    reaction_remove: false,
                     accept_third_party_mention: false,
                     act_on_behalf: false,
+                },
+                scope_evidence: arkret::protocol_journey::ParticipationScopeEvidence::AcceptedTargetReceipt {
+                    receipt_id: ProtocolOpaqueId::new("cotest-participation-receipt-01999999")
+                        .map_err(anyhow::Error::msg)?,
+                    disclosure_digest: arkret::Hash::new(format!("sha256:{}", "1".repeat(64)))?,
+                    commitment: arkret::Hash::new(format!("sha256:{}", "2".repeat(64)))?,
+                    agent_id: arkret::Did::new(agent_did.clone())?,
+                    target_scope: target_scope.clone(),
+                    target_service_id: service_id.clone(),
+                    verifier_id: service_id,
+                    audience: ProtocolOpaqueId::new("cotest-participation-audience-01999999")
+                        .map_err(anyhow::Error::msg)?,
+                    issued_at: now,
+                    expires_at: now + chrono::Duration::minutes(5),
+                    binding_digest: arkret::Hash::new(format!("sha256:{}", "3".repeat(64)))?,
+                    signature: arkret::protocol_journey::ProtocolSignature {
+                        verification_method: DidUrl::new(format!("{}#server-key", server.service_id()))
+                            .map_err(anyhow::Error::msg)?,
+                        created_at: now,
+                        jws: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+                    },
+                },
+                expected_version: 0,
+                basis: vec![arkret::EventId::new(
+                    "ak:event:01904100-0000-7000-8000-00000000a913".to_owned(),
+                )?],
+                grant_events: Vec::new(),
+                revoke_events: Vec::new(),
+                idempotency_key: ProtocolOpaqueId::new(
+                    "cotest-participation-replace-01999999",
+                )
+                .map_err(anyhow::Error::msg)?,
+                controller_signature: arkret::protocol_journey::ProtocolSignature {
+                    verification_method: DidUrl::new(format!("{ALICE_DID}#device"))
+                        .map_err(anyhow::Error::msg)?,
+                    created_at: now,
+                    jws: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
                 },
             },
         )
         .await?;
+    assert_eq!(receipt.accepted_version, 1);
+    let participation = controller.agent_participation_get(&agent_did).await?;
     assert!(participation.ok);
     assert_eq!(participation.entries.len(), 1);
-    assert!(participation.entries[0].selection.reply);
+    assert!(participation.entries[0].selection.reply_message);
     Ok(())
 }
 
