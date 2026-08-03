@@ -47,7 +47,7 @@ pub fn register_event_signing_identity(
         .insert(actor.to_owned(), (signing_seed, verification_method));
 }
 
-fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
+pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
     REGISTERED_EVENT_SIGNERS
         .lock()
         .expect("registered Event signer lock")

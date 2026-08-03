@@ -24,22 +24,8 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         )
         .await?;
 
-    let request = expect_json(
-        alice
-            .post("/_arkret/self/contacts/request")
-            .json(&json!({"target": bob.actor})),
-        StatusCode::CREATED,
-    )
-    .await?;
-    expect_json(
-        bob.post("/_arkret/self/contacts/respond").json(&json!({
-            "request_id": request["request_event_ref"],
-            "requester": alice.actor,
-            "action": "accept"
-        })),
-        StatusCode::OK,
-    )
-    .await?;
+    let request_receipt = alice.request_contact(&bob.actor).await?;
+    bob.accept_contact(request_receipt).await?;
 
     let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);

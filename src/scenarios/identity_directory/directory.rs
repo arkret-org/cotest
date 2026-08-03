@@ -277,22 +277,8 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     .await?;
     assert_eq!(bob_self["actors"][0]["actor_id"], bob.actor);
 
-    let request = expect_json(
-        alice
-            .post("/_arkret/self/contacts/request")
-            .json(&json!({"target": bob.actor})),
-        StatusCode::CREATED,
-    )
-    .await?;
-    expect_json(
-        bob.post("/_arkret/self/contacts/respond").json(&json!({
-            "request_id": request["request_event_ref"],
-            "requester": alice.actor,
-            "action": "accept"
-        })),
-        StatusCode::OK,
-    )
-    .await?;
+    let request_receipt = alice.request_contact(&bob.actor).await?;
+    bob.accept_contact(request_receipt).await?;
 
     let alice_after_contact = expect_json(
         alice

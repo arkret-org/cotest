@@ -74,25 +74,10 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     .await?;
     assert_eq!(me["principal_id"], BOB_DID);
 
-    let requested = expect_json(
-        alice
-            .post("/_arkret/self/contacts/request")
-            .json(&json!({"target": BOB_DID})),
-        StatusCode::CREATED,
-    )
-    .await?;
-    assert_eq!(requested["state"], "pending_outgoing");
-
-    let accepted = expect_json(
-        bob.post("/_arkret/self/contacts/respond").json(&json!({
-            "request_id": requested["request_event_ref"],
-            "requester": ALICE_DID,
-            "action": "accept"
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(accepted["state"], "accepted");
+    let request_receipt = alice.request_contact(BOB_DID).await?;
+    assert_eq!(request_receipt.core.holder.subject_id().as_str(), ALICE_DID);
+    assert_eq!(request_receipt.core.peer.subject_id().as_str(), BOB_DID);
+    bob.accept_contact(request_receipt).await?;
 
     let visible_bob = expect_json(
         alice

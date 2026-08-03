@@ -313,27 +313,22 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("component_mapping missing vectors"))?;
 
-    // Build the live cell_family set from the spec event-kind registry to
-    // catch fixture entries that drift away from the canonical names.
-    let event_kind_registry =
-        crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;
-    let mut registered_components = std::collections::BTreeSet::new();
-    for entry in event_kind_registry
-        .get("event_kinds")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("event-kind registry missing event_kinds"))?
-    {
-        if let Some(cell_family) = entry.get("cell_family").and_then(Value::as_str) {
-            registered_components.insert(cell_family.to_owned());
-        }
-    }
-
     let mut bidirectional = 0usize;
     let mut arkret_only = 0usize;
     for vector in component_vectors {
         let component_type = required_str(vector, "arkret_component_type")?;
-        if !registered_components.contains(component_type) {
-            bail!("mimi component vector references unknown component_type {component_type}");
+        let event_kind = required_str(vector, "arkret_kind")?;
+        let descriptor = arkret_wire::EventKind::try_new(event_kind)
+            .and_then(|kind| kind.descriptor())
+            .ok_or_else(|| {
+                anyhow!("mimi component vector references unknown event kind {event_kind}")
+            })?;
+        let writes_component = descriptor.cell_family == Some(component_type)
+            || descriptor.cell_writes.iter().any(|write| {
+                write.cell_family.map(|family| family.as_str()) == Some(component_type)
+            });
+        if !writes_component {
+            bail!("mimi event kind {event_kind} does not write SDK component {component_type}");
         }
         let direction = required_str(vector, "direction")?;
         match direction {

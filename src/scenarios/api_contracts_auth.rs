@@ -131,84 +131,51 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 
 pub async fn contact_edges_are_rejected() -> Result<()> {
     let server = ArkretServer::spawn("contact-edges").await?;
-    let alice = expect_json(
-        server.account_registration_request().json(&json!({
-            "principal_id": "did:web:alice-contact.example",
-            "display_name": "Alice",
-            "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(alice["principal_id"], "did:web:alice-contact.example");
+    let alice = server
+        .register_client(
+            "did:web:alice-contact.example",
+            "@alice-contact",
+            "ak:device:01904100-0000-7000-8000-0000000000a1",
+        )
+        .await?;
+    let bob = server
+        .register_client(
+            "did:web:bob-contact.example",
+            "@bob-contact",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
+        )
+        .await?;
 
-    let alice = expect_json(
-        server
-            .http()
-            .post(server.url("/_soland/gate/auth/dev-login"))
-            .json(&json!({
-                "actor": "did:web:alice-contact.example",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
-                "display_name": "Alice"
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    let alice_token = alice["session_credential"].as_str().unwrap();
+    for (target, expected_status, expected_code) in [
+        (
+            alice.actor.as_str(),
+            StatusCode::BAD_REQUEST,
+            "invalid_param",
+        ),
+        (
+            "did:web:missing-contact.example",
+            StatusCode::NOT_FOUND,
+            "not_found",
+        ),
+    ] {
+        let request = alice.contact_request_prepare(target)?;
+        match alice.sdk().contacts_request(&request).await {
+            Err(arkret_http_client::Error::Api { status, error }) => {
+                assert_eq!(status, expected_status.as_u16());
+                assert_eq!(error.error.code, expected_code);
+            }
+            Err(error) => return Err(error.into()),
+            Ok(outcome) => {
+                return Err(anyhow::anyhow!(
+                    "invalid Contact target {target} was accepted: {outcome:?}"
+                ));
+            }
+        }
+    }
 
-    let bob = expect_json(
-        server.account_registration_request().json(&json!({
-            "principal_id": "did:web:bob-contact.example",
-            "display_name": "Bob",
-            "device_id": "ak:device:01904100-0000-7000-8000-0000000000b0"
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(bob["principal_id"], "did:web:bob-contact.example");
-
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/contacts/request"))
-            .bearer_auth(alice_token)
-            .json(&json!({"target": "did:web:alice-contact.example"})),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/contacts/request"))
-            .bearer_auth(alice_token)
-            .json(&json!({"target": "did:web:missing-contact.example"})),
-        StatusCode::NOT_FOUND,
-        "not_found",
-    )
-    .await?;
-
-    let requested = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/contacts/request"))
-            .bearer_auth(alice_token)
-            .json(&json!({"target": "did:web:bob-contact.example"})),
-        StatusCode::CREATED,
-    )
-    .await?;
-    assert_eq!(requested["state"], "pending_outgoing");
-
-    let duplicate = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/contacts/request"))
-            .bearer_auth(alice_token)
-            .json(&json!({"target": "did:web:bob-contact.example"})),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(duplicate["state"], "pending_outgoing");
+    let receipt = alice.request_contact(&bob.actor).await?;
+    assert_eq!(receipt.core.holder.subject_id().as_str(), alice.actor);
+    assert_eq!(receipt.core.peer.subject_id().as_str(), bob.actor);
 
     Ok(())
 }

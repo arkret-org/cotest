@@ -58,6 +58,7 @@
       "ak.component.realm.digest_suite.v1",
       "ak.component.realm.metadata.v1",
       "ak.component.schema.definition.v1",
+      "ak.component.sidecar.access.v1",
       "ak.component.sovereign.did_policy.v1",
       "ak.component.call.summary.v1",
       "ak.component.call.focus.v1",
@@ -124,6 +125,7 @@
     "ordered_log_families": [
       "ak.component.applet.bridge_error.v1",
       "ak.component.audit.access_log.v1",
+      "ak.component.sidecar.context.v1",
       "ak.component.sidecar.create.v1",
       "ak.component.identity.disclosure_receipt.v1",
       "ak.component.identity.presentation.v1",
