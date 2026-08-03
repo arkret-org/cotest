@@ -8,16 +8,13 @@ use arkret_identifiers::{Did, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode};
 use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome,
-    effective_participation,
-    fold_ceiling_chain, validate_agent_participation_tightens, validate_selection_within_ceiling,
+    effective_participation, fold_ceiling_chain, validate_agent_participation_tightens,
 };
 use arkret_models_collaboration::protocol_journey::{ParticipationBits, ParticipationScope};
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
-use arkret_wire::{
-    Audience, CapabilityActionId, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId,
-};
+use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId};
 use chrono::{TimeZone, Utc};
 use serde_json::Value;
 
@@ -28,8 +25,8 @@ pub const VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN: &str =
     "ak.vector.agent.participation.ceiling_tighten.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION: &str =
     "ak.vector.agent.participation.effective_intersection.v1";
-pub const VECTOR_ID_AGENT_PARTICIPATION_SELECTION_WITHIN_CEILING: &str =
-    "ak.vector.agent.participation.selection_within_ceiling.v1";
+pub const VECTOR_ID_AGENT_PARTICIPATION_SELECTION_CAS: &str =
+    "ak.vector.agent.participation.selection_cas.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY: &str =
     "ak.vector.agent.participation.session_overlay.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE: &str =
@@ -39,7 +36,7 @@ pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_MENTION_SELECTOR,
     VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN,
     VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION,
-    VECTOR_ID_AGENT_PARTICIPATION_SELECTION_WITHIN_CEILING,
+    VECTOR_ID_AGENT_PARTICIPATION_SELECTION_CAS,
     VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY,
     VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE,
 ];
@@ -47,7 +44,6 @@ pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
 const AGENT_PARTICIPATION_FIXTURE_FILE: &str = "agent-participation-fixture.json";
 const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
     "schemas/agent-operations.schema.json#/$defs/agent_participation_entry";
-const GRANT_ACT_ON_BEHALF: &str = "ak.agent.act_on_behalf";
 
 fn participation_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE)?;
@@ -108,6 +104,13 @@ fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .get(field)
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("case missing string field {field}"))
+}
+
+fn required_u64(value: &Value, field: &str) -> Result<u64> {
+    value
+        .get(field)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("case missing unsigned integer field {field}"))
 }
 
 fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
@@ -306,117 +309,22 @@ pub fn run_agent_participation_ceiling_tighten_vector() -> Result<()> {
     Ok(())
 }
 
-fn materialized_grants(effective: ParticipationBits) -> Vec<&'static str> {
-    let mut grants = Vec::new();
-    if effective.reply_message {
-        grants.push(CapabilityActionId::MESSAGE_CREATE);
-    }
-    if effective.reaction_add {
-        grants.push(CapabilityActionId::REACTION_ADD);
-    }
-    if effective.reaction_remove {
-        grants.push(CapabilityActionId::REACTION_REMOVE);
-    }
-    if effective.act_on_behalf {
-        grants.push(GRANT_ACT_ON_BEHALF);
-    }
-    grants
-}
-
-fn provision_ceiling_from_requested_scope(scope: &Value) -> Result<ParticipationBits> {
-    let actions = scope
-        .get("actions")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("requested_scope.actions[] is required"))?
-        .iter()
-        .map(|action| {
-            action
-                .as_str()
-                .ok_or_else(|| anyhow!("requested_scope action must be a string"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let message_create = actions.contains(&CapabilityActionId::MESSAGE_CREATE);
-    let controller_constraint = scope
-        .get("constraints")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .any(|constraint| {
-            if constraint.get("constraint_kind").and_then(Value::as_str) != Some("claim_based") {
-                return false;
-            }
-            let controller_requirement =
-                match constraint.get("constraint_subkind").and_then(Value::as_str) {
-                    Some("approval") => {
-                        constraint.get("approval_required").and_then(Value::as_bool) == Some(true)
-                            && (constraint.get("approval_relation").and_then(Value::as_str)
-                                == Some("controller")
-                                || constraint
-                                    .get("controller_approval_required")
-                                    .and_then(Value::as_bool)
-                                    == Some(true))
-                    }
-                    Some("accountability") => {
-                        constraint
-                            .get("accountability_required")
-                            .and_then(Value::as_bool)
-                            == Some(true)
-                            && constraint.get("approval_relation").and_then(Value::as_str)
-                                == Some("controller")
-                    }
-                    _ => false,
-                };
-            let applies = constraint
-                .get("applies_to_actions")
-                .and_then(Value::as_array)
-                .is_none_or(|applicable| {
-                    applicable
-                        .iter()
-                        .any(|action| action.as_str() == Some(CapabilityActionId::MESSAGE_CREATE))
-                });
-            controller_requirement && applies
-        });
-    Ok(ParticipationBits {
-        reply_message: message_create,
-        reaction_add: actions.contains(&CapabilityActionId::REACTION_ADD),
-        reaction_remove: actions.contains(&CapabilityActionId::REACTION_REMOVE),
-        accept_third_party_mention: actions.contains(&CapabilityActionId::EVENT_READ),
-        act_on_behalf: message_create && controller_constraint,
-    })
-}
-
 pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     let fixture = participation_fixture()?;
     let vector = case(
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION,
     )?;
-    let provision_ceiling = provision_ceiling_from_requested_scope(
-        vector
-            .get("requested_scope")
-            .ok_or_else(|| anyhow!("effective vector missing requested_scope"))?,
-    )?;
-    let governance_ceiling = participation_field(vector, "governance_ceiling")?;
-    let ceiling = fold_ceiling_chain([provision_ceiling, governance_ceiling]);
+    let ceiling = participation_field(vector, "governance_ceiling")?;
     let selection = participation_field(vector, "selection")?;
     let expected = participation_pointer(vector, "/expected/effective")?;
 
-    validate_selection_within_ceiling(ceiling, expected)?;
+    if !expected.is_subset_of(ceiling) {
+        bail!("expected effective participation exceeds its governance ceiling");
+    }
     let effective = effective_participation(ceiling, selection);
     if effective != expected {
         bail!("effective participation drifted: expected {expected:?}, got {effective:?}");
-    }
-
-    let grants = materialized_grants(effective);
-    for expected_grant in super::string_array_field(&vector["expected"], "materialized_grants")? {
-        if !grants.contains(&expected_grant) {
-            bail!("effective participation did not materialize grant {expected_grant}");
-        }
-    }
-    for forbidden_grant in super::string_array_field(&vector["expected"], "forbidden_grants")? {
-        if grants.contains(&forbidden_grant) {
-            bail!("effective participation materialized forbidden grant {forbidden_grant}");
-        }
     }
 
     let tightened = ParticipationBits {
@@ -427,10 +335,7 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     };
     let after_tighten = effective_participation(tightened, selection);
     if after_tighten != participation_pointer(vector, "/expected/after_reply_tighten")? {
-        bail!("tightened ceiling did not revoke reply grant");
-    }
-    if materialized_grants(after_tighten).contains(&CapabilityActionId::MESSAGE_CREATE) {
-        bail!("reply grant survived ceiling tighten");
+        bail!("tightened ceiling did not disable the reply action gate");
     }
 
     let unknown_source_effective = ParticipationBits::NONE;
@@ -439,62 +344,31 @@ pub fn run_agent_participation_effective_intersection_vector() -> Result<()> {
     {
         bail!("unknown ceiling source did not fail closed to no participation");
     }
-    for variant in vector
-        .get("derivation_variants")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("effective vector missing derivation_variants[]"))?
-    {
-        let actual = provision_ceiling_from_requested_scope(
-            variant
-                .get("requested_scope")
-                .ok_or_else(|| anyhow!("derivation variant missing requested_scope"))?,
-        )?;
-        let expected: ParticipationBits = serde_json::from_value(
-            variant
-                .get("expected")
-                .cloned()
-                .ok_or_else(|| anyhow!("derivation variant missing expected"))?,
-        )?;
-        if actual != expected {
-            bail!(
-                "requested_scope derivation variant {} drifted: expected {expected:?}, got {actual:?}",
-                variant
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unnamed")
-            );
-        }
-    }
     Ok(())
 }
 
-pub fn run_agent_participation_selection_within_ceiling_vector() -> Result<()> {
+pub fn run_agent_participation_selection_cas_vector() -> Result<()> {
     let fixture = participation_fixture()?;
-    let vector = case(
-        &fixture,
-        VECTOR_ID_AGENT_PARTICIPATION_SELECTION_WITHIN_CEILING,
-    )?;
-    let provision_ceiling = provision_ceiling_from_requested_scope(
-        vector
-            .get("requested_scope")
-            .ok_or_else(|| anyhow!("selection vector missing requested_scope"))?,
-    )?;
-    let governance_ceiling = participation_field(vector, "governance_ceiling")?;
-    let ceiling = fold_ceiling_chain([provision_ceiling, governance_ceiling]);
+    let vector = case(&fixture, VECTOR_ID_AGENT_PARTICIPATION_SELECTION_CAS)?;
+    if required_u64(vector, "initial_expected_version")? != 0 {
+        bail!("first participation selection write must use expected_version=0");
+    }
+    let ceiling = participation_field(vector, "governance_ceiling")?;
     let selection = participation_field(vector, "selection")?;
-    expect_reason(
-        validate_selection_within_ceiling(ceiling, selection).unwrap_err(),
-        expected_str(vector, "reason")?,
-    )?;
+    let effective = effective_participation(ceiling, selection);
+    if effective != participation_pointer(vector, "/expected/effective")? {
+        bail!("selection action-time intersection drifted");
+    }
     let capped_bits = super::string_array_field(&vector["expected"], "capped_bits")?;
     if capped_bits != ["accept_third_party_mention"] {
-        bail!("selection-within-ceiling capped bits drifted: {capped_bits:?}");
+        bail!("selection CAS capped bits drifted: {capped_bits:?}");
     }
-    let materialized = vector
-        .pointer("/expected/materialized_grants")
-        .and_then(Value::as_array);
-    if materialized.is_none_or(|grants| !grants.is_empty()) {
-        bail!("rejected participation selection must not materialize grants");
+    if vector
+        .pointer("/expected/stored_version")
+        .and_then(Value::as_u64)
+        != Some(1)
+    {
+        bail!("accepted first participation write must store version=1");
     }
     Ok(())
 }
@@ -504,17 +378,12 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     let vector = case(&fixture, VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY)?;
     let scope = scope_field(vector, "target_scope")?;
     let selection = participation_field(vector, "selection")?;
-    let ceiling = participation_field(vector, "ceiling")?;
-    let effective = effective_participation(ceiling, selection);
-    if effective != participation_pointer(vector, "/expected/effective")? {
-        bail!("session overlay effective participation drifted");
-    }
+    let version = required_u64(vector, "version")?;
 
     let entry = AgentParticipationEntry {
         scope: scope.clone(),
         selection,
-        ceiling,
-        effective,
+        version,
     };
     let outcome = AgentParticipationOutcome {
         ok: true,
@@ -670,7 +539,7 @@ pub fn run_agent_participation_fixture_suite() -> Result<()> {
     run_agent_mention_selector_vector()?;
     run_agent_participation_ceiling_tighten_vector()?;
     run_agent_participation_effective_intersection_vector()?;
-    run_agent_participation_selection_within_ceiling_vector()?;
+    run_agent_participation_selection_cas_vector()?;
     run_agent_participation_session_overlay_vector()?;
     run_agent_participation_third_party_mention_gate_vector()?;
     Ok(())

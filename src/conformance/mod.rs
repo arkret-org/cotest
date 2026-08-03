@@ -106,8 +106,7 @@ pub use agent_participation::{
     ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,
     run_agent_participation_ceiling_tighten_vector,
     run_agent_participation_effective_intersection_vector, run_agent_participation_fixture_suite,
-    run_agent_participation_selection_within_ceiling_vector,
-    run_agent_participation_session_overlay_vector,
+    run_agent_participation_selection_cas_vector, run_agent_participation_session_overlay_vector,
     run_agent_participation_third_party_mention_gate_vector,
 };
 pub use agent_signer_evidence::{

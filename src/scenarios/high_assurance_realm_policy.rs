@@ -58,6 +58,7 @@ fn build_realm(
         default_discoverability: Discoverability::InviteOnly,
         default_join_rule: JoinRule::Invite,
         history_visibility: HistoryVisibility::Joined,
+        reducer_profile: arkret_wire::CORE_REDUCER_PROFILE.to_owned(),
         encryption_profile: EncryptionProfile::None,
         content_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
         metadata_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
