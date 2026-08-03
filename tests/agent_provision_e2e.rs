@@ -2810,7 +2810,8 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                         arkret::Hash::new(format!("sha256:{}", "4".repeat(64)))?;
                     serde_json::to_value(
                         arkret_models_collaboration::events_payloads::mls::MlsGenesisPayload {
-                            mls_group_id: arkret::MlsGroupId::new(group_id.clone())?,
+                            mls_group_id: arkret::MlsGroupId::new(group_id.clone())
+                                .map_err(anyhow::Error::msg)?,
                             effective_scope: arkret_wire::ScopeRef::Realm {
                                 realm_id: realm_id.clone(),
                             },
