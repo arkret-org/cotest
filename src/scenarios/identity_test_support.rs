@@ -348,12 +348,14 @@ async fn bootstrap_test_device_authorization(
             authorization_lease: Some(create_lease.clone()),
             cba_proof_bundles: Vec::new(),
             control_proposal_receipt: None,
+            membership_compensation_evidence: None,
         },
         EventInitialSubmission {
             event: authorize.clone(),
             authorization_lease: Some(authorize_lease.clone()),
             cba_proof_bundles: Vec::new(),
             control_proposal_receipt: None,
+            membership_compensation_evidence: None,
         },
         &crate::publication::project_cells,
     )?;

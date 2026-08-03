@@ -13,7 +13,7 @@ pub const VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY: &str =
     "ak.vector.calendar.rsvp_occurrence_key.v1";
 pub const VECTOR_ID_FEDERATION_TIMING_BUCKET: &str = "ak.vector.federation.timing_bucket.v1";
 pub const VECTOR_ID_MLS_SECURITY_FRONTIER: &str =
-    "ak.vector.mls.covered_seals_no_self_reference.v1";
+    "ak.vector.mls.security_frontier_key_access_only.v1";
 pub const VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING: &str =
     "ak.vector.mls.governance_epoch_binding.v1";
 pub const VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP: &str =

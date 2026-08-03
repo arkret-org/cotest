@@ -11,14 +11,14 @@
 
 use anyhow::{Context, Result, bail};
 use arkret::{
-    ArkretMlsGroup, ArkretMlsIdentity, DeviceId, Did, KeyPackageUploadEntry,
-    KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
+    ArkretMlsGroup, ArkretMlsIdentity, Base64UrlString, DeviceId, Did, Hash, KeyOperationSignature,
+    KeyPackageUploadEntry, KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
     KeyPackagesUploadUnsignedRequest, MlsDeviceWorkflowAction, MlsGroupStateSink, NonEmptyString,
-    keypackage_upload_entry_signing_input, keypackages_consume_signing_input,
-    keypackages_revoke_signing_input, keypackages_upload_signing_input, late_device_join_steps,
-    sign_keypackage_upload_entry, sign_keypackages_consume_request,
-    sign_keypackages_revoke_request, sign_keypackages_upload_request,
-    verify_keypackage_signing_input,
+    RealmId, RecipientMlsDurableReceipt, keypackage_upload_entry_signing_input,
+    keypackages_consume_signing_input, keypackages_revoke_signing_input,
+    keypackages_upload_signing_input, late_device_join_steps, sign_keypackage_upload_entry,
+    sign_keypackages_consume_request, sign_keypackages_revoke_request,
+    sign_keypackages_upload_request, verify_keypackage_signing_input,
 };
 use arkret_models_crypto::MlsKeyPackageState;
 use base64::Engine as _;
@@ -340,14 +340,48 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
     )?;
     let agent_group = ArkretMlsGroup::join_from_welcome(restarted_identity, &add.welcome)?;
     let persisted = agent_group.persist_state(&mut runtime_store)?;
+    let claim_request_id =
+        Base64UrlString::new("Y2xhaW0tYWdlbnQtbGlmZWN5Y2xlLTAwMQ").map_err(anyhow::Error::msg)?;
+    let welcome_ref = NonEmptyString::new(add.welcome.welcome_hash.as_str().to_owned())
+        .map_err(anyhow::Error::msg)?;
+    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-00000000000f")?;
+    let mls_group_id =
+        NonEmptyString::new(add.welcome.group_id.clone()).map_err(anyhow::Error::msg)?;
+    let recipient_durable_receipt = RecipientMlsDurableReceipt {
+        domain: NonEmptyString::new("ak.keypackage-recipient-durable-receipt.v1")
+            .map_err(anyhow::Error::msg)?,
+        claim_request_id: claim_request_id.clone(),
+        key_package_ref: NonEmptyString::new(record.keypackage_ref.as_str().to_owned())
+            .map_err(anyhow::Error::msg)?,
+        recipient_principal_id: agent_did.clone(),
+        recipient_device_id: agent_device.clone(),
+        recipient_service_id: Did::new("did:webvh:z6mkrecipient:recipient.example")?,
+        realm_id: realm_id.clone(),
+        mls_group_id: mls_group_id.clone(),
+        mls_epoch: add.welcome.epoch,
+        welcome_ref: welcome_ref.clone(),
+        welcome_digest: Hash::new(add.welcome.welcome_hash.as_str().to_owned())?,
+        durable_at: chrono::Utc::now(),
+        device_verification_method: NonEmptyString::new(verification_method.clone())
+            .map_err(anyhow::Error::msg)?,
+        signature: KeyOperationSignature {
+            kid: NonEmptyString::new(verification_method.clone()).map_err(anyhow::Error::msg)?,
+            alg: Some(NonEmptyString::new("EdDSA").map_err(anyhow::Error::msg)?),
+            sig: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+        },
+    };
     let consume_unsigned = KeyPackagesConsumeUnsignedRequest {
+        owner_account_id: agent_did.clone(),
         key_package_refs: vec![record.keypackage_ref.as_str().to_owned()],
         consumer_device_id: agent_device.clone(),
-        claim_ids: vec!["claim-agent-lifecycle-001".to_owned()],
-        welcome_ref: Some(add.welcome.welcome_hash.as_str().to_owned()),
-        realm_id: None,
+        claim_ids: vec![
+            NonEmptyString::new("claim-agent-lifecycle-001").map_err(anyhow::Error::msg)?,
+        ],
+        welcome_ref,
+        recipient_durable_receipt,
+        realm_id: Some(realm_id),
         strand_id: None,
-        mls_group_id: Some(add.welcome.group_id.clone()),
+        mls_group_id: Some(mls_group_id),
         epoch: Some(add.welcome.epoch),
     };
     let consume = agent
@@ -368,6 +402,7 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
 
     let revoke = agent.signed_key_packages_revoke_request(
         KeyPackagesRevokeUnsignedRequest {
+            owner_account_id: agent_did.clone(),
             key_package_refs: vec![record.keypackage_ref.as_str().to_owned()],
             device_id: agent_device.clone(),
             reason: Some(NonEmptyString::new("authorization_superseded").unwrap()),

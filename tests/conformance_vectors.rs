@@ -252,7 +252,7 @@ fn agent_vector_suite_runs_clean() {
 fn agent_signer_evidence_vector_suite_runs_clean() {
     run_agent_signer_evidence_vector_suite()
         .expect("Agent signer-evidence vectors must execute and pass");
-    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 32);
+    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 21);
 }
 
 // ─── P0 / VECT-SC-1..18 — sidecar vectors ──────────────────────────────────

@@ -38,6 +38,10 @@ use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizePayload, DeviceCrossSigningBinding, DeviceListUpdatePayload,
     DeviceOrPrincipalRef,
 };
+use arkret_models_collaboration::protocol_journey::{
+    ParticipationBits, SidecarContextRef, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
+    SidecarEnsureRequestBody, SidecarPreparePhase, SidecarPreparedOutcome,
+};
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
@@ -55,7 +59,8 @@ use arkret_models_identity::artifacts_device_identity::{
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, Base64UrlString, DidUrl, EventKind, NonEmptyString,
-    OpaqueLocalId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
+    OpaqueLocalId, ProtocolOpaqueId, ProtocolOperationId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId,
+    ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -150,6 +155,16 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
             })
             .collect(),
         constraints: Vec::new(),
+    }
+}
+
+fn test_agent_participation_ceiling() -> ParticipationBits {
+    ParticipationBits {
+        reply_message: true,
+        reaction_add: true,
+        reaction_remove: false,
+        accept_third_party_mention: true,
+        act_on_behalf: false,
     }
 }
 
@@ -256,88 +271,36 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 
     let controller = bearer_sdk_client(&server, &token)?;
     let sidecar = controller
-        .agent_sidecar_ensure(&arkret::AgentSidecarEnsureRequestBody {
-            controller_id: arkret::Did::new(ALICE_DID)?,
-            addressed_agent_ids: Vec::new(),
-            context_ref: arkret::AgentSidecarContextRef::strand(
-                arkret::RealmId::new(realm_id.clone())?,
-                arkret::StrandId::new(strand_id)?,
-            ),
-        })
-        .await
-        .context("ensure agent sidecar")?;
-    assert!(sidecar.ok, "live Sidecar ensure must succeed");
-    assert!(sidecar.sidecar_id.as_str().starts_with("ak:sidecar:"));
-    assert_eq!(
-        sidecar.access_readiness,
-        arkret::AgentSidecarAccessReadiness::KeyMaterialPending,
-        "ensure must not report ready before a controller-authored MLS genesis exists"
-    );
-    let sidecar_view = controller.agent_sidecar_get(&sidecar.sidecar_id).await?;
-    assert_eq!(sidecar_view.sidecar.id, sidecar.sidecar_id);
-    assert_eq!(
-        sidecar_view.access_readiness,
-        arkret::AgentSidecarAccessReadiness::KeyMaterialPending
-    );
-    assert!(sidecar_view.effective_agent_ids.is_empty());
-    expect_sdk_api_error(
-        controller
-            .circle_get(sidecar_view.sidecar.backing_circle_id.as_str())
-            .await,
-        StatusCode::NOT_FOUND,
-        "not_found",
-    )?;
-    let ordinary_circles = controller.circle_list(&realm_id).await?;
-    assert!(
-        ordinary_circles
-            .circles
-            .iter()
-            .all(|circle| circle.circle_id != sidecar_view.sidecar.backing_circle_id),
-        "ordinary Circle list must not enumerate Sidecar backing Circles"
-    );
-
-    // The legacy command surface has no client-supplied Event parameter. It
-    // must fail closed instead of letting the server impersonate the
-    // controller; callers must submit a controller-signed SDK Event.
-    let attach = controller
-        .agent_grant_attach(
-            &agent_did,
-            &arkret::AgentGrantAttachRequestBody {
-                grant: arkret::CapabilityGrant {
-                    id: arkret::GrantId::new("ak:grant:01964137-0000-7000-8000-000000000010")?,
-                    schema: "ak.schema.capability.v1".to_owned(),
-                    realm_id: Some(arkret::RealmId::new(realm_id.clone())?),
-                    issuer: arkret::Did::new(ALICE_DID)?,
-                    subject: arkret::CapabilitySubject::Did(arkret::Did::new(agent_did.clone())?),
-                    actions: vec!["ak.event.read".to_owned()],
-                    capability_action_registry_digest: None,
-                    resources: vec![serde_json::from_value(json!({
-                        "kind": "realm",
-                        "realm_id": realm_id
-                    }))?],
-                    constraints: Vec::new(),
-                    issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
-                        realm_id: arkret_identifiers::RealmId::new(realm_id.to_string())?,
-                        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
-                        controller_epoch_at_issuance: 0,
-                        authority_generation: 0,
-                    }],
-                    issued_at: Utc::now(),
-                    not_before: None,
-                    expires_at: None,
-                    updated_by: None,
-                    updated_at: None,
-                    revoked_by: None,
-                    revoked_at: None,
+        .agent_sidecar_ensure(&SidecarEnsureRequestBody::Prepare(
+            SidecarEnsurePrepareRequestBody {
+                phase: SidecarPreparePhase::Prepare,
+                operation_id: ProtocolOperationId::new("ak:operation:cotest.sidecar.prepare")
+                    .map_err(anyhow::Error::msg)?,
+                idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-prepare-01999999")
+                    .map_err(anyhow::Error::msg)?,
+                source_realm_id: arkret::RealmId::new(realm_id.clone())?,
+                controller_id: arkret::Did::new(ALICE_DID)?,
+                context_ref: SidecarContextRef::Strand {
+                    strand_id: arkret::StrandId::new(strand_id)?,
                 },
             },
-        )
-        .await;
-    expect_sdk_api_error(
-        attach,
-        StatusCode::NOT_IMPLEMENTED,
-        "controller_signed_event_required",
-    )?;
+        ))
+        .await
+        .context("prepare agent sidecar")?;
+    let sidecar_id = match sidecar {
+        SidecarEnsureOutcome::Prepared {
+            prepared: SidecarPreparedOutcome::New { sidecar_id, .. },
+        }
+        | SidecarEnsureOutcome::Prepared {
+            prepared: SidecarPreparedOutcome::Existing { sidecar_id, .. },
+        } => sidecar_id,
+        unexpected => {
+            return Err(anyhow!(
+                "Sidecar prepare returned an unexpected outcome: {unexpected:?}"
+            ));
+        }
+    };
+    assert!(sidecar_id.as_str().starts_with("ak:sidecar:"));
 
     Ok(())
 }
@@ -1282,13 +1245,13 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     let prov = provision_agent(&server, &token, "Renewal Assistant", "renewal", Some(1)).await?;
     let agent_did = prov.agent_id.to_string();
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    // Two orthogonal axes (key-management.md §3.6.1): pairing expiry is not a
-    // lifecycle transition — the intent stays active while the derived
-    // runtime_state falls to pairing_expired on first observation.
+    // Pairing expiry is not a lifecycle transition: the intent stays active,
+    // while the generic Agent projection exposes only that runtime readiness is
+    // unavailable. Exact operation-local runtime states belong to pairing status.
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
-        "pairing_expired"
+        agent_readiness_state(&server, &token, &agent_did).await?,
+        "not_ready"
     );
 
     // Renewal only rotates short-lived pairing material; it does not author a
@@ -1302,8 +1265,8 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     assert_ne!(renewed.pairing_code, prov.pairing_code);
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
-        "pending_runtime_key"
+        agent_readiness_state(&server, &token, &agent_did).await?,
+        "not_ready"
     );
 
     let stale = pair_agent_runtime_key(&server, &token, &prov).await;
@@ -1312,14 +1275,14 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     assert!(!paired.authorize_event_ref.as_str().is_empty());
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
+        agent_readiness_state(&server, &token, &agent_did).await?,
         "ready"
     );
 
     // Active-intent runtime replacement: no forced pause and no resume. The
-    // agent stays active throughout, runtime_state projects replacing while the
-    // handle is open, and completing the pairing atomically supersedes the old
-    // key without changing the lifecycle intent (key-management.md §3.6.1).
+    // agent stays active throughout, generic readiness is unavailable while the
+    // replacement handle is open, and completing the pairing atomically
+    // supersedes the old key without changing the lifecycle intent.
     let replacement = controller
         .agent_renew_pairing(&agent_did, &arkret::AgentRenewPairingRequestBody::default())
         .await?;
@@ -1327,8 +1290,8 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     assert_ne!(replacement.pairing_request_id, renewed.pairing_request_id);
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
-        "replacing"
+        agent_readiness_state(&server, &token, &agent_did).await?,
+        "not_ready"
     );
     let stale = pair_agent_runtime_key(&server, &token, &renewed).await;
     assert!(stale.is_err(), "superseded pairing handle must remain dead");
@@ -1338,7 +1301,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     // No resume required: the active agent immediately serves with the new key.
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
+        agent_readiness_state(&server, &token, &agent_did).await?,
         "ready"
     );
 
@@ -1352,8 +1315,8 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
         .await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
-        "replacing"
+        agent_readiness_state(&server, &token, &agent_did).await?,
+        "not_ready"
     );
     let paused_replaced =
         pair_agent_runtime_key_as(&server, &token, &paused_replacement, "runtime-key-3").await?;
@@ -1363,14 +1326,14 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     );
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "paused");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
+        agent_readiness_state(&server, &token, &agent_did).await?,
         "ready"
     );
     resume_agent_runtime(&server, &token, &paused_replacement).await?;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
     // Replacement handle expiry is non-destructive: the intent, the existing key
-    // and grants all survive and runtime_state returns to ready.
+    // and grants all survive and generic readiness returns to ready.
     let short_lived = controller
         .agent_renew_pairing(
             &agent_did,
@@ -1382,7 +1345,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
     assert_eq!(
-        agent_runtime_state(&server, &token, &agent_did).await?,
+        agent_readiness_state(&server, &token, &agent_did).await?,
         "ready"
     );
     assert!(
@@ -1537,16 +1500,15 @@ async fn agent_pairing_waits_for_current_pcr_recovery_without_consuming_handle()
         "agent_pcr_recovery_not_ready",
     )?;
     // A rejected recovery gate must not consume the pairing: the lifecycle
-    // intent stays active and the derived runtime_state stays pending_runtime_key
-    // (key-management.md §3.6.1).
+    // intent stays active and generic runtime readiness stays unavailable.
     assert_eq!(
         agent_status(&server, &token, provisioned.agent_id.as_str()).await?,
         "active",
         "a rejected recovery gate must not change the lifecycle intent"
     );
     assert_eq!(
-        agent_runtime_state(&server, &token, provisioned.agent_id.as_str()).await?,
-        "pending_runtime_key",
+        agent_readiness_state(&server, &token, provisioned.agent_id.as_str()).await?,
+        "not_ready",
         "a rejected recovery gate must not activate or consume the pairing"
     );
 
@@ -3377,6 +3339,7 @@ async fn provision_agent(
         &agent_id,
         &controller_id,
         &requested_scope,
+        test_agent_participation_ceiling(),
     )?;
     if requested_scope_digest != expected_scope_digest {
         return Err(anyhow!(
@@ -3560,10 +3523,10 @@ async fn provision_and_pair_agent(
         "active"
     );
     assert_eq!(
-        agent_runtime_state(server, token, &agent_did)
+        agent_readiness_state(server, token, &agent_did)
             .await
-            .context("read pending agent runtime_state")?,
-        "pending_runtime_key"
+            .context("read pending agent readiness")?,
+        "not_ready"
     );
 
     let pair = pair_agent_runtime_key(server, token, &prov)
@@ -3891,6 +3854,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         &agent_id,
         &controller_id,
         &requested_scope,
+        test_agent_participation_ceiling(),
     )?;
     let pairing_request_uuid = pairing_request_id
         .strip_prefix("agent_pairing_request:")
@@ -3901,6 +3865,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         agent_id,
         controller_id,
         requested_scope,
+        participation_ceiling: test_agent_participation_ceiling(),
         requested_scope_digest,
         verifier_did: arkret::Did::new(server.service_id().to_owned())?,
         audience: arkret::NonEmptyString::new(
@@ -3941,7 +3906,7 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
         .iter()
         .find(|agent| agent.agent_id.as_str() == agent_did)
         .map(|agent| {
-            serde_json::to_value(agent.status)
+            serde_json::to_value(agent.lifecycle)
                 .ok()
                 .and_then(|value| value.as_str().map(ToOwned::to_owned))
                 .unwrap_or_default()
@@ -3950,26 +3915,26 @@ async fn agent_status(server: &ArkretServer, token: &str, agent_did: &str) -> Re
     Ok(status)
 }
 
-/// The derived runtime readiness axis (key-management.md §3.6.1), orthogonal to
-/// the lifecycle intent returned by [`agent_status`].
-async fn agent_runtime_state(
+/// Generic runtime readiness, orthogonal to the lifecycle intent returned by
+/// [`agent_status`]. Exact operation-local states remain on pairing status.
+async fn agent_readiness_state(
     server: &ArkretServer,
     token: &str,
     agent_did: &str,
 ) -> Result<String> {
     let list = bearer_sdk_client(server, token)?.agent_list().await?;
-    let runtime_state = list
+    let readiness_state = list
         .agents
         .iter()
         .find(|agent| agent.agent_id.as_str() == agent_did)
         .map(|agent| {
-            serde_json::to_value(agent.runtime_state)
+            serde_json::to_value(agent.readiness.state)
                 .ok()
                 .and_then(|value| value.as_str().map(ToOwned::to_owned))
                 .unwrap_or_default()
         })
         .unwrap_or_default();
-    Ok(runtime_state)
+    Ok(readiness_state)
 }
 
 async fn prepare_controller_initial_submission(
@@ -4176,6 +4141,7 @@ async fn prepare_initial_submission_for_notary(
         authorization_lease: Some(lease),
         cba_proof_bundles: Vec::new(),
         control_proposal_receipt: Some(control_proposal_receipt),
+        membership_compensation_evidence: None,
     };
     submission.validate_structural()?;
     Ok(submission)

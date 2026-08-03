@@ -228,5 +228,6 @@ pub fn federation_submission(event: Event, action: &str) -> Result<EventFederati
         authorization_lease: Some(authorization_lease),
         ingress_receipts: vec![receipt],
         control_proposal_receipt,
+        membership_compensation_evidence: None,
     })
 }
