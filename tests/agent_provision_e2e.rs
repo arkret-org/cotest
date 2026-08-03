@@ -2444,7 +2444,7 @@ async fn submit_delegated_agent_event(
             control_proposal_receipt: None,
             membership_compensation_evidence: None,
         };
-        submission.validate_structural()?;
+        submission.validate_structural_in_context(arkret_wire::EventSubmitContext::AnchorUnit)?;
         let outcome = sdk.events_submit(&submission).await?;
         if !outcome.accepted.contains(&typed_event.event_id) {
             return Err(anyhow!("delegated {kind} was not accepted: {outcome:?}"));
