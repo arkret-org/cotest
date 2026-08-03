@@ -55,7 +55,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 
       // The Contacts sidebar is a chat surface: only agents that ever became
       // effective (active / paused) belong here. The freshly provisioned
-      // agent is still pending_runtime_key, so it must stay out of the
+      // agent is still not ready with runtime_key_missing, so it must stay out of the
       // sidebar and out of the Agents count pill until pairing completes;
       // it remains manageable in Settings → My Agents. Wait for Bob's
       // contact row first — contacts and own agents land from the same
@@ -140,53 +140,24 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
   );
 });
 
-type AgentProvisionPreparation = {
-  status: "awaiting_controller_events";
-  agent_id: string;
-  principal_control_realm_id: string;
-  controller_realm_id: string;
-  requested_scope_digest: string;
-};
+function asJsonObject(value: unknown, where: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${where} must be a JSON object`);
+  }
+  return value as Record<string, unknown>;
+}
 
-type AgentProvisionEvent = {
-  event_id: string;
-  kind: string;
-  actor_id: string;
-  realm_id: string;
-  payload: Record<string, unknown> & { source_refs?: string[] };
-  proofs?: unknown[];
-};
-
-// `provision_events.*` are `EventInitialSubmission`s on the wire
-// (`arkret-rust-sdk/crates/wire/src/event_submission.rs`), not bare Events:
-// the signed envelope travels under `event`, alongside the authorization lease
-// that bounds its revocation window.
-type AgentProvisionSubmission = {
-  event: AgentProvisionEvent;
-  authorization_lease: Record<string, unknown>;
-};
-
-type AgentProvisionCommit = {
-  phase: "commit";
-  agent_id: string;
-  principal_control_realm_id: string;
-  slug: string;
-  requested_scope: Record<string, unknown>;
-  provision_events: {
-    accountability_grant: AgentProvisionSubmission;
-    selector_claim: AgentProvisionSubmission;
-  };
-};
-
-type AgentProvisionComplete = {
-  status: "complete";
-  agent_id: string;
-  principal_control_realm_id: string;
-  requested_scope_digest: string;
-  pairing_request_id: string;
-  pairing_code: string;
-  expires_at: string;
-};
+function requiredString(
+  object: Record<string, unknown>,
+  field: string,
+  where: string,
+): string {
+  const value = object[field];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${where}.${field} must be a non-empty string`);
+  }
+  return value;
+}
 
 async function provisionPendingAgent(
   request: APIRequestContext,
@@ -208,16 +179,16 @@ async function provisionPendingAgent(
   const commitGate = new Promise<void>((resolve) => {
     releaseCommit = resolve;
   });
-  let observeCommit = (_body: AgentProvisionCommit) => {};
-  const commitObserved = new Promise<AgentProvisionCommit>((resolve) => {
+  let observeCommit = (_body: Record<string, unknown>) => {};
+  const commitObserved = new Promise<Record<string, unknown>>((resolve) => {
     observeCommit = resolve;
   });
   const holdCommit = async (route: Parameters<Parameters<typeof page.route>[1]>[0]) => {
     const intercepted = route.request();
     if (intercepted.method() === "POST") {
-      const body = intercepted.postDataJSON() as { phase?: string };
+      const body = asJsonObject(intercepted.postDataJSON(), "provision request");
       if (body.phase === "commit") {
-        observeCommit(body as AgentProvisionCommit);
+        observeCommit(body);
         await commitGate;
       }
     }
@@ -238,29 +209,69 @@ async function provisionPendingAgent(
     const prepareResponse = await prepareResponsePromise;
     const prepareText = await prepareResponse.text();
     expect(prepareResponse.status(), prepareText).toBe(200);
-    const preparation = JSON.parse(prepareText) as AgentProvisionPreparation;
-    expect(preparation.status).toBe("awaiting_controller_events");
-    expect(preparation.agent_id).toMatch(/^did:/);
-    expect(preparation.principal_control_realm_id).toMatch(/^ak:realm:/);
-    expect(preparation.controller_realm_id).toMatch(/^ak:realm:/);
-    expect(preparation.requested_scope_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const preparation = asJsonObject(
+      JSON.parse(prepareText),
+      "Agent provision prepare outcome",
+    );
+    expect(preparation.status).toBe("awaiting_controller_event");
+    const agentId = requiredString(preparation, "agent_id", "prepare outcome");
+    const principalControlRealmId = requiredString(
+      preparation,
+      "principal_control_realm_id",
+      "prepare outcome",
+    );
+    const controllerRealmId = requiredString(
+      preparation,
+      "controller_realm_id",
+      "prepare outcome",
+    );
+    const allocationHandle = requiredString(
+      preparation,
+      "allocation_handle",
+      "prepare outcome",
+    );
+    const requestedScopeDigest = requiredString(
+      preparation,
+      "requested_scope_digest",
+      "prepare outcome",
+    );
+    expect(agentId).toMatch(/^did:/);
+    expect(principalControlRealmId).toMatch(/^ak:realm:/);
+    expect(controllerRealmId).toMatch(/^ak:realm:/);
+    expect(allocationHandle).toBeTruthy();
+    expect(requestedScopeDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const commit = await commitObserved;
-    expect(commit.agent_id).toBe(preparation.agent_id);
-    expect(commit.principal_control_realm_id).toBe(
-      preparation.principal_control_realm_id,
-    );
+    expect(commit.agent_id).toBe(agentId);
+    expect(commit.principal_control_realm_id).toBe(principalControlRealmId);
+    expect(commit.allocation_handle).toBe(allocationHandle);
+    expect(typeof commit.operation_id).toBe("string");
+    expect(typeof commit.idempotency_key).toBe("string");
     expect(commit.slug).toBe(agentSlug);
-    const accountability = commit.provision_events.accountability_grant.event;
-    const selector = commit.provision_events.selector_claim.event;
-    expect(accountability.kind).toBe("ak.identity.accountability_grant");
-    expect(selector.kind).toBe("ak.agent.selector_claim");
-    for (const event of [accountability, selector]) {
-      expect(event.actor_id).toBe(controller.user.did);
-      expect(event.realm_id).toBe(preparation.controller_realm_id);
-      expect(event.proofs).not.toHaveLength(0);
-    }
-    expect(selector.payload.source_refs).toContain(accountability.event_id);
+    const provisionSubmission = asJsonObject(
+      commit.provision_event,
+      "Agent provision commit.provision_event",
+    );
+    const provisionEvent = asJsonObject(
+      provisionSubmission.event,
+      "Agent provision EventInitialSubmission.event",
+    );
+    expect(provisionEvent.kind).toBe("ak.agent.provision");
+    expect(provisionEvent.actor_id).toBe(controller.user.did);
+    expect(provisionEvent.realm_id).toBe(controllerRealmId);
+    expect(provisionEvent.proofs).not.toHaveLength(0);
+    const provisionPayload = asJsonObject(
+      provisionEvent.payload,
+      "ak.agent.provision payload",
+    );
+    expect(provisionPayload.schema).toBe("ak.schema.agent_provision.v1");
+    expect(provisionPayload.agent_id).toBe(agentId);
+    expect(provisionPayload.controller_id).toBe(controller.user.did);
+    expect(provisionPayload.principal_control_realm_id).toBe(
+      principalControlRealmId,
+    );
+    expect(provisionPayload.agent_slug).toBe(agentSlug);
+    expect(provisionPayload.requested_scope_digest).toBe(requestedScopeDigest);
 
     // prepare is allocation-only: before commit is released, the Agent MUST
     // not exist in the durable self projection and no pairing handle exists.
@@ -269,13 +280,18 @@ async function provisionPendingAgent(
     });
     const beforeCommitText = await beforeCommit.text();
     expect(beforeCommit.status(), beforeCommitText).toBe(200);
-    const beforeCommitBody = JSON.parse(beforeCommitText) as {
-      agents?: Array<{ agent_id?: string }>;
-    };
+    const beforeCommitBody = asJsonObject(
+      JSON.parse(beforeCommitText),
+      "Agent list before provision commit",
+    );
+    const beforeCommitAgents = Array.isArray(beforeCommitBody.agents)
+      ? beforeCommitBody.agents
+      : [];
     expect(
-      (beforeCommitBody.agents ?? []).some(
-        (agent) => agent.agent_id === preparation.agent_id,
-      ),
+      beforeCommitAgents.some((agent) => {
+        const candidate = asJsonObject(agent, "Agent list entry");
+        return candidate.agent_id === agentId;
+      }),
     ).toBeFalsy();
 
     const commitResponsePromise = page.waitForResponse((response) => {
@@ -283,22 +299,22 @@ async function provisionPendingAgent(
       return (
         outgoing.method() === "POST" &&
         new URL(outgoing.url()).pathname === "/_arkret/self/agents" &&
-        (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
+        asJsonObject(outgoing.postDataJSON(), "Agent provision request").phase ===
+          "commit"
       );
     });
     releaseCommit();
     const commitResponse = await commitResponsePromise;
     const commitText = await commitResponse.text();
     expect(commitResponse.status(), commitText).toBe(201);
-    const completed = JSON.parse(commitText) as AgentProvisionComplete;
+    const completed = asJsonObject(
+      JSON.parse(commitText),
+      "Agent provision complete outcome",
+    );
     expect(completed.status).toBe("complete");
-    expect(completed.agent_id).toBe(preparation.agent_id);
-    expect(completed.principal_control_realm_id).toBe(
-      preparation.principal_control_realm_id,
-    );
-    expect(completed.requested_scope_digest).toBe(
-      preparation.requested_scope_digest,
-    );
+    expect(completed.agent_id).toBe(agentId);
+    expect(completed.principal_control_realm_id).toBe(principalControlRealmId);
+    expect(completed.requested_scope_digest).toBe(requestedScopeDigest);
     expect(completed.pairing_request_id).toBeTruthy();
     expect(completed.pairing_code).toBeTruthy();
 
@@ -314,7 +330,7 @@ async function provisionPendingAgent(
     await expect(page.getByTestId("agent-admin-pairing-card")).toBeVisible({
       timeout: 120_000,
     });
-    return completed.agent_id;
+    return requiredString(completed, "agent_id", "complete outcome");
   } finally {
     releaseCommit();
     await page.unroute("**/_arkret/self/agents", holdCommit);
