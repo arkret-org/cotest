@@ -2734,61 +2734,31 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
             .find(|event| event.kind == EventKind::REALM_CREATE)
         {
             Some(event) => event.event_id.clone(),
-            None => submit_delegated_agent_event(
-                server,
-                token,
-                agent_id,
-                realm_id,
-                provisioned.controller_authorization_ref(),
-                "ak.realm.create",
-                json!({
-                    "object": {
-                        "id": realm_id,
-                        "schema": "ak.schema.realm.v1",
-                        "title": "Managed Agent Principal Control Realm",
-                        "summary": "Controller-managed E2EE continuity for a Native Personal Agent",
-                        "created_by": agent_id,
-                        "trust_domain": TRUST_DOMAIN,
-                        "schema_refs": [
-                            "ak.schema.realm.v1",
-                            "ak.profile.principal_control_realm.v1"
-                        ],
-                        "fields": {"purpose": "principal_control"},
-                        "default_discoverability": "invite_only",
-                        "default_join_rule": "invite",
-                        "history_visibility": "restricted",
-                        // `realm.schema.json` is closed and declares neither
-                        // `history_sharing_policy` nor
-                        // `plaintext_visible_services`. A managed Agent PCR
-                        // satisfies `restricted` through the profile-fixed
-                        // baseline in `ak.profile.principal_control_realm.v1`
-                        // (realm-and-space.md §2.8.1), which is why its
-                        // single-Event genesis needs no policy Event — and could
-                        // not emit one, since the kind is absent from the PCR
-                        // event-kind allowlist.
-                        "encryption_profile": "mls_rfc9420",
-                        "content_encryption_floor": "e2ee_required",
-                        "metadata_encryption_floor": "e2ee_required",
-                        "security_class": "high_assurance",
-                        "federation_policy": "restricted",
-                        "notary_profile": "single_did",
-                        "digest_algorithm": "sha256",
-                        "notary": {
-                            "kind": "single_did",
-                            "did": agent_id,
-                            "recovery_members": [ALICE_DID],
-                            "controller_organization": ALICE_DID,
-                            "recovery_controller_organizations": [ALICE_DID]
+            None => {
+                submit_delegated_agent_event(
+                    server,
+                    token,
+                    agent_id,
+                    realm_id,
+                    provisioned.controller_authorization_ref(),
+                    "ak.realm.create",
+                    arkret_bootstrap::build_managed_agent_pcr_create_payload(
+                        arkret_bootstrap::ManagedAgentPcrCreatePayloadInput {
+                            agent_id: Did::new(agent_id.to_owned())?,
+                            controller_id: Did::new(ALICE_DID.to_owned())?,
+                            realm_id: arkret::RealmId::new(realm_id.to_owned())?,
+                            trust_domain: TypedTrustDomainId::new(TRUST_DOMAIN.to_owned())?,
+                            capability_action_registry_digest:
+                                arkret::current_capability_action_registry_digest()?,
+                            created_at: DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
+                                .with_timezone(&Utc),
                         },
-                        "capability_action_registry_digest":
-                            arkret::current_capability_action_registry_digest()
-                                .expect("embedded capability-action registry"),
-                        "created_at": "2026-05-02T00:00:00.000Z"
-                    }
-                }),
-            )
-            .await?
-            .event_id,
+                    )?
+                    .to_value()?,
+                )
+                .await?
+                .event_id
+            }
         };
         let seal_key = format!("{}|{realm_id}", server.base_url());
         let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
