@@ -47,7 +47,7 @@
       "evidence": [
         {"layer": "playwright_joint_e2e", "path": "e2e/tests/identity/contact-graph.spec.ts", "markers": ["direct-conversation materialization draft must be deterministic across retries"]},
         {"layer": "playwright_joint_e2e", "path": "e2e/tests/encryption/mls-group.spec.ts", "markers": ["joined member decrypts E2EE timeline messages"]},
-        {"layer": "conformance_fixture", "path": "tests/fixtures/private_chat_privacy_contracts.json", "markers": ["binding_payload", "ak.direct_conversation.bound"]}
+        {"layer": "conformance_fixture", "path": "tests/fixtures/private_chat_privacy_contracts.json", "markers": ["binding_payload", "binding_event_ref"]}
       ],
       "gaps": ["规范已收敛为单一 immutable stable binding，但 Cotest 没有公开接口测试把 resolve 返回的 materialization 精确提交、Welcome 消费和首条密文串起来"]
     },
