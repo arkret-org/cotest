@@ -963,15 +963,26 @@ async fn call_live_soland(
     }
     if let Some(body) = body {
         request = match case.operation_id.as_str() {
-            "ak.self.events.command.submit" => request.json(&serde_json::from_value::<
-                arkret_wire::EventsSubmitBatchRequestBody,
-            >(body)?),
-            "ak.find.directory.query.search_realms" => request.json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchRealmsRequestBody,
-            >(body)?),
-            "ak.self.signal.command.send" => request.json(&serde_json::from_value::<
-                arkret_wire::SignalEnvelope,
-            >(body)?),
+            "ak.self.events.command.submit" => {
+                let typed: arkret_wire::EventsSubmitBatchRequestBody =
+                    serde_json::from_value(body)?;
+                request
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(arkret_canonical::canonical_json_bytes(&typed)?)
+            }
+            "ak.find.directory.query.search_realms" => {
+                let typed: arkret_models_discovery::DirectorySearchRealmsRequestBody =
+                    serde_json::from_value(body)?;
+                request
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(arkret_canonical::canonical_json_bytes(&typed)?)
+            }
+            "ak.self.signal.command.send" => {
+                let typed: arkret_wire::SignalEnvelope = serde_json::from_value(body)?;
+                request
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(arkret_canonical::canonical_json_bytes(&typed)?)
+            }
             operation_id => {
                 return Err(anyhow!(
                     "live mock-parity request {operation_id} has no SDK request-body binding"
