@@ -2050,18 +2050,9 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         cba_proof_bundles: policy_submission.cba_proof_bundles,
         control_proposal_receipt: policy_submission.control_proposal_receipt,
     };
-    let response = server
-        .http()
-        .post(server.url("/_arkret/root/identity/recovery-policy"))
-        .bearer_auth(token)
-        .json(&policy_request)
-        .send()
-        .await?;
-    let status = response.status();
-    let body = response.text().await?;
-    if !matches!(status, StatusCode::OK | StatusCode::CREATED) {
-        return Err(anyhow!("recovery policy publish returned {status}: {body}"));
-    }
+    sdk.identity_recovery_policy_publish(&policy_request)
+        .await
+        .context("publish recovery policy through the SDK canonical transport")?;
 
     let policy_seal_basis = policy_seal.seal_basis();
     cross_signing_event.actor_seq = 3;
