@@ -327,9 +327,3 @@ fn submitted_event_id(response: &Value) -> Option<&str> {
                 .and_then(Value::as_str)
         })
 }
-
-fn json_string<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value[field]
-        .as_str()
-        .ok_or_else(|| anyhow!("{field} is not a string: {value}"))
-}

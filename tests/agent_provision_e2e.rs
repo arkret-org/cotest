@@ -2405,7 +2405,8 @@ async fn submit_delegated_agent_event(
     ))?);
     event.prev_refs = actor_frontier.frontier_event_ids;
     event.executed_by = Some(Did::new(ALICE_DID.to_owned())?);
-    event.authorization_ref = Some(AuthorizationRef::new(authorization_ref.to_owned())?);
+    event.authorization_ref =
+        Some(AuthorizationRef::new(authorization_ref.to_owned()).map_err(anyhow::Error::msg)?);
     if kind == EventKind::REALM_CREATE {
         if actor_frontier.next_actor_seq != 0 {
             return Err(anyhow!(
