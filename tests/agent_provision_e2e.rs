@@ -31,6 +31,7 @@ use arkret_crypto::DeviceTrustBinding;
 use arkret_http_client::{Auth, Client as SdkClient, ClientBuilder, Error as ArkretError};
 use arkret_identifiers::{
     BackupId, BackupSeriesId, DeviceId, Did, Hlc, PolicyId, TypedTrustDomainId,
+    new_prefixed_uuid7,
 };
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
@@ -3326,10 +3327,9 @@ async fn provision_agent(
 ) -> Result<arkret::AgentProvisionComplete> {
     let client = bearer_sdk_client(server, token)?;
     let requested_scope = test_agent_requested_scope();
-    let operation_id =
-        ProtocolOperationId::new(format!("ak:operation:{}", uuid::Uuid::now_v7().simple()))
-            .map_err(anyhow::Error::msg)?;
-    let idempotency_key = ProtocolOpaqueId::new(uuid::Uuid::now_v7().simple().to_string())
+    let operation_id = ProtocolOperationId::new(new_prefixed_uuid7("ak:operation:"))
+        .map_err(anyhow::Error::msg)?;
+    let idempotency_key = ProtocolOpaqueId::new(new_prefixed_uuid7("agent-provision-"))
         .map_err(anyhow::Error::msg)?;
     let prepared = client
         .agent_provision(&arkret::AgentProvisionRequestBody::Prepare {
